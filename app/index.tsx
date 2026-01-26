@@ -7,6 +7,7 @@ import MarketingLanding from '@/components/marketing/MarketingLanding';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { useTheme } from '@/contexts/ThemeContext';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
 // Default theme fallback (used before ThemeProvider mounts)
 const defaultTheme = {
@@ -51,15 +52,7 @@ export default function Index() {
         try {
           const initialUrl = await Linking.getInitialURL();
           if (initialUrl) {
-            const parsed = Linking.parse(initialUrl);
-            const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
-            // Expo Linking.parse() returns hostname on the parsed object
-            const host = typeof parsed.hostname === 'string' ? String(parsed.hostname) : '';
-            // Some Android intent flows treat the first segment as the URL host:
-            // - `edudashpro://screens/payments/return?...` => host="screens", path="payments/return"
-            // For robustness, reconstruct a full path when host is present.
-            const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
-            const path = combined ? `/${combined.replace(/^\/+/, '')}` : '';
+            const { path, params } = parseDeepLinkUrl(initialUrl);
 
             // Ignore common "empty" or dev-client URLs
             const shouldHandle =
@@ -69,10 +62,9 @@ export default function Index() {
               !path.startsWith('/expo-development-client');
 
             if (shouldHandle) {
-              const qp = (parsed.queryParams || {}) as Record<string, unknown>;
               const search = new URLSearchParams();
-              for (const [k, v] of Object.entries(qp)) {
-                if (v === undefined || v === null) continue;
+              for (const [k, v] of Object.entries(params)) {
+                if (v === undefined || v === null || v === '') continue;
                 search.set(k, String(v));
               }
               const target = `${path}${search.toString() ? `?${search.toString()}` : ''}`;
@@ -88,6 +80,10 @@ export default function Index() {
               }
               if (path === '/auth-callback' || path.includes('auth-callback')) {
                 console.log('[Index] Auth callback deep link detected');
+                const flow = String(params.flow || params.type || '').toLowerCase();
+                if (flow === 'recovery') {
+                  try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+                }
                 router.replace(`/auth-callback${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
                 return;
               }

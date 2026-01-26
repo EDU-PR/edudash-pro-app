@@ -8,19 +8,17 @@
  * - Clean architecture with service separation
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   RefreshControl,
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,27 +28,29 @@ import { navigateBack } from '@/lib/navigation';
 import { useTranslation } from 'react-i18next';
 import { derivePreschoolId } from '@/lib/roleUtils';
 import { SimpleHeader } from '@/components/ui/SimpleHeader';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 
 import { FinancialDataService } from '@/services/FinancialDataService';
-import { ChartDataService } from '@/lib/services/finance/ChartDataService';
 import { ExportService } from '@/lib/services/finance/ExportService';
-import type { FinanceOverviewData, TransactionRecord } from '@/services/FinancialDataService';
+import type { FinanceOverviewData, FinancialMetrics, TransactionRecord } from '@/services/FinancialDataService';
 import type { ExportFormat } from '@/lib/services/finance/ExportService';
 
-const { width: screenWidth } = Dimensions.get('window');
-const chartWidth = screenWidth - 32;
+type IconName = keyof typeof Ionicons.glyphMap;
+type TransactionStatus = TransactionRecord['status'];
 
 export default function FinanceDashboard() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   const { t } = useTranslation('common');
+  const { terminology } = useOrganizationTerminology();
   
   const [overview, setOverview] = useState<FinanceOverviewData | null>(null);
+  const [metrics, setMetrics] = useState<FinancialMetrics | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeChart, setActiveChart] = useState<'cashflow' | 'categories' | 'comparison'>('cashflow');
 
   useEffect(() => {
     loadDashboardData();
@@ -67,7 +67,13 @@ export default function FinanceDashboard() {
 
       const preschoolId = derivePreschoolId(profile);
 
-      // Load financial overview (fallback works when preschoolId is undefined)
+      // Load simple financial metrics
+      const metricsData = preschoolId
+        ? await FinancialDataService.getFinancialMetrics(preschoolId)
+        : null;
+      setMetrics(metricsData);
+
+      // Load financial overview (used only for sample-data detection)
       const overviewData = await FinancialDataService.getOverview(preschoolId || undefined);
       setOverview(overviewData);
 
@@ -91,15 +97,15 @@ export default function FinanceDashboard() {
   };
 
   const handleExport = (format: ExportFormat) => {
-    if (!overview || !transactions.length) {
+    if ((!overview && !metrics) || !transactions.length) {
       Alert.alert(t('transactions.no_data', { defaultValue: 'No Data' }), t('finance_dashboard.no_financial_data_export', { defaultValue: 'No financial data available to export' }));
       return;
     }
 
     const summary = {
-      revenue: overview.keyMetrics.monthlyRevenue,
-      expenses: overview.keyMetrics.monthlyExpenses,
-      cashFlow: overview.keyMetrics.cashFlow,
+      revenue: metrics?.monthlyRevenue ?? overview?.keyMetrics.monthlyRevenue ?? 0,
+      expenses: metrics?.monthlyExpenses ?? overview?.keyMetrics.monthlyExpenses ?? 0,
+      cashFlow: metrics?.netIncome ?? overview?.keyMetrics.cashFlow ?? 0,
     };
 
     ExportService.exportFinancialData(transactions, summary, {
@@ -116,193 +122,80 @@ export default function FinanceDashboard() {
     return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
   };
 
-  const renderMetricCard = (title: string, value: string, subtitle: string, color: string, icon: string) => (
-    <View style={[styles.metricCard, { width: (screenWidth - 48) / 2 }]}>
-      <View style={styles.cardHeader}>
-        <Ionicons name={icon as any} size={24} color={color} />
-        <Text style={styles.cardTitle}>{title}</Text>
+  const resolvedMetrics = useMemo<FinancialMetrics>(() => {
+    if (metrics) return metrics;
+    return {
+      monthlyRevenue: overview?.keyMetrics.monthlyRevenue || 0,
+      outstandingPayments: 0,
+      monthlyExpenses: overview?.keyMetrics.monthlyExpenses || 0,
+      netIncome: overview?.keyMetrics.cashFlow || 0,
+      paymentCompletionRate: 0,
+      totalStudents: 0,
+      averageFeePerStudent: 0,
+    };
+  }, [metrics, overview]);
+
+  const formatPercent = (value: number) => `${Math.round(value)}%`;
+
+  const renderSummaryCard = (title: string, value: string, subtitle: string, color: string, icon: IconName) => (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryHeader}>
+        <View style={[styles.summaryIcon, { backgroundColor: color + '20' }]}>
+          <Ionicons name={icon} size={18} color={color} />
+        </View>
+        <Text style={styles.summaryTitle}>{title}</Text>
       </View>
-      <Text style={[styles.cardValue, { color }]}>{value}</Text>
-      <Text style={styles.cardSubtitle}>{subtitle}</Text>
+      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
+      <Text style={styles.summarySubtitle}>{subtitle}</Text>
     </View>
   );
 
-  const renderChart = () => {
-    if (!overview) return null;
+  const renderActionRow = (
+    title: string,
+    subtitle: string,
+    icon: IconName,
+    color: string,
+    onPress: () => void
+  ) => (
+    <TouchableOpacity style={styles.actionRow} onPress={onPress} activeOpacity={0.8}>
+      <View style={[styles.actionIcon, { backgroundColor: color + '20' }]}>
+        <Ionicons name={icon} size={20} color={color} />
+      </View>
+      <View style={styles.actionTextContainer}>
+        <Text style={styles.actionTitle}>{title}</Text>
+        <Text style={styles.actionSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={theme?.textSecondary || Colors.light.tabIconDefault} />
+    </TouchableOpacity>
+  );
 
-    const chartConfig = ChartDataService.getCommonChartConfig();
-
-    switch (activeChart) {
-      case 'cashflow': {
-        const cashFlowData = ChartDataService.formatCashFlowTrend(overview);
-        return (
-          <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>{t('finance_dashboard.trend_title', { defaultValue: 'Cash Flow Trend (Last 6 Months)' })}</Text>
-            <LineChart
-              data={cashFlowData}
-              width={chartWidth}
-              height={220}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chart}
-            />
-          </View>
-        );
-      }
-
-      case 'categories': {
-        const categoriesData = ChartDataService.formatCategoriesBreakdown(overview);
-        return (
-          <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>{t('finance_dashboard.categories_title', { defaultValue: 'Expense Categories' })}</Text>
-            <PieChart
-              data={categoriesData}
-              width={chartWidth}
-              height={220}
-              chartConfig={chartConfig}
-              accessor="population"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              center={[10, 0]}
-              style={styles.chart}
-            />
-          </View>
-        );
-      }
-
-      case 'comparison': {
-        const comparisonData = ChartDataService.formatMonthlyComparison(overview);
-        return (
-          <View style={styles.chartContainer}>
-            <Text style={styles.chartTitle}>{t('finance_dashboard.comparison_title', { defaultValue: 'Monthly Comparison' })}</Text>
-            <BarChart
-              data={comparisonData}
-              width={chartWidth}
-              height={220}
-              chartConfig={chartConfig}
-              style={styles.chart}
-              yAxisLabel="R"
-              yAxisSuffix="k"
-            />
-          </View>
-        );
-      }
-
-      default:
-        return null;
-    }
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short' });
   };
 
-  const renderChartSelector = () => (
-    <View style={styles.chartSelector}>
-      {[
-        { key: 'cashflow', label: t('finance_dashboard.tab_cash_flow', { defaultValue: 'Cash Flow' }), icon: 'trending-up' },
-        { key: 'categories', label: t('finance_dashboard.tab_categories', { defaultValue: 'Categories' }), icon: 'pie-chart' },
-        { key: 'comparison', label: t('finance_dashboard.tab_comparison', { defaultValue: 'Compare' }), icon: 'bar-chart' },
-      ].map(({ key, label, icon }) => (
-        <TouchableOpacity
-          key={key}
-          style={[
-            styles.chartTab,
-            activeChart === key && styles.chartTabActive,
-          ]}
-          onPress={() => setActiveChart(key as any)}
-        >
-          <Ionicons 
-            name={icon as any} 
-            size={16} 
-            color={activeChart === key ? (theme?.primary || Colors.light.tint) : (theme?.textSecondary || Colors.light.tabIconDefault)} 
-          />
-          <Text 
-            style={[
-              styles.chartTabText,
-              activeChart === key && styles.chartTabTextActive,
-            ]}
-          >
-            {label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  const statusLabels: Record<TransactionStatus, string> = {
+    completed: t('common.completed', { defaultValue: 'Completed' }),
+    pending: t('common.pending', { defaultValue: 'Pending' }),
+    overdue: t('common.overdue', { defaultValue: 'Overdue' }),
+    approved: t('common.approved', { defaultValue: 'Approved' }),
+    rejected: t('common.rejected', { defaultValue: 'Rejected' }),
+  };
 
-  const renderExportOptions = () => (
-    <View style={styles.exportContainer}>
-      <Text style={styles.sectionTitle}>{t('finance_dashboard.export_title', { defaultValue: 'Export Data' })}</Text>
-      <View style={styles.exportButtons}>
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={() => handleExport('csv')}
-        >
-          <Ionicons name="document-text" size={20} color={theme?.primary || Colors.light.tint} />
-          <Text style={styles.exportButtonText}>{t('finance_dashboard.csv', { defaultValue: 'CSV' })}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={() => handleExport('excel')}
-        >
-          <Ionicons name="grid" size={20} color={theme?.primary || Colors.light.tint} />
-          <Text style={styles.exportButtonText}>{t('finance_dashboard.excel', { defaultValue: 'Excel' })}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={() => handleExport('pdf')}
-        >
-          <Ionicons name="document" size={20} color={theme?.primary || Colors.light.tint} />
-          <Text style={styles.exportButtonText}>{t('finance_dashboard.pdf', { defaultValue: 'PDF' })}</Text>
-        </TouchableOpacity>
-        </View>
+  const statusColors: Record<TransactionStatus, string> = {
+    completed: theme?.success || Colors.light.tint,
+    pending: theme?.warning || Colors.light.tint,
+    overdue: theme?.error || Colors.light.tint,
+    approved: theme?.success || Colors.light.tint,
+    rejected: theme?.error || Colors.light.tint,
+  };
 
-        {/* Error screen when data cannot be loaded (fallback/sample) */}
-        {overview?.isSample && (
-          <View style={styles.errorContainer}>
-            <Ionicons name="cloud-offline" size={48} color={theme?.textSecondary || Colors.light.tabIconDefault} />
-            <Text style={styles.errorTitle}>{t('finance_dashboard.load_failed', { defaultValue: 'Unable to load financial data' })}</Text>
-            <Text style={styles.errorSubtitle}>{t('finance_dashboard.check_connection', { defaultValue: 'Please check your connection or try again.' })}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={() => loadDashboardData(true)}>
-              <Text style={styles.retryButtonText}>{t('common.retry', { defaultValue: 'Retry' })}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-    </View>
-  );
-
-  const renderQuickActions = () => (
-    <View style={styles.quickActions}>
-      <Text style={styles.sectionTitle}>{t('finance_dashboard.quick_actions_title', { defaultValue: 'Quick Actions' })}</Text>
-      <View style={styles.actionGrid}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => router.push('/screens/pop-review')}
-        >
-          <Ionicons name="checkmark-circle" size={24} color="#F59E0B" />
-          <Text style={styles.actionText}>{t('finance_dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => router.push('/screens/financial-transactions')}
-        >
-          <Ionicons name="list" size={24} color={theme?.primary || Colors.light.tint} />
-          <Text style={styles.actionText}>{t('finance_dashboard.view_transactions', { defaultValue: 'View Transactions' })}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => router.push('/screens/financial-reports')}
-        >
-          <Ionicons name="analytics" size={24} color={theme?.primary || Colors.light.tint} />
-          <Text style={styles.actionText}>{t('finance_dashboard.detailed_reports', { defaultValue: 'Detailed Reports' })}</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+  const recentTransactions = transactions.slice(0, 6);
 
   if (!canAccessFinances()) {
     return (
-      <View style={styles.accessDenied}>
+      <SafeAreaView style={styles.accessDenied}>
         <Ionicons name="lock-closed" size={64} color={theme?.textSecondary || Colors.light.tabIconDefault} />
         <Text style={styles.accessDeniedTitle}>{t('dashboard.accessDenied', { defaultValue: 'Access Denied' })}</Text>
         <Text style={styles.accessDeniedText}>
@@ -311,21 +204,21 @@ export default function FinanceDashboard() {
         <TouchableOpacity style={styles.backButton} onPress={() => navigateBack()}>
           <Text style={styles.backButtonText}>{t('navigation.back', { defaultValue: 'Back' })}</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.light.tint} />
         <Text style={styles.loadingText}>{t('finance_dashboard.loading', { defaultValue: 'Loading financial dashboard...' })}</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <SimpleHeader title={t('finance_dashboard.title', { defaultValue: 'Finance Dashboard' })} />
 
       <ScrollView
@@ -335,53 +228,169 @@ export default function FinanceDashboard() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {overview && !overview.isSample && (
-          <>
-            {/* Key Metrics */}
-            <View style={styles.metricsGrid}>
-              {renderMetricCard(
-                t('dashboard.monthly_revenue', { defaultValue: 'Monthly Revenue' }),
-                formatCurrency(overview.keyMetrics.monthlyRevenue),
-                t('dashboard.this_month', { defaultValue: 'This month' }),
-                '#059669',
-                'trending-up'
-              )}
-              {renderMetricCard(
-                t('dashboard.monthly_expenses', { defaultValue: 'Monthly Expenses' }), 
-                formatCurrency(overview.keyMetrics.monthlyExpenses),
-                t('dashboard.this_month', { defaultValue: 'This month' }),
-                '#DC2626',
-                'trending-down'
-              )}
-              {renderMetricCard(
-                t('finance_dashboard.net_cash_flow', { defaultValue: 'Net Cash Flow' }),
-                formatCurrency(overview.keyMetrics.cashFlow),
-                overview.keyMetrics.cashFlow >= 0 ? t('finance_dashboard.positive', { defaultValue: 'Positive' }) : t('finance_dashboard.negative', { defaultValue: 'Negative' }),
-                overview.keyMetrics.cashFlow >= 0 ? '#059669' : '#DC2626',
-                'wallet'
-              )}
-              {renderMetricCard(
-                t('finance_dashboard.total_transactions', { defaultValue: 'Total Transactions' }),
-                transactions.length.toString(),
-                t('finance_dashboard.last_30_days', { defaultValue: 'Last 30 days' }),
-                '#4F46E5',
-                'receipt'
-              )}
+        {/* Overview */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('finance_dashboard.overview_title', { defaultValue: 'This Month at a Glance' })}</Text>
+          <Text style={styles.sectionSubtitle}>
+            {t('finance_dashboard.overview_subtitle', { defaultValue: 'Simple numbers to guide your decisions.' })}
+          </Text>
+
+          <View style={styles.summaryGrid}>
+            {renderSummaryCard(
+              t('finance_dashboard.collected', { defaultValue: 'Collected' }),
+              formatCurrency(resolvedMetrics.monthlyRevenue),
+              t('finance_dashboard.collected_hint', { defaultValue: 'Fees received' }),
+              theme?.success || '#059669',
+              'checkmark-circle'
+            )}
+            {renderSummaryCard(
+              t('finance_dashboard.outstanding', { defaultValue: 'Outstanding' }),
+              formatCurrency(resolvedMetrics.outstandingPayments),
+              t('finance_dashboard.outstanding_hint', { defaultValue: 'Still to be paid' }),
+              theme?.warning || '#F59E0B',
+              'alert-circle'
+            )}
+            {renderSummaryCard(
+              t('finance_dashboard.expenses', { defaultValue: 'Expenses' }),
+              formatCurrency(resolvedMetrics.monthlyExpenses),
+              t('finance_dashboard.expenses_hint', { defaultValue: 'Spent this month' }),
+              theme?.error || '#DC2626',
+              'cash'
+            )}
+            {renderSummaryCard(
+              t('finance_dashboard.net', { defaultValue: 'Net Balance' }),
+              formatCurrency(resolvedMetrics.netIncome),
+              resolvedMetrics.netIncome >= 0
+                ? t('finance_dashboard.positive', { defaultValue: 'Positive' })
+                : t('finance_dashboard.negative', { defaultValue: 'Negative' }),
+              resolvedMetrics.netIncome >= 0 ? theme?.success || '#059669' : theme?.error || '#DC2626',
+              'wallet'
+            )}
+          </View>
+
+          <View style={styles.insightRow}>
+            <View style={styles.insightCard}>
+              <Text style={styles.insightLabel}>{t('finance_dashboard.payment_rate', { defaultValue: 'Payment Rate' })}</Text>
+              <Text style={styles.insightValue}>{formatPercent(resolvedMetrics.paymentCompletionRate)}</Text>
             </View>
+            <View style={styles.insightCard}>
+              <Text style={styles.insightLabel}>{terminology.members}</Text>
+              <Text style={styles.insightValue}>{resolvedMetrics.totalStudents}</Text>
+            </View>
+          </View>
 
-            {/* Chart Section */}
-            {renderChartSelector()}
-            {renderChart()}
+          {overview?.isSample && (
+            <View style={styles.sampleBanner}>
+              <Ionicons name="cloud-offline" size={16} color={theme?.textSecondary || Colors.light.tabIconDefault} />
+              <Text style={styles.sampleText}>
+                {t('finance_dashboard.sample_data', { defaultValue: 'Live data is unavailable. Showing a sample view.' })}
+              </Text>
+            </View>
+          )}
+        </View>
 
-            {/* Export Options */}
-            {renderExportOptions()}
+        {/* Main Actions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('finance_dashboard.actions_title', { defaultValue: 'What do you want to do?' })}</Text>
+          {renderActionRow(
+            t('finance_dashboard.manage_fees', { defaultValue: `Manage ${terminology.members} Fees` }),
+            t('finance_dashboard.manage_fees_hint', { defaultValue: 'See who paid and who still owes' }),
+            'people',
+            theme?.primary || Colors.light.tint,
+            () => router.push('/screens/principal-fee-overview')
+          )}
+          {renderActionRow(
+            t('finance_dashboard.review_payments', { defaultValue: 'Review Payments' }),
+            t('finance_dashboard.review_payments_hint', { defaultValue: 'Approve POPs and registrations' }),
+            'checkmark-circle',
+            theme?.warning || '#F59E0B',
+            () => router.push('/screens/pop-review')
+          )}
+          {renderActionRow(
+            t('finance_dashboard.record_expense', { defaultValue: 'Record an Expense' }),
+            t('finance_dashboard.record_expense_hint', { defaultValue: 'Petty cash and receipts' }),
+            'cash',
+            theme?.success || '#059669',
+            () => router.push('/screens/petty-cash')
+          )}
+          {renderActionRow(
+            t('finance_dashboard.view_transactions', { defaultValue: 'View Transactions' }),
+            t('finance_dashboard.view_transactions_hint', { defaultValue: 'All income and expenses' }),
+            'list',
+            theme?.primary || Colors.light.tint,
+            () => router.push('/screens/financial-transactions')
+          )}
+          {renderActionRow(
+            t('finance_dashboard.view_reports', { defaultValue: 'Reports & Exports' }),
+            t('finance_dashboard.view_reports_hint', { defaultValue: 'Monthly summaries and downloads' }),
+            'analytics',
+            theme?.primary || Colors.light.tint,
+            () => router.push('/screens/financial-reports')
+          )}
+        </View>
 
-            {/* Quick Actions */}
-            {renderQuickActions()}
-          </>
-        )}
+        {/* Recent Activity */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('finance_dashboard.recent_activity', { defaultValue: 'Recent Activity' })}</Text>
+          {recentTransactions.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="receipt-outline" size={28} color={theme?.textSecondary || Colors.light.tabIconDefault} />
+              <Text style={styles.emptyTitle}>{t('finance_dashboard.no_activity', { defaultValue: 'No recent transactions yet.' })}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t('finance_dashboard.no_activity_hint', { defaultValue: 'Payments and expenses will appear here.' })}
+              </Text>
+            </View>
+          ) : (
+            recentTransactions.map((transaction) => {
+              const amountColor = transaction.type === 'income'
+                ? theme?.success || '#059669'
+                : theme?.error || '#DC2626';
+              const statusColor = statusColors[transaction.status];
+              return (
+                <View key={transaction.id} style={styles.transactionRow}>
+                  <View style={[styles.transactionIcon, { backgroundColor: amountColor + '20' }]}>
+                    <Ionicons name={transaction.type === 'income' ? 'arrow-up-circle' : 'arrow-down-circle'} size={18} color={amountColor} />
+                  </View>
+                  <View style={styles.transactionInfo}>
+                    <Text style={styles.transactionTitle} numberOfLines={1}>{transaction.description}</Text>
+                    <Text style={styles.transactionMeta}>
+                      {formatDate(transaction.date)} • {transaction.category}
+                    </Text>
+                  </View>
+                  <View style={styles.transactionAmountWrap}>
+                    <Text style={[styles.transactionAmount, { color: amountColor }]}>
+                      {formatCurrency(transaction.amount)}
+                    </Text>
+                    <Text style={[styles.transactionStatus, { color: statusColor }]}>
+                      {statusLabels[transaction.status]}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        {/* Reports & Export */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('finance_dashboard.export_title', { defaultValue: 'Export Data' })}</Text>
+          <View style={styles.exportButtons}>
+            <TouchableOpacity style={styles.exportButton} onPress={() => handleExport('csv')}>
+              <Ionicons name="document-text" size={18} color={theme?.primary || Colors.light.tint} />
+              <Text style={styles.exportButtonText}>{t('finance_dashboard.csv', { defaultValue: 'CSV' })}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportButton} onPress={() => handleExport('excel')}>
+              <Ionicons name="grid" size={18} color={theme?.primary || Colors.light.tint} />
+              <Text style={styles.exportButtonText}>{t('finance_dashboard.excel', { defaultValue: 'Excel' })}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportButton} onPress={() => handleExport('pdf')}>
+              <Ionicons name="document" size={18} color={theme?.primary || Colors.light.tint} />
+              <Text style={styles.exportButtonText}>{t('finance_dashboard.pdf', { defaultValue: 'PDF' })}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -409,110 +418,198 @@ const createStyles = (theme: any) => StyleSheet.create({
   content: {
     flex: 1,
   },
-  metricsGrid: {
+  section: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme?.text || Colors.light.text,
+    marginBottom: 6,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    marginBottom: 12,
+  },
+  summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    padding: 16,
+    gap: 12,
   },
-  metricCard: {
+  summaryCard: {
+    flexBasis: '48%',
     backgroundColor: theme?.cardBackground || 'white',
     borderRadius: 12,
-    padding: 16,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: theme?.border || '#e2e8f0',
   },
-  cardHeader: {
+  summaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 8,
   },
-  cardTitle: {
-    fontSize: 14,
-    color: theme?.textSecondary || Colors.light.tabIconDefault,
-    marginLeft: 8,
-  },
-  cardValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: theme?.textSecondary || Colors.light.tabIconDefault,
-  },
-  chartContainer: {
-    backgroundColor: theme?.cardBackground || 'white',
-    margin: 16,
-    marginTop: 0,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme?.text || Colors.light.text,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  chartSelector: {
-    flexDirection: 'row',
-    backgroundColor: theme?.surface || 'white',
-    margin: 16,
+  summaryIcon: {
+    width: 30,
+    height: 30,
     borderRadius: 8,
-    padding: 4,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  chartTab: {
-    flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 4,
-    gap: 4,
   },
-  chartTabActive: {
-    backgroundColor: (theme?.primary || Colors.light.tint) + '20',
+  summaryTitle: {
+    fontSize: 12,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    fontWeight: '600',
   },
-  chartTabText: {
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  summarySubtitle: {
+    fontSize: 11,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    marginTop: 4,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  insightCard: {
+    flex: 1,
+    backgroundColor: theme?.cardBackground || 'white',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme?.border || '#e2e8f0',
+  },
+  insightLabel: {
     fontSize: 12,
     color: theme?.textSecondary || Colors.light.tabIconDefault,
   },
-  chartTabTextActive: {
-    color: theme?.primary || Colors.light.tint,
-    fontWeight: '600',
+  insightValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme?.text || Colors.light.text,
+    marginTop: 4,
   },
-  exportContainer: {
-    backgroundColor: theme?.surface || 'white',
-    margin: 16,
+  sampleBanner: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: theme?.surface || '#f1f5f9',
+  },
+  sampleText: {
+    fontSize: 12,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
     borderRadius: 12,
-    padding: 16,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: theme?.cardBackground || 'white',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: theme?.border || '#e2e8f0',
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme?.text || Colors.light.text,
+  },
+  actionSubtitle: {
+    fontSize: 12,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    marginTop: 2,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: theme?.cardBackground || 'white',
+    borderWidth: 1,
+    borderColor: theme?.border || '#e2e8f0',
+    marginTop: 10,
+  },
+  transactionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transactionInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  transactionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme?.text || Colors.light.text,
+  },
+  transactionMeta: {
+    fontSize: 12,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    marginTop: 2,
+  },
+  transactionAmountWrap: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  transactionStatus: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: theme?.cardBackground || 'white',
+    borderWidth: 1,
+    borderColor: theme?.border || '#e2e8f0',
+    marginTop: 10,
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme?.text || Colors.light.text,
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: theme?.textSecondary || Colors.light.tabIconDefault,
+    marginTop: 4,
+    textAlign: 'center',
   },
   exportButtons: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 8,
   },
   exportButton: {
     flex: 1,
@@ -528,39 +625,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: theme?.primary || Colors.light.tint,
-  },
-  quickActions: {
-    margin: 16,
-    marginTop: 0,
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: theme?.cardBackground || 'white',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme?.text || Colors.light.text,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme?.text || Colors.light.text,
-    marginBottom: 12,
   },
   accessDenied: {
     flex: 1,
@@ -602,33 +666,5 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     color: theme?.textSecondary || Colors.light.tabIconDefault,
     marginTop: 16,
-  },
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme?.text || Colors.light.text,
-  },
-  errorSubtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    color: theme?.textSecondary || Colors.light.tabIconDefault,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    backgroundColor: theme?.primary || Colors.light.tint,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: theme?.onPrimary || '#fff',
-    fontWeight: '600',
   },
 });

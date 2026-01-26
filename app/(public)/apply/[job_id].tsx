@@ -222,7 +222,7 @@ console.error('Error submitting application:', error);
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
 <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>{t('apply.loadingPosting')}</Text>
@@ -233,7 +233,7 @@ console.error('Error submitting application:', error);
 
   if (!jobPosting) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.error} />
 <Text style={styles.errorText}>{t('apply.notFoundTitle')}</Text>
@@ -246,7 +246,7 @@ console.error('Error submitting application:', error);
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
 <Stack.Screen options={{ title: t('apply.screenTitle'), headerShown: false }} />
 
       {/* Header */}

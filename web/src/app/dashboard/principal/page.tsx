@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
+import { UniformOrdersWidget } from '@/components/dashboard/principal/UniformOrdersWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { showLocalNotification } from '@/lib/services/pushNotificationService';
@@ -271,6 +272,9 @@ export default function PrincipalDashboard() {
 
       {/* Parent Link Approval Requests */}
       <ParentApprovalWidget preschoolId={preschoolId} userId={userId} />
+
+      {/* Uniform Sizes */}
+      <UniformOrdersWidget preschoolId={preschoolId} />
 
       {/* Recent Activity */}
       <div className="card">

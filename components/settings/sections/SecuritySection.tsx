@@ -17,6 +17,8 @@ interface BiometricState {
 interface SecuritySectionProps {
   biometric: BiometricState;
   onToggleBiometric: () => void;
+  onChangePassword?: () => void;
+  onChangeEmail?: () => void;
   styles: {
     section: ViewStyle;
     sectionTitle: TextStyle;
@@ -34,7 +36,13 @@ interface SecuritySectionProps {
   };
 }
 
-export function SecuritySection({ biometric, onToggleBiometric, styles }: SecuritySectionProps) {
+export function SecuritySection({
+  biometric,
+  onToggleBiometric,
+  onChangePassword,
+  onChangeEmail,
+  styles,
+}: SecuritySectionProps) {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
 
@@ -146,6 +154,52 @@ export function SecuritySection({ biometric, onToggleBiometric, styles }: Securi
             )}
           </View>
         </TouchableOpacity>
+
+        {/* Change Password */}
+        {onChangePassword && (
+          <TouchableOpacity style={styles.settingItem} onPress={onChangePassword}>
+            <View style={styles.settingLeft}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={24}
+                color={theme.primary}
+                style={styles.settingIcon}
+              />
+              <View style={styles.settingContent}>
+                <Text style={styles.settingTitle}>
+                  {t('account.change_password_title', { defaultValue: 'Change Password' })}
+                </Text>
+                <Text style={styles.settingSubtitle}>
+                  {t('account.change_password_subtitle', { defaultValue: 'Update your sign-in password' })}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        )}
+
+        {/* Change Email */}
+        {onChangeEmail && (
+          <TouchableOpacity style={styles.settingItem} onPress={onChangeEmail}>
+            <View style={styles.settingLeft}>
+              <Ionicons
+                name="mail-outline"
+                size={24}
+                color={theme.primary}
+                style={styles.settingIcon}
+              />
+              <View style={styles.settingContent}>
+                <Text style={styles.settingTitle}>
+                  {t('account.change_email_title', { defaultValue: 'Change Email' })}
+                </Text>
+                <Text style={styles.settingSubtitle}>
+                  {t('account.change_email_subtitle', { defaultValue: 'Update the email you use to sign in' })}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+        )}
 
         {/* Privacy & Data Protection */}
         <TouchableOpacity

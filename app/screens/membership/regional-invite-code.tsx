@@ -283,7 +283,7 @@ export default function RegionalInviteCodeScreen() {
   if (!regionId) {
     return (
       <DashboardWallpaperBackground>
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <Stack.Screen options={{ headerShown: false }} />
           <View style={[styles.header, { backgroundColor: theme.card }]}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -306,7 +306,7 @@ export default function RegionalInviteCodeScreen() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         
         {/* Header */}

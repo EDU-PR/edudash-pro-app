@@ -134,7 +134,7 @@ export default function YouthMembersListScreen() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.card }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>

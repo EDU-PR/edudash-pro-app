@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -60,6 +60,7 @@ interface FinancialSummary {
 }
 
 type FilterType = 'all' | 'outstanding' | 'paid' | 'overdue';
+type TimeFilter = 'month' | 'all';
 
 export default function PrincipalFeeOverviewScreen() {
   const router = useRouter();
@@ -73,6 +74,7 @@ export default function PrincipalFeeOverviewScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('month');
 
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
 
@@ -90,6 +92,7 @@ export default function PrincipalFeeOverviewScreen() {
           id,
           first_name,
           last_name,
+          enrollment_date,
           class_id,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
@@ -102,20 +105,30 @@ export default function PrincipalFeeOverviewScreen() {
 
       // Fetch all fees for these students
       const studentIds = (studentsData || []).map(s => s.id);
-      const { data: feesData, error: feesError } = await supabase
-        .from('student_fees')
-        .select('*')
-        .in('student_id', studentIds);
+      const { data: feesData, error: feesError } = studentIds.length
+        ? await supabase
+            .from('student_fees')
+            .select('*')
+            .in('student_id', studentIds)
+        : { data: [], error: null };
       
       if (feesError) throw feesError;
 
-      // Fetch registration data
+      // Fetch registration data (EduSite sync)
       const { data: registrations, error: regError } = await supabase
         .from('registration_requests')
-        .select('registration_fee_amount, payment_verified, status')
+        .select('registration_fee_amount, payment_verified, status, created_at')
         .eq('organization_id', organizationId);
       
       if (regError) console.warn('Registration fetch error:', regError);
+
+      // Fetch in-app registration data
+      const { data: inAppRegistrations, error: inAppRegError } = await supabase
+        .from('child_registration_requests')
+        .select('registration_fee_amount, payment_verified, status, created_at')
+        .eq('preschool_id', organizationId);
+
+      if (inAppRegError) console.warn('In-app registration fetch error:', inAppRegError);
 
       // Group fees by student
       const feesByStudent = new Map<string, typeof feesData>();
@@ -126,24 +139,73 @@ export default function PrincipalFeeOverviewScreen() {
       });
 
       // Process students with fee summaries
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid', 'pending_verification']);
+
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
       const processedStudents: StudentWithFees[] = (studentsData || []).map((student: any) => {
         const studentFees = feesByStudent.get(student.id) || [];
         const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
         const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
+
+        const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
+        const enrollmentMonthStart = enrollmentDate
+          ? new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1)
+          : null;
+
+        const isPreEnrollment = (fee: any) => {
+          if (!enrollmentMonthStart || !fee?.due_date) return false;
+          const due = new Date(fee.due_date);
+          if (Number.isNaN(due.getTime())) return false;
+          return due < enrollmentMonthStart;
+        };
+
+        const isDueNow = (fee: any) => {
+          if (!fee?.due_date) return true;
+          const due = new Date(fee.due_date);
+          if (Number.isNaN(due.getTime())) return true;
+          return due <= todayStart;
+        };
         
-        const outstanding = studentFees
-          .filter(f => f.status === 'pending' || f.status === 'overdue')
+        const payableFees = studentFees.filter(f => !isPreEnrollment(f));
+        const monthFees = payableFees.filter((f: any) => {
+          if (!f?.due_date) return false;
+          const due = new Date(f.due_date);
+          if (Number.isNaN(due.getTime())) return false;
+          return due >= monthStart && due < monthEnd;
+        });
+        const baseFees = timeFilter === 'month' ? monthFees : payableFees;
+        const dueFees = baseFees.filter(
+          (f: any) => unpaidStatuses.has(String(f.status)) && String(f.status) !== 'pending_verification' && isDueNow(f)
+        );
+        
+        const outstanding = dueFees
           .reduce((sum, f) => sum + (f.final_amount || f.amount || 0), 0);
         
-        const paid = studentFees
+        const paid = baseFees
           .filter(f => f.status === 'paid')
           .reduce((sum, f) => sum + (f.final_amount || f.amount || 0), 0);
         
-        const waived = studentFees
+        const waived = baseFees
           .reduce((sum, f) => sum + (f.waived_amount || 0), 0);
         
-        const overdue_count = studentFees.filter(f => f.status === 'overdue').length;
-        const pending_count = studentFees.filter(f => f.status === 'pending').length;
+        const overdue_count = baseFees.filter((f: any) => {
+          if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
+          if (!f?.due_date) return false;
+          const due = new Date(f.due_date);
+          if (Number.isNaN(due.getTime())) return false;
+          return due < todayStart;
+        }).length;
+        const pending_count = baseFees.filter((f: any) => {
+          if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
+          if (!f?.due_date) return true;
+          const due = new Date(f.due_date);
+          if (Number.isNaN(due.getTime())) return true;
+          return due >= todayStart;
+        }).length;
         
         return {
           id: student.id,
@@ -171,18 +233,31 @@ export default function PrincipalFeeOverviewScreen() {
       const overdueStudents = processedStudents.filter(s => s.fees.overdue_count > 0).length;
 
       // Registration fees
-      const regData = registrations || [];
+      const regData = [...(registrations || []), ...(inAppRegistrations || [])];
+      const filterByTime = (r: any) => {
+        if (timeFilter !== 'month') return true;
+        if (!r?.created_at) return false;
+        const created = new Date(r.created_at);
+        if (Number.isNaN(created.getTime())) return false;
+        return created >= monthStart && created < monthEnd;
+      };
+
       const regCollected = regData
+        .filter(filterByTime)
         .filter((r: any) => r.payment_verified && r.status === 'approved')
         .reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount) || 0), 0);
       const regPending = regData
+        .filter(filterByTime)
         .filter((r: any) => !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected')
         .reduce((sum: number, r: any) => sum + (parseFloat(r.registration_fee_amount) || 0), 0);
 
+      const combinedCollected = totalPaid + regCollected;
+      const combinedOutstanding = totalOutstanding + regPending;
+
       setSummary({
         totalStudents: processedStudents.length,
-        totalOutstanding,
-        totalPaid,
+        totalOutstanding: combinedOutstanding,
+        totalPaid: combinedCollected,
         totalWaived,
         overdueStudents,
         registrationFees: {
@@ -197,7 +272,7 @@ export default function PrincipalFeeOverviewScreen() {
     } catch (error) {
       console.error('[PrincipalFeeOverview] Error loading data:', error);
     }
-  }, [organizationId]);
+  }, [organizationId, timeFilter]);
 
   // Initial load
   useEffect(() => {
@@ -259,16 +334,16 @@ export default function PrincipalFeeOverviewScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Fee Management' }} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading financial data...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{ 
           title: 'Fee Management',
@@ -299,7 +374,35 @@ export default function PrincipalFeeOverviewScreen() {
         {/* Financial Summary */}
         {summary && (
           <View style={styles.summarySection}>
-            <Text style={styles.sectionTitle}>Financial Overview</Text>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.sectionTitle}>Financial Overview</Text>
+              <TouchableOpacity
+                style={styles.expensesButton}
+                onPress={() => router.push('/screens/financial-dashboard')}
+              >
+                <Ionicons name="cash-outline" size={16} color={theme.primary} />
+                <Text style={styles.expensesButtonText}>Expenses & Petty Cash</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.timeFilterRow}>
+              <TouchableOpacity
+                style={[styles.timeChip, timeFilter === 'month' && styles.timeChipActive]}
+                onPress={() => setTimeFilter('month')}
+              >
+                <Text style={[styles.timeChipText, timeFilter === 'month' && styles.timeChipTextActive]}>
+                  This Month
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timeChip, timeFilter === 'all' && styles.timeChipActive]}
+                onPress={() => setTimeFilter('all')}
+              >
+                <Text style={[styles.timeChipText, timeFilter === 'all' && styles.timeChipTextActive]}>
+                  All Time
+                </Text>
+              </TouchableOpacity>
+            </View>
             
             {/* Main Stats Row */}
             <View style={styles.mainStatsRow}>
@@ -486,7 +589,7 @@ export default function PrincipalFeeOverviewScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -517,6 +620,54 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   },
   summarySection: {
     marginBottom: 20,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 12,
+  },
+  expensesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  expensesButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  timeFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  timeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  timeChipActive: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  timeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  timeChipTextActive: {
+    color: '#FFFFFF',
   },
   sectionTitle: {
     fontSize: 18,

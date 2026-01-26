@@ -81,83 +81,97 @@ function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
   });
 }
 
+function isSameUserProfile(user: User, existingProfile?: EnhancedUserProfile | null): boolean {
+  if (!existingProfile) return false;
+  if (existingProfile.id && existingProfile.id === user.id) return true;
+  if (
+    existingProfile.email &&
+    user.email &&
+    existingProfile.email.toLowerCase() === user.email.toLowerCase()
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function buildFallbackProfileFromSession(
   user: User,
   existingProfile?: EnhancedUserProfile | null
 ): Promise<EnhancedUserProfile> {
+  const safeProfile = isSameUserProfile(user, existingProfile) ? existingProfile : null;
   const userMeta = (user.user_metadata || {}) as Record<string, any>;
   const appMeta = (user.app_metadata || {}) as Record<string, any>;
-  const role = (userMeta.role || appMeta.role || existingProfile?.role || 'parent') as any;
+  const role = (userMeta.role || appMeta.role || safeProfile?.role || 'parent') as any;
   const seatStatus =
     userMeta.seat_status ||
     appMeta.seat_status ||
-    existingProfile?.seat_status ||
-    existingProfile?.organization_membership?.seat_status ||
+    safeProfile?.seat_status ||
+    safeProfile?.organization_membership?.seat_status ||
     'active';
   const planTier =
     userMeta.plan_tier ||
     userMeta.subscription_tier ||
     appMeta.plan_tier ||
     appMeta.subscription_tier ||
-    existingProfile?.organization_membership?.plan_tier ||
+    safeProfile?.organization_membership?.plan_tier ||
     'free';
   const organizationId =
     userMeta.organization_id ||
     appMeta.organization_id ||
-    existingProfile?.organization_id ||
-    existingProfile?.organization_membership?.organization_id;
+    safeProfile?.organization_id ||
+    safeProfile?.organization_membership?.organization_id;
   const organizationName =
     userMeta.organization_name ||
     appMeta.organization_name ||
-    existingProfile?.organization_name ||
-    existingProfile?.organization_membership?.organization_name;
+    safeProfile?.organization_name ||
+    safeProfile?.organization_membership?.organization_name;
   const firstName =
     userMeta.first_name ||
     userMeta.given_name ||
-    existingProfile?.first_name ||
+    safeProfile?.first_name ||
     '';
   const lastName =
     userMeta.last_name ||
     userMeta.family_name ||
-    existingProfile?.last_name ||
+    safeProfile?.last_name ||
     '';
   const fullName =
     userMeta.full_name ||
     userMeta.name ||
-    existingProfile?.full_name ||
+    safeProfile?.full_name ||
     `${firstName} ${lastName}`.trim() ||
     undefined;
   const capabilities = await getUserCapabilities(role, planTier, seatStatus);
 
   const baseProfile = {
     id: user.id,
-    email: user.email || existingProfile?.email || '',
+    email: user.email || safeProfile?.email || '',
     role,
     first_name: firstName,
     last_name: lastName,
     full_name: fullName,
-    avatar_url: userMeta.avatar_url || userMeta.picture || existingProfile?.avatar_url,
+    avatar_url: userMeta.avatar_url || userMeta.picture || safeProfile?.avatar_url,
     organization_id: organizationId,
     organization_name: organizationName,
-    preschool_id: userMeta.preschool_id || appMeta.preschool_id || (existingProfile as any)?.preschool_id,
+    preschool_id: userMeta.preschool_id || appMeta.preschool_id || (safeProfile as any)?.preschool_id,
     seat_status: seatStatus,
     capabilities,
-    created_at: existingProfile?.created_at || new Date().toISOString(),
-    last_login_at: existingProfile?.last_login_at || new Date().toISOString(),
+    created_at: safeProfile?.created_at || new Date().toISOString(),
+    last_login_at: safeProfile?.last_login_at || new Date().toISOString(),
   } as any;
 
   const orgMembership =
-    existingProfile?.organization_membership ||
+    safeProfile?.organization_membership ||
     (organizationId
       ? {
           organization_id: organizationId,
           organization_name: organizationName || 'Unknown',
           plan_tier: planTier,
           seat_status: seatStatus,
-          invited_by: existingProfile?.organization_membership?.invited_by,
-          created_at: existingProfile?.organization_membership?.created_at || baseProfile.created_at,
-          member_type: existingProfile?.organization_membership?.member_type,
-          school_type: existingProfile?.organization_membership?.school_type,
+          invited_by: safeProfile?.organization_membership?.invited_by,
+          created_at: safeProfile?.organization_membership?.created_at || baseProfile.created_at,
+          member_type: safeProfile?.organization_membership?.member_type,
+          school_type: safeProfile?.organization_membership?.school_type,
         }
       : undefined);
 
@@ -388,7 +402,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         console.log('================================');
         
-        if (storedSession && storedProfile && mounted) {
+        const canUseStoredProfile =
+          !!storedSession &&
+          !!storedProfile &&
+          (
+            (storedProfile as any)?.id === storedSession.user_id ||
+            ((storedProfile as any)?.email && storedSession.email &&
+              String((storedProfile as any).email).toLowerCase() === String(storedSession.email).toLowerCase())
+          );
+
+        if (storedSession && mounted) {
           setSession({ 
             access_token: storedSession.access_token, 
             refresh_token: storedSession.refresh_token, 
@@ -396,9 +419,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             user: { id: storedSession.user_id, email: storedSession.email } 
           } as any);
           setUser({ id: storedSession.user_id, email: storedSession.email } as any);
-          const enhanced = toEnhancedProfile(storedProfile as any);
-          setProfile(enhanced);
-          setPermissions(createPermissionChecker(enhanced));
+          if (canUseStoredProfile) {
+            const enhanced = toEnhancedProfile(storedProfile as any);
+            setProfile(enhanced);
+            setPermissions(createPermissionChecker(enhanced));
+          } else {
+            setProfile(null);
+            setPermissions(createPermissionChecker(null));
+          }
         }
 
         // Get current auth session
@@ -540,9 +568,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               enhancedProfile = null;
             }
 
+            const safeExistingProfile = isSameUserProfile(s.user, profile) ? profile : null;
+            if (profile && !safeExistingProfile) {
+              setProfile(null);
+              setPermissions(createPermissionChecker(null));
+            }
+
             if (!enhancedProfile) {
               usedFallback = true;
-              enhancedProfile = await buildFallbackProfileFromSession(s.user, profile);
+              enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
             }
 
             if (mounted && enhancedProfile) {

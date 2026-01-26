@@ -6,8 +6,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
 } from "react-native";
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { BiometricBackupManager } from "@/lib/BiometricBackupManager";
 import { assertSupabase } from "@/lib/supabase";
@@ -20,6 +21,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSchoolSettings } from '@/lib/hooks/useSchoolSettings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
+import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
+import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
 // Extracted section components
 import {
@@ -34,6 +38,13 @@ import {
 
 // App Preferences Section - FAB & Tutorial settings
 import { AppPreferencesSection } from '@/components/settings/AppPreferencesSection';
+
+let Clipboard: any = null;
+try {
+  Clipboard = require('expo-clipboard');
+} catch {
+  Clipboard = null;
+}
 
 // Safe useUpdates hook that handles missing provider
 const useSafeUpdates = () => {
@@ -245,6 +256,57 @@ export default function SettingsScreen() {
     setRefreshing(false);
   }, [loadSettings]);
 
+  const handleForgotPasswordTest = useCallback(async () => {
+    try {
+      let url = '';
+      if (Clipboard?.getStringAsync) {
+        const clip = await Clipboard.getStringAsync();
+        if (clip && typeof clip === 'string' && (clip.includes('http') || clip.includes('edudashpro://'))) {
+          url = clip.trim();
+        }
+      }
+
+      if (!url) {
+        url = (await Linking.getInitialURL()) || '';
+      }
+
+      if (!url) {
+        Alert.alert(
+          'Forgot Password Test',
+          'No URL found. Copy a reset link to your clipboard or open a recovery link first.',
+        );
+        return;
+      }
+
+      const parsed = parseDeepLinkUrl(url);
+      console.log('[Dev][ForgotPasswordTest] URL:', url);
+      console.log('[Dev][ForgotPasswordTest] Parsed:', parsed);
+
+      Alert.alert(
+        'Forgot Password Test',
+        `Path: ${parsed.path}\nParams: ${JSON.stringify(parsed.params, null, 2)}`,
+        [
+          {
+            text: 'Open Callback',
+            onPress: () => {
+              const search = new URLSearchParams();
+              Object.entries(parsed.params || {}).forEach(([key, value]) => {
+                if (!key) return;
+                if (value === undefined || value === null || value === '') return;
+                search.set(key, String(value));
+              });
+              router.push(`/auth-callback${search.toString() ? `?${search.toString()}` : ''}` as any);
+            },
+          },
+          { text: 'OK', style: 'default' },
+        ]
+      );
+    } catch (err) {
+      console.error('[Dev][ForgotPasswordTest] Error:', err);
+      Alert.alert('Forgot Password Test', 'Failed to run test. Check logs for details.');
+    }
+  }, []);
+
   const toggleBiometric = async () => {
     if (!biometricEnrolled) {
       Alert.alert(
@@ -334,8 +396,38 @@ export default function SettingsScreen() {
               hasBackupMethods,
             }}
             onToggleBiometric={toggleBiometric}
+            onChangePassword={() => router.push('/screens/change-password')}
+            onChangeEmail={() => router.push('/screens/change-email')}
             styles={styles}
           />
+
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Dev Tools</Text>
+              <View style={styles.settingsCard}>
+                <TouchableOpacity
+                  style={[styles.settingItem, styles.lastSettingItem]}
+                  onPress={handleForgotPasswordTest}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons
+                      name="bug-outline"
+                      size={24}
+                      color={theme.primary}
+                      style={styles.settingIcon}
+                    />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Forgot Password Test</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Parse deep link and open auth-callback (dev only)
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Notifications & Alerts */}
           <NotificationsSection

@@ -110,16 +110,27 @@ export const useParentDashboard = () => {
         }
 
         // Fetch children for this parent
+        const parentIdentifiers = new Set<string>();
+        if (parentUser.id) parentIdentifiers.add(parentUser.id);
+        if (user.id) parentIdentifiers.add(user.id);
+
+        const parentFilters = Array.from(parentIdentifiers).flatMap((id) => [
+          `parent_id.eq.${id}`,
+          `guardian_id.eq.${id}`,
+        ]);
+
         const { data: childrenData } = await supabase
           .from('students')
           .select(`
             id,
             first_name,
             last_name,
+            date_of_birth,
             grade_level,
+            avatar_url,
             classes!students_class_id_fkey(id, name, teacher_id)
           `)
-          .eq('parent_id', user.id);
+          .or(parentFilters.join(','));
         
         // Fetch teacher names separately if we have classes
         const classIds = (childrenData || [])
@@ -148,6 +159,8 @@ export const useParentDashboard = () => {
           id: child.id as string,
           firstName: child.first_name as string,
           lastName: child.last_name as string,
+          avatarUrl: (child.avatar_url as string | null) ?? null,
+          dateOfBirth: (child.date_of_birth as string | null) ?? null,
           grade: (child.grade_level as string) || 'Grade R',
           className: (child.classes as Record<string, unknown>)?.name as string || 'No Class',
           classId: (child.classes as Record<string, unknown>)?.id as string || null,

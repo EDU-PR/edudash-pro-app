@@ -13,15 +13,20 @@ import { supabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Get proper redirect URL based on platform
-// For password reset, use the landing page which handles mobile deep-linking properly
+// For password reset, route through auth-callback so we can extract tokens and open reset UI.
 const getRedirectUrl = (path: string) => {
   if (Platform.OS === 'web') {
+    if (path === 'reset-password') {
+      return `${window.location.origin}/auth-callback?type=recovery`;
+    }
     return `${window.location.origin}/${path}`;
   }
-  // For native apps, use the landing page with flow=recovery parameter
-  // This allows the web landing page to detect mobile and deep-link back to the app
+  // For native apps, use custom scheme so the app opens directly.
+  // auth-callback will handle recovery and route to reset-password.
   if (path === 'reset-password') {
-    return `https://www.edudashpro.org.za/landing?flow=recovery`;
+    // Use custom scheme so recovery opens the native app directly.
+    // Supabase will append the recovery code/token to this URL.
+    return `edudashpro://auth-callback?type=recovery`;
   }
   // Fallback for other paths
   return `https://www.edudashpro.org.za/${path}`;
@@ -65,7 +70,7 @@ export default function ForgotPassword() {
         showAlert({
           title: t('common.success', { defaultValue: 'Success' }),
           message: t('auth.forgot_password.email_sent_web', { 
-            defaultValue: 'Password reset email sent! Click the link in your email - you will reset your password on our secure website, then return to the app to sign in.' 
+            defaultValue: 'Password reset email sent! Open the link in your email — it will open the app (if installed) or the web reset page.' 
           }),
           type: 'success',
           buttons: [{ text: 'OK', style: 'default' }],
@@ -203,7 +208,7 @@ export default function ForgotPassword() {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <LinearGradient
         colors={marketingTokens.gradients.background}
         start={{ x: 0, y: 0 }}

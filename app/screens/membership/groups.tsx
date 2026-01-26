@@ -257,7 +257,7 @@ export default function MemberGroupsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: t('membership.groups', { defaultValue: 'Groups' }),

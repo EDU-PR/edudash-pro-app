@@ -148,7 +148,7 @@ export default function BirthdayChartScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading birthdays...</Text>
@@ -159,7 +159,7 @@ export default function BirthdayChartScreen() {
   // Show error state if no organization ID
   if (!organizationId) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Ionicons name="alert-circle" size={48} color={theme.warning} />
         <Text style={[styles.loadingText, { marginTop: 16 }]}>
@@ -181,7 +181,7 @@ export default function BirthdayChartScreen() {
   // Show error state if there was an error loading data
   if (error) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Ionicons name="warning" size={48} color={theme.error} />
         <Text style={[styles.loadingText, { marginTop: 16 }]}>
@@ -198,7 +198,7 @@ export default function BirthdayChartScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* Custom Header */}

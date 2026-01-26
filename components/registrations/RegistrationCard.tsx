@@ -84,6 +84,9 @@ const getStatusIcon = (status: Registration['status']): string => {
 export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   item,
   isProcessing,
+  onApprove,
+  onReject,
+  onVerifyPayment,
   canApprove,
   onSendReminder,
   isSendingReminder,
@@ -98,7 +101,16 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
     } as any);
   };
 
+  const feeAmount = item.registration_fee_amount ?? 0;
+  const hasFee = feeAmount > 0;
+  const hasPop = !!item.proof_of_payment_url;
   const canApproveItem = canApprove(item);
+  const canVerifyPayment = item.status === 'pending' && hasFee;
+  const verifyLabel = item.payment_verified
+    ? 'Unverify'
+    : hasPop
+      ? 'Verify'
+      : 'Confirm Paid';
 
   return (
     <TouchableOpacity
@@ -213,11 +225,11 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
       </View>
 
       {/* Fee Info */}
-      {item.registration_fee_amount && (
+      {hasFee && (
         <View style={[styles.feeRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.feeLabel, { color: colors.textSecondary }]}>Registration Fee:</Text>
           <Text style={[styles.feeAmount, { color: colors.text }]}>
-            R{item.registration_fee_amount.toLocaleString()}
+            R{feeAmount.toLocaleString()}
             {item.discount_amount ? ` (-R${item.discount_amount})` : ''}
           </Text>
         </View>
@@ -251,11 +263,11 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
       )}
 
       {/* POP Warning - only show if pending and needs payment */}
-      {item.status === 'pending' && !canApproveItem && item.registration_fee_amount && item.registration_fee_amount > 0 && (
+      {item.status === 'pending' && !canApproveItem && hasFee && (
         <View style={[styles.popWarning, { backgroundColor: '#F59E0B20' }]}>
           <Ionicons name="warning" size={16} color="#F59E0B" />
           <Text style={styles.popWarningText}>
-            Proof of Payment not uploaded yet - cannot approve
+            Proof of Payment not uploaded yet - confirm payment to approve
           </Text>
         </View>
       )}
@@ -289,15 +301,63 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
           <Text style={{ color: colors.primary, marginLeft: 8, fontWeight: '600' }}>
             View Proof of Payment
           </Text>
-          {item.registration_fee_amount && (
+          {hasFee && (
             <Text style={{ color: colors.primary, marginLeft: 'auto', fontWeight: '700' }}>
-              R{item.registration_fee_amount.toFixed(2)}
+              R{feeAmount.toFixed(2)}
             </Text>
           )}
         </TouchableOpacity>
       )}
 
-      {/* Action Buttons removed - approvals are handled in the POP verification screen */}
+      {/* Action Buttons */}
+      {item.status === 'pending' && (
+        <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
+          {canVerifyPayment && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.verifyButton,
+                isProcessing && styles.disabledButton,
+              ]}
+              onPress={() => onVerifyPayment(item, !item.payment_verified)}
+              disabled={isProcessing}
+            >
+              <Ionicons
+                name={item.payment_verified ? 'close-circle' : 'checkmark-circle'}
+                size={18}
+                color="#fff"
+              />
+              <Text style={styles.actionButtonText}>
+                {verifyLabel}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.approveButton,
+              (!canApproveItem || isProcessing) && styles.disabledButton,
+            ]}
+            onPress={() => onApprove(item)}
+            disabled={!canApproveItem || isProcessing}
+          >
+            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>Approve</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              styles.rejectButton,
+              isProcessing && styles.disabledButton,
+            ]}
+            onPress={() => onReject(item)}
+            disabled={isProcessing}
+          >
+            <Ionicons name="close-circle" size={18} color="#fff" />
+            <Text style={styles.actionButtonText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </TouchableOpacity>
   );
 };

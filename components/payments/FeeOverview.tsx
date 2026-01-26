@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { PaymentChild, StudentFee } from '@/types/payments';
 import { formatCurrency, formatPaymentDate } from '@/lib/utils/payment-utils';
@@ -135,16 +135,21 @@ export function NextPaymentCard({ upcomingFees, theme }: NextPaymentCardProps) {
 interface RegistrationCardProps {
   child: PaymentChild;
   theme: any;
+  onUploadPress?: () => void;
 }
 
-export function RegistrationCard({ child, theme }: RegistrationCardProps) {
+export function RegistrationCard({ child, theme, onUploadPress }: RegistrationCardProps) {
   const styles = createStyles(theme);
   
   // Determine payment status display
   // payment_verified = school has confirmed payment receipt
   // registration_fee_paid = parent has indicated they paid (POP uploaded)
+  const feeAmount = child.registration_fee_amount || 0;
+  const hasFee = feeAmount > 0;
   const isFullyVerified = child.payment_verified;
   const isPaidAwaitingVerification = child.registration_fee_paid && !child.payment_verified;
+  const canUpload = hasFee && !isFullyVerified;
+  const uploadLabel = isPaidAwaitingVerification ? 'Upload New POP' : 'Upload Proof of Payment';
 
   return (
     <View style={styles.registrationCard}>
@@ -153,7 +158,7 @@ export function RegistrationCard({ child, theme }: RegistrationCardProps) {
         <Ionicons name="receipt-outline" size={20} color={theme.textSecondary} />
       </View>
       <Text style={styles.registrationAmount}>
-        {formatCurrency(child.registration_fee_amount || 0)}
+        {formatCurrency(feeAmount)}
       </Text>
       {isFullyVerified ? (
         <View style={styles.paidBadge}>
@@ -170,6 +175,13 @@ export function RegistrationCard({ child, theme }: RegistrationCardProps) {
           <Ionicons name="time-outline" size={14} color="#fbbf24" />
           <Text style={styles.unpaidText}>Payment Pending</Text>
         </View>
+      )}
+
+      {canUpload && onUploadPress && (
+        <TouchableOpacity style={styles.uploadButton} onPress={onUploadPress}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+          <Text style={styles.uploadButtonText}>{uploadLabel}</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -275,4 +287,16 @@ const createStyles = (theme: any) => StyleSheet.create({
   paidText: { fontSize: 12, color: '#22c55e', fontWeight: '500' },
   unpaidBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   unpaidText: { fontSize: 12, color: '#fbbf24', fontWeight: '500' },
+  uploadButton: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: theme.primary,
+    alignSelf: 'flex-start',
+  },
+  uploadButtonText: { color: '#fff', fontWeight: '600', fontSize: 12 },
 });

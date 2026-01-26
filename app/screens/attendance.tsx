@@ -276,7 +276,7 @@ export default function AttendanceScreen() {
         headerBackVisible: true
       }} />
       <ThemedStatusBar />
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: palette.background }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: palette.background }}>
         <ScrollView 
           contentContainerStyle={styles.container}
           refreshControl={

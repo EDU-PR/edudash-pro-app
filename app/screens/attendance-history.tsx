@@ -708,7 +708,7 @@ export default function AttendanceHistoryScreen() {
       }} />
       <ThemedStatusBar />
       
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: palette.background }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: palette.background }}>
         <FlatList
           data={records}
           keyExtractor={(item) => item.id}

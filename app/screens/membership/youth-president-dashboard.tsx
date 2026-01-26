@@ -295,7 +295,7 @@ export default function YouthPresidentDashboard() {
   if (loading && !stats) {
     return (
       <DashboardWallpaperBackground>
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -309,7 +309,7 @@ export default function YouthPresidentDashboard() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer 
         isOpen={isDrawerOpen} 

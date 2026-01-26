@@ -99,7 +99,7 @@ export default function PricingPage() {
     return (
       <View style={styles.container}>
         <StatusBar style="light" />
-        <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
+        <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#00f5ff" />
             <Text style={styles.loadingText}>{t('pricing.loading', { defaultValue: 'Loading pricing plans...' })}</Text>
@@ -113,7 +113,7 @@ export default function PricingPage() {
     return (
       <View style={styles.container}>
         <StatusBar style="light" />
-        <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
+        <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
           <View style={styles.errorContainer}>
             <IconSymbol name="exclamationmark.triangle" size={48} color="#ef4444" />
             <Text style={styles.errorTitle}>{t('pricing.unable_title', { defaultValue: 'Unable to Load Pricing' })}</Text>
@@ -170,7 +170,7 @@ export default function PricingPage() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1 }}>
+      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
         <ScrollView 
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}

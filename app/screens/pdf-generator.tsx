@@ -517,7 +517,7 @@ export default function PDFGeneratorScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={theme.surface} />
       
       {/* Header */}

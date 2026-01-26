@@ -142,7 +142,7 @@ export default function OrganizationDashboard() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -155,7 +155,7 @@ export default function OrganizationDashboard() {
 
   if (error) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={48} color="#EF4444" />
           <Text style={[styles.errorTitle, { color: theme.text }]}>Unable to Load Dashboard</Text>
@@ -173,7 +173,7 @@ export default function OrganizationDashboard() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]} edges={['top', 'bottom']}>
         {/* Mobile Navigation Drawer */}
         <MobileNavDrawer 
           isOpen={isDrawerOpen} 

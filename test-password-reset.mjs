@@ -17,7 +17,7 @@ async function triggerPasswordReset(email) {
     type: 'recovery',
     email: email,
     options: {
-      redirectTo: 'https://edudashpro.org.za/reset-password',
+      redirectTo: 'https://www.edudashpro.org.za/landing?flow=recovery',
     },
   });
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ export interface ChildSwitcherProps {
     id: string;
     firstName: string;
     lastName: string;
+    avatarUrl?: string | null;
   }>;
   activeChildId: string | null;
   onChildChange: (childId: string) => void;
@@ -22,7 +23,13 @@ export const ChildSwitcher: React.FC<ChildSwitcherProps> = ({
   const { theme } = useTheme();
   const { t } = useTranslation();
 
-  if (children.length <= 1) return null;
+  if (children.length === 0) return null;
+
+  const getInitials = (firstName: string, lastName: string) => {
+    const firstInitial = firstName?.trim().charAt(0) ?? '';
+    const lastInitial = lastName?.trim().charAt(0) ?? '';
+    return `${firstInitial}${lastInitial}`.toUpperCase() || '?';
+  };
 
   return (
     <View style={{
@@ -58,13 +65,34 @@ export const ChildSwitcher: React.FC<ChildSwitcherProps> = ({
                 }}
                 onPress={() => onChildChange(child.id)}
               >
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: isActive ? '600' : '500',
-                  color: isActive ? theme.onPrimary : theme.text,
-                }}>
-                  {child.firstName} {child.lastName}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {child.avatarUrl ? (
+                    <Image
+                      source={{ uri: child.avatarUrl }}
+                      style={{ width: 24, height: 24, borderRadius: 12 }}
+                    />
+                  ) : (
+                    <View style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 12,
+                      backgroundColor: isActive ? theme.onPrimary + '30' : theme.primary + '20',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: isActive ? theme.onPrimary : theme.primary }}>
+                        {getInitials(child.firstName, child.lastName)}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: isActive ? '600' : '500',
+                    color: isActive ? theme.onPrimary : theme.text,
+                  }}>
+                    {child.firstName} {child.lastName}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })}

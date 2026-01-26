@@ -18,8 +18,9 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
+import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 
 export default function ParentDashboard() {
   const router = useRouter();
@@ -254,6 +255,18 @@ export default function ParentDashboard() {
                 </div>
               ))}
             </div>
+          </CollapsibleSection>
+        )}
+
+        {/* Uniform Sizes (organization-linked parents only) */}
+        {hasOrganization && childrenCards.length > 0 && (
+          <CollapsibleSection
+            title="Uniform Sizes"
+            icon={Shirt}
+            isOpen={openSection === 'uniforms'}
+            onToggle={() => setOpenSection(openSection === 'uniforms' ? null : 'uniforms')}
+          >
+            <UniformSizesWidget childrenCards={childrenCards} />
           </CollapsibleSection>
         )}
 

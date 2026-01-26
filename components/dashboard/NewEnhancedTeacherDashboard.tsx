@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTeacherDashboard } from '@/hooks/useDashboardData';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
@@ -30,6 +31,9 @@ import { PendingParentLinkRequests } from './PendingParentLinkRequests';
 import { TeacherMetricsCard } from './teacher/TeacherMetricsCard';
 import { TeacherQuickActionCard } from './teacher/TeacherQuickActionCard';
 import { useNewEnhancedTeacherState } from '@/hooks/useNewEnhancedTeacherState';
+import { useTeacherStudents } from '@/hooks/useTeacherStudents';
+import { StudentSummaryCard } from '@/components/dashboard/shared';
+import { router } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -84,6 +88,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   refreshTrigger: _refreshTrigger, 
   preferences: _preferences 
 }) => {
+  const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { theme } = useTheme();
   const { preferences: dashPrefs } = useDashboardPreferences();
@@ -109,6 +114,12 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
     refresh,
     isLoadingFromCache,
   } = useTeacherDashboard();
+
+  const organizationId = profile?.organization_id || (profile as any)?.preschool_id || null;
+  const {
+    students: teacherStudents,
+    loading: teacherStudentsLoading,
+  } = useTeacherStudents({ teacherId: user?.id || null, organizationId, limit: 4 });
 
   // Build metrics and actions from state
   const metrics = state.buildMetrics(dashboardData);
@@ -215,6 +226,28 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           </View>
         </View>
 
+        {/* My Students */}
+        <View style={styles.section}>
+          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
+            <Text style={styles.sectionTitle}>{t('dashboard.my_students', { defaultValue: 'My Students' })}</Text>
+          </View>
+          {teacherStudentsLoading ? (
+            <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
+          ) : (
+            teacherStudents.map((student) => (
+              <StudentSummaryCard
+                key={student.id}
+                student={student}
+                onPress={() => router.push(`/screens/student-detail?id=${student.id}` as any)}
+                subtitle={student.className || t('common.noClass', { defaultValue: 'No class assigned' })}
+              />
+            ))
+          )}
+          {!teacherStudentsLoading && teacherStudents.length === 0 && (
+            <Text style={styles.emptyText}>{t('dashboard.no_students', { defaultValue: 'No students yet.' })}</Text>
+          )}
+        </View>
+
         {/* Parent Link Requests Widget */}
         <View style={styles.section}>
           <PendingParentLinkRequests />
@@ -248,6 +281,11 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     fontSize: 16,
     color: theme.textSecondary,
     marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    marginTop: 8,
   },
   headerCard: {
     marginBottom: 24,

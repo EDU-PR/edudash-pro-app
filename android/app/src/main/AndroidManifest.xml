@@ -52,18 +52,30 @@
     <package android:name="za.co.nedbank.nedbank"/>
     <!-- Capitec -->
     <package android:name="za.co.capitecbank.production"/>
+    <!-- Capitec (alternate) -->
+    <package android:name="za.co.capitecbank"/>
     <!-- TymeBank -->
     <package android:name="za.co.tymebank"/>
+    <!-- TymeBank (alternate) -->
+    <package android:name="za.co.tymebank.digital"/>
     <!-- Discovery Bank -->
     <package android:name="com.discoverycoza"/>
+    <!-- Discovery Bank (alternate) -->
+    <package android:name="com.discovery.bank"/>
     <!-- Investec -->
     <package android:name="za.co.investec"/>
     <!-- African Bank -->
     <package android:name="za.co.africanbank.application"/>
+    <!-- African Bank (alternate) -->
+    <package android:name="za.co.africanbank.myworld"/>
     <!-- Intent queries for banking app URL schemes -->
     <intent>
       <action android:name="android.intent.action.VIEW"/>
       <data android:scheme="fnbbanking"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="fnb"/>
     </intent>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -75,11 +87,23 @@
     </intent>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="absa"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
       <data android:scheme="nedbankmoneyapp"/>
     </intent>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="nedbank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
       <data android:scheme="capitecbank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="capitec"/>
     </intent>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -88,6 +112,10 @@
     <intent>
       <action android:name="android.intent.action.VIEW"/>
       <data android:scheme="discoverybank"/>
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <data android:scheme="discovery"/>
     </intent>
     <intent>
       <action android:name="android.intent.action.VIEW"/>

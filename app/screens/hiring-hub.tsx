@@ -90,7 +90,7 @@ const { data: stats, refetch: refetchStats } = useQuery({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Hiring Hub', headerShown: false }} />
       
       {/* Header */}

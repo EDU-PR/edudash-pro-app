@@ -13,7 +13,7 @@ export default function SuperAdminLeadsScreen() {
   return (
     <View style={{ flex: 1 }}>
       <ThemedStatusBar />
-      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
         <RoleBasedHeader 
           title="Sales/Leads" 
           showBackButton={false} 

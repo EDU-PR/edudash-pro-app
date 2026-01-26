@@ -208,7 +208,7 @@ export default function EmailVerificationScreen() {
       }} />
       <ThemedStatusBar />
       
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <KeyboardAvoidingView 
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

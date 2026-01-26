@@ -35,18 +35,6 @@ interface UsePaymentFlowReturn {
   sharePaymentDetails: () => Promise<void>;
 }
 
-// SA banking app schemes
-const BANKING_APPS = [
-  { name: 'FNB', scheme: 'fnb://', playStoreId: 'za.co.fnb.connect.itt', fallbackUrl: 'https://www.fnb.co.za' },
-  { name: 'Standard Bank', scheme: 'standardbank://', playStoreId: 'com.standardbank.sb', fallbackUrl: 'https://www.standardbank.co.za' },
-  { name: 'ABSA', scheme: 'absa://', playStoreId: 'com.barclays.africa', fallbackUrl: 'https://www.absa.co.za' },
-  { name: 'Nedbank', scheme: 'nedbank://', playStoreId: 'za.co.nedbank.nedbank', fallbackUrl: 'https://www.nedbank.co.za' },
-  { name: 'Capitec', scheme: 'capitec://', playStoreId: 'za.co.capitec', fallbackUrl: 'https://www.capitecbank.co.za' },
-  { name: 'TymeBank', scheme: 'tymebank://', playStoreId: 'za.co.tymebank.digital', fallbackUrl: 'https://www.tymebank.co.za' },
-  { name: 'Discovery Bank', scheme: 'discovery://', playStoreId: 'com.discovery.bank', fallbackUrl: 'https://www.discovery.co.za/bank' },
-  { name: 'African Bank', scheme: 'africanbank://', playStoreId: 'za.co.africanbank.myworld', fallbackUrl: 'https://www.africanbank.co.za' },
-];
-
 export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn {
   const { preschoolId, preschoolName, feeAmount, feeDescription, studentCode } = params;
   

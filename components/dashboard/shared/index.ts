@@ -15,3 +15,6 @@ export type { CollapsibleSectionProps } from './CollapsibleSection';
 
 export { SearchBar } from './SearchBar';
 export type { SearchBarProps, SearchBarSuggestion } from './SearchBar';
+
+export { StudentSummaryCard } from './StudentSummaryCard';
+export type { StudentSummaryCardProps } from './StudentSummaryCard';

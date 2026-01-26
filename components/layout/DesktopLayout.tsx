@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Avatar';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 
@@ -221,9 +221,9 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
         </View>
 
         {/* Main Content */}
-        <View style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
           {children}
-        </View>
+        </SafeAreaView>
 
         {/* Mobile Navigation Drawer */}
         <MobileNavDrawer

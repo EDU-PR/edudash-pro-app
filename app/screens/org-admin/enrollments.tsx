@@ -14,7 +14,7 @@ export default function EnrollmentsScreen() {
   const styles = createStyles(theme);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: 'Enrollments',

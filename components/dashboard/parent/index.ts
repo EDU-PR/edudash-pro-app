@@ -15,3 +15,4 @@ export { MetricCard } from './MetricCard';
 export { SearchBar } from './SearchBar';
 export { TeacherQuickNotes, type TeacherNote } from './TeacherQuickNotes';
 export { WelcomeSection } from './WelcomeSection';
+export { UniformSizesSection } from './UniformSizesSection';

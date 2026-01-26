@@ -8,22 +8,24 @@ import {
   RefreshControl,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useTranslation } from 'react-i18next';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import StudentAvatarService from '@/services/StudentAvatarService';
 
 export default function ParentChildrenScreen() {
-  const { t } = useTranslation();
   const { theme } = useTheme();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [children, setChildren] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingChildId, setUploadingChildId] = useState<string | null>(null);
   
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -53,7 +55,7 @@ export default function ParentChildrenScreen() {
             .from('students')
             .select(`
               id, first_name, last_name, class_id, is_active, 
-              preschool_id, date_of_birth, parent_id, guardian_id,
+              preschool_id, date_of_birth, parent_id, guardian_id, avatar_url,
               classes!students_class_id_fkey(id, name, grade_level)
             `)
             .or(`parent_id.eq.${me.id},guardian_id.eq.${me.id}`)
@@ -92,6 +94,69 @@ export default function ParentChildrenScreen() {
     }
   };
 
+  const handleAvatarUpload = useCallback(async (childId: string, source: 'camera' | 'library') => {
+    try {
+      const permissionResult = source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.status !== 'granted') {
+        Alert.alert(
+          'Permission required',
+          source === 'camera'
+            ? 'Camera permission is required to take a photo.'
+            : 'Photo library permission is required to select a photo.'
+        );
+        return;
+      }
+
+      const pickerResult = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          });
+
+      if (pickerResult.canceled || !pickerResult.assets?.[0]?.uri) {
+        return;
+      }
+
+      setUploadingChildId(childId);
+      const uploadResult = await StudentAvatarService.uploadStudentAvatar(childId, pickerResult.assets[0].uri);
+
+      if (uploadResult.success && uploadResult.publicUrl) {
+        setChildren((prev) =>
+          prev.map((child) =>
+            child.id === childId ? { ...child, avatar_url: uploadResult.publicUrl } : child
+          )
+        );
+        Alert.alert('Success', 'Child profile photo updated.');
+      } else {
+        Alert.alert('Upload Failed', uploadResult.error || 'Unable to upload profile photo.');
+      }
+    } catch (error) {
+      console.error('Error uploading child photo:', error);
+      Alert.alert('Error', 'Failed to upload profile photo.');
+    } finally {
+      setUploadingChildId(null);
+    }
+  }, []);
+
+  const showAvatarOptions = useCallback((childId: string) => {
+    Alert.alert('Update Profile Photo', 'Choose an option', [
+      { text: 'Take Photo', onPress: () => handleAvatarUpload(childId, 'camera') },
+      { text: 'Choose from Library', onPress: () => handleAvatarUpload(childId, 'library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [handleAvatarUpload]);
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -127,11 +192,31 @@ export default function ParentChildrenScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
     },
     avatarText: {
       fontSize: 24,
       fontWeight: 'bold',
       color: theme.primary,
+    },
+    avatarUploadButton: {
+      position: 'absolute',
+      bottom: -2,
+      right: -2,
+      backgroundColor: theme.primary,
+      borderRadius: 12,
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: theme.surface,
     },
     childInfo: {
       flex: 1,
@@ -288,7 +373,22 @@ export default function ParentChildrenScreen() {
                   >
                     <View style={styles.childHeader}>
                       <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{initials}</Text>
+                        {child.avatar_url ? (
+                          <Image source={{ uri: child.avatar_url }} style={styles.avatarImage} />
+                        ) : (
+                          <Text style={styles.avatarText}>{initials}</Text>
+                        )}
+                        <TouchableOpacity
+                          style={styles.avatarUploadButton}
+                          onPress={() => showAvatarOptions(child.id)}
+                          disabled={uploadingChildId === child.id}
+                        >
+                          {uploadingChildId === child.id ? (
+                            <ActivityIndicator size="small" color={theme.onPrimary} />
+                          ) : (
+                            <Ionicons name="camera" size={14} color={theme.onPrimary} />
+                          )}
+                        </TouchableOpacity>
                       </View>
                       
                       <View style={styles.childInfo}>

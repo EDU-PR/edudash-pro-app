@@ -17,6 +17,7 @@ import {
 } from "@/lib/biometrics";
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { assertSupabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
 import { useThemedStyles, themedStyles } from "@/hooks/useThemedStyles";
@@ -35,6 +36,7 @@ import {
 
 export default function AccountScreen() {
   const { theme, mode } = useTheme();
+  const { refreshProfile } = useAuth();
   const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
@@ -391,10 +393,22 @@ export default function AccountScreen() {
 
       if (error) Alert.alert("Warning", "Profile updated locally but failed to sync.");
 
+      // Keep auth metadata in sync so greetings and headers update immediately
+      try {
+        await assertSupabase().auth.updateUser({
+          data: {
+            first_name: editFirstName.trim() || null,
+            last_name: editLastName.trim() || null,
+            full_name: `${editFirstName.trim()} ${editLastName.trim()}`.trim() || null,
+          },
+        });
+      } catch { /* non-blocking */ }
+
       setFirstName(editFirstName.trim() || null);
       setLastName(editLastName.trim() || null);
       setPhone(editPhone.trim() || null);
       setAddress(editAddress.trim() || null);
+      await refreshProfile();
       setShowEditProfile(false);
       Alert.alert("Success", "Profile updated successfully!");
     } catch {
@@ -464,7 +478,12 @@ export default function AccountScreen() {
           styles={styles}
         />
 
-        <AccountActions theme={theme} styles={styles} />
+        <AccountActions
+          theme={theme}
+          styles={styles}
+          onChangeEmail={() => router.push('/screens/change-email')}
+          onChangePassword={() => router.push('/screens/change-password')}
+        />
       </ScrollView>
 
       <SettingsModal
@@ -480,6 +499,10 @@ export default function AccountScreen() {
         onOpenChangeEmail={() => {
           setShowSettingsMenu(false);
           router.push('/screens/change-email');
+        }}
+        onOpenChangePassword={() => {
+          setShowSettingsMenu(false);
+          router.push('/screens/change-password');
         }}
         hasMultipleOrgs={hasMultipleOrgs}
         theme={theme}

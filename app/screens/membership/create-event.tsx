@@ -139,7 +139,7 @@ export default function CreateEventScreen() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen
           options={{
             headerShown: true,

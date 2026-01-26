@@ -39,7 +39,7 @@ import { useParentDashboard } from '@/hooks/useDashboardData';
 
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
-import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadges } from './parent';
+import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadges, UniformSizesSection } from './parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
@@ -70,6 +70,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const insets = useSafeAreaInsets();
+  const hasOrganization = !!profile?.preschool_id || !!profile?.organization_id;
+  const schoolTypeRaw =
+    (profile as any)?.organization_membership?.school_type ||
+    (profile as any)?.school_type ||
+    (profile as any)?.organization_type ||
+    'preschool';
+  const schoolTypeNormalized = String(schoolTypeRaw || 'preschool').toLowerCase();
+  const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
+  const isK12School = k12Types.has(schoolTypeNormalized);
+  const upgradeBannerTitle = isK12School
+    ? t('dashboard.upgrade_value', { defaultValue: 'Save time with AI homework help' })
+    : t('dashboard.upgrade_value_preschool', { defaultValue: 'Save time with Dash AI support' });
   
   // Onboarding hints state
   const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
@@ -154,6 +166,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     });
   }, []);
 
+  const handlePaymentsPress = useCallback(() => {
+    track('parent.dashboard.quick_action', { action: 'payments', layout: 'enhanced' });
+    router.push('/screens/parent-payments');
+  }, []);
+
   const handleQuickAction = (action: string) => {
     track('parent.dashboard.quick_action', { action, layout: 'enhanced' });
     
@@ -201,7 +218,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/calls');
         break;
       case 'payments':
-        router.push('/screens/parent-payments');
+        handlePaymentsPress();
+        break;
+      case 'learning_hub':
+        router.push('/screens/learning-hub');
         break;
       default:
         Alert.alert(
@@ -212,12 +232,19 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   };
 
   // Search suggestions for PWA-style search
-  const searchSuggestions: SearchBarSuggestion[] = useMemo(() => [
-    { id: 'homework', label: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book' },
-    { id: 'messages', label: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles' },
-    { id: 'attendance', label: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar' },
-    { id: 'grades', label: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school' },
-  ], [t]);
+  const searchSuggestions: SearchBarSuggestion[] = useMemo(() => {
+    const base: SearchBarSuggestion[] = [
+      { id: 'view_homework', label: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book' },
+      { id: 'messages', label: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles' },
+      { id: 'check_attendance', label: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar' },
+    ];
+    if (isK12School) {
+      base.push({ id: 'view_grades', label: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school' });
+    } else {
+      base.push({ id: 'learning_hub', label: t('parent.learning_hub', { defaultValue: 'Learning Hub' }), icon: 'rocket' });
+    }
+    return base;
+  }, [t, isK12School]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -295,21 +322,44 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   }, [dashboardData, unreadMessageCount, missedCallsCount, theme, t]);
 
   // Quick actions - enhanced with parent-friendly labels
-  const quickActions = useMemo(() => [
-    { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
-    { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
-    { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
-    { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
-    { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
-    { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
-    { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
-    { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: '#059669' },
-    { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
+  const baseQuickActions = useMemo(() => {
+    const actions = [
+      { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
+      { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
+      { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
+      { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
+      { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
+      { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
+      { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
+      { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: '#059669' },
+      { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
+    ];
+
+    if (!isK12School) {
+      actions.splice(3, 0, {
+        id: 'learning_hub',
+        title: t('parent.learning_hub', { defaultValue: 'Learning Hub' }),
+        icon: 'rocket',
+        color: '#0EA5E9',
+      });
+    }
+
+    return actions;
+  }, [t, theme, isK12School]);
+
+  const k12LearningActions = useMemo(() => ([
     { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
     { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
     { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
     { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
-  ], [t, theme, tier]);
+  ]), [t, tier]);
+
+  const quickActions = useMemo(() => {
+    if (isK12School) {
+      return [...baseQuickActions, ...k12LearningActions];
+    }
+    return baseQuickActions;
+  }, [baseQuickActions, k12LearningActions, isK12School]);
 
   if (loading && !dashboardData) {
     return (
@@ -411,7 +461,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                 </View>
                 <View style={styles.upgradeBannerText}>
                   <Text style={styles.upgradeBannerTitle}>
-                    {t('dashboard.upgrade_value', { defaultValue: 'Save time with AI homework help' })}
+                    {upgradeBannerTitle}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -501,7 +551,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
                       // Show upgrade modal for locked features
                       router.push('/screens/subscription-setup' as any);
                     } else {
-                      handleQuickAction(action.id);
+                      if (action.id === 'payments') {
+                        handlePaymentsPress();
+                      } else {
+                        handleQuickAction(action.id);
+                      }
                     }
                   }}
                 />
@@ -509,6 +563,19 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             ))}
           </View>
         </CollapsibleSection>
+
+        {/* Uniform Sizes (organization-linked parents only) */}
+        {hasOrganization && children.length > 0 && (
+          <CollapsibleSection
+            title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
+            sectionId="uniform-sizes"
+            icon="shirt-outline"
+            defaultCollapsed={collapsedSections.has('uniform-sizes')}
+            onToggle={toggleSection}
+          >
+            <UniformSizesSection children={children} />
+          </CollapsibleSection>
+        )}
 
         {/* Live Classes - Show if user has preschool_id */}
         {profile?.preschool_id && (

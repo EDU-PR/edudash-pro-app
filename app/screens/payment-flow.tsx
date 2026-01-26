@@ -91,7 +91,7 @@ export default function PaymentFlowScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScreenHeader title="Make Payment" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
@@ -102,7 +102,7 @@ export default function PaymentFlowScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScreenHeader title="Make Payment" subtitle={preschoolName} />
 
       <ScrollView 
@@ -264,7 +264,7 @@ export default function PaymentFlowScreen() {
             style={[styles.primaryButton, { backgroundColor: theme.primary }]}
             onPress={openBankingApp}
           >
-            <Ionicons name="phone-portrait-outline" size={20} color="#fff" />
+            <Ionicons name="wallet-outline" size={20} color="#fff" />
             <Text style={styles.primaryButtonText}>Open Banking App</Text>
           </TouchableOpacity>
 

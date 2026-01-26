@@ -30,85 +30,105 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // SA banking apps with deep links and package names
-export const SA_BANKING_APPS = [
+type BankApp = {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  schemes: string[];
+  packageIds: string[];
+  fallbackUrl: string;
+  marketUrl: string;
+};
+
+export const SA_BANKING_APPS: BankApp[] = [
   { 
     id: 'fnb', 
     name: 'FNB', 
+    shortName: 'FNB',
     color: '#009639',
-    scheme: 'fnbbanking://',
-    playStoreId: 'za.co.fnb.connect.itt',
+    schemes: ['fnbbanking://', 'fnb://'],
+    packageIds: ['za.co.fnb.connect.itt'],
     fallbackUrl: 'https://www.fnb.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.fnb.connect.itt',
   },
   { 
     id: 'standard_bank', 
     name: 'Standard Bank', 
+    shortName: 'SB',
     color: '#0033A0',
-    scheme: 'standardbank://',
-    playStoreId: 'com.standardbank.sb',
+    schemes: ['standardbank://'],
+    packageIds: ['com.standardbank.sb'],
     fallbackUrl: 'https://www.standardbank.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=com.standardbank.sb',
   },
   { 
     id: 'absa', 
     name: 'ABSA', 
+    shortName: 'ABSA',
     color: '#E31837',
-    scheme: 'absabanking://',
-    playStoreId: 'com.barclays.africa',
+    schemes: ['absabanking://', 'absa://'],
+    packageIds: ['com.barclays.africa'],
     fallbackUrl: 'https://www.absa.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=com.barclays.africa',
   },
   { 
     id: 'nedbank', 
     name: 'Nedbank', 
+    shortName: 'NED',
     color: '#007A4E',
-    scheme: 'nedbankmoneyapp://',
-    playStoreId: 'za.co.nedbank.nedbank',
+    schemes: ['nedbankmoneyapp://', 'nedbank://'],
+    packageIds: ['za.co.nedbank.nedbank'],
     fallbackUrl: 'https://www.nedbank.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.nedbank.nedbank',
   },
   { 
     id: 'capitec', 
     name: 'Capitec', 
+    shortName: 'CAP',
     color: '#E5173F',
-    scheme: 'capitecbank://',
-    playStoreId: 'za.co.capitecbank.production',
+    schemes: ['capitecbank://', 'capitec://'],
+    packageIds: ['za.co.capitecbank.production', 'za.co.capitecbank'],
     fallbackUrl: 'https://www.capitecbank.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.capitecbank.production',
   },
   { 
     id: 'tymebank', 
     name: 'TymeBank', 
+    shortName: 'TYME',
     color: '#FF4B00',
-    scheme: 'tymebank://',
-    playStoreId: 'za.co.tymebank',
+    schemes: ['tymebank://'],
+    packageIds: ['za.co.tymebank', 'za.co.tymebank.digital'],
     fallbackUrl: 'https://www.tymebank.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.tymebank',
   },
   { 
     id: 'discovery', 
     name: 'Discovery Bank', 
+    shortName: 'DISC',
     color: '#003366',
-    scheme: 'discoverybank://',
-    playStoreId: 'com.discoverycoza',
+    schemes: ['discoverybank://', 'discovery://'],
+    packageIds: ['com.discoverycoza', 'com.discovery.bank'],
     fallbackUrl: 'https://www.discovery.co.za/bank',
     marketUrl: 'https://play.google.com/store/apps/details?id=com.discoverycoza',
   },
   { 
     id: 'investec', 
     name: 'Investec', 
+    shortName: 'INV',
     color: '#00205B',
-    scheme: 'investec://',
-    playStoreId: 'za.co.investec',
+    schemes: ['investec://'],
+    packageIds: ['za.co.investec'],
     fallbackUrl: 'https://www.investec.com',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.investec',
   },
   { 
     id: 'african_bank', 
     name: 'African Bank', 
+    shortName: 'AFB',
     color: '#00A651',
-    scheme: 'africanbank://',
-    playStoreId: 'za.co.africanbank.application',
+    schemes: ['africanbank://'],
+    packageIds: ['za.co.africanbank.application', 'za.co.africanbank.myworld'],
     fallbackUrl: 'https://www.africanbank.co.za',
     marketUrl: 'https://play.google.com/store/apps/details?id=za.co.africanbank.application',
   },
@@ -125,53 +145,65 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
-  const handleBankPress = async (bank: typeof SA_BANKING_APPS[0]) => {
+  const getBadgeFontSize = (label: string) => {
+    if (label.length <= 2) return 18;
+    if (label.length === 3) return 14;
+    return 12;
+  };
+
+  const tryOpenScheme = async (scheme: string) => {
+    try {
+      const canOpen = await Linking.canOpenURL(scheme);
+      if (canOpen) {
+        await Linking.openURL(scheme);
+        return true;
+      }
+    } catch (error) {
+      console.log(`📱 Scheme open failed for ${scheme}:`, error);
+    }
+    return false;
+  };
+
+  const tryOpenPackage = async (packageName: string) => {
+    if (Platform.OS !== 'android' || !IntentLauncher) return false;
+    try {
+      await IntentLauncher.startActivityAsync(
+        IntentLauncher.ActivityAction?.MAIN ?? 'android.intent.action.MAIN',
+        {
+          packageName,
+          category: IntentLauncher.ActivityCategory?.LAUNCHER ?? 'android.intent.category.LAUNCHER',
+        }
+      );
+      return true;
+    } catch (error) {
+      console.log(`📱 IntentLauncher failed for ${packageName}:`, error);
+      return false;
+    }
+  };
+
+  const handleBankPress = async (bank: BankApp) => {
     onClose();
     onBankSelected?.(bank);
     
     const playStoreWeb = bank.marketUrl;
+    const primaryPackage = bank.packageIds[0];
     
     try {
       if (Platform.OS === 'android' && IntentLauncher) {
-        // On Android, use IntentLauncher to directly open the app by package name
-        // We use the ACTION_MAIN activity action which launches the main activity
-        try {
-          await IntentLauncher.startActivityAsync(
-            'android.intent.action.MAIN',
-            {
-              packageName: bank.playStoreId,
-              category: 'android.intent.category.LAUNCHER',
-            }
-          );
-          console.log(`✅ Opened ${bank.name} via IntentLauncher: ${bank.playStoreId}`);
+        for (const packageName of bank.packageIds) {
+          const opened = await tryOpenPackage(packageName);
+          if (opened) {
+            console.log(`✅ Opened ${bank.name} via IntentLauncher: ${packageName}`);
+            return;
+          }
+        }
+      }
+
+      for (const scheme of bank.schemes) {
+        const opened = await tryOpenScheme(scheme);
+        if (opened) {
+          console.log(`✅ Opened ${bank.name} via scheme: ${scheme}`);
           return;
-        } catch (intentError) {
-          console.log(`📱 ${bank.name} IntentLauncher failed:`, intentError);
-          // App is likely not installed, show options
-        }
-      } else if (Platform.OS === 'android') {
-        // IntentLauncher not available (pre-rebuild), try URL scheme fallback
-        try {
-          const canOpen = await Linking.canOpenURL(bank.scheme);
-          if (canOpen) {
-            await Linking.openURL(bank.scheme);
-            console.log(`✅ Opened ${bank.name} via scheme (fallback): ${bank.scheme}`);
-            return;
-          }
-        } catch (schemeError) {
-          console.log(`📱 ${bank.name} scheme fallback failed:`, schemeError);
-        }
-      } else {
-        // On iOS, try the URL scheme
-        try {
-          const canOpen = await Linking.canOpenURL(bank.scheme);
-          if (canOpen) {
-            await Linking.openURL(bank.scheme);
-            console.log(`✅ Opened ${bank.name} via scheme: ${bank.scheme}`);
-            return;
-          }
-        } catch (schemeError) {
-          console.log(`📱 ${bank.name} scheme failed:`, schemeError);
         }
       }
 
@@ -191,7 +223,11 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
               try {
                 if (Platform.OS === 'android') {
                   // Use market:// intent for Play Store
-                  await Linking.openURL(`market://details?id=${bank.playStoreId}`);
+                  if (primaryPackage) {
+                    await Linking.openURL(`market://details?id=${primaryPackage}`);
+                  } else {
+                    await Linking.openURL(playStoreWeb);
+                  }
                 } else {
                   await Linking.openURL(playStoreWeb);
                 }
@@ -226,14 +262,16 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
     }
   };
 
-  const renderBankItem = ({ item }: { item: typeof SA_BANKING_APPS[0] }) => (
+  const renderBankItem = ({ item }: { item: BankApp }) => (
     <TouchableOpacity
       style={[styles.bankItem, { backgroundColor: theme.surface }]}
       onPress={() => handleBankPress(item)}
       activeOpacity={0.7}
     >
       <View style={[styles.bankIcon, { backgroundColor: item.color }]}>
-        <Text style={styles.bankInitial}>{item.name.charAt(0)}</Text>
+        <Text style={[styles.bankInitial, { fontSize: getBadgeFontSize(item.shortName) }]}>
+          {item.shortName}
+        </Text>
       </View>
       <Text style={[styles.bankName, { color: theme.text }]}>{item.name}</Text>
       <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />

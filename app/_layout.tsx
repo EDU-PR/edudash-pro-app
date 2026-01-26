@@ -61,6 +61,7 @@ import { injectWebStyles } from '../lib/utils/web-styles';
 import * as Linking from 'expo-linking';
 import { setPasswordRecoveryInProgress } from '../lib/sessionManager';
 import { patchNativeEventEmitterModules } from '../lib/nativeEventEmitterPatch';
+import { parseDeepLinkUrl } from '../lib/utils/deepLink';
 
 patchNativeEventEmitterModules();
 
@@ -259,21 +260,13 @@ function RootLayoutContent() {
 
     const handleUrl = (url: string) => {
       try {
-        const parsed = Linking.parse(url);
-        const rawPath = typeof parsed.path === 'string' ? parsed.path : '';
-        // Expo Linking.parse() returns hostname on the parsed object
-        const host = typeof parsed.hostname === 'string' ? String(parsed.hostname) : '';
-        const qp = (parsed.queryParams || {}) as Record<string, unknown>;
-
-        // Reconstruct path from hostname (for custom scheme URLs like edudashpro://reset-password)
-        const combined = host ? `${host}${rawPath ? `/${rawPath}` : ''}` : rawPath;
-        const normalized = combined ? `/${combined.replace(/^\/+/, '')}` : '';
+        const { path: normalized, params } = parseDeepLinkUrl(url);
 
         // Handle reset-password deep links (warm start)
         if (normalized === '/reset-password' || normalized.includes('reset-password')) {
           const search = new URLSearchParams();
-          for (const [k, v] of Object.entries(qp)) {
-            if (v === undefined || v === null) continue;
+          for (const [k, v] of Object.entries(params)) {
+            if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
           console.log('[_layout] Password reset deep link detected - routing to native reset flow');
@@ -285,22 +278,26 @@ function RootLayoutContent() {
         // Handle auth-callback deep links (warm start)
         if (normalized === '/auth-callback' || normalized.includes('auth-callback')) {
           const search = new URLSearchParams();
-          for (const [k, v] of Object.entries(qp)) {
-            if (v === undefined || v === null) continue;
+          for (const [k, v] of Object.entries(params)) {
+            if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
           console.log('[_layout] Auth callback deep link (warm start)');
+          const flow = String(params.flow || params.type || '').toLowerCase();
+          if (flow === 'recovery') {
+            try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+          }
           router.replace(`/auth-callback${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
           return;
         }
 
-        const flow = String(qp.flow || '').toLowerCase();
+        const flow = String(params.flow || '').toLowerCase();
         if (flow === 'payment-return' || flow === 'payment-cancel') {
           const paymentPath = flow === 'payment-return' ? 'return' : 'cancel';
           const search = new URLSearchParams();
-          for (const [k, v] of Object.entries(qp)) {
+          for (const [k, v] of Object.entries(params)) {
             if (k === 'flow') continue;
-            if (v === undefined || v === null) continue;
+            if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
           const target = `/screens/payments/${paymentPath}${search.toString() ? `?${search.toString()}` : ''}`;
@@ -311,8 +308,8 @@ function RootLayoutContent() {
         // Handle direct custom-scheme links (edudashpro://screens/payments/return?...).
         if (normalized.startsWith('/screens/payments/return') || normalized.startsWith('/screens/payments/cancel')) {
           const search = new URLSearchParams();
-          for (const [k, v] of Object.entries(qp)) {
-            if (v === undefined || v === null) continue;
+          for (const [k, v] of Object.entries(params)) {
+            if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
           const target = `${normalized}${search.toString() ? `?${search.toString()}` : ''}`;

@@ -25,6 +25,7 @@ import {
   Megaphone,
   Calendar as CalendarIcon,
   Clock, // For aftercare
+  Shirt,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -83,6 +84,7 @@ export function PrincipalShell({
     { href: '/dashboard/principal/students', label: 'Students', icon: Users },
     { href: '/dashboard/principal/teachers', label: 'Teachers', icon: School },
     { href: '/dashboard/principal/registrations', label: 'Registrations', icon: UserPlus },
+    { href: '/dashboard/principal/uniforms', label: 'Uniforms', icon: Shirt },
     { href: '/dashboard/principal/campaigns', label: 'Campaigns', icon: Activity },
     { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
     { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },

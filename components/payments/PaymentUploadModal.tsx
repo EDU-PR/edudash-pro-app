@@ -29,6 +29,8 @@ interface PaymentUploadModalProps {
   userId: string;
   preschoolId?: string;
   initialAmount?: string;
+  initialReference?: string;
+  paymentPurpose?: string;
   theme: any;
 }
 
@@ -41,16 +43,25 @@ export function PaymentUploadModal({
   userId,
   preschoolId,
   initialAmount = '',
+  initialReference = '',
+  paymentPurpose = '',
   theme,
 }: PaymentUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentReference, setPaymentReference] = useState(initialReference);
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [uploading, setUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const insets = useSafeAreaInsets();
 
   const styles = createStyles(theme, insets);
+
+  React.useEffect(() => {
+    if (visible) {
+      setPaymentReference(initialReference);
+      setPaymentAmount(initialAmount);
+    }
+  }, [visible, initialReference, initialAmount]);
 
   const handleImagePicker = async () => {
     try {
@@ -202,6 +213,9 @@ export function PaymentUploadModal({
       // Use student_code (which maps from student_id in database) for payment reference
       const studentCode = selectedChild?.student_code || `STU-${selectedChildId.slice(0, 8).toUpperCase()}`;
       
+      const titlePrefix = paymentPurpose ? paymentPurpose : 'Payment';
+      const popTitle = `${titlePrefix} - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`;
+
       const { data: insertedPOP, error: dbError } = await supabase
         .from('pop_uploads')
         .insert({
@@ -209,7 +223,7 @@ export function PaymentUploadModal({
           uploaded_by: userId,
           preschool_id: finalPreschoolId,
           upload_type: 'proof_of_payment',
-          title: `Payment - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`,
+          title: popTitle,
           file_path: uploadResult.filePath,
           file_name: uploadResult.fileName || selectedFile.name,
           file_size: uploadResult.fileSize || selectedFile.size || 0,
@@ -236,7 +250,7 @@ export function PaymentUploadModal({
             payment_amount: paymentAmountNum,
             payment_date: new Date().toISOString(),
             payment_method: 'bank_transfer',
-            payment_purpose: 'School Fees',
+            payment_purpose: paymentPurpose || 'School Fees',
             status: 'submitted',
             auto_matched: false,
             submitted_at: new Date().toISOString(),
@@ -275,8 +289,8 @@ export function PaymentUploadModal({
 
   const resetForm = () => {
     setSelectedFile(null);
-    setPaymentReference('');
-    setPaymentAmount('');
+    setPaymentReference(initialReference);
+    setPaymentAmount(initialAmount);
   };
 
   const handleClose = () => {
