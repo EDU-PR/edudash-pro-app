@@ -229,6 +229,8 @@ export default function PrincipalRegistrationsScreen() {
         title={successModal.title}
         message={successModal.message}
         icon={successModal.icon as any}
+        type={successModal.type}
+        buttonText={successModal.buttonText}
         onClose={() => setSuccessModal(prev => ({ ...prev, visible: false }))}
       />
     </View>
