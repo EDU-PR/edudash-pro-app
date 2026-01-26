@@ -36,12 +36,18 @@ export function createClient() {
 
   // Global auth events
   try {
-    browserClient.auth.onAuthStateChange((event: any) => {
+    browserClient.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         try {
-          localStorage.removeItem('edudash_user_session');
-          localStorage.removeItem('edudash_user_profile');
-          localStorage.removeItem('edudash_active_child_id');
+          const keysToClear = [
+            'edudash-auth-session',
+            'edudash_session',
+            'edudash_profile',
+            'edudash_user_session',
+            'edudash_user_profile',
+            'edudash_active_child_id',
+          ];
+          keysToClear.forEach((key) => localStorage.removeItem(key));
         } catch { /* noop */ }
       }
     });

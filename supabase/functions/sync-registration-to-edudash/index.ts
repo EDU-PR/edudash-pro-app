@@ -93,6 +93,18 @@ interface PostgrestErrorLike {
   details?: string;
 }
 
+interface ProfileLinkResult {
+  linked: boolean;
+  organizationId?: string;
+  error?: string;
+}
+
+interface ProfileLinkRow {
+  id: string;
+  organization_id: string | null;
+  preschool_id: string | null;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -143,6 +155,43 @@ function isDuplicateStudentIdError(error: PostgrestErrorLike | null): boolean {
   if (!error) return false;
   if (error.code != '23505') return false;
   return (error.message || error.details || '').includes('students_student_id_key');
+}
+
+async function ensureParentProfileLinked(
+  supabase: ReturnType<typeof createClient>,
+  parentId: string,
+  organizationId: string
+): Promise<ProfileLinkResult> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        organization_id: organizationId,
+        preschool_id: organizationId,
+        role: 'parent',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', parentId)
+      .select('id, organization_id, preschool_id')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[sync-registration] Parent profile link update failed:', error);
+      return { linked: false, organizationId, error: error.message };
+    }
+
+    const linkedProfile = data as ProfileLinkRow | null;
+    const linked =
+      !!linkedProfile?.organization_id &&
+      linkedProfile.organization_id === organizationId &&
+      linkedProfile.preschool_id === organizationId;
+
+    return { linked, organizationId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[sync-registration] Parent profile link exception:', message);
+    return { linked: false, organizationId, error: message };
+  }
 }
 
 serve(async (req) => {
@@ -233,23 +282,6 @@ serve(async (req) => {
     if (existingProfile) {
       console.log('[sync-registration] Parent profile already exists:', existingProfile.id);
       parentUserId = existingProfile.id;
-      
-      // ALWAYS update parent's organization to match registration
-      // This fixes cases where parent was created with placeholder org
-      const needsOrgUpdate = !existingProfile.organization_id || 
-        existingProfile.organization_id !== organizationId ||
-        existingProfile.preschool_id !== organizationId;
-      
-      if (needsOrgUpdate) {
-        console.log(`[sync-registration] Updating parent ${parentUserId} org from ${existingProfile.organization_id} to ${organizationId}`);
-        await supabase
-          .from('profiles')
-          .update({ 
-            organization_id: organizationId,
-            preschool_id: organizationId 
-          })
-          .eq('id', parentUserId);
-      }
     } else {
       // Create parent account with generated password
       generatedPassword = generateReadablePassword();
@@ -300,6 +332,16 @@ serve(async (req) => {
       if (profileError) {
         console.error('[sync-registration] Error creating profile:', profileError);
         // Continue - profile might be created by trigger
+      }
+    }
+
+    // Ensure parent profile is linked to the correct organization (even if it already existed)
+    let parentProfileLinked = false;
+    if (parentUserId) {
+      const linkResult = await ensureParentProfileLinked(supabase, parentUserId, organizationId);
+      parentProfileLinked = linkResult.linked;
+      if (!parentProfileLinked) {
+        console.warn('[sync-registration] Parent profile not fully linked:', linkResult);
       }
     }
 
@@ -609,6 +651,7 @@ serve(async (req) => {
         data: {
           parent_user_id: parentUserId,
           parent_account_created: parentAccountCreated,
+          parent_profile_linked: parentProfileLinked,
           student_id: studentId,
           student_created: studentCreated,
           email_sent: parentAccountCreated && !!resendApiKey,
