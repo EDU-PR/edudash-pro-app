@@ -11,6 +11,7 @@ import { Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
 
 // Types
 export interface Registration {
@@ -69,6 +70,15 @@ interface PostgrestErrorLike {
   code?: string;
   message?: string;
   details?: string;
+}
+
+interface FeeStructureRow {
+  id: string;
+  amount: number;
+  name?: string | null;
+  description?: string | null;
+  effective_from?: string | null;
+  created_at?: string | null;
 }
 
 const normalizeOrgCode = (value: string | null | undefined): string => {
@@ -646,35 +656,41 @@ export function useRegistrations(): UseRegistrationsReturn {
           // Auto-assign monthly fees for the new student
           try {
             // Get tuition fee structure for this school
-            const { data: feeStructure, error: feeError } = await supabase
+            const { data: feeStructures, error: feeError } = await supabase
               .from('fee_structures')
-              .select('id, amount, effective_from, created_at')
+              .select('id, amount, name, description, effective_from, created_at')
               .eq('preschool_id', regData.preschool_id)
               .eq('fee_type', 'tuition')
               .eq('is_active', true)
               .order('effective_from', { ascending: false })
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
+              .order('created_at', { ascending: false });
 
             if (feeError) {
               console.warn('Failed to load tuition fee structure:', feeError);
               return;
             }
 
-            if (feeStructure && studentCreated && studentId) {
+            const selectedFee = selectFeeStructureForChild(
+              (feeStructures || []) as FeeStructureRow[],
+              {
+                dateOfBirth: regData.child_birth_date,
+                enrollmentDate: enrollmentDate,
+              }
+            );
+
+            if (selectedFee && studentCreated && studentId) {
               const startDate = new Date(enrollmentDate);
               const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
               const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
               
               const feesToInsert = [startMonth, nextMonth].map(date => ({
                 student_id: studentId,
-                fee_structure_id: feeStructure.id,
-                amount: feeStructure.amount,
-                final_amount: feeStructure.amount,
+                fee_structure_id: selectedFee.id,
+                amount: selectedFee.amount,
+                final_amount: selectedFee.amount,
                 due_date: date.toISOString().split('T')[0],
                 status: 'pending',
-                amount_outstanding: feeStructure.amount,
+                amount_outstanding: selectedFee.amount,
               }));
 
               await supabase.from('student_fees').insert(feesToInsert);
@@ -899,30 +915,36 @@ export function useRegistrations(): UseRegistrationsReturn {
 
           // Auto-assign tuition fees
           try {
-            const { data: feeStructure } = await supabase
+            const { data: feeStructures } = await supabase
               .from('fee_structures')
-              .select('id, amount, effective_from, created_at')
+              .select('id, amount, name, description, effective_from, created_at')
               .eq('preschool_id', regData.organization_id)
               .eq('fee_type', 'tuition')
               .eq('is_active', true)
               .order('effective_from', { ascending: false })
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
+              .order('created_at', { ascending: false });
 
-            if (feeStructure && studentCreated && studentId) {
+            const selectedFee = selectFeeStructureForChild(
+              (feeStructures || []) as FeeStructureRow[],
+              {
+                dateOfBirth: regData.student_dob || regData.student_date_of_birth,
+                enrollmentDate: enrollmentDate,
+              }
+            );
+
+            if (selectedFee && studentCreated && studentId) {
               const startDate = new Date(enrollmentDate);
               const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
               const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
               
               const feesToInsert = [startMonth, nextMonth].map(date => ({
                 student_id: studentId,
-                fee_structure_id: feeStructure.id,
-                amount: feeStructure.amount,
-                final_amount: feeStructure.amount,
+                fee_structure_id: selectedFee.id,
+                amount: selectedFee.amount,
+                final_amount: selectedFee.amount,
                 due_date: date.toISOString().split('T')[0],
                 status: 'pending',
-                amount_outstanding: feeStructure.amount,
+                amount_outstanding: selectedFee.amount,
               }));
 
               await supabase.from('student_fees').insert(feesToInsert);
