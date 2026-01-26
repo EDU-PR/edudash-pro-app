@@ -96,9 +96,19 @@ if (url && anon) {
       logger.info('Token refreshed successfully');
     } else if (event === 'SIGNED_OUT') {
       logger.info('User signed out');
-      // Clear any stale session data
-      storage.removeItem('edudash_user_session').catch(() => { /* Intentional: error handled */ });
-      storage.removeItem('edudash_user_profile').catch(() => { /* Intentional: error handled */ });
+      // Clear any stale session data across legacy and current keys
+      const keysToClear = [
+        'edudash-auth-session',
+        'edudash_session',
+        'edudash_profile',
+        'edudash_user_session',
+        'edudash_user_profile',
+        '@edudash_active_child_id',
+        'edudash_active_child_id',
+      ];
+      keysToClear.forEach((key) => {
+        storage.removeItem(key).catch(() => { /* Intentional: error handled */ });
+      });
     }
   });
 }

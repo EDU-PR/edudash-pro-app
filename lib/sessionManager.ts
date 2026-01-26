@@ -3,6 +3,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track, identifyUser } from '@/lib/analytics';
 import { identifyUserForFlags } from '@/lib/featureFlags';
 import { reportError } from '@/lib/monitoring';
+import { storage as supabaseStorage } from '@/lib/storage';
 import type { User } from '@supabase/supabase-js';
 
 // ============================================================================
@@ -167,6 +168,9 @@ export interface UserProfile {
 
 const SESSION_STORAGE_KEY = 'edudash_session';
 const PROFILE_STORAGE_KEY = 'edudash_profile';
+const SUPABASE_STORAGE_KEY = 'edudash-auth-session';
+const LEGACY_SESSION_KEYS = ['edudash_user_session', 'edudash_user_profile'] as const;
+const ACTIVE_CHILD_KEYS = ['@edudash_active_child_id', 'edudash_active_child_id'] as const;
 const REFRESH_THRESHOLD = parseInt(process.env.EXPO_PUBLIC_SESSION_REFRESH_THRESHOLD || '300000'); // 5 minutes
 
 let sessionRefreshTimer: any = null;
@@ -240,6 +244,10 @@ async function clearStoredData(): Promise<void> {
         console.debug('AsyncStorage clear skipped:', e);
       }
     }
+
+    // Clear Supabase auth session and legacy keys from cross-platform storage
+    const extraKeys = [SUPABASE_STORAGE_KEY, ...LEGACY_SESSION_KEYS, ...ACTIVE_CHILD_KEYS];
+    await Promise.all(extraKeys.map((key) => supabaseStorage.removeItem(key)));
     
     console.log('[SessionManager] All stored data cleared successfully');
   } catch (error) {

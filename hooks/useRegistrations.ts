@@ -648,10 +648,13 @@ export function useRegistrations(): UseRegistrationsReturn {
             // Get tuition fee structure for this school
             const { data: feeStructure, error: feeError } = await supabase
               .from('fee_structures')
-              .select('id, amount')
+              .select('id, amount, effective_from, created_at')
               .eq('preschool_id', regData.preschool_id)
               .eq('fee_type', 'tuition')
               .eq('is_active', true)
+              .order('effective_from', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
               .maybeSingle();
 
             if (feeError) {
@@ -752,6 +755,7 @@ export function useRegistrations(): UseRegistrationsReturn {
 
           // Check if parent already exists by email
           let parentId: string | null = null;
+          let parentLinked: boolean | null = null;
           const { data: existingParent } = await supabase
             .from('profiles')
             .select('id, organization_id, preschool_id')
@@ -769,14 +773,25 @@ export function useRegistrations(): UseRegistrationsReturn {
             if (needsOrgUpdate) {
               console.log(`[Approve] Linking parent ${parentId} to school ${regData.organization_id}`);
               try {
-                await supabase.rpc('link_profile_to_school', {
+                const { data: linkedProfile, error: linkErr } = await supabase.rpc('link_profile_to_school', {
                   p_target_profile_id: parentId,
                   p_school_id: regData.organization_id,
                   p_role: 'parent',
                 });
+                if (!linkErr && linkedProfile) {
+                  const profileRow = linkedProfile as { organization_id?: string | null; preschool_id?: string | null };
+                  parentLinked =
+                    profileRow.organization_id === regData.organization_id &&
+                    profileRow.preschool_id === regData.organization_id;
+                } else {
+                  parentLinked = false;
+                }
               } catch (linkErr) {
                 console.warn('[Approve] Parent linkage RPC warning:', linkErr);
+                parentLinked = false;
               }
+            } else {
+              parentLinked = true;
             }
           }
 
@@ -886,11 +901,14 @@ export function useRegistrations(): UseRegistrationsReturn {
           try {
             const { data: feeStructure } = await supabase
               .from('fee_structures')
-              .select('id, amount')
+              .select('id, amount, effective_from, created_at')
               .eq('preschool_id', regData.organization_id)
               .eq('fee_type', 'tuition')
               .eq('is_active', true)
-              .single();
+              .order('effective_from', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
 
             if (feeStructure && studentCreated && studentId) {
               const startDate = new Date(enrollmentDate);
@@ -935,12 +953,17 @@ export function useRegistrations(): UseRegistrationsReturn {
               'sync-registration-to-edudash',
               { body: { registration_id: registration.id } }
             );
-            const syncResponse = syncData as { error?: string } | null;
+            const syncResponse = syncData as {
+              error?: string;
+              data?: { parent_profile_linked?: boolean };
+            } | null;
             if (syncError || syncResponse?.error) {
               console.warn(
                 '[Registrations] sync-registration-to-edudash warning:',
                 syncError?.message || syncResponse?.error
               );
+            } else if (typeof syncResponse?.data?.parent_profile_linked === 'boolean') {
+              parentLinked = syncResponse.data.parent_profile_linked;
             }
           } catch (syncErr) {
             console.warn('[Registrations] sync-registration-to-edudash failed:', syncErr);
@@ -985,8 +1008,16 @@ export function useRegistrations(): UseRegistrationsReturn {
 
           const parentMessage = parentId
             ? parentCreated
-              ? '👤 Parent account created & linked\n📱 Parent notified'
-              : '👤 Linked to parent\n📱 Parent notified'
+              ? parentLinked === true
+                ? '👤 Parent account created & linked\n📱 Parent notified'
+                : parentLinked === false
+                  ? '⚠️ Parent account created but is not linked to the school yet'
+                  : '👤 Parent account created\n📱 Parent notified'
+              : parentLinked === false
+                ? '⚠️ Parent account exists but is not linked to the school yet'
+                : parentLinked === true
+                  ? '👤 Parent linked\n📱 Parent notified'
+                  : '👤 Parent account found\n📱 Parent notified'
             : '⚠️ Parent account not found - they need to register';
 
           setSuccessModal({

@@ -21,13 +21,15 @@ import {
   TextInput,
   Alert,
   Modal,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Student {
   id: string;
@@ -36,6 +38,9 @@ interface Student {
   class_id: string | null;
   class_name?: string;
   parent_name?: string;
+  parent_id?: string | null;
+  preschool_id?: string | null;
+  enrollment_date?: string | null;
 }
 
 interface StudentFee {
@@ -73,6 +78,7 @@ export default function StudentFeeManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showEnrollmentPicker, setShowEnrollmentPicker] = useState(false);
   
   // Modal state
   const [modalType, setModalType] = useState<ModalType>(null);
@@ -91,6 +97,7 @@ export default function StudentFeeManagementScreen() {
   const [newClassId, setNewClassId] = useState<string>('');
 
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
+  const [feeBootstrapAttempted, setFeeBootstrapAttempted] = useState(false);
 
   // Load student data
   const loadStudent = useCallback(async () => {
@@ -102,7 +109,7 @@ export default function StudentFeeManagementScreen() {
       const { data, error } = await supabase
         .from('students')
         .select(`
-          id, first_name, last_name, class_id,
+          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
         `)
@@ -121,6 +128,9 @@ export default function StudentFeeManagementScreen() {
         class_id: data.class_id,
         class_name: classData?.name,
         parent_name: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
+        parent_id: data.parent_id,
+        preschool_id: data.preschool_id,
+        enrollment_date: data.enrollment_date,
       });
     } catch (error) {
       console.error('[StudentFeeManagement] Error loading student:', error);
@@ -145,7 +155,7 @@ export default function StudentFeeManagementScreen() {
       
       if (error) throw error;
       
-      setFees((data || []).map((f: any) => ({
+      const mappedFees = (data || []).map((f: any) => ({
         id: f.id,
         student_id: f.student_id,
         amount: f.amount,
@@ -158,11 +168,87 @@ export default function StudentFeeManagementScreen() {
         waived_reason: f.waived_reason,
         waived_at: f.waived_at,
         waived_by: f.waived_by,
-      })));
+      }));
+
+      if (mappedFees.length === 0 && student && !feeBootstrapAttempted) {
+        setFeeBootstrapAttempted(true);
+        await bootstrapFeesIfMissing(student, supabase);
+        const { data: refreshed } = await supabase
+          .from('student_fees')
+          .select(`
+            *,
+            fee_structures(name, fee_type, description)
+          `)
+          .eq('student_id', studentId)
+          .order('due_date', { ascending: false });
+
+        const refreshedFees = (refreshed || []).map((f: any) => ({
+          id: f.id,
+          student_id: f.student_id,
+          amount: f.amount,
+          final_amount: f.final_amount || f.amount,
+          status: f.status,
+          due_date: f.due_date,
+          fee_type: f.fee_structures?.fee_type || f.fee_type || 'tuition',
+          description: f.fee_structures?.description || f.fee_structures?.name,
+          waived_amount: f.waived_amount,
+          waived_reason: f.waived_reason,
+          waived_at: f.waived_at,
+          waived_by: f.waived_by,
+        }));
+
+        setFees(refreshedFees);
+        return;
+      }
+
+      setFees(mappedFees);
     } catch (error) {
       console.error('[StudentFeeManagement] Error loading fees:', error);
     }
-  }, [studentId]);
+  }, [studentId, student, feeBootstrapAttempted]);
+
+  const bootstrapFeesIfMissing = async (targetStudent: Student, supabase: ReturnType<typeof assertSupabase>) => {
+    try {
+      const { data: feeStructure, error: feeError } = await supabase
+        .from('fee_structures')
+        .select('id, amount, effective_from, created_at')
+        .eq('preschool_id', targetStudent.preschool_id || organizationId)
+        .eq('fee_type', 'tuition')
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (feeError) {
+        console.warn('[StudentFeeManagement] Fee structure lookup failed:', feeError);
+        return;
+      }
+
+      if (!feeStructure) {
+        return;
+      }
+
+      const enrollmentDate = targetStudent.enrollment_date
+        ? new Date(targetStudent.enrollment_date)
+        : new Date();
+      const startMonth = new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1);
+      const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
+      const feesToInsert = [startMonth, nextMonth].map(date => ({
+        student_id: targetStudent.id,
+        fee_structure_id: feeStructure.id,
+        amount: feeStructure.amount,
+        final_amount: feeStructure.amount,
+        due_date: date.toISOString().split('T')[0],
+        status: 'pending',
+        amount_outstanding: feeStructure.amount,
+      }));
+
+      await supabase.from('student_fees').insert(feesToInsert);
+    } catch (error) {
+      console.warn('[StudentFeeManagement] Fee bootstrap failed (non-fatal):', error);
+    }
+  };
 
   // Load classes
   const loadClasses = useCallback(async () => {
@@ -354,9 +440,223 @@ export default function StudentFeeManagementScreen() {
     }
   };
 
+  const getEnrollmentMonthStart = useCallback((date?: string | null) => {
+    if (!date) return null;
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }, []);
+
+  const handleUpdateEnrollmentDate = async (date: Date) => {
+    if (!student) return;
+    setSaving(true);
+    try {
+      const supabase = assertSupabase();
+      const formatted = date.toISOString().split('T')[0];
+      const { error } = await supabase
+        .from('students')
+        .update({ enrollment_date: formatted, updated_at: new Date().toISOString() })
+        .eq('id', student.id);
+      
+      if (error) throw error;
+      
+      setStudent({
+        ...student,
+        enrollment_date: formatted,
+      });
+      
+      Alert.alert('Start Date Updated', `Enrollment start set to ${formatted}.`);
+      loadFees();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update enrollment date.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const upsertPaymentRecord = async (fee: StudentFee, status: 'completed' | 'reversed') => {
+    if (!student) return;
+    const supabase = assertSupabase();
+    const nowIso = new Date().toISOString();
+    const paymentReference = `MANUAL-FEE-${fee.id.slice(0, 8)}`;
+    const amount = fee.final_amount || fee.amount;
+    const preschoolId = student.preschool_id || organizationId;
+    if (!preschoolId) return;
+
+    const { data: existing } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('payment_reference', paymentReference)
+      .maybeSingle();
+
+    if (existing?.id) {
+      await supabase
+        .from('payments')
+        .update({
+          status,
+          amount,
+          amount_cents: Math.round(amount * 100),
+          reviewed_at: nowIso,
+          reviewed_by: profile?.id || undefined,
+          updated_at: nowIso,
+        })
+        .eq('id', existing.id);
+      return;
+    }
+
+    await supabase.from('payments').insert({
+      amount,
+      amount_cents: Math.round(amount * 100),
+      currency: 'ZAR',
+      status,
+      payment_method: 'manual',
+      payment_reference: paymentReference,
+      description: fee.description || fee.fee_type || 'School fees payment',
+      preschool_id: preschoolId,
+      student_id: student.id,
+      parent_id: student.parent_id || null,
+      fee_ids: [fee.id],
+      reviewed_at: nowIso,
+      reviewed_by: profile?.id || undefined,
+      submitted_at: nowIso,
+      metadata: { source: 'manual_principal_update', fee_id: fee.id },
+    });
+  };
+
+  const upsertFinancialTransaction = async (fee: StudentFee, status: 'completed' | 'voided') => {
+    if (!student || !profile?.id) return;
+    const supabase = assertSupabase();
+    const nowIso = new Date().toISOString();
+    const reference = `MANUAL-FEE-${fee.id.slice(0, 8)}`;
+    const amount = fee.final_amount || fee.amount;
+    const preschoolId = student.preschool_id || organizationId;
+    if (!preschoolId) return;
+
+    const { data: existing } = await supabase
+      .from('financial_transactions')
+      .select('id')
+      .eq('payment_reference', reference)
+      .maybeSingle();
+
+    if (existing?.id) {
+      await supabase
+        .from('financial_transactions')
+        .update({
+          status,
+          amount,
+          approved_at: status === 'completed' ? nowIso : null,
+          approved_by: status === 'completed' ? profile.id : null,
+          updated_at: nowIso,
+        })
+        .eq('id', existing.id);
+      return;
+    }
+
+    await supabase.from('financial_transactions').insert({
+      amount,
+      description: fee.description || fee.fee_type || 'School fees payment',
+      type: 'fee_payment',
+      status,
+      payment_method: 'manual',
+      payment_reference: reference,
+      preschool_id: preschoolId,
+      student_id: student.id,
+      created_by: profile.id,
+      approved_by: status === 'completed' ? profile.id : null,
+      approved_at: status === 'completed' ? nowIso : null,
+      metadata: { source: 'manual_principal_update', fee_id: fee.id },
+    });
+  };
+
+  const handleMarkPaid = async (fee: StudentFee) => {
+    if (!profile?.id) return;
+    setSaving(true);
+    try {
+      const supabase = assertSupabase();
+      const nowIso = new Date().toISOString();
+      const paidDate = nowIso.split('T')[0];
+      const amount = fee.final_amount || fee.amount;
+
+      const { error } = await supabase
+        .from('student_fees')
+        .update({
+          status: 'paid',
+          paid_date: paidDate,
+          amount_paid: amount,
+          amount_outstanding: 0,
+          updated_at: nowIso,
+        })
+        .eq('id', fee.id);
+      
+      if (error) throw error;
+      
+      await upsertPaymentRecord(fee, 'completed');
+      await upsertFinancialTransaction(fee, 'completed');
+      
+      Alert.alert('Payment Updated', 'Fee marked as paid.');
+      loadFees();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update fee status.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkUnpaid = async (fee: StudentFee) => {
+    if (!profile?.id) return;
+    setSaving(true);
+    try {
+      const supabase = assertSupabase();
+      const nowIso = new Date().toISOString();
+      const amount = fee.final_amount || fee.amount;
+
+      const { error } = await supabase
+        .from('student_fees')
+        .update({
+          status: 'pending',
+          paid_date: null,
+          amount_paid: null,
+          amount_outstanding: amount,
+          updated_at: nowIso,
+        })
+        .eq('id', fee.id);
+      
+      if (error) throw error;
+      
+      await upsertPaymentRecord(fee, 'reversed');
+      await upsertFinancialTransaction(fee, 'voided');
+      
+      Alert.alert('Payment Updated', 'Fee marked as unpaid.');
+      loadFees();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update fee status.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Calculate totals
   const totals = useMemo(() => {
-    const pending = fees.filter(f => f.status === 'pending' || f.status === 'overdue');
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const enrollmentStart = getEnrollmentMonthStart(student?.enrollment_date);
+
+    const isPreEnrollment = (fee: StudentFee) => {
+      if (!enrollmentStart || !fee.due_date) return false;
+      const due = new Date(fee.due_date);
+      if (Number.isNaN(due.getTime())) return false;
+      return due < enrollmentStart;
+    };
+
+    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+    const pending = fees.filter(f => {
+      if (isPreEnrollment(f)) return false;
+      if (!unpaidStatuses.has(f.status)) return false;
+      if (!f.due_date) return true;
+      const due = new Date(f.due_date);
+      if (Number.isNaN(due.getTime())) return true;
+      return due <= todayStart;
+    });
     const paid = fees.filter(f => f.status === 'paid');
     const waived = fees.filter(f => f.status === 'waived' || f.waived_amount);
     
@@ -366,6 +666,17 @@ export default function StudentFeeManagementScreen() {
       waived: waived.reduce((sum, f) => sum + (f.waived_amount || 0), 0),
     };
   }, [fees]);
+
+  const displayFees = useMemo(() => {
+    const enrollmentStart = getEnrollmentMonthStart(student?.enrollment_date);
+    if (!enrollmentStart) return fees;
+    return fees.filter(f => {
+      if (!f.due_date) return true;
+      const due = new Date(f.due_date);
+      if (Number.isNaN(due.getTime())) return true;
+      return due >= enrollmentStart;
+    });
+  }, [fees, student?.enrollment_date, getEnrollmentMonthStart]);
 
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
 
@@ -394,29 +705,29 @@ export default function StudentFeeManagementScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Fee Management' }} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!student) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Fee Management' }} />
         <Ionicons name="person-outline" size={64} color={theme.textSecondary} />
         <Text style={styles.emptyTitle}>Student Not Found</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: `${student.first_name}'s Fees` }} />
       
       <ScrollView
@@ -449,6 +760,19 @@ export default function StudentFeeManagementScreen() {
               </Text>
             </View>
           </View>
+
+          <View style={styles.enrollmentRow}>
+            <Text style={styles.enrollmentLabel}>Start Date</Text>
+            <TouchableOpacity
+              style={styles.enrollmentButton}
+              onPress={() => setShowEnrollmentPicker(true)}
+            >
+              <Ionicons name="calendar" size={16} color={theme.primary} />
+              <Text style={styles.enrollmentButtonText}>
+                {student.enrollment_date ? formatDate(student.enrollment_date) : 'Set Date'}
+              </Text>
+            </TouchableOpacity>
+          </View>
           
           <TouchableOpacity
             style={styles.changeClassButton}
@@ -461,6 +785,20 @@ export default function StudentFeeManagementScreen() {
             <Text style={styles.changeClassText}>Change Class</Text>
           </TouchableOpacity>
         </View>
+
+        {showEnrollmentPicker && (
+          <DateTimePicker
+            value={student.enrollment_date ? new Date(student.enrollment_date) : new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS !== 'ios') setShowEnrollmentPicker(false);
+              if (selectedDate) {
+                handleUpdateEnrollmentDate(selectedDate);
+              }
+            }}
+          />
+        )}
 
         {/* Summary Cards */}
         <View style={styles.summaryRow}>
@@ -488,13 +826,13 @@ export default function StudentFeeManagementScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Fee History</Text>
           
-          {fees.length === 0 ? (
+          {displayFees.length === 0 ? (
             <View style={styles.emptyFees}>
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
               <Text style={styles.emptyFeesText}>No fees recorded</Text>
             </View>
           ) : (
-            fees.map((fee) => (
+            displayFees.map((fee) => (
               <View key={fee.id} style={styles.feeCard}>
                 <View style={styles.feeHeader}>
                   <View>
@@ -543,33 +881,56 @@ export default function StudentFeeManagementScreen() {
                 )}
                 
                 {/* Actions */}
-                {(fee.status === 'pending' || fee.status === 'overdue') && (
+                {(fee.status === 'pending' || fee.status === 'overdue' || fee.status === 'partially_paid') && (
+                  <>
+                    <View style={styles.feeActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.paidButton]}
+                        onPress={() => handleMarkPaid(fee)}
+                      >
+                        <Ionicons name="checkmark-circle" size={16} color={theme.success} />
+                        <Text style={styles.paidButtonText}>Mark Paid</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.feeActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.waiveButton]}
+                        onPress={() => {
+                          setSelectedFee(fee);
+                          setWaiveType('full');
+                          setWaiveAmount('');
+                          setWaiveReason('');
+                          setModalType('waive');
+                        }}
+                      >
+                        <Ionicons name="checkmark-done" size={16} color="#6B7280" />
+                        <Text style={styles.waiveButtonText}>Waive</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.adjustButton]}
+                        onPress={() => {
+                          setSelectedFee(fee);
+                          setAdjustAmount(fee.final_amount.toString());
+                          setAdjustReason('');
+                          setModalType('adjust');
+                        }}
+                      >
+                        <Ionicons name="create" size={16} color={theme.primary} />
+                        <Text style={styles.adjustButtonText}>Adjust</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+
+                {fee.status === 'paid' && (
                   <View style={styles.feeActions}>
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.waiveButton]}
-                      onPress={() => {
-                        setSelectedFee(fee);
-                        setWaiveType('full');
-                        setWaiveAmount('');
-                        setWaiveReason('');
-                        setModalType('waive');
-                      }}
+                      style={[styles.actionButton, styles.unpaidButton]}
+                      onPress={() => handleMarkUnpaid(fee)}
                     >
-                      <Ionicons name="checkmark-done" size={16} color="#6B7280" />
-                      <Text style={styles.waiveButtonText}>Waive</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.adjustButton]}
-                      onPress={() => {
-                        setSelectedFee(fee);
-                        setAdjustAmount(fee.final_amount.toString());
-                        setAdjustReason('');
-                        setModalType('adjust');
-                      }}
-                    >
-                      <Ionicons name="create" size={16} color={theme.primary} />
-                      <Text style={styles.adjustButtonText}>Adjust</Text>
+                      <Ionicons name="refresh" size={16} color={theme.warning} />
+                      <Text style={styles.unpaidButtonText}>Mark Unpaid</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -802,7 +1163,7 @@ export default function StudentFeeManagementScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -882,6 +1243,30 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 14,
     color: theme.textSecondary,
     marginTop: 2,
+  },
+  enrollmentRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  enrollmentLabel: {
+    fontSize: 13,
+    color: theme.textSecondary,
+  },
+  enrollmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: theme.primary + '15',
+  },
+  enrollmentButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.primary,
   },
   changeClassButton: {
     flexDirection: 'row',
@@ -1034,6 +1419,22 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 14,
     fontWeight: '600',
     color: theme.primary,
+  },
+  paidButton: {
+    backgroundColor: theme.success + '15',
+  },
+  paidButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.success,
+  },
+  unpaidButton: {
+    backgroundColor: theme.warning + '15',
+  },
+  unpaidButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.warning,
   },
   modalOverlay: {
     flex: 1,
