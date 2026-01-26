@@ -58,6 +58,8 @@ export default function ParentPaymentsScreen() {
   const [activeTab, setActiveTab] = useState<PaymentTabType>('upcoming');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFeeAmount, setSelectedFeeAmount] = useState('');
+  const [selectedFeeReference, setSelectedFeeReference] = useState('');
+  const [selectedPaymentPurpose, setSelectedPaymentPurpose] = useState('');
 
   // Refresh data when screen comes into focus (e.g., from notification tap)
   useFocusEffect(
@@ -71,6 +73,16 @@ export default function ParentPaymentsScreen() {
 
   const openUploadForFee = (fee: StudentFee) => {
     setSelectedFeeAmount(fee.amount.toString());
+    setSelectedFeeReference('');
+    setSelectedPaymentPurpose('');
+    setShowUploadModal(true);
+  };
+
+  const openRegistrationUpload = () => {
+    if (!selectedChild) return;
+    setSelectedFeeAmount((selectedChild.registration_fee_amount || 0).toString());
+    setSelectedFeeReference('');
+    setSelectedPaymentPurpose('Registration Fee');
     setShowUploadModal(true);
   };
 
@@ -155,7 +167,11 @@ export default function ParentPaymentsScreen() {
 
         {/* Registration Fee */}
         {selectedChild && (
-          <RegistrationCard child={selectedChild} theme={theme} />
+          <RegistrationCard
+            child={selectedChild}
+            theme={theme}
+            onUploadPress={openRegistrationUpload}
+          />
         )}
 
         {/* Pending Documents - Shows if any documents are missing */}
@@ -208,7 +224,12 @@ export default function ParentPaymentsScreen() {
               <Text style={styles.sectionTitle}>Upload Proof of Payment</Text>
               <POPUploadSection 
                 popUploads={popUploads}
-                onUploadPress={() => setShowUploadModal(true)}
+                onUploadPress={() => {
+                  setSelectedFeeAmount('');
+                  setSelectedFeeReference('');
+                  setSelectedPaymentPurpose('');
+                  setShowUploadModal(true);
+                }}
                 theme={theme}
               />
             </>
@@ -222,6 +243,8 @@ export default function ParentPaymentsScreen() {
         onClose={() => {
           setShowUploadModal(false);
           setSelectedFeeAmount('');
+          setSelectedFeeReference('');
+          setSelectedPaymentPurpose('');
         }}
         onSuccess={handleUploadSuccess}
         selectedChildId={selectedChildId}
@@ -229,6 +252,8 @@ export default function ParentPaymentsScreen() {
         userId={user?.id || ''}
         preschoolId={profile?.preschool_id}
         initialAmount={selectedFeeAmount}
+        initialReference={selectedFeeReference}
+        paymentPurpose={selectedPaymentPurpose}
         theme={theme}
       />
     </View>

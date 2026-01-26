@@ -7,6 +7,28 @@ export interface PaymentChild {
   preschool_id: string;
   preschool_name?: string;
   student_code: string; // Unique payment reference (e.g., YE-2026-0001)
+  enrollment_date?: string | null;
+  date_of_birth?: string | null;
+  age_group_id?: string | null;
+  age_group_ref?: string | null;
+  age_group?: {
+    id: string;
+    name: string | null;
+    age_min: number | null;
+    age_max: number | null;
+    min_age_months: number | null;
+    max_age_months: number | null;
+  } | null;
+  age_group_ref_data?: {
+    id: string;
+    name: string | null;
+    age_min: number | null;
+    age_max: number | null;
+    min_age_months: number | null;
+    max_age_months: number | null;
+  } | null;
+  grade?: string | null;
+  grade_level?: string | null;
   registration_fee_amount?: number;
   registration_fee_paid?: boolean;
   payment_verified?: boolean;
@@ -28,11 +50,14 @@ export interface StudentFee {
 
 export interface FeeStructure {
   id: string;
+  name?: string;
   fee_type: string;
   amount: number;
   description: string;
   payment_frequency?: string;
   age_group?: string;
+  grade_level?: string | null;
+  grade_levels?: string[] | null;
 }
 
 export interface PaymentMethod {

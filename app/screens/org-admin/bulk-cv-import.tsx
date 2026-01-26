@@ -242,7 +242,7 @@ bob.wilson@example.com,Bob,Wilson,+27555123456,9876543210987,Marketing course ca
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: true,

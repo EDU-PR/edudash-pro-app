@@ -1,7 +1,7 @@
 import React, { memo, useState, useEffect } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 // Using refactored modular dashboard (317 lines vs 1,518 lines original)
-import { NewEnhancedPrincipalDashboard } from './NewEnhancedPrincipalDashboardRefactored';
+import PrincipalDashboardV2 from './PrincipalDashboardV2';
 import { K12AdminDashboard } from './K12AdminDashboard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -102,7 +102,7 @@ const PrincipalDashboardWrapperComponent: React.FC<PrincipalDashboardWrapperProp
   
   // Default: Preschool dashboard
   return (
-    <NewEnhancedPrincipalDashboard 
+    <PrincipalDashboardV2 
       refreshTrigger={refreshTrigger}
     />
   );

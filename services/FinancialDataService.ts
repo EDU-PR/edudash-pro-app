@@ -737,6 +737,9 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
         return 'pending';
       case 'failed':
       case 'rejected':
+      case 'reversed':
+      case 'voided':
+      case 'cancelled':
         return 'rejected';
       case 'overdue':
         return 'overdue';

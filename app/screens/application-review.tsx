@@ -178,7 +178,7 @@ export default function ApplicationReviewScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading application...</Text>
@@ -189,7 +189,7 @@ export default function ApplicationReviewScreen() {
 
   if (!application) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.error} />
           <Text style={styles.errorText}>Application not found</Text>
@@ -204,7 +204,7 @@ export default function ApplicationReviewScreen() {
   const actions = getStatusActions();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Review Application', headerShown: false }} />
 
       {/* Header */}

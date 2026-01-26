@@ -88,7 +88,7 @@ export default function SalesContactScreen() {
         ),
       }} />
       <StatusBar style="light" backgroundColor="#0b1220" />
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0b1220' }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: '#0b1220' }}>
       <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>{t('sales.talk_to_sales', { defaultValue: 'Talk to Sales' })}</Text>

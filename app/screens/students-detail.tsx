@@ -189,6 +189,7 @@ if (!preschoolId) {
           class_id,
           is_active,
           preschool_id,
+          avatar_url,
           created_at,
           status,
           gender,
@@ -246,7 +247,7 @@ if (!preschoolId) {
           allergies: dbStudent.allergies || '',
           enrollmentDate: dbStudent.created_at?.split('T')[0] || '',
           status: (dbStudent.status || 'active') as 'active' | 'inactive' | 'pending',
-          profilePhoto: undefined,
+          profilePhoto: dbStudent.avatar_url || undefined,
           attendanceRate: 90, // TODO: Calculate from attendance_records
           lastAttendance: new Date().toISOString(),
           assignedTeacher: 'Not Assigned', // TODO: Get from class->teacher lookup

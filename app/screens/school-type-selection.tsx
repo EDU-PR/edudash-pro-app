@@ -166,7 +166,7 @@ export default function SchoolTypeSelectionScreen() {
         }} />
         <ThemedStatusBar />
         
-        <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
           <ScrollView contentContainerStyle={styles.scrollContainer}>
             <View style={[styles.detailHeader, { backgroundColor: typeDetails.secondaryColor }]}>
               <Image source={typeDetails.icon} style={styles.detailIcon} />
@@ -239,7 +239,7 @@ export default function SchoolTypeSelectionScreen() {
       }} />
       <ThemedStatusBar />
       
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <Text style={styles.title}>What type of educational institution are you registering?</Text>
           <Text style={styles.subtitle}>

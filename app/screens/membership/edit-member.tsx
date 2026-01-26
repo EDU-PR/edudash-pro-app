@@ -176,7 +176,7 @@ export default function EditMemberScreen() {
   // Loading state
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.primary} />
@@ -189,7 +189,7 @@ export default function EditMemberScreen() {
   // Authorization check
   if (!isAuthorized) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
           <Ionicons name="lock-closed-outline" size={64} color={theme.error || '#EF4444'} />
@@ -211,7 +211,7 @@ export default function EditMemberScreen() {
   // Error state
   if (error || !member) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
           <Ionicons name="alert-circle-outline" size={64} color={theme.error || '#EF4444'} />
@@ -230,7 +230,7 @@ export default function EditMemberScreen() {
   const selectedProvince = PROVINCES.find(p => p.value === formData.province);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* Custom Header */}

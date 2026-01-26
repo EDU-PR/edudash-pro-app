@@ -151,7 +151,7 @@ export default function GovernanceScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <DashboardWallpaperBackground>
         {/* Custom Header */}
         <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>

@@ -158,7 +158,7 @@ export default function VeteransDashboard() {
   if (loading && !stats) {
     return (
       <DashboardWallpaperBackground>
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#854D0E" />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -172,7 +172,7 @@ export default function VeteransDashboard() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Mobile Navigation Drawer */}
         <MobileNavDrawer 
           isOpen={isDrawerOpen} 

@@ -159,7 +159,7 @@ export default function WomenDashboard() {
   if (loading && !stats) {
     return (
       <DashboardWallpaperBackground>
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#EC4899" />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -173,7 +173,7 @@ export default function WomenDashboard() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Mobile Navigation Drawer */}
         <MobileNavDrawer 
           isOpen={isDrawerOpen} 

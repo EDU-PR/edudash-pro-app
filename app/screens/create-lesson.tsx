@@ -78,7 +78,7 @@ export default function CreateLessonScreen() {
         headerBackVisible: true
       }} />
       <StatusBar style="light" backgroundColor={palette.background} />
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: palette.background }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: palette.background }}>
         <ScrollView contentContainerStyle={styles.container}>
           <View style={styles.row}>
             <TouchableOpacity style={[styles.chip, mode === 'manual' && styles.chipActive]} onPress={() => setMode('manual')}>

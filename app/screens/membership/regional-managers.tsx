@@ -68,7 +68,7 @@ export default function RegionalManagersScreen() {
   // Loading state
   if (loading && regions.length === 0) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
@@ -187,7 +187,7 @@ export default function RegionalManagersScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <DashboardWallpaperBackground>
         {/* Custom Header */}
         <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>

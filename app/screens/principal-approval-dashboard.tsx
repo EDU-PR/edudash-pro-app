@@ -249,7 +249,7 @@ export default function PrincipalApprovalDashboard() {
   // Show loading state while auth/profile is loading
   if (isStillLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
@@ -263,7 +263,7 @@ export default function PrincipalApprovalDashboard() {
     // If not authenticated, show loading state
     if (!user) {
       return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
           <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
           <View style={styles.loadingContainer}>
             <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
@@ -272,7 +272,7 @@ export default function PrincipalApprovalDashboard() {
       );
     }
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
@@ -287,7 +287,7 @@ export default function PrincipalApprovalDashboard() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
 
       <View style={styles.header}>

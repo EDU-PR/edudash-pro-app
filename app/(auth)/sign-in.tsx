@@ -849,7 +849,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
   });
 
 return (
-<SafeAreaView style={styles.container} edges={['top', 'left', 'right']} onLayout={onContainerLayout}>
+<SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']} onLayout={onContainerLayout}>
       {/* Background gradient */}
       <LinearGradient
         colors={marketingTokens.gradients.background}

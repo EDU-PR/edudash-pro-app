@@ -226,7 +226,7 @@ export default function YouthExecutiveInviteScreen() {
 
   return (
     <DashboardWallpaperBackground>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen 
           options={{ 
             headerShown: true,

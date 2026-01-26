@@ -366,7 +366,7 @@ export default function ParentRegistrationScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Parent Registration',

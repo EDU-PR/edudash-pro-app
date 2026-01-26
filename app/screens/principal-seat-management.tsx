@@ -88,7 +88,7 @@ export default function PrincipalSeatManagementScreen() {
       <>
         <Stack.Screen options={headerOptions} />
         <ThemedStatusBar />
-        <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <SafeAreaView edges={['top', 'bottom']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={styles.loadingText}>
@@ -106,7 +106,7 @@ export default function PrincipalSeatManagementScreen() {
       <>
         <Stack.Screen options={headerOptions} />
         <ThemedStatusBar />
-        <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <SafeAreaView edges={['top', 'bottom']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
           <View style={styles.loadingContainer}>
             <Ionicons name="school-outline" size={48} color={theme.textSecondary} />
             <Text style={styles.loadingText}>
@@ -127,7 +127,7 @@ export default function PrincipalSeatManagementScreen() {
     <>
       <Stack.Screen options={headerOptions} />
       <ThemedStatusBar />
-      <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <SafeAreaView edges={['top', 'bottom']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
         <ScrollView
           contentContainerStyle={styles.container}
           refreshControl={

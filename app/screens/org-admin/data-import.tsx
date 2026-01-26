@@ -186,7 +186,7 @@ learner2@example.com,program-uuid-here,2025-01-01,active`,
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Data Import',

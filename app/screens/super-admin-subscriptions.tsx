@@ -97,7 +97,7 @@ export default function SuperAdminSubscriptionsScreen() {
         }}
       />
       <StatusBar style="light" backgroundColor="#0b1220" />
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#0b1220' }}>
+      <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: '#0b1220' }}>
         <ScrollView
           contentContainerStyle={styles.container}
           refreshControl={

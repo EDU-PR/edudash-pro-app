@@ -55,22 +55,54 @@ export function useParentDashboardData() {
     try {
       const client = assertSupabase();
       const today = new Date().toISOString().split('T')[0];
-      const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       const { data: studentData } = await client
         .from('students')
-        .select('preschool_id, class_id')
+        .select('preschool_id, class_id, enrollment_date')
         .eq('id', studentId)
         .single();
       
       if (!studentData) return;
       
-      // Mock fees (will be real when payments table exists)
-      const feesDue = {
-        amount: Math.random() > 0.7 ? Math.floor(Math.random() * 5000) + 500 : 0,
-        dueDate: Math.random() > 0.5 ? thirtyDaysFromNow : null,
-        overdue: Math.random() > 0.8
-      };
+      const enrollmentDate = studentData.enrollment_date ? new Date(studentData.enrollment_date) : null;
+      const enrollmentMonthStart = enrollmentDate
+        ? new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1)
+        : null;
+      const todayDate = new Date();
+      const todayStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+
+      // Real fees due (from student_fees)
+      const { data: feeRows } = await client
+        .from('student_fees')
+        .select('final_amount, amount, due_date, status')
+        .eq('student_id', studentId);
+
+      const payableFees = (feeRows || []).filter((f: any) => {
+        if (!enrollmentMonthStart || !f?.due_date) return true;
+        const due = new Date(f.due_date);
+        if (Number.isNaN(due.getTime())) return true;
+        return due >= enrollmentMonthStart;
+      });
+
+      const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+      const pendingFees = payableFees.filter((f: any) => unpaidStatuses.has(String(f.status)));
+      const dueFees = pendingFees.filter((f: any) => {
+        if (!f?.due_date) return true;
+        const due = new Date(f.due_date);
+        if (Number.isNaN(due.getTime())) return true;
+        return due <= todayStart;
+      });
+
+      const nextDue = dueFees
+        .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0];
+
+      const feesDue = nextDue
+        ? {
+            amount: nextDue.final_amount || nextDue.amount || 0,
+            dueDate: nextDue.due_date || null,
+            overdue: nextDue.due_date ? new Date(nextDue.due_date) < todayStart : false,
+          }
+        : null;
       
       // Pending homework
       let pendingHomework = 0;
@@ -129,7 +161,7 @@ export function useParentDashboardData() {
       }
       
       setUrgentMetrics({
-        feesDue: feesDue.amount > 0 ? feesDue : null,
+        feesDue: feesDue && feesDue.amount > 0 ? feesDue : null,
         unreadMessages: 0, // Set by parent component
         pendingHomework,
         todayAttendance,
@@ -283,6 +315,33 @@ export function useParentDashboardData() {
           const targetChild = cards.find(c => c.id === (activeChildId || cards[0].id));
           if (targetChild) {
             await loadUrgentMetrics(targetChild.id);
+          }
+        } else if (internalUserId) {
+          // If no linked children yet, surface registration fee status if present
+          try {
+            const { data: pendingRegs } = await client
+              .from('child_registration_requests')
+              .select('registration_fee_amount, payment_verified, status, requested_at')
+              .eq('parent_id', internalUserId)
+              .order('requested_at', { ascending: false })
+              .limit(1);
+            
+            const reg = pendingRegs?.[0];
+            if (reg && reg.registration_fee_amount && !reg.payment_verified && reg.status !== 'rejected') {
+              setUrgentMetrics({
+                feesDue: {
+                  amount: Number(reg.registration_fee_amount) || 0,
+                  dueDate: reg.requested_at || null,
+                  overdue: false,
+                },
+                unreadMessages: 0,
+                pendingHomework: 0,
+                todayAttendance: 'unknown',
+                upcomingEvents: 0,
+              });
+            }
+          } catch (regErr) {
+            console.warn('Failed to load pending registration fees:', regErr);
           }
         }
 

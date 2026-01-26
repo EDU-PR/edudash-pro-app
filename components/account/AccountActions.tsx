@@ -10,6 +10,8 @@ interface AccountActionsProps {
     surfaceVariant: string;
     primary: string;
     onError: string;
+    text?: string;
+    textSecondary?: string;
   };
   styles: {
     infoSection: ViewStyle;
@@ -17,14 +19,64 @@ interface AccountActionsProps {
     signOutButton: ViewStyle;
     signOutText: TextStyle;
   };
+  onChangeEmail?: () => void;
+  onChangePassword?: () => void;
 }
 
-export function AccountActions({ theme, styles }: AccountActionsProps) {
+export function AccountActions({ theme, styles, onChangeEmail, onChangePassword }: AccountActionsProps) {
   const { t } = useTranslation();
 
   return (
     <View style={styles.infoSection}>
-      <Text style={styles.sectionTitle}>{t('account.account_actions', { defaultValue: 'Account Actions' })}</Text>
+      {(onChangeEmail || onChangePassword) && (
+        <>
+          <Text style={styles.sectionTitle}>{t('account.security', { defaultValue: 'Security' })}</Text>
+          {onChangePassword && (
+            <TouchableOpacity
+              onPress={onChangePassword}
+              style={[
+                styles.signOutButton,
+                {
+                  backgroundColor: theme.surfaceVariant,
+                  borderWidth: 2,
+                  borderColor: theme.primary,
+                  shadowColor: theme.primary,
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="lock-closed-outline" size={22} color={theme.primary} />
+              <Text style={[styles.signOutText, { color: theme.primary }]}>
+                {t('account.change_password_title', { defaultValue: 'Change Password' })}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {onChangeEmail && (
+            <TouchableOpacity
+              onPress={onChangeEmail}
+              style={[
+                styles.signOutButton,
+                {
+                  backgroundColor: theme.surfaceVariant,
+                  borderWidth: 2,
+                  borderColor: theme.primary,
+                  shadowColor: theme.primary,
+                },
+              ]}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="mail-outline" size={22} color={theme.primary} />
+              <Text style={[styles.signOutText, { color: theme.primary }]}>
+                {t('account.change_email_title', { defaultValue: 'Change Email' })}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
+      <Text style={[styles.sectionTitle, (onChangeEmail || onChangePassword) && { marginTop: 12 }]}>
+        {t('account.account_actions', { defaultValue: 'Account Actions' })}
+      </Text>
       
       <TouchableOpacity
         onPress={() => signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' })}

@@ -9,7 +9,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Student, formatAge } from '@/services/students';
 
@@ -32,7 +32,7 @@ export default function StudentCard({
 }: Props) {
   const { theme } = useTheme();
 
-  const initials = `${student.first_name[0]}${student.last_name[0]}`.toUpperCase();
+  const initials = `${student.first_name?.[0] || ''}${student.last_name?.[0] || ''}`.toUpperCase() || '?';
   const fullName = `${student.first_name} ${student.last_name}`;
   const age = formatAge(student.date_of_birth);
 
@@ -80,6 +80,11 @@ export default function StudentCard({
           fontSize: 18,
           fontWeight: '600',
           color: theme.primary,
+        },
+        avatarImage: {
+          width: 50,
+          height: 50,
+          borderRadius: 25,
         },
         info: {
           flex: 1,
@@ -144,7 +149,11 @@ export default function StudentCard({
     >
       <View style={styles.cardContent}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          {student.avatar_url ? (
+            <Image source={{ uri: student.avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{initials}</Text>
+          )}
         </View>
 
         <View style={styles.info}>

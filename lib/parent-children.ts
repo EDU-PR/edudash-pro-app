@@ -12,7 +12,27 @@ export interface ChildBasicInfo {
   student_id?: string | null;
   first_name: string;
   last_name: string;
+  enrollment_date?: string | null;
+  avatar_url?: string | null;
   date_of_birth: string | null;
+  age_group_id?: string | null;
+  age_group_ref?: string | null;
+  age_group?: {
+    id: string;
+    name: string | null;
+    age_min: number | null;
+    age_max: number | null;
+    min_age_months: number | null;
+    max_age_months: number | null;
+  } | null;
+  age_group_ref_data?: {
+    id: string;
+    name: string | null;
+    age_min: number | null;
+    age_max: number | null;
+    min_age_months: number | null;
+    max_age_months: number | null;
+  } | null;
   grade: string | null;
   grade_level?: string | null;
   class_id: string | null;
@@ -50,8 +70,10 @@ export async function fetchParentChildren(
     let directQuery = supabase
       .from('students')
       .select(`
-        id, student_id, first_name, last_name, date_of_birth, grade, grade_level, class_id, 
-        preschool_id, is_active, parent_id, guardian_id, registration_fee_amount, registration_fee_paid, payment_verified,
+        id, student_id, first_name, last_name, enrollment_date, date_of_birth, age_group_id, age_group_ref, grade, grade_level, class_id,
+        preschool_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
+        age_group:age_groups!students_age_group_id_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
+        age_group_ref_data:age_groups!students_age_group_ref_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
         classes!students_class_id_fkey(id, name, grade_level)
       `)
       .or(`parent_id.eq.${parentId},guardian_id.eq.${parentId}`);
@@ -86,8 +108,10 @@ export async function fetchParentChildren(
       let junctionQuery = supabase
         .from('students')
         .select(`
-          id, student_id, first_name, last_name, date_of_birth, grade, grade_level, class_id, 
-          preschool_id, is_active, parent_id, guardian_id, registration_fee_amount, registration_fee_paid, payment_verified,
+          id, student_id, first_name, last_name, enrollment_date, date_of_birth, age_group_id, age_group_ref, grade, grade_level, class_id,
+          preschool_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
+          age_group:age_groups!students_age_group_id_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
+          age_group_ref_data:age_groups!students_age_group_ref_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
           classes!students_class_id_fkey(id, name, grade_level)
         `)
         .in('id', studentIds);

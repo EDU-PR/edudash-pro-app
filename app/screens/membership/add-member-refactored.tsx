@@ -202,7 +202,7 @@ export default function AddMemberScreen() {
   // ============================================================================
   
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           title: 'Add New Member',

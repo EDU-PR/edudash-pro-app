@@ -132,11 +132,44 @@ export default function RegistrationDetailScreen() {
     setAlertState(prev => ({ ...prev, visible: false }));
   };
 
+  const getStartMonthIso = (offset: number): string => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    return monthStart.toISOString().split('T')[0];
+  };
+
+  const promptStartMonth = (onSelect: (startDateIso: string) => void) => {
+    showAlert(
+      'Start Month',
+      'When does the child start? This sets the first fee and avoids false unpaid fees.',
+      'info',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Starts This Month',
+          style: 'default',
+          onPress: () => {
+            hideAlert();
+            onSelect(getStartMonthIso(0));
+          },
+        },
+        {
+          text: 'Starts Next Month',
+          style: 'default',
+          onPress: () => {
+            hideAlert();
+            onSelect(getStartMonthIso(1));
+          },
+        },
+      ]
+    );
+  };
+
   // Check if registration can be approved
   const canApprove = (reg: Registration): boolean => {
     const requiresPayment = (reg.registration_fee_amount || 0) > 0;
     if (!requiresPayment) return true;
-    return !!reg.proof_of_payment_url && !!reg.payment_verified;
+    return !!reg.payment_verified;
   };
 
   // Fetch registration details
@@ -340,11 +373,12 @@ export default function RegistrationDetailScreen() {
     Linking.openURL(`whatsapp://send?phone=${intlPhone}`);
   };
 
-  const approveRegistrationCore = async () => {
+  const approveRegistrationCore = async (startDateIso: string) => {
     if (!registration) return;
     const supabase = assertSupabase();
     const isInApp = registration.source === 'in-app';
     const reviewerId = user?.id;
+    const enrollmentDate = startDateIso || new Date().toISOString().split('T')[0];
 
     if (isInApp) {
       // Fetch full in-app registration
@@ -385,10 +419,11 @@ export default function RegistrationDetailScreen() {
         .from('students')
         .insert({
           student_id: studentIdCode,
-          first_name: regData.child_first_name,
-          last_name: regData.child_last_name,
+          first_name: regData.child_first_name?.trim() || regData.child_first_name,
+          last_name: regData.child_last_name?.trim() || regData.child_last_name,
           date_of_birth: regData.child_birth_date,
           gender: regData.child_gender,
+          enrollment_date: enrollmentDate,
           medical_conditions: regData.medical_info,
           allergies: regData.dietary_requirements,
           notes: regData.special_needs ? `Special needs: ${regData.special_needs}` : regData.notes,
@@ -444,11 +479,11 @@ export default function RegistrationDetailScreen() {
           .single();
 
         if (feeStructure) {
-          const now = new Date();
-          const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          const startDate = new Date(enrollmentDate);
+          const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+          const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
 
-          const feesToInsert = [currentMonth, nextMonth].map(date => ({
+          const feesToInsert = [startMonth, nextMonth].map(date => ({
             student_id: newStudent.id,
             fee_structure_id: feeStructure.id,
             amount: feeStructure.amount,
@@ -579,10 +614,11 @@ export default function RegistrationDetailScreen() {
       .from('students')
       .insert({
         student_id: studentIdCode,
-        first_name: regData.student_first_name,
-        last_name: regData.student_last_name,
+        first_name: regData.student_first_name?.trim() || regData.student_first_name,
+        last_name: regData.student_last_name?.trim() || regData.student_last_name,
         date_of_birth: regData.student_dob,
         gender: regData.student_gender,
+        enrollment_date: enrollmentDate,
         parent_id: parentId,
         guardian_id: parentId,
         registration_fee_amount: regData.registration_fee_amount || 0,
@@ -624,20 +660,25 @@ export default function RegistrationDetailScreen() {
     }
 
     try {
-      const { data: feeStructure } = await supabase
+      const { data: feeStructure, error: feeError } = await supabase
         .from('fee_structures')
         .select('id, amount')
         .eq('preschool_id', regData.organization_id)
         .eq('fee_type', 'tuition')
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
+
+      if (feeError) {
+        console.warn('Failed to load tuition fee structure:', feeError);
+        return;
+      }
 
       if (feeStructure) {
-        const now = new Date();
-        const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const startDate = new Date(enrollmentDate);
+        const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
 
-        const feesToInsert = [currentMonth, nextMonth].map(date => ({
+        const feesToInsert = [startMonth, nextMonth].map(date => ({
           student_id: newStudent.id,
           fee_structure_id: feeStructure.id,
           amount: feeStructure.amount,
@@ -665,6 +706,23 @@ export default function RegistrationDetailScreen() {
       .eq('id', registration.id);
 
     if (updateError) throw updateError;
+
+    // Ensure parent account creation + linking via Edge Function (best effort).
+    try {
+      const { error: syncError, data: syncData } = await supabase.functions.invoke(
+        'sync-registration-to-edudash',
+        { body: { registration_id: registration.id } }
+      );
+      const syncResponse = syncData as { error?: string } | null;
+      if (syncError || syncResponse?.error) {
+        console.warn(
+          '[RegistrationDetail] sync-registration-to-edudash warning:',
+          syncError?.message || syncResponse?.error
+        );
+      }
+    } catch (syncErr) {
+      console.warn('[RegistrationDetail] sync-registration-to-edudash failed:', syncErr);
+    }
 
     if (parentId) {
       try {
@@ -700,29 +758,16 @@ export default function RegistrationDetailScreen() {
       return;
     }
 
-    showAlert(
-      'Approve Registration',
-      `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?`,
-      'info',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Approve',
-          style: 'default',
-          onPress: async () => {
-            hideAlert();
-            setProcessing(true);
-            try {
-              await approveRegistrationCore();
-            } catch (err: any) {
-              showAlert('Error', err.message || 'Failed to approve registration', 'error');
-            } finally {
-              setProcessing(false);
-            }
-          },
-        },
-      ]
-    );
+    promptStartMonth(async (startDateIso) => {
+      setProcessing(true);
+      try {
+        await approveRegistrationCore(startDateIso);
+      } catch (err: any) {
+        showAlert('Error', err.message || 'Failed to approve registration', 'error');
+      } finally {
+        setProcessing(false);
+      }
+    });
   };
 
   // Reject registration
@@ -786,10 +831,13 @@ export default function RegistrationDetailScreen() {
   // Verify payment (and approve registration)
   const handleVerifyPayment = async () => {
     if (!registration) return;
+    const hasPop = !!registration.proof_of_payment_url;
     
     showAlert(
-      'Verify Payment & Approve',
-      'Confirm that the payment has been received and approve this registration?',
+      hasPop ? 'Verify Payment & Approve' : 'Confirm Payment (No POP)',
+      hasPop
+        ? 'Confirm that the payment has been received and approve this registration?'
+        : 'No proof of payment was uploaded. Confirm the payment was received and approve this registration?',
       'info',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -820,12 +868,22 @@ export default function RegistrationDetailScreen() {
                 payment_verified: true,
                 registration_fee_paid: true,
               } : null);
-
-              await approveRegistrationCore();
+              setProcessing(false);
+              promptStartMonth(async (startDateIso) => {
+                setProcessing(true);
+                try {
+                  await approveRegistrationCore(startDateIso);
+                } catch (err: any) {
+                  showAlert('Error', err.message || 'Failed to approve registration', 'error');
+                } finally {
+                  setProcessing(false);
+                }
+              });
             } catch (err: any) {
               showAlert('Error', err.message || 'Failed to verify payment', 'error');
-            } finally {
               setProcessing(false);
+            } finally {
+              // Processing state handled above
             }
           },
         },
@@ -1095,12 +1153,12 @@ export default function RegistrationDetailScreen() {
                   ? (registration.payment_verified ? 'Payment Verified' : 'Paid (Awaiting Verification)')
                   : 'Payment Pending'}
               </Text>
-              {registration.registration_fee_amount && (
+              {registration.registration_fee_amount && registration.registration_fee_amount > 0 ? (
                 <Text style={[styles.paymentAmount, { color: colors.text }]}>
                   R{registration.registration_fee_amount.toLocaleString()}
                   {registration.discount_amount ? ` (Discount: R${registration.discount_amount})` : ''}
                 </Text>
-              )}
+              ) : null}
             </View>
           </View>
 
@@ -1167,8 +1225,8 @@ export default function RegistrationDetailScreen() {
             </>
           )}
 
-          {/* Show verify button for non-POP payments (if paid but no POP uploaded) */}
-          {!registration.proof_of_payment_url && registration.registration_fee_paid && !registration.payment_verified && registration.status === 'pending' && (
+          {/* Show verify button for non-POP payments */}
+          {!registration.proof_of_payment_url && (registration.registration_fee_amount || 0) > 0 && !registration.payment_verified && registration.status === 'pending' && (
             <TouchableOpacity
               style={[styles.verifyPaymentButton, { backgroundColor: '#10B981' }]}
               onPress={handleVerifyPayment}
@@ -1179,7 +1237,7 @@ export default function RegistrationDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="shield-checkmark" size={20} color="#fff" />
-                  <Text style={styles.verifyPaymentText}>Verify & Approve</Text>
+                  <Text style={styles.verifyPaymentText}>Confirm Paid & Approve</Text>
                 </>
               )}
             </TouchableOpacity>

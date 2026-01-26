@@ -19,7 +19,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +27,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 // Shared components
 import {
@@ -49,7 +49,37 @@ export default function StudentDetailScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
-  const { studentId } = useLocalSearchParams<{ studentId: string }>();
+  const params = useLocalSearchParams<{ studentId?: string; id?: string }>();
+  const studentId = params.studentId || params.id;
+
+  interface AlertState {
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    buttons: AlertButton[];
+  }
+
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (
+    title: string,
+    message: string,
+    type: AlertState['type'] = 'info',
+    buttons: AlertButton[] = [{ text: 'OK', style: 'default' }],
+  ) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
   
   const [student, setStudent] = useState<StudentDetail | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -88,14 +118,14 @@ export default function StudentDetailScreen() {
 
       if (profileError) {
         console.error('Error loading profile:', profileError);
-        Alert.alert('Error', 'Failed to load user profile');
+        showAlert('Error', 'Failed to load user profile', 'error');
         setLoading(false);
         return;
       }
 
       const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
       if (!schoolId) {
-        Alert.alert('Error', 'No school assigned to your account');
+        showAlert('Error', 'No school assigned to your account', 'error');
         setLoading(false);
         return;
       }
@@ -113,9 +143,10 @@ export default function StudentDetailScreen() {
 
       if (studentError) {
         console.error('Error loading student:', studentError);
-        Alert.alert('Error', 'Student not found');
+        showAlert('Error', 'Student not found', 'error', [
+          { text: 'OK', style: 'default', onPress: () => router.back() },
+        ]);
         setLoading(false);
-        router.back();
         return;
       }
 
@@ -273,7 +304,7 @@ export default function StudentDetailScreen() {
 
     } catch (error) {
       console.error('Error loading student data:', error);
-      Alert.alert('Error', 'Failed to load student information');
+      showAlert('Error', 'Failed to load student information', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -290,15 +321,15 @@ export default function StudentDetailScreen() {
         .eq('id', student.id);
 
       if (error) {
-        Alert.alert('Error', 'Failed to assign class');
+        showAlert('Error', 'Failed to assign class', 'error');
         return;
       }
 
-      Alert.alert('Success', 'Student successfully assigned to class');
+      showAlert('Success', 'Student successfully assigned to class', 'success');
       setShowClassAssignment(false);
       loadStudentData();
     } catch {
-      Alert.alert('Error', 'Failed to assign class');
+      showAlert('Error', 'Failed to assign class', 'error');
     }
   };
 
@@ -338,17 +369,17 @@ export default function StudentDetailScreen() {
         .eq('id', student.id);
 
       if (error) {
-        Alert.alert('Error', 'Failed to save student details');
+        showAlert('Error', 'Failed to save student details', 'error');
         return;
       }
 
-      Alert.alert('Success', 'Student details updated successfully');
+      showAlert('Success', 'Student details updated successfully', 'success');
       setEditMode(false);
       setEditedStudent({});
       loadStudentData();
     } catch (error) {
       console.error('Error saving student:', error);
-      Alert.alert('Error', 'Failed to save student details');
+      showAlert('Error', 'Failed to save student details', 'error');
     } finally {
       setSaving(false);
     }
@@ -357,9 +388,10 @@ export default function StudentDetailScreen() {
   const handleRemoveStudent = async () => {
     if (!student) return;
 
-    Alert.alert(
+    showAlert(
       'Remove Student',
       `Are you sure you want to remove ${student.first_name} ${student.last_name} from the school? This will deactivate their account and remove them from their class.`,
+      'warning',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -370,7 +402,7 @@ export default function StudentDetailScreen() {
               setSaving(true);
 
               // Call the deactivate_student function
-              const { data, error } = await assertSupabase()
+              const { error } = await assertSupabase()
                 .rpc('deactivate_student', {
                   student_uuid: student.id,
                   reason: 'Removed by principal - left school',
@@ -390,24 +422,26 @@ export default function StudentDetailScreen() {
 
                 if (updateError) {
                   console.error('Error deactivating student (fallback):', updateError);
-                  Alert.alert('Error', 'Failed to remove student. Please try again.');
+                  showAlert('Error', 'Failed to remove student. Please try again.', 'error');
                   return;
                 }
               }
 
-              Alert.alert(
+              showAlert(
                 'Success',
                 `${student.first_name} ${student.last_name} has been removed from the school.`,
+                'success',
                 [
                   {
                     text: 'OK',
+                    style: 'default',
                     onPress: () => router.back(),
                   },
                 ]
               );
             } catch (error) {
               console.error('Error removing student:', error);
-              Alert.alert('Error', 'Failed to remove student. Please try again.');
+              showAlert('Error', 'Failed to remove student. Please try again.', 'error');
             } finally {
               setSaving(false);
             }
@@ -490,6 +524,14 @@ export default function StudentDetailScreen() {
           <Ionicons name="person-outline" size={48} color={theme.textSecondary} />
           <Text style={styles.loadingText}>Loading student details...</Text>
         </View>
+        <AlertModal
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          type={alertState.type}
+          buttons={alertState.buttons}
+          onClose={hideAlert}
+        />
       </SafeAreaView>
     );
   }
@@ -505,6 +547,14 @@ export default function StudentDetailScreen() {
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
+        <AlertModal
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          type={alertState.type}
+          buttons={alertState.buttons}
+          onClose={hideAlert}
+        />
       </SafeAreaView>
     );
   }
@@ -611,6 +661,15 @@ export default function StudentDetailScreen() {
         onSave={handleAssignClass}
         onClose={() => setShowClassAssignment(false)}
         theme={theme}
+      />
+
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
       />
     </SafeAreaView>
   );

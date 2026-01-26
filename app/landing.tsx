@@ -79,18 +79,23 @@ export default function LandingHandler() {
           Object.entries(query).forEach(([k, v]) => {
             if (v) recoveryParams.set(k, v);
           });
+          if (!recoveryParams.has('type')) {
+            recoveryParams.set('type', 'recovery');
+          }
           const recoveryQuery = recoveryParams.toString();
+          const recoveryPath = `auth-callback${recoveryQuery ? `?${recoveryQuery}` : ''}`;
 
           if (!isWeb) {
             // Ensure AuthContext does not auto-route away from recovery.
             try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
-            router.replace(`/auth-callback${recoveryQuery ? `?${recoveryQuery}` : ''}` as `/${string}`);
+            router.replace(`/${recoveryPath}` as `/${string}`);
             return;
           }
           
-          // Web: redirect directly.
-          const webUrl = `https://www.edudashpro.org.za/landing?${recoveryQuery}`;
-          window.location.href = webUrl;
+          // Web: attempt to open the native app via deep link.
+          setStatus('ready');
+          setOpenAppPath(`/${recoveryPath}`);
+          tryOpenApp(`/${recoveryPath}`);
           return;
         }
         

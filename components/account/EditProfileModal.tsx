@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { ViewStyle, TextStyle } from 'react-native';
 
@@ -62,7 +63,7 @@ export function EditProfileModal({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={styles.editModalContainer}>
+      <SafeAreaView style={styles.editModalContainer} edges={['top', 'bottom']}>
         <View style={styles.editModalHeader}>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.editModalCancel}>{t('navigation.cancel')}</Text>
@@ -145,7 +146,7 @@ export function EditProfileModal({
             )}
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

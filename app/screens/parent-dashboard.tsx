@@ -128,7 +128,7 @@ export default function ParentDashboardScreen() {
     return (
       <View style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView edges={['top']} style={deniedStyles.deniedContainer}>
+        <SafeAreaView edges={['top', 'bottom']} style={deniedStyles.deniedContainer}>
           <LinearGradient
             colors={isDark 
               ? ['#0b1220', '#1a0a2e', '#16213e']

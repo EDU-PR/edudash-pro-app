@@ -1,13 +1,51 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View, StyleSheet, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
 export default function AuthCallback() {
   const handled = useRef(false);
   const [message, setMessage] = useState('Finalizing sign-in…');
+  const localParams = useLocalSearchParams<Record<string, string | string[]>>();
+  const normalizedLocalParams = useMemo(() => {
+    const normalized: Record<string, string> = {};
+    Object.entries(localParams || {}).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        if (value.length) normalized[key] = String(value[0]);
+        return;
+      }
+      if (value === undefined || value === null) return;
+      normalized[key] = String(value);
+    });
+    return normalized;
+  }, [localParams]);
+
+  const buildCallbackUrl = (params: Record<string, string>) => {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (!key || value === undefined || value === null || value === '') return;
+      search.set(key, String(value));
+    });
+    const query = search.toString();
+    return `edudashpro://auth-callback${query ? `?${query}` : ''}`;
+  };
+
+  const resolveCallbackUrl = (rawUrl?: string | null) => {
+    if (rawUrl) {
+      const parsed = parseDeepLinkUrl(rawUrl);
+      if (Object.keys(parsed.params).length > 0 || Object.keys(normalizedLocalParams).length > 0) {
+        const mergedParams = { ...normalizedLocalParams, ...parsed.params };
+        return buildCallbackUrl(mergedParams);
+      }
+    }
+    if (Object.keys(normalizedLocalParams).length > 0) {
+      return buildCallbackUrl(normalizedLocalParams);
+    }
+    return rawUrl || null;
+  };
 
   async function handleCallback(urlStr?: string | null) {
     if (handled.current) return;
@@ -65,17 +103,19 @@ export default function AuthCallback() {
 
       // Case 1: OAuth callback (hash fragment with tokens)
       if (urlStr.includes('#access_token') || urlStr.includes('access_token=')) {
-        setMessage('Validating OAuth session...');
+        setMessage('Validating session...');
         
         // Try hash fragment first
         let access_token: string | null = null;
         let refresh_token: string | null = null;
+        let flowType: string | null = null;
         
         if (urlStr.includes('#')) {
           const hash = urlStr.slice(urlStr.indexOf('#') + 1);
           const params = new URLSearchParams(hash);
           access_token = params.get('access_token');
           refresh_token = params.get('refresh_token');
+          flowType = params.get('type') || params.get('flow');
         }
         
         // Also try query params
@@ -84,22 +124,51 @@ export default function AuthCallback() {
             const url = new URL(urlStr);
             access_token = url.searchParams.get('access_token');
             refresh_token = url.searchParams.get('refresh_token');
+            flowType = flowType || url.searchParams.get('type') || url.searchParams.get('flow');
           } catch {
             // URL parsing failed, try manual extraction
             const match = urlStr.match(/access_token=([^&]+)/);
             if (match) access_token = match[1];
             const refreshMatch = urlStr.match(/refresh_token=([^&]+)/);
             if (refreshMatch) refresh_token = refreshMatch[1];
+            const typeMatch = urlStr.match(/type=([^&]+)/);
+            if (typeMatch) flowType = decodeURIComponent(typeMatch[1]);
+            const flowMatch = urlStr.match(/flow=([^&]+)/);
+            if (flowMatch) flowType = decodeURIComponent(flowMatch[1]);
           }
         }
 
         if (access_token) {
-          const { error } = await supabase.auth.setSession({
+          const { data, error } = await supabase.auth.setSession({
             access_token,
             refresh_token: refresh_token || '',
           });
 
           if (error) throw error;
+
+          const normalizedFlow = (flowType || '').toLowerCase();
+          const isRecovery = normalizedFlow === 'recovery' || recoveryHint;
+
+          if (isRecovery) {
+            const session = data.session;
+            if (session?.access_token && session?.refresh_token) {
+              setMessage('Opening password reset...');
+              routeToResetPassword(session);
+            } else {
+              setMessage('Opening password reset...');
+              routeToResetPassword({
+                access_token,
+                refresh_token: refresh_token || '',
+              });
+            }
+            return;
+          }
+
+          if (normalizedFlow === 'email_change' && data.session) {
+            setMessage('Finalizing email change...');
+            await handleEmailChange(data.session);
+            return;
+          }
 
           setMessage('Sign-in successful! Redirecting...');
           console.log('[AuthCallback] OAuth sign-in successful');
@@ -321,8 +390,9 @@ export default function AuthCallback() {
   useEffect(() => {
     // Get initial URL
     Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleCallback(url);
+      const resolved = resolveCallbackUrl(url);
+      if (resolved) {
+        handleCallback(resolved);
       } else if (Platform.OS === 'web' && typeof window !== 'undefined') {
         // On web, check window.location
         handleCallback(window.location.href);
@@ -331,11 +401,12 @@ export default function AuthCallback() {
 
     // Listen for deep link events
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      handleCallback(url);
+      const resolved = resolveCallbackUrl(url);
+      handleCallback(resolved || url);
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [normalizedLocalParams]);
 
   return (
     <View style={styles.container}>

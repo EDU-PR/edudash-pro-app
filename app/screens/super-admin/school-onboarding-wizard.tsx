@@ -689,7 +689,7 @@ export default function SuperAdminSchoolOnboardingWizard() {
       }} />
       <StatusBar style="light" backgroundColor="#0b1220" />
       
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <KeyboardAvoidingView 
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

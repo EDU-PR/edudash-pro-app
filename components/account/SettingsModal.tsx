@@ -15,6 +15,7 @@ interface SettingsModalProps {
   onOpenThemeSettings: () => void;
   onOpenOrgSwitcher?: () => void;
   onOpenChangeEmail?: () => void;
+  onOpenChangePassword?: () => void;
   hasMultipleOrgs?: boolean;
   theme: {
     text: string;
@@ -50,6 +51,7 @@ export function SettingsModal({
   onOpenThemeSettings,
   onOpenOrgSwitcher,
   onOpenChangeEmail,
+  onOpenChangePassword,
   hasMultipleOrgs,
   theme,
   styles,
@@ -167,6 +169,26 @@ export function SettingsModal({
                   <Text style={styles.settingSubtitle}>
                     {t('account.change_email_subtitle', {
                       defaultValue: 'Update the email you use to sign in',
+                    })}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+
+          {/* Change Password */}
+          {onOpenChangePassword && (
+            <TouchableOpacity style={styles.settingItem} onPress={onOpenChangePassword}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="lock-closed-outline" size={24} color={theme.primary} />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>
+                    {t('account.change_password_title', { defaultValue: 'Change Password' })}
+                  </Text>
+                  <Text style={styles.settingSubtitle}>
+                    {t('account.change_password_subtitle', {
+                      defaultValue: 'Update the password you use to sign in',
                     })}
                   </Text>
                 </View>

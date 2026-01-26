@@ -348,7 +348,7 @@ export default function BrowseProgramsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: t('learner.browse_programs', { defaultValue: 'Browse Programs' }),

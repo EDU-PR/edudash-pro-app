@@ -347,7 +347,7 @@ export default function TeacherLessonsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScreenHeader 
         title="Lessons"
         showBackButton

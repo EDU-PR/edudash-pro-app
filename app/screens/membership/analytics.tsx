@@ -82,7 +82,7 @@ export default function AnalyticsScreen() {
   const maxMembers = Math.max(...MONTHLY_TREND.map(d => d.members));
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <DashboardWallpaperBackground>
         {/* Custom Header */}
         <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>

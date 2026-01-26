@@ -120,7 +120,7 @@ export default function OrgAdminDashboard() {
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <Stack.Screen 
         options={{ 
           headerShown: true,

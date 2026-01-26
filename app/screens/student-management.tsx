@@ -9,7 +9,7 @@
  * - Real database integration
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 interface Student {
   id: string;
@@ -139,7 +139,7 @@ export default function StudentManagementScreen() {
     // Decision 3: All good, stay on screen (no navigation needed)
   }, [isStillLoading, user, orgId, profile]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!orgId) return;
     
     try {
@@ -243,7 +243,7 @@ export default function StudentManagementScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [orgId]);
 
   const calculateAgeInfo = (dateOfBirth: string | null) => {
     if (!dateOfBirth) return { age_months: 0, age_years: 0 };
@@ -343,12 +343,15 @@ export default function StudentManagementScreen() {
     return stats;
   };
 
-  // Load data when org is available
-  useEffect(() => {
-    if (orgId && user) {
-      fetchData();
-    }
-  }, [orgId, user?.id]);
+  // Load data when screen is focused (ensures updates after returning)
+  useFocusEffect(
+    useCallback(() => {
+      if (orgId && user) {
+        fetchData();
+      }
+      return undefined;
+    }, [orgId, user?.id, fetchData])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);

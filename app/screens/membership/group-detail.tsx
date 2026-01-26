@@ -330,7 +330,7 @@ export default function GroupDetailScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ title: groupName }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.primary} />
@@ -341,7 +341,7 @@ export default function GroupDetailScreen() {
 
   if (!group) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ title: 'Group Not Found' }} />
         <View style={styles.centered}>
           <EmptyState
@@ -357,7 +357,7 @@ export default function GroupDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           title: group.name,

@@ -55,6 +55,8 @@ export interface ChildData {
   id: string;
   firstName: string;
   lastName: string;
+  avatarUrl?: string | null;
+  dateOfBirth?: string | null;
   grade?: string;
   className?: string;
   teacher?: string;
@@ -140,6 +142,8 @@ export interface ParentDashboardData {
     id: string;
     firstName: string;
     lastName: string;
+    avatarUrl?: string | null;
+    dateOfBirth?: string | null;
     grade: string;
     className: string;
     classId: string | null;

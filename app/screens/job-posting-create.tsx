@@ -196,7 +196,7 @@ export default function JobPostingCreateScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Create Job Posting', headerShown: false }} />
 
       {/* Header */}

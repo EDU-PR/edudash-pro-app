@@ -4,6 +4,36 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
 import type { PaymentChild, StudentFee, FeeStructure, PaymentMethod, POPUpload } from '@/types/payments';
+import { selectFeeStructureForChild, type FeeStructureCandidate } from '@/lib/utils/feeStructureSelector';
+
+const isTuitionFee = (feeType?: string | null, name?: string | null, description?: string | null) => {
+  const text = `${feeType ?? ''} ${name ?? ''} ${description ?? ''}`.toLowerCase();
+  return text.includes('tuition') || text.includes('school fees') || text.includes('school fee') || text.includes('monthly');
+};
+
+const resolveAgeGroupLabel = (child?: PaymentChild) => {
+  const directName =
+    child?.age_group?.name ||
+    child?.age_group_ref_data?.name ||
+    child?.grade_level ||
+    child?.grade;
+  if (directName) return directName;
+
+  const min = child?.age_group?.age_min ?? child?.age_group_ref_data?.age_min ?? null;
+  const max = child?.age_group?.age_max ?? child?.age_group_ref_data?.age_max ?? null;
+  if (min != null || max != null) {
+    if (min != null && max != null) return `${min}-${max}`;
+    if (min != null) return `${min}+`;
+    if (max != null) return `0-${max}`;
+  }
+  return null;
+};
+
+const buildFeeContext = (child?: PaymentChild) => ({
+  dateOfBirth: child?.date_of_birth ?? null,
+  ageGroupLabel: resolveAgeGroupLabel(child),
+  gradeLevel: child?.grade_level ?? child?.grade ?? null,
+});
 
 export function useParentPayments() {
   const { user, profile } = useAuth();
@@ -19,6 +49,13 @@ export function useParentPayments() {
   const [feeStructure, setFeeStructure] = useState<FeeStructure[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [popUploads, setPOPUploads] = useState<POPUpload[]>([]);
+
+  const getEnrollmentMonthStart = useCallback((date?: string | null) => {
+    if (!date) return null;
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }, []);
 
   const getNextFeeMonth = useCallback(() => {
     const now = new Date();
@@ -93,19 +130,62 @@ export function useParentPayments() {
         .select(`
           *,
           fee_structures (
+            id,
             name,
             fee_type,
-            description
+            description,
+            grade_levels
           )
         `)
         .eq('student_id', selectedChildId)
         .order('due_date', { ascending: true });
 
+      let mappedFees: StudentFee[] = [];
+      let hasTuitionFeesForChild = false;
+
       if (fees && fees.length > 0) {
+        const enrollmentStart = getEnrollmentMonthStart(selectedChild?.enrollment_date);
+        let filteredFees = fees.filter((f: any) => {
+          if (!enrollmentStart || !f?.due_date) return true;
+          const dueDate = new Date(f.due_date);
+          if (Number.isNaN(dueDate.getTime())) return true;
+          return dueDate >= enrollmentStart;
+        });
+
+        const feeContext = buildFeeContext(selectedChild);
+        const canFilterByAge = Boolean(feeContext.dateOfBirth || feeContext.ageGroupLabel || feeContext.gradeLevel);
+        const tuitionStructures = filteredFees
+          .filter((f: any) => isTuitionFee(f?.fee_structures?.fee_type, f?.fee_structures?.name, f?.fee_structures?.description))
+          .map((f: any) => f.fee_structures)
+          .filter((fs: any) => fs && fs.id) as FeeStructureCandidate[];
+
+        const uniqueTuitionStructures = tuitionStructures.filter((fs, idx, arr) =>
+          arr.findIndex(item => item.id === fs.id) === idx
+        );
+
+        const selectedStructure = canFilterByAge && uniqueTuitionStructures.length > 1
+          ? selectFeeStructureForChild(uniqueTuitionStructures, feeContext)
+          : null;
+        const selectedStructureId = selectedStructure?.id;
+
+        if (selectedStructureId) {
+          filteredFees = filteredFees.filter((f: any) => {
+            if (!isTuitionFee(f?.fee_structures?.fee_type, f?.fee_structures?.name, f?.fee_structures?.description)) {
+              return true;
+            }
+            const feeStructureId = f?.fee_structures?.id || f?.fee_structure_id;
+            return !feeStructureId || feeStructureId === selectedStructureId;
+          });
+        }
+
+        hasTuitionFeesForChild = filteredFees.some((f: any) =>
+          isTuitionFee(f?.fee_structures?.fee_type, f?.fee_structures?.name, f?.fee_structures?.description)
+        );
+
         // Map database fields to expected StudentFee interface
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         
-        const mappedFees: StudentFee[] = fees.map((f: any) => {
+        mappedFees = filteredFees.map((f: any) => {
           // Generate month-specific description from due_date
           const dueDate = new Date(f.due_date);
           const month = monthNames[dueDate.getMonth()];
@@ -141,7 +221,6 @@ export function useParentPayments() {
             pop_status: matchingPOP?.status, // Include POP status for UI display
           };
         });
-        setStudentFees(mappedFees);
       }
 
       // Get fee structure for the school (try school_fee_structures first, fallback to fee_structures)
@@ -156,11 +235,13 @@ export function useParentPayments() {
         if (schoolFees && schoolFees.length > 0) {
           resolvedFees = schoolFees.map((f: any) => ({
             id: f.id,
+            name: f.name,
             fee_type: f.fee_category || f.name,
             amount: f.amount_cents / 100,
             description: f.description || f.name,
             payment_frequency: f.billing_frequency,
             age_group: f.age_group,
+            grade_level: f.grade_level,
           }));
         } else {
           const { data: legacyFees } = await supabase
@@ -172,11 +253,13 @@ export function useParentPayments() {
           if (legacyFees && legacyFees.length > 0) {
             resolvedFees = legacyFees.map((f: any) => ({
               id: f.id,
+              name: f.name,
               fee_type: f.fee_type || f.name,
               amount: f.amount,
               description: f.description || f.name,
               payment_frequency: f.frequency,
               age_group: Array.isArray(f.grade_levels) ? f.grade_levels.join(', ') : undefined,
+              grade_levels: Array.isArray(f.grade_levels) ? f.grade_levels : undefined,
             }));
           }
         }
@@ -184,17 +267,27 @@ export function useParentPayments() {
         if (resolvedFees.length > 0) {
           setFeeStructure(resolvedFees as FeeStructure[]);
 
-          // Generate next month's fee if no fees exist
-          const monthlyFee = resolvedFees.find((f: any) => String(f.fee_type || '').toLowerCase().includes('tuition'));
-          if (monthlyFee && (!fees || fees.length === 0)) {
+          // Generate next month's fee if no tuition fees exist (age-aware selection)
+          const tuitionFees = resolvedFees.filter((f: any) => isTuitionFee(f.fee_type, f.name, f.description));
+          const selectedFee = tuitionFees.length > 0
+            ? selectFeeStructureForChild(tuitionFees as FeeStructureCandidate[], buildFeeContext(selectedChild)) || tuitionFees[0]
+            : null;
+          if (selectedFee && (!fees || fees.length === 0 || !hasTuitionFeesForChild)) {
             const { month, year } = getNextFeeMonth();
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-            setStudentFees([{
-              id: `pending-${monthNames[month].toLowerCase()}-${year}`, student_id: selectedChildId, fee_type: 'monthly_tuition',
-              description: `${monthNames[month]} ${year} School Fees${monthlyFee.age_group ? ` (${monthlyFee.age_group})` : ''}`,
-              amount: monthlyFee.amount, due_date: `${year}-${String(month + 1).padStart(2, '0')}-01`,
-              grace_period_days: 7, status: 'pending',
-            }]);
+            mappedFees = [
+              ...mappedFees,
+              {
+                id: `pending-${monthNames[month].toLowerCase()}-${year}`,
+                student_id: selectedChildId,
+                fee_type: 'monthly_tuition',
+                description: `${monthNames[month]} ${year} School Fees${selectedFee.age_group ? ` (${selectedFee.age_group})` : ''}`,
+                amount: selectedFee.amount,
+                due_date: `${year}-${String(month + 1).padStart(2, '0')}-01`,
+                grace_period_days: 7,
+                status: 'pending',
+              },
+            ];
           }
         }
 
@@ -211,6 +304,7 @@ export function useParentPayments() {
         }
       }
 
+      setStudentFees(mappedFees);
       // POP uploads already loaded at the start of this function
     } catch (error) {
       console.error('[Payments] Error loading fees:', error);
@@ -365,8 +459,18 @@ export function useParentPayments() {
 
   const outstandingBalance = useMemo(() => {
     // Don't include pending_verification in outstanding balance since payment was made
+    // Include fees that are overdue or due within the next 7 days
+    const today = new Date();
+    const dueSoonCutoff = new Date();
+    dueSoonCutoff.setDate(dueSoonCutoff.getDate() + 7);
     return upcomingFees
       .filter(f => f.status !== 'pending_verification')
+      .filter(f => {
+        if (!f.due_date) return true;
+        const dueDate = new Date(f.due_date);
+        if (Number.isNaN(dueDate.getTime())) return true;
+        return dueDate <= dueSoonCutoff;
+      })
       .reduce((sum, f) => sum + f.amount, 0);
   }, [upcomingFees]);
 

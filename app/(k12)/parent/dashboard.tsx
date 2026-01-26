@@ -133,6 +133,10 @@ export default function K12ParentDashboardScreen() {
 
   const handleQuickAction = (route: string, actionId: string) => {
     track('k12.parent.quick_action_tap', { action: actionId, user_id: user?.id });
+    if (actionId === 'payments') {
+      router.push('/screens/parent-payments' as any);
+      return;
+    }
     router.push(route as any);
     console.log('[K12 Parent] Quick action:', actionId, route);
   };
@@ -182,7 +186,7 @@ export default function K12ParentDashboardScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* FIXED HEADER - Does not scroll */}
       <View style={[styles.fixedHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
         <View style={styles.headerLeftSection}>
