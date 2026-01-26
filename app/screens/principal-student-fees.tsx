@@ -29,6 +29,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Student {
@@ -41,6 +42,7 @@ interface Student {
   parent_id?: string | null;
   preschool_id?: string | null;
   enrollment_date?: string | null;
+  date_of_birth?: string | null;
 }
 
 interface StudentFee {
@@ -61,6 +63,15 @@ interface StudentFee {
 interface ClassOption {
   id: string;
   name: string;
+}
+
+interface FeeStructureRow {
+  id: string;
+  amount: number;
+  name?: string | null;
+  description?: string | null;
+  effective_from?: string | null;
+  created_at?: string | null;
 }
 
 type ModalType = 'waive' | 'adjust' | 'change_class' | null;
@@ -109,7 +120,7 @@ export default function StudentFeeManagementScreen() {
       const { data, error } = await supabase
         .from('students')
         .select(`
-          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date,
+          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
         `)
@@ -131,6 +142,7 @@ export default function StudentFeeManagementScreen() {
         parent_id: data.parent_id,
         preschool_id: data.preschool_id,
         enrollment_date: data.enrollment_date,
+        date_of_birth: data.date_of_birth,
       });
     } catch (error) {
       console.error('[StudentFeeManagement] Error loading student:', error);
@@ -209,23 +221,29 @@ export default function StudentFeeManagementScreen() {
 
   const bootstrapFeesIfMissing = async (targetStudent: Student, supabase: ReturnType<typeof assertSupabase>) => {
     try {
-      const { data: feeStructure, error: feeError } = await supabase
+      const { data: feeStructures, error: feeError } = await supabase
         .from('fee_structures')
-        .select('id, amount, effective_from, created_at')
+        .select('id, amount, name, description, effective_from, created_at')
         .eq('preschool_id', targetStudent.preschool_id || organizationId)
         .eq('fee_type', 'tuition')
         .eq('is_active', true)
         .order('effective_from', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (feeError) {
         console.warn('[StudentFeeManagement] Fee structure lookup failed:', feeError);
         return;
       }
 
-      if (!feeStructure) {
+      const selectedFee = selectFeeStructureForChild(
+        (feeStructures || []) as FeeStructureRow[],
+        {
+          dateOfBirth: targetStudent.date_of_birth,
+          enrollmentDate: targetStudent.enrollment_date,
+        }
+      );
+
+      if (!selectedFee) {
         return;
       }
 
@@ -236,12 +254,12 @@ export default function StudentFeeManagementScreen() {
       const nextMonth = new Date(startMonth.getFullYear(), startMonth.getMonth() + 1, 1);
       const feesToInsert = [startMonth, nextMonth].map(date => ({
         student_id: targetStudent.id,
-        fee_structure_id: feeStructure.id,
-        amount: feeStructure.amount,
-        final_amount: feeStructure.amount,
+        fee_structure_id: selectedFee.id,
+        amount: selectedFee.amount,
+        final_amount: selectedFee.amount,
         due_date: date.toISOString().split('T')[0],
         status: 'pending',
-        amount_outstanding: feeStructure.amount,
+        amount_outstanding: selectedFee.amount,
       }));
 
       await supabase.from('student_fees').insert(feesToInsert);
