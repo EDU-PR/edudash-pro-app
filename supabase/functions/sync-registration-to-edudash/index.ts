@@ -15,22 +15,39 @@ const corsHeaders = {
 
 interface RegistrationRequest {
   id: string;
-  organization_id: string;
-  guardian_first_name: string;
-  guardian_last_name: string;
-  guardian_email: string;
-  guardian_phone: string;
-  student_first_name: string;
-  student_last_name: string;
+  organization_id: string | null;
+  preschool_id?: string | null;
+  guardian_first_name: string | null;
+  guardian_last_name: string | null;
+  guardian_email: string | null;
+  guardian_phone: string | null;
+  parent_first_name?: string | null;
+  parent_last_name?: string | null;
+  parent_email?: string | null;
+  parent_phone?: string | null;
+  student_first_name: string | null;
+  student_last_name: string | null;
   student_date_of_birth: string | null;
   student_grade: string | null;
   student_allergies: string | null;
   student_medical_conditions: string | null;
+  child_first_name?: string | null;
+  child_last_name?: string | null;
+  child_date_of_birth?: string | null;
+  child_grade?: string | null;
+  child_allergies?: string | null;
+  child_medical_conditions?: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relation: string | null;
+  registration_fee_amount?: number | string | null;
+  registration_fee_paid?: boolean | null;
+  payment_verified?: boolean | null;
+  payment_date?: string | null;
   status: string;
   edusite_id?: string | null;
+  edudash_student_id?: string | null;
+  edudash_parent_id?: string | null;
 }
 
 // Generate a readable, memorable password
@@ -67,6 +84,67 @@ function generateSecurePassword(): string {
   return password;
 }
 
+const STUDENT_ID_SEQUENCE_LENGTH = 4;
+const STUDENT_ID_MAX_ATTEMPTS = 6;
+
+interface PostgrestErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeOrgCode(value: string | null | undefined): string {
+  const cleaned = (value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim();
+  if (cleaned.length >= 3) return cleaned.slice(0, 3);
+  if (cleaned.length > 0) return cleaned.padEnd(3, 'X');
+  return 'STU';
+}
+
+async function getLastStudentSequence(
+  supabase: ReturnType<typeof createClient>,
+  prefix: string
+): Promise<number> {
+  const { data: lastStudent } = await supabase
+    .from('students')
+    .select('student_id')
+    .like('student_id', `${prefix}%`)
+    .order('student_id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lastStudent?.student_id) {
+    const match = lastStudent.student_id.match(
+      new RegExp(`^${escapeRegExp(prefix)}(\\d{${STUDENT_ID_SEQUENCE_LENGTH}})$`)
+    );
+    if (match?.[1]) {
+      const parsed = Number.parseInt(match[1], 10);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  const { count } = await supabase
+    .from('students')
+    .select('id', { count: 'exact', head: true })
+    .like('student_id', `${prefix}%`);
+
+  return count ?? 0;
+}
+
+function isDuplicateStudentIdError(error: PostgrestErrorLike | null): boolean {
+  if (!error) return false;
+  if (error.code != '23505') return false;
+  return (error.message || error.details || '').includes('students_student_id_key');
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -93,11 +171,13 @@ serve(async (req) => {
     console.log(`[sync-registration] Processing registration: ${registration_id}`);
 
     // Fetch registration from EduDashPro database
-    const { data: registration, error: fetchError } = await supabase
+    const { data: registrationData, error: fetchError } = await supabase
       .from('registration_requests')
       .select('*')
       .eq('id', registration_id)
       .single();
+
+    const registration = registrationData as RegistrationRequest | null;
 
     if (fetchError || !registration) {
       console.error('[sync-registration] Registration not found:', fetchError);
@@ -128,6 +208,13 @@ serve(async (req) => {
     if (!parentEmail) {
       return new Response(
         JSON.stringify({ error: 'Parent email is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!organizationId) {
+      return new Response(
+        JSON.stringify({ error: 'Organization ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -219,33 +306,58 @@ serve(async (req) => {
     // Step 2: Create student record
     const studentFirstName = registration.student_first_name || registration.child_first_name;
     const studentLastName = registration.student_last_name || registration.child_last_name;
+    const trimmedFirstName = studentFirstName?.trim() || studentFirstName || '';
+    const trimmedLastName = studentLastName?.trim() || studentLastName || '';
     
     // Check if student already exists
-    const { data: existingStudent } = await supabase
-      .from('students')
-      .select('id')
-      .eq('first_name', studentFirstName?.trim())
-      .eq('last_name', studentLastName?.trim())
-      .eq('preschool_id', organizationId)
-      .maybeSingle();
-
     let studentId: string | null = null;
     let studentCreated = false;
 
-    if (existingStudent) {
-      studentId = existingStudent.id;
+    // Prefer explicit student ID from registration if available
+    if (registration.edudash_student_id) {
+      const { data: studentById } = await supabase
+        .from('students')
+        .select('id')
+        .eq('id', registration.edudash_student_id)
+        .maybeSingle();
+      
+      if (studentById?.id) {
+        studentId = studentById.id;
+      }
+    }
+
+    // Fallback: find existing student by name within the preschool
+    if (!studentId) {
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id')
+        .ilike('first_name', `${trimmedFirstName}%`)
+        .ilike('last_name', `${trimmedLastName}%`)
+        .eq('preschool_id', organizationId)
+        .maybeSingle();
+
+      if (existingStudent?.id) {
+        studentId = existingStudent.id;
+      }
+    }
+
+    if (studentId) {
       // Update parent link and payment status from registration
+      const studentUpdate: Record<string, unknown> = {
+        // Also update payment status from registration
+        registration_fee_amount: registration.registration_fee_amount || null,
+        registration_fee_paid: registration.registration_fee_paid || false,
+        payment_verified: registration.payment_verified || false,
+        payment_date: registration.payment_date || null,
+      };
+      if (parentUserId) {
+        studentUpdate.parent_id = parentUserId;
+        studentUpdate.guardian_id = parentUserId;
+      }
+
       await supabase
         .from('students')
-        .update({ 
-          parent_id: parentUserId, 
-          guardian_id: parentUserId,
-          // Also update payment status from registration
-          registration_fee_amount: registration.registration_fee_amount || null,
-          registration_fee_paid: registration.registration_fee_paid || false,
-          payment_verified: registration.payment_verified || false,
-          payment_date: registration.payment_date || null,
-        })
+        .update(studentUpdate)
         .eq('id', studentId);
       
       console.log('[sync-registration] Updated existing student with payment status:', {
@@ -261,49 +373,63 @@ serve(async (req) => {
         .eq('id', organizationId)
         .single();
 
-      const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
+      const orgCode = normalizeOrgCode(org?.name);
       const year = new Date().getFullYear().toString().slice(-2);
-      const { count } = await supabase
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', organizationId);
-      
-      const studentIdCode = `${orgCode}${year}${String((count || 0) + 1).padStart(4, '0')}`;
+      const prefix = `${orgCode}${year}`;
+      const lastSequence = await getLastStudentSequence(supabase, prefix);
+      let studentError: PostgrestErrorLike | null = null;
 
-      // Create student with payment status from registration
-      const { data: newStudent, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          first_name: studentFirstName?.trim(),
-          last_name: studentLastName?.trim(),
-          date_of_birth: registration.student_date_of_birth || registration.child_date_of_birth,
-          grade: registration.student_grade || registration.child_grade,
-          parent_id: parentUserId,
-          guardian_id: parentUserId,
-          preschool_id: organizationId,
-          student_id: studentIdCode,
-          emergency_contact_name: registration.emergency_contact_name,
-          emergency_contact_phone: registration.emergency_contact_phone,
-          emergency_contact_relation: registration.emergency_contact_relation,
-          allergies: registration.student_allergies || registration.child_allergies,
-          medical_conditions: registration.student_medical_conditions || registration.child_medical_conditions,
-          is_active: true,
-          status: 'active',
-          enrollment_date: new Date().toISOString(),
-          // Carry over payment status from registration so parent dashboard shows correct status
-          registration_fee_amount: registration.registration_fee_amount || null,
-          registration_fee_paid: registration.registration_fee_paid || false,
-          payment_verified: registration.payment_verified || false,
-          payment_date: registration.payment_date || null,
-        })
-        .select('id')
-        .single();
+      for (let attempt = 1; attempt <= STUDENT_ID_MAX_ATTEMPTS; attempt += 1) {
+        const studentIdCode = `${prefix}${String(lastSequence + attempt).padStart(
+          STUDENT_ID_SEQUENCE_LENGTH,
+          '0'
+        )}`;
+
+        const { data: newStudent, error } = await supabase
+          .from('students')
+          .insert({
+            first_name: trimmedFirstName,
+            last_name: trimmedLastName,
+            date_of_birth: registration.student_date_of_birth || registration.child_date_of_birth,
+            grade: registration.student_grade || registration.child_grade,
+            parent_id: parentUserId,
+            guardian_id: parentUserId,
+            preschool_id: organizationId,
+            student_id: studentIdCode,
+            emergency_contact_name: registration.emergency_contact_name,
+            emergency_contact_phone: registration.emergency_contact_phone,
+            emergency_contact_relation: registration.emergency_contact_relation,
+            allergies: registration.student_allergies || registration.child_allergies,
+            medical_conditions: registration.student_medical_conditions || registration.child_medical_conditions,
+            is_active: true,
+            status: 'active',
+            enrollment_date: new Date().toISOString(),
+            // Carry over payment status from registration so parent dashboard shows correct status
+            registration_fee_amount: registration.registration_fee_amount || null,
+            registration_fee_paid: registration.registration_fee_paid || false,
+            payment_verified: registration.payment_verified || false,
+            payment_date: registration.payment_date || null,
+          })
+          .select('id')
+          .single();
+
+        if (!error) {
+          studentId = newStudent?.id;
+          studentCreated = true;
+          studentError = null;
+          break;
+        }
+
+        const typedError = error as PostgrestErrorLike | null;
+        if (!isDuplicateStudentIdError(typedError)) {
+          studentError = typedError;
+          break;
+        }
+      }
 
       if (studentError) {
         console.error('[sync-registration] Error creating student:', studentError);
-      } else {
-        studentId = newStudent?.id;
-        studentCreated = true;
+      } else if (studentCreated) {
         console.log('[sync-registration] Student created with payment status:', {
           registration_fee_paid: registration.registration_fee_paid,
           payment_verified: registration.payment_verified,
@@ -314,23 +440,28 @@ serve(async (req) => {
     // Step 3: Create guardian-student relationship
     if (parentUserId && studentId) {
       await supabase
-        .from('guardian_student')
+        .from('student_parent_relationships')
         .upsert({
           parent_id: parentUserId,
           student_id: studentId,
-          relationship: 'parent',
+          relationship_type: 'parent',
           is_primary: true,
         }, { onConflict: 'parent_id,student_id' });
     }
 
     // Step 4: Update registration with created IDs
+    const regUpdate: Record<string, unknown> = {
+      edudash_student_id: studentId,
+      synced_at: new Date().toISOString(),
+    };
+
+    if (parentUserId) {
+      regUpdate.edudash_parent_id = parentUserId;
+    }
+
     await supabase
       .from('registration_requests')
-      .update({
-        edudash_parent_id: parentUserId,
-        edudash_student_id: studentId,
-        synced_at: new Date().toISOString(),
-      })
+      .update(regUpdate)
       .eq('id', registration_id);
 
     // Step 5: Send welcome email with login credentials (if new account)
