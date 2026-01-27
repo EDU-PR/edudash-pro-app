@@ -1,7 +1,6 @@
-/* eslint-disable i18next/no-literal-string */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -23,9 +22,45 @@ interface PaymentMethod {
   preferred: boolean;
 }
 
+const COPY = {
+  headerTitle: 'Make a Payment',
+  headerSubtitleFallback: 'School payment flow',
+  backToPayments: 'Back to Payments',
+  loadingPaymentDetails: 'Loading payment details…',
+  summaryTitle: 'Payment Summary',
+  summaryLabels: {
+    for: 'For',
+    child: 'Child',
+    dueDate: 'Due date',
+    total: 'Total',
+    reference: 'Payment Reference',
+  },
+  copyLabels: {
+    copied: 'Copied',
+    copy: 'Copy',
+  },
+  bankingTitle: 'Banking Details',
+  bankingLabels: {
+    bank: 'Bank',
+    accountNumber: 'Account Number',
+    branchCode: 'Branch Code',
+  },
+  noBankingDetails: 'No banking details available. Please contact the school.',
+  nextStepsTitle: 'Next Steps',
+  nextSteps: [
+    'Open your banking app and make the transfer.',
+    'Use the payment reference exactly as shown above.',
+    'Upload proof of payment once done.',
+  ],
+  uploadProof: 'Upload Proof of Payment',
+  childFallback: 'N/A',
+  accountNumberFallback: 'N/A',
+  feeDescriptionFallback: 'School Fees',
+} as const;
+
 const formatCurrency = (amount: number) => `R ${amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`;
 
-export default function PaymentFlowPage() {
+function PaymentFlowContent() {
   const router = useRouter();
   const supabase = createClient();
   const searchParams = useSearchParams();
@@ -35,7 +70,7 @@ export default function PaymentFlowPage() {
   const studentCode = searchParams.get('studentCode') || '';
   const feeId = searchParams.get('feeId') || '';
   const feeAmountParam = searchParams.get('feeAmount') || '0';
-  const feeDescription = searchParams.get('feeDescription') || 'School Fees';
+  const feeDescription = searchParams.get('feeDescription') || COPY.feeDescriptionFallback;
   const feeDueDate = searchParams.get('feeDueDate') || '';
   const preschoolId = searchParams.get('preschoolId') || '';
   const preschoolName = searchParams.get('preschoolName') || '';
@@ -97,8 +132,8 @@ export default function PaymentFlowPage() {
     <ParentShell tenantSlug={slug} userEmail={email} preschoolName={preschoolName}>
       <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
         <SubPageHeader
-          title="Make a Payment"
-          subtitle={preschoolName || 'School payment flow'}
+          title={COPY.headerTitle}
+          subtitle={preschoolName || COPY.headerSubtitleFallback}
           icon={<CreditCard size={28} color="white" />}
         />
 
@@ -122,41 +157,41 @@ export default function PaymentFlowPage() {
             }}
           >
             <ArrowLeft size={16} />
-            Back to Payments
+            {COPY.backToPayments}
           </button>
 
           {loading ? (
             <div className="card" style={{ padding: 24, textAlign: 'center' }}>
               <div className="spinner" style={{ margin: '0 auto' }} />
-              <p className="muted" style={{ marginTop: 12 }}>Loading payment details…</p>
+              <p className="muted" style={{ marginTop: 12 }}>{COPY.loadingPaymentDetails}</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 16 }}>
               <div className="card" style={{ padding: 20 }}>
-                <div style={{ fontWeight: 600, marginBottom: 12 }}>Payment Summary</div>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>{COPY.summaryTitle}</div>
                 <div style={{ display: 'grid', gap: 8, fontSize: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="muted">For</span>
+                    <span className="muted">{COPY.summaryLabels.for}</span>
                     <span>{feeDescription}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="muted">Child</span>
-                    <span>{childName || 'N/A'}</span>
+                    <span className="muted">{COPY.summaryLabels.child}</span>
+                    <span>{childName || COPY.childFallback}</span>
                   </div>
                   {feeDueDate && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span className="muted">Due date</span>
+                      <span className="muted">{COPY.summaryLabels.dueDate}</span>
                       <span>{new Date(feeDueDate).toLocaleDateString()}</span>
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                    <span>Total</span>
+                    <span>{COPY.summaryLabels.total}</span>
                     <span>{formatCurrency(amount)}</span>
                   </div>
                 </div>
                 {studentCode && (
                   <div style={{ marginTop: 16, padding: 12, borderRadius: 10, background: 'rgba(59,130,246,0.08)' }}>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>Payment Reference</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.summaryLabels.reference}</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontWeight: 600 }}>{studentCode}</span>
                       <button
@@ -165,7 +200,7 @@ export default function PaymentFlowPage() {
                         style={{ padding: '6px 10px', fontSize: 12 }}
                       >
                         {copiedField === 'reference' ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-                        {copiedField === 'reference' ? 'Copied' : 'Copy'}
+                        {copiedField === 'reference' ? COPY.copyLabels.copied : COPY.copyLabels.copy}
                       </button>
                     </div>
                   </div>
@@ -173,20 +208,20 @@ export default function PaymentFlowPage() {
               </div>
 
               <div className="card" style={{ padding: 20 }}>
-                <div style={{ fontWeight: 600, marginBottom: 12 }}>Banking Details</div>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>{COPY.bankingTitle}</div>
                 {preferredMethod?.bank_name ? (
                   <div style={{ display: 'grid', gap: 10, fontSize: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span className="muted">Bank</span>
+                      <span className="muted">{COPY.bankingLabels.bank}</span>
                       <span>{preferredMethod.bank_name}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span className="muted">Account Number</span>
-                      <span style={{ fontWeight: 600 }}>{preferredMethod.account_number || 'N/A'}</span>
+                      <span className="muted">{COPY.bankingLabels.accountNumber}</span>
+                      <span style={{ fontWeight: 600 }}>{preferredMethod.account_number || COPY.accountNumberFallback}</span>
                     </div>
                     {preferredMethod.branch_code && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                        <span className="muted">Branch Code</span>
+                        <span className="muted">{COPY.bankingLabels.branchCode}</span>
                         <span>{preferredMethod.branch_code}</span>
                       </div>
                     )}
@@ -199,17 +234,17 @@ export default function PaymentFlowPage() {
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)' }}>
                     <AlertCircle size={16} />
-                    No banking details available. Please contact the school.
+                    {COPY.noBankingDetails}
                   </div>
                 )}
               </div>
 
               <div className="card" style={{ padding: 20 }}>
-                <div style={{ fontWeight: 600, marginBottom: 12 }}>Next Steps</div>
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>{COPY.nextStepsTitle}</div>
                 <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8, fontSize: 13, color: 'var(--muted)' }}>
-                  <li>Open your banking app and make the transfer.</li>
-                  <li>Use the payment reference exactly as shown above.</li>
-                  <li>Upload proof of payment once done.</li>
+                  {COPY.nextSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
                 </ol>
                 <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                   <button
@@ -217,7 +252,7 @@ export default function PaymentFlowPage() {
                     onClick={() => router.push(`/dashboard/parent/payments/pop-upload?child=${childId}&feeId=${feeId}`)}
                   >
                     <FileText size={16} />
-                    Upload Proof of Payment
+                    {COPY.uploadProof}
                   </button>
                 </div>
               </div>
@@ -226,5 +261,19 @@ export default function PaymentFlowPage() {
         </div>
       </div>
     </ParentShell>
+  );
+}
+
+export default function PaymentFlowPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      }
+    >
+      <PaymentFlowContent />
+    </Suspense>
   );
 }

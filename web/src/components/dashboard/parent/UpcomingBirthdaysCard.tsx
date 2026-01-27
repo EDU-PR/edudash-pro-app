@@ -85,12 +85,12 @@ export function UpcomingBirthdaysCard({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const rows = (data || []) as StudentRow[];
-    const upcoming: UpcomingBirthday[] = rows
-      .map((row) => {
-        if (!row.date_of_birth) return null;
+    const upcoming = rows
+      .reduce<UpcomingBirthday[]>((acc, row) => {
+        if (!row.date_of_birth) return acc;
         const calc = calculateUpcomingBirthday(row.date_of_birth, today);
-        if (!calc) return null;
-        return {
+        if (!calc) return acc;
+        acc.push({
           id: row.id,
           studentId: row.id,
           firstName: row.first_name || "Student",
@@ -98,9 +98,9 @@ export function UpcomingBirthdaysCard({
           daysUntil: calc.daysUntil,
           ageTurning: calc.ageTurning,
           avatarUrl: row.avatar_url,
-        };
-      })
-      .filter((row): row is UpcomingBirthday => Boolean(row))
+        });
+        return acc;
+      }, [])
       .filter((row) => row.daysUntil <= 30)
       .sort((a, b) => a.daysUntil - b.daysUntil)
       .slice(0, maxItems);

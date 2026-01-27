@@ -32,6 +32,84 @@ import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, La
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 
+const COPY = {
+  greetings: {
+    morning: 'Good morning',
+    afternoon: 'Good afternoon',
+    evening: 'Good evening',
+  },
+  searchPlaceholder: 'Search homework, messages, children...',
+  upgradeBanner: {
+    title: 'Unlock more parent tools',
+    description: 'Get homework help, progress insights, and remove ads by upgrading.',
+  },
+  hints: {
+    quickActionsTitle: 'Quick Actions',
+    quickActionsMessage: 'Tap any card to quickly access homework, messages, payments, or Dash AI.',
+    liveClassesTitle: 'Live Classes',
+    liveClassesMessage: 'When a teacher starts a live class, you can join here instantly.',
+  },
+  sections: {
+    myChildren: 'My Children',
+    uniformSizes: 'Uniform Sizes',
+    recentActivity: 'Recent Activity',
+    practiceAtHome: 'Practice at Home',
+    earlyLearningActivities: 'Early Learning Activities',
+    earlyLearningTips: 'Early Learning Tips for Parents',
+    overview: "Today's Overview",
+  },
+  childCard: {
+    homework: 'Homework',
+    events: 'Events',
+  },
+  practiceCards: {
+    robotics: {
+      title: 'Robotics Practice',
+      description: 'Explore robot movements, basic programming, and sensor activities',
+    },
+    aiActivities: {
+      title: 'AI Activities',
+      description: 'Age-appropriate AI learning games and pattern recognition activities',
+    },
+    computerLiteracy: {
+      title: 'Computer Literacy',
+      description: 'Basic skills practice: typing, mouse control, app navigation, online safety',
+    },
+  },
+  earlyLearning: {
+    heading: "Supporting Your Preschooler's Development",
+    tips: [
+      {
+        title: '🎨 Creative Play',
+        description: 'Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills.',
+      },
+      {
+        title: '📚 Reading Together',
+        description: 'Read stories daily to build language skills, vocabulary, and a love for books.',
+      },
+      {
+        title: '🔢 Numbers & Shapes',
+        description: 'Use everyday activities to introduce counting, colors, and shapes in fun ways.',
+      },
+      {
+        title: '🎵 Songs & Rhymes',
+        description: 'Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness.',
+      },
+      {
+        title: '🤝 Social Skills',
+        description: 'Arrange playdates and teach sharing, turn-taking, and expressing emotions.',
+      },
+    ],
+  },
+  overviewCards: {
+    unreadMessages: 'Unread Messages',
+    missedCalls: 'Missed Calls',
+    homeworkPending: 'Homework Pending',
+    attendanceRate: 'Attendance Rate',
+  },
+  aiModalClose: 'Close',
+} as const;
+
 export default function ParentDashboard() {
   const router = useRouter();
   
@@ -75,9 +153,9 @@ export default function ParentDashboard() {
   // Set greeting based on time of day
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 12) setGreeting('Good morning');
-    else if (hour < 18) setGreeting('Good afternoon');
-    else setGreeting('Good evening');
+    if (hour < 12) setGreeting(COPY.greetings.morning);
+    else if (hour < 18) setGreeting(COPY.greetings.afternoon);
+    else setGreeting(COPY.greetings.evening);
   }, []);
 
   // Auth guard
@@ -181,7 +259,7 @@ export default function ParentDashboard() {
             <Search className="searchIcon icon16" />
             <input
               className="searchInput"
-              placeholder="Search homework, messages, children..."
+              placeholder={COPY.searchPlaceholder}
               onKeyDown={(e) => {
                 const t = e.target as HTMLInputElement;
                 if (e.key === 'Enter' && t.value.trim()) {
@@ -201,8 +279,8 @@ export default function ParentDashboard() {
         {showUpgradeBanner && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <UpgradeBanner
-              title="Unlock more parent tools"
-              description="Get homework help, progress insights, and remove ads by upgrading."
+              title={COPY.upgradeBanner.title}
+              description={COPY.upgradeBanner.description}
               onUpgrade={() => router.push('/pricing')}
             />
           </div>
@@ -230,7 +308,7 @@ export default function ParentDashboard() {
 
         {childrenCards.length > 0 && (
           <CollapsibleSection 
-            title="My Children" 
+            title={COPY.sections.myChildren}
             icon={Users} 
             isOpen={openSection === 'children'}
             onToggle={() => setOpenSection(openSection === 'children' ? null : 'children')}
@@ -264,11 +342,11 @@ export default function ParentDashboard() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="text-xs" style={{ color: 'var(--muted)' }}>
                       <div className="font-semibold" style={{ fontSize: 16 }}>{child.homeworkPending}</div>
-                      Homework
+                      {COPY.childCard.homework}
                     </div>
                     <div className="text-xs" style={{ color: 'var(--muted)' }}>
                       <div className="font-semibold" style={{ fontSize: 16 }}>{child.upcomingEvents}</div>
-                      Events
+                      {COPY.childCard.events}
                     </div>
                   </div>
                 </div>
@@ -280,7 +358,7 @@ export default function ParentDashboard() {
         {/* Uniform Sizes (organization-linked parents only) */}
         {hasOrganization && childrenCards.length > 0 && (
           <CollapsibleSection
-            title="Uniform Sizes"
+            title={COPY.sections.uniformSizes}
             icon={Shirt}
             isOpen={openSection === 'uniforms'}
             onToggle={() => setOpenSection(openSection === 'uniforms' ? null : 'uniforms')}
@@ -294,8 +372,8 @@ export default function ParentDashboard() {
           <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
             {showQuickActionsHint && (
               <OnboardingHint
-                title="Quick Actions"
-                message="Tap any card to quickly access homework, messages, payments, or Dash AI."
+                title={COPY.hints.quickActionsTitle}
+                message={COPY.hints.quickActionsMessage}
                 onDismiss={dismissQuickActionsHint}
               />
             )}
@@ -316,7 +394,7 @@ export default function ParentDashboard() {
         {/* Recent Activity Feed */}
         {hasAnyChild && userId && (
           <CollapsibleSection 
-            title="Recent Activity" 
+            title={COPY.sections.recentActivity}
             icon={Activity} 
             isOpen={openSection === 'activity'}
             onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
@@ -342,8 +420,8 @@ export default function ParentDashboard() {
             {showLiveClassesHint && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
                 <OnboardingHint
-                  title="Live Classes"
-                  message="When a teacher starts a live class, you can join here instantly."
+                  title={COPY.hints.liveClassesTitle}
+                  message={COPY.hints.liveClassesMessage}
                   onDismiss={dismissLiveClassesHint}
                 />
               </div>
@@ -393,7 +471,7 @@ export default function ParentDashboard() {
         {/* Practice at Home Hub - STEM Activities */}
         {hasAnyChild && activeChild && (
           <CollapsibleSection 
-            title="Practice at Home" 
+            title={COPY.sections.practiceAtHome}
             icon={Sparkles} 
             isOpen={openSection === 'practice'}
             onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
@@ -410,9 +488,11 @@ export default function ParentDashboard() {
                 }}
               >
                 <Cpu className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>Robotics Practice</h3>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                  {COPY.practiceCards.robotics.title}
+                </h3>
                 <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  Explore robot movements, basic programming, and sensor activities
+                  {COPY.practiceCards.robotics.description}
                 </p>
               </div>
               
@@ -431,9 +511,11 @@ export default function ParentDashboard() {
                 }}
               >
                 <Brain className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>AI Activities</h3>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                  {COPY.practiceCards.aiActivities.title}
+                </h3>
                 <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  Age-appropriate AI learning games and pattern recognition activities
+                  {COPY.practiceCards.aiActivities.description}
                 </p>
               </div>
               
@@ -452,9 +534,11 @@ export default function ParentDashboard() {
                 }}
               >
                 <Laptop className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>Computer Literacy</h3>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                  {COPY.practiceCards.computerLiteracy.title}
+                </h3>
                 <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  Basic skills practice: typing, mouse control, app navigation, online safety
+                  {COPY.practiceCards.computerLiteracy.description}
                 </p>
               </div>
             </div>
@@ -464,7 +548,7 @@ export default function ParentDashboard() {
         {/* Early Learning Activities - ONLY for preschoolers */}
         {allChildrenArePreschoolers && activeChild && (
           <CollapsibleSection 
-            title="Early Learning Activities" 
+            title={COPY.sections.earlyLearningActivities}
             icon={BookOpen} 
             isOpen={openSection === 'activities'}
             onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
@@ -480,34 +564,20 @@ export default function ParentDashboard() {
         {/* Preschool Learning Tips - ONLY for preschoolers */}
         {allChildrenArePreschoolers && childrenCards.length > 0 && (
           <CollapsibleSection 
-            title="Early Learning Tips for Parents" 
+            title={COPY.sections.earlyLearningTips}
             icon={Lightbulb} 
             isOpen={openSection === 'tips'}
             onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
           >
             <div className="card">
-              <h3 style={{ marginBottom: 12 }}>Supporting Your Preschooler's Development</h3>
+              <h3 style={{ marginBottom: 12 }}>{COPY.earlyLearning.heading}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <strong>🎨 Creative Play</strong>
-                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills.</p>
-                </div>
-                <div>
-                  <strong>📚 Reading Together</strong>
-                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Read stories daily to build language skills, vocabulary, and a love for books.</p>
-                </div>
-                <div>
-                  <strong>🔢 Numbers & Shapes</strong>
-                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Use everyday activities to introduce counting, colors, and shapes in fun ways.</p>
-                </div>
-                <div>
-                  <strong>🎵 Songs & Rhymes</strong>
-                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness.</p>
-                </div>
-                <div>
-                  <strong>🤝 Social Skills</strong>
-                  <p style={{ margin: '4px 0', color: 'var(--muted)' }}>Arrange playdates and teach sharing, turn-taking, and expressing emotions.</p>
-                </div>
+                {COPY.earlyLearning.tips.map((tip) => (
+                  <div key={tip.title}>
+                    <strong>{tip.title}</strong>
+                    <p style={{ margin: '4px 0', color: 'var(--muted)' }}>{tip.description}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </CollapsibleSection>
@@ -516,35 +586,35 @@ export default function ParentDashboard() {
         {/* Overview Section (ONLY for organization-linked parents) */}
         {hasOrganization && (
           <CollapsibleSection 
-            title="Today's Overview" 
+            title={COPY.sections.overview}
             icon={BarChart3} 
             isOpen={openSection === 'overview'}
             onToggle={() => setOpenSection(openSection === 'overview' ? null : 'overview')}
           >
             <div className="grid2">
               <MetricCard
-                title="Unread Messages"
+                title={COPY.overviewCards.unreadMessages}
                 value={unreadCount}
                 icon={MessageCircle}
                 color="#8b5cf6"
                 onPress={() => router.push('/dashboard/parent/messages')}
               />
               <MetricCard
-                title="Missed Calls"
+                title={COPY.overviewCards.missedCalls}
                 value={missedCalls}
                 icon={PhoneOff}
                 color="#10b981"
                 onPress={() => router.push('/dashboard/parent/messages')}
               />
               <MetricCard
-                title="Homework Pending"
+                title={COPY.overviewCards.homeworkPending}
                 value={activeChild ? metrics.pendingHomework : homeworkCount}
                 icon={BookOpen}
                 color="#f59e0b"
                 onPress={() => router.push('/dashboard/parent/homework')}
               />
               <MetricCard
-                title="Attendance Rate"
+                title={COPY.overviewCards.attendanceRate}
                 value={`${attendanceRate}%`}
                 icon={CalendarCheck}
                 color="#22c55e"
@@ -593,7 +663,7 @@ export default function ParentDashboard() {
                 color: 'white'
               }}
             >
-              Close
+              {COPY.aiModalClose}
             </button>
             <AskAIWidget
               fullscreen={true}

@@ -120,7 +120,8 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
           .gte("created_at", weekStart.toISOString())
           .lte("due_date", new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString());
 
-        const assignmentIds = (assignments || []).map((row) => (row as HomeworkAssignmentRow).id);
+        const assignmentRows = (assignments || []) as HomeworkAssignmentRow[];
+        const assignmentIds = assignmentRows.map((row) => row.id);
         if (assignmentIds.length > 0) {
           const { data: submissions } = await supabase
             .from("homework_submissions")

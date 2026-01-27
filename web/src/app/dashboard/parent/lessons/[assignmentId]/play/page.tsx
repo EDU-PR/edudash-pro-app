@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { Play, CheckCircle, Loader2 } from 'lucide-react';
 
-export default function PlayInteractiveLessonPage() {
+function PlayInteractiveLessonContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const assignmentId = searchParams.get('assignmentId');
@@ -198,5 +198,19 @@ export default function PlayInteractiveLessonPage() {
         </div>
       </div>
     </ParentShell>
+  );
+}
+
+export default function PlayInteractiveLessonPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      }
+    >
+      <PlayInteractiveLessonContent />
+    </Suspense>
   );
 }

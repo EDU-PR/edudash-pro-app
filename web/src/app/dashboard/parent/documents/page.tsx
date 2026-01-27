@@ -1,7 +1,6 @@
-/* eslint-disable i18next/no-literal-string */
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -26,6 +25,22 @@ interface RegistrationRecord {
   guardian_id_document_url: string | null;
 }
 
+const COPY = {
+  headerTitle: 'Upload Documents',
+  headerSubtitle: 'Submit required registration documents for verification',
+  backToPayments: 'Back to Payments',
+  loadingDocuments: 'Loading documents…',
+  uploaded: 'Uploaded',
+  replace: 'Replace',
+  upload: 'Upload',
+  uploadTipsTitle: 'Upload Tips',
+  uploadTips: [
+    'Accepted formats: PDF, JPG, PNG',
+    'Keep files under 10MB for faster uploads',
+    'Ensure text is clear and readable',
+  ],
+} as const;
+
 const DOCUMENTS: DocumentInfo[] = [
   {
     type: 'birth_certificate',
@@ -47,7 +62,7 @@ const DOCUMENTS: DocumentInfo[] = [
   },
 ];
 
-export default function ParentDocumentsPage() {
+function ParentDocumentsContent() {
   const router = useRouter();
   const supabase = createClient();
   const searchParams = useSearchParams();
@@ -212,8 +227,8 @@ export default function ParentDocumentsPage() {
     <ParentShell tenantSlug={tenantSlug} userEmail={email} userName={userName} preschoolName={preschoolName}>
       <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
         <SubPageHeader
-          title="Upload Documents"
-          subtitle="Submit required registration documents for verification"
+          title={COPY.headerTitle}
+          subtitle={COPY.headerSubtitle}
           icon={<FileText size={28} color="white" />}
         />
 
@@ -237,13 +252,13 @@ export default function ParentDocumentsPage() {
             }}
           >
             <ArrowLeft size={16} />
-            Back to Payments
+            {COPY.backToPayments}
           </button>
 
           {loading ? (
             <div className="card" style={{ padding: 24, textAlign: 'center' }}>
               <div className="spinner" style={{ margin: '0 auto' }} />
-              <p className="muted" style={{ marginTop: 12 }}>Loading documents…</p>
+              <p className="muted" style={{ marginTop: 12 }}>{COPY.loadingDocuments}</p>
             </div>
           ) : error ? (
             <div className="card" style={{ padding: 24, textAlign: 'center' }}>
@@ -262,7 +277,7 @@ export default function ParentDocumentsPage() {
                       <div style={{ fontWeight: 600 }}>{doc.label}</div>
                       <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{doc.description}</div>
                       {doc.uploaded && (
-                        <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Uploaded</div>
+                        <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>{COPY.uploaded}</div>
                       )}
                     </div>
                     <div>
@@ -277,7 +292,7 @@ export default function ParentDocumentsPage() {
                         }}
                       >
                         <UploadCloud size={14} />
-                        {doc.uploaded ? 'Replace' : 'Upload'}
+                        {doc.uploaded ? COPY.replace : COPY.upload}
                         <input
                           type="file"
                           accept="image/*,application/pdf"
@@ -301,11 +316,11 @@ export default function ParentDocumentsPage() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                   <AlertCircle size={20} color="#3b82f6" />
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Upload Tips</div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{COPY.uploadTipsTitle}</div>
                     <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-                      <li>Accepted formats: PDF, JPG, PNG</li>
-                      <li>Keep files under 10MB for faster uploads</li>
-                      <li>Ensure text is clear and readable</li>
+                      {COPY.uploadTips.map((tip) => (
+                        <li key={tip}>{tip}</li>
+                      ))}
                     </ul>
                   </div>
                 </div>
@@ -318,3 +333,16 @@ export default function ParentDocumentsPage() {
   );
 }
 
+export default function ParentDocumentsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      }
+    >
+      <ParentDocumentsContent />
+    </Suspense>
+  );
+}
