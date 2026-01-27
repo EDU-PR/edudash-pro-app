@@ -17,6 +17,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
+import { formatPaymentDate } from '@/lib/utils/payment-utils';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 
@@ -30,6 +31,7 @@ interface PaymentUploadModalProps {
   preschoolId?: string;
   initialAmount?: string;
   initialReference?: string;
+  paymentForDate?: string;
   paymentPurpose?: string;
   theme: any;
 }
@@ -44,6 +46,7 @@ export function PaymentUploadModal({
   preschoolId,
   initialAmount = '',
   initialReference = '',
+  paymentForDate,
   paymentPurpose = '',
   theme,
 }: PaymentUploadModalProps) {
@@ -55,6 +58,11 @@ export function PaymentUploadModal({
   const insets = useSafeAreaInsets();
 
   const styles = createStyles(theme, insets);
+  const paymentDateOverride = paymentForDate?.trim() || '';
+  const paymentDateValue = paymentDateOverride || new Date().toISOString().split('T')[0];
+  const paymentForLabel = paymentDateOverride
+    ? formatPaymentDate(paymentDateOverride)
+    : null;
 
   React.useEffect(() => {
     if (visible) {
@@ -229,7 +237,7 @@ export function PaymentUploadModal({
           file_size: uploadResult.fileSize || selectedFile.size || 0,
           file_type: uploadResult.fileType || selectedFile.type || 'unknown',
           payment_amount: paymentAmountNum, // Required by CHECK constraint
-          payment_date: new Date().toISOString().split('T')[0], // Required by CHECK constraint (YYYY-MM-DD)
+          payment_date: paymentDateValue, // Required by CHECK constraint (YYYY-MM-DD)
           payment_reference: paymentReference || studentCode,
           status: 'pending',
         })
@@ -248,7 +256,7 @@ export function PaymentUploadModal({
             submitted_by: userId,
             parent_name: parentName,
             payment_amount: paymentAmountNum,
-            payment_date: new Date().toISOString(),
+            payment_date: paymentDateValue,
             payment_method: 'bank_transfer',
             payment_purpose: paymentPurpose || 'School Fees',
             status: 'submitted',
@@ -357,6 +365,19 @@ export function PaymentUploadModal({
           <Text style={styles.referenceHint}>
             Always include this reference when making bank payments
           </Text>
+
+          {paymentForLabel && (
+            <>
+              <Text style={styles.modalLabel}>Payment For</Text>
+              <View style={styles.referenceContainer}>
+                <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+                <Text style={styles.referenceText}>{paymentForLabel}</Text>
+              </View>
+              <Text style={styles.referenceHint}>
+                This proof of payment will be matched to this billing period
+              </Text>
+            </>
+          )}
 
           <Text style={styles.modalLabel}>Bank Transaction Reference (Optional)</Text>
           <View style={styles.inputContainer}>

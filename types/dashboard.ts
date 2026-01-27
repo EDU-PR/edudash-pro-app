@@ -93,6 +93,7 @@ export function createEmptyParentData(): ParentDashboardData {
   return {
     schoolName: '',
     totalChildren: 0,
+    feesDueSoon: null,
     children: [],
     attendanceRate: 0,
     presentToday: 0,
@@ -138,10 +139,18 @@ export interface TeacherDashboardData {
 export interface ParentDashboardData {
   schoolName: string;
   totalChildren: number;
+  feesDueSoon?: {
+    amount: number;
+    dueDate: string | null;
+    daysUntil: number;
+    childName: string | null;
+  } | null;
   children: Array<{
     id: string;
     firstName: string;
     lastName: string;
+    studentCode?: string | null;
+    preschoolId?: string | null;
     avatarUrl?: string | null;
     dateOfBirth?: string | null;
     grade: string;

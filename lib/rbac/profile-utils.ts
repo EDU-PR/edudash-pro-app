@@ -71,6 +71,7 @@ export interface DatabaseProfile {
   avatar_url?: string;
   created_at?: string;
   last_login_at?: string;
+  preferred_language?: string | null;
   preschool_id?: string;
   organization_id?: string;
   tenant_slug?: string;

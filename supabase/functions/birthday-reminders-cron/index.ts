@@ -23,6 +23,7 @@ interface StudentBirthday {
   date_of_birth: string;
   class_id: string | null;
   parent_id: string | null;
+  guardian_id: string | null;
   preschool_id: string;
   avatar_url: string | null;
 }
@@ -34,10 +35,11 @@ interface BirthdayReminder {
   age: number;
   classId: string | null;
   className: string | null;
-  parentId: string | null;
-  teacherId: string | null;
-  preschoolId: string;
-  birthdayDate: string;
+      parentId: string | null;
+      guardianId: string | null;
+      teacherId: string | null;
+      preschoolId: string;
+      birthdayDate: string;
 }
 
 // Calculate age they will be turning
@@ -145,6 +147,7 @@ serve(async (req: Request): Promise<Response> => {
           date_of_birth,
           class_id,
           parent_id,
+          guardian_id,
           preschool_id,
           avatar_url,
           classes(id, name, teacher_id)
@@ -163,8 +166,11 @@ serve(async (req: Request): Promise<Response> => {
         const birthdayDate = getThisYearsBirthday(student.date_of_birth);
         const daysUntil = getDaysUntil(birthdayDate);
         
-        // Only process 7-day, 1-day, and day-of birthdays
-        if (daysUntil !== 7 && daysUntil !== 1 && daysUntil !== 0) {
+        const weeklyDonationDays = [28, 21, 14, 7];
+        const shouldSendWeeklyDonation = weeklyDonationDays.includes(daysUntil);
+
+        // Only process weekly donation reminders, 1-day, and day-of birthdays
+        if (!shouldSendWeeklyDonation && daysUntil !== 1 && daysUntil !== 0) {
           continue;
         }
 
@@ -182,24 +188,27 @@ serve(async (req: Request): Promise<Response> => {
           classId: student.class_id,
           className: classData?.name || null,
           parentId: student.parent_id,
+          guardianId: student.guardian_id,
           teacherId: classData?.teacher_id || null,
           preschoolId: school.id,
           birthdayDate: birthdayDate.toISOString(),
         };
 
-        // 7-day reminder to parent
-        if (daysUntil === 7 && student.parent_id) {
+        // Weekly donation reminder to parent/guardian
+        if (shouldSendWeeklyDonation && (student.parent_id || student.guardian_id)) {
           try {
             await supabase.functions.invoke('notifications-dispatcher', {
               body: {
-                event_type: 'birthday_reminder_week',
-                user_ids: [student.parent_id],
+                event_type: 'birthday_donation_reminder',
+                user_ids: [student.parent_id, student.guardian_id].filter(Boolean),
                 preschool_id: school.id,
                 context: {
+                  child_name: studentName,
                   student_name: student.first_name,
                   student_full_name: studentName,
-                  days_until: 7,
+                  days_until: daysUntil,
                   age: age,
+                  donation_amount: 25,
                   birthday_date: birthdayDate.toLocaleDateString('en-ZA', {
                     weekday: 'long',
                     month: 'long',
@@ -211,20 +220,20 @@ serve(async (req: Request): Promise<Response> => {
               },
             });
             results.parentReminders7Day.sent++;
-            console.log(`[birthday-reminders-cron] Sent 7-day reminder for ${studentName}`);
+            console.log(`[birthday-reminders-cron] Sent donation reminder (${daysUntil} days) for ${studentName}`);
           } catch (err) {
-            console.error(`[birthday-reminders-cron] Failed 7-day reminder for ${studentName}:`, err);
+            console.error(`[birthday-reminders-cron] Failed donation reminder for ${studentName}:`, err);
             results.parentReminders7Day.failed++;
           }
         }
 
         // 1-day reminder to parent
-        if (daysUntil === 1 && student.parent_id) {
+        if (daysUntil === 1 && (student.parent_id || student.guardian_id)) {
           try {
             await supabase.functions.invoke('notifications-dispatcher', {
               body: {
                 event_type: 'birthday_reminder_tomorrow',
-                user_ids: [student.parent_id],
+                user_ids: [student.parent_id, student.guardian_id].filter(Boolean),
                 preschool_id: school.id,
                 context: {
                   student_name: student.first_name,
@@ -269,13 +278,13 @@ serve(async (req: Request): Promise<Response> => {
 
         // Day-of birthday wishes
         if (daysUntil === 0) {
-          // Notify parent with birthday wishes
-          if (student.parent_id) {
+          // Notify parent/guardian with birthday wishes
+          if (student.parent_id || student.guardian_id) {
             try {
               await supabase.functions.invoke('notifications-dispatcher', {
                 body: {
                   event_type: 'birthday_today',
-                  user_ids: [student.parent_id],
+                  user_ids: [student.parent_id, student.guardian_id].filter(Boolean),
                   preschool_id: school.id,
                   context: {
                     student_name: student.first_name,

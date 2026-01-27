@@ -125,6 +125,8 @@ export const useParentDashboard = () => {
             id,
             first_name,
             last_name,
+            student_id,
+            preschool_id,
             date_of_birth,
             grade_level,
             avatar_url,
@@ -159,6 +161,8 @@ export const useParentDashboard = () => {
           id: child.id as string,
           firstName: child.first_name as string,
           lastName: child.last_name as string,
+          studentCode: (child.student_id as string | null) ?? null,
+          preschoolId: (child.preschool_id as string | null) ?? (schoolId as string | null),
           avatarUrl: (child.avatar_url as string | null) ?? null,
           dateOfBirth: (child.date_of_birth as string | null) ?? null,
           grade: (child.grade_level as string) || 'Grade R',
@@ -172,6 +176,38 @@ export const useParentDashboard = () => {
         // Get today's attendance for all children
         const today = new Date().toISOString().split('T')[0];
         const childIds = children.map(child => child.id);
+
+        let feesDueSoon: ParentDashboardData['feesDueSoon'] = null;
+        if (childIds.length > 0) {
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          const dueSoonDate = new Date(todayDate);
+          dueSoonDate.setDate(dueSoonDate.getDate() + 3);
+          const dueSoonStr = dueSoonDate.toISOString().split('T')[0];
+
+          const { data: dueSoonFees } = await supabase
+            .from('student_fees')
+            .select('student_id, due_date, amount, final_amount, status')
+            .in('student_id', childIds)
+            .in('status', ['pending', 'overdue', 'partially_paid'])
+            .gte('due_date', today)
+            .lte('due_date', dueSoonStr)
+            .order('due_date', { ascending: true })
+            .limit(1);
+
+          const dueFee = dueSoonFees && dueSoonFees[0];
+          if (dueFee?.due_date) {
+            const dueDate = new Date(dueFee.due_date);
+            const daysUntil = Math.ceil((dueDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+            const childMatch = children.find(child => child.id === dueFee.student_id);
+            feesDueSoon = {
+              amount: Number(dueFee.final_amount ?? dueFee.amount ?? 0),
+              dueDate: dueFee.due_date,
+              daysUntil: Number.isNaN(daysUntil) ? 0 : daysUntil,
+              childName: childMatch ? `${childMatch.firstName} ${childMatch.lastName}`.trim() : null,
+            };
+          }
+        }
         
         let todayAttendanceData: Array<{ student_id: string; status: string }> = [];
         if (childIds.length > 0) {
@@ -249,6 +285,7 @@ export const useParentDashboard = () => {
         dashboardData = {
           schoolName,
           totalChildren,
+          feesDueSoon,
           children,
           attendanceRate,
           presentToday,

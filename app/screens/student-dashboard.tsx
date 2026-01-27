@@ -16,6 +16,7 @@ import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
 import { useLearnerEnrollments } from '@/hooks/useLearnerData';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { QuickActions } from '@/components/learner/QuickActions';
+import type { LearnerQuickAction } from '@/components/learner/QuickActions';
 import DashOrb from '@/components/dash-orb';
 import { track } from '@/lib/analytics';
 
@@ -103,32 +104,32 @@ export default function StudentDashboard() {
   const studentName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'Student';
   const shouldShowUpgrade = tier === 'free' || !tier;
 
-  const dashTools = React.useMemo(() => ([
+  const dashTools = React.useMemo<LearnerQuickAction[]>(() => ([
     {
-      icon: 'sparkles',
+      icon: 'sparkles' as LearnerQuickAction['icon'],
       title: t('dash_ai.ask', { defaultValue: 'Ask Dash AI' }),
       subtitle: t('dash_ai.ask_subtitle', { defaultValue: 'Chat with your AI study buddy' }),
       onPress: () => router.push('/screens/dash-assistant'),
     },
     {
-      icon: 'bulb-outline',
+      icon: 'bulb-outline' as LearnerQuickAction['icon'],
       title: t('dash_ai.explain', { defaultValue: 'Explain a Concept' }),
       subtitle: t('dash_ai.explain_subtitle', { defaultValue: 'Get a simple explanation' }),
       onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } }),
     },
     {
-      icon: 'help-circle-outline',
+      icon: 'help-circle-outline' as LearnerQuickAction['icon'],
       title: t('dash_ai.quiz', { defaultValue: 'Practice Quiz' }),
       subtitle: t('dash_ai.quiz_subtitle', { defaultValue: 'Quick questions to test you' }),
       onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for me.' } }),
     },
     {
-      icon: 'map-outline',
+      icon: 'map-outline' as LearnerQuickAction['icon'],
       title: t('dash_ai.study_plan', { defaultValue: 'Study Plan' }),
       subtitle: t('dash_ai.study_plan_subtitle', { defaultValue: 'Plan your week of study' }),
       onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } }),
     },
-  ]), [t]);
+  ]), [t, router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>

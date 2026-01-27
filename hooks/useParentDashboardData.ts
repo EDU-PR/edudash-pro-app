@@ -182,6 +182,8 @@ export function useParentDashboardData() {
         const client = assertSupabase();
         let studentsData: any[] = [];
         
+        let internalUserId: string | null = null;
+        let mySchoolId: string | null = null;
         try {
           // profiles.auth_user_id links to the auth.users.id
           const { data: me } = await client
@@ -189,8 +191,8 @@ export function useParentDashboardData() {
             .select('id, preschool_id, organization_id')
             .eq('auth_user_id', user.id)
             .single();
-          const internalUserId = me?.id;
-          const mySchoolId = me?.preschool_id || me?.organization_id || (profile as any)?.organization_id || null;
+          internalUserId = me?.id ?? null;
+          mySchoolId = me?.preschool_id || me?.organization_id || (profile as any)?.organization_id || null;
 
           // Use centralized utility that checks both direct links AND junction table
           // This supports multiple parents per child
@@ -386,6 +388,31 @@ export function useParentDashboardData() {
     // Only run when activeChildId changes, not when childrenCards or loadUrgentMetrics changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChildId]);
+
+  useEffect(() => {
+    if (!activeChildId) return;
+    const supabase = assertSupabase();
+
+    const subscription = supabase
+      .channel(`parent-dashboard-fees-${activeChildId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'student_fees',
+          filter: `student_id=eq.${activeChildId}`,
+        },
+        () => {
+          loadUrgentMetrics(activeChildId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [activeChildId, loadUrgentMetrics]);
 
   return {
     children,

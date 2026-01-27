@@ -127,29 +127,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     DeviceEventEmitter.emit('dash:wake_word_toggle', next);
   }, [wakeWordEnabled]);
 
-  const handleAgeBandChange = useCallback((band: string) => {
-    if (!dashInstance?.updateUserContext) return;
-    let ageGroup: 'child' | 'teen' | 'adult' | null = null;
-    let gradeBand: string | null = null;
-    if (band === 'adult') {
-      ageGroup = 'adult';
-      gradeBand = null;
-    } else if (band === '13-15' || band === '16-18') {
-      ageGroup = 'teen';
-      gradeBand = band === '13-15' ? '8-9' : '10-12';
-    } else if (band === 'auto') {
-      ageGroup = null;
-      gradeBand = null;
-    } else {
-      ageGroup = 'child';
-      gradeBand = band === '3-5' ? 'R-1' : band === '6-8' ? '2-3' : '4-7';
-    }
-    dashInstance.updateUserContext({
-      age_group: ageGroup === null ? null : ageGroup,
-      grade_levels: gradeBand ? [gradeBand] : null,
-    }).catch(() => {});
-  }, [dashInstance]);
-  
   // Use custom hook for all business logic
   const {
     messages,
@@ -193,6 +170,29 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
+
+  const handleAgeBandChange = useCallback((band: string) => {
+    if (!dashInstance?.updateUserContext) return;
+    let ageGroup: 'child' | 'teen' | 'adult' | null = null;
+    let gradeBand: string | null = null;
+    if (band === 'adult') {
+      ageGroup = 'adult';
+      gradeBand = null;
+    } else if (band === '13-15' || band === '16-18') {
+      ageGroup = 'teen';
+      gradeBand = band === '13-15' ? '8-9' : '10-12';
+    } else if (band === 'auto') {
+      ageGroup = null;
+      gradeBand = null;
+    } else {
+      ageGroup = 'child';
+      gradeBand = band === '3-5' ? 'R-1' : band === '6-8' ? '2-3' : '4-7';
+    }
+    dashInstance.updateUserContext({
+      age_group: ageGroup === null ? null : ageGroup,
+      grade_levels: gradeBand ? [gradeBand] : null,
+    }).catch(() => {});
+  }, [dashInstance]);
 
   // Scroll to bottom when keyboard shows to keep messages visible
   useEffect(() => {

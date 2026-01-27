@@ -169,7 +169,7 @@ async function buildFallbackProfileFromSession(
           plan_tier: planTier,
           seat_status: seatStatus,
           invited_by: safeProfile?.organization_membership?.invited_by,
-          created_at: safeProfile?.organization_membership?.created_at || baseProfile.created_at,
+          joined_at: safeProfile?.organization_membership?.joined_at || baseProfile.created_at,
           member_type: safeProfile?.organization_membership?.member_type,
           school_type: safeProfile?.organization_membership?.school_type,
         }

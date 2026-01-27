@@ -60,6 +60,7 @@ export default function ParentPaymentsScreen() {
   const [selectedFeeAmount, setSelectedFeeAmount] = useState('');
   const [selectedFeeReference, setSelectedFeeReference] = useState('');
   const [selectedPaymentPurpose, setSelectedPaymentPurpose] = useState('');
+  const [selectedFeeDueDate, setSelectedFeeDueDate] = useState<string | undefined>(undefined);
 
   // Refresh data when screen comes into focus (e.g., from notification tap)
   useFocusEffect(
@@ -75,6 +76,7 @@ export default function ParentPaymentsScreen() {
     setSelectedFeeAmount(fee.amount.toString());
     setSelectedFeeReference('');
     setSelectedPaymentPurpose('');
+    setSelectedFeeDueDate(fee.due_date);
     setShowUploadModal(true);
   };
 
@@ -83,6 +85,7 @@ export default function ParentPaymentsScreen() {
     setSelectedFeeAmount((selectedChild.registration_fee_amount || 0).toString());
     setSelectedFeeReference('');
     setSelectedPaymentPurpose('Registration Fee');
+    setSelectedFeeDueDate(undefined);
     setShowUploadModal(true);
   };
 
@@ -99,6 +102,7 @@ export default function ParentPaymentsScreen() {
         feeId: fee.id,
         feeDescription: fee.description,
         feeAmount: fee.amount.toString(),
+        feeDueDate: fee.due_date,
         childId: selectedChildId,
         childName: `${selectedChild.first_name} ${selectedChild.last_name}`,
         studentCode: selectedChild.student_code,
@@ -245,6 +249,7 @@ export default function ParentPaymentsScreen() {
           setSelectedFeeAmount('');
           setSelectedFeeReference('');
           setSelectedPaymentPurpose('');
+          setSelectedFeeDueDate(undefined);
         }}
         onSuccess={handleUploadSuccess}
         selectedChildId={selectedChildId}
@@ -254,6 +259,7 @@ export default function ParentPaymentsScreen() {
         initialAmount={selectedFeeAmount}
         initialReference={selectedFeeReference}
         paymentPurpose={selectedPaymentPurpose}
+        paymentForDate={selectedFeeDueDate}
         theme={theme}
       />
     </View>

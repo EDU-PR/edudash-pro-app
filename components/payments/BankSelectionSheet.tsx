@@ -167,13 +167,10 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
   const tryOpenPackage = async (packageName: string) => {
     if (Platform.OS !== 'android' || !IntentLauncher) return false;
     try {
-      await IntentLauncher.startActivityAsync(
-        IntentLauncher.ActivityAction?.MAIN ?? 'android.intent.action.MAIN',
-        {
-          packageName,
-          category: IntentLauncher.ActivityCategory?.LAUNCHER ?? 'android.intent.category.LAUNCHER',
-        }
-      );
+      await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+        packageName,
+        category: 'android.intent.category.LAUNCHER',
+      });
       return true;
     } catch (error) {
       console.log(`📱 IntentLauncher failed for ${packageName}:`, error);

@@ -101,6 +101,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
 
   // Birthday planner hook - show upcoming birthdays in child's class
   const { birthdays: upcomingBirthdays, loading: birthdaysLoading, refresh: refreshBirthdays } = useBirthdayPlanner();
+  const feesDueSoon = dashboardData?.feesDueSoon ?? null;
+  const isFeesDueSoon = Boolean(feesDueSoon && feesDueSoon.daysUntil <= 3);
+  const feesDueSubtitle = isFeesDueSoon && feesDueSoon
+    ? `Due in ${feesDueSoon.daysUntil} day${feesDueSoon.daysUntil === 1 ? '' : 's'}`
+    : undefined;
 
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {
@@ -322,7 +327,17 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   }, [dashboardData, unreadMessageCount, missedCallsCount, theme, t]);
 
   // Quick actions - enhanced with parent-friendly labels
-  const baseQuickActions = useMemo(() => {
+  type ParentQuickAction = {
+    id: string;
+    title: string;
+    icon: string;
+    color: string;
+    disabled?: boolean;
+    subtitle?: string;
+    glow?: boolean;
+  };
+
+  const baseQuickActions = useMemo<ParentQuickAction[]>(() => {
     const actions = [
       { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
       { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
@@ -331,7 +346,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
       { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
       { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
-      { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: '#059669' },
+      { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
       { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
     ];
 
@@ -345,16 +360,16 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
 
     return actions;
-  }, [t, theme, isK12School]);
+  }, [t, theme, isK12School, isFeesDueSoon, feesDueSubtitle]);
 
-  const k12LearningActions = useMemo(() => ([
+  const k12LearningActions = useMemo<ParentQuickAction[]>(() => ([
     { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
     { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
     { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
     { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
   ]), [t, tier]);
 
-  const quickActions = useMemo(() => {
+  const quickActions = useMemo<ParentQuickAction[]>(() => {
     if (isK12School) {
       return [...baseQuickActions, ...k12LearningActions];
     }
@@ -542,10 +557,12 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               <View key={action.id} style={action.disabled ? { opacity: 0.5 } : undefined}>
                 <MetricCard
                   title={action.disabled ? `${action.title} 🔒` : action.title}
+                  subtitle={action.subtitle}
                   value=""
                   icon={action.icon}
                   color={action.disabled ? theme.textSecondary : action.color}
                   size="small"
+                  glow={Boolean(action.glow)}
                   onPress={() => {
                     if (action.disabled) {
                       // Show upgrade modal for locked features
@@ -573,7 +590,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             defaultCollapsed={collapsedSections.has('uniform-sizes')}
             onToggle={toggleSection}
           >
-            <UniformSizesSection children={children} />
+            <UniformSizesSection children={children} schoolName={dashboardData?.schoolName} />
           </CollapsibleSection>
         )}
 

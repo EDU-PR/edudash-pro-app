@@ -315,6 +315,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  progressRing: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
   glowContainer: {
     position: 'absolute',
     top: -10,

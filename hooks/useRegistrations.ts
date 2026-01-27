@@ -12,6 +12,7 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
+import { isTuitionFee } from '@/lib/utils/feeUtils';
 
 // Types
 export interface Registration {
@@ -75,8 +76,12 @@ interface PostgrestErrorLike {
 interface FeeStructureRow {
   id: string;
   amount: number;
+  fee_type?: string | null;
   name?: string | null;
   description?: string | null;
+  age_group?: string | null;
+  grade_levels?: string[] | null;
+  grade_level?: string | null;
   effective_from?: string | null;
   created_at?: string | null;
 }
@@ -658,9 +663,8 @@ export function useRegistrations(): UseRegistrationsReturn {
             // Get tuition fee structure for this school
             const { data: feeStructures, error: feeError } = await supabase
               .from('fee_structures')
-              .select('id, amount, name, description, effective_from, created_at')
+              .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
               .eq('preschool_id', regData.preschool_id)
-              .eq('fee_type', 'tuition')
               .eq('is_active', true)
               .order('effective_from', { ascending: false })
               .order('created_at', { ascending: false });
@@ -670,8 +674,12 @@ export function useRegistrations(): UseRegistrationsReturn {
               return;
             }
 
+            const tuitionFees = (feeStructures || []).filter((fee: FeeStructureRow) =>
+              isTuitionFee(fee.fee_type, fee.name, fee.description)
+            );
+
             const selectedFee = selectFeeStructureForChild(
-              (feeStructures || []) as FeeStructureRow[],
+              tuitionFees as FeeStructureRow[],
               {
                 dateOfBirth: regData.child_birth_date,
                 enrollmentDate: enrollmentDate,
@@ -917,15 +925,18 @@ export function useRegistrations(): UseRegistrationsReturn {
           try {
             const { data: feeStructures } = await supabase
               .from('fee_structures')
-              .select('id, amount, name, description, effective_from, created_at')
+              .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
               .eq('preschool_id', regData.organization_id)
-              .eq('fee_type', 'tuition')
               .eq('is_active', true)
               .order('effective_from', { ascending: false })
               .order('created_at', { ascending: false });
 
+            const tuitionFees = (feeStructures || []).filter((fee: FeeStructureRow) =>
+              isTuitionFee(fee.fee_type, fee.name, fee.description)
+            );
+
             const selectedFee = selectFeeStructureForChild(
-              (feeStructures || []) as FeeStructureRow[],
+              tuitionFees as FeeStructureRow[],
               {
                 dateOfBirth: regData.student_dob || regData.student_date_of_birth,
                 enrollmentDate: enrollmentDate,

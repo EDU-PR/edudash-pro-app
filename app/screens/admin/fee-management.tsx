@@ -34,7 +34,7 @@ interface FeeStructure {
   name: string;
   description?: string;
   amount: number;
-  fee_type: 'registration' | 'tuition' | 'materials' | 'transport' | 'meals' | 'other';
+  fee_type: 'registration' | 'tuition' | 'materials' | 'transport' | 'meals' | 'uniform_tshirt' | 'uniform_shorts' | 'uniform' | 'other';
   frequency: 'one_time' | 'monthly' | 'quarterly' | 'yearly';
   is_active: boolean;
 }
@@ -59,6 +59,9 @@ const FEE_TYPES = [
   { value: 'materials', label: '🎨 Materials', icon: 'color-palette' },
   { value: 'transport', label: '🚌 Transport', icon: 'bus' },
   { value: 'meals', label: '🍽️ Meals', icon: 'restaurant' },
+  { value: 'uniform_tshirt', label: '👕 Uniform (T-shirt)', icon: 'shirt' },
+  { value: 'uniform_shorts', label: '🩳 Uniform (Shorts)', icon: 'shirt' },
+  { value: 'uniform', label: '🎽 Uniform (Other)', icon: 'shirt' },
   { value: 'other', label: '📦 Other', icon: 'cube' },
 ];
 

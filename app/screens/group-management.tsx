@@ -184,7 +184,7 @@ export default function GroupManagementScreen() {
           <EmptyState
             icon="lock-closed"
             title="Access restricted"
-            message="Only teachers and principals can manage groups."
+            description="Only teachers and principals can manage groups."
           />
         ) : isLoading ? (
           <View style={styles.loadingState}>
@@ -201,9 +201,9 @@ export default function GroupManagementScreen() {
           <EmptyState
             icon="people"
             title="No groups yet"
-            message="Create your first group to organize teachers, grades, or subjects."
-            actionText="Create Group"
-            onAction={() => setShowCreateModal(true)}
+            description="Create your first group to organize teachers, grades, or subjects."
+            actionLabel="Create Group"
+            onActionPress={() => setShowCreateModal(true)}
           />
         )}
       </ScrollView>
@@ -254,9 +254,9 @@ export default function GroupManagementScreen() {
               <TouchableOpacity
                 style={styles.modalButton}
                 onPress={handleCreateGroup}
-                disabled={createGroupMutation.isLoading}
+                disabled={createGroupMutation.isPending}
               >
-                {createGroupMutation.isLoading ? (
+                {createGroupMutation.isPending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.modalButtonText}>Create</Text>

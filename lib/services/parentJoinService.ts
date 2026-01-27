@@ -26,6 +26,7 @@ export type GuardianRequestWithStudent = GuardianRequest & {
 
 export type SearchedStudent = {
   id: string;
+  student_id?: string | null;
   first_name: string;
   last_name: string;
   date_of_birth: string;
@@ -188,13 +189,13 @@ export class ParentJoinService {
     const supabase = assertSupabase();
 
     // Prefer explicit FK-qualified embed to avoid PostgREST 300 (ambiguous relationship)
-    const selectWithAgeGroup = 'id, first_name, last_name, date_of_birth, avatar_url, preschool_id, age_group:age_groups!students_age_group_id_fkey(name)';
+    const selectWithAgeGroup = 'id, student_id, first_name, last_name, date_of_birth, avatar_url, preschool_id, age_group:age_groups!students_age_group_id_fkey(name)';
 
     let { data, error, status } = await supabase
       .from('students')
       .select(selectWithAgeGroup)
       .eq('preschool_id', preschoolId)
-      .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+      .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,student_id.ilike.%${query}%`)
       .order('first_name', { ascending: true })
       .limit(20);
 
@@ -202,9 +203,9 @@ export class ParentJoinService {
     if (error && (status === 300 || (error as any)?.code === 'PGRST302')) {
       const retry = await supabase
         .from('students')
-        .select('id, first_name, last_name, date_of_birth, avatar_url, preschool_id')
+        .select('id, student_id, first_name, last_name, date_of_birth, avatar_url, preschool_id')
         .eq('preschool_id', preschoolId)
-        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
+        .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,student_id.ilike.%${query}%`)
         .order('first_name', { ascending: true })
         .limit(20);
       if (retry.error) throw retry.error;
