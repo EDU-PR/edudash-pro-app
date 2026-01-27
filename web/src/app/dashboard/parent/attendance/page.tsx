@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -17,6 +16,35 @@ interface AttendanceRecord {
   status: AttendanceStatus | null;
   notes?: string | null;
 }
+
+const COPY = {
+  title: 'Attendance',
+  subtitle: 'View attendance history',
+  stats: {
+    attendanceRate: 'Attendance Rate',
+    present: 'Present',
+    absent: 'Absent',
+  },
+  filters: {
+    all: 'All',
+    present: 'Present',
+    late: 'Late',
+    excused: 'Excused',
+    absent: 'Absent',
+  },
+  emptyState: {
+    title: 'No Attendance Records',
+    description: 'Attendance entries will appear once the school marks attendance.',
+  },
+} as const;
+
+const FILTER_LABELS: Record<'all' | AttendanceStatus, string> = {
+  all: COPY.filters.all,
+  present: COPY.filters.present,
+  late: COPY.filters.late,
+  excused: COPY.filters.excused,
+  absent: COPY.filters.absent,
+};
 
 export default function ParentAttendancePage() {
   const router = useRouter();
@@ -111,8 +139,8 @@ export default function ParentAttendancePage() {
     >
       <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
         <SubPageHeader
-          title="Attendance"
-          subtitle="View attendance history"
+          title={COPY.title}
+          subtitle={COPY.subtitle}
           icon={<Calendar size={28} color="white" />}
         />
 
@@ -151,17 +179,17 @@ export default function ParentAttendancePage() {
                 <div className="card" style={{ padding: 16, textAlign: 'center' }}>
                   <CheckCircle2 size={24} color="var(--success)" style={{ margin: '0 auto 8px' }} />
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{stats.rate}%</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Attendance Rate</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.stats.attendanceRate}</div>
                 </div>
                 <div className="card" style={{ padding: 16, textAlign: 'center' }}>
                   <Users size={24} color="var(--primary)" style={{ margin: '0 auto 8px' }} />
                   <div style={{ fontSize: 22, fontWeight: 700 }}>{stats.present}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Present</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.stats.present}</div>
                 </div>
                 <div className="card" style={{ padding: 16, textAlign: 'center' }}>
                   <AlertCircle size={24} color="var(--danger)" style={{ margin: '0 auto 8px' }} />
                   <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--danger)' }}>{stats.absent}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Absent</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.stats.absent}</div>
                 </div>
               </div>
             </div>
@@ -185,7 +213,7 @@ export default function ParentAttendancePage() {
                     cursor: 'pointer',
                   }}
                 >
-                  {key === 'all' ? 'All' : key.charAt(0).toUpperCase() + key.slice(1)}
+                  {FILTER_LABELS[key]}
                 </button>
               ))}
             </div>
@@ -203,10 +231,8 @@ export default function ParentAttendancePage() {
             {!error && filteredRecords.length === 0 && (
               <div className="card" style={{ padding: 48, textAlign: 'center' }}>
                 <Calendar size={48} color="var(--muted)" style={{ margin: '0 auto 16px' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No Attendance Records</h3>
-                <p style={{ color: 'var(--muted)' }}>
-                  Attendance entries will appear once the school marks attendance.
-                </p>
+                <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{COPY.emptyState.title}</h3>
+                <p style={{ color: 'var(--muted)' }}>{COPY.emptyState.description}</p>
               </div>
             )}
 
@@ -247,7 +273,7 @@ export default function ParentAttendancePage() {
                         height: 'fit-content',
                       }}
                     >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {FILTER_LABELS[status]}
                     </span>
                   </div>
                 </div>

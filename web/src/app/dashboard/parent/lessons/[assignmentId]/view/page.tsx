@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -44,7 +44,7 @@ interface Lesson {
   is_ai_generated: boolean;
 }
 
-export default function ParentLessonViewPage() {
+function ParentLessonViewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const lessonId = searchParams.get('lessonId');
@@ -457,5 +457,19 @@ export default function ParentLessonViewPage() {
         )}
       </div>
     </ParentShell>
+  );
+}
+
+export default function ParentLessonViewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      }
+    >
+      <ParentLessonViewContent />
+    </Suspense>
   );
 }

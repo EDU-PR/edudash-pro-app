@@ -123,10 +123,11 @@ export function TeacherQuickNotesCard({
           .select('id, first_name, last_name, avatar_url')
           .in('id', uniqueTeacherIds);
 
-        teacherMap = (teachers || []).reduce<Record<string, TeacherProfileRow>>((acc, row) => {
-          acc[row.id] = row as TeacherProfileRow;
+        const teacherRows = (teachers || []) as TeacherProfileRow[];
+        teacherMap = teacherRows.reduce((acc, row) => {
+          acc[row.id] = row;
           return acc;
-        }, {});
+        }, {} as Record<string, TeacherProfileRow>);
       }
 
       const mapped = rows.map((row) => {

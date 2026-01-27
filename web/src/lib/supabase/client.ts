@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
+import type { AuthChangeEvent } from '@supabase/supabase-js';
 
 let browserClient: ReturnType<typeof createBrowserClient> | null = null;
 
@@ -36,7 +37,7 @@ export function createClient() {
 
   // Global auth events
   try {
-    browserClient.auth.onAuthStateChange((event) => {
+    browserClient.auth.onAuthStateChange((event: AuthChangeEvent) => {
       if (event === 'SIGNED_OUT') {
         try {
           const keysToClear = [

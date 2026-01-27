@@ -34,6 +34,10 @@ interface ActiveCallRow {
   duration_seconds: number | null;
 }
 
+interface AttendancePayload {
+  new: { student_id?: string | null } | null;
+}
+
 const isMissingSchema = (error?: PostgrestError | null) => {
   if (!error) return false;
   return error.code === '42P01' || error.code === '42703';
@@ -133,8 +137,8 @@ export function useParentOverviewMetrics({
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'attendance' },
-        (payload) => {
-          const studentId = (payload.new as { student_id?: string } | null)?.student_id;
+        (payload: AttendancePayload) => {
+          const studentId = payload.new?.student_id ?? null;
           if (studentId && childIds.includes(studentId)) {
             void loadMetrics();
           }
