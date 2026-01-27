@@ -212,10 +212,10 @@ const TAB_ITEMS: TabItem[] = [
   },
   { 
     id: 'principal-reports', 
-    label: 'Reports', 
-    icon: 'document-text-outline', 
-    activeIcon: 'document-text', 
-    route: '/screens/teacher-reports', 
+    label: 'Fees', 
+    icon: 'cash-outline', 
+    activeIcon: 'cash', 
+    route: '/screens/principal-fee-overview', 
     roles: ['principal', 'principal_admin'] 
   },
   { 

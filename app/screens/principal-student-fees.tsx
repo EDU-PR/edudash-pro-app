@@ -9,7 +9,7 @@
  * - View registration vs school fees summary
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
+import { isTuitionFee } from '@/lib/utils/feeUtils';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Student {
@@ -68,9 +69,25 @@ interface ClassOption {
 interface FeeStructureRow {
   id: string;
   amount: number;
+  fee_type: string | null;
+  name: string | null;
+  description: string | null;
+  age_group: string | null;
+  grade_levels: string[] | null;
+  grade_level: string | null;
+  effective_from: string | null;
+  created_at: string | null;
+}
+
+interface SchoolFeeStructureRow {
+  id: string;
+  amount_cents: number;
+  fee_category?: string | null;
   name?: string | null;
   description?: string | null;
-  effective_from?: string | null;
+  age_group?: string | null;
+  grade_level?: string | null;
+  billing_frequency?: string | null;
   created_at?: string | null;
 }
 
@@ -109,10 +126,17 @@ export default function StudentFeeManagementScreen() {
 
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
   const [feeBootstrapAttempted, setFeeBootstrapAttempted] = useState(false);
+  const studentRef = useRef<Student | null>(null);
+  const [feeSetupStatus, setFeeSetupStatus] = useState<'unknown' | 'ready' | 'missing' | 'school_only'>('unknown');
+  const [generatingFees, setGeneratingFees] = useState(false);
+
+  useEffect(() => {
+    studentRef.current = student;
+  }, [student]);
 
   // Load student data
-  const loadStudent = useCallback(async () => {
-    if (!studentId) return;
+  const loadStudent = useCallback(async (): Promise<Student | null> => {
+    if (!studentId) return null;
     
     try {
       const supabase = assertSupabase();
@@ -132,7 +156,7 @@ export default function StudentFeeManagementScreen() {
       const classData = Array.isArray(data.classes) ? data.classes[0] : data.classes;
       const parentData = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
       
-      setStudent({
+      const nextStudent: Student = {
         id: data.id,
         first_name: data.first_name,
         last_name: data.last_name,
@@ -143,14 +167,19 @@ export default function StudentFeeManagementScreen() {
         preschool_id: data.preschool_id,
         enrollment_date: data.enrollment_date,
         date_of_birth: data.date_of_birth,
-      });
+      };
+
+      setStudent(nextStudent);
+      studentRef.current = nextStudent;
+      return nextStudent;
     } catch (error) {
       console.error('[StudentFeeManagement] Error loading student:', error);
+      return null;
     }
   }, [studentId]);
 
   // Load student fees
-  const loadFees = useCallback(async () => {
+  const loadFees = useCallback(async (targetStudent?: Student | null) => {
     if (!studentId) return;
     
     try {
@@ -182,9 +211,14 @@ export default function StudentFeeManagementScreen() {
         waived_by: f.waived_by,
       }));
 
-      if (mappedFees.length === 0 && student && !feeBootstrapAttempted) {
+      if (mappedFees.length > 0) {
+        setFeeSetupStatus('ready');
+      }
+
+      const bootstrapStudent = targetStudent ?? studentRef.current;
+      if (mappedFees.length === 0 && bootstrapStudent && !feeBootstrapAttempted) {
         setFeeBootstrapAttempted(true);
-        await bootstrapFeesIfMissing(student, supabase);
+        await bootstrapFeesIfMissing(bootstrapStudent, supabase);
         const { data: refreshed } = await supabase
           .from('student_fees')
           .select(`
@@ -217,15 +251,17 @@ export default function StudentFeeManagementScreen() {
     } catch (error) {
       console.error('[StudentFeeManagement] Error loading fees:', error);
     }
-  }, [studentId, student, feeBootstrapAttempted]);
+  }, [studentId, feeBootstrapAttempted]);
 
   const bootstrapFeesIfMissing = async (targetStudent: Student, supabase: ReturnType<typeof assertSupabase>) => {
     try {
+      const preschoolId = targetStudent.preschool_id || organizationId;
+      if (!preschoolId) return;
+
       const { data: feeStructures, error: feeError } = await supabase
         .from('fee_structures')
-        .select('id, amount, name, description, effective_from, created_at')
-        .eq('preschool_id', targetStudent.preschool_id || organizationId)
-        .eq('fee_type', 'tuition')
+        .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
+        .eq('preschool_id', preschoolId)
         .eq('is_active', true)
         .order('effective_from', { ascending: false })
         .order('created_at', { ascending: false });
@@ -235,8 +271,85 @@ export default function StudentFeeManagementScreen() {
         return;
       }
 
+      const tuitionFees = (feeStructures || []).filter((fee: FeeStructureRow) =>
+        isTuitionFee(fee.fee_type, fee.name, fee.description)
+      );
+      let resolvedTuitionFees = tuitionFees;
+
+      if (!tuitionFees.length) {
+        const { data: schoolFees } = await supabase
+          .from('school_fee_structures')
+          .select('id, amount_cents, fee_category, name, description, age_group, grade_level, billing_frequency, created_at')
+          .eq('preschool_id', preschoolId)
+          .eq('is_active', true);
+
+        const tuitionSchoolFees = (schoolFees || []).filter((fee: SchoolFeeStructureRow) =>
+          isTuitionFee(fee.fee_category, fee.name, fee.description)
+        );
+
+        if (!tuitionSchoolFees.length) {
+          setFeeSetupStatus('missing');
+          return;
+        }
+
+        if (!profile?.id) {
+          setFeeSetupStatus('school_only');
+          return;
+        }
+
+        const mappedSchoolFees = tuitionSchoolFees.map((fee) => ({
+          id: fee.id,
+          amount: fee.amount_cents / 100,
+          name: fee.name,
+          description: fee.description,
+          age_group: fee.age_group,
+          grade_level: fee.grade_level,
+          created_at: fee.created_at,
+        }));
+
+        const selectedSchoolFee = selectFeeStructureForChild(mappedSchoolFees, {
+          dateOfBirth: targetStudent.date_of_birth,
+          enrollmentDate: targetStudent.enrollment_date,
+        });
+
+        if (!selectedSchoolFee) {
+          setFeeSetupStatus('school_only');
+          return;
+        }
+
+        const frequency = tuitionSchoolFees.find((fee) => fee.id === selectedSchoolFee.id)?.billing_frequency || 'monthly';
+        const gradeLevels = selectedSchoolFee.grade_level ? [selectedSchoolFee.grade_level] : undefined;
+
+        const { data: createdFee, error: createError } = await supabase
+          .from('fee_structures')
+          .insert({
+            amount: selectedSchoolFee.amount,
+            created_by: profile.id,
+            description: selectedSchoolFee.description || selectedSchoolFee.name || 'School Fees',
+            fee_type: 'tuition',
+            frequency,
+            grade_levels: gradeLevels,
+            name: selectedSchoolFee.name || 'School Fees',
+            preschool_id: preschoolId,
+            is_active: true,
+            effective_from: new Date().toISOString().split('T')[0],
+          })
+          .select('id, amount, fee_type, name, description, effective_from, created_at')
+          .single();
+
+        if (createError || !createdFee) {
+          console.warn('[StudentFeeManagement] Failed to create fee structure from school fees:', createError);
+          setFeeSetupStatus('school_only');
+          return;
+        }
+
+        resolvedTuitionFees = [createdFee as FeeStructureRow];
+      }
+
+      setFeeSetupStatus('ready');
+
       const selectedFee = selectFeeStructureForChild(
-        (feeStructures || []) as FeeStructureRow[],
+        resolvedTuitionFees as FeeStructureRow[],
         {
           dateOfBirth: targetStudent.date_of_birth,
           enrollmentDate: targetStudent.enrollment_date,
@@ -291,9 +404,15 @@ export default function StudentFeeManagementScreen() {
 
   // Initial load
   useEffect(() => {
+    setFeeBootstrapAttempted(false);
+    setFeeSetupStatus('unknown');
+  }, [studentId]);
+
+  useEffect(() => {
     const load = async () => {
       setLoading(true);
-      await Promise.all([loadStudent(), loadFees(), loadClasses()]);
+      const resolvedStudent = await loadStudent();
+      await Promise.all([loadFees(resolvedStudent), loadClasses()]);
       setLoading(false);
     };
     load();
@@ -302,9 +421,22 @@ export default function StudentFeeManagementScreen() {
   // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadStudent(), loadFees()]);
+    const resolvedStudent = await loadStudent();
+    await loadFees(resolvedStudent);
     setRefreshing(false);
   }, [loadStudent, loadFees]);
+
+  const handleGenerateFees = useCallback(async () => {
+    if (!student) return;
+    setGeneratingFees(true);
+    try {
+      const supabase = assertSupabase();
+      await bootstrapFeesIfMissing(student, supabase);
+      await loadFees(student);
+    } finally {
+      setGeneratingFees(false);
+    }
+  }, [student, loadFees]);
 
   // Waive fee
   const handleWaiveFee = async () => {
@@ -478,13 +610,15 @@ export default function StudentFeeManagementScreen() {
       
       if (error) throw error;
       
-      setStudent({
+      const updatedStudent = {
         ...student,
         enrollment_date: formatted,
-      });
+      };
+      setStudent(updatedStudent);
+      studentRef.current = updatedStudent;
       
       Alert.alert('Start Date Updated', `Enrollment start set to ${formatted}.`);
-      loadFees();
+      await loadFees(updatedStudent);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update enrollment date.');
     } finally {
@@ -696,6 +830,8 @@ export default function StudentFeeManagementScreen() {
     });
   }, [fees, student?.enrollment_date, getEnrollmentMonthStart]);
 
+  const hasParent = Boolean(student?.parent_id || student?.parent_name);
+
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
 
   // Format currency
@@ -776,6 +912,24 @@ export default function StudentFeeManagementScreen() {
               <Text style={styles.studentMeta}>
                 {student.class_name || 'No Class'} • {student.parent_name || 'No Parent'}
               </Text>
+              {!hasParent && (
+                <View style={styles.parentNotice}>
+                  <Ionicons name="alert-circle-outline" size={14} color={theme.warning || '#f59e0b'} />
+                  <Text style={styles.parentNoticeText}>Parent not linked</Text>
+                  <TouchableOpacity
+                    style={styles.parentInviteButton}
+                    onPress={() => router.push('/screens/principal-parent-invite-code')}
+                  >
+                    <Text style={styles.parentInviteText}>Invite Parent</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.parentInviteButton}
+                    onPress={() => router.push('/screens/principal-parent-requests')}
+                  >
+                    <Text style={styles.parentInviteText}>Parent Requests</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
 
@@ -848,6 +1002,35 @@ export default function StudentFeeManagementScreen() {
             <View style={styles.emptyFees}>
               <Ionicons name="receipt-outline" size={48} color={theme.textSecondary} />
               <Text style={styles.emptyFeesText}>No fees recorded</Text>
+              {feeSetupStatus === 'missing' && (
+                <Text style={styles.emptyFeesHint}>
+                  No tuition fee setup found for this school yet.
+                </Text>
+              )}
+              {feeSetupStatus === 'school_only' && (
+                <Text style={styles.emptyFeesHint}>
+                  Fees are configured in the new fee setup but haven’t been generated for this student.
+                </Text>
+              )}
+              {feeSetupStatus !== 'missing' && (
+                <TouchableOpacity
+                  style={styles.generateFeesButton}
+                  onPress={handleGenerateFees}
+                  disabled={generatingFees}
+                >
+                  <Text style={styles.generateFeesText}>
+                    {generatingFees ? 'Generating...' : 'Generate Fees'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {(feeSetupStatus === 'missing' || feeSetupStatus === 'school_only') && (
+                <TouchableOpacity
+                  style={styles.openFeeSetupButton}
+                  onPress={() => router.push('/screens/admin/fee-management')}
+                >
+                  <Text style={styles.openFeeSetupText}>Open Fee Setup</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             displayFees.map((fee) => (
@@ -1262,6 +1445,29 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     color: theme.textSecondary,
     marginTop: 2,
   },
+  parentNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    flexWrap: 'wrap',
+  },
+  parentNoticeText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  parentInviteButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: theme.primary + '15',
+  },
+  parentInviteText: {
+    color: theme.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   enrollmentRow: {
     marginTop: 12,
     flexDirection: 'row',
@@ -1341,6 +1547,36 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 14,
     color: theme.textSecondary,
     marginTop: 8,
+  },
+  emptyFeesHint: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  generateFeesButton: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.primary + '20',
+  },
+  generateFeesText: {
+    color: theme.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  openFeeSetupButton: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.textSecondary + '20',
+  },
+  openFeeSetupText: {
+    color: theme.textSecondary,
+    fontWeight: '700',
+    fontSize: 12,
   },
   feeCard: {
     backgroundColor: theme.card,

@@ -128,7 +128,23 @@ export async function fetchParentChildren(
       if (junctionError) {
         console.error('[fetchParentChildren] Junction query error:', junctionError);
       } else if (junctionData) {
-        junctionChildren = junctionData as ChildBasicInfo[];
+        junctionChildren = junctionData.map((child) => {
+          const normalized = child as Record<string, unknown>;
+          const ageGroupValue = normalized.age_group;
+          const ageGroupRefValue = normalized.age_group_ref_data;
+          const classesValue = normalized.classes;
+
+          return {
+            ...child,
+            age_group: Array.isArray(ageGroupValue) ? ageGroupValue[0] ?? null : ageGroupValue ?? null,
+            age_group_ref_data: Array.isArray(ageGroupRefValue) ? ageGroupRefValue[0] ?? null : ageGroupRefValue ?? null,
+            classes: Array.isArray(classesValue)
+              ? classesValue
+              : classesValue
+                ? [classesValue]
+                : null,
+          } as ChildBasicInfo;
+        });
       }
     }
 

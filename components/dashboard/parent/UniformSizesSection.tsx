@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
 
 const SIZE_OPTIONS = [
   '2-3',
@@ -30,12 +32,15 @@ interface UniformEntry {
   childName: string;
   ageYears: string;
   tshirtSize: string;
+  tshirtQuantity: string;
+  shortsQuantity: string;
   isReturning: boolean;
   tshirtNumber: string;
   sampleSupplied: boolean;
   status: EntryStatus;
   message?: string | null;
   updatedAt?: string | null;
+  isEditing?: boolean;
 }
 
 interface ChildRow {
@@ -43,10 +48,30 @@ interface ChildRow {
   firstName: string;
   lastName: string;
   dateOfBirth?: string | null;
+  studentCode?: string | null;
+  preschoolId?: string | null;
 }
 
 interface UniformSizesSectionProps {
   children: ChildRow[];
+  schoolName?: string;
+}
+
+interface UniformFeeRow {
+  amount: number;
+  fee_type?: string | null;
+  name?: string | null;
+  description?: string | null;
+  effective_from?: string | null;
+  created_at?: string | null;
+}
+
+interface SchoolUniformFeeRow {
+  amount_cents: number;
+  fee_category?: string | null;
+  name?: string | null;
+  description?: string | null;
+  created_at?: string | null;
 }
 
 const getAgeYears = (dob?: string | null): string => {
@@ -57,12 +82,14 @@ const getAgeYears = (dob?: string | null): string => {
   return age > 0 ? String(age) : '';
 };
 
-export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children }) => {
+export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children, schoolName }) => {
   const { theme } = useTheme();
+  const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [entries, setEntries] = useState<Record<string, UniformEntry>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [uniformPricing, setUniformPricing] = useState<Record<string, { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number }>>({});
 
   useEffect(() => {
     if (!children.length) {
@@ -76,12 +103,15 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         childName: `${child.firstName} ${child.lastName}`.trim(),
         ageYears: getAgeYears(child.dateOfBirth),
         tshirtSize: '',
+        tshirtQuantity: '1',
+        shortsQuantity: '1',
         isReturning: false,
         tshirtNumber: '',
         sampleSupplied: false,
         status: 'idle',
         message: null,
         updatedAt: null,
+        isEditing: true,
       };
     });
 
@@ -104,7 +134,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         const childIds = children.map((child) => child.id);
         const { data, error } = await supabase
           .from('uniform_requests')
-          .select('student_id, child_name, age_years, tshirt_size, is_returning, tshirt_number, sample_supplied, updated_at')
+          .select('student_id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, is_returning, tshirt_number, sample_supplied, updated_at')
           .in('student_id', childIds);
 
         if (error) throw error;
@@ -120,12 +150,15 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 childName: row.child_name || next[row.student_id]?.childName || '',
                 ageYears: row.age_years ? String(row.age_years) : next[row.student_id]?.ageYears || '',
                 tshirtSize: row.tshirt_size || next[row.student_id]?.tshirtSize || '',
+                tshirtQuantity: row.tshirt_quantity ? String(row.tshirt_quantity) : next[row.student_id]?.tshirtQuantity || '1',
+                shortsQuantity: row.shorts_quantity ? String(row.shorts_quantity) : next[row.student_id]?.shortsQuantity || '1',
                 isReturning,
                 tshirtNumber: isReturning ? row.tshirt_number || next[row.student_id]?.tshirtNumber || '' : '',
                 sampleSupplied,
                 status: 'saved',
                 message: 'Saved',
                 updatedAt: row.updated_at || null,
+                isEditing: false,
               };
             });
             return next;
@@ -141,10 +174,96 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     loadExisting();
   }, [children]);
 
+  useEffect(() => {
+    const loadUniformPricing = async () => {
+      const preschoolIds = Array.from(new Set(children.map((child) => child.preschoolId).filter(Boolean))) as string[];
+      if (!preschoolIds.length) return;
+
+      try {
+        const supabase = assertSupabase();
+        const pricingMap: Record<string, { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number }> = {};
+
+        for (const preschoolId of preschoolIds) {
+          const pricing: { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number } = {};
+
+          const applyFee = (
+            amount: number,
+            feeType?: string | null,
+            name?: string | null,
+            description?: string | null
+          ) => {
+            if (!Number.isFinite(amount)) return;
+            const itemType = getUniformItemType(feeType, name, description);
+            if (itemType === 'tshirt' && pricing.tshirtAmount == null) {
+              pricing.tshirtAmount = amount;
+              return;
+            }
+            if (itemType === 'shorts' && pricing.shortsAmount == null) {
+              pricing.shortsAmount = amount;
+              return;
+            }
+            if (pricing.fallbackAmount == null) {
+              pricing.fallbackAmount = amount;
+            }
+          };
+
+          const { data: feeStructures } = await supabase
+            .from('fee_structures')
+            .select('amount, fee_type, name, description, effective_from, created_at')
+            .eq('preschool_id', preschoolId)
+            .eq('is_active', true)
+            .order('effective_from', { ascending: false })
+            .order('created_at', { ascending: false });
+
+          const uniformFees = (feeStructures || []).filter((fee: UniformFeeRow) =>
+            isUniformFee(fee.fee_type, fee.name, fee.description)
+          );
+
+          uniformFees.forEach((fee) => {
+            applyFee(fee.amount, fee.fee_type, fee.name, fee.description);
+          });
+
+          const { data: schoolFees } = await supabase
+            .from('school_fee_structures')
+            .select('amount_cents, fee_category, name, description, created_at')
+            .eq('preschool_id', preschoolId)
+            .eq('is_active', true);
+
+          const uniformSchoolFees = (schoolFees || []).filter((fee: SchoolUniformFeeRow) =>
+            isUniformFee(fee.fee_category, fee.name, fee.description)
+          );
+
+          uniformSchoolFees.forEach((fee) => {
+            applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description);
+          });
+
+          if (pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
+            pricingMap[preschoolId] = pricing;
+          }
+        }
+
+        if (Object.keys(pricingMap).length > 0) {
+          setUniformPricing((prev) => ({ ...prev, ...pricingMap }));
+        }
+      } catch (error) {
+        console.warn('[UniformSizes] Failed to load uniform pricing:', error);
+      }
+    };
+
+    loadUniformPricing();
+  }, [children]);
+
   const updateEntry = (childId: string, patch: Partial<UniformEntry>) => {
     setEntries((prev) => ({
       ...prev,
       [childId]: { ...prev[childId], ...patch, status: 'idle', message: null },
+    }));
+  };
+
+  const setEditing = (childId: string, isEditing: boolean) => {
+    setEntries((prev) => ({
+      ...prev,
+      [childId]: { ...prev[childId], isEditing },
     }));
   };
 
@@ -155,6 +274,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const childName = entry.childName.trim();
     const ageValue = parseInt(entry.ageYears, 10);
     const tshirtNumber = entry.tshirtNumber.trim();
+    const tshirtQty = parseInt(entry.tshirtQuantity, 10);
+    const shortsQty = parseInt(entry.shortsQuantity, 10);
 
     if (!childName) {
       updateEntry(childId, { status: 'error', message: 'Please enter the child name.' });
@@ -176,6 +297,14 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
       updateEntry(childId, { status: 'error', message: 'T-shirt number must be 1-6 digits.' });
       return;
     }
+    if (!Number.isFinite(tshirtQty) || tshirtQty < 1 || tshirtQty > 20) {
+      updateEntry(childId, { status: 'error', message: 'Enter a valid number of T-shirts (1-20).' });
+      return;
+    }
+    if (!Number.isFinite(shortsQty) || shortsQty < 0 || shortsQty > 20) {
+      updateEntry(childId, { status: 'error', message: 'Enter a valid number of shorts (0-20).' });
+      return;
+    }
 
     setEntries((prev) => ({
       ...prev,
@@ -192,6 +321,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
             child_name: childName,
             age_years: ageValue,
             tshirt_size: entry.tshirtSize,
+            tshirt_quantity: tshirtQty,
+            shorts_quantity: shortsQty,
             is_returning: entry.isReturning,
             tshirt_number: entry.isReturning ? tshirtNumber || null : null,
             sample_supplied: entry.sampleSupplied,
@@ -210,6 +341,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           status: 'saved',
           message: 'Saved',
           updatedAt: data?.updated_at || new Date().toISOString(),
+          isEditing: false,
         },
       }));
     } catch (error: any) {
@@ -218,6 +350,67 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         [childId]: { ...prev[childId], status: 'error', message: error?.message || 'Save failed' },
       }));
     }
+  };
+
+  const handlePayNow = (child: ChildRow, entry: UniformEntry) => {
+    const preschoolId = child.preschoolId || null;
+    if (!preschoolId) {
+      Alert.alert('School not found', 'We could not find the school for this child.');
+      return;
+    }
+
+    if (!entry.tshirtSize) {
+      Alert.alert('Missing size', 'Please select a T-shirt size before paying.');
+      return;
+    }
+
+    const tshirtQty = parseInt(entry.tshirtQuantity, 10);
+    const shortsQty = parseInt(entry.shortsQuantity, 10);
+    const totalItems = (Number.isFinite(tshirtQty) ? tshirtQty : 0) + (Number.isFinite(shortsQty) ? shortsQty : 0);
+
+    if (!totalItems || totalItems <= 0) {
+      Alert.alert('Missing quantities', 'Enter the number of T-shirts and shorts before paying.');
+      return;
+    }
+
+    const pricing = uniformPricing[preschoolId];
+    const tshirtPrice = pricing?.tshirtAmount ?? pricing?.fallbackAmount ?? 0;
+    const shortsPrice = pricing?.shortsAmount ?? pricing?.fallbackAmount ?? 0;
+    const totalAmount = (tshirtPrice * tshirtQty) + (shortsPrice * shortsQty);
+
+    if (!pricing || (tshirtPrice <= 0 && shortsPrice <= 0)) {
+      Alert.alert(
+        'Uniform pricing not set',
+        'Uniform pricing is not configured yet. We will still generate a reference for you.'
+      );
+    } else if ((tshirtQty > 0 && tshirtPrice <= 0) || (shortsQty > 0 && shortsPrice <= 0)) {
+      Alert.alert(
+        'Uniform pricing incomplete',
+        'Some uniform items do not have a price yet. We will still generate a reference for you.'
+      );
+    }
+
+    const descriptionParts = [
+      'Uniform order',
+      entry.tshirtSize ? `Size ${entry.tshirtSize}` : null,
+      `T-shirts ${tshirtQty}`,
+      `Shorts ${shortsQty}`,
+    ].filter(Boolean);
+
+    const referenceCode = child.studentCode || `UNIFORM-${child.id.slice(0, 6).toUpperCase()}`;
+
+    router.push({
+      pathname: '/screens/payment-flow',
+      params: {
+        feeDescription: descriptionParts.join(' • '),
+        feeAmount: totalAmount.toFixed(2),
+        childId: child.id,
+        childName: `${child.firstName} ${child.lastName}`.trim(),
+        studentCode: referenceCode,
+        preschoolId,
+        preschoolName: schoolName || '',
+      },
+    });
   };
 
   if (!children.length) {
@@ -232,7 +425,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     <View>
       <View style={styles.header}>
         <Text style={styles.title}>Uniform Sizes</Text>
-        <Text style={styles.subtitle}>T-shirt size will also be used for shorts. Add a returning number if needed.</Text>
+        <Text style={styles.subtitle}>Select sizes, quantities, and add a returning number if needed.</Text>
       </View>
 
       {loading && (
@@ -246,6 +439,32 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
       {children.map((child) => {
         const entry = entries[child.id];
         if (!entry) return null;
+
+        if (entry.status === 'saved' && !entry.isEditing) {
+          return (
+            <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
+              <View style={styles.summaryHeader}>
+                <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
+                <View style={styles.statusPill}>
+                  <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+                  <Text style={styles.statusPillText}>Confirmed</Text>
+                </View>
+              </View>
+              <Text style={styles.summaryText}>
+                Size: {entry.tshirtSize || '—'} • T-shirts: {entry.tshirtQuantity} • Shorts: {entry.shortsQuantity}
+              </Text>
+              {entry.isReturning && entry.tshirtNumber ? (
+                <Text style={styles.summaryText}>Back number: {entry.tshirtNumber}</Text>
+              ) : null}
+              {entry.updatedAt ? (
+                <Text style={styles.updatedText}>Last updated: {new Date(entry.updatedAt).toLocaleString('en-ZA')}</Text>
+              ) : null}
+              <TouchableOpacity style={styles.editButton} onPress={() => setEditing(child.id, true)}>
+                <Text style={styles.editButtonText}>Edit Order</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }
 
         return (
           <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
@@ -283,6 +502,28 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 ))}
               </Picker>
             </View>
+
+            <Text style={styles.label}>Number of T-shirts</Text>
+            <TextInput
+              style={styles.input}
+              value={entry.tshirtQuantity}
+              onChangeText={(text) => updateEntry(child.id, { tshirtQuantity: text })}
+              placeholder="e.g. 1"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+
+            <Text style={styles.label}>Number of Shorts</Text>
+            <TextInput
+              style={styles.input}
+              value={entry.shortsQuantity}
+              onChangeText={(text) => updateEntry(child.id, { shortsQuantity: text })}
+              placeholder="e.g. 1"
+              placeholderTextColor={theme.textSecondary}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Sample supplied?</Text>
@@ -331,6 +572,12 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 <Text style={styles.saveButtonText}>
                   {entry.status === 'saving' ? 'Saving...' : 'Save'}
                 </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.payButton, { borderColor: theme.primary }]}
+                onPress={() => handlePayNow(child, entry)}
+              >
+                <Text style={[styles.payButtonText, { color: theme.primary }]}>Pay Now</Text>
               </TouchableOpacity>
               {entry.status === 'saved' && (
                 <View style={styles.statusRow}>
@@ -391,6 +638,44 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.text,
     marginBottom: 10,
   },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: theme.success + '20',
+  },
+  statusPillText: {
+    color: theme.success,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  summaryText: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginBottom: 4,
+  },
+  editButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.primary + '15',
+  },
+  editButtonText: {
+    color: theme.primary,
+    fontWeight: '700',
+    fontSize: 12,
+  },
   label: {
     fontSize: 12,
     fontWeight: '600',
@@ -442,6 +727,15 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   saveButtonText: {
     color: '#fff',
+    fontWeight: '700',
+  },
+  payButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  payButtonText: {
     fontWeight: '700',
   },
   statusRow: {

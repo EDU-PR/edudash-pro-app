@@ -510,12 +510,6 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  attachButton: {
-    width: screenWidth < 360 ? 34 : 40,
-    height: screenWidth < 360 ? 34 : 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   inputWrapper: {
     flex: 1,
     flexDirection: 'row',

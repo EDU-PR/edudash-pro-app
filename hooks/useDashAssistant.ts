@@ -41,6 +41,36 @@ interface UseDashAssistantOptions {
   onClose?: () => void;
 }
 
+function resolveAgeBand(ageYears?: number | null, grade?: string | null): string | null {
+  const raw = (grade || '').toString().toLowerCase();
+  const gradeNum = raw.startsWith('r')
+    ? 0
+    : (() => {
+        const match = raw.match(/(\d{1,2})/);
+        return match ? Number(match[1]) : null;
+      })();
+
+  if (typeof gradeNum === 'number' && !Number.isNaN(gradeNum)) {
+    if (gradeNum <= 1) return '3-5';
+    if (gradeNum <= 3) return '6-8';
+    if (gradeNum <= 7) return '9-12';
+    if (gradeNum <= 9) return '13-15';
+    if (gradeNum <= 12) return '16-18';
+    return 'adult';
+  }
+
+  if (typeof ageYears === 'number' && !Number.isNaN(ageYears)) {
+    if (ageYears <= 5) return '3-5';
+    if (ageYears <= 8) return '6-8';
+    if (ageYears <= 12) return '9-12';
+    if (ageYears <= 15) return '13-15';
+    if (ageYears <= 18) return '16-18';
+    return 'adult';
+  }
+
+  return null;
+}
+
 interface AlertState {
   visible: boolean;
   title: string;
@@ -410,7 +440,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     profile?.first_name,
     profile?.date_of_birth,
     activeChildId,
-    resolveAgeBand,
   ]);
 
   // Scroll utility
@@ -522,36 +551,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       schoolType: fallback?.schoolType || null,
       learnerName: fallback?.learnerName || null,
     };
-  }, []);
-
-  const resolveAgeBand = useCallback((ageYears?: number | null, grade?: string | null): string | null => {
-    const raw = (grade || '').toString().toLowerCase();
-    const gradeNum = raw.startsWith('r')
-      ? 0
-      : (() => {
-          const match = raw.match(/(\d{1,2})/);
-          return match ? Number(match[1]) : null;
-        })();
-
-    if (typeof gradeNum === 'number' && !Number.isNaN(gradeNum)) {
-      if (gradeNum <= 1) return '3-5';
-      if (gradeNum <= 3) return '6-8';
-      if (gradeNum <= 7) return '9-12';
-      if (gradeNum <= 9) return '13-15';
-      if (gradeNum <= 12) return '16-18';
-      return 'adult';
-    }
-
-    if (typeof ageYears === 'number' && !Number.isNaN(ageYears)) {
-      if (ageYears <= 5) return '3-5';
-      if (ageYears <= 8) return '6-8';
-      if (ageYears <= 12) return '9-12';
-      if (ageYears <= 15) return '13-15';
-      if (ageYears <= 18) return '16-18';
-      return 'adult';
-    }
-
-    return null;
   }, []);
 
   const resolveVoiceLocale = useCallback((lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' => {
@@ -728,6 +727,108 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
     return !freeTiers.includes(currentTier);
   }, [tier]);
+
+  const stopSpeaking = useCallback(async () => {
+    if (!dashInstance) return;
+    
+    try {
+      await dashInstance.stopSpeaking();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    } catch (error) {
+      console.error('Failed to stop speaking:', error);
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  }, [dashInstance]);
+
+  // Speech functions
+  const speakResponse = useCallback(async (message: DashMessage) => {
+    if (!dashInstance || message.type !== 'assistant') return;
+
+    if (!voiceEnabled) {
+      showAlert({
+        title: 'Voice Responses Disabled',
+        message: 'Enable Voice Responses in Dash AI Settings to hear spoken replies.',
+        type: 'info',
+        icon: 'volume-mute-outline',
+        buttons: [{ text: 'OK', style: 'default' }]
+      });
+      return;
+    }
+
+    // Check tier for TTS access
+    if (!hasTTSAccess()) {
+      showAlert({
+        title: 'Voice Playback - Premium',
+        message: 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
+        type: 'info',
+        icon: 'volume-high-outline',
+        buttons: [
+          { text: 'Maybe Later', style: 'cancel' },
+          { 
+            text: 'Upgrade Now', 
+            onPress: () => {
+              hideAlert();
+              router.push('/screens/subscription-setup' as any);
+            }
+          }
+        ]
+      });
+      return;
+    }
+
+    if (speakingMessageId === message.id) {
+      await stopSpeaking();
+      return;
+    }
+
+    if (isSpeaking && speakingMessageId) {
+      await stopSpeaking();
+    }
+
+    try {
+      setIsSpeaking(true);
+      setSpeakingMessageId(message.id);
+      
+      await dashInstance.speakResponse(message, {
+        onStart: () => {},
+        onDone: () => {
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+        },
+        onStopped: () => {
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+        },
+        onError: (error: unknown) => {
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+          console.error('Speech error:', error);
+          showAlert({
+            title: 'Voice Playback Error',
+            message: 'We had trouble speaking that response. Try again or disable voice.',
+            type: 'warning',
+            icon: 'volume-mute-outline',
+            buttons: [
+              { text: 'OK', style: 'default' },
+              { 
+                text: 'Disable Voice', 
+                onPress: () => {
+                  hideAlert();
+                  setVoiceEnabled(false);
+                }
+              }
+            ]
+          });
+        },
+      });
+    } catch (error) {
+      console.error('Failed to speak response:', error);
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled, stopSpeaking]);
 
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
@@ -1160,111 +1261,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
     await sendMessage(trimmed);
   }, [sendMessage]);
-
-  // Speech functions
-  const speakResponse = useCallback(async (message: DashMessage) => {
-    if (!dashInstance || message.type !== 'assistant') return;
-
-    if (!voiceEnabled) {
-      showAlert({
-        title: 'Voice Responses Disabled',
-        message: 'Enable Voice Responses in Dash AI Settings to hear spoken replies.',
-        type: 'info',
-        icon: 'volume-mute-outline',
-        buttons: [{ text: 'OK', style: 'default' }]
-      });
-      return;
-    }
-
-    // Check tier for TTS access
-    if (!hasTTSAccess()) {
-      showAlert({
-        title: 'Voice Playback - Premium',
-        message: 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
-        type: 'info',
-        icon: 'volume-high-outline',
-        buttons: [
-          { text: 'Maybe Later', style: 'cancel' },
-          { 
-            text: 'Upgrade Now', 
-            onPress: () => {
-              hideAlert();
-              router.push('/screens/subscription-setup' as any);
-            }
-          }
-        ]
-      });
-      return;
-    }
-
-    if (speakingMessageId === message.id) {
-      await stopSpeaking();
-      return;
-    }
-
-    if (isSpeaking && speakingMessageId) {
-      await stopSpeaking();
-    }
-
-    try {
-      setIsSpeaking(true);
-      setSpeakingMessageId(message.id);
-      
-      await dashInstance.speakResponse(message, {
-        onStart: () => {},
-        onDone: () => {
-          setIsSpeaking(false);
-          setSpeakingMessageId(null);
-        },
-        onStopped: () => {
-          setIsSpeaking(false);
-          setSpeakingMessageId(null);
-        },
-        onError: (error: any) => {
-          setIsSpeaking(false);
-          setSpeakingMessageId(null);
-          
-          // Check for tier-blocked error
-          if (error?.message === 'TTS_FREE_TIER_BLOCKED') {
-            showAlert({
-              title: 'Voice Playback - Premium',
-              message: 'Text-to-speech is a premium feature. Upgrade to Starter or Plus to unlock voice features.',
-              type: 'info',
-              icon: 'volume-high-outline',
-              buttons: [
-                { text: 'Maybe Later', style: 'cancel' },
-                { 
-                  text: 'Upgrade Now', 
-                  onPress: () => {
-                    hideAlert();
-                    router.push('/screens/subscription-setup' as any);
-                  }
-                }
-              ]
-            });
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Failed to speak response:', error);
-      setIsSpeaking(false);
-      setSpeakingMessageId(null);
-    }
-  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled]);
-
-  const stopSpeaking = useCallback(async () => {
-    if (!dashInstance) return;
-    
-    try {
-      await dashInstance.stopSpeaking();
-      setIsSpeaking(false);
-      setSpeakingMessageId(null);
-    } catch (error) {
-      console.error('Failed to stop speaking:', error);
-      setIsSpeaking(false);
-      setSpeakingMessageId(null);
-    }
-  }, [dashInstance]);
 
   // Attachment handlers
   const handleAttachFile = useCallback(async () => {

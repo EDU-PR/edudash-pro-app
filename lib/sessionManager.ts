@@ -164,6 +164,7 @@ export interface UserProfile {
   capabilities?: string[];
   created_at?: string;
   last_login_at?: string;
+  preferred_language?: string | null;
 }
 
 const SESSION_STORAGE_KEY = 'edudash_session';
@@ -861,8 +862,12 @@ export async function signInWithSession(
 
     // Update last login via RPC to avoid REST conflicts on public.users
     try {
+      const rpcPromise = assertSupabase().rpc('update_user_last_login') as unknown as Promise<{
+        data?: unknown;
+        error?: unknown;
+      }>;
       const { result: lastLoginResult, timedOut: lastLoginTimedOut } = await withTimeoutMarker(
-        assertSupabase().rpc('update_user_last_login'),
+        rpcPromise,
         2000
       );
       if (lastLoginTimedOut) {

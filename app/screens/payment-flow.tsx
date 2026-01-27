@@ -39,6 +39,7 @@ export default function PaymentFlowScreen() {
   const feeId = params.feeId as string | undefined;
   const feeDescription = params.feeDescription as string | undefined;
   const feeAmount = params.feeAmount as string | undefined;
+  const feeDueDate = params.feeDueDate as string | undefined;
   const childId = params.childId as string | undefined;
   const childName = params.childName as string | undefined;
   const studentCode = params.studentCode as string | undefined;
@@ -308,6 +309,7 @@ export default function PaymentFlowScreen() {
         userId={user?.id || ''}
         preschoolId={preschoolId}
         initialAmount={feeAmount || ''}
+        paymentForDate={feeDueDate}
         theme={theme}
       />
 

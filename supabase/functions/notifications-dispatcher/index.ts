@@ -47,6 +47,10 @@ interface NotificationContext {
   due_date?: string;
   status?: string;
   overdue_days?: number;
+  invite_code?: string;
+  invite_link?: string;
+  student_code?: string;
+  donation_amount?: number;
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
@@ -123,6 +127,9 @@ interface NotificationRequest {
   child_name?: string;
   parent_name?: string;
   parent_id?: string;
+  recipient_email?: string;
+  recipient_emails?: string[];
+  context?: Record<string, unknown>;
   // Custom payload
   custom_payload?: Record<string, unknown>;
   template_override?: Partial<NotificationTemplate>;
@@ -748,6 +755,77 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'high',
       channelId: 'general'
+    },
+    parent_invite: {
+      title: context.school_name ? `You're invited to ${context.school_name}` : 'You are invited to EduDash Pro',
+      body: context.child_name && context.invite_code
+        ? `You've been invited to connect to ${context.child_name}. Use code ${context.invite_code}.`
+        : context.invite_code
+          ? `Use invite code ${context.invite_code} to join your school.`
+          : 'You have been invited to join your school on EduDash Pro.',
+      data: {
+        type: 'parent_invite',
+        invite_code: context.invite_code,
+        invite_link: context.invite_link,
+        student_code: context.student_code,
+        screen: 'invite'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    parent_linked: {
+      title: '✅ Child Linked',
+      body: context.child_name
+        ? `${context.child_name} has been linked to your account.`
+        : 'A child has been linked to your account.',
+      data: {
+        type: 'parent_linked',
+        student_id: context.student_id,
+        student_code: context.student_code,
+        screen: 'children'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    birthday_donation_reminder: {
+      title: '🎂 Birthday Donation Reminder',
+      body: context.child_name && typeof context.days_until === 'number'
+        ? `${context.child_name}'s birthday is in ${context.days_until} days. Please contribute R${context.donation_amount || 25}.`
+        : `A birthday is coming up. Please contribute R${context.donation_amount || 25}.`,
+      data: {
+        type: 'birthday',
+        screen: 'birthday-planner',
+        student_name: context.child_name || context.student_name,
+        days_until: context.days_until,
+        donation_amount: context.donation_amount || 25,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
+    fee_due_soon: {
+      title: '💳 Fee Due Soon',
+      body: context.child_name && context.due_date
+        ? `${context.child_name}'s fees are due on ${context.due_date}.`
+        : context.due_date
+          ? `Fees are due on ${context.due_date}.`
+          : 'Fees are due soon.',
+      data: {
+        type: 'billing',
+        screen: 'parent-payments',
+        student_id: context.student_id,
+        due_date: context.due_date,
+        amount: context.amount,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'billing'
     }
   };
 
@@ -1121,11 +1199,30 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
   return [...new Set(userIds.filter(Boolean))];
 }
 
+function normalizeRecipientEmails(request: NotificationRequest): string[] {
+  const emails: string[] = [];
+  if (request.recipient_email) {
+    emails.push(request.recipient_email);
+  }
+  if (Array.isArray(request.recipient_emails)) {
+    emails.push(...request.recipient_emails);
+  }
+
+  const normalized = emails
+    .map((email) => String(email || '').trim().toLowerCase())
+    .filter((email) => Boolean(email));
+
+  return [...new Set(normalized)];
+}
+
 /**
  * Get notification context for template rendering
  */
 async function getNotificationContext(request: NotificationRequest): Promise<NotificationContext> {
   const context: NotificationContext = {};
+  if (request.context && typeof request.context === 'object') {
+    Object.assign(context, request.context);
+  }
 
   try {
     switch (request.event_type) {
@@ -1593,6 +1690,21 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
           }
         }
         break;
+      case 'parent_invite':
+      case 'parent_linked':
+      case 'birthday_donation_reminder':
+      case 'fee_due_soon': {
+        context.child_name = (request.custom_payload?.child_name as string | undefined) ?? context.child_name;
+        context.student_code = (request.custom_payload?.student_code as string | undefined) ?? context.student_code;
+        context.invite_code = (request.custom_payload?.invite_code as string | undefined) ?? context.invite_code;
+        context.invite_link = (request.custom_payload?.invite_link as string | undefined) ?? context.invite_link;
+        context.donation_amount = (request.custom_payload?.donation_amount as number | undefined) ?? context.donation_amount;
+        context.due_date = (request.custom_payload?.due_date as string | undefined) ?? context.due_date;
+        context.amount = (request.custom_payload?.amount as number | undefined) ?? context.amount;
+        context.days_until = (request.custom_payload?.days_until as number | undefined) ?? context.days_until;
+        context.school_name = (request.custom_payload?.school_name as string | undefined) ?? context.school_name;
+        break;
+      }
     }
   } catch (error) {
     console.error('Error getting notification context:', error);
@@ -1717,7 +1829,7 @@ async function recordNotification(
  * Map event types to notification UI types
  */
 function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' | 'success' | 'error' {
-  const warningTypes = ['payment_overdue', 'emergency', 'urgent_announcement'];
+  const warningTypes = ['payment_overdue', 'fee_due_soon', 'emergency', 'urgent_announcement'];
   const successTypes = ['payment_received', 'assignment_graded', 'homework_submitted'];
   const errorTypes = ['payment_failed', 'registration_rejected'];
   
@@ -1733,7 +1845,7 @@ function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' |
 function getNotificationCategory(eventType: string): string {
   const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement'];
   const homeworkEvents = ['homework_assigned', 'homework_due', 'homework_graded', 'assignment_graded', 'homework_submitted'];
-  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'registration_approved', 'registration_rejected'];
+  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked'];
   
   if (schoolEvents.includes(eventType)) return 'school';
   if (homeworkEvents.includes(eventType)) return 'homework';
@@ -1952,9 +2064,10 @@ async function dispatchNotification(request: Request): Promise<Response> {
       );
     }
 
+    const recipientEmails = normalizeRecipientEmails(notificationRequest);
     const userIds = await getUsersToNotify(notificationRequest);
 
-    if (userIds.length === 0) {
+    if (userIds.length === 0 && recipientEmails.length === 0) {
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'no_recipients',
@@ -1967,29 +2080,33 @@ async function dispatchNotification(request: Request): Promise<Response> {
       );
     }
 
-    const filteredUserIds = await filterUsersByPreferences(userIds, notificationRequest.event_type, 'email');
+    let filteredUserIds: string[] = userIds;
 
-    if (filteredUserIds.length === 0) {
-      await trackAnalyticsEvent('edudash.notifications.skipped', {
-        event_type: notificationRequest.event_type,
-        reason: 'disabled_by_preferences',
-        count: userIds.length
-      });
+    if (userIds.length > 0) {
+      filteredUserIds = await filterUsersByPreferences(userIds, notificationRequest.event_type, 'email');
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'All users have disabled notifications for this event',
-          recipients: 0,
-          original_recipients: userIds.length
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
+      if (filteredUserIds.length === 0 && recipientEmails.length === 0) {
+        await trackAnalyticsEvent('edudash.notifications.skipped', {
+          event_type: notificationRequest.event_type,
+          reason: 'disabled_by_preferences',
+          count: userIds.length
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'All users have disabled notifications for this event',
+            recipients: 0,
+            original_recipients: userIds.length
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    const pushTokens = await getPushTokensForUsers(filteredUserIds);
+    const pushTokens = filteredUserIds.length > 0 ? await getPushTokensForUsers(filteredUserIds) : [];
 
-    if (pushTokens.length === 0 && !notificationRequest.include_email) {
+    if (filteredUserIds.length > 0 && pushTokens.length === 0 && !notificationRequest.include_email && recipientEmails.length === 0) {
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'no_push_tokens',
@@ -2045,7 +2162,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
     }
 
     const expoResult = expoResults.length > 0 ? expoResults[0] : undefined;
-    await recordNotification(filteredUserIds, template, notificationRequest, expoResult);
+    if (filteredUserIds.length > 0) {
+      await recordNotification(filteredUserIds, template, notificationRequest, expoResult);
+    }
 
     const isInvoiceEvent = [
       'new_invoice',
@@ -2057,7 +2176,20 @@ async function dispatchNotification(request: Request): Promise<Response> {
       'subscription_pending_payment'
     ].includes(notificationRequest.event_type);
 
-    if (isInvoiceEvent || notificationRequest.include_email) {
+    const emailOverride = notificationRequest.email_template_override;
+    const emailSubject = emailOverride?.subject ?? template.title;
+    const emailText = emailOverride?.text ?? template.body;
+    const emailHtml = emailOverride?.html ?? `<p>${template.body}</p>`;
+
+    if (recipientEmails.length > 0 && notificationRequest.include_email !== false) {
+      try {
+        await sendEmailNotification(recipientEmails, emailSubject, emailHtml, emailText);
+      } catch (emailError) {
+        console.error('Error sending direct email notifications:', emailError);
+      }
+    }
+
+    if (filteredUserIds.length > 0 && (isInvoiceEvent || notificationRequest.include_email)) {
       try {
         await sendEnhancedEmailNotification(
           filteredUserIds,
@@ -2073,12 +2205,14 @@ async function dispatchNotification(request: Request): Promise<Response> {
     await trackAnalyticsEvent('edudash.notifications.sent', {
       event_type: notificationRequest.event_type,
       channel: isInvoiceEvent ? 'email' : 'push',
-      recipients: filteredUserIds.length,
-      success_count: pushTokens.length + (isInvoiceEvent ? filteredUserIds.length : 0),
+      recipients: filteredUserIds.length + recipientEmails.length,
+      success_count: pushTokens.length + (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
       failure_count: 0
     });
 
-    await trackNotificationEvent(filteredUserIds, notificationRequest);
+    if (filteredUserIds.length > 0) {
+      await trackNotificationEvent(filteredUserIds, notificationRequest);
+    }
 
     console.log(`Notification dispatched to ${pushTokens.length} devices and ${filteredUserIds.length} email recipients`);
 
@@ -2086,9 +2220,10 @@ async function dispatchNotification(request: Request): Promise<Response> {
       JSON.stringify({
         success: true,
         recipients: pushTokens.length,
-        email_recipients: isInvoiceEvent ? filteredUserIds.length : 0,
+        email_recipients: (isInvoiceEvent ? filteredUserIds.length : 0) + recipientEmails.length,
         user_count: filteredUserIds.length,
         original_user_count: userIds.length,
+        direct_email_recipients: recipientEmails.length,
         event_type: notificationRequest.event_type,
         expo_result: expoResult,
         sent_immediately: notificationRequest.send_immediately !== false,

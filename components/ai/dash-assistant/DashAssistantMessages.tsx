@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, View, Text } from 'react-native';
+import { Platform, View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import TutorHome from './TutorHome';
 
@@ -89,14 +89,23 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
     />
   );
 
+  const listStyle = StyleSheet.flatten([
+    styles.messagesContainer,
+    { backgroundColor: theme.background },
+  ]) as ViewStyle;
+  const listContentStyle = StyleSheet.flatten([
+    styles.messagesContent,
+    { backgroundColor: theme.background, flexGrow: 1 },
+  ]) as ViewStyle;
+
   return (
     <FlashList
       ref={flashListRef}
       data={messages}
       keyExtractor={(item: any, index: number) => item.id || `msg-${index}`}
       renderItem={({ item, index }) => renderMessage(item, index)}
-      style={[styles.messagesContainer, { backgroundColor: theme.background }]}
-      contentContainerStyle={[styles.messagesContent, { backgroundColor: theme.background, flexGrow: 1 }]}
+      style={listStyle}
+      contentContainerStyle={listContentStyle}
       showsVerticalScrollIndicator={false}
       removeClippedSubviews={Platform.OS === 'android'}
       onScroll={(e: any) => {

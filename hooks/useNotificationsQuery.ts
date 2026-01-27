@@ -54,6 +54,8 @@ function mapNotificationType(notifType: string): NotificationType {
     'child_registration_submitted': 'registration',
     'child_registration_approved': 'registration',
     'child_registration_rejected': 'registration',
+    'parent_invite': 'registration',
+    'parent_linked': 'registration',
     // Billing & Payments
     'subscription_created': 'billing',
     'payment_success': 'billing',
@@ -65,6 +67,7 @@ function mapNotificationType(notifType: string): NotificationType {
     'new_invoice': 'billing',
     'invoice_sent': 'billing',
     'overdue_reminder': 'billing',
+    'fee_due_soon': 'billing',
     'payment': 'billing',
     // Calendar & Events
     'school_event_created': 'calendar',
@@ -78,6 +81,7 @@ function mapNotificationType(notifType: string): NotificationType {
     'birthday_today': 'birthday',
     'birthday_today_teacher': 'birthday',
     'birthday_classmates_notification': 'birthday',
+    'birthday_donation_reminder': 'birthday',
   };
   return typeMap[notifType] || 'system';
 }

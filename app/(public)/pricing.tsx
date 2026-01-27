@@ -11,7 +11,7 @@ import { GradientButton } from '@/components/marketing/GradientButton';
 import { QASection } from '@/components/marketing/sections/QASection';
 import { supabase } from '@/lib/supabase';
 import { listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
-import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, type TierNameAligned } from '@/lib/tiers';
+import { EARLY_BIRD_DISCOUNT, TIER_PRICING, getEarlyBirdPrice, normalizeTierName, type TierNameAligned } from '@/lib/tiers';
 
 /** Feature item in a plan */
 interface PlanFeature {
@@ -170,8 +170,8 @@ export default function PricingPage() {
         if (Array.isArray(data) && data.length > 0) {
           // Map database plans to display format
           mapped = data.map((p: SubscriptionPlan) => {
-            const normalizedTier = String(p.tier || '').toLowerCase().replace(/-/g, '_') as TierNameAligned;
-            const isEnterprise = normalizedTier === 'school_enterprise' || normalizedTier === 'enterprise';
+            const normalizedTier = normalizeTierName(String(p.tier || ''));
+            const isEnterprise = normalizedTier === 'school_enterprise';
             const isFree = normalizedTier === 'free';
             const promoActive = EARLY_BIRD_DISCOUNT.enabled && new Date() <= EARLY_BIRD_DISCOUNT.endDate;
             const basePricing = TIER_PRICING[normalizedTier];

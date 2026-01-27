@@ -23,6 +23,8 @@ interface UniformRow {
   child_name: string;
   age_years: number;
   tshirt_size: string;
+  tshirt_quantity?: number | null;
+  shorts_quantity?: number | null;
   tshirt_number?: string | null;
   is_returning?: boolean | null;
   sample_supplied?: boolean | null;
@@ -56,6 +58,8 @@ interface DisplayRow {
   childName: string;
   ageYears: number | null;
   tshirtSize: string;
+  tshirtQuantity: number | null;
+  shortsQuantity: number | null;
   tshirtNumber: string;
   isReturning: boolean;
   sampleSupplied: boolean;
@@ -120,6 +124,8 @@ export default function PrincipalUniformsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   const load = useCallback(async () => {
     if (!schoolId) return;
@@ -129,7 +135,7 @@ export default function PrincipalUniformsScreen() {
       const [{ data, error }, { data: studentData, error: studentError }] = await Promise.all([
         supabase
           .from('uniform_requests')
-          .select('id, child_name, age_years, tshirt_size, tshirt_number, is_returning, sample_supplied, created_at, updated_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(id, first_name,last_name,email,phone)')
+          .select('id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, tshirt_number, is_returning, sample_supplied, created_at, updated_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(id, first_name,last_name,email,phone)')
           .eq('preschool_id', schoolId)
           .order('created_at', { ascending: false }),
         supabase
@@ -182,6 +188,8 @@ export default function PrincipalUniformsScreen() {
       childName: childName || 'Unnamed Child',
       ageYears: row.age_years,
       tshirtSize: row.tshirt_size,
+      tshirtQuantity: row.tshirt_quantity ?? 0,
+      shortsQuantity: row.shorts_quantity ?? 0,
       tshirtNumber: row.tshirt_number || '',
       isReturning: Boolean(row.is_returning),
       sampleSupplied: Boolean(row.sample_supplied),
@@ -204,6 +212,8 @@ export default function PrincipalUniformsScreen() {
       childName: formatName(student.first_name, student.last_name) || 'Unnamed Child',
       ageYears: null,
       tshirtSize: '',
+      tshirtQuantity: null,
+      shortsQuantity: null,
       tshirtNumber: '',
       isReturning: false,
       sampleSupplied: false,
@@ -217,6 +227,9 @@ export default function PrincipalUniformsScreen() {
       className: student.classroom?.name || 'Unassigned',
     };
   }), [missingStudents]);
+
+  const submittedCount = submittedRows.length;
+  const missingCount = missingRows.length;
 
   const displayRows: DisplayRow[] = useMemo(() => (
     statusFilter === 'submitted'
@@ -280,19 +293,21 @@ export default function PrincipalUniformsScreen() {
       const htmlRows = filtered.map((row, index) => {
         const updated = row.updatedAt || row.submittedAt;
         const updatedText = updated ? new Date(updated).toLocaleDateString('en-ZA') : '-';
+        const firstName = row.childName.split(' ')[0] || row.childName;
         return `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(row.childName)}</td>
+            <td>${escapeHtml(firstName)}</td>
             <td>${escapeHtml(row.className)}</td>
             <td>${escapeHtml(row.ageYears ?? '-')}</td>
             <td>${escapeHtml(row.tshirtSize || '-')}</td>
+            <td>${escapeHtml(row.tshirtQuantity ?? '-')}</td>
+            <td>${escapeHtml(row.shortsQuantity ?? '-')}</td>
             <td>${row.isReturning ? 'Yes' : 'No'}</td>
             <td>${escapeHtml(row.tshirtNumber || '-')}</td>
             <td>${row.sampleSupplied ? 'Yes' : 'No'}</td>
             <td>${escapeHtml(row.studentCode || '-')}</td>
             <td>${escapeHtml(row.parentName || '-')}</td>
-            <td>${escapeHtml(row.parentEmail || '-')}</td>
             <td>${escapeHtml(updatedText)}</td>
             <td>${escapeHtml(row.status)}</td>
           </tr>
@@ -341,12 +356,13 @@ export default function PrincipalUniformsScreen() {
                   <th>Class</th>
                   <th>Age</th>
                   <th>Size</th>
+                  <th># T-shirt</th>
+                  <th># Shorts</th>
                   <th>Returning</th>
                   <th>Back #</th>
                   <th>Sample</th>
                   <th>Student Code</th>
                   <th>Submitted By</th>
-                  <th>Email</th>
                   <th>Last Updated</th>
                   <th>Status</th>
                 </tr>
@@ -381,7 +397,7 @@ export default function PrincipalUniformsScreen() {
 
   const handleMessageParent = useCallback(async (row: DisplayRow) => {
     const parentLabel = row.parentName || 'Parent';
-    const message = `Hi ${parentLabel}, please submit ${row.childName}'s uniform size, age, and returning T-shirt number (if applicable) in the app. Thank you.`;
+    const message = `Hi ${parentLabel}, please submit ${row.childName}'s uniform size, T-shirt/shorts quantities, and returning T-shirt number (if applicable) in the app. Thank you.`;
     try {
       await Share.share({ message });
     } catch (e: any) {
@@ -419,60 +435,104 @@ export default function PrincipalUniformsScreen() {
             placeholderTextColor={theme.textSecondary}
           />
 
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Size Summary</Text>
-            {Object.keys(sizeSummary).length === 0 ? (
-              <Text style={styles.muted}>No submissions yet.</Text>
-            ) : (
-              <View style={styles.summaryRow}>
-                {Object.entries(sizeSummary).map(([size, count]) => (
-                  <View key={size} style={styles.summaryChip}>
-                    <Text style={styles.summaryChipText}>{size}</Text>
-                    <Text style={styles.summaryChipCount}>{count}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Missing by Class</Text>
-            {missingByClass.length === 0 ? (
-              <Text style={styles.muted}>No missing submissions.</Text>
-            ) : (
-              <View style={styles.summaryRow}>
-                {missingByClass.map(({ name, count }) => (
-                  <View key={name} style={styles.summaryChip}>
-                    <Text style={styles.summaryChipText}>{name}</Text>
-                    <Text style={styles.summaryChipCount}>{count}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Size</Text>
-            <View style={styles.pickerWrap}>
-              <Picker selectedValue={sizeFilter} onValueChange={(value) => setSizeFilter(value)} style={styles.picker}>
-                <Picker.Item label="All sizes" value="all" />
-                {SIZE_OPTIONS.map((size) => (
-                  <Picker.Item key={size} label={size} value={size} />
-                ))}
-              </Picker>
+          <View style={styles.controlsRow}>
+            <View style={styles.countChip}>
+              <Ionicons name="checkmark-circle" size={14} color={theme.success || '#22c55e'} />
+              <Text style={styles.countChipText}>{submittedCount} submitted</Text>
             </View>
+            <View style={styles.countChip}>
+              <Ionicons name="alert-circle" size={14} color={theme.warning || '#f59e0b'} />
+              <Text style={styles.countChipText}>{missingCount} missing</Text>
+            </View>
+            <View style={styles.controlsSpacer} />
+            <TouchableOpacity
+              style={[styles.toggleButton, showInsights && styles.toggleButtonActive]}
+              onPress={() => setShowInsights((prev) => !prev)}
+            >
+              <Ionicons name="analytics-outline" size={16} color={showInsights ? '#fff' : theme.textSecondary} />
+              <Text style={[styles.toggleButtonText, showInsights && styles.toggleButtonTextActive]}>Insights</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, showFilters && styles.toggleButtonActive]}
+              onPress={() => setShowFilters((prev) => !prev)}
+            >
+              <Ionicons name="funnel-outline" size={16} color={showFilters ? '#fff' : theme.textSecondary} />
+              <Text style={[styles.toggleButtonText, showFilters && styles.toggleButtonTextActive]}>Filters</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Status</Text>
-            <View style={styles.pickerWrap}>
-              <Picker selectedValue={statusFilter} onValueChange={(value) => setStatusFilter(value)} style={styles.picker}>
-                <Picker.Item label="All" value="all" />
-                <Picker.Item label="Submitted" value="submitted" />
-                <Picker.Item label="Missing sizes" value="missing" />
-              </Picker>
+          {!showFilters && (
+            <View style={styles.filterSummaryRow}>
+              <Text style={styles.filterSummaryText}>
+                Size: {sizeFilter === 'all' ? 'All' : sizeFilter} • Status: {statusFilter === 'all' ? 'All' : statusFilter}
+              </Text>
             </View>
-          </View>
+          )}
+
+          {showFilters && (
+            <View style={styles.filtersCard}>
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>Size</Text>
+                <View style={styles.pickerWrap}>
+                  <Picker selectedValue={sizeFilter} onValueChange={(value) => setSizeFilter(value)} style={styles.picker}>
+                    <Picker.Item label="All sizes" value="all" />
+                    {SIZE_OPTIONS.map((size) => (
+                      <Picker.Item key={size} label={size} value={size} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
+
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>Status</Text>
+                <View style={styles.pickerWrap}>
+                  <Picker selectedValue={statusFilter} onValueChange={(value) => setStatusFilter(value)} style={styles.picker}>
+                    <Picker.Item label="All" value="all" />
+                    <Picker.Item label="Submitted" value="submitted" />
+                    <Picker.Item label="Missing sizes" value="missing" />
+                  </Picker>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {showInsights && (
+            <View style={styles.insightsCard}>
+              <View style={styles.insightBlock}>
+                <Text style={styles.summaryTitle}>Size Summary</Text>
+                {Object.keys(sizeSummary).length === 0 ? (
+                  <Text style={styles.muted}>No submissions yet.</Text>
+                ) : (
+                  <View style={styles.summaryRow}>
+                    {Object.entries(sizeSummary).map(([size, count]) => (
+                      <View key={size} style={styles.summaryChip}>
+                        <Text style={styles.summaryChipText}>{size}</Text>
+                        <Text style={styles.summaryChipCount}>{count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.insightDivider} />
+
+              <View style={styles.insightBlock}>
+                <Text style={styles.summaryTitle}>Missing by Class</Text>
+                {missingByClass.length === 0 ? (
+                  <Text style={styles.muted}>No missing submissions.</Text>
+                ) : (
+                  <View style={styles.summaryRow}>
+                    {missingByClass.map(({ name, count }) => (
+                      <View key={name} style={styles.summaryChip}>
+                        <Text style={styles.summaryChipText}>{name}</Text>
+                        <Text style={styles.summaryChipCount}>{count}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           <FlatList
             data={filtered}
@@ -505,6 +565,8 @@ export default function PrincipalUniformsScreen() {
                   <>
                     <Text style={styles.text}>Age: {item.ageYears ?? '-'}</Text>
                     <Text style={styles.text}>Size: {item.tshirtSize}</Text>
+                    <Text style={styles.text}>T-shirts: {item.tshirtQuantity ?? '-'}</Text>
+                    <Text style={styles.text}>Shorts: {item.shortsQuantity ?? '-'}</Text>
                     <Text style={styles.text}>Returning: {item.isReturning ? 'Yes' : 'No'}</Text>
                     {item.tshirtNumber ? <Text style={styles.text}>T-shirt Number: {item.tshirtNumber}</Text> : null}
                     <Text style={styles.text}>Sample supplied: {item.sampleSupplied ? 'Yes' : 'No'}</Text>
@@ -526,21 +588,75 @@ export default function PrincipalUniformsScreen() {
 }
 
 const createStyles = (theme: any) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme?.background || '#0b1220', padding: 12 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 },
+  container: { flex: 1, backgroundColor: theme?.background || '#0b1220', padding: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 },
   headerText: { flex: 1 },
   title: { color: theme?.text || '#fff', fontSize: 20, fontWeight: '800' },
   subtitle: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, marginTop: 4 },
   exportButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
   exportButtonText: { color: '#fff', fontWeight: '700' },
-  search: { backgroundColor: theme?.surface || '#111827', color: theme?.text || '#fff', borderRadius: 10, padding: 12, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 8 },
-  summaryCard: { backgroundColor: theme?.cardBackground || '#111827', borderRadius: 12, padding: 12, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 10 },
+  search: { backgroundColor: theme?.surface || '#111827', color: theme?.text || '#fff', borderRadius: 10, padding: 10, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 6 },
+  controlsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 6 },
+  countChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: theme?.surface || '#111827',
+    borderWidth: 1,
+    borderColor: theme?.border || '#1f2937',
+  },
+  countChipText: { color: theme?.text || '#fff', fontSize: 12, fontWeight: '600' },
+  controlsSpacer: { flexGrow: 1 },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme?.border || '#1f2937',
+    backgroundColor: theme?.surface || '#111827',
+  },
+  toggleButtonActive: {
+    backgroundColor: theme?.primary || '#3b82f6',
+    borderColor: theme?.primary || '#3b82f6',
+  },
+  toggleButtonText: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, fontWeight: '700' },
+  toggleButtonTextActive: { color: '#fff' },
+  filterSummaryRow: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  filterSummaryText: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, fontWeight: '600' },
+  filtersCard: {
+    backgroundColor: theme?.cardBackground || '#111827',
+    borderRadius: 12,
+    padding: 10,
+    borderColor: theme?.border || '#1f2937',
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  insightsCard: {
+    backgroundColor: theme?.cardBackground || '#111827',
+    borderRadius: 12,
+    padding: 10,
+    borderColor: theme?.border || '#1f2937',
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  insightBlock: { marginBottom: 10 },
+  insightDivider: { height: 1, backgroundColor: theme?.border || '#1f2937', marginVertical: 6 },
   summaryTitle: { color: theme?.text || '#fff', fontWeight: '700', marginBottom: 8 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   summaryChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: theme?.surface || '#111827', borderWidth: 1, borderColor: theme?.border || '#1f2937' },
   summaryChipText: { color: theme?.text || '#fff', fontWeight: '600', fontSize: 12 },
   summaryChipCount: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 6 },
   filterLabel: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, fontWeight: '600' },
   pickerWrap: { flex: 1, borderWidth: 1, borderColor: theme?.border || '#1f2937', borderRadius: 10, overflow: 'hidden', backgroundColor: theme?.surface || '#111827' },
   picker: { color: theme?.text || '#fff' },
