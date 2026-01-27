@@ -27,10 +27,21 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // App identifiers
-const ANDROID_PACKAGE_NAME = 'com.edudashpro.app';
+const DEFAULT_ANDROID_PACKAGE_NAME = 'com.edudashpro.app';
 const IOS_APP_ID = ''; // Add when iOS app is published
-const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}`;
-const APP_STORE_URL = IOS_APP_ID ? `https://apps.apple.com/app/id${IOS_APP_ID}` : '';
+
+const getAndroidPackageName = (): string => {
+  return Constants.expoConfig?.android?.package || DEFAULT_ANDROID_PACKAGE_NAME;
+};
+
+const getPlayStoreUrl = (): string => {
+  const packageName = getAndroidPackageName();
+  return `https://play.google.com/store/apps/details?id=${packageName}`;
+};
+
+const getAppStoreUrl = (): string => {
+  return IOS_APP_ID ? `https://apps.apple.com/app/id${IOS_APP_ID}` : '';
+};
 
 // Storage keys
 const LAST_CHECK_KEY = '@playstore_update_last_check';
@@ -130,16 +141,23 @@ export function PlayStoreUpdateChecker({
     }
 
     try {
+      const storeUrl = getPlayStoreUrl();
       // Use Google Play Store page scraping (simple approach)
       // Note: For production, consider using a backend API or Google Play Developer API
-      const response = await fetch(PLAY_STORE_URL, {
+      const response = await fetch(storeUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
         },
       });
 
+      if (response.status === 404) {
+        logger.info('[PlayStoreUpdate] Package not found on Play Store yet');
+        return null;
+      }
+
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        logger.warn('[PlayStoreUpdate] Play Store response not OK:', response.status);
+        return null;
       }
 
       const html = await response.text();
@@ -204,7 +222,7 @@ export function PlayStoreUpdateChecker({
         currentVersion,
         latestVersion,
         isUpdateAvailable: isAvailable,
-        storeUrl: Platform.OS === 'android' ? PLAY_STORE_URL : APP_STORE_URL,
+        storeUrl: Platform.OS === 'android' ? getPlayStoreUrl() : getAppStoreUrl(),
       };
 
       logger.info('[PlayStoreUpdate] Version check:', {
@@ -257,7 +275,7 @@ export function PlayStoreUpdateChecker({
         } else {
           // Fallback to market intent for Android
           if (Platform.OS === 'android') {
-            await Linking.openURL(`market://details?id=${ANDROID_PACKAGE_NAME}`);
+            await Linking.openURL(`market://details?id=${getAndroidPackageName()}`);
           }
         }
       } catch (error) {
@@ -398,11 +416,18 @@ export function usePlayStoreUpdate() {
       const currentVersion = Constants.expoConfig?.version || '1.0.0';
       
       // Fetch from store
-      const response = await fetch(PLAY_STORE_URL, {
+      const storeUrl = getPlayStoreUrl();
+      const response = await fetch(storeUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36',
         },
       });
+
+      if (response.status === 404) {
+        logger.info('[usePlayStoreUpdate] Package not found on Play Store yet');
+        setIsChecking(false);
+        return null;
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -439,7 +464,7 @@ export function usePlayStoreUpdate() {
         currentVersion,
         latestVersion,
         isUpdateAvailable: isAvailable,
-        storeUrl: PLAY_STORE_URL,
+        storeUrl,
       };
 
       setUpdateInfo(info);
@@ -455,11 +480,12 @@ export function usePlayStoreUpdate() {
   const openStore = useCallback(async () => {
     try {
       if (Platform.OS === 'android') {
-        const canOpen = await Linking.canOpenURL(PLAY_STORE_URL);
+        const storeUrl = getPlayStoreUrl();
+        const canOpen = await Linking.canOpenURL(storeUrl);
         if (canOpen) {
-          await Linking.openURL(PLAY_STORE_URL);
+          await Linking.openURL(storeUrl);
         } else {
-          await Linking.openURL(`market://details?id=${ANDROID_PACKAGE_NAME}`);
+          await Linking.openURL(`market://details?id=${getAndroidPackageName()}`);
         }
       }
     } catch (error) {

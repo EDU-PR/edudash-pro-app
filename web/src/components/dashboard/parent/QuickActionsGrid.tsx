@@ -5,7 +5,8 @@ import { useState, useRef, useEffect } from 'react';
 import { 
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
   Users, GraduationCap, Sparkles, Search, Settings, Home, Target,
-  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot, Phone, Video, ChevronDown
+  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot, Phone, Video, ChevronDown,
+  CheckCircle2
 } from 'lucide-react';
 import { QuickCallModal } from '@/components/calls/QuickCallModal';
 
@@ -14,6 +15,8 @@ interface QuickAction {
   label: string;
   href: string;
   color: string;
+  subtitle?: string;
+  glow?: boolean;
 }
 
 interface QuickActionsGridProps {
@@ -25,9 +28,14 @@ interface QuickActionsGridProps {
   homeworkCount?: number;
   userId?: string;
   preschoolId?: string;
+  feesDue?: {
+    amount: number;
+    dueDate: string | null;
+    overdue: boolean;
+  } | null;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0, userId, preschoolId }: QuickActionsGridProps) {
+export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0, userId, preschoolId, feesDue }: QuickActionsGridProps) {
   const router = useRouter();
   const [showMessagesDropdown, setShowMessagesDropdown] = useState(false);
   const [showQuickCallModal, setShowQuickCallModal] = useState(false);
@@ -45,19 +53,35 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
   }, []);
 
   const getQuickActions = (): QuickAction[] => {
+    const feesSubtitle = (() => {
+      if (!feesDue?.dueDate) return undefined;
+      if (feesDue.overdue) return 'Overdue';
+      const dueDate = new Date(feesDue.dueDate);
+      if (Number.isNaN(dueDate.getTime())) return undefined;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntil = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntil <= 0) return 'Due today';
+      if (daysUntil <= 3) return `Due in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`;
+      return undefined;
+    })();
+
+    const feesGlow = Boolean(feesSubtitle);
+
     // Organization-linked actions (common for all with organization)
     const organizationActions: QuickAction[] = hasOrganization ? [
       { icon: MessageCircle, label: 'Messages', href: '/dashboard/parent/messages', color: '#8b5cf6' },
       { icon: FileText, label: 'Homework', href: '/dashboard/parent/homework', color: '#f59e0b' },
       { icon: Calendar, label: 'Calendar', href: '/dashboard/parent/calendar', color: '#06b6d4' },
       { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#10b981' },
+      { icon: CheckCircle2, label: 'Attendance', href: '/dashboard/parent/attendance', color: '#22c55e' },
       { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#3b82f6' },
       { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
       ...(isExamEligible ? [
         { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/generate-exam', color: '#10b981' },
         { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
       ] : []),
-      { icon: DollarSign, label: 'Payments', href: '/dashboard/parent/payments', color: '#f59e0b' },
+      { icon: DollarSign, label: 'Payments', href: '/dashboard/parent/payments', color: '#f59e0b', subtitle: feesSubtitle, glow: feesGlow },
       { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
       { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
     ] : [];
@@ -114,6 +138,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
           const hasPendingHomework = isHomework && homeworkCount > 0;
           const badgeCount = isMessages ? unreadCount : isHomework ? homeworkCount : 0;
           const showBadge = hasUnread || hasPendingHomework;
+          const shouldGlow = Boolean(action.glow) || showBadge;
           
           // Messages button gets special dropdown treatment
           if (isMessages) {
@@ -124,7 +149,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                   className="qa"
                   style={{
                     background: 'var(--surface-1)',
-                    border: hasUnread
+                    border: shouldGlow
                       ? '2px solid #8b5cf6'
                       : '1px solid var(--border)',
                     borderRadius: 12,
@@ -137,11 +162,11 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     transition: 'all 0.2s',
                     textAlign: 'center',
                     minHeight: '120px',
-                    boxShadow: hasUnread
+                    boxShadow: shouldGlow
                       ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
                       : 'none',
                     position: 'relative',
-                    animation: hasUnread ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+                    animation: shouldGlow ? 'pulse-glow 2s ease-in-out infinite' : 'none',
                     width: '100%',
                   }}
                   onMouseEnter={(e) => {
@@ -151,8 +176,8 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = hasUnread ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)' : 'none';
-                    e.currentTarget.style.borderColor = hasUnread ? '#8b5cf6' : 'var(--border)';
+                    e.currentTarget.style.boxShadow = shouldGlow ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)' : 'none';
+                    e.currentTarget.style.borderColor = shouldGlow ? '#8b5cf6' : 'var(--border)';
                   }}
                 >
                   {hasUnread && (
@@ -193,6 +218,9 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     </span>
                     <ChevronDown size={14} style={{ color: 'var(--text-secondary)' }} />
                   </div>
+                  {action.subtitle && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{action.subtitle}</div>
+                  )}
                 </button>
                 
                 {/* Dropdown Menu */}
@@ -291,7 +319,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
           }
           
           // Regular button for other actions
-          return (
+              return (
             <button
               key={action.href}
               onClick={() => router.push(action.href)}
@@ -300,7 +328,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 background: isChatWithDash 
                   ? 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)'
                   : 'var(--surface-1)',
-                border: (hasUnread || hasPendingHomework)
+                border: (hasUnread || hasPendingHomework || action.glow)
                   ? '2px solid #8b5cf6'
                   : isChatWithDash
                   ? '2px solid #ec4899'
@@ -315,13 +343,13 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 transition: 'all 0.2s',
                 textAlign: 'center',
                 minHeight: '120px',
-                boxShadow: (hasUnread || hasPendingHomework)
+                boxShadow: (hasUnread || hasPendingHomework || action.glow)
                   ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
                   : isChatWithDash 
                   ? '0 4px 20px rgba(236, 72, 153, 0.5)' 
                   : 'none',
                 position: 'relative',
-                animation: (hasUnread || hasPendingHomework) ? 'pulse-glow 2s ease-in-out infinite' : 'none',
+                animation: (hasUnread || hasPendingHomework || action.glow) ? 'pulse-glow 2s ease-in-out infinite' : 'none',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -377,6 +405,11 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
               }}>
                 {action.label}
               </span>
+              {action.subtitle && (
+                <span style={{ fontSize: 11, color: isChatWithDash ? 'rgba(255,255,255,0.8)' : 'var(--muted)' }}>
+                  {action.subtitle}
+                </span>
+              )}
             </button>
           );
         })}

@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { useTierUpdates } from '@/hooks/useTierUpdates';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -18,13 +17,23 @@ import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt } from 'lucide-react';
+import { useParentOverviewMetrics } from '@/lib/hooks/parent/useParentOverviewMetrics';
+import { useOnboardingHint } from '@/lib/hooks/useOnboardingHint';
+import { TeacherQuickNotesCard } from '@/components/dashboard/parent/TeacherQuickNotesCard';
+import { ChildProgressBadgesCard } from '@/components/dashboard/parent/ChildProgressBadgesCard';
+import { DailyActivityFeedCard } from '@/components/dashboard/parent/DailyActivityFeedCard';
+import { UpcomingBirthdaysCard } from '@/components/dashboard/parent/UpcomingBirthdaysCard';
+import { MetricCard } from '@/components/dashboard/parent/MetricCard';
+import { OnboardingHint } from '@/components/dashboard/parent/OnboardingHint';
+import { UpgradeBanner } from '@/components/dashboard/parent/UpgradeBanner';
+import { AdBannerPlaceholder } from '@/components/dashboard/parent/AdBannerPlaceholder';
+import { DashOrbButton } from '@/components/dashboard/parent/DashOrbButton';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 
 export default function ParentDashboard() {
   const router = useRouter();
-  const supabase = createClient();
   
   // Get all data from custom hook
   const {
@@ -46,8 +55,7 @@ export default function ParentDashboard() {
   } = useParentDashboardData();
   
   // Listen for tier updates
-  useTierUpdates(userId, (newTier) => {
-    console.log('[Dashboard] Tier updated to:', newTier);
+  useTierUpdates(userId, () => {
     // Reload the page to refresh quota data
     window.location.reload();
   });
@@ -79,6 +87,16 @@ export default function ParentDashboard() {
     }
   }, [loading, userId, router]);
 
+  const childIds = useMemo(() => childrenCards.map((child) => child.id), [childrenCards]);
+  const { metrics: overviewMetrics } = useParentOverviewMetrics({
+    userId,
+    childIds,
+    organizationId: profile?.organizationId || profile?.preschoolId || null,
+  });
+
+  const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
+  const [showLiveClassesHint, dismissLiveClassesHint] = useOnboardingHint('parent_live_classes');
+
   // Handle AI interactions
   const handleAskFromActivity = async (
     prompt: string, 
@@ -99,21 +117,6 @@ export default function ParentDashboard() {
     setAIDisplay('');
     setAILanguage('en-ZA');
     setAIInteractive(false);
-  };
-
-  // Handle exam prep navigation
-  const handleStartExamPrep = () => {
-    // Scroll to exam prep widget or show AI with exam context
-    setAIPrompt('I need help preparing for my exams next week. Can you help me create a study plan?');
-    setAIDisplay('Exam Preparation Assistant');
-    setShowAskAI(true);
-  };
-
-  const handleSubjectPractice = (subject: string, grade?: string) => {
-    const gradeInfo = grade ? ` for ${grade}` : '';
-    setAIPrompt(`Generate a CAPS-aligned practice test for ${subject}${gradeInfo}. Include questions with a detailed memorandum. Make it exam-standard quality.`);
-    setAIDisplay(`${subject} Practice Test${gradeInfo}`);
-    setShowAskAI(true);
   };
 
   // Loading state
@@ -145,16 +148,22 @@ export default function ParentDashboard() {
   
   const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
   const activeChildGrade = activeChild ? getGradeNumber(activeChild.grade) : 0;
-  
+
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
-  const hasSchoolAgeChildren = childrenCards.some(child => getChildAge(child.dateOfBirth) >= 6);
-  
   // Grade 4+ gets exam features (with daily quota)
   const isExamEligible = activeChildGrade >= 4;
   
   // All children get access to general features (Dash Chat, Robotics, etc) with quotas
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
+
+  const feesDue = metrics?.feesDue ?? null;
+  const attendanceRate = overviewMetrics.attendanceRate;
+  const missedCalls = overviewMetrics.missedCalls;
+
+  const subscriptionTier = (profile?.subscription_tier || '').toLowerCase();
+  const isFreeTier = !subscriptionTier || subscriptionTier === 'free';
+  const showUpgradeBanner = isFreeTier && !trialStatus?.is_trial;
 
   return (
     <ParentShell
@@ -188,6 +197,16 @@ export default function ParentDashboard() {
 
         {/* Trial Banner */}
         <TrialBanner trialStatus={trialStatus} />
+
+        {showUpgradeBanner && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <UpgradeBanner
+              title="Unlock more parent tools"
+              description="Get homework help, progress insights, and remove ads by upgrading."
+              onUpgrade={() => router.push('/pricing')}
+            />
+          </div>
+        )}
 
         {/* AI Usage Quota Card - Only show if children exist and have age */}
         {userId && childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
@@ -272,16 +291,26 @@ export default function ParentDashboard() {
 
         {/* Quick Actions Grid - Show if children exist with age */}
         {hasAnyChild && (
-          <QuickActionsGrid 
-            usageType={usageType} 
-            hasOrganization={hasOrganization}
-            activeChildGrade={activeChildGrade}
-            isExamEligible={isExamEligible}
-            unreadCount={unreadCount}
-            homeworkCount={homeworkCount}
-            userId={userId}
-            preschoolId={profile?.preschoolId}
-          />
+          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            {showQuickActionsHint && (
+              <OnboardingHint
+                title="Quick Actions"
+                message="Tap any card to quickly access homework, messages, payments, or Dash AI."
+                onDismiss={dismissQuickActionsHint}
+              />
+            )}
+            <QuickActionsGrid 
+              usageType={usageType} 
+              hasOrganization={hasOrganization}
+              activeChildGrade={activeChildGrade}
+              isExamEligible={isExamEligible}
+              unreadCount={unreadCount}
+              homeworkCount={homeworkCount}
+              userId={userId}
+              preschoolId={profile?.preschoolId}
+              feesDue={feesDue}
+            />
+          </div>
         )}
 
         {/* Recent Activity Feed */}
@@ -310,10 +339,54 @@ export default function ParentDashboard() {
         {/* Live Lessons Section - Show if organization-linked with active child */}
         {hasOrganization && activeChild && profile?.preschoolId && (
           <div className="section" style={{ marginTop: 'var(--space-4)' }}>
+            {showLiveClassesHint && (
+              <div style={{ marginBottom: 'var(--space-3)' }}>
+                <OnboardingHint
+                  title="Live Classes"
+                  message="When a teacher starts a live class, you can join here instantly."
+                  onDismiss={dismissLiveClassesHint}
+                />
+              </div>
+            )}
             <JoinLiveLessonWithToggle 
               preschoolId={profile.preschoolId} 
               classId={activeChild.classId}
             />
+          </div>
+        )}
+
+        {/* Teacher Notes */}
+        {hasOrganization && activeChildId && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <TeacherQuickNotesCard studentId={activeChildId} />
+          </div>
+        )}
+
+        {/* Child Progress & Achievements */}
+        {activeChildId && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <ChildProgressBadgesCard studentId={activeChildId} />
+          </div>
+        )}
+
+        {/* Upcoming Birthdays */}
+        {hasOrganization && activeChild?.classId && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <UpcomingBirthdaysCard classId={activeChild.classId} />
+          </div>
+        )}
+
+        {/* Daily Activity Feed */}
+        {hasOrganization && activeChild?.classId && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <DailyActivityFeedCard classId={activeChild.classId} />
+          </div>
+        )}
+
+        {/* Ad placeholders for free tier */}
+        {showUpgradeBanner && (
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <AdBannerPlaceholder onUpgrade={() => router.push('/pricing')} variant="bottom" />
           </div>
         )}
 
@@ -443,32 +516,52 @@ export default function ParentDashboard() {
         {/* Overview Section (ONLY for organization-linked parents) */}
         {hasOrganization && (
           <CollapsibleSection 
-            title="Overview" 
+            title="Today's Overview" 
             icon={BarChart3} 
             isOpen={openSection === 'overview'}
             onToggle={() => setOpenSection(openSection === 'overview' ? null : 'overview')}
           >
             <div className="grid2">
-              <div className="card tile">
-                <div className="metricValue">{unreadCount}</div>
-                <div className="metricLabel">Unread Messages</div>
-              </div>
-              <div className="card tile">
-                <div className="metricValue">{activeChild ? metrics.pendingHomework : 0}</div>
-                <div className="metricLabel">Homework Pending</div>
-              </div>
-              <div className="card tile">
-                <div className="metricValue">0%</div>
-                <div className="metricLabel">Attendance Rate</div>
-              </div>
-              <div className="card tile">
-                <div className="metricValue">{childrenCards.length}</div>
-                <div className="metricLabel">Total Children</div>
-              </div>
+              <MetricCard
+                title="Unread Messages"
+                value={unreadCount}
+                icon={MessageCircle}
+                color="#8b5cf6"
+                onPress={() => router.push('/dashboard/parent/messages')}
+              />
+              <MetricCard
+                title="Missed Calls"
+                value={missedCalls}
+                icon={PhoneOff}
+                color="#10b981"
+                onPress={() => router.push('/dashboard/parent/messages')}
+              />
+              <MetricCard
+                title="Homework Pending"
+                value={activeChild ? metrics.pendingHomework : homeworkCount}
+                icon={BookOpen}
+                color="#f59e0b"
+                onPress={() => router.push('/dashboard/parent/homework')}
+              />
+              <MetricCard
+                title="Attendance Rate"
+                value={`${attendanceRate}%`}
+                icon={CalendarCheck}
+                color="#22c55e"
+                onPress={() => router.push('/dashboard/parent/progress')}
+              />
             </div>
           </CollapsibleSection>
         )}
       </div>
+
+      <DashOrbButton
+        onClick={() => {
+          setAIPrompt('How can I support my child today?');
+          setAIDisplay('Dash AI Helper');
+          setShowAskAI(true);
+        }}
+      />
 
       {/* AI Widget Modal */}
       {showAskAI && (

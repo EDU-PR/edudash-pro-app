@@ -25,6 +25,7 @@ import {
   UserCircle2,
   ChevronDown,
   Phone,
+  CheckCircle2,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
@@ -173,6 +174,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent/announcements', label: 'Announcements', icon: Megaphone },
         { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
+        { href: '/dashboard/parent/attendance', label: 'Attendance', icon: CheckCircle2 },
         { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
         { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
         { href: '/dashboard/parent/payments', label: 'Payments', icon: CreditCard },

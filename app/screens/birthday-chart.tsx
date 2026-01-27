@@ -37,6 +37,7 @@ export default function BirthdayChartScreen() {
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const isParentView = profile?.role === 'parent' || String(profile?.role) === 'guardian';
 
   // Get organization ID from profile using tenant compatibility utility
   const organizationId = getActiveOrganizationId(profile);
@@ -314,6 +315,7 @@ export default function BirthdayChartScreen() {
               loading={false}
               showHeader={false}
               compact={false}
+              studentTapBehavior={isParentView ? 'info' : 'profile'}
             />
 
             {/* Legend */}
@@ -325,7 +327,9 @@ export default function BirthdayChartScreen() {
               </View>
               <View style={styles.legendItem}>
                 <Ionicons name="person" size={18} color={theme.textSecondary} />
-                <Text style={styles.legendText}>Tap a student to view their profile</Text>
+                <Text style={styles.legendText}>
+                  {isParentView ? 'Tap a student to view birthday info' : 'Tap a student to view their profile'}
+                </Text>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendColor, { backgroundColor: '#FFD700' }]} />

@@ -19,7 +19,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   TextInput,
-  Alert,
   Modal,
   Platform,
 } from 'react-native';
@@ -32,6 +31,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+import { ReceiptService } from '@/lib/services/ReceiptService';
 
 interface Student {
   id: string;
@@ -72,9 +73,7 @@ interface FeeStructureRow {
   fee_type: string | null;
   name: string | null;
   description: string | null;
-  age_group: string | null;
   grade_levels: string[] | null;
-  grade_level: string | null;
   effective_from: string | null;
   created_at: string | null;
 }
@@ -89,6 +88,13 @@ interface SchoolFeeStructureRow {
   grade_level?: string | null;
   billing_frequency?: string | null;
   created_at?: string | null;
+}
+
+interface ParentProfileRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
 }
 
 type ModalType = 'waive' | 'adjust' | 'change_class' | null;
@@ -107,6 +113,35 @@ export default function StudentFeeManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showEnrollmentPicker, setShowEnrollmentPicker] = useState(false);
+
+  interface AlertState {
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    buttons: AlertButton[];
+  }
+
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (
+    title: string,
+    message: string,
+    type: AlertState['type'] = 'info',
+    buttons: AlertButton[] = [{ text: 'OK', style: 'default' }],
+  ) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
   
   // Modal state
   const [modalType, setModalType] = useState<ModalType>(null);
@@ -260,7 +295,7 @@ export default function StudentFeeManagementScreen() {
 
       const { data: feeStructures, error: feeError } = await supabase
         .from('fee_structures')
-        .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
+        .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
         .eq('preschool_id', preschoolId)
         .eq('is_active', true)
         .order('effective_from', { ascending: false })
@@ -447,12 +482,12 @@ export default function StudentFeeManagementScreen() {
       : parseFloat(waiveAmount);
     
     if (waiveType === 'partial' && (!amount || amount <= 0 || amount > selectedFee.final_amount)) {
-      Alert.alert('Invalid Amount', 'Please enter a valid waiver amount.');
+      showAlert('Invalid Amount', 'Please enter a valid waiver amount.', 'warning');
       return;
     }
     
     if (!waiveReason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for the waiver.');
+      showAlert('Reason Required', 'Please provide a reason for the waiver.', 'warning');
       return;
     }
     
@@ -478,11 +513,12 @@ export default function StudentFeeManagementScreen() {
       
       if (error) throw error;
       
-      Alert.alert(
+      showAlert(
         'Fee Waived',
         waiveType === 'full' 
           ? 'The fee has been fully waived.' 
-          : `R${amount.toFixed(2)} has been waived from this fee.`
+          : `R${amount.toFixed(2)} has been waived from this fee.`,
+        'success'
       );
       
       setModalType(null);
@@ -492,7 +528,7 @@ export default function StudentFeeManagementScreen() {
       setWaiveType('full');
       loadFees();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to waive fee.');
+      showAlert('Error', error.message || 'Failed to waive fee.', 'error');
     } finally {
       setSaving(false);
     }
@@ -505,12 +541,12 @@ export default function StudentFeeManagementScreen() {
     const amount = parseFloat(adjustAmount);
     
     if (!amount || amount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+      showAlert('Invalid Amount', 'Please enter a valid amount.', 'warning');
       return;
     }
     
     if (!adjustReason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for the adjustment.');
+      showAlert('Reason Required', 'Please provide a reason for the adjustment.', 'warning');
       return;
     }
     
@@ -545,7 +581,7 @@ export default function StudentFeeManagementScreen() {
         // Ignore if table doesn't exist
       }
       
-      Alert.alert('Fee Adjusted', `Fee amount updated to R${amount.toFixed(2)}.`);
+      showAlert('Fee Adjusted', `Fee amount updated to R${amount.toFixed(2)}.`, 'success');
       
       setModalType(null);
       setSelectedFee(null);
@@ -553,7 +589,7 @@ export default function StudentFeeManagementScreen() {
       setAdjustReason('');
       loadFees();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to adjust fee.');
+      showAlert('Error', error.message || 'Failed to adjust fee.', 'error');
     } finally {
       setSaving(false);
     }
@@ -578,13 +614,13 @@ export default function StudentFeeManagementScreen() {
       if (error) throw error;
       
       const newClass = classes.find(c => c.id === newClassId);
-      Alert.alert('Class Changed', `Student moved to ${newClass?.name || 'new class'}.`);
+      showAlert('Class Changed', `Student moved to ${newClass?.name || 'new class'}.`, 'success');
       
       setModalType(null);
       setNewClassId('');
       loadStudent();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to change class.');
+      showAlert('Error', error.message || 'Failed to change class.', 'error');
     } finally {
       setSaving(false);
     }
@@ -617,10 +653,10 @@ export default function StudentFeeManagementScreen() {
       setStudent(updatedStudent);
       studentRef.current = updatedStudent;
       
-      Alert.alert('Start Date Updated', `Enrollment start set to ${formatted}.`);
+      showAlert('Start Date Updated', `Enrollment start set to ${formatted}.`, 'success');
       await loadFees(updatedStudent);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update enrollment date.');
+      showAlert('Error', error.message || 'Failed to update enrollment date.', 'error');
     } finally {
       setSaving(false);
     }
@@ -720,6 +756,160 @@ export default function StudentFeeManagementScreen() {
     });
   };
 
+  const fetchParentProfile = async (parentId?: string | null): Promise<ParentProfileRow | null> => {
+    if (!parentId) return null;
+    const supabase = assertSupabase();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .eq('id', parentId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+    };
+  };
+
+  const attachReceiptToPayments = async (
+    fee: StudentFee,
+    receiptUrl: string | null,
+    receiptStoragePath?: string
+  ) => {
+    const supabase = assertSupabase();
+    const nowIso = new Date().toISOString();
+    const paymentReference = `MANUAL-FEE-${fee.id.slice(0, 8)}`;
+
+    const { data: payment } = await supabase
+      .from('payments')
+      .select('id, metadata')
+      .eq('payment_reference', paymentReference)
+      .maybeSingle();
+
+    if (payment?.id) {
+      const nextMetadata = {
+        ...(payment.metadata || {}),
+        receipt_storage_path: receiptStoragePath,
+        receipt_url: receiptUrl,
+      };
+      await supabase
+        .from('payments')
+        .update({
+          attachment_url: receiptUrl,
+          metadata: nextMetadata,
+          updated_at: nowIso,
+        })
+        .eq('id', payment.id);
+    }
+
+    if (receiptStoragePath) {
+      await supabase
+        .from('financial_transactions')
+        .update({
+          receipt_image_path: receiptStoragePath,
+          updated_at: nowIso,
+        })
+        .eq('payment_reference', paymentReference);
+    }
+  };
+
+  const sendReceiptNotification = async (
+    parent: ParentProfileRow | null,
+    studentName: string,
+    receiptUrl: string | null,
+    receiptNumber: string,
+    amount: number
+  ) => {
+    if (!parent?.email && !parent?.id) return;
+    const supabase = assertSupabase();
+    const subject = `Payment receipt for ${studentName}`;
+    const text = receiptUrl
+      ? `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}. Download: ${receiptUrl}`
+      : `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}.`;
+    const html = `
+      <p>Your payment of <strong>R ${amount.toFixed(2)}</strong> for <strong>${studentName}</strong> has been marked as paid.</p>
+      <p>Receipt #: <strong>${receiptNumber}</strong></p>
+      ${receiptUrl ? `<p><a href="${receiptUrl}">Download your receipt</a></p>` : ''}
+    `;
+
+    await supabase.functions.invoke('notifications-dispatcher', {
+      body: {
+        event_type: 'payment_receipt',
+        user_ids: parent?.id ? [parent.id] : undefined,
+        recipient_email: parent?.email || undefined,
+        include_email: true,
+        template_override: {
+          title: 'Payment Receipt Ready',
+          body: `Receipt issued for ${studentName}.`,
+          data: {
+            type: 'receipt',
+            student_name: studentName,
+            receipt_url: receiptUrl,
+          },
+        },
+        email_template_override: {
+          subject,
+          text,
+          html,
+        },
+      },
+    });
+  };
+
+  const generateReceiptForFee = async (fee: StudentFee, amount: number, paidDate: string) => {
+    if (!student || !profile?.id) return;
+    const preschoolId = student.preschool_id || organizationId;
+    if (!preschoolId) return;
+
+    const parentProfile = await fetchParentProfile(student.parent_id);
+    const issuerName =
+      profile.full_name ||
+      `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+      'School Administrator';
+    const studentName = `${student.first_name} ${student.last_name}`.trim();
+    const paymentReference = `MANUAL-FEE-${fee.id.slice(0, 8)}`;
+    const receiptNumber = `REC-${new Date().getFullYear()}-${fee.id.slice(0, 6).toUpperCase()}`;
+
+    try {
+      const result = await ReceiptService.generateFeeReceipt({
+        schoolId: preschoolId,
+        fee: {
+          id: fee.id,
+          description: fee.description || fee.fee_type || 'School fee',
+          amount,
+          dueDate: fee.due_date,
+          paidDate,
+          paymentReference,
+          paymentMethod: 'manual',
+        },
+        student: {
+          id: student.id,
+          firstName: student.first_name,
+          lastName: student.last_name,
+          className: student.class_name || null,
+        },
+        parent: {
+          id: parentProfile?.id || null,
+          name: parentProfile
+            ? `${parentProfile.first_name || ''} ${parentProfile.last_name || ''}`.trim()
+            : null,
+          email: parentProfile?.email || null,
+        },
+        issuer: {
+          id: profile.id,
+          name: issuerName,
+        },
+      });
+
+      await attachReceiptToPayments(fee, result.receiptUrl ?? null, result.storagePath);
+      await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amount);
+    } catch (error) {
+      console.warn('[StudentFeeManagement] Receipt generation failed:', error);
+    }
+  };
+
   const handleMarkPaid = async (fee: StudentFee) => {
     if (!profile?.id) return;
     setSaving(true);
@@ -744,11 +934,12 @@ export default function StudentFeeManagementScreen() {
       
       await upsertPaymentRecord(fee, 'completed');
       await upsertFinancialTransaction(fee, 'completed');
+      await generateReceiptForFee(fee, amount, paidDate);
       
-      Alert.alert('Payment Updated', 'Fee marked as paid.');
+      showAlert('Payment Updated', 'Fee marked as paid.', 'success');
       loadFees();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update fee status.');
+      showAlert('Error', error.message || 'Failed to update fee status.', 'error');
     } finally {
       setSaving(false);
     }
@@ -778,10 +969,10 @@ export default function StudentFeeManagementScreen() {
       await upsertPaymentRecord(fee, 'reversed');
       await upsertFinancialTransaction(fee, 'voided');
       
-      Alert.alert('Payment Updated', 'Fee marked as unpaid.');
+      showAlert('Payment Updated', 'Fee marked as unpaid.', 'success');
       loadFees();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update fee status.');
+      showAlert('Error', error.message || 'Failed to update fee status.', 'error');
     } finally {
       setSaving(false);
     }
@@ -1364,6 +1555,15 @@ export default function StudentFeeManagementScreen() {
           </View>
         </View>
       </Modal>
+
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </SafeAreaView>
   );
 }

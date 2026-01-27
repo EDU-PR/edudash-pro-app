@@ -43,6 +43,33 @@ export default function StudentDashboard() {
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;
 
+  const dashTools = React.useMemo<LearnerQuickAction[]>(() => ([
+    {
+      icon: 'sparkles' as LearnerQuickAction['icon'],
+      title: t('dash_ai.ask', { defaultValue: 'Ask Dash AI' }),
+      subtitle: t('dash_ai.ask_subtitle', { defaultValue: 'Chat with your AI study buddy' }),
+      onPress: () => router.push('/screens/dash-assistant'),
+    },
+    {
+      icon: 'bulb-outline' as LearnerQuickAction['icon'],
+      title: t('dash_ai.explain', { defaultValue: 'Explain a Concept' }),
+      subtitle: t('dash_ai.explain_subtitle', { defaultValue: 'Get a simple explanation' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } }),
+    },
+    {
+      icon: 'help-circle-outline' as LearnerQuickAction['icon'],
+      title: t('dash_ai.quiz', { defaultValue: 'Practice Quiz' }),
+      subtitle: t('dash_ai.quiz_subtitle', { defaultValue: 'Quick questions to test you' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for me.' } }),
+    },
+    {
+      icon: 'map-outline' as LearnerQuickAction['icon'],
+      title: t('dash_ai.study_plan', { defaultValue: 'Study Plan' }),
+      subtitle: t('dash_ai.study_plan_subtitle', { defaultValue: 'Plan your week of study' }),
+      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } }),
+    },
+  ]), [t, router]);
+
   // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
   useEffect(() => {
     // Skip if still loading data
@@ -103,33 +130,6 @@ export default function StudentDashboard() {
   // Get student name (handle both first_name and full name)
   const studentName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'Student';
   const shouldShowUpgrade = tier === 'free' || !tier;
-
-  const dashTools = React.useMemo<LearnerQuickAction[]>(() => ([
-    {
-      icon: 'sparkles' as LearnerQuickAction['icon'],
-      title: t('dash_ai.ask', { defaultValue: 'Ask Dash AI' }),
-      subtitle: t('dash_ai.ask_subtitle', { defaultValue: 'Chat with your AI study buddy' }),
-      onPress: () => router.push('/screens/dash-assistant'),
-    },
-    {
-      icon: 'bulb-outline' as LearnerQuickAction['icon'],
-      title: t('dash_ai.explain', { defaultValue: 'Explain a Concept' }),
-      subtitle: t('dash_ai.explain_subtitle', { defaultValue: 'Get a simple explanation' }),
-      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } }),
-    },
-    {
-      icon: 'help-circle-outline' as LearnerQuickAction['icon'],
-      title: t('dash_ai.quiz', { defaultValue: 'Practice Quiz' }),
-      subtitle: t('dash_ai.quiz_subtitle', { defaultValue: 'Quick questions to test you' }),
-      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for me.' } }),
-    },
-    {
-      icon: 'map-outline' as LearnerQuickAction['icon'],
-      title: t('dash_ai.study_plan', { defaultValue: 'Study Plan' }),
-      subtitle: t('dash_ai.study_plan_subtitle', { defaultValue: 'Plan your week of study' }),
-      onPress: () => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } }),
-    },
-  ]), [t, router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>

@@ -4,9 +4,10 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail } from './types';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface ParentContactSectionProps {
   student: StudentDetail;
@@ -18,10 +19,15 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   theme,
 }) => {
   const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
 
   const handleContactParent = (type: 'call' | 'email' | 'sms') => {
     if (!student?.parent_phone && !student?.parent_email) {
-      Alert.alert('No Contact', 'No parent contact information available');
+      showAlert({
+        title: 'No Contact',
+        message: 'No parent contact information available.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -45,50 +51,53 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   };
 
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Parent/Guardian</Text>
-      {student.parent_name ? (
-        <View>
-          <View style={styles.contactInfo}>
-            <Text style={styles.parentName}>{student.parent_name}</Text>
-            {student.parent_email && (
-              <Text style={styles.contactDetail}>{student.parent_email}</Text>
-            )}
-            {student.parent_phone && (
-              <Text style={styles.contactDetail}>{student.parent_phone}</Text>
-            )}
-          </View>
-          
-          <View style={styles.contactActions}>
-            <TouchableOpacity 
-              style={styles.contactButton}
-              onPress={() => handleContactParent('call')}
-            >
-              <Ionicons name="call" size={20} color="#10B981" />
-              <Text style={styles.contactButtonText}>Call</Text>
-            </TouchableOpacity>
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Parent/Guardian</Text>
+        {student.parent_name ? (
+          <View>
+            <View style={styles.contactInfo}>
+              <Text style={styles.parentName}>{student.parent_name}</Text>
+              {student.parent_email && (
+                <Text style={styles.contactDetail}>{student.parent_email}</Text>
+              )}
+              {student.parent_phone && (
+                <Text style={styles.contactDetail}>{student.parent_phone}</Text>
+              )}
+            </View>
             
-            <TouchableOpacity 
-              style={styles.contactButton}
-              onPress={() => handleContactParent('sms')}
-            >
-              <Ionicons name="chatbubble" size={20} color="#007AFF" />
-              <Text style={styles.contactButtonText}>SMS</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.contactButton}
-              onPress={() => handleContactParent('email')}
-            >
-              <Ionicons name="mail" size={20} color="#8B5CF6" />
-              <Text style={styles.contactButtonText}>Email</Text>
-            </TouchableOpacity>
+            <View style={styles.contactActions}>
+              <TouchableOpacity 
+                style={styles.contactButton}
+                onPress={() => handleContactParent('call')}
+              >
+                <Ionicons name="call" size={20} color="#10B981" />
+                <Text style={styles.contactButtonText}>Call</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.contactButton}
+                onPress={() => handleContactParent('sms')}
+              >
+                <Ionicons name="chatbubble" size={20} color="#007AFF" />
+                <Text style={styles.contactButtonText}>SMS</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.contactButton}
+                onPress={() => handleContactParent('email')}
+              >
+                <Ionicons name="mail" size={20} color="#8B5CF6" />
+                <Text style={styles.contactButtonText}>Email</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      ) : (
-        <Text style={styles.noContact}>No parent contact information</Text>
-      )}
-    </View>
+        ) : (
+          <Text style={styles.noContact}>No parent contact information</Text>
+        )}
+      </View>
+      <AlertModal {...alertProps} />
+    </>
   );
 };
 

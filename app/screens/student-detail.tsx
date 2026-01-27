@@ -98,7 +98,7 @@ export default function StudentDetailScreen() {
   const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
   
   // Role-based checks
-  const isPrincipal = profile?.role === 'principal';
+  const isPrincipal = ['principal', 'principal_admin', 'admin'].includes(profile?.role || '');
 
   const loadStudentData = async () => {
     if (!studentId || !user) {
@@ -113,17 +113,18 @@ export default function StudentDetailScreen() {
       const { data: userProfile, error: profileError } = await assertSupabase()
         .from('profiles')
         .select('id, preschool_id, organization_id, role')
-        .eq('auth_user_id', user.id)
-        .single();
+        .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+        .maybeSingle();
 
       if (profileError) {
         console.error('Error loading profile:', profileError);
-        showAlert('Error', 'Failed to load user profile', 'error');
-        setLoading(false);
-        return;
       }
 
-      const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
+      const schoolId =
+        userProfile?.preschool_id ||
+        userProfile?.organization_id ||
+        profile?.preschool_id ||
+        profile?.organization_id;
       if (!schoolId) {
         showAlert('Error', 'No school assigned to your account', 'error');
         setLoading(false);
@@ -246,7 +247,7 @@ export default function StudentDetailScreen() {
       setStudent(processedStudent);
 
       // Load available classes for assignment (Principal only)
-      if (userProfile.role === 'principal') {
+      if (['principal', 'principal_admin', 'admin'].includes(userProfile?.role || profile?.role || '')) {
         const { data: classesData } = await assertSupabase()
           .from('classes')
           .select(`
@@ -256,7 +257,7 @@ export default function StudentDetailScreen() {
             teacher_id,
             max_capacity
           `)
-          .eq('preschool_id', userProfile.preschool_id)
+          .eq('preschool_id', schoolId)
           .eq('active', true);
 
         // Get teacher names for each class
@@ -279,7 +280,7 @@ export default function StudentDetailScreen() {
         const { data: enrollmentData } = await assertSupabase()
           .from('students')
           .select('class_id')
-          .eq('preschool_id', userProfile.preschool_id)
+          .eq('preschool_id', schoolId)
           .eq('is_active', true);
         
         const enrollmentMap = (enrollmentData || []).reduce((acc, s) => {

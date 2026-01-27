@@ -13,6 +13,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -35,6 +36,7 @@ interface BirthdayChartProps {
   showHeader?: boolean;
   compact?: boolean;
   onStudentPress?: (studentId: string) => void;
+  studentTapBehavior?: 'profile' | 'info' | 'none';
 }
 
 interface MonthData {
@@ -50,10 +52,12 @@ export function BirthdayChart({
   showHeader = true,
   compact = false,
   onStudentPress,
+  studentTapBehavior = 'profile',
 }: BirthdayChartProps) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedBirthday, setSelectedBirthday] = useState<StudentBirthday | null>(null);
 
   // Group birthdays by month
   const monthlyData: MonthData[] = useMemo(() => {
@@ -103,12 +107,24 @@ export function BirthdayChart({
     });
   }, [birthdays, currentMonth, currentDay]);
 
-  const handleStudentPress = (studentId: string) => {
-    if (onStudentPress) {
-      onStudentPress(studentId);
-    } else {
-      router.push(`/screens/student-detail?id=${studentId}`);
+  const handleStudentPress = (birthday: StudentBirthday) => {
+    if (studentTapBehavior === 'none') return;
+    if (studentTapBehavior === 'info') {
+      setSelectedBirthday(birthday);
+      return;
     }
+
+    if (onStudentPress) {
+      onStudentPress(birthday.studentId);
+      return;
+    }
+
+    router.push(`/screens/student-detail?id=${birthday.studentId}`);
+  };
+
+  const closeMonthModal = () => {
+    setSelectedMonth(null);
+    setSelectedBirthday(null);
   };
 
   const styles = createStyles(theme, isDark, compact);
@@ -129,6 +145,9 @@ export function BirthdayChart({
   }
 
   const totalBirthdays = birthdays.length;
+  const selectedMonthData = selectedMonth !== null ? monthlyData[selectedMonth] : null;
+  const showActionIcon = studentTapBehavior !== 'none';
+  const isInfoMode = studentTapBehavior === 'info';
 
   return (
     <View style={styles.container}>
@@ -185,7 +204,14 @@ export function BirthdayChart({
                   hasNoData && styles.monthCardEmpty,
                   { borderColor: monthData.color },
                 ]}
-                onPress={() => setSelectedMonth(isSelected ? null : monthData.month)}
+                onPress={() => {
+                  if (isSelected) {
+                    closeMonthModal();
+                    return;
+                  }
+                  setSelectedBirthday(null);
+                  setSelectedMonth(monthData.month);
+                }}
                 activeOpacity={0.7}
               >
                 <View style={[styles.monthHeader, { backgroundColor: monthData.color + '20' }]}>
@@ -233,66 +259,120 @@ export function BirthdayChart({
         </View>
       </ScrollView>
 
-      {/* Expanded Month Detail */}
-      {selectedMonth !== null && (
-        <View style={styles.detailSection}>
-          <View style={styles.detailHeader}>
-            <Text style={styles.detailTitle}>
-              {MONTHS[selectedMonth]} Birthdays
-            </Text>
-            <TouchableOpacity onPress={() => setSelectedMonth(null)}>
-              <Ionicons name="close-circle" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          
-          {monthlyData[selectedMonth].birthdays.length === 0 ? (
-            <View style={styles.emptyDetail}>
-              <Text style={styles.emptyDetailText}>No birthdays in {MONTHS[selectedMonth]}</Text>
+      <Modal
+        visible={selectedMonth !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMonthModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {selectedMonthData ? `${selectedMonthData.name} Birthdays` : 'Birthdays'}
+                </Text>
+                {selectedMonthData && (
+                  <Text style={styles.modalSubtitle}>
+                    {selectedMonthData.birthdays.length} {selectedMonthData.birthdays.length === 1 ? 'birthday' : 'birthdays'}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={closeMonthModal}>
+                <Ionicons name="close" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <ScrollView style={styles.detailList} nestedScrollEnabled>
-              {monthlyData[selectedMonth].birthdays.map((birthday) => {
-                const dob = new Date(birthday.dateOfBirth);
-                const day = dob.getDate();
-                const isToday = dob.getMonth() === currentMonth && day === currentDay;
-                
-                return (
-                  <TouchableOpacity
-                    key={birthday.id}
-                    style={[styles.birthdayRow, isToday && styles.birthdayRowToday]}
-                    onPress={() => handleStudentPress(birthday.studentId)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.dateCircle}>
-                      <Text style={styles.dateText}>{day}</Text>
+
+            {selectedMonthData && (
+              <>
+                {isInfoMode && selectedBirthday && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoHeader}>
+                      <Text style={styles.infoTitle}>Birthday Info</Text>
+                      <TouchableOpacity onPress={() => setSelectedBirthday(null)}>
+                        <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+                      </TouchableOpacity>
                     </View>
-                    
-                    {birthday.photoUrl ? (
-                      <Image source={{ uri: birthday.photoUrl }} style={styles.studentAvatar} />
-                    ) : (
-                      <View style={[styles.studentAvatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarText}>{birthday.firstName.charAt(0)}</Text>
-                      </View>
-                    )}
-                    
-                    <View style={styles.studentInfo}>
-                      <Text style={styles.studentName}>
-                        {birthday.firstName} {birthday.lastName}
-                        {isToday && ' 🎉'}
-                      </Text>
-                      <Text style={styles.studentClass}>
-                        {birthday.className || 'No Class'} • Turning {birthday.age}
+                    <Text style={styles.infoName}>
+                      {selectedBirthday.firstName} {selectedBirthday.lastName}
+                    </Text>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Class</Text>
+                      <Text style={styles.infoValue}>{selectedBirthday.className || 'No Class'}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Birthday</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(selectedBirthday.dateOfBirth).toLocaleDateString('en-ZA', { day: '2-digit', month: 'short' })}
                       </Text>
                     </View>
-                    
-                    <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Turning</Text>
+                      <Text style={styles.infoValue}>{selectedBirthday.age}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {selectedMonthData.birthdays.length === 0 ? (
+                  <View style={styles.emptyDetail}>
+                    <Text style={styles.emptyDetailText}>No birthdays in {selectedMonthData.name}</Text>
+                  </View>
+                ) : (
+                  <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+                    {selectedMonthData.birthdays.map((birthday) => {
+                      const dob = new Date(birthday.dateOfBirth);
+                      const day = dob.getDate();
+                      const isToday = dob.getMonth() === currentMonth && day === currentDay;
+                      const isSelectedRow = isInfoMode && selectedBirthday?.studentId === birthday.studentId;
+                      const actionIcon = studentTapBehavior === 'profile' ? 'chevron-forward' : 'information-circle-outline';
+                      
+                      return (
+                        <TouchableOpacity
+                          key={birthday.id}
+                          style={[
+                            styles.birthdayRow,
+                            isToday && styles.birthdayRowToday,
+                            isSelectedRow && styles.birthdayRowSelected,
+                          ]}
+                          onPress={() => handleStudentPress(birthday)}
+                          activeOpacity={studentTapBehavior === 'none' ? 1 : 0.7}
+                          disabled={studentTapBehavior === 'none'}
+                        >
+                          <View style={styles.dateCircle}>
+                            <Text style={styles.dateText}>{day}</Text>
+                          </View>
+                          
+                          {birthday.photoUrl ? (
+                            <Image source={{ uri: birthday.photoUrl }} style={styles.studentAvatar} />
+                          ) : (
+                            <View style={[styles.studentAvatar, styles.avatarPlaceholder]}>
+                              <Text style={styles.avatarText}>{birthday.firstName.charAt(0)}</Text>
+                            </View>
+                          )}
+                          
+                          <View style={styles.studentInfo}>
+                            <Text style={styles.studentName}>
+                              {birthday.firstName} {birthday.lastName}
+                              {isToday && ' 🎉'}
+                            </Text>
+                            <Text style={styles.studentClass}>
+                              {birthday.className || 'No Class'} • Turning {birthday.age}
+                            </Text>
+                          </View>
+                          
+                          {showActionIcon && (
+                            <Ionicons name={actionIcon} size={20} color={theme.textSecondary} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </>
+            )}
+          </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -472,23 +552,85 @@ const createStyles = (theme: any, isDark: boolean, compact: boolean) => StyleShe
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  detailSection: {
-    marginTop: 16,
-    backgroundColor: theme.background,
-    borderRadius: 12,
-    padding: 12,
-    maxHeight: 300,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  detailHeader: {
+  modalCard: {
+    backgroundColor: theme.card,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    maxHeight: 520,
+  },
+  modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  detailTitle: {
+  modalTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: theme.text,
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.background,
+  },
+  modalList: {
+    maxHeight: 320,
+  },
+  infoCard: {
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginBottom: 12,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.textSecondary,
+  },
+  infoName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  infoValue: {
+    fontSize: 12,
+    color: theme.text,
+    fontWeight: '600',
   },
   emptyDetail: {
     padding: 24,
@@ -497,9 +639,6 @@ const createStyles = (theme: any, isDark: boolean, compact: boolean) => StyleShe
   emptyDetailText: {
     fontSize: 14,
     color: theme.textSecondary,
-  },
-  detailList: {
-    maxHeight: 220,
   },
   birthdayRow: {
     flexDirection: 'row',
@@ -513,6 +652,12 @@ const createStyles = (theme: any, isDark: boolean, compact: boolean) => StyleShe
     marginHorizontal: -12,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  birthdayRowSelected: {
+    backgroundColor: theme.primary + '10',
+    borderRadius: 8,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
   },
   dateCircle: {
     width: 36,
