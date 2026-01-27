@@ -1,0 +1,320 @@
+/* eslint-disable i18next/no-literal-string */
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { ParentShell } from '@/components/dashboard/parent/ParentShell';
+import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
+import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
+import { FileText, UploadCloud, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+
+type DocumentType = 'birth_certificate' | 'clinic_card' | 'guardian_id';
+
+interface DocumentInfo {
+  type: DocumentType;
+  label: string;
+  description: string;
+  dbColumn: 'student_birth_certificate_url' | 'student_clinic_card_url' | 'guardian_id_document_url';
+}
+
+interface RegistrationRecord {
+  id: string;
+  preschool_id: string | null;
+  student_birth_certificate_url: string | null;
+  student_clinic_card_url: string | null;
+  guardian_id_document_url: string | null;
+}
+
+const DOCUMENTS: DocumentInfo[] = [
+  {
+    type: 'birth_certificate',
+    label: 'Birth Certificate',
+    description: "Child's official birth certificate",
+    dbColumn: 'student_birth_certificate_url',
+  },
+  {
+    type: 'clinic_card',
+    label: 'Clinic Card',
+    description: "Child's clinic/vaccination card",
+    dbColumn: 'student_clinic_card_url',
+  },
+  {
+    type: 'guardian_id',
+    label: 'Guardian ID',
+    description: 'Parent/Guardian identity document',
+    dbColumn: 'guardian_id_document_url',
+  },
+];
+
+export default function ParentDocumentsPage() {
+  const router = useRouter();
+  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const registrationParam = searchParams.get('registrationId') || undefined;
+  const studentParam = searchParams.get('studentId') || undefined;
+
+  const { tenantSlug, userName, preschoolName, profile } = useParentDashboardData();
+
+  const [email, setEmail] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<DocumentType | null>(null);
+  const [registration, setRegistration] = useState<RegistrationRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const preschoolId = profile?.preschoolId;
+
+  const loadRegistration = useCallback(async (currentEmail: string, currentUserId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let record: RegistrationRecord | null = null;
+
+      if (registrationParam) {
+        const { data, error: regError } = await supabase
+          .from('registration_requests')
+          .select('id, preschool_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
+          .eq('id', registrationParam)
+          .maybeSingle();
+        if (regError) throw regError;
+        record = data as RegistrationRecord | null;
+      } else if (currentEmail) {
+        let query = supabase
+          .from('registration_requests')
+          .select('id, preschool_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
+          .ilike('guardian_email', currentEmail)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (preschoolId) {
+          query = query.eq('preschool_id', preschoolId);
+        }
+
+        const { data, error: regError } = await query.maybeSingle();
+        if (regError) throw regError;
+        record = data as RegistrationRecord | null;
+      }
+
+      if (!record && studentParam) {
+        // If no registration request exists, attempt to set a placeholder registration record
+        record = {
+          id: studentParam,
+          preschool_id: preschoolId || null,
+          student_birth_certificate_url: null,
+          student_clinic_card_url: null,
+          guardian_id_document_url: null,
+        };
+      }
+
+      setRegistration(record);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load documents');
+    } finally {
+      setLoading(false);
+    }
+  }, [preschoolId, registrationParam, studentParam, supabase]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/sign-in');
+        return;
+      }
+      setEmail(session.user.email || '');
+      setUserId(session.user.id);
+      await loadRegistration(session.user.email || '', session.user.id);
+    })();
+  }, [loadRegistration, router, supabase]);
+
+  const handleUpload = async (doc: DocumentInfo, file: File) => {
+    if (!userId || !registration) return;
+
+    try {
+      setSaving(doc.type);
+      setError(null);
+
+      const ext = file.name.split('.').pop() || 'pdf';
+      const timestamp = Date.now();
+      const targetSchoolId = registration.preschool_id || preschoolId || 'unknown';
+      const filePath = `documents/${targetSchoolId}/${userId}/${doc.type}_${timestamp}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('registration-documents')
+        .upload(filePath, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('registration-documents')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      if (registrationParam) {
+        const { error: updateError } = await supabase
+          .from('registration_requests')
+          .update({
+            [doc.dbColumn]: publicUrl,
+            documents_uploaded: true,
+          })
+          .eq('id', registrationParam);
+
+        if (updateError) throw updateError;
+      } else if (registration?.id && registration.id !== studentParam) {
+        await supabase
+          .from('registration_requests')
+          .update({
+            [doc.dbColumn]: publicUrl,
+            documents_uploaded: true,
+          })
+          .eq('id', registration.id);
+      }
+
+      if (studentParam) {
+        const studentColumnMap: Record<DocumentInfo['dbColumn'], string> = {
+          student_birth_certificate_url: 'birth_certificate_url',
+          student_clinic_card_url: 'clinic_card_url',
+          guardian_id_document_url: 'guardian_id_url',
+        };
+
+        await supabase
+          .from('students')
+          .update({ [studentColumnMap[doc.dbColumn]]: publicUrl })
+          .eq('id', studentParam);
+      }
+
+      setRegistration((prev) =>
+        prev
+          ? { ...prev, [doc.dbColumn]: publicUrl }
+          : prev
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload document');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const documentStatuses = useMemo(() => {
+    return DOCUMENTS.map((doc) => ({
+      ...doc,
+      uploaded: Boolean(registration?.[doc.dbColumn]),
+    }));
+  }, [registration]);
+
+  return (
+    <ParentShell tenantSlug={tenantSlug} userEmail={email} userName={userName} preschoolName={preschoolName}>
+      <div style={{ margin: 'calc(var(--space-3) * -1) calc(var(--space-2) * -1)', padding: 0 }}>
+        <SubPageHeader
+          title="Upload Documents"
+          subtitle="Submit required registration documents for verification"
+          icon={<FileText size={28} color="white" />}
+        />
+
+        <div style={{ width: '100%', padding: 20 }}>
+          <button
+            onClick={() => router.push('/dashboard/parent/payments')}
+            className="btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 20,
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              padding: '8px 16px',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+          >
+            <ArrowLeft size={16} />
+            Back to Payments
+          </button>
+
+          {loading ? (
+            <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+              <div className="spinner" style={{ margin: '0 auto' }} />
+              <p className="muted" style={{ marginTop: 12 }}>Loading documents…</p>
+            </div>
+          ) : error ? (
+            <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+              <AlertCircle size={36} color="var(--danger)" style={{ margin: '0 auto 12px' }} />
+              <p style={{ color: 'var(--danger)' }}>{error}</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 16 }}>
+              {documentStatuses.map((doc) => (
+                <div key={doc.type} className="card" style={{ padding: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: doc.uploaded ? 'rgba(34,197,94,0.12)' : 'rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {doc.uploaded ? <CheckCircle2 size={22} color="#16a34a" /> : <UploadCloud size={22} color="#3b82f6" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600 }}>{doc.label}</div>
+                      <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{doc.description}</div>
+                      {doc.uploaded && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Uploaded</div>
+                      )}
+                    </div>
+                    <div>
+                      <label
+                        className="btn btnSecondary"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          cursor: saving === doc.type ? 'not-allowed' : 'pointer',
+                          opacity: saving === doc.type ? 0.6 : 1,
+                        }}
+                      >
+                        <UploadCloud size={14} />
+                        {doc.uploaded ? 'Replace' : 'Upload'}
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          style={{ display: 'none' }}
+                          disabled={saving === doc.type}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) {
+                              void handleUpload(doc, file);
+                              event.currentTarget.value = '';
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="card" style={{ padding: 20, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <AlertCircle size={20} color="#3b82f6" />
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Upload Tips</div>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+                      <li>Accepted formats: PDF, JPG, PNG</li>
+                      <li>Keep files under 10MB for faster uploads</li>
+                      <li>Ensure text is clear and readable</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </ParentShell>
+  );
+}
+

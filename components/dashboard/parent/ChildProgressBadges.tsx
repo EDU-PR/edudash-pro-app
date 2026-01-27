@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -71,6 +72,7 @@ export function ChildProgressBadges({
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [progressStats, setProgressStats] = useState<ProgressStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   
   const styles = useMemo(() => createStyles(theme, compact), [theme, compact]);
 
@@ -83,21 +85,30 @@ export function ChildProgressBadges({
     try {
       const supabase = assertSupabase();
       
-      // Calculate attendance streak
+      // Attendance progress (last 7 days, deduped per date)
       const today = new Date();
       const weekStart = new Date(today);
       weekStart.setDate(today.getDate() - today.getDay() + 1); // Monday
-      
+      const windowStart = new Date(today);
+      windowStart.setDate(today.getDate() - 6);
+
       const { data: attendanceData } = await supabase
         .from('attendance')
         .select('attendance_date, status')
         .eq('student_id', studentId)
-        .gte('attendance_date', weekStart.toISOString().split('T')[0])
+        .gte('attendance_date', windowStart.toISOString().split('T')[0])
         .order('attendance_date', { ascending: false });
-      
-      const presentDays = attendanceData?.filter(a => a.status === 'present').length || 0;
-      // Children typically have 5 school days per week
-      const totalDays = Math.min(attendanceData?.length || 0, 5);
+
+      const seenDates = new Set<string>();
+      const recentAttendance = (attendanceData || [])
+        .filter((row) => {
+          if (!row.attendance_date || seenDates.has(row.attendance_date)) return false;
+          seenDates.add(row.attendance_date);
+          return true;
+        })
+        .slice(0, 5);
+
+      const presentDays = recentAttendance.filter(a => a.status === 'present').length || 0;
 
       // Get student's class_id for homework queries
       const { data: studentData } = await supabase
@@ -142,7 +153,7 @@ export function ChildProgressBadges({
         {
           label: 'Attendance',
           value: presentDays,
-          max: 5, // 5 school days per week
+          max: 5,
           color: '#10B981',
           icon: 'calendar-outline',
         },
@@ -241,6 +252,7 @@ export function ChildProgressBadges({
       }
 
       setEarnedBadges(badges);
+      setLastUpdated(new Date().toISOString());
     } catch (err) {
       console.error('[ChildProgressBadges] Error:', err);
     } finally {
@@ -251,6 +263,24 @@ export function ChildProgressBadges({
   useEffect(() => {
     loadProgress();
   }, [loadProgress]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        loadProgress();
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [loadProgress]);
+
+  const visibleBadges = useMemo(() => {
+    const earned = earnedBadges.filter((badge) => badge.earned_at);
+    const inProgress = earnedBadges.filter((badge) => !badge.earned_at);
+    const maxBadges = compact ? 3 : 4;
+    return [...earned, ...inProgress].slice(0, maxBadges);
+  }, [earnedBadges, compact]);
 
   // Set up realtime subscription for attendance and achievements updates
   useEffect(() => {
@@ -384,9 +414,14 @@ export function ChildProgressBadges({
           <View style={styles.headerLeft}>
             <Ionicons name="ribbon" size={20} color="#F59E0B" />
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Progress & Achievements
+              Progress & Acknowledgement
             </Text>
           </View>
+          {!compact && lastUpdated && (
+            <Text style={[styles.headerMeta, { color: theme.textSecondary }]}>
+              Updated {new Date(lastUpdated).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          )}
         </View>
       )}
 
@@ -403,7 +438,7 @@ export function ChildProgressBadges({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.badgesContainer}
       >
-        {earnedBadges.map(renderBadge)}
+        {visibleBadges.map(renderBadge)}
       </ScrollView>
 
       {/* Encouragement message */}
@@ -412,8 +447,8 @@ export function ChildProgressBadges({
           <Ionicons name="sparkles" size={16} color={theme.success} />
           <Text style={[styles.encouragementText, { color: theme.success }]}>
             {earnedBadges.filter(b => b.earned_at).length > 0 
-              ? `Great job! ${earnedBadges.filter(b => b.earned_at).length} badge${earnedBadges.filter(b => b.earned_at).length > 1 ? 's' : ''} earned this week!`
-              : 'Keep going! You\'re making great progress!'
+              ? `Great job! ${earnedBadges.filter(b => b.earned_at).length} badge${earnedBadges.filter(b => b.earned_at).length > 1 ? 's' : ''} earned.`
+              : 'Keep going! New updates will show here.'
             }
           </Text>
         </View>
@@ -447,6 +482,10 @@ const createStyles = (theme: any, compact: boolean) =>
     headerTitle: {
       fontSize: 18,
       fontWeight: '600',
+    },
+    headerMeta: {
+      fontSize: 12,
+      fontWeight: '500',
     },
     progressStatsRow: {
       flexDirection: 'row',

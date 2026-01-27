@@ -193,6 +193,7 @@ export default function AttendanceScreen() {
         status: e.status,
         attendance_date: today,
         recorded_by: authUserId,
+        organization_id: schoolId || undefined,
       })) as any)
       
       if (insertError) {
@@ -427,4 +428,3 @@ const styles = StyleSheet.create({
   historyText: { fontWeight: '700' },
   dim: { opacity: 0.6 },
 })
-

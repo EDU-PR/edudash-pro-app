@@ -474,7 +474,7 @@ export default function RegistrationDetailScreen() {
       try {
         const { data: feeStructures, error: feeError } = await supabase
           .from('fee_structures')
-          .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
+          .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
           .eq('preschool_id', regData.preschool_id)
           .eq('is_active', true)
           .order('effective_from', { ascending: false })
@@ -680,7 +680,7 @@ export default function RegistrationDetailScreen() {
     try {
       const { data: feeStructures, error: feeError } = await supabase
         .from('fee_structures')
-        .select('id, amount, fee_type, name, description, age_group, grade_levels, grade_level, effective_from, created_at')
+        .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
         .eq('preschool_id', regData.organization_id)
         .eq('is_active', true)
         .order('effective_from', { ascending: false })

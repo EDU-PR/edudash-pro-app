@@ -35,6 +35,7 @@ interface StudentWithFees {
   class_name?: string;
   parent_name?: string;
   fees: {
+    fee_count: number;
     outstanding: number;
     paid: number;
     waived: number;
@@ -146,6 +147,39 @@ export default function PrincipalFeeOverviewScreen() {
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
+      const toNumber = (value: unknown) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num : 0;
+      };
+
+      const getFeeAmount = (fee: any) => {
+        const finalAmount = toNumber(fee?.final_amount);
+        if (finalAmount > 0) return finalAmount;
+        return toNumber(fee?.amount);
+      };
+
+      const getPaidAmount = (fee: any) => {
+        const paid = toNumber(fee?.amount_paid);
+        if (paid > 0) return paid;
+        return fee?.status === 'paid' ? getFeeAmount(fee) : 0;
+      };
+
+      const getOutstandingAmount = (fee: any) => {
+        const outstanding = toNumber(fee?.amount_outstanding);
+        if (outstanding > 0) return outstanding;
+        if (unpaidStatuses.has(String(fee?.status))) {
+          return getFeeAmount(fee);
+        }
+        return 0;
+      };
+
+      const isInMonth = (dateString?: string | null) => {
+        if (!dateString) return false;
+        const date = new Date(dateString);
+        if (Number.isNaN(date.getTime())) return false;
+        return date >= monthStart && date < monthEnd;
+      };
+
       const processedStudents: StudentWithFees[] = (studentsData || []).map((student: any) => {
         const studentFees = feesByStudent.get(student.id) || [];
         const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
@@ -172,10 +206,8 @@ export default function PrincipalFeeOverviewScreen() {
         
         const payableFees = studentFees.filter(f => !isPreEnrollment(f));
         const monthFees = payableFees.filter((f: any) => {
-          if (!f?.due_date) return false;
-          const due = new Date(f.due_date);
-          if (Number.isNaN(due.getTime())) return false;
-          return due >= monthStart && due < monthEnd;
+          if (isInMonth(f?.due_date)) return true;
+          return isInMonth(f?.created_at);
         });
         const baseFees = timeFilter === 'month' ? monthFees : payableFees;
         const dueFees = baseFees.filter(
@@ -183,14 +215,13 @@ export default function PrincipalFeeOverviewScreen() {
         );
         
         const outstanding = dueFees
-          .reduce((sum, f) => sum + (f.final_amount || f.amount || 0), 0);
+          .reduce((sum, f) => sum + getOutstandingAmount(f), 0);
         
         const paid = baseFees
-          .filter(f => f.status === 'paid')
-          .reduce((sum, f) => sum + (f.final_amount || f.amount || 0), 0);
+          .reduce((sum, f) => sum + getPaidAmount(f), 0);
         
         const waived = baseFees
-          .reduce((sum, f) => sum + (f.waived_amount || 0), 0);
+          .reduce((sum, f) => sum + toNumber(f.waived_amount), 0);
         
         const overdue_count = baseFees.filter((f: any) => {
           if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
@@ -215,6 +246,7 @@ export default function PrincipalFeeOverviewScreen() {
           class_name: classData?.name,
           parent_name: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
           fees: {
+            fee_count: baseFees.length,
             outstanding,
             paid,
             waived,
@@ -292,6 +324,14 @@ export default function PrincipalFeeOverviewScreen() {
   }, [loadData]);
 
   // Filter and search students
+  const isFullyPaid = useCallback((student: StudentWithFees) => {
+    return (
+      student.fees.outstanding <= 0 &&
+      student.fees.overdue_count === 0 &&
+      student.fees.pending_count === 0
+    );
+  }, []);
+
   const filteredStudents = useMemo(() => {
     let result = students;
     
@@ -301,7 +341,7 @@ export default function PrincipalFeeOverviewScreen() {
         result = result.filter(s => s.fees.outstanding > 0);
         break;
       case 'paid':
-        result = result.filter(s => s.fees.paid > 0 && s.fees.outstanding === 0);
+        result = result.filter(isFullyPaid);
         break;
       case 'overdue':
         result = result.filter(s => s.fees.overdue_count > 0);
@@ -320,7 +360,7 @@ export default function PrincipalFeeOverviewScreen() {
     }
     
     return result;
-  }, [students, filter, searchQuery]);
+  }, [students, filter, searchQuery, isFullyPaid]);
 
   // Navigate to student fee management
   const handleStudentPress = (studentId: string) => {
@@ -568,7 +608,7 @@ export default function PrincipalFeeOverviewScreen() {
                       </Text>
                     </View>
                   )}
-                  {student.fees.outstanding === 0 && student.fees.paid > 0 && (
+                  {isFullyPaid(student) && (
                     <View style={[styles.feeBadge, { backgroundColor: theme.success + '15' }]}>
                       <Ionicons name="checkmark-circle" size={12} color={theme.success} />
                       <Text style={[styles.feeBadgeText, { color: theme.success }]}>

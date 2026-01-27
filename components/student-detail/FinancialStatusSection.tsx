@@ -5,9 +5,10 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail, Transaction, formatCurrency } from './types';
+import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 interface FinancialStatusSectionProps {
   student: StudentDetail;
@@ -36,18 +37,44 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'eft' | 'card' | 'other'>('cash');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [alertState, setAlertState] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'warning' | 'success' | 'error';
+    buttons: AlertButton[];
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: [],
+  });
+
+  const showAlert = (
+    title: string,
+    message: string,
+    type: 'info' | 'warning' | 'success' | 'error' = 'info',
+    buttons: AlertButton[] = [{ text: 'OK', style: 'default' }],
+  ) => {
+    setAlertState({ visible: true, title, message, type, buttons });
+  };
+
+  const hideAlert = () => {
+    setAlertState(prev => ({ ...prev, visible: false }));
+  };
 
   const outstandingAmount = student.outstanding_fees || 0;
 
   const handleMarkAsPaid = async () => {
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid payment amount');
+      showAlert('Invalid Amount', 'Please enter a valid payment amount', 'warning');
       return;
     }
 
     if (!onMarkPaymentReceived) {
-      Alert.alert('Error', 'Payment recording is not available');
+      showAlert('Error', 'Payment recording is not available', 'error');
       return;
     }
 
@@ -58,10 +85,10 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
       setPaymentAmount('');
       setPaymentNotes('');
       setPaymentMethod('cash');
-      Alert.alert('Success', `Payment of ${formatCurrency(amount)} recorded successfully`);
+      showAlert('Success', `Payment of ${formatCurrency(amount)} recorded successfully`, 'success');
     } catch (error) {
       console.error('Error recording payment:', error);
-      Alert.alert('Error', 'Failed to record payment. Please try again.');
+      showAlert('Error', 'Failed to record payment. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -259,6 +286,15 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
           </View>
         </View>
       </Modal>
+
+      <AlertModal
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttons={alertState.buttons}
+        onClose={hideAlert}
+      />
     </View>
   );
 };

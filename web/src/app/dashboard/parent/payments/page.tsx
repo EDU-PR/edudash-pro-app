@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
+import { PendingDocumentsCard, type PendingDocumentStatus } from '@/components/dashboard/parent/PendingDocumentsCard';
 import {
   DollarSign,
   CreditCard,
@@ -12,7 +13,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  Download,
   Upload,
   FileText,
   Info,
@@ -60,18 +60,11 @@ interface FeeStructure {
   age_group?: string;
 }
 
-interface PaymentMethod {
+interface RegistrationDocs {
   id: string;
-  method_name: string;
-  display_name: string;
-  processing_fee: number;
-  fee_type: string;
-  description?: string;
-  instructions?: string;
-  bank_name?: string;
-  account_number?: string;
-  branch_code?: string;
-  preferred: boolean;
+  student_birth_certificate_url: string | null;
+  student_clinic_card_url: string | null;
+  guardian_id_document_url: string | null;
 }
 
 export default function PaymentsPage() {
@@ -90,7 +83,8 @@ export default function PaymentsPage() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
   const [feeStructure, setFeeStructure] = useState<FeeStructure[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [documentStatus, setDocumentStatus] = useState<PendingDocumentStatus[]>([]);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
 
   // Format currency consistently (avoid hydration mismatch)
   const formatCurrency = (amount: number) => {
@@ -176,6 +170,57 @@ export default function PaymentsPage() {
     }
   };
 
+  const buildDocumentStatus = (docs: RegistrationDocs | null): PendingDocumentStatus[] => {
+    return [
+      {
+        type: 'birth_certificate',
+        label: 'Birth Certificate',
+        uploaded: Boolean(docs?.student_birth_certificate_url),
+      },
+      {
+        type: 'clinic_card',
+        label: 'Clinic Card',
+        uploaded: Boolean(docs?.student_clinic_card_url),
+      },
+      {
+        type: 'guardian_id',
+        label: 'Guardian ID',
+        uploaded: Boolean(docs?.guardian_id_document_url),
+      },
+    ];
+  };
+
+  const loadDocuments = useCallback(async (currentEmail: string) => {
+    if (!currentEmail) {
+      setDocumentStatus([]);
+      setRegistrationId(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('registration_requests')
+        .select('id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
+        .ilike('guardian_email', currentEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        setDocumentStatus(buildDocumentStatus(null));
+        setRegistrationId(null);
+        return;
+      }
+
+      const docs = data as RegistrationDocs | null;
+      setRegistrationId(docs?.id ?? null);
+      setDocumentStatus(buildDocumentStatus(docs));
+    } catch {
+      setDocumentStatus(buildDocumentStatus(null));
+      setRegistrationId(null);
+    }
+  }, [supabase]);
+
   // Fetch parent's children and their school info
   useEffect(() => {
     (async () => {
@@ -184,8 +229,10 @@ export default function PaymentsPage() {
         router.push('/sign-in');
         return;
       }
-      setEmail(session.user.email || '');
+      const userEmail = session.user.email || '';
+      setEmail(userEmail);
       setUserId(session.user.id);
+      await loadDocuments(userEmail);
 
       // Get parent's profile to get preschool_id
       const { data: profile } = await supabase
@@ -210,12 +257,10 @@ export default function PaymentsPage() {
       }
 
       // Fetch children linked to this parent via parent_id or guardian_id in students table
-      const { data: directChildren, error: childrenError } = await supabase
+      const { data: directChildren } = await supabase
         .from('students')
         .select('id, student_id, first_name, last_name, preschool_id, registration_fee_amount, registration_fee_paid, payment_verified')
         .or(`parent_id.eq.${session.user.id},guardian_id.eq.${session.user.id}`);
-
-      console.log('[Payments] Children:', directChildren, 'Error:', childrenError);
 
       if (directChildren && directChildren.length > 0) {
         const childrenData: Child[] = [];
@@ -252,7 +297,7 @@ export default function PaymentsPage() {
 
       setLoading(false);
     })();
-  }, [router, supabase]);
+  }, [loadDocuments, router, supabase]);
 
   // Fetch fees for selected child
   useEffect(() => {
@@ -278,13 +323,11 @@ export default function PaymentsPage() {
       
       if (childPreschoolId) {
         // Fetch fee structures directly from school_fee_structures table (uses preschool_id)
-        const { data: schoolFees, error: feeError } = await supabase
+        const { data: schoolFees } = await supabase
           .from('school_fee_structures')
           .select('*')
           .eq('preschool_id', childPreschoolId)
           .eq('is_active', true);
-
-        console.log('[Payments] School fee structures:', schoolFees, 'Error:', feeError);
 
         if (schoolFees && schoolFees.length > 0) {
           // Convert from cents to rands and map to our interface
@@ -334,20 +377,6 @@ export default function PaymentsPage() {
           }
         }
         
-        // Also fetch payment methods for the school
-        // The organization_id in organizations table equals preschool_id for linked schools
-        // So we can query directly using the preschool_id as the organization_id
-        const { data: paymentMethodsData } = await supabase
-          .from('organization_payment_methods')
-          .select('*')
-          .eq('organization_id', childPreschoolId)
-          .eq('active', true)
-          .order('preferred', { ascending: false });
-        
-        if (paymentMethodsData) {
-          console.log('[Payments] Payment methods:', paymentMethodsData);
-          setPaymentMethods(paymentMethodsData as PaymentMethod[]);
-        }
       }
     };
 
@@ -468,6 +497,22 @@ export default function PaymentsPage() {
     };
     return labels[feeType] || feeType;
   };
+
+  const handlePayNow = useCallback((fee: StudentFee) => {
+    if (!selectedChild) return;
+    const params = new URLSearchParams();
+    params.set('childId', selectedChild.id);
+    params.set('childName', `${selectedChild.first_name} ${selectedChild.last_name}`);
+    params.set('studentCode', selectedChild.student_code);
+    params.set('feeId', fee.id);
+    params.set('feeAmount', fee.amount.toString());
+    params.set('feeDescription', fee.description || getFeeTypeLabel(fee.fee_type));
+    params.set('feeDueDate', fee.due_date);
+    params.set('preschoolId', selectedChild.preschool_id);
+    if (selectedChild.preschool_name) params.set('preschoolName', selectedChild.preschool_name);
+
+    router.push(`/dashboard/parent/payments/flow?${params.toString()}`);
+  }, [router, selectedChild]);
 
   if (loading) {
     return (
@@ -708,6 +753,15 @@ export default function PaymentsPage() {
                 </div>
               </div>
 
+              {/* Pending Documents */}
+              <div style={{ marginBottom: 'var(--space-6)' }}>
+                <PendingDocumentsCard
+                  documents={documentStatus}
+                  registrationId={registrationId}
+                  studentId={selectedChildId}
+                />
+              </div>
+
               {/* Tabs */}
               <div style={{
                 display: 'flex',
@@ -815,11 +869,18 @@ export default function PaymentsPage() {
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-                            <button className="btn btnPrimary" style={{ flex: 1 }}>
+                            <button
+                              className="btn btnPrimary"
+                              style={{ flex: 1 }}
+                              onClick={() => handlePayNow(fee)}
+                            >
                               <CreditCard className="icon16" />
                               Pay Now
                             </button>
-                            <button className="btn btnSecondary" onClick={() => setActiveTab('upload')}>
+                            <button
+                              className="btn btnSecondary"
+                              onClick={() => router.push(`/dashboard/parent/payments/pop-upload?child=${selectedChildId ?? ''}&feeId=${fee.id}`)}
+                            >
                               <Upload className="icon16" />
                               Upload Proof
                             </button>

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 const SIZE_OPTIONS = [
   '2-3',
@@ -86,6 +87,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
   const { theme } = useTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
   const [entries, setEntries] = useState<Record<string, UniformEntry>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -355,12 +357,20 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
   const handlePayNow = (child: ChildRow, entry: UniformEntry) => {
     const preschoolId = child.preschoolId || null;
     if (!preschoolId) {
-      Alert.alert('School not found', 'We could not find the school for this child.');
+      showAlert({
+        title: 'School not found',
+        message: 'We could not find the school for this child.',
+        type: 'error',
+      });
       return;
     }
 
     if (!entry.tshirtSize) {
-      Alert.alert('Missing size', 'Please select a T-shirt size before paying.');
+      showAlert({
+        title: 'Missing size',
+        message: 'Please select a T-shirt size before paying.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -369,7 +379,11 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const totalItems = (Number.isFinite(tshirtQty) ? tshirtQty : 0) + (Number.isFinite(shortsQty) ? shortsQty : 0);
 
     if (!totalItems || totalItems <= 0) {
-      Alert.alert('Missing quantities', 'Enter the number of T-shirts and shorts before paying.');
+      showAlert({
+        title: 'Missing quantities',
+        message: 'Enter the number of T-shirts and shorts before paying.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -379,15 +393,17 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const totalAmount = (tshirtPrice * tshirtQty) + (shortsPrice * shortsQty);
 
     if (!pricing || (tshirtPrice <= 0 && shortsPrice <= 0)) {
-      Alert.alert(
-        'Uniform pricing not set',
-        'Uniform pricing is not configured yet. We will still generate a reference for you.'
-      );
+      showAlert({
+        title: 'Uniform pricing not set',
+        message: 'Uniform pricing is not configured yet. We will still generate a reference for you.',
+        type: 'warning',
+      });
     } else if ((tshirtQty > 0 && tshirtPrice <= 0) || (shortsQty > 0 && shortsPrice <= 0)) {
-      Alert.alert(
-        'Uniform pricing incomplete',
-        'Some uniform items do not have a price yet. We will still generate a reference for you.'
-      );
+      showAlert({
+        title: 'Uniform pricing incomplete',
+        message: 'Some uniform items do not have a price yet. We will still generate a reference for you.',
+        type: 'warning',
+      });
     }
 
     const descriptionParts = [
@@ -415,60 +431,64 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
   if (!children.length) {
     return (
-      <View style={[styles.card, { backgroundColor: theme.surface }]}>
-        <Text style={styles.emptyText}>Add a child to submit uniform sizes.</Text>
-      </View>
+      <>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={styles.emptyText}>Add a child to submit uniform sizes.</Text>
+        </View>
+        <AlertModal {...alertProps} />
+      </>
     );
   }
 
   return (
-    <View>
-      <View style={styles.header}>
-        <Text style={styles.title}>Uniform Sizes</Text>
-        <Text style={styles.subtitle}>Select sizes, quantities, and add a returning number if needed.</Text>
-      </View>
-
-      {loading && (
-        <View style={styles.inlineRow}>
-          <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={styles.mutedText}>Loading existing submissions...</Text>
+    <>
+      <View>
+        <View style={styles.header}>
+          <Text style={styles.title}>Uniform Sizes</Text>
+          <Text style={styles.subtitle}>Select sizes, quantities, and add a returning number if needed.</Text>
         </View>
-      )}
-      {loadError && <Text style={styles.errorText}>{loadError}</Text>}
 
-      {children.map((child) => {
-        const entry = entries[child.id];
-        if (!entry) return null;
+        {loading && (
+          <View style={styles.inlineRow}>
+            <ActivityIndicator size="small" color={theme.primary} />
+            <Text style={styles.mutedText}>Loading existing submissions...</Text>
+          </View>
+        )}
+        {loadError && <Text style={styles.errorText}>{loadError}</Text>}
 
-        if (entry.status === 'saved' && !entry.isEditing) {
+        {children.map((child) => {
+          const entry = entries[child.id];
+          if (!entry) return null;
+
+          if (entry.status === 'saved' && !entry.isEditing) {
+            return (
+              <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
+                <View style={styles.summaryHeader}>
+                  <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
+                  <View style={styles.statusPill}>
+                    <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+                    <Text style={styles.statusPillText}>Confirmed</Text>
+                  </View>
+                </View>
+                <Text style={styles.summaryText}>
+                  Size: {entry.tshirtSize || '—'} • T-shirts: {entry.tshirtQuantity} • Shorts: {entry.shortsQuantity}
+                </Text>
+                {entry.isReturning && entry.tshirtNumber ? (
+                  <Text style={styles.summaryText}>Back number: {entry.tshirtNumber}</Text>
+                ) : null}
+                {entry.updatedAt ? (
+                  <Text style={styles.updatedText}>Last updated: {new Date(entry.updatedAt).toLocaleString('en-ZA')}</Text>
+                ) : null}
+                <TouchableOpacity style={styles.editButton} onPress={() => setEditing(child.id, true)}>
+                  <Text style={styles.editButtonText}>Edit Order</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
           return (
             <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
-              <View style={styles.summaryHeader}>
-                <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
-                <View style={styles.statusPill}>
-                  <Ionicons name="checkmark-circle" size={14} color={theme.success} />
-                  <Text style={styles.statusPillText}>Confirmed</Text>
-                </View>
-              </View>
-              <Text style={styles.summaryText}>
-                Size: {entry.tshirtSize || '—'} • T-shirts: {entry.tshirtQuantity} • Shorts: {entry.shortsQuantity}
-              </Text>
-              {entry.isReturning && entry.tshirtNumber ? (
-                <Text style={styles.summaryText}>Back number: {entry.tshirtNumber}</Text>
-              ) : null}
-              {entry.updatedAt ? (
-                <Text style={styles.updatedText}>Last updated: {new Date(entry.updatedAt).toLocaleString('en-ZA')}</Text>
-              ) : null}
-              <TouchableOpacity style={styles.editButton} onPress={() => setEditing(child.id, true)}>
-                <Text style={styles.editButtonText}>Edit Order</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        }
-
-        return (
-          <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
-            <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
+              <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
 
             <Text style={styles.label}>Child Name</Text>
             <TextInput
@@ -600,8 +620,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
             )}
           </View>
         );
-      })}
-    </View>
+        })}
+      </View>
+      <AlertModal {...alertProps} />
+    </>
   );
 };
 

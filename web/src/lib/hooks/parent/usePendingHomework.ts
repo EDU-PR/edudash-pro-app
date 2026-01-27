@@ -10,6 +10,27 @@ export interface PendingHomework {
   student_name: string;
 }
 
+interface ChildRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  class_id: string | null;
+}
+
+interface HomeworkRow {
+  id: string;
+  title: string | null;
+  due_date: string;
+  subject: string | null;
+  class?: { name?: string | null } | null;
+  homework_submissions?: HomeworkSubmissionRow[] | null;
+}
+
+interface HomeworkSubmissionRow {
+  student_id: string;
+  status: string | null;
+}
+
 export function usePendingHomework(userId: string | undefined) {
   const [pendingHomework, setPendingHomework] = useState<PendingHomework[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +51,7 @@ export function usePendingHomework(userId: string | undefined) {
         const { data: children, error: childrenError } = await supabase
           .from('students')
           .select('id, first_name, last_name, class_id')
-          .eq('parent_id', userId);
+          .or(`parent_id.eq.${userId},guardian_id.eq.${userId}`);
 
         if (childrenError) throw childrenError;
         if (!children || children.length === 0) {
@@ -39,7 +60,8 @@ export function usePendingHomework(userId: string | undefined) {
           return;
         }
 
-        const studentIds = children.map((c: any) => c.id);
+        const childRows = children as ChildRow[];
+        const studentIds = childRows.map((c) => c.id);
 
         // Get pending homework for all children
         const { data: homework, error: homeworkError } = await supabase
@@ -59,26 +81,27 @@ export function usePendingHomework(userId: string | undefined) {
         if (homeworkError) throw homeworkError;
 
         // Filter to only show homework without submissions from these students
-        const pending = homework?.filter((hw: any) => {
-          const submissions = hw.homework_submissions || [];
+        const homeworkRows = (homework || []) as HomeworkRow[];
+        const pending = homeworkRows.filter((hw) => {
+          const submissions = (hw.homework_submissions || []) as HomeworkSubmissionRow[];
           // Check if any of the parent's children have submitted
-          return !submissions.some((sub: any) => 
-            studentIds.includes(sub.student_id) && sub.status !== 'draft'
+          return !submissions.some((sub) =>
+            studentIds.includes(sub.student_id) && String(sub.status || '').toLowerCase() !== 'draft'
           );
-        }).map((hw: any) => ({
+        }).map((hw) => ({
           id: hw.id,
-          title: hw.title,
+          title: hw.title || 'Homework',
           due_date: hw.due_date,
           subject: hw.subject || 'General',
           class_name: hw.class?.name || 'Unknown',
-          student_name: children[0]?.first_name || 'Child'
-        })) || [];
+          student_name: childRows[0]?.first_name || 'Child',
+        }));
 
         setPendingHomework(pending);
         setError(null);
-      } catch (err: any) {
-        console.error('Error fetching pending homework:', err);
-        setError(err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unable to load pending homework';
+        setError(message);
       } finally {
         setLoading(false);
       }

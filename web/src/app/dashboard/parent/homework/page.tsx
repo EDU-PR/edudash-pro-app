@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
-import { FileText, Sparkles, CheckCircle2, Clock, AlertCircle, Calendar, BookOpen } from 'lucide-react';
+import { FileText, Sparkles, CheckCircle2, Clock, AlertCircle, BookOpen } from 'lucide-react';
 
 type HomeworkSubmission = {
   id: string;
@@ -365,7 +365,12 @@ export default function HomeworkPage() {
                     {overdueHomework.map((hw) => {
                       const dueInfo = formatDueDate(hw.due_date);
                       return (
-                        <div key={hw.id} className="card" style={{ padding: 16, marginBottom: 12, borderLeft: '4px solid var(--danger)' }}>
+                        <div
+                          key={hw.id}
+                          className="card"
+                          style={{ padding: 16, marginBottom: 12, borderLeft: '4px solid var(--danger)', cursor: 'pointer' }}
+                          onClick={() => router.push(`/dashboard/parent/homework/${hw.id}`)}
+                        >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8 }}>
                             <div style={{ flex: 1 }}>
                               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{hw.title}</h3>
@@ -400,7 +405,12 @@ export default function HomeworkPage() {
                     {pendingHomework.map((hw) => {
                       const dueInfo = formatDueDate(hw.due_date);
                       return (
-                        <div key={hw.id} className="card" style={{ padding: 16, marginBottom: 12, borderLeft: dueInfo.isDueSoon ? '4px solid var(--warning)' : '4px solid var(--primary)' }}>
+                        <div
+                          key={hw.id}
+                          className="card"
+                          style={{ padding: 16, marginBottom: 12, borderLeft: dueInfo.isDueSoon ? '4px solid var(--warning)' : '4px solid var(--primary)', cursor: 'pointer' }}
+                          onClick={() => router.push(`/dashboard/parent/homework/${hw.id}`)}
+                        >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8 }}>
                             <div style={{ flex: 1 }}>
                               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{hw.title}</h3>
@@ -441,7 +451,12 @@ export default function HomeworkPage() {
                     {completedHomework.map((hw) => {
                       const submission = hw.submissions?.[0];
                       return (
-                        <div key={hw.id} className="card" style={{ padding: 16, marginBottom: 12, borderLeft: '4px solid var(--success)', opacity: 0.8 }}>
+                        <div
+                          key={hw.id}
+                          className="card"
+                          style={{ padding: 16, marginBottom: 12, borderLeft: '4px solid var(--success)', opacity: 0.8, cursor: 'pointer' }}
+                          onClick={() => router.push(`/dashboard/parent/homework/${hw.id}`)}
+                        >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8 }}>
                             <div style={{ flex: 1 }}>
                               <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{hw.title}</h3>

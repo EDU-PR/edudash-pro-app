@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { z } from 'zod';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +9,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { InviteCodeService } from '@/lib/services/inviteCodeService';
 import { toast } from '@/components/ui/ToastProvider';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export default function PrincipalParentRequestsScreen() {
   const { user, profile } = useAuth();
@@ -27,6 +28,7 @@ export default function PrincipalParentRequestsScreen() {
   const [inviteSent, setInviteSent] = useState<{ email: string; childName: string; code: string } | null>(null);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const load = useCallback(async () => {
@@ -58,7 +60,7 @@ export default function PrincipalParentRequestsScreen() {
         updateSelectionFromResults(results);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Failed to search';
-        Alert.alert('Error', message);
+        showAlert({ title: 'Error', message, type: 'error' });
         setManualSearchResults([]);
         updateSelectionFromResults([]);
       } finally {
@@ -104,16 +106,20 @@ export default function PrincipalParentRequestsScreen() {
   const approve = async (req: GuardianRequest) => {
     const studentId = studentIdMap[req.id] || req.student_id || '';
     if (!studentId) {
-      Alert.alert('Student required', 'Enter the student ID to link the parent.');
+      showAlert({
+        title: 'Student required',
+        message: 'Enter the student ID to link the parent.',
+        type: 'warning',
+      });
       return;
     }
     try {
       await ParentJoinService.approve(req.id, studentId, user?.id || '');
-      Alert.alert('Approved', 'Parent linked to student');
+      showAlert({ title: 'Approved', message: 'Parent linked to student.', type: 'success' });
       load();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to approve';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message, type: 'error' });
     }
   };
 
@@ -123,7 +129,7 @@ export default function PrincipalParentRequestsScreen() {
       load();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to reject';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message, type: 'error' });
     }
   };
 
@@ -136,7 +142,7 @@ export default function PrincipalParentRequestsScreen() {
     if (!schoolId) return;
     const query = manualSearchQuery.trim();
     if (!query) {
-      Alert.alert('Search required', 'Enter a child name to search.');
+      showAlert({ title: 'Search required', message: 'Enter a child name to search.', type: 'warning' });
       return;
     }
     await performSearch(query);
@@ -145,7 +151,7 @@ export default function PrincipalParentRequestsScreen() {
   const handleManualLink = async () => {
     if (!schoolId) return;
     if (!selectedStudent) {
-      Alert.alert('Select a child', 'Please select a child from the search results.');
+      showAlert({ title: 'Select a child', message: 'Please select a child from the search results.', type: 'warning' });
       return;
     }
     const parsed = manualLinkSchema.safeParse({
@@ -154,7 +160,7 @@ export default function PrincipalParentRequestsScreen() {
     });
 
     if (!parsed.success) {
-      Alert.alert('Invalid input', 'Enter a valid parent email and select a child.');
+      showAlert({ title: 'Invalid input', message: 'Enter a valid parent email and select a child.', type: 'warning' });
       return;
     }
 
@@ -239,7 +245,11 @@ export default function PrincipalParentRequestsScreen() {
 
       const studentCode = student.student_id || student.id.slice(0, 8).toUpperCase();
       toast.success(`${student.first_name} (${studentCode}) linked`, 'Parent Connected');
-      Alert.alert('Linked', `Parent can now access ${student.first_name}'s profile.`);
+      showAlert({
+        title: 'Linked',
+        message: `Parent can now access ${student.first_name}'s profile.`,
+        type: 'success',
+      });
       setManualParentEmail('');
       setManualSearchQuery('');
       setManualSearchResults([]);
@@ -248,7 +258,7 @@ export default function PrincipalParentRequestsScreen() {
       load();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to link parent';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message, type: 'error' });
     } finally {
       setManualLinking(false);
     }
@@ -277,14 +287,14 @@ export default function PrincipalParentRequestsScreen() {
   const handleSendInvite = async () => {
     if (!schoolId) return;
     if (!selectedStudent) {
-      Alert.alert('Select a child', 'Please select a child before sending an invite.');
+      showAlert({ title: 'Select a child', message: 'Please select a child before sending an invite.', type: 'warning' });
       return;
     }
 
     const email = manualParentEmail.trim().toLowerCase();
     const parsed = z.string().email().safeParse(email);
     if (!parsed.success) {
-      Alert.alert('Invalid email', 'Enter a valid parent email address.');
+      showAlert({ title: 'Invalid email', message: 'Enter a valid parent email address.', type: 'warning' });
       return;
     }
 
@@ -350,7 +360,7 @@ export default function PrincipalParentRequestsScreen() {
       setInviteSent({ email, childName, code: invite.code });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to send invite';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message, type: 'error' });
     } finally {
       setManualLinking(false);
     }
@@ -490,6 +500,7 @@ export default function PrincipalParentRequestsScreen() {
         )}
         ListEmptyComponent={<Text style={styles.empty}>No pending requests</Text>}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 }

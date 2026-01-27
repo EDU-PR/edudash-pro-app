@@ -395,6 +395,21 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       priority: 'normal',
       channelId: 'invoices'
     },
+    payment_receipt: {
+      title: 'Payment Receipt Ready',
+      body: context.student_name
+        ? `Receipt ready for ${context.student_name}`
+        : 'Your payment receipt is ready',
+      data: {
+        type: 'receipt',
+        student_id: context.student_id,
+        receipt_url: context.receipt_url,
+        screen: 'parent-payments'
+      },
+      sound: 'default',
+      priority: 'normal',
+      channelId: 'billing'
+    },
     invoice_viewed: {
       title: 'Invoice Viewed',
       body: context.invoice_number ? `Invoice ${context.invoice_number} was viewed` : 'Your invoice was viewed',
