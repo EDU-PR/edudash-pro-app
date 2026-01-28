@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { isSuperAdmin, getRoleDisplayName } from '@/lib/roleUtils';
+import { reloadApp } from '@/lib/utils/reloadApp';
 
 /**
  * Debug component to help diagnose and fix role issues in development
@@ -78,9 +79,7 @@ export function RoleDebugger() {
                 'Role updated to super_admin successfully! The page should now show the SuperAdmin dashboard.',
                 [{ text: 'OK', onPress: () => {
                   // Force a page refresh
-                  if (typeof window !== 'undefined') {
-                    window.location.reload();
-                  }
+                  void reloadApp();
                 }}]
               );
               

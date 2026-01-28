@@ -7,6 +7,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { reloadApp } from '@/lib/utils/reloadApp';
 
 interface Props {
   children: ReactNode;
@@ -90,12 +91,7 @@ export class ErrorBoundary extends Component<Props, State> {
             
             <TouchableOpacity 
               style={[styles.button, styles.secondaryButton]} 
-              onPress={() => {
-                // Force reload the app
-                if (typeof window !== 'undefined') {
-                  window.location.reload();
-                }
-              }}
+              onPress={() => { void reloadApp(); }}
             >
               <Text style={[styles.buttonText, styles.secondaryButtonText]}>
                 Reload App
