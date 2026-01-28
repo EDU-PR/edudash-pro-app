@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
+import { reloadApp } from '@/lib/utils/reloadApp';
 
 interface SuperAdminLoadingHandlerProps {
   children: React.ReactNode;
@@ -103,10 +104,8 @@ export const SuperAdminLoadingHandler: React.FC<SuperAdminLoadingHandlerProps> =
       router.replace('/sign-in');
     } catch (error) {
       console.error('Force sign out failed:', error);
-      // Fallback: reload the page
-      if (typeof window !== 'undefined') {
-        window.location.reload();
-      }
+      // Fallback: reload the app
+      void reloadApp();
     }
   }, [retryCount]);
 
