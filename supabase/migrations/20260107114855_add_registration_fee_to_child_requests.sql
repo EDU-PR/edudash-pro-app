@@ -1,6 +1,65 @@
 -- Migration: Add registration fee support to child_registration_requests
 -- This aligns in-app registration with the website registration flow
 
+-- Shadow DB safety: ensure base tables exist
+CREATE TABLE IF NOT EXISTS preschools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  settings JSONB
+);
+
+ALTER TABLE preschools
+  ADD COLUMN IF NOT EXISTS settings JSONB;
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT,
+  preschool_id UUID
+);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS role TEXT,
+  ADD COLUMN IF NOT EXISTS preschool_id UUID;
+
+CREATE TABLE IF NOT EXISTS fee_structures (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID,
+  name TEXT,
+  description TEXT,
+  amount DECIMAL(10,2),
+  fee_type TEXT,
+  frequency TEXT,
+  mandatory BOOLEAN,
+  is_active BOOLEAN,
+  effective_from DATE,
+  created_by UUID,
+  due_day INTEGER
+);
+
+ALTER TABLE fee_structures
+  ADD COLUMN IF NOT EXISTS due_day INTEGER,
+  ADD COLUMN IF NOT EXISTS mandatory BOOLEAN,
+  ADD COLUMN IF NOT EXISTS is_active BOOLEAN,
+  ADD COLUMN IF NOT EXISTS fee_type TEXT,
+  ADD COLUMN IF NOT EXISTS frequency TEXT;
+
+CREATE TABLE IF NOT EXISTS student_fees (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID,
+  fee_structure_id UUID,
+  amount DECIMAL(10,2),
+  final_amount DECIMAL(10,2),
+  due_date DATE,
+  status TEXT,
+  amount_outstanding DECIMAL(10,2)
+);
+
+CREATE TABLE IF NOT EXISTS child_registration_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_id UUID,
+  preschool_id UUID,
+  status TEXT DEFAULT 'pending'
+);
+
 -- =============================================================================
 -- 1. Add registration fee columns to child_registration_requests
 -- =============================================================================

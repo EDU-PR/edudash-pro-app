@@ -38,7 +38,7 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
         
         const { data: student, error: studentError } = await client
           .from('students')
-          .select('class_id, preschool_id')
+          .select('class_id, preschool_id, organization_id')
           .eq('id', studentId)
           .maybeSingle();
         
@@ -48,6 +48,7 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
           setIsLoading(false);
           return;
         }
+        const schoolId = student?.organization_id || student?.preschool_id || null;
         
         const today = new Date();
         const thirtyDaysLater = new Date(today);
@@ -56,13 +57,19 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
         const events: CalendarEvent[] = [];
         
         if (student.class_id) {
-          const { data: classEvents, error: eventsError} = await client
+          let eventsQuery = client
             .from('class_events')
             .select('id, title, description, start_time, end_time, event_type, class_id, class:classes(name, grade_level)')
             .eq('class_id', student.class_id)
             .gte('start_time', today.toISOString())
             .lte('start_time', thirtyDaysLater.toISOString())
             .order('start_time', { ascending: true });
+
+          if (schoolId) {
+            eventsQuery = eventsQuery.eq('preschool_id', schoolId);
+          }
+
+          const { data: classEvents, error: eventsError} = await eventsQuery;
           
           if (!eventsError && classEvents) {
             events.push(...classEvents);
@@ -70,20 +77,32 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
         }
         
         if (student.class_id) {
-          const { data: homework } = await client
+          let homeworkQuery = client
             .from('homework_assignments')
             .select('id, title, due_date, class_id, class:classes(name, grade_level)')
             .eq('class_id', student.class_id)
             .gte('due_date', today.toISOString().split('T')[0])
             .lte('due_date', thirtyDaysLater.toISOString().split('T')[0]);
+
+          if (schoolId) {
+            homeworkQuery = homeworkQuery.eq('preschool_id', schoolId);
+          }
+
+          const { data: homework } = await homeworkQuery;
           
           if (homework) {
             const homeworkIds = homework.map((hw: any) => hw.id);
-            const { data: submissions } = await client
+            let submissionsQuery = client
               .from('homework_submissions')
               .select('assignment_id')
               .eq('student_id', studentId)
               .in('assignment_id', homeworkIds);
+
+            if (schoolId) {
+              submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+            }
+
+            const { data: submissions } = await submissionsQuery;
             
             const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
             

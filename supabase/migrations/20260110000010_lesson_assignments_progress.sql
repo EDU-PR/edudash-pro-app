@@ -1,6 +1,55 @@
 -- Lesson Assignments and Progress Tracking Tables
 -- Created for the complete aftercare teaching system
 
+-- Shadow DB safety: ensure base tables exist
+CREATE TABLE IF NOT EXISTS preschools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT,
+  preschool_id UUID,
+  organization_id UUID
+);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS role TEXT,
+  ADD COLUMN IF NOT EXISTS preschool_id UUID,
+  ADD COLUMN IF NOT EXISTS organization_id UUID;
+
+CREATE TABLE IF NOT EXISTS students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID,
+  parent_id UUID,
+  guardian_id UUID
+);
+
+ALTER TABLE students
+  ADD COLUMN IF NOT EXISTS preschool_id UUID,
+  ADD COLUMN IF NOT EXISTS parent_id UUID,
+  ADD COLUMN IF NOT EXISTS guardian_id UUID;
+
+CREATE TABLE IF NOT EXISTS classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID
+);
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID
+);
+
+CREATE TABLE IF NOT EXISTS lesson_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lesson_id UUID,
+  preschool_id UUID
+);
+
+CREATE TABLE IF NOT EXISTS teacher_invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
 -- ================================================================
 -- LESSON ASSIGNMENTS TABLE
 -- Tracks which lessons are assigned to which students/classes

@@ -15,6 +15,8 @@ interface ChildRow {
   first_name: string | null;
   last_name: string | null;
   class_id: string | null;
+  preschool_id?: string | null;
+  organization_id?: string | null;
 }
 
 interface HomeworkRow {
@@ -50,7 +52,7 @@ export function usePendingHomework(userId: string | undefined) {
         // Get parent's children
         const { data: children, error: childrenError } = await supabase
           .from('students')
-          .select('id, first_name, last_name, class_id')
+          .select('id, first_name, last_name, class_id, preschool_id, organization_id')
           .or(`parent_id.eq.${userId},guardian_id.eq.${userId}`);
 
         if (childrenError) throw childrenError;
@@ -62,9 +64,21 @@ export function usePendingHomework(userId: string | undefined) {
 
         const childRows = children as ChildRow[];
         const studentIds = childRows.map((c) => c.id);
+        const schoolIds = Array.from(new Set(
+          childRows
+            .map((c) => c.organization_id || c.preschool_id)
+            .filter((id): id is string => Boolean(id))
+        ));
+        const classIds = childRows.map((c) => c.class_id).filter((id): id is string => Boolean(id));
+
+        if (classIds.length === 0) {
+          setPendingHomework([]);
+          setLoading(false);
+          return;
+        }
 
         // Get pending homework for all children
-        const { data: homework, error: homeworkError } = await supabase
+        let homeworkQuery = supabase
           .from('homework_assignments')
           .select(`
             id,
@@ -74,9 +88,15 @@ export function usePendingHomework(userId: string | undefined) {
             class:classes!homework_assignments_class_id_fkey(name),
             homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)
           `)
-          .in('class_id', children.map((c: any) => c.class_id))
+          .in('class_id', classIds)
           .gte('due_date', new Date().toISOString())
           .order('due_date', { ascending: true });
+
+        if (schoolIds.length > 0) {
+          homeworkQuery = homeworkQuery.in('preschool_id', schoolIds);
+        }
+
+        const { data: homework, error: homeworkError } = await homeworkQuery;
 
         if (homeworkError) throw homeworkError;
 

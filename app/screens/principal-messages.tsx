@@ -1,143 +1,470 @@
-// Principal Messages Screen - Refactored for WARP.md compliance
+/**
+ * Principal Messages Screen
+ * Thread-based messaging list for principals
+ */
 
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, RefreshControl, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { useMessages } from '@/hooks/principal/useMessages';
+import React, { useCallback } from 'react';
 import {
-  RecipientSelector,
-  MessageComposer,
-  MessageHistoryList,
-  RecipientStats,
-  QuickActions,
-  type RecipientType,
-  RECIPIENT_OPTIONS,
-  getRecipientCount,
-} from '@/components/principal/messages';
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  Platform,
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { MessagesListHeader } from '@/components/messaging/MessageHeader';
+import { useParentThreads, MessageThread, MessageParticipant } from '@/hooks/useParentMessaging';
+import SkeletonLoader from '@/components/ui/SkeletonLoader';
+import { getMessageDisplayText } from '@/lib/utils/messageContent';
 
-export default function PrincipalMessagesScreen() {
-  const { profile } = useAuth();
-  const { theme } = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+const formatMessageTime = (timestamp: string): string => {
+  const now = new Date();
+  const messageTime = new Date(timestamp);
+  const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
 
-  const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
+  if (diffInHours < 1) {
+    return 'Just now';
+  }
+  if (diffInHours < 24) {
+    return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  if (diffInHours < 168) {
+    return messageTime.toLocaleDateString([], { weekday: 'short' });
+  }
+  return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
 
-  const {
-    classes,
-    messageHistory,
-    recipientCounts,
-    loadingCounts,
-    refreshing,
-    sending,
-    onRefresh,
-    sendMessage,
-  } = useMessages({ organizationId });
-
-  const [recipientType, setRecipientType] = useState<RecipientType>('all_parents');
-  const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-
-  const selectedOption = RECIPIENT_OPTIONS.find(o => o.id === recipientType);
-  const recipientCount = getRecipientCount(recipientType, recipientCounts, selectedClass);
-
-  const handleSend = async () => {
-    const success = await sendMessage(recipientType, selectedClass, subject, message);
-    if (success) {
-      setSubject('');
-      setMessage('');
-      setSelectedClass(null);
-    }
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <ScreenHeader 
-        title="Communication Hub" 
-        subtitle="Announcements, messages, and calls"
-      />
-
-      <ScrollView 
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
-        }
-      >
-        {!organizationId ? (
-          <View style={styles.card}>
-            <Ionicons name="alert-circle" size={48} color="#F59E0B" style={{ alignSelf: 'center' }} />
-            <Text style={[styles.cardTitle, { textAlign: 'center', marginTop: 12 }]}>
-              Not Connected to School
-            </Text>
-            <Text style={[styles.cardText, { textAlign: 'center' }]}>
-              Your account is not linked to a school. Please contact support.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <QuickActions />
-
-            <RecipientStats counts={recipientCounts} loading={loadingCounts} />
-
-            <RecipientSelector
-              recipientType={recipientType}
-              selectedClass={selectedClass}
-              classes={classes}
-              onRecipientChange={setRecipientType}
-              onClassChange={setSelectedClass}
-            />
-
-            <MessageComposer
-              subject={subject}
-              message={message}
-              recipientCount={recipientCount}
-              recipientLabel={selectedOption?.label.toLowerCase() || 'recipients'}
-              sending={sending}
-              onSubjectChange={setSubject}
-              onMessageChange={setMessage}
-              onSend={handleSend}
-            />
-
-            <MessageHistoryList messages={messageHistory} />
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+interface ThreadItemProps {
+  thread: MessageThread;
+  onPress: () => void;
+  currentUserId?: string | null;
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme?.background || '#0b1220',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  card: {
-    backgroundColor: theme?.card || '#111827',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme?.border || '#1f2937',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    color: theme?.text || '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  cardText: {
-    color: theme?.textSecondary || '#9CA3AF',
-    fontSize: 14,
-    lineHeight: 20,
-  },
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, currentUserId }) => {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+
+  const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== currentUserId);
+  const participantName = otherParticipant?.user_profile
+    ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+    : t('principal.contactLabel', { defaultValue: 'Contact' });
+
+  const participantRole = otherParticipant?.user_profile?.role || 'contact';
+  const studentName = thread.student
+    ? `${thread.student.first_name} ${thread.student.last_name}`.trim()
+    : null;
+
+  const hasUnread = (thread.unread_count || 0) > 0;
+  const initials = participantName
+    .split(' ')
+    .map((n) => n.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  const styles = StyleSheet.create({
+    container: {
+      backgroundColor: theme.surface,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 16,
+      overflow: 'hidden',
+      ...Platform.select({
+        ios: {
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 2,
+        },
+      }),
+    },
+    inner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+    },
+    avatar: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: hasUnread ? theme.primary : theme.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+    },
+    avatarText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: hasUnread ? theme.onPrimary : theme.primary,
+    },
+    content: {
+      flex: 1,
+    },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    name: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    time: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginBottom: 4,
+    },
+    messageRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    messagePreview: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      flex: 1,
+      marginRight: 8,
+    },
+    unreadBadge: {
+      backgroundColor: theme.primary,
+      borderRadius: 10,
+      minWidth: 20,
+      height: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 6,
+    },
+    unreadText: {
+      color: theme.onPrimary,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    roleChip: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      backgroundColor: theme.elevated,
+      marginTop: 2,
+    },
+    roleText: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      textTransform: 'capitalize',
+    },
+  });
+
+  return (
+    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.inner}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials}</Text>
+        </View>
+        <View style={styles.content}>
+          <View style={styles.topRow}>
+            <Text style={styles.name} numberOfLines={1}>{participantName}</Text>
+            {thread.last_message && (
+              <Text style={styles.time}>{formatMessageTime(thread.last_message.created_at)}</Text>
+            )}
+          </View>
+          {studentName && (
+            <Text style={styles.subtitle} numberOfLines={1}>{studentName}</Text>
+          )}
+          <View style={styles.messageRow}>
+            <Text style={styles.messagePreview} numberOfLines={1}>
+              {thread.last_message
+                ? getMessageDisplayText(thread.last_message.content)
+                : t('principal.noMessagesYet', { defaultValue: 'No messages yet' })}
+            </Text>
+            {hasUnread && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>
+                  {thread.unread_count && thread.unread_count > 99 ? '99+' : thread.unread_count}
+                </Text>
+              </View>
+            )}
+          </View>
+          {!!participantRole && (
+            <View style={styles.roleChip}>
+              <Text style={styles.roleText}>{participantRole}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
 });
+
+export default function PrincipalMessagesScreen() {
+  const { theme } = useTheme();
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+
+  const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
+
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const handleThreadPress = useCallback((thread: MessageThread) => {
+    const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== user?.id);
+    const participantName = otherParticipant?.user_profile
+      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+      : t('principal.contactLabel', { defaultValue: 'Contact' });
+
+    router.push({
+      pathname: '/screens/principal-message-thread',
+      params: {
+        threadId: thread.id,
+        title: participantName,
+      },
+    });
+  }, [t, user?.id]);
+
+  const handleSettings = useCallback(() => {
+    // TODO: Add messaging preferences for principals
+    router.push('/screens/settings');
+  }, []);
+
+  const handleAnnouncements = useCallback(() => {
+    router.push('/screens/principal-announcement');
+  }, []);
+
+  const handleGroups = useCallback(() => {
+    router.push('/screens/group-management');
+  }, []);
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      padding: 16,
+    },
+    skeletonItem: {
+      marginBottom: 12,
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 40,
+    },
+    errorIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.error + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 20,
+    },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    errorSubtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    listContent: {
+      paddingVertical: 12,
+      paddingBottom: insets.bottom + 16,
+    },
+    quickActions: {
+      flexDirection: 'row',
+      gap: 12,
+      marginHorizontal: 16,
+      marginBottom: 12,
+    },
+    quickActionCard: {
+      flex: 1,
+      backgroundColor: theme.surface,
+      borderRadius: 14,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    quickActionText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.text,
+      flexShrink: 1,
+    },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40,
+    },
+    emptyIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.primary + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 20,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+      marginBottom: 24,
+    },
+    emptyButton: {
+      backgroundColor: theme.primary,
+      borderRadius: 12,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    emptyButtonText: {
+      color: theme.onPrimary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+  });
+
+  if (isLoading && !threads) {
+    return (
+      <View style={styles.container}>
+        <MessagesListHeader
+          title={t('principal.messages', { defaultValue: 'Messages' })}
+          onSettings={handleSettings}
+        />
+        <View style={styles.loadingContainer}>
+          {[...Array(6)].map((_, i) => (
+            <View key={i} style={styles.skeletonItem}>
+              <SkeletonLoader height={84} borderRadius={16} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (error && !threads) {
+    return (
+      <View style={styles.container}>
+        <MessagesListHeader
+          title={t('principal.messages', { defaultValue: 'Messages' })}
+          onSettings={handleSettings}
+        />
+        <View style={styles.errorContainer}>
+          <View style={styles.errorIcon}>
+            <Ionicons name="alert-circle-outline" size={40} color={theme.error} />
+          </View>
+          <Text style={styles.errorTitle}>
+            {t('principal.messagesError', { defaultValue: 'Unable to Load Messages' })}
+          </Text>
+          <Text style={styles.errorSubtitle}>
+            {t('principal.messagesErrorDesc', { defaultValue: 'Please check your connection and try again.' })}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!threads || threads.length === 0) {
+    return (
+      <View style={styles.container}>
+        <MessagesListHeader
+          title={t('principal.messages', { defaultValue: 'Messages' })}
+          onSettings={handleSettings}
+        />
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="chatbubbles-outline" size={48} color={theme.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {t('principal.noMessagesTitle', { defaultValue: 'No Conversations Yet' })}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {t('principal.noMessagesDesc', { defaultValue: 'Messages from parents and staff will appear here.' })}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <MessagesListHeader
+        title={t('principal.messages', { defaultValue: 'Messages' })}
+        subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+        onSettings={handleSettings}
+      />
+      <View style={styles.quickActions}>
+        <TouchableOpacity style={styles.quickActionCard} onPress={handleAnnouncements}>
+          <Ionicons name="megaphone" size={18} color={theme.primary} />
+          <Text style={styles.quickActionText}>Send Announcement</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.quickActionCard} onPress={handleGroups}>
+          <Ionicons name="people" size={18} color={theme.primary} />
+          <Text style={styles.quickActionText}>Create Groups</Text>
+        </TouchableOpacity>
+      </View>
+      <FlatList
+        data={threads}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ThreadItem
+            thread={item}
+            onPress={() => handleThreadPress(item)}
+            currentUserId={user?.id}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor={theme.primary}
+            colors={[theme.primary]}
+          />
+        }
+      />
+    </View>
+  );
+}

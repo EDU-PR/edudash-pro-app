@@ -2,7 +2,7 @@
  * BankSelectionSheet - Bottom sheet modal for selecting SA banking apps
  * Uses proper deep linking with package visibility support
  */
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -139,12 +139,19 @@ interface BankSelectionSheetProps {
   visible: boolean;
   onClose: () => void;
   onBankSelected?: (bank: typeof SA_BANKING_APPS[0]) => void;
+  autoOpenHomeScreen?: boolean;
 }
 
-export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSelectionSheetProps) {
+export function BankSelectionSheet({
+  visible,
+  onClose,
+  onBankSelected,
+  autoOpenHomeScreen = false,
+}: BankSelectionSheetProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const autoLaunchRef = useRef(false);
 
   const getBadgeFontSize = (label: string) => {
     if (label.length <= 2) return 18;
@@ -226,6 +233,16 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
       })
     );
   };
+
+  useEffect(() => {
+    if (!visible) {
+      autoLaunchRef.current = false;
+      return;
+    }
+    if (!autoOpenHomeScreen || autoLaunchRef.current) return;
+    autoLaunchRef.current = true;
+    handleOpenHomeScreen();
+  }, [visible, autoOpenHomeScreen]);
 
   const handleBankPress = async (bank: BankApp) => {
     onClose();

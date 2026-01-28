@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { ExamInteractiveView } from '@/components/dashboard/exam-prep/ExamInteractiveView';
 import { parseExamMarkdown } from '@/lib/examParser';
@@ -9,6 +10,12 @@ import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
+
+const getGradeNumber = (gradeString?: string): number => {
+  if (!gradeString) return 0;
+  const match = gradeString.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+};
 
 interface SavedExam {
   id: string;
@@ -28,6 +35,7 @@ interface SavedExam {
 
 export default function MyExamsPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const supabase = createClient();
   const [exams, setExams] = useState<SavedExam[]>([]);
   const [selectedExam, setSelectedExam] = useState<any>(null);
@@ -39,11 +47,17 @@ export default function MyExamsPage() {
   });
   
   // Get parent dashboard data for shell
-  const { userId, userName, preschoolName, hasOrganization, tenantSlug } = useParentDashboardData();
+  const { userId, userName, preschoolName, hasOrganization, tenantSlug, childrenCards, childrenLoading } = useParentDashboardData();
+  const hasExamEligibleChild = useMemo(() => {
+    if (childrenLoading || !childrenCards || childrenCards.length === 0) return false;
+    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
+  }, [childrenCards, childrenLoading]);
   
   useEffect(() => {
+    if (childrenLoading) return;
+    if (!hasExamEligibleChild) return;
     fetchMyExams();
-  }, []);
+  }, [childrenLoading, hasExamEligibleChild]);
   
   const fetchMyExams = async () => {
     setLoading(true);
@@ -140,6 +154,32 @@ export default function MyExamsPage() {
           fetchMyExams(); // Refresh to show new scores
         }}
       />
+    );
+  }
+
+  if (!childrenLoading && !hasExamEligibleChild) {
+    return (
+      <ParentShell
+        tenantSlug={tenantSlug}
+        userName={userName}
+        preschoolName={preschoolName}
+        hasOrganization={hasOrganization}
+        hideHeader={true}
+      >
+        <div className="container" style={{ maxWidth: 800 }}>
+          <div className="card" style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
+            <h2 className="h2" style={{ marginBottom: 'var(--space-2)' }}>
+              {t('dashboard.parent.exam_prep.locked.title', { defaultValue: 'Exam Prep Locked' })}
+            </h2>
+            <p style={{ color: 'var(--muted)', marginBottom: 'var(--space-3)' }}>
+              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.' })}
+            </p>
+            <button className="btn btnPrimary" onClick={() => router.push('/dashboard/parent')}>
+              {t('dashboard.parent.exam_prep.locked.cta', { defaultValue: 'Back to Dashboard' })}
+            </button>
+          </div>
+        </div>
+      </ParentShell>
     );
   }
   

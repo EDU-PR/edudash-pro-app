@@ -4,6 +4,27 @@
 -- Purpose: Prevent multiple registrations for the same child from the same parent
 -- ============================================================================
 
+-- Shadow DB safety: ensure base table/columns exist
+CREATE TABLE IF NOT EXISTS aftercare_registrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_email TEXT,
+  child_first_name TEXT,
+  child_last_name TEXT,
+  child_date_of_birth DATE,
+  preschool_id UUID,
+  status TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE aftercare_registrations
+  ADD COLUMN IF NOT EXISTS parent_email TEXT,
+  ADD COLUMN IF NOT EXISTS child_first_name TEXT,
+  ADD COLUMN IF NOT EXISTS child_last_name TEXT,
+  ADD COLUMN IF NOT EXISTS child_date_of_birth DATE,
+  ADD COLUMN IF NOT EXISTS preschool_id UUID,
+  ADD COLUMN IF NOT EXISTS status TEXT,
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+
 -- Create unique partial index to prevent duplicates
 -- Only applies when status is NOT 'cancelled' (allows re-registration after cancellation)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_aftercare_registrations_unique_child

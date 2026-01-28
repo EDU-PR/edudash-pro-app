@@ -2,14 +2,25 @@
 -- This allows invite codes to include a pre-generated temporary password
 -- that users can use to login immediately after joining
 
-ALTER TABLE join_requests
-ADD COLUMN IF NOT EXISTS temp_password TEXT;
+DO $$
+BEGIN
+  IF to_regclass('public.join_requests') IS NULL THEN
+    RAISE NOTICE 'Skipping join_requests temp_password update: join_requests table missing';
+    RETURN;
+  END IF;
 
--- Add comment explaining the column
-COMMENT ON COLUMN join_requests.temp_password IS 'Temporary password for invite codes. Users can use this to login immediately after joining with the invite code.';
+  ALTER TABLE public.join_requests
+  ADD COLUMN IF NOT EXISTS temp_password TEXT;
 
--- Add index for faster lookups by invite code
-CREATE INDEX IF NOT EXISTS idx_join_requests_invite_code ON join_requests(invite_code) WHERE invite_code IS NOT NULL;
+  -- Add comment explaining the column
+  COMMENT ON COLUMN public.join_requests.temp_password IS
+    'Temporary password for invite codes. Users can use this to login immediately after joining with the invite code.';
+
+  -- Add index for faster lookups by invite code
+  CREATE INDEX IF NOT EXISTS idx_join_requests_invite_code
+    ON public.join_requests(invite_code)
+    WHERE invite_code IS NOT NULL;
+END $$;
 
 -- Also add temp_password to region_invite_codes if it doesn't exist
 DO $$

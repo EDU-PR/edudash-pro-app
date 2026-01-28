@@ -27,6 +27,7 @@ interface Child {
   first_name: string;
   last_name: string;
   preschool_id: string;
+  organization_id?: string | null;
   preschool_name?: string;
   student_code: string; // Unique payment reference (e.g., YE-2026-0001)
   registration_fee_amount?: number;
@@ -272,29 +273,40 @@ export default function PaymentsPage() {
       // Get parent's profile to get preschool_id
       const { data: profile } = await supabase
         .from('profiles')
-        .select('preschool_id')
+        .select('preschool_id, organization_id')
         .eq('id', session.user.id)
         .single();
 
-      if (profile?.preschool_id) {
-        setPreschoolId(profile.preschool_id);
+      const schoolId = profile?.organization_id || profile?.preschool_id;
+      if (schoolId) {
+        setPreschoolId(schoolId);
 
-        // Get preschool name
+        // Get school name (preschools or organizations)
         const { data: preschool } = await supabase
           .from('preschools')
           .select('name')
-          .eq('id', profile.preschool_id)
-          .single();
-        
-        if (preschool) {
+          .eq('id', schoolId)
+          .maybeSingle();
+
+        if (preschool?.name) {
           setPreschoolName(preschool.name);
+        } else {
+          const { data: org } = await supabase
+            .from('organizations')
+            .select('name')
+            .eq('id', schoolId)
+            .maybeSingle();
+
+          if (org?.name) {
+            setPreschoolName(org.name);
+          }
         }
       }
 
       // Fetch children linked to this parent via parent_id or guardian_id in students table
       const { data: directChildren } = await supabase
         .from('students')
-        .select('id, student_id, first_name, last_name, preschool_id, registration_fee_amount, registration_fee_paid, payment_verified')
+        .select('id, student_id, first_name, last_name, preschool_id, organization_id, registration_fee_amount, registration_fee_paid, payment_verified')
         .or(`parent_id.eq.${session.user.id},guardian_id.eq.${session.user.id}`);
 
       if (directChildren && directChildren.length > 0) {
@@ -302,13 +314,23 @@ export default function PaymentsPage() {
         
         for (const student of directChildren) {
           let schoolName = '';
-          if (student.preschool_id) {
+          const schoolId = student.organization_id || student.preschool_id;
+          if (schoolId) {
             const { data: school } = await supabase
               .from('preschools')
               .select('name')
-              .eq('id', student.preschool_id)
-              .single();
-            schoolName = school?.name || '';
+              .eq('id', schoolId)
+              .maybeSingle();
+            if (school?.name) {
+              schoolName = school.name;
+            } else {
+              const { data: org } = await supabase
+                .from('organizations')
+                .select('name')
+                .eq('id', schoolId)
+                .maybeSingle();
+              schoolName = org?.name || '';
+            }
           }
 
           childrenData.push({
@@ -316,6 +338,7 @@ export default function PaymentsPage() {
             first_name: student.first_name,
             last_name: student.last_name,
             preschool_id: student.preschool_id,
+            organization_id: student.organization_id,
             preschool_name: schoolName,
             student_code: student.student_id || student.id.slice(0, 8).toUpperCase(),
             registration_fee_amount: student.registration_fee_amount,
@@ -372,7 +395,7 @@ export default function PaymentsPage() {
       const selectedChild = children.find(c => c.id === selectedChildId);
       
       // Try to get preschool_id from selected child or fallback to preschoolId state
-      const childPreschoolId = selectedChild?.preschool_id || preschoolId;
+      const childPreschoolId = selectedChild?.organization_id || selectedChild?.preschool_id || preschoolId;
       
       if (childPreschoolId) {
         // Fetch fee structures directly from school_fee_structures table (uses preschool_id)
@@ -605,7 +628,10 @@ export default function PaymentsPage() {
     params.set('feeAmount', fee.amount.toString());
     params.set('feeDescription', fee.description || getFeeTypeLabel(fee.fee_type));
     params.set('feeDueDate', fee.due_date);
-    params.set('preschoolId', selectedChild.preschool_id);
+    const schoolId = selectedChild.organization_id || selectedChild.preschool_id;
+    if (schoolId) {
+      params.set('preschoolId', schoolId);
+    }
     if (selectedChild.preschool_name) params.set('preschoolName', selectedChild.preschool_name);
 
     router.push(`/dashboard/parent/payments/flow?${params.toString()}`);

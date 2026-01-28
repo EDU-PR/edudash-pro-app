@@ -1,6 +1,27 @@
 -- Fix RLS policies for aftercare_registrations table
 -- Allow authenticated users to insert their own registrations
 
+-- Shadow DB safety: ensure base tables exist
+CREATE TABLE IF NOT EXISTS public.aftercare_registrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_user_id UUID,
+  parent_email TEXT,
+  preschool_id UUID,
+  status TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT,
+  organization_id UUID,
+  preschool_id UUID
+);
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS role TEXT,
+  ADD COLUMN IF NOT EXISTS organization_id UUID,
+  ADD COLUMN IF NOT EXISTS preschool_id UUID;
+
 -- Policy: Authenticated users can insert their own aftercare registrations
 -- They can insert if:
 -- 1. parent_user_id matches auth.uid() (if set), OR

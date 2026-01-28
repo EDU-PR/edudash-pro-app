@@ -5,6 +5,21 @@
 -- Purpose: Store AI-generated weekly learning reports for parents
 -- ============================================================================
 
+-- Ensure base tables exist for foreign keys (shadow DB safety)
+CREATE TABLE IF NOT EXISTS public.preschools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role TEXT,
+  preschool_id UUID
+);
+
+CREATE TABLE IF NOT EXISTS public.students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
 -- Create weekly_learning_reports table
 CREATE TABLE IF NOT EXISTS public.weekly_learning_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

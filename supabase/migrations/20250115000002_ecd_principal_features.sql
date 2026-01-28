@@ -2,6 +2,34 @@
 -- Year Planner, Term Management, Curriculum Planning, Lesson Templates
 -- Date: 2025-01-15
 
+-- Ensure base tables exist for foreign keys (some environments create these outside migrations)
+CREATE TABLE IF NOT EXISTS preschools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS role TEXT,
+  ADD COLUMN IF NOT EXISTS organization_id UUID,
+  ADD COLUMN IF NOT EXISTS preschool_id UUID;
+
+CREATE TABLE IF NOT EXISTS classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID REFERENCES preschools(id) ON DELETE CASCADE
+);
+
+-- Provide updated_at helper if it doesn't exist yet (shadow DB safety)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ================================================================
 -- PART 1: ACADEMIC TERMS TABLE
 -- ================================================================

@@ -95,18 +95,45 @@ export default function LearnerChatScreen() {
         throw new Error('Cannot create thread without organization');
       }
 
-      const { data: newThread, error } = await assertSupabase()
+      const threadPayload = {
+        preschool_id: orgId, // Using preschool_id for compatibility
+        type: 'general',
+        subject: `Chat with ${otherUserName}`,
+        created_by: profile.id,
+      };
+
+      let newThread: { id: string } | null = null;
+      const { data: createdThread, error } = await assertSupabase()
         .from('message_threads')
-        .insert({
-          preschool_id: orgId, // Using preschool_id for compatibility
-          type: 'general',
-          subject: `Chat with ${otherUserName}`,
-          created_by: profile.id,
-        })
+        .insert(threadPayload)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        const errorMessage = error.message?.toLowerCase() || '';
+        if (errorMessage.includes('created_by')) {
+          const { data: fallbackThread, error: fallbackError } = await assertSupabase()
+            .from('message_threads')
+            .insert({
+              preschool_id: orgId,
+              type: 'general',
+              subject: `Chat with ${otherUserName}`,
+            })
+            .select()
+            .single();
+
+          if (fallbackError) throw fallbackError;
+          newThread = fallbackThread;
+        } else {
+          throw error;
+        }
+      } else {
+        newThread = createdThread;
+      }
+
+      if (!newThread?.id) {
+        throw new Error('Unable to create conversation.');
+      }
 
       // Add participants
       await assertSupabase()
@@ -388,4 +415,3 @@ const createStyles = (theme: any, insets: any) => StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

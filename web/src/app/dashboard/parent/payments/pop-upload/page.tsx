@@ -20,6 +20,7 @@ export default function POPUploadPage() {
     preschoolName,
     hasOrganization,
     tenantSlug,
+    profile,
     childrenCards,
   } = useParentDashboardData();
 
@@ -53,7 +54,7 @@ export default function POPUploadPage() {
   return (
     <ParentShell
       tenantSlug={tenantSlug}
-      userEmail={userId}
+      userEmail={profile?.email}
       userName={userName}
       preschoolName={preschoolName}
       hasOrganization={hasOrganization}

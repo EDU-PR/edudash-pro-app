@@ -45,6 +45,7 @@ import {
 // Birthday widget
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
+import { BirthdayDonationSummaryCard } from './principal/BirthdayDonationSummaryCard';
 
 export function K12AdminDashboard() {
   const { user, profile } = useAuth();
@@ -291,6 +292,11 @@ export function K12AdminDashboard() {
           maxItems={5}
           onViewAll={() => router.push('/screens/birthday-chart')}
         />
+      </View>
+
+      {/* 4b. Birthday Donations Summary */}
+      <View style={styles.section}>
+        <BirthdayDonationSummaryCard organizationId={organizationId} />
       </View>
 
       {/* 5. Stats Overview - Summary metrics */}

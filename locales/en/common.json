@@ -448,6 +448,37 @@
     "upgrade_required": "Upgrade required",
     "feature_coming_soon": "Feature coming soon",
     "parent_requests": "Parent Link Requests",
+    "birthday_donations": {
+      "title": "Birthday Donations",
+      "subtitle": "Record today's R25 donation for birthday packs.",
+      "principal_subtitle": "Track daily and monthly birthday pack contributions.",
+      "today_label": "Today",
+      "expected_amount": "Expected",
+      "total_received": "Received",
+      "remaining": "Remaining",
+      "record_button": "Record Donation",
+      "record_error": "Failed to record donation.",
+      "no_birthdays": "No birthdays today. Donation register is closed.",
+      "limit_warning": "More than two birthdays detected. Please contact admin to correct the roster.",
+      "amount_label": "Donation amount",
+      "amount_error": "Enter a valid amount.",
+      "method_label": "Payment method",
+      "note_label": "Notes (optional)",
+      "note_placeholder": "Add any notes...",
+      "none_today": "No birthdays today.",
+      "no_entries": "No donations recorded yet.",
+      "recent_title": "Today's entries",
+      "month_label": "This month",
+      "month_progress": "{{percent}}% collected across {{days}} birthday days",
+      "refresh": "Refresh",
+      "no_org": "Connect your school profile to track donations.",
+      "methods": {
+        "cash": "Cash",
+        "eft": "EFT",
+        "card": "Card",
+        "other": "Other"
+      }
+    },
     "ai_teaching_tools": "🤖 AI Teaching Tools",
     "my_classes": "📚 My Classes",
     "recent_assignments": "📝 Recent Homework Assignments",
@@ -739,6 +770,12 @@
         "my_children": "My Children",
         "uniform_sizes": "Uniform Sizes",
         "recent_activity": "Recent Activity",
+        "homework": "Homework",
+        "live_classes": "Live Classes",
+        "teacher_notes": "Teacher Notes",
+        "progress": "Progress & Achievements",
+        "birthdays": "Upcoming Birthdays",
+        "daily_activity": "Daily Activity",
         "practice_at_home": "Practice at Home",
         "early_learning_activities": "Early Learning Activities",
         "early_learning_tips": "Early Learning Tips for Parents",
@@ -746,7 +783,12 @@
       },
       "child_card": {
         "homework": "Homework",
-        "events": "Events"
+        "events": "Events",
+        "attendance": "Attendance",
+        "pending_homework": "Pending Homework",
+        "upcoming_events": "Upcoming Events",
+        "message": "Message",
+        "last_activity": "Last activity:"
       },
       "activity": {
         "homework_graded": {
@@ -1213,6 +1255,13 @@
         "title": "EXAM MODE",
         "description": "Practice tests, revision notes & last-minute tips to ace your exams!",
         "cta": "Start Exam Prep"
+      },
+      "exam_prep": {
+        "locked": {
+          "title": "Exam Prep Locked",
+          "description": "Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.",
+          "cta": "Back to Dashboard"
+        }
       }
     }
   },

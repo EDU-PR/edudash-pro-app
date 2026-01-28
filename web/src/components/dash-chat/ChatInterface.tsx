@@ -24,6 +24,7 @@ interface ChatInterfaceProps {
   onMessageSent?: () => void; // Callback when message is successfully sent
   initialPrompt?: string;
   showTutorPanel?: boolean;
+  canUseExamBuilder?: boolean;
 }
 
 export function ChatInterface({
@@ -32,7 +33,8 @@ export function ChatInterface({
   userId,
   onMessageSent,
   initialPrompt,
-  showTutorPanel = true
+  showTutorPanel = true,
+  canUseExamBuilder = true
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -113,6 +115,7 @@ export function ChatInterface({
 
   // Handle exam builder click
   const handleExamBuilderClick = (context: typeof examContext) => {
+    if (!canUseExamBuilder) return;
     const lastMessage = messages[messages.length - 1];
     if (lastMessage) {
       const extractedContext = extractExamContextFromMessage(lastMessage.content);
@@ -138,7 +141,7 @@ export function ChatInterface({
         />
       )}
       {/* Exam Builder Overlay */}
-      {showExamBuilder && (
+      {showExamBuilder && canUseExamBuilder && (
         <div className="absolute inset-0 z-50">
           <ExamBuilderLauncher
             suggestedGrade={examContext.grade}
@@ -154,7 +157,7 @@ export function ChatInterface({
         messages={messages}
         isTyping={isTyping}
         onRetry={handleRetry}
-        onExamBuilderClick={handleExamBuilderClick}
+        onExamBuilderClick={canUseExamBuilder ? handleExamBuilderClick : undefined}
         examContext={examContext}
         onQuickPrompt={handleQuickPrompt}
       />

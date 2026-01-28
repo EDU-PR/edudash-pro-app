@@ -40,6 +40,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
   const fetchChildMetrics = useCallback(async (child: any, supabase: ReturnType<typeof createClient>): Promise<ChildMetrics> => {
     const today = new Date().toISOString().split('T')[0];
     const metrics = createDefaultMetrics();
+    const schoolId = child.organization_id || child.preschool_id || null;
 
     // Attendance check
     try {
@@ -55,22 +56,32 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
       // Homework count
       try {
         // Fetch assignments for the class
-        const { data: assignments } = await supabase
+        let assignmentsQuery = supabase
           .from('homework_assignments')
           .select('id')
           .eq('class_id', child.class_id)
-          .eq('preschool_id', child.preschool_id)
           .gte('due_date', today);
+
+        if (schoolId) {
+          assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);
+        }
+
+        const { data: assignments } = await assignmentsQuery;
 
         if (assignments && assignments.length > 0) {
           const assignmentIds = assignments.map((a: { id: string }) => a.id);
           // Check which ones have been submitted
-          const { data: submissions } = await supabase
+          let submissionsQuery = supabase
             .from('homework_submissions')
             .select('assignment_id')
             .eq('student_id', child.id)
-            .eq('preschool_id', child.preschool_id)
             .in('assignment_id', assignmentIds);
+
+          if (schoolId) {
+            submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+          }
+
+          const { data: submissions } = await submissionsQuery;
 
           const submittedIds = new Set(submissions?.map((s: { assignment_id: string }) => s.assignment_id) || []);
           metrics.homeworkPending = assignmentIds.filter((id: string) => !submittedIds.has(id)).length;
@@ -78,8 +89,14 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
       } catch {}
       // Events count
       try {
-        const { count } = await supabase.from('class_events').select('*', { count: 'exact', head: true })
-          .eq('class_id', child.class_id).eq('preschool_id', child.preschool_id).gte('start_time', new Date().toISOString());
+        let eventsQuery = supabase.from('class_events').select('*', { count: 'exact', head: true })
+          .eq('class_id', child.class_id).gte('start_time', new Date().toISOString());
+
+        if (schoolId) {
+          eventsQuery = eventsQuery.eq('preschool_id', schoolId);
+        }
+
+        const { count } = await eventsQuery;
         metrics.upcomingEvents = count || 0;
       } catch {}
     }
@@ -112,7 +129,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
 
       let query = supabase
         .from('students')
-        .select(`id, first_name, last_name, class_id, is_active, preschool_id, student_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!students_class_id_fkey(id, name, grade_level)`)
+        .select(`id, first_name, last_name, class_id, is_active, preschool_id, organization_id, student_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!students_class_id_fkey(id, name, grade_level)`)
         .or(`parent_id.eq.${profile.id},guardian_id.eq.${profile.id}`)
         .eq('is_active', true);
 

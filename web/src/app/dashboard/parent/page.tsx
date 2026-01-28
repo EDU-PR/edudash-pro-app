@@ -28,7 +28,7 @@ import { OnboardingHint } from '@/components/dashboard/parent/OnboardingHint';
 import { UpgradeBanner } from '@/components/dashboard/parent/UpgradeBanner';
 import { AdBannerPlaceholder } from '@/components/dashboard/parent/AdBannerPlaceholder';
 import { DashOrbButton } from '@/components/dashboard/parent/DashOrbButton';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck, Video } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 
@@ -56,6 +56,12 @@ export default function ParentDashboard() {
       myChildren: t('dashboard.parent.section.my_children', { defaultValue: 'My Children' }),
       uniformSizes: t('dashboard.parent.section.uniform_sizes', { defaultValue: 'Uniform Sizes' }),
       recentActivity: t('dashboard.parent.section.recent_activity', { defaultValue: 'Recent Activity' }),
+      homework: t('dashboard.parent.section.homework', { defaultValue: 'Homework' }),
+      liveClasses: t('dashboard.parent.section.live_classes', { defaultValue: 'Live Classes' }),
+      teacherNotes: t('dashboard.parent.section.teacher_notes', { defaultValue: 'Teacher Notes' }),
+      progress: t('dashboard.parent.section.progress', { defaultValue: 'Progress & Achievements' }),
+      birthdays: t('dashboard.parent.section.birthdays', { defaultValue: 'Upcoming Birthdays' }),
+      dailyActivity: t('dashboard.parent.section.daily_activity', { defaultValue: 'Daily Activity' }),
       practiceAtHome: t('dashboard.parent.section.practice_at_home', { defaultValue: 'Practice at Home' }),
       earlyLearningActivities: t('dashboard.parent.section.early_learning_activities', { defaultValue: 'Early Learning Activities' }),
       earlyLearningTips: t('dashboard.parent.section.early_learning_tips', { defaultValue: 'Early Learning Tips for Parents' }),
@@ -141,6 +147,9 @@ export default function ParentDashboard() {
   // Local state
   const [greeting, setGreeting] = useState('');
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const toggleSection = (sectionId: string) => {
+    setOpenSection((prev) => (prev === sectionId ? null : sectionId));
+  };
 
   // Get pending homework count for badge
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -227,7 +236,7 @@ export default function ParentDashboard() {
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
   // Grade 4+ gets exam features (with daily quota)
-  const isExamEligible = activeChildGrade >= 4;
+  const hasExamEligibleChild = childrenCards.length > 0 && childrenCards.some(child => getGradeNumber(child.grade) >= 4);
   
   // All children get access to general features (Dash Chat, Robotics, etc) with quotas
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
@@ -329,7 +338,7 @@ export default function ParentDashboard() {
           title={COPY.sections.myChildren}
           icon={Users} 
           isOpen={openSection === 'children'}
-          onToggle={() => setOpenSection(openSection === 'children' ? null : 'children')}
+          onToggle={() => toggleSection('children')}
         >
           {hasChildren ? (
             <div className="flex gap-3 overflow-x-auto" style={{ paddingBottom: 'var(--space-2)' }}>
@@ -386,7 +395,7 @@ export default function ParentDashboard() {
           title={COPY.sections.uniformSizes}
           icon={Shirt}
           isOpen={openSection === 'uniforms'}
-          onToggle={() => setOpenSection(openSection === 'uniforms' ? null : 'uniforms')}
+          onToggle={() => toggleSection('uniforms')}
         >
           {hasOrganization && hasChildren ? (
             <UniformSizesWidget childrenCards={childrenCards} />
@@ -413,7 +422,7 @@ export default function ParentDashboard() {
             usageType={usageType} 
             hasOrganization={hasOrganization}
             activeChildGrade={activeChildGrade}
-            isExamEligible={isExamEligible}
+            isExamEligible={hasExamEligibleChild}
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
             userId={userId}
@@ -428,7 +437,7 @@ export default function ParentDashboard() {
             title={COPY.sections.recentActivity}
             icon={Activity} 
             isOpen={openSection === 'activity'}
-            onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
+            onToggle={() => toggleSection('activity')}
           >
             {hasChildren ? (
               <ActivityFeed 
@@ -449,7 +458,12 @@ export default function ParentDashboard() {
 
         {/* Homework Card - Show if organization-linked */}
         {userId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
+          <CollapsibleSection
+            title={COPY.sections.homework}
+            icon={BookOpen}
+            isOpen={openSection === 'homework'}
+            onToggle={() => toggleSection('homework')}
+          >
             {hasOrganization ? (
               <HomeworkCard userId={userId} />
             ) : (
@@ -460,11 +474,16 @@ export default function ParentDashboard() {
                 onAction={() => router.push('/dashboard/parent/register-child')}
               />
             )}
-          </div>
+          </CollapsibleSection>
         )}
 
         {/* Live Lessons Section - Show if organization-linked with active child */}
-        <div className="section" style={{ marginTop: 'var(--space-4)' }}>
+        <CollapsibleSection
+          title={COPY.sections.liveClasses}
+          icon={Video}
+          isOpen={openSection === 'live-classes'}
+          onToggle={() => toggleSection('live-classes')}
+        >
           {showLiveClassesHint && (
             <div style={{ marginBottom: 'var(--space-3)' }}>
               <OnboardingHint
@@ -487,10 +506,15 @@ export default function ParentDashboard() {
               onAction={() => router.push('/dashboard/parent/register-child')}
             />
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Teacher Notes */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
+        <CollapsibleSection
+          title={COPY.sections.teacherNotes}
+          icon={MessageCircle}
+          isOpen={openSection === 'teacher-notes'}
+          onToggle={() => toggleSection('teacher-notes')}
+        >
           {hasOrganization && activeChildId ? (
             <TeacherQuickNotesCard studentId={activeChildId} />
           ) : (
@@ -501,10 +525,15 @@ export default function ParentDashboard() {
               onAction={() => router.push('/dashboard/parent/register-child')}
             />
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Child Progress & Achievements */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
+        <CollapsibleSection
+          title={COPY.sections.progress}
+          icon={BarChart3}
+          isOpen={openSection === 'progress'}
+          onToggle={() => toggleSection('progress')}
+        >
           {activeChildId ? (
             <ChildProgressBadgesCard studentId={activeChildId} />
           ) : (
@@ -515,10 +544,15 @@ export default function ParentDashboard() {
               onAction={() => router.push('/dashboard/parent/register-child')}
             />
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Upcoming Birthdays */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
+        <CollapsibleSection
+          title={COPY.sections.birthdays}
+          icon={Sparkles}
+          isOpen={openSection === 'birthdays'}
+          onToggle={() => toggleSection('birthdays')}
+        >
           {hasOrganization && activeChild?.classId ? (
             <UpcomingBirthdaysCard
               classId={activeChild.classId}
@@ -532,10 +566,15 @@ export default function ParentDashboard() {
               onAction={() => router.push('/dashboard/parent/register-child')}
             />
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Daily Activity Feed */}
-        <div style={{ marginTop: 'var(--space-4)' }}>
+        <CollapsibleSection
+          title={COPY.sections.dailyActivity}
+          icon={Activity}
+          isOpen={openSection === 'daily-activity'}
+          onToggle={() => toggleSection('daily-activity')}
+        >
           {hasOrganization && activeChild?.classId ? (
             <DailyActivityFeedCard classId={activeChild.classId} />
           ) : (
@@ -546,7 +585,7 @@ export default function ParentDashboard() {
               onAction={() => router.push('/dashboard/parent/register-child')}
             />
           )}
-        </div>
+        </CollapsibleSection>
 
         {/* Ad placeholders for free tier */}
         {showUpgradeBanner && (
@@ -560,7 +599,7 @@ export default function ParentDashboard() {
           title={COPY.sections.practiceAtHome}
           icon={Sparkles} 
           isOpen={openSection === 'practice'}
-          onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
+          onToggle={() => toggleSection('practice')}
         >
           {hasAnyChild && activeChild ? (
             <div className="grid2" style={{ marginTop: 16 }}>
@@ -644,7 +683,7 @@ export default function ParentDashboard() {
           title={COPY.sections.earlyLearningActivities}
           icon={BookOpen} 
           isOpen={openSection === 'activities'}
-          onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
+          onToggle={() => toggleSection('activities')}
         >
           {allChildrenArePreschoolers && activeChild ? (
             <CAPSActivitiesWidget
@@ -669,7 +708,7 @@ export default function ParentDashboard() {
           title={COPY.sections.earlyLearningTips}
           icon={Lightbulb} 
           isOpen={openSection === 'tips'}
-          onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
+          onToggle={() => toggleSection('tips')}
         >
           {allChildrenArePreschoolers && childrenCards.length > 0 ? (
             <div className="card">
@@ -700,7 +739,7 @@ export default function ParentDashboard() {
           title={COPY.sections.overview}
           icon={BarChart3} 
           isOpen={openSection === 'overview'}
-          onToggle={() => setOpenSection(openSection === 'overview' ? null : 'overview')}
+          onToggle={() => toggleSection('overview')}
         >
           {hasOrganization ? (
             <div className="grid2">

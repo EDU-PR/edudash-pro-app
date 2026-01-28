@@ -34,7 +34,7 @@ const calculateAgeTurning = (dateOfBirth: string, onDate: Date): number => {
   if (monthDiff < 0 || (monthDiff === 0 && onDate.getDate() < dob.getDate())) {
     age -= 1;
   }
-  return Math.max(age + 1, 0);
+  return Math.max(age, 0);
 };
 
 const getNextBirthday = (dateOfBirth: string, today: Date): Date | null => {

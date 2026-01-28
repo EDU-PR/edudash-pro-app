@@ -10,7 +10,7 @@
  * - Styles extracted to styles/teacher-management.ts
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,13 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
   ScrollView,
   TextInput,
   Modal,
   ActivityIndicator,
+  Alert,
+  Share,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
@@ -30,7 +32,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
-import { navigateBack } from '@/lib/navigation';
 import * as DocumentPicker from 'expo-document-picker';
 import { TeacherDocumentsService, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 
@@ -40,6 +41,8 @@ import { HiringView } from '@/components/teacher/HiringView';
 import { PerformanceView } from '@/components/teacher/PerformanceView';
 import { PayrollView } from '@/components/teacher/PayrollView';
 import { TeacherProfileView } from '@/components/teacher/TeacherProfileView';
+import * as Clipboard from 'expo-clipboard';
+import { buildTeacherInviteLink, buildTeacherInviteMessage } from '@/lib/utils/teacherInviteLink';
 
 // Types and hook
 import type { Teacher, TeacherManagementView } from '@/types/teacher-management';
@@ -49,7 +52,7 @@ export default function TeacherManagement() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   
   // Use the extracted hook for all data management
   const {
@@ -207,6 +210,69 @@ export default function TeacherManagement() {
     setCurrentView('profile');
   };
 
+  const schoolName = profile?.preschool_name || profile?.organization_name || 'Your School';
+
+  const inviterName = useMemo(() => {
+    const first = profile?.first_name || '';
+    const last = profile?.last_name || '';
+    const full = `${first} ${last}`.trim();
+    return full || profile?.email || 'A principal';
+  }, [profile?.first_name, profile?.last_name, profile?.email]);
+
+  const handleShareInvite = useCallback(
+    async (inviteToken: string, inviteEmail: string) => {
+      const message = buildTeacherInviteMessage({
+        token: inviteToken,
+        email: inviteEmail,
+        schoolName,
+        inviterName,
+        roleLabel: 'teacher',
+      });
+      const inviteLink = buildTeacherInviteLink(inviteToken, inviteEmail);
+
+      const openWhatsApp = async () => {
+        const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+        const canOpen = await Linking.canOpenURL(url);
+        if (!canOpen) {
+          Alert.alert('WhatsApp not available', 'Install WhatsApp to use this option.');
+          return;
+        }
+        await Linking.openURL(url);
+      };
+
+      const openSms = async () => {
+        const url = `sms:?body=${encodeURIComponent(message)}`;
+        await Linking.openURL(url);
+      };
+
+      const openEmail = async () => {
+        const subject = encodeURIComponent(`EduDash Pro Teacher Invite from ${schoolName}`);
+        const body = encodeURIComponent(message);
+        const url = `mailto:${inviteEmail}?subject=${subject}&body=${body}`;
+        await Linking.openURL(url);
+      };
+
+      const copyLink = async () => {
+        await Clipboard.setStringAsync(inviteLink);
+        Alert.alert('Copied', 'Invite link copied to clipboard.');
+      };
+
+      const shareGeneric = async () => {
+        await Share.share({ message, url: inviteLink });
+      };
+
+      Alert.alert('Invite ready', 'Choose how you want to send the invite.', [
+        { text: 'Share', onPress: shareGeneric },
+        { text: 'WhatsApp', onPress: openWhatsApp },
+        { text: 'SMS', onPress: openSms },
+        { text: 'Email', onPress: openEmail },
+        { text: 'Copy Link', onPress: copyLink },
+        { text: 'Close', style: 'cancel' },
+      ]);
+    },
+    [inviterName, schoolName]
+  );
+
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = searchQuery === '' || 
       `${teacher.firstName} ${teacher.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -270,9 +336,6 @@ export default function TeacherManagement() {
     withSeats: seatUsageDisplay?.used || 0,
     maxSeats: seatUsageDisplay?.total || 15,
   };
-
-  // School name from profile
-  const schoolName = profile?.preschool_name || profile?.organization_name || 'Your School';
 
   return (
     <View style={styles.container}>
@@ -354,7 +417,7 @@ export default function TeacherManagement() {
               });
               setShowInviteModal(false);
               setInviteEmail('');
-              Alert.alert('Invite created', `Share this invite token with the teacher:\n\n${invite.token}`);
+              await handleShareInvite(invite.token, inviteEmail.trim());
             } catch (e: unknown) {
               Alert.alert('Error', e instanceof Error ? e.message : 'Failed to create invite');
             }
@@ -473,6 +536,8 @@ export default function TeacherManagement() {
             }}
             onRefresh={fetchAvailableCandidates}
             onLoadInvites={loadInvites}
+            schoolName={schoolName}
+            inviterName={inviterName}
           />
         )}
 

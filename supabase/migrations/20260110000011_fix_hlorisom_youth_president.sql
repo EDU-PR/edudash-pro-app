@@ -5,26 +5,29 @@
 
 BEGIN;
 
--- SOA Organization ID
-\set SOA_ORG_ID '63b6139a-e21f-447c-b322-376fb0828992'
-\set USER_EMAIL 'hlorisom@soilofafrica.org'
-
 -- Step 1: Get user ID from profiles
 DO $$
 DECLARE
   v_user_id uuid;
   v_org_id uuid := '63b6139a-e21f-447c-b322-376fb0828992';
+  v_user_email text := 'hlorisom@soilofafrica.org';
   v_member_exists boolean;
   v_current_member_type text;
 BEGIN
+  IF to_regclass('public.profiles') IS NULL OR to_regclass('public.organization_members') IS NULL THEN
+    RAISE NOTICE 'Skipping youth president fix: profiles or organization_members table missing';
+    RETURN;
+  END IF;
+
   -- Get user ID from profiles table
   SELECT id INTO v_user_id
   FROM public.profiles
-  WHERE email = 'hlorisom@soilofafrica.org'
+  WHERE email = v_user_email
   LIMIT 1;
 
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'User not found: hlorisom@soilofafrica.org';
+    RAISE NOTICE 'Skipping youth president fix: user not found: %', v_user_email;
+    RETURN;
   END IF;
 
   RAISE NOTICE 'Found user ID: %', v_user_id;
@@ -108,15 +111,22 @@ DECLARE
   v_member_type text;
   v_seat_status text;
   v_org_id uuid := '63b6139a-e21f-447c-b322-376fb0828992';
+  v_user_email text := 'hlorisom@soilofafrica.org';
 BEGIN
+  IF to_regclass('public.profiles') IS NULL OR to_regclass('public.organization_members') IS NULL THEN
+    RAISE NOTICE 'Skipping youth president verification: profiles or organization_members table missing';
+    RETURN;
+  END IF;
+
   -- Get user ID
   SELECT id INTO v_user_id
   FROM public.profiles
-  WHERE email = 'hlorisom@soilofafrica.org'
+  WHERE email = v_user_email
   LIMIT 1;
 
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'User not found for verification';
+    RAISE NOTICE 'Skipping youth president verification: user not found: %', v_user_email;
+    RETURN;
   END IF;
 
   -- Get member_type from organization_members
@@ -135,7 +145,7 @@ BEGIN
   END IF;
 
   RAISE NOTICE '✅ Verification successful:';
-  RAISE NOTICE '   User: hlorisom@soilofafrica.org';
+  RAISE NOTICE '   User: %', v_user_email;
   RAISE NOTICE '   User ID: %', v_user_id;
   RAISE NOTICE '   Organization ID: %', v_org_id;
   RAISE NOTICE '   Member Type: %', v_member_type;

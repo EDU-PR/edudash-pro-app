@@ -60,6 +60,7 @@ export default function ParentAttendancePage() {
     preschoolName,
     hasOrganization,
     tenantSlug,
+    profile,
     childrenCards,
     activeChildId,
     setActiveChildId,
@@ -83,12 +84,18 @@ export default function ParentAttendancePage() {
     const loadAttendance = async () => {
       setError(null);
       try {
-        const { data, error: attendanceError } = await supabase
+        let attendanceQuery = supabase
           .from('attendance')
           .select('id, attendance_date, status, notes')
           .eq('student_id', activeChildId)
           .order('attendance_date', { ascending: false })
           .limit(120);
+
+        if (profile?.organizationId) {
+          attendanceQuery = attendanceQuery.eq('organization_id', profile.organizationId);
+        }
+
+        const { data, error: attendanceError } = await attendanceQuery;
 
         if (attendanceError) {
           const message = attendanceError.message || '';
@@ -132,7 +139,7 @@ export default function ParentAttendancePage() {
   return (
     <ParentShell
       tenantSlug={tenantSlug}
-      userEmail={userId}
+      userEmail={profile?.email}
       userName={userName}
       preschoolName={preschoolName}
       hasOrganization={hasOrganization}

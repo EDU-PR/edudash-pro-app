@@ -51,7 +51,7 @@
   
   /* Layout dimensions */
   --topnav-h: 56px;
-  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-top: max(env(safe-area-inset-top, 0px), 8px);
   --topnav-offset: calc(var(--topnav-h) + var(--safe-top));
   --conversations-w: 0px;
   --sidebar-w: 0px;

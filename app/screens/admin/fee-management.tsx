@@ -175,35 +175,51 @@ export default function FeeManagementScreen() {
     setSaving(true);
     try {
       const supabase = assertSupabase();
-      const payload = {
+      const buildPayload = (overrideFeeType?: string) => ({
         name: feeForm.name.trim(),
         description: feeForm.description.trim() || null,
         amount: parseFloat(feeForm.amount),
-        fee_type: feeForm.fee_type,
+        fee_type: overrideFeeType || feeForm.fee_type,
         frequency: feeForm.frequency,
         is_active: feeForm.is_active,
         preschool_id: organizationId,
         created_by: profile?.id,
+      });
+      const payload = buildPayload();
+      const fallbackPayload = () => {
+        if (!['uniform_tshirt', 'uniform_shorts'].includes(feeForm.fee_type)) return null;
+        return buildPayload('uniform');
       };
       
-      if (editingFee) {
-        // Update
-        const { error } = await supabase
-          .from('fee_structures')
-          .update(payload)
-          .eq('id', editingFee.id);
-        
+      const saveFee = async (data: typeof payload) => {
+        if (editingFee) {
+          const { error } = await supabase
+            .from('fee_structures')
+            .update(data)
+            .eq('id', editingFee.id);
+          if (error) throw error;
+          return 'updated';
+        }
+        const { error } = await supabase.from('fee_structures').insert(data);
         if (error) throw error;
-        Alert.alert('Success', 'Fee updated successfully');
-      } else {
-        // Insert
-        const { error } = await supabase
-          .from('fee_structures')
-          .insert(payload);
-        
-        if (error) throw error;
-        Alert.alert('Success', 'Fee created successfully');
+        return 'created';
+      };
+
+      let action: 'created' | 'updated' = 'created';
+      try {
+        action = await saveFee(payload);
+      } catch (error: any) {
+        const message = error?.message?.toLowerCase() || '';
+        const code = error?.code;
+        const fallback = fallbackPayload();
+        if ((code === '23514' || message.includes('fee_type_check')) && fallback) {
+          action = await saveFee(fallback);
+        } else {
+          throw error;
+        }
       }
+
+      Alert.alert('Success', action === 'updated' ? 'Fee updated successfully' : 'Fee created successfully');
       
       setShowFeeModal(false);
       resetFeeForm();
@@ -511,7 +527,7 @@ export default function FeeManagementScreen() {
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
             style={styles.modalKeyboard}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
           >
             <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
@@ -524,7 +540,11 @@ export default function FeeManagementScreen() {
                 </TouchableOpacity>
               </View>
               
-              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                style={styles.modalBody}
+                contentContainerStyle={styles.modalBodyContent}
+                keyboardShouldPersistTaps="handled"
+              >
               <Text style={[styles.label, { color: theme.text }]}>Fee Name *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -635,7 +655,7 @@ export default function FeeManagementScreen() {
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
             style={styles.modalKeyboard}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
           >
             <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
@@ -648,7 +668,11 @@ export default function FeeManagementScreen() {
                 </TouchableOpacity>
               </View>
               
-              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                style={styles.modalBody}
+                contentContainerStyle={styles.modalBodyContent}
+                keyboardShouldPersistTaps="handled"
+              >
               <Text style={[styles.label, { color: theme.text }]}>Promo Code *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -849,6 +873,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '700' },
   modalBody: { padding: 16 },
+  modalBodyContent: { paddingBottom: 24 },
   modalFooter: {
     flexDirection: 'row',
     padding: 16,

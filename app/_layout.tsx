@@ -5,7 +5,7 @@
 import '../polyfills/react-use';
 
 import 'react-native-get-random-values';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, LogBox } from 'react-native';
 // Initialize i18n globally (web + native)
 import '../lib/i18n';
@@ -62,6 +62,8 @@ import * as Linking from 'expo-linking';
 import { setPasswordRecoveryInProgress } from '../lib/sessionManager';
 import { patchNativeEventEmitterModules } from '../lib/nativeEventEmitterPatch';
 import { parseDeepLinkUrl } from '../lib/utils/deepLink';
+import { assertSupabase } from '../lib/supabase';
+import { checkAndRefreshTokenIfNeeded, registerPushDevice } from '../lib/notifications';
 
 patchNativeEventEmitterModules();
 
@@ -72,6 +74,7 @@ function LayoutContent() {
   const { isDark } = useTheme();
   const [showFAB, setShowFAB] = useState(false);
   const [statusBarKey, setStatusBarKey] = useState(0);
+  const pushRegistrationRef = useRef<{ userId: string; attempted: boolean } | null>(null);
   
   // App preferences for FAB visibility
   const { showDashFAB, tutorialCompleted } = useAppPreferencesSafe();
@@ -130,6 +133,23 @@ function LayoutContent() {
       setShowFAB(false);
     }
   }, [authLoading, isAuthRoute, user]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (!user?.id) {
+      pushRegistrationRef.current = null;
+      return;
+    }
+    if (pushRegistrationRef.current?.userId === user.id && pushRegistrationRef.current.attempted) {
+      return;
+    }
+
+    pushRegistrationRef.current = { userId: user.id, attempted: true };
+    const supabase = assertSupabase();
+    checkAndRefreshTokenIfNeeded(supabase, user).catch(() => {
+      registerPushDevice(supabase, user).catch(() => {});
+    });
+  }, [user?.id]);
   
   // Determine if FAB should be visible (user pref + route logic + must be logged in)
   const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB && !!user;

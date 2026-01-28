@@ -1,6 +1,35 @@
 -- Fix classes table RLS policies to avoid infinite recursion
 -- Using security definer functions to bypass RLS checks
 
+-- Ensure classes table and required columns exist (shadow DB compatibility)
+CREATE TABLE IF NOT EXISTS public.classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  preschool_id UUID,
+  teacher_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'classes'
+      AND column_name = 'preschool_id'
+  ) THEN
+    ALTER TABLE public.classes ADD COLUMN preschool_id UUID;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'classes'
+      AND column_name = 'teacher_id'
+  ) THEN
+    ALTER TABLE public.classes ADD COLUMN teacher_id UUID;
+  END IF;
+END $$;
+
 -- Drop existing policies
 DROP POLICY IF EXISTS "classes_admin_all" ON public.classes;
 DROP POLICY IF EXISTS "classes_school_staff_manage" ON public.classes;
