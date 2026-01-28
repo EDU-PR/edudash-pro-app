@@ -235,8 +235,8 @@ export default function ParentDashboard() {
 
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
-  // Grade 4+ gets exam features (with daily quota)
-  const hasExamEligibleChild = childrenCards.length > 0 && childrenCards.some(child => getGradeNumber(child.grade) >= 4);
+  // Grade 4+ gets exam features (based on active child)
+  const hasExamEligibleChild = activeChildGrade >= 4;
   
   // All children get access to general features (Dash Chat, Robotics, etc) with quotas
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);

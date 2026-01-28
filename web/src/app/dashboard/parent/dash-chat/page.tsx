@@ -41,11 +41,15 @@ export default function DashChatPage() {
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
   const initialPrompt = searchParams.get('prompt') || '';
-  const { childrenCards } = useChildrenData(userId || undefined);
+  const { childrenCards, activeChildId } = useChildrenData(userId || undefined);
+  const activeChild = useMemo(
+    () => childrenCards.find((child) => child.id === activeChildId),
+    [childrenCards, activeChildId]
+  );
   const hasExamEligibleChild = useMemo(() => {
-    if (!childrenCards || childrenCards.length === 0) return false;
-    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
-  }, [childrenCards]);
+    if (!activeChild) return false;
+    return getGradeNumber(activeChild.grade) >= 4;
+  }, [activeChild]);
   const canUseExamBuilder = hasExamEligibleChild;
 
   // Keyboard navigation - Escape to close overlays

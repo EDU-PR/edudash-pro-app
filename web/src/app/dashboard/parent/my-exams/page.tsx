@@ -47,11 +47,15 @@ export default function MyExamsPage() {
   });
   
   // Get parent dashboard data for shell
-  const { userId, userName, preschoolName, hasOrganization, tenantSlug, childrenCards, childrenLoading } = useParentDashboardData();
+  const { userId, userName, preschoolName, hasOrganization, tenantSlug, childrenCards, childrenLoading, activeChildId } = useParentDashboardData();
+  const activeChild = useMemo(
+    () => childrenCards.find((child) => child.id === activeChildId),
+    [childrenCards, activeChildId]
+  );
   const hasExamEligibleChild = useMemo(() => {
-    if (childrenLoading || !childrenCards || childrenCards.length === 0) return false;
-    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
-  }, [childrenCards, childrenLoading]);
+    if (childrenLoading || !activeChild) return false;
+    return getGradeNumber(activeChild.grade) >= 4;
+  }, [activeChild, childrenLoading]);
   
   useEffect(() => {
     if (childrenLoading) return;
