@@ -3,10 +3,11 @@ import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacit
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 
 const SIZE_OPTIONS = [
   '2-3',
@@ -75,6 +76,26 @@ interface SchoolUniformFeeRow {
   created_at?: string | null;
 }
 
+interface UniformPricing {
+  setAmount?: number;
+  tshirtAmount?: number;
+  shortsAmount?: number;
+  fallbackAmount?: number;
+}
+
+interface UniformRequestRow {
+  student_id: string;
+  child_name?: string | null;
+  age_years?: number | null;
+  tshirt_size?: string | null;
+  tshirt_quantity?: number | null;
+  shorts_quantity?: number | null;
+  is_returning?: boolean | null;
+  tshirt_number?: string | null;
+  sample_supplied?: boolean | null;
+  updated_at?: string | null;
+}
+
 const getAgeYears = (dob?: string | null): string => {
   if (!dob) return '';
   const date = new Date(dob);
@@ -83,15 +104,27 @@ const getAgeYears = (dob?: string | null): string => {
   return age > 0 ? String(age) : '';
 };
 
+const formatCurrency = (value: number) => `R ${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}`;
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  return fallback;
+};
+
 export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children, schoolName }) => {
   const { theme } = useTheme();
+  const { terminology } = useOrganizationTerminology();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
+  const memberLabel = terminology.member;
+  const memberLabelLower = memberLabel.toLowerCase();
+  const institutionLabel = terminology.institution;
   const [entries, setEntries] = useState<Record<string, UniformEntry>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [uniformPricing, setUniformPricing] = useState<Record<string, { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number }>>({});
+  const [uniformPricing, setUniformPricing] = useState<Record<string, UniformPricing>>({});
 
   useEffect(() => {
     if (!children.length) {
@@ -141,10 +174,11 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
         if (error) throw error;
 
-        if (data) {
+        const uniformRows: UniformRequestRow[] = Array.isArray(data) ? data : [];
+        if (uniformRows.length) {
           setEntries((prev) => {
             const next = { ...prev };
-            data.forEach((row: any) => {
+            uniformRows.forEach((row) => {
               const isReturning = row.is_returning ?? next[row.student_id]?.isReturning ?? false;
               const sampleSupplied = row.sample_supplied ?? next[row.student_id]?.sampleSupplied ?? false;
               next[row.student_id] = {
@@ -166,8 +200,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
             return next;
           });
         }
-      } catch (error: any) {
-        setLoadError(error?.message || 'Unable to load uniform sizes.');
+      } catch (error: unknown) {
+        setLoadError(getErrorMessage(error, 'Unable to load uniform sizes.'));
       } finally {
         setLoading(false);
       }
@@ -183,10 +217,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
       try {
         const supabase = assertSupabase();
-        const pricingMap: Record<string, { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number }> = {};
+        const pricingMap: Record<string, UniformPricing> = {};
 
         for (const preschoolId of preschoolIds) {
-          const pricing: { tshirtAmount?: number; shortsAmount?: number; fallbackAmount?: number } = {};
+          const pricing: UniformPricing = {};
 
           const applyFee = (
             amount: number,
@@ -196,6 +230,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           ) => {
             if (!Number.isFinite(amount)) return;
             const itemType = getUniformItemType(feeType, name, description);
+            if (itemType === 'set' && pricing.setAmount == null) {
+              pricing.setAmount = amount;
+              return;
+            }
             if (itemType === 'tshirt' && pricing.tshirtAmount == null) {
               pricing.tshirtAmount = amount;
               return;
@@ -247,7 +285,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         if (Object.keys(pricingMap).length > 0) {
           setUniformPricing((prev) => ({ ...prev, ...pricingMap }));
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.warn('[UniformSizes] Failed to load uniform pricing:', error);
       }
     };
@@ -260,6 +298,24 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
       ...prev,
       [childId]: { ...prev[childId], ...patch, status: 'idle', message: null },
     }));
+  };
+
+  const canPayNow = (entry: UniformEntry) => {
+    const tshirtQty = parseInt(entry.tshirtQuantity, 10);
+    const shortsQty = parseInt(entry.shortsQuantity, 10);
+    const totalItems = (Number.isFinite(tshirtQty) ? tshirtQty : 0) + (Number.isFinite(shortsQty) ? shortsQty : 0);
+    return Boolean(entry.tshirtSize) && totalItems > 0;
+  };
+
+  const setFullSetQuantity = (childId: string, value: string) => {
+    if (value.trim() === '') {
+      updateEntry(childId, { tshirtQuantity: '', shortsQuantity: '' });
+      return;
+    }
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.min(Math.max(parsed, 0), 20);
+    updateEntry(childId, { tshirtQuantity: String(clamped), shortsQuantity: String(clamped) });
   };
 
   const setEditing = (childId: string, isEditing: boolean) => {
@@ -346,10 +402,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           isEditing: false,
         },
       }));
-    } catch (error: any) {
+    } catch (error: unknown) {
       setEntries((prev) => ({
         ...prev,
-        [childId]: { ...prev[childId], status: 'error', message: error?.message || 'Save failed' },
+        [childId]: { ...prev[childId], status: 'error', message: getErrorMessage(error, 'Save failed') },
       }));
     }
   };
@@ -358,8 +414,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const preschoolId = child.preschoolId || null;
     if (!preschoolId) {
       showAlert({
-        title: 'School not found',
-        message: 'We could not find the school for this child.',
+        title: `${institutionLabel} not found`,
+        message: `We could not find the ${institutionLabel.toLowerCase()} for this ${memberLabelLower}.`,
         type: 'error',
       });
       return;
@@ -376,7 +432,9 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
     const tshirtQty = parseInt(entry.tshirtQuantity, 10);
     const shortsQty = parseInt(entry.shortsQuantity, 10);
-    const totalItems = (Number.isFinite(tshirtQty) ? tshirtQty : 0) + (Number.isFinite(shortsQty) ? shortsQty : 0);
+    const resolvedTshirtQty = Number.isFinite(tshirtQty) ? tshirtQty : 0;
+    const resolvedShortsQty = Number.isFinite(shortsQty) ? shortsQty : 0;
+    const totalItems = resolvedTshirtQty + resolvedShortsQty;
 
     if (!totalItems || totalItems <= 0) {
       showAlert({
@@ -388,17 +446,23 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     }
 
     const pricing = uniformPricing[preschoolId];
-    const tshirtPrice = pricing?.tshirtAmount ?? pricing?.fallbackAmount ?? 0;
-    const shortsPrice = pricing?.shortsAmount ?? pricing?.fallbackAmount ?? 0;
-    const totalAmount = (tshirtPrice * tshirtQty) + (shortsPrice * shortsQty);
+    const setPrice = pricing?.setAmount ?? pricing?.fallbackAmount ?? 0;
+    const tshirtPrice = pricing?.tshirtAmount ?? 0;
+    const shortsPrice = pricing?.shortsAmount ?? 0;
+    const setQty = setPrice > 0 ? Math.min(resolvedTshirtQty, resolvedShortsQty) : 0;
+    const remainingTshirts = Math.max(resolvedTshirtQty - setQty, 0);
+    const remainingShorts = Math.max(resolvedShortsQty - setQty, 0);
+    const totalAmount = (setPrice * setQty) + (tshirtPrice * remainingTshirts) + (shortsPrice * remainingShorts);
 
-    if (!pricing || (tshirtPrice <= 0 && shortsPrice <= 0)) {
+    const hasAnyPricing = Boolean(pricing && (setPrice > 0 || tshirtPrice > 0 || shortsPrice > 0));
+
+    if (!hasAnyPricing) {
       showAlert({
         title: 'Uniform pricing not set',
         message: 'Uniform pricing is not configured yet. We will still generate a reference for you.',
         type: 'warning',
       });
-    } else if ((tshirtQty > 0 && tshirtPrice <= 0) || (shortsQty > 0 && shortsPrice <= 0)) {
+    } else if ((remainingTshirts > 0 && tshirtPrice <= 0) || (remainingShorts > 0 && shortsPrice <= 0)) {
       showAlert({
         title: 'Uniform pricing incomplete',
         message: 'Some uniform items do not have a price yet. We will still generate a reference for you.',
@@ -459,6 +523,21 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         {children.map((child) => {
           const entry = entries[child.id];
           if (!entry) return null;
+          const preschoolId = child.preschoolId || '';
+          const pricing = preschoolId ? uniformPricing[preschoolId] : undefined;
+          const tshirtQty = Number.isFinite(Number(entry.tshirtQuantity)) ? Number(entry.tshirtQuantity) : 0;
+          const shortsQty = Number.isFinite(Number(entry.shortsQuantity)) ? Number(entry.shortsQuantity) : 0;
+          const setPrice = pricing?.setAmount ?? pricing?.fallbackAmount ?? 0;
+          const tshirtPrice = pricing?.tshirtAmount ?? 0;
+          const shortsPrice = pricing?.shortsAmount ?? 0;
+          const impliedSetQty = Math.min(tshirtQty, shortsQty);
+          const billableSetQty = setPrice > 0 ? impliedSetQty : 0;
+          const remainingTshirts = Math.max(tshirtQty - billableSetQty, 0);
+          const remainingShorts = Math.max(shortsQty - billableSetQty, 0);
+          const orderExtraTshirts = Math.max(tshirtQty - impliedSetQty, 0);
+          const orderExtraShorts = Math.max(shortsQty - impliedSetQty, 0);
+          const totalAmount = (setPrice * billableSetQty) + (tshirtPrice * remainingTshirts) + (shortsPrice * remainingShorts);
+          const hasPricing = Boolean(pricing && (setPrice > 0 || tshirtPrice > 0 || shortsPrice > 0));
 
           if (entry.status === 'saved' && !entry.isEditing) {
             return (
@@ -473,6 +552,12 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 <Text style={styles.summaryText}>
                   Size: {entry.tshirtSize || '—'} • T-shirts: {entry.tshirtQuantity} • Shorts: {entry.shortsQuantity}
                 </Text>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Total estimate</Text>
+                  <Text style={styles.summaryValue}>
+                    {hasPricing ? formatCurrency(totalAmount) : 'Pricing not configured'}
+                  </Text>
+                </View>
                 {entry.isReturning && entry.tshirtNumber ? (
                   <Text style={styles.summaryText}>Back number: {entry.tshirtNumber}</Text>
                 ) : null}
@@ -488,14 +573,31 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
           return (
             <View key={child.id} style={[styles.card, { backgroundColor: theme.surface }]}>
-              <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderLeft}>
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{child.firstName.charAt(0)}{child.lastName.charAt(0)}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
+                    <Text style={styles.helperText}>Complete the uniform form below.</Text>
+                  </View>
+                </View>
+                {entry.status === 'saved' && (
+                  <View style={styles.statusPill}>
+                    <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+                    <Text style={styles.statusPillText}>Saved</Text>
+                  </View>
+                )}
+              </View>
 
-            <Text style={styles.label}>Child Name</Text>
+            <Text style={styles.sectionTitle}>Details</Text>
+            <Text style={styles.label}>{memberLabel} Name</Text>
             <TextInput
               style={styles.input}
               value={entry.childName}
               onChangeText={(text) => updateEntry(child.id, { childName: text })}
-              placeholder="Child name"
+              placeholder={`${memberLabelLower} name`}
               placeholderTextColor={theme.textSecondary}
             />
 
@@ -509,6 +611,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
               keyboardType="number-pad"
             />
 
+            <Text style={styles.sectionTitle}>Sizes & Quantities</Text>
             <Text style={styles.label}>T-shirt Size</Text>
             <View style={styles.pickerWrap}>
               <Picker
@@ -545,6 +648,43 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
               maxLength={2}
             />
 
+            <Text style={styles.label}>Full sets (1 set = 1 T-shirt + 1 shorts)</Text>
+            <View style={styles.setRow}>
+              <TextInput
+                style={[styles.input, styles.setInput]}
+                value={impliedSetQty ? String(impliedSetQty) : ''}
+                onChangeText={(text) => setFullSetQuantity(child.id, text)}
+                placeholder="e.g. 1"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <TouchableOpacity
+                style={[styles.matchButton, { borderColor: theme.primary }]}
+                onPress={() => setFullSetQuantity(child.id, entry.tshirtQuantity)}
+              >
+                <Text style={[styles.matchButtonText, { color: theme.primary }]}>Match to T-shirt qty</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.helperText}>This sets both quantities to the same value. You can still edit them separately above.</Text>
+
+            <View style={styles.pricingCard}>
+              <Text style={styles.pricingTitle}>Pricing summary</Text>
+              <Text style={styles.pricingText}>
+                Full set: {setPrice > 0 ? formatCurrency(setPrice) : '—'} • T-shirt: {tshirtPrice > 0 ? formatCurrency(tshirtPrice) : '—'} • Shorts: {shortsPrice > 0 ? formatCurrency(shortsPrice) : '—'}
+              </Text>
+              <Text style={styles.pricingText}>
+                Sets: {impliedSetQty} • Extra T-shirts: {orderExtraTshirts} • Extra Shorts: {orderExtraShorts}
+              </Text>
+              <Text style={styles.pricingTotal}>
+                Total: {hasPricing ? formatCurrency(totalAmount) : 'Pricing not configured'}
+              </Text>
+              {!hasPricing ? (
+                <Text style={styles.pricingHint}>We can still generate a reference if pricing is not set yet.</Text>
+              ) : null}
+            </View>
+
+            <Text style={styles.sectionTitle}>Notes</Text>
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Sample supplied?</Text>
               <Switch
@@ -594,8 +734,12 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.payButton, { borderColor: theme.primary }]}
+                style={[
+                  styles.payButton,
+                  { borderColor: theme.primary, opacity: canPayNow(entry) ? 1 : 0.5 },
+                ]}
                 onPress={() => handlePayNow(child, entry)}
+                disabled={!canPayNow(entry)}
               >
                 <Text style={[styles.payButtonText, { color: theme.primary }]}>Pay Now</Text>
               </TouchableOpacity>
@@ -627,7 +771,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   header: {
     marginBottom: 12,
   },
@@ -658,7 +802,29 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: theme.text,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.primary,
+  },
+  avatarText: {
+    color: '#fff',
+    fontWeight: '700',
   },
   summaryHeader: {
     flexDirection: 'row',
@@ -685,6 +851,20 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     marginBottom: 4,
   },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: theme.textSecondary,
+  },
+  summaryValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.text,
+  },
   editButton: {
     marginTop: 8,
     alignSelf: 'flex-start',
@@ -703,6 +883,13 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
     color: theme.textSecondary,
     marginBottom: 6,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 8,
+    marginTop: 4,
   },
   toggleLabel: {
     fontSize: 12,
@@ -778,6 +965,55 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 11,
     color: theme.textSecondary,
     marginBottom: 10,
+  },
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  setInput: {
+    flex: 1,
+  },
+  matchButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  matchButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pricingCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 10,
+    marginBottom: 12,
+    backgroundColor: theme.surface,
+  },
+  pricingTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  pricingText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    marginBottom: 2,
+  },
+  pricingTotal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.text,
+    marginTop: 4,
+  },
+  pricingHint: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    marginTop: 6,
   },
   emptyText: {
     color: theme.textSecondary,

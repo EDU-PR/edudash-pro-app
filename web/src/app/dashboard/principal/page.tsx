@@ -14,7 +14,6 @@ import {
   UserPlus,
   FileText,
   Calendar,
-  MessageCircle,
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -22,8 +21,8 @@ import {
   Search,
   X,
   Sparkles,
-  Bell,
   BookOpen,
+  Megaphone,
 } from 'lucide-react';
 import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
 import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
@@ -463,9 +462,13 @@ export default function PrincipalDashboard() {
             <FileText className="icon20" />
             <span>Generate Reports</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/messages')}>
-            <MessageCircle className="icon20" />
-            <span>Send Announcement</span>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/messages?create=group')}>
+            <Users className="icon20" />
+            <span>Create Group</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/announcements')}>
+            <Megaphone className="icon20" />
+            <span>Announcements</span>
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/calendar')}>
             <Calendar className="icon20" />
@@ -517,9 +520,9 @@ export default function PrincipalDashboard() {
             <span style={{ fontSize: 20 }}>🎨</span>
             <span>Activity Library</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/communications')}>
-            <Bell className="icon20" />
-            <span>Parent Communications</span>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/announcements')}>
+            <Megaphone className="icon20" />
+            <span>Announcements</span>
           </button>
         </div>
       </div>

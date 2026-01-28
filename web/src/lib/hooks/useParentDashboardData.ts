@@ -53,11 +53,11 @@ export function useParentDashboardData() {
   // Derived values
   const userName = profile?.firstName || profile?.email?.split('@')[0] || 'User';
   const usageType = profile?.usageType;
-  const hasOrganization = !!profile?.preschoolId;
+  const hasOrganization = !!(profile?.preschoolId || profile?.organizationId);
   
   // Show "EduDash Pro Community School" for standalone users (digital learning focus), actual school name for org users
   const preschoolName = hasOrganization 
-    ? profile?.preschoolName 
+    ? (profile?.preschoolName || profile?.organizationName)
     : 'EduDash Pro Community School';
   
   // Profile validation (no debug logs in production)

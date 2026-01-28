@@ -4,10 +4,20 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Alert, Linking, Share } from 'react-native';
+import { Alert, Linking, Share, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { logger } from '@/lib/logger';
 import { assertSupabase } from '@/lib/supabase';
 import type { SchoolBankDetails } from '@/types/payments';
+
+// Lazy load IntentLauncher to avoid OTA crashes before rebuilds
+let IntentLauncher: typeof import('expo-intent-launcher') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  IntentLauncher = require('expo-intent-launcher');
+} catch {
+  logger.debug('usePaymentFlow', 'expo-intent-launcher not available (needs rebuild)');
+}
 
 interface PaymentFlowParams {
   feeId?: string;
@@ -156,13 +166,27 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     } catch (error) {
       Alert.alert('Error', 'Failed to copy to clipboard');
     }
-  }, []);
+  }, [setPaymentInitiated, setShowBankSelector]);
 
   const openBankingApp = useCallback(() => {
     // Mark payment as initiated - enables Upload POP button
     setPaymentInitiated(true);
-    // Open the bank selection sheet instead of Alert
-    setShowBankSelector(true);
+
+    void (async () => {
+      if (Platform.OS === 'android' && IntentLauncher) {
+        try {
+          await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+            category: 'android.intent.category.HOME',
+          });
+          return;
+        } catch (error) {
+          logger.warn('usePaymentFlow', 'Failed to open home screen, falling back to bank list', error);
+        }
+      }
+
+      // Fallback: open the bank selection sheet
+      setShowBankSelector(true);
+    })();
   }, []);
 
   const sharePaymentDetails = useCallback(async () => {

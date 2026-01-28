@@ -14,8 +14,8 @@
  *   npm_package_version - From package.json
  */
 
-const https = require('https');
-const http = require('http');
+import https from 'node:https';
+import http from 'node:http';
 
 const webhookUrl = process.env.DEPLOYMENT_WEBHOOK_URL || 
   `${process.env.NEXT_PUBLIC_WEB_URL || 'https://edudashpro.org.za'}/api/notifications/deployment`;
@@ -78,9 +78,10 @@ const req = protocol.request(options, (res) => {
         console.log(`   Message: ${response.message || 'OK'}`);
         console.log(`   Version: ${response.version || appVersion}`);
         process.exit(0);
-      } catch (e) {
+      } catch (error) {
         console.log('✅ Deployment notification sent (non-JSON response)');
         console.log(`   Response: ${data.substring(0, 100)}`);
+        console.log(`   Parse error: ${error instanceof Error ? error.message : String(error)}`);
         process.exit(0);
       }
     } else {

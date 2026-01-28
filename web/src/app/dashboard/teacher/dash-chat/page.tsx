@@ -159,7 +159,7 @@ export default function TeacherDashChatPage() {
           <main className="flex-1 flex flex-col" style={{ overflow: 'hidden' }}>
             <ChatInterface
               conversationId={activeConversationId}
-              onNewConversation={handleNewConversation}
+              showTutorPanel={false}
             />
           </main>
         </div>

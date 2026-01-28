@@ -146,6 +146,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'warning',
     category: 'reports',
   },
+  reputation: {
+    path: '/screens/teacher-references' as Href,
+    title: 'My Reputation',
+    titleKey: 'teacher.reputation',
+    icon: 'star',
+    color: '#F59E0B',
+    category: 'reports',
+  },
   
   // === BIRTHDAYS ===
   birthday_chart: {
@@ -187,6 +195,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'messages',
   'manage_groups',
   'student_reports',
+  'reputation',
   'ai_assistant',
   'call_parent',
 ];

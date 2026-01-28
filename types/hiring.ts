@@ -69,11 +69,20 @@ export interface JobPosting {
 
 export interface CandidateProfile {
   id: string;
+  user_id?: string | null;
   email: string;
   first_name: string;
   last_name: string;
   phone?: string | null;
   location?: string | null;
+  location_city?: string | null;
+  location_province?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  location_source?: 'gps' | 'manual' | null;
+  preferred_radius_km?: number | null;
+  is_public?: boolean | null;
+  location_updated_at?: string | null;
   experience_years: number;
   qualifications: QualificationRecord[];
   skills: string[];
@@ -177,11 +186,19 @@ export interface UpdateJobPostingRequest {
 }
 
 export interface CreateCandidateProfileRequest {
+  user_id?: string;
   email: string;
   first_name: string;
   last_name: string;
   phone?: string;
   location?: string;
+  location_city?: string;
+  location_province?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_source?: 'gps' | 'manual';
+  preferred_radius_km?: number;
+  is_public?: boolean;
   experience_years: number;
   qualifications?: QualificationRecord[];
   skills?: string[];
@@ -243,6 +260,8 @@ export interface ApplicationWithDetails extends JobApplication {
   candidate_experience_years: number;
   job_title: string;
   has_resume: boolean;
+  rating_average?: number | null;
+  rating_count?: number | null;
 }
 
 // =====================================================

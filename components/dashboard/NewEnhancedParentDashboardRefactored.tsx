@@ -43,6 +43,7 @@ import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadge
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHint';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 import DashOrb from '@/components/dash-orb';
@@ -52,6 +53,14 @@ const isTablet = width > 768;
 const isSmallScreen = width < 380;
 const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
 const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+const DEFAULT_COLLAPSED_SECTIONS = [
+  'overview',
+  'quick-actions',
+  'uniform-sizes',
+  'live-classes',
+  'birthdays',
+  'daily-activities',
+];
 
 interface NewEnhancedParentDashboardProps {
   refreshTrigger?: number;
@@ -67,7 +76,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () => new Set(DEFAULT_COLLAPSED_SECTIONS)
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const insets = useSafeAreaInsets();
   const hasOrganization = !!profile?.preschool_id || !!profile?.organization_id;
@@ -104,7 +115,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const feesDueSoon = dashboardData?.feesDueSoon ?? null;
   const isFeesDueSoon = Boolean(feesDueSoon && feesDueSoon.daysUntil <= 3);
   const feesDueSubtitle = isFeesDueSoon && feesDueSoon
-    ? `Due in ${feesDueSoon.daysUntil} day${feesDueSoon.daysUntil === 1 ? '' : 's'}`
+    ? t('parent.fees_due_in_days', {
+      defaultValue: 'Due in {{count}} day',
+      count: feesDueSoon.daysUntil,
+    })
     : undefined;
 
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
@@ -136,7 +150,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
 
   const getGreeting = (): string => {
     const hour = new Date().getHours();
-    const parentName = profile?.first_name || user?.user_metadata?.first_name || 'Parent';
+    const parentName = profile?.first_name || user?.user_metadata?.first_name || t('roles.parent', { defaultValue: 'Parent' });
     if (hour < 12) return t('dashboard.good_morning', { defaultValue: 'Good morning' }) + ', ' + parentName;
     if (hour < 18) return t('dashboard.good_afternoon', { defaultValue: 'Good afternoon' }) + ', ' + parentName;
     return t('dashboard.good_evening', { defaultValue: 'Good evening' }) + ', ' + parentName;
@@ -159,15 +173,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
   };
 
-  const toggleSection = useCallback((sectionId: string) => {
+  const toggleSection = useCallback((sectionId: string, isCollapsed?: boolean) => {
     setCollapsedSections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(sectionId)) {
-        newSet.delete(sectionId);
-      } else {
-        newSet.add(sectionId);
+      if (isCollapsed === false) {
+        return new Set(DEFAULT_COLLAPSED_SECTIONS);
       }
-      return newSet;
+      if (isCollapsed === true) {
+        return new Set(DEFAULT_COLLAPSED_SECTIONS.filter(id => id !== sectionId));
+      }
+      if (!prev.has(sectionId)) {
+        return new Set(DEFAULT_COLLAPSED_SECTIONS.filter(id => id !== sectionId));
+      }
+      return new Set(DEFAULT_COLLAPSED_SECTIONS);
     });
   }, []);
 
@@ -206,13 +223,13 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/dash-assistant');
         break;
       case 'dash_explain':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Explain a concept to me in simple terms.' } });
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_explain_prompt', { defaultValue: 'Explain a concept to me in simple terms.' }) } });
         break;
       case 'dash_quiz':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a short practice quiz for my child.' } });
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_quiz_prompt', { defaultValue: 'Create a short practice quiz for my child.' }) } });
         break;
       case 'dash_study_plan':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: 'Create a simple study plan for this week.' } });
+        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_study_plan_prompt', { defaultValue: 'Create a simple study plan for this week.' }) } });
         break;
       case 'children':
         // Show children list or scroll to child switcher
@@ -582,73 +599,120 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         </CollapsibleSection>
 
         {/* Uniform Sizes (organization-linked parents only) */}
-        {hasOrganization && children.length > 0 && (
-          <CollapsibleSection
-            title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
-            sectionId="uniform-sizes"
-            icon="shirt-outline"
-            defaultCollapsed={collapsedSections.has('uniform-sizes')}
-            onToggle={toggleSection}
-          >
+        <CollapsibleSection
+          title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
+          sectionId="uniform-sizes"
+          icon="shirt-outline"
+          defaultCollapsed={collapsedSections.has('uniform-sizes')}
+          onToggle={toggleSection}
+        >
+          {hasOrganization && children.length > 0 ? (
             <UniformSizesSection children={children} schoolName={dashboardData?.schoolName} />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <EmptyState
+              icon="shirt-outline"
+              title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
+              description={t('dashboard.parent.empty.uniform_sizes.description', {
+                defaultValue: 'Link a child to a school to see uniform sizes and updates.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Live Classes - Show if user has preschool_id */}
-        {profile?.preschool_id && (
-          <CollapsibleSection 
-            title={t('calls.live_classes', { defaultValue: 'Live Classes' })}
-            sectionId="live-classes"
-            icon="videocam"
-            defaultCollapsed={collapsedSections.has('live-classes')}
-            onToggle={toggleSection}
-          >
-            {/* Onboarding hint for Live Classes */}
-            {showLiveClassesHint && !showQuickActionsHint && (
-              <OnboardingHint
-                hintId="parent_live_classes"
-                message={t('hints.live_classes_message', { defaultValue: "When your child's teacher starts a live class, you'll see it here. Tap to join and watch together!" })}
-                icon="videocam"
-                position="bottom"
-                screen="parent_dashboard"
-                onDismiss={dismissLiveClassesHint}
-              />
-            )}
+        <CollapsibleSection 
+          title={t('calls.live_classes', { defaultValue: 'Live Classes' })}
+          sectionId="live-classes"
+          icon="videocam"
+          defaultCollapsed={collapsedSections.has('live-classes')}
+          onToggle={toggleSection}
+        >
+          {showLiveClassesHint && !showQuickActionsHint && (
+            <OnboardingHint
+              hintId="parent_live_classes"
+              message={t('hints.live_classes_message', { defaultValue: "When your child's teacher starts a live class, you'll see it here. Tap to join and watch together!" })}
+              icon="videocam"
+              position="bottom"
+              screen="parent_dashboard"
+              onDismiss={dismissLiveClassesHint}
+            />
+          )}
+          {profile?.preschool_id ? (
             <JoinLiveLesson 
               preschoolId={profile.preschool_id}
             />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <EmptyState
+              icon="videocam-outline"
+              title={t('dashboard.parent.empty.live_classes.title', { defaultValue: 'Live classes preview' })}
+              description={t('dashboard.parent.empty.live_classes.description', {
+                defaultValue: 'Live class links appear here once a child is linked to a school.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Teacher Quick Notes - Show notes from teacher to parent */}
-        {activeChildId && (
+        {activeChildId ? (
           <TeacherQuickNotes
             studentId={activeChildId}
             maxItems={3}
             showHeader={true}
           />
+        ) : (
+          <EmptyState
+            icon="chatbubbles-outline"
+            title={t('dashboard.parent.empty.teacher_notes.title', { defaultValue: 'Teacher notes preview' })}
+            description={t('dashboard.parent.empty.teacher_notes.description', {
+              defaultValue: 'Notes from educators will appear here after a child is linked.',
+            })}
+            actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+            onActionPress={() => router.push('/screens/register-child' as any)}
+            size="small"
+            secondary
+          />
         )}
 
         {/* Child Progress & Achievements */}
-        {activeChildId && (
+        {activeChildId ? (
           <ChildProgressBadges
             studentId={activeChildId}
             compact={false}
             showHeader={true}
           />
+        ) : (
+          <EmptyState
+            icon="ribbon-outline"
+            title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
+            description={t('dashboard.parent.empty.progress.description', {
+              defaultValue: 'Track milestones and achievements once a child is linked.',
+            })}
+            actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+            onActionPress={() => router.push('/screens/register-child' as any)}
+            size="small"
+            secondary
+          />
         )}
 
         {/* Upcoming Birthdays in Class */}
-        {profile?.preschool_id && (
-          <CollapsibleSection 
-            title={t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays 🎂' })}
-            sectionId="birthdays"
-            icon="🎈"
-            defaultCollapsed={collapsedSections.has('birthdays')}
-            onToggle={toggleSection}
-            actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
-            onActionPress={() => router.push('/screens/birthday-chart' as any)}
-          >
+        <CollapsibleSection 
+          title={t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays 🎂' })}
+          sectionId="birthdays"
+          icon="🎈"
+          defaultCollapsed={collapsedSections.has('birthdays')}
+          onToggle={toggleSection}
+          actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
+          onActionPress={() => router.push('/screens/birthday-chart' as any)}
+        >
+          {profile?.preschool_id ? (
             <UpcomingBirthdaysCard
               birthdays={upcomingBirthdays}
               loading={birthdaysLoading}
@@ -657,25 +721,49 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               compact={true}
               onViewAll={() => router.push('/screens/birthday-chart' as any)}
             />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <EmptyState
+              icon="balloon-outline"
+              title={t('dashboard.parent.empty.birthdays.title', { defaultValue: 'Upcoming birthdays preview' })}
+              description={t('dashboard.parent.empty.birthdays.description', {
+                defaultValue: 'Birthdays for your child\'s group will appear here after linking.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Today's Activities - Show daily activities for child's class */}
-        {dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId && (
-          <CollapsibleSection 
-            title={t('dashboard.todays_activities', { defaultValue: "Today's Activities" })}
-            sectionId="daily-activities"
-            icon="☀️"
-            defaultCollapsed={collapsedSections.has('daily-activities')}
-            onToggle={toggleSection}
-          >
+        <CollapsibleSection 
+          title={t('dashboard.todays_activities', { defaultValue: "Today's Activities" })}
+          sectionId="daily-activities"
+          icon="☀️"
+          defaultCollapsed={collapsedSections.has('daily-activities')}
+          onToggle={toggleSection}
+        >
+          {dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId ? (
             <DailyActivityFeed
               classId={dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId}
               studentId={activeChildId || undefined}
               showHeader={false}
             />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <EmptyState
+              icon="sunny-outline"
+              title={t('dashboard.parent.empty.daily_activity.title', { defaultValue: 'Daily activity preview' })}
+              description={t('dashboard.parent.empty.daily_activity.description', {
+                defaultValue: 'Daily activities will appear here once a child is linked.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Bottom Ad Banner for Free Tier Users (Android only) */}
         <AdBannerWithUpgrade 

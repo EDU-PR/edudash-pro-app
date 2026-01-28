@@ -450,6 +450,9 @@ export default function HomeworkPage() {
                     </h2>
                     {completedHomework.map((hw) => {
                       const submission = hw.submissions?.[0];
+                      const submissionStatus = submission?.status === 'graded'
+                        ? { label: 'Graded', color: 'var(--success)' }
+                        : { label: 'Submitted', color: 'var(--warning)' };
                       return (
                         <div
                           key={hw.id}
@@ -467,8 +470,8 @@ export default function HomeworkPage() {
                               )}
                             </div>
                             {submission && (
-                              <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 12 }}>
-                                Submitted {new Date(submission.submitted_at).toLocaleDateString()}
+                              <span style={{ fontSize: 12, color: submissionStatus.color, fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 12 }}>
+                                {submissionStatus.label} • {new Date(submission.submitted_at).toLocaleDateString()}
                               </span>
                             )}
                           </div>

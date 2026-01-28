@@ -29,7 +29,7 @@ export function ChatInput({
   selectedImagesCount,
 }: ChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { state: voiceState, startRecording, stopRecording, cancelRecording, isSupported, permissionState } = useVoiceRecording();
+  const { state: voiceState, startRecording, stopRecording, isSupported } = useVoiceRecording();
   const [isSendingVoice, setIsSendingVoice] = useState(false);
   const [showPermissionError, setShowPermissionError] = useState(false);
 
@@ -179,10 +179,11 @@ export function ChatInput({
           ) : (
             <textarea
               ref={inputRef}
+              data-chat-input="true"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Message Dash..."
+              placeholder="Message Dash (include grade & subject if you can)..."
               disabled={isDisabled}
               style={{ 
                 flex: 1,

@@ -1003,7 +1003,7 @@ function TeacherMessagesPage() {
       if (!response.ok) throw new Error('AI request failed');
 
       const data = await response.json();
-      const aiResponse = data.response || data.message || 'I apologize, I couldn\'t process that request. Please try again.';
+      const aiResponse = data.response || data.message || 'That didn’t go through yet. Please try again or add more detail.';
 
       const aiMsg: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -2392,6 +2392,8 @@ function TeacherMessagesPage() {
           onClose={() => setShowInviteModal(false)}
           inviterName={profile?.firstName || 'A teacher'}
           preschoolName={profile?.preschoolName}
+          preschoolId={profile?.preschoolId}
+          inviterId={userId}
         />
         
         {/* Create Group Modal */}

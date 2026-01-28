@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { logger } from '@/lib/logger';
 
 // Lazy load IntentLauncher - will be null if not available (pre-rebuild)
 // This prevents OTA crashes while still enabling the feature after rebuild
@@ -23,7 +24,7 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   IntentLauncher = require('expo-intent-launcher');
 } catch {
-  console.log('[BankSelectionSheet] expo-intent-launcher not available (needs rebuild)');
+  logger.debug('BankSelectionSheet', 'expo-intent-launcher not available (needs rebuild)');
 }
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,7 +160,7 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
         return true;
       }
     } catch (error) {
-      console.log(`📱 Scheme open failed for ${scheme}:`, error);
+      logger.warn('BankSelectionSheet', `Scheme open failed for ${scheme}`, error);
     }
     return false;
   };
@@ -173,9 +174,57 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
       });
       return true;
     } catch (error) {
-      console.log(`📱 IntentLauncher failed for ${packageName}:`, error);
+      logger.warn('BankSelectionSheet', `IntentLauncher failed for ${packageName}`, error);
       return false;
     }
+  };
+
+  const openHomeScreen = async () => {
+    if (Platform.OS !== 'android' || !IntentLauncher) return false;
+    try {
+      await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+        category: 'android.intent.category.HOME',
+      });
+      return true;
+    } catch (error) {
+      logger.warn('BankSelectionSheet', 'Failed to open home screen', error);
+      return false;
+    }
+  };
+
+  const handleOpenHomeScreen = async () => {
+    if (Platform.OS !== 'android') {
+      Alert.alert(
+        t('payments.open_bank_app', { defaultValue: 'Open Banking App' }),
+        t('payments.open_bank_app_ios', {
+          defaultValue: 'Please return to your home screen and open your banking app.',
+        })
+      );
+      return;
+    }
+
+    if (!IntentLauncher) {
+      Alert.alert(
+        t('payments.update_required', { defaultValue: 'Update Required' }),
+        t('payments.bank_launcher_unavailable', {
+          defaultValue: 'This feature needs the latest app update. Please update and try again.',
+        })
+      );
+      return;
+    }
+
+    const opened = await openHomeScreen();
+    if (opened) {
+      onClose();
+      return;
+    }
+
+    Alert.alert(
+      t('payments.open_bank_app', { defaultValue: 'Open Banking App' }),
+      t('payments.open_bank_app_failed', {
+        defaultValue: 'Could not open your home screen. Please select a bank from the list.',
+      })
+    );
   };
 
   const handleBankPress = async (bank: BankApp) => {
@@ -190,7 +239,7 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
         for (const packageName of bank.packageIds) {
           const opened = await tryOpenPackage(packageName);
           if (opened) {
-            console.log(`✅ Opened ${bank.name} via IntentLauncher: ${packageName}`);
+            logger.debug('BankSelectionSheet', `Opened ${bank.name} via IntentLauncher: ${packageName}`);
             return;
           }
         }
@@ -199,7 +248,7 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
       for (const scheme of bank.schemes) {
         const opened = await tryOpenScheme(scheme);
         if (opened) {
-          console.log(`✅ Opened ${bank.name} via scheme: ${scheme}`);
+          logger.debug('BankSelectionSheet', `Opened ${bank.name} via scheme: ${scheme}`);
           return;
         }
       }
@@ -242,7 +291,7 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
         ]
       );
     } catch (error) {
-      console.error('Error opening banking app:', error);
+      logger.error('BankSelectionSheet', 'Error opening banking app', error);
       // Ultimate fallback to website
       Alert.alert(
         t('common.error', { defaultValue: 'Error' }),
@@ -261,17 +310,18 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
 
   const renderBankItem = ({ item }: { item: BankApp }) => (
     <TouchableOpacity
-      style={[styles.bankItem, { backgroundColor: theme.surface }]}
+      style={[styles.bankTile, { backgroundColor: theme.surface }]}
       onPress={() => handleBankPress(item)}
       activeOpacity={0.7}
     >
-      <View style={[styles.bankIcon, { backgroundColor: item.color }]}>
-        <Text style={[styles.bankInitial, { fontSize: getBadgeFontSize(item.shortName) }]}>
+      <View style={[styles.bankBadge, { backgroundColor: item.color }]}>
+        <Text style={[styles.bankBadgeText, { fontSize: getBadgeFontSize(item.shortName) }]}>
           {item.shortName}
         </Text>
       </View>
-      <Text style={[styles.bankName, { color: theme.text }]}>{item.name}</Text>
-      <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+      <Text style={[styles.bankTileLabel, { color: theme.text }]} numberOfLines={2}>
+        {item.name}
+      </Text>
     </TouchableOpacity>
   );
 
@@ -289,11 +339,32 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
           {/* Header */}
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.text }]}>
-              {t('payments.select_bank', { defaultValue: 'Select Your Bank' })}
+              {t('payments.select_bank', { defaultValue: 'Banking Apps' })}
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {t('payments.select_bank_desc', { defaultValue: 'Choose your bank to open their app' })}
+              {t('payments.select_bank_desc', { defaultValue: 'Open your banking app to complete payment' })}
             </Text>
+          </View>
+
+          {/* Quick action */}
+          <View style={styles.quickActionContainer}>
+            <TouchableOpacity
+              style={[styles.quickAction, { backgroundColor: theme.surface }]}
+              onPress={handleOpenHomeScreen}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: theme.primary + '20' }]}>
+                <Ionicons name="apps-outline" size={18} color={theme.primary} />
+              </View>
+              <View style={styles.quickActionText}>
+                <Text style={[styles.quickActionTitle, { color: theme.text }]}>
+                  {t('payments.open_home_screen', { defaultValue: 'Open Home Screen' })}
+                </Text>
+                <Text style={[styles.quickActionSubtitle, { color: theme.textSecondary }]}>
+                  {t('payments.open_home_screen_desc', { defaultValue: 'Pick your banking app from your device' })}
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Bank list */}
@@ -304,6 +375,8 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            numColumns={3}
+            columnWrapperStyle={styles.gridRow}
             ListEmptyComponent={() => (
               <View style={styles.emptyContainer}>
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -312,11 +385,6 @@ export function BankSelectionSheet({ visible, onClose, onBankSelected }: BankSel
               </View>
             )}
             initialNumToRender={10}
-            getItemLayout={(data, index) => ({
-              length: 66, // bankItem height (44 + 14*2 padding) + marginBottom 8
-              offset: 66 * index,
-              index,
-            })}
           />
 
           {/* Cancel button */}
@@ -370,36 +438,73 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
   },
-  list: {
-    flex: 1,
-  },
-  listContent: {
+  quickActionContainer: {
     paddingHorizontal: 16,
+    paddingBottom: 12,
   },
-  bankItem: {
+  quickAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
   },
-  bankIcon: {
-    width: 44,
-    height: 44,
+  quickActionIcon: {
+    width: 36,
+    height: 36,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  bankInitial: {
+  quickActionText: {
+    flex: 1,
+  },
+  quickActionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  quickActionSubtitle: {
+    fontSize: 12,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+  },
+  bankTile: {
+    flex: 1,
+    margin: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 118,
+  },
+  bankBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bankBadgeText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
   },
-  bankName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
+  bankTileLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
   },
   cancelButton: {
     marginHorizontal: 16,

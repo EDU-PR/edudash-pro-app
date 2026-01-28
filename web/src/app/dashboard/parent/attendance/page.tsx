@@ -115,8 +115,8 @@ export default function ParentAttendancePage() {
 
   const stats = useMemo(() => {
     const total = records.length;
-    const present = records.filter((r) => r.status === 'present' || r.status === 'late').length;
-    const absent = records.filter((r) => r.status === 'absent').length;
+    const present = records.filter((r) => r.status === 'present').length;
+    const absent = total - present;
     const rate = total > 0 ? Math.round((present / total) * 100) : 0;
     return { total, present, absent, rate };
   }, [records]);

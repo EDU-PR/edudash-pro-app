@@ -23,6 +23,10 @@ export interface MessageThread {
   subject: string;
   student_id?: string | null;
   last_message_at?: string;
+  is_group?: boolean | null;
+  group_name?: string | null;
+  group_type?: string | null;
+  allow_replies?: boolean | null;
   student?: {
     id?: string;
     first_name: string;
@@ -33,6 +37,8 @@ export interface MessageThread {
     user_id: string;
     role: string;
     last_read_at?: string;
+    is_admin?: boolean | null;
+    can_send_messages?: boolean | null;
     /** Profile data - some APIs use 'profiles', others use 'user_profile' */
     profiles?: ParticipantProfile;
     user_profile?: ParticipantProfile;

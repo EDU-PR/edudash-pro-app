@@ -12,6 +12,7 @@ import { CallProviderWrapper } from "@/components/calls/CallProviderWrapper";
 import { NativeAppManager } from "@/components/NativeAppManager";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { PushNotificationSubscribe } from "@/components/PushNotificationSubscribe";
+import { I18nProvider } from "@/components/i18n/I18nProvider";
 import 'katex/dist/katex.min.css';
 
 const geistSans = Geist({
@@ -76,6 +77,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <I18nProvider />
         <PWASplashScreen />
         <PWARegister />
         {/* PWAInstallPrompt disabled - not actively developing PWA */}

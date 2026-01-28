@@ -2,6 +2,7 @@
 
 import { Clock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 
 interface TrialStatus {
   is_trial: boolean;
@@ -16,6 +17,7 @@ interface TrialBannerProps {
 
 export function TrialBanner({ trialStatus }: TrialBannerProps) {
   const router = useRouter();
+  const { t } = useTranslation();
 
   if (!trialStatus?.is_trial || trialStatus.days_remaining === undefined) {
     return null;
@@ -52,9 +54,15 @@ export function TrialBanner({ trialStatus }: TrialBannerProps) {
         <Clock size={18} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>
-            {daysLeft === 0 ? '⏰ Trial Ends Today!' : 
-             daysLeft === 1 ? 'Last Day of Trial' :
-             `${daysLeft} Days Left • ${trialStatus.plan_name} Trial`}
+            {daysLeft === 0
+              ? t('dashboard.parent.trial.ends_today', { defaultValue: '⏰ Trial Ends Today!' })
+              : daysLeft === 1
+                ? t('dashboard.parent.trial.last_day', { defaultValue: 'Last Day of Trial' })
+                : t('dashboard.parent.trial.days_left', {
+                    defaultValue: '{{count}} Days Left • {{plan}} Trial',
+                    count: daysLeft,
+                    plan: trialStatus.plan_name,
+                  })}
           </span>
         </div>
       </div>
@@ -74,7 +82,7 @@ export function TrialBanner({ trialStatus }: TrialBannerProps) {
             flexShrink: 0
           }}
         >
-          Upgrade
+          {t('dashboard.parent.trial.upgrade', { defaultValue: 'Upgrade' })}
         </button>
       )}
     </div>

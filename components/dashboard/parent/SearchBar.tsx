@@ -1,45 +1,46 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import { createDashboardStyles, SPACING, RADIUS, FONT_SIZE } from '@/lib/styles/dashboardTheme';
+import { createDashboardStyles, SPACING } from '@/lib/styles/dashboardTheme';
 
 interface SearchBarProps {
   /**
    * Search query value
    */
   value: string;
-  
+
   /**
    * Callback when search query changes
    */
   onChangeText: (text: string) => void;
-  
+
   /**
    * Optional placeholder text
    */
   placeholder?: string;
-  
+
   /**
    * Optional callback when search is submitted
    */
   onSubmit?: (query: string) => void;
-  
+
   /**
    * Optional callback when search is cleared
    */
   onClear?: () => void;
-  
+
   /**
    * Show clear button when there's text
    */
   showClearButton?: boolean;
-  
+
   /**
    * Auto-focus on mount
    */
   autoFocus?: boolean;
-  
+
   /**
    * Optional keyboard type
    */
@@ -48,9 +49,9 @@ interface SearchBarProps {
 
 /**
  * SearchBar Component
- * 
+ *
  * Global search input with clear button and keyboard navigation.
- * 
+ *
  * @example
  * ```tsx
  * <SearchBar
@@ -65,7 +66,7 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = 'Search...',
+  placeholder,
   onSubmit,
   onClear,
   showClearButton = true,
@@ -73,8 +74,10 @@ export function SearchBar({
   keyboardType = 'default',
 }: SearchBarProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const dashStyles = createDashboardStyles(theme);
   const [isFocused, setIsFocused] = useState(false);
+  const resolvedPlaceholder = placeholder ?? t('common.search', { defaultValue: 'Search...' });
 
   const handleClear = () => {
     onChangeText('');
@@ -105,7 +108,7 @@ export function SearchBar({
         style={[dashStyles.searchInput, styles.input]}
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         placeholderTextColor={theme.textSecondary}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}

@@ -310,7 +310,6 @@ export function useVoiceCallAudio({
   // Audio management via InCallManager
   // CRITICAL: Only initialize audio ONCE to prevent ringtone changes
   useEffect(() => {
-    if (!InCallManager) return;
     if (audioInitializedRef.current) return;
     
     // Only start on first 'connecting' state, never restart
@@ -328,86 +327,93 @@ export function useVoiceCallAudio({
           allowsRecording: true,
           shouldPlayInBackground: true,
           // ANDROID SPECIFIC: Route through earpiece for phone-like experience
-          shouldRouteThroughEarpiece: true,
+          shouldRouteThroughEarpiece: !isSpeakerEnabled,
         });
         console.log('[VoiceCallAudio] ✅ Pre-initialized audio mode for earpiece');
         
-        // CRITICAL: Set earpiece via InCallManager BEFORE starting 
-        InCallManager.setForceSpeakerphoneOn(false);
-        
-        if (isOwner) {
-          // Caller: NO system ringback - it forces speaker on Android
-          // Instead, use empty ringback and play custom tone via expo-audio
-          // expo-audio respects InCallManager's earpiece routing
-          InCallManager.start({ 
-            media: 'audio',
-            auto: false,
-            ringback: '' // Empty - no system ringback (prevents speaker routing)
-          });
-          console.log('[VoiceCallAudio] Caller: Audio initialized (no system ringback to prevent speaker routing)');
-          
-          // CRITICAL: Set earpiece AGAIN after start to override any default
+        if (InCallManager) {
+          // CRITICAL: Set earpiece via InCallManager BEFORE starting 
           InCallManager.setForceSpeakerphoneOn(false);
           
-          // Play custom ringback via expo-audio (respects earpiece routing)
-          // Fire and forget - don't await to avoid blocking
+          if (isOwner) {
+            // Caller: NO system ringback - it forces speaker on Android
+            // Instead, use empty ringback and play custom tone via expo-audio
+            // expo-audio respects InCallManager's earpiece routing
+            InCallManager.start({ 
+              media: 'audio',
+              auto: false,
+              ringback: '' // Empty - no system ringback (prevents speaker routing)
+            });
+            console.log('[VoiceCallAudio] Caller: Audio initialized (no system ringback to prevent speaker routing)');
+            
+            // CRITICAL: Set earpiece AGAIN after start to override any default
+            InCallManager.setForceSpeakerphoneOn(false);
+            
+            // Play custom ringback via expo-audio (respects earpiece routing)
+            // Fire and forget - don't await to avoid blocking
+            playCustomRingback().catch(err => 
+              console.warn('[VoiceCallAudio] Ringback playback failed:', err)
+            );
+          } else {
+            // Callee: No ringback needed, just setup audio routing
+            InCallManager.start({ 
+              media: 'audio',
+              auto: false,
+              ringback: '' // No ringback for callee
+            });
+            console.log('[VoiceCallAudio] Callee: Audio routing only, no ringback');
+          }
+          
+          // Default to earpiece (WhatsApp-like) - enforce multiple times
+          InCallManager.setForceSpeakerphoneOn(false);
+          setIsSpeakerEnabled(false);
+          
+          // Additional enforcement after short delays to catch any automatic speaker switches
+          setTimeout(() => {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallAudio] Earpiece enforcement (100ms post-init)');
+            } catch (e) { /* ignore */ }
+          }, 100);
+          
+          setTimeout(() => {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallAudio] Earpiece enforcement (300ms post-init)');
+            } catch (e) { /* ignore */ }
+          }, 300);
+          
+          // For earpiece calls: Don't force screen to stay on
+          // This allows the proximity sensor to turn off the screen when phone is near ear
+          // For speaker calls, we'll enable keepScreenOn in the connected state effect
+          InCallManager.setKeepScreenOn(false);
+        } else if (isOwner) {
+          // Fallback: if InCallManager isn't available, still play ringback and rely on expo-audio routing
           playCustomRingback().catch(err => 
-            console.warn('[VoiceCallAudio] Ringback playback failed:', err)
+            console.warn('[VoiceCallAudio] Ringback playback failed (no InCallManager):', err)
           );
-        } else {
-          // Callee: No ringback needed, just setup audio routing
-          InCallManager.start({ 
-            media: 'audio',
-            auto: false,
-            ringback: '' // No ringback for callee
-          });
-          console.log('[VoiceCallAudio] Callee: Audio routing only, no ringback');
         }
-        
-        // Default to earpiece (WhatsApp-like) - enforce multiple times
-        InCallManager.setForceSpeakerphoneOn(false);
-        setIsSpeakerEnabled(false);
-        
-        // Additional enforcement after short delays to catch any automatic speaker switches
-        setTimeout(() => {
-          try {
-            InCallManager.setForceSpeakerphoneOn(false);
-            console.log('[VoiceCallAudio] Earpiece enforcement (100ms post-init)');
-          } catch (e) { /* ignore */ }
-        }, 100);
-        
-        setTimeout(() => {
-          try {
-            InCallManager.setForceSpeakerphoneOn(false);
-            console.log('[VoiceCallAudio] Earpiece enforcement (300ms post-init)');
-          } catch (e) { /* ignore */ }
-        }, 300);
-        
-        // For earpiece calls: Don't force screen to stay on
-        // This allows the proximity sensor to turn off the screen when phone is near ear
-        // For speaker calls, we'll enable keepScreenOn in the connected state effect
-        InCallManager.setKeepScreenOn(false);
         
         audioInitializedRef.current = true;
         console.log('[VoiceCallAudio] Audio initialized successfully');
       } catch (error) {
-        console.error('[VoiceCallAudio] Failed to start InCallManager:', error);
+        console.error('[VoiceCallAudio] Failed to start audio routing:', error);
       }
     };
     
     initializeAudio();
-  }, [callState, isOwner, setIsSpeakerEnabled, playCustomRingback]);
+  }, [callState, isOwner, setIsSpeakerEnabled, playCustomRingback, isSpeakerEnabled]);
 
   // Stop ringback when call connects and enforce audio routing
   // CRITICAL: Only apply speaker setting ONCE on connect to avoid overriding user toggles
   useEffect(() => {
-    if (callState === 'connected' && InCallManager) {
+    if (callState === 'connected') {
       try {
         // Stop custom ringback (if playing)
         stopCustomRingback();
         
         // Stop InCallManager ringback (if any)
-        if (isOwner) {
+        if (InCallManager && isOwner) {
           InCallManager.stopRingback();
           console.log('[VoiceCallAudio] Stopped ringback - call connected');
         }
@@ -431,12 +437,14 @@ export function useVoiceCallAudio({
           
           // Enforce current speaker state (earpiece by default, unless user toggled)
           // The continuous enforcement hook will maintain earpiece if not using speaker
-          InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
-          
-          // Screen control based on speaker state:
-          // - Earpiece: Allow proximity sensor to turn off screen when near ear
-          // - Speaker: Keep screen on (user is looking at it)
-          InCallManager.setKeepScreenOn(isSpeakerEnabled);
+          if (InCallManager) {
+            InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
+            
+            // Screen control based on speaker state:
+            // - Earpiece: Allow proximity sensor to turn off screen when near ear
+            // - Speaker: Keep screen on (user is looking at it)
+            InCallManager.setKeepScreenOn(isSpeakerEnabled);
+          }
           
           console.log('[VoiceCallAudio] 📞 Call connected - audio routed to:', isSpeakerEnabled ? 'speaker' : 'earpiece');
           console.log('[VoiceCallAudio] Screen keep-on:', isSpeakerEnabled ? 'enabled (speaker mode)' : 'disabled (proximity sensor enabled)');
@@ -445,7 +453,7 @@ export function useVoiceCallAudio({
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           
           // Additional enforcement after a short delay to catch any routing changes from Daily.co
-          if (!isSpeakerEnabled) {
+          if (!isSpeakerEnabled && InCallManager) {
             setTimeout(() => {
               try {
                 InCallManager.setForceSpeakerphoneOn(false);
@@ -499,6 +507,17 @@ export function useVoiceCallAudio({
         // Still update state for UI feedback
         setIsSpeakerEnabled(newSpeakerState);
       }
+      
+      // Keep expo-audio routing in sync as a fallback
+      setAudioModeAsync({
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+        allowsRecording: true,
+        shouldPlayInBackground: true,
+        shouldRouteThroughEarpiece: !newSpeakerState,
+      }).catch(error => {
+        console.warn('[VoiceCallAudio] Failed to update audio mode for speaker toggle:', error);
+      });
     } catch (error) {
       console.error('[VoiceCallAudio] Failed to toggle speaker:', error);
       // Revert state on error

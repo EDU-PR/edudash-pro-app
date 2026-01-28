@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Activity, BookOpen, Calculator, FlaskConical, Music, Palette, Salad, Sun } from "lucide-react";
@@ -54,11 +55,11 @@ const iconForActivity = (name: string) => {
   return Activity;
 };
 
-const formatTime = (timeString: string | null) => {
+const formatTime = (timeString: string | null, locale: string) => {
   if (!timeString) return null;
   const date = new Date(`1970-01-01T${timeString}`);
   if (Number.isNaN(date.getTime())) return timeString;
-  return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString(locale || "en-ZA", { hour: "2-digit", minute: "2-digit" });
 };
 
 export function DailyActivityFeedCard({
@@ -67,6 +68,7 @@ export function DailyActivityFeedCard({
   maxItems = 8,
   showHeader = true,
 }: DailyActivityFeedCardProps) {
+  const { t, i18n } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [activities, setActivities] = useState<DailyActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,10 +107,12 @@ export function DailyActivityFeedCard({
       id: row.id,
       name: row.activity_name,
       description: row.description,
-      time: row.start_time ? `${formatTime(row.start_time)}${row.end_time ? ` - ${formatTime(row.end_time)}` : ""}` : null,
+      time: row.start_time
+        ? `${formatTime(row.start_time, i18n.language)}${row.end_time ? ` - ${formatTime(row.end_time, i18n.language)}` : ""}`
+        : null,
       teacherName: row.profiles
-        ? `${row.profiles.first_name || ""} ${row.profiles.last_name || ""}`.trim() || "Teacher"
-        : "Teacher",
+        ? `${row.profiles.first_name || ""} ${row.profiles.last_name || ""}`.trim() || t("roles.teacher", { defaultValue: "Teacher" })
+        : t("roles.teacher", { defaultValue: "Teacher" }),
       materials: row.materials_needed || [],
       objectives: row.learning_objectives || [],
       notes: row.notes || null,
@@ -116,7 +120,7 @@ export function DailyActivityFeedCard({
 
     setActivities(mapped);
     setLoading(false);
-  }, [classId, dateString, maxItems, supabase]);
+  }, [classId, dateString, i18n.language, maxItems, supabase, t]);
 
   useEffect(() => {
     void loadActivities();
@@ -143,8 +147,8 @@ export function DailyActivityFeedCard({
   if (loading) {
     return (
       <div className="card">
-        <div className="sectionTitle">Today&apos;s Activities</div>
-        <div className="muted">Loading activities...</div>
+        <div className="sectionTitle">{t("dashboard.parent.daily_activity.title", { defaultValue: "Today's Activities" })}</div>
+        <div className="muted">{t("dashboard.parent.daily_activity.loading", { defaultValue: "Loading activities..." })}</div>
       </div>
     );
   }
@@ -155,7 +159,7 @@ export function DailyActivityFeedCard({
 
   return (
     <div className="card">
-      {showHeader && <div className="sectionTitle">Today&apos;s Activities</div>}
+      {showHeader && <div className="sectionTitle">{t("dashboard.parent.daily_activity.title", { defaultValue: "Today's Activities" })}</div>}
       <div style={{ display: "grid", gap: 12 }}>
         {activities.map((activity) => {
           const Icon = iconForActivity(activity.name);
@@ -199,14 +203,14 @@ export function DailyActivityFeedCard({
 
               {isExpanded && (
                 <div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 12, color: "var(--muted)" }}>
-                  <div>Teacher: {activity.teacherName}</div>
+                  <div>{t("dashboard.parent.daily_activity.labels.teacher", { defaultValue: "Teacher:" })} {activity.teacherName}</div>
                   {activity.materials.length > 0 && (
-                    <div>Materials: {activity.materials.join(", ")}</div>
+                    <div>{t("dashboard.parent.daily_activity.labels.materials", { defaultValue: "Materials:" })} {activity.materials.join(", ")}</div>
                   )}
                   {activity.objectives.length > 0 && (
-                    <div>Objectives: {activity.objectives.join(", ")}</div>
+                    <div>{t("dashboard.parent.daily_activity.labels.objectives", { defaultValue: "Objectives:" })} {activity.objectives.join(", ")}</div>
                   )}
-                  {activity.notes && <div>Notes: {activity.notes}</div>}
+                  {activity.notes && <div>{t("dashboard.parent.daily_activity.labels.notes", { defaultValue: "Notes:" })} {activity.notes}</div>}
                 </div>
               )}
             </div>

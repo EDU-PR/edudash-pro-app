@@ -7,22 +7,37 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { 
-  MessageSquare, Send, Bell, Users, Filter, Search, Plus, X,
-  CheckCircle, Clock, AlertCircle, Megaphone, Mail, Phone, FileText,
-  Calendar, ChevronDown, Loader2, Eye, Trash2
+  MessageSquare,
+  Send,
+  Bell,
+  Search,
+  Plus,
+  X,
+  Clock,
+  Megaphone,
+  Mail,
+  Phone,
+  FileText,
+  Calendar,
+  ChevronDown,
+  Loader2,
+  Eye,
 } from 'lucide-react';
+
+type TargetAudience = 'all' | 'teachers' | 'parents' | 'students';
+type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
 
 interface Announcement {
   id: string;
   title: string;
   content: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  target_audience: string[];
-  status: 'draft' | 'sent' | 'scheduled';
-  scheduled_for?: string;
-  sent_at?: string;
+  priority: PriorityLevel;
+  target_audience: TargetAudience;
+  is_published: boolean;
+  scheduled_for: string | null;
+  published_at: string | null;
   created_at: string;
-  read_count?: number;
+  view_count?: number;
 }
 
 interface MessageTemplate {
@@ -120,16 +135,16 @@ Please make alternative arrangements for childcare. We apologize for any inconve
   },
 ];
 
-const AUDIENCE_OPTIONS = [
-  { value: 'all', label: 'All Parents', icon: '👨‍👩‍👧‍👦' },
-  { value: 'class', label: 'Specific Class', icon: '🏫' },
-  { value: 'age_group', label: 'Age Group', icon: '👶' },
-  { value: 'selected', label: 'Selected Parents', icon: '✅' },
+const AUDIENCE_OPTIONS: { value: TargetAudience; label: string; icon: string }[] = [
+  { value: 'all', label: 'Everyone', icon: '👨‍👩‍👧‍👦' },
+  { value: 'parents', label: 'Parents', icon: '👪' },
+  { value: 'teachers', label: 'Teachers', icon: '👩‍🏫' },
+  { value: 'students', label: 'Students', icon: '🧒' },
 ];
 
-const PRIORITY_OPTIONS = [
+const PRIORITY_OPTIONS: { value: PriorityLevel; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#6b7280' },
-  { value: 'normal', label: 'Normal', color: '#3b82f6' },
+  { value: 'medium', label: 'Medium', color: '#3b82f6' },
   { value: 'high', label: 'High', color: '#f59e0b' },
   { value: 'urgent', label: 'Urgent', color: '#ef4444' },
 ];
@@ -151,8 +166,8 @@ export default function ParentCommunicationsPage() {
   const [composeData, setComposeData] = useState({
     title: '',
     content: '',
-    priority: 'normal' as const,
-    target_audience: ['all'],
+    priority: 'medium' as PriorityLevel,
+    target_audience: 'all' as TargetAudience,
     send_push: true,
     send_email: false,
     send_sms: false,
@@ -193,8 +208,23 @@ export default function ParentCommunicationsPage() {
 
       if (error) {
         console.error('Error loading announcements:', error);
+      } else if (data && data.length > 0) {
+        const announcementIds = data.map((a: any) => a.id);
+        const { data: viewsData } = await supabase
+          .from('announcement_views')
+          .select('announcement_id')
+          .in('announcement_id', announcementIds);
+
+        const viewCounts = viewsData?.reduce((acc: Record<string, number>, view: any) => {
+          acc[view.announcement_id] = (acc[view.announcement_id] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>) || {};
+
+        setAnnouncements(
+          (data || []).map((a: any) => ({ ...a, view_count: viewCounts[a.id] || 0 }))
+        );
       } else {
-        setAnnouncements(data || []);
+        setAnnouncements([]);
       }
     } catch (err) {
       console.error('Error:', err);
@@ -246,7 +276,7 @@ export default function ParentCommunicationsPage() {
   };
 
   const handleSendAnnouncement = async () => {
-    if (!preschoolId || !composeData.title.trim() || !composeData.content.trim()) return;
+    if (!preschoolId || !userId || !composeData.title.trim() || !composeData.content.trim()) return;
 
     setSending(true);
     try {
@@ -256,14 +286,14 @@ export default function ParentCommunicationsPage() {
         .from('announcements')
         .insert({
           preschool_id: preschoolId,
-          created_by: userId,
+          author_id: userId,
           title: composeData.title,
           content: composeData.content,
           priority: composeData.priority,
           target_audience: composeData.target_audience,
-          status: isScheduled ? 'scheduled' : 'sent',
+          is_published: !isScheduled,
           scheduled_for: isScheduled ? composeData.schedule_for : null,
-          sent_at: isScheduled ? null : new Date().toISOString(),
+          published_at: isScheduled ? null : new Date().toISOString(),
         });
 
       if (error) throw error;
@@ -272,8 +302,8 @@ export default function ParentCommunicationsPage() {
       setComposeData({
         title: '',
         content: '',
-        priority: 'normal',
-        target_audience: ['all'],
+        priority: 'medium',
+        target_audience: 'all',
         send_push: true,
         send_email: false,
         send_sms: false,
@@ -290,19 +320,21 @@ export default function ParentCommunicationsPage() {
   };
 
   const handleSaveDraft = async () => {
-    if (!preschoolId || !composeData.title.trim()) return;
+    if (!preschoolId || !userId || !composeData.title.trim()) return;
 
     try {
       const { error } = await supabase
         .from('announcements')
         .insert({
           preschool_id: preschoolId,
-          created_by: userId,
+          author_id: userId,
           title: composeData.title,
           content: composeData.content,
           priority: composeData.priority,
           target_audience: composeData.target_audience,
-          status: 'draft',
+          is_published: false,
+          scheduled_for: null,
+          published_at: null,
         });
 
       if (error) throw error;
@@ -314,11 +346,18 @@ export default function ParentCommunicationsPage() {
     }
   };
 
+  const getAnnouncementStatus = (announcement: Announcement) => {
+    if (announcement.is_published) return 'sent' as const;
+    if (announcement.scheduled_for) return 'scheduled' as const;
+    return 'draft' as const;
+  };
+
   const filteredAnnouncements = announcements.filter(a => {
+    const status = getAnnouncementStatus(a);
     // Filter by tab
-    if (activeTab === 'sent' && a.status !== 'sent') return false;
-    if (activeTab === 'scheduled' && a.status !== 'scheduled') return false;
-    if (activeTab === 'drafts' && a.status !== 'draft') return false;
+    if (activeTab === 'sent' && status !== 'sent') return false;
+    if (activeTab === 'scheduled' && status !== 'scheduled') return false;
+    if (activeTab === 'drafts' && status !== 'draft') return false;
 
     // Filter by priority
     if (filterPriority !== 'all' && a.priority !== filterPriority) return false;
@@ -370,7 +409,7 @@ export default function ParentCommunicationsPage() {
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  {announcements.filter(a => a.status === 'sent').length}
+                  {announcements.filter(a => getAnnouncementStatus(a) === 'sent').length}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Sent This Month</div>
               </div>
@@ -383,7 +422,7 @@ export default function ParentCommunicationsPage() {
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  {announcements.filter(a => a.status === 'scheduled').length}
+                  {announcements.filter(a => getAnnouncementStatus(a) === 'scheduled').length}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Scheduled</div>
               </div>
@@ -396,7 +435,7 @@ export default function ParentCommunicationsPage() {
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  {announcements.filter(a => a.status === 'draft').length}
+                  {announcements.filter(a => getAnnouncementStatus(a) === 'draft').length}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Drafts</div>
               </div>
@@ -409,7 +448,7 @@ export default function ParentCommunicationsPage() {
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  {announcements.reduce((sum, a) => sum + (a.read_count || 0), 0)}
+                  {announcements.reduce((sum, a) => sum + (a.view_count || 0), 0)}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>Total Reads</div>
               </div>
@@ -520,10 +559,18 @@ export default function ParentCommunicationsPage() {
                         borderRadius: 12,
                         fontSize: 11,
                         fontWeight: 600,
-                        backgroundColor: announcement.status === 'sent' ? '#10b98120' : announcement.status === 'scheduled' ? '#f59e0b20' : '#6b728020',
-                        color: announcement.status === 'sent' ? '#10b981' : announcement.status === 'scheduled' ? '#f59e0b' : '#6b7280',
+                        backgroundColor: getAnnouncementStatus(announcement) === 'sent'
+                          ? '#10b98120'
+                          : getAnnouncementStatus(announcement) === 'scheduled'
+                          ? '#f59e0b20'
+                          : '#6b728020',
+                        color: getAnnouncementStatus(announcement) === 'sent'
+                          ? '#10b981'
+                          : getAnnouncementStatus(announcement) === 'scheduled'
+                          ? '#f59e0b'
+                          : '#6b7280',
                       }}>
-                        {announcement.status}
+                        {getAnnouncementStatus(announcement)}
                       </span>
                     </div>
                     <h3 style={{ fontWeight: 600, marginBottom: 4 }}>{announcement.title}</h3>
@@ -534,17 +581,17 @@ export default function ParentCommunicationsPage() {
                   </div>
                   <div style={{ textAlign: 'right', marginLeft: 24 }}>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                      {announcement.status === 'sent' && announcement.sent_at
-                        ? `Sent ${new Date(announcement.sent_at).toLocaleDateString('en-ZA')}`
-                        : announcement.status === 'scheduled' && announcement.scheduled_for
+                      {getAnnouncementStatus(announcement) === 'sent' && announcement.published_at
+                        ? `Sent ${new Date(announcement.published_at).toLocaleDateString('en-ZA')}`
+                        : getAnnouncementStatus(announcement) === 'scheduled' && announcement.scheduled_for
                         ? `Scheduled for ${new Date(announcement.scheduled_for).toLocaleDateString('en-ZA')}`
                         : `Created ${new Date(announcement.created_at).toLocaleDateString('en-ZA')}`
                       }
                     </div>
-                    {announcement.read_count !== undefined && (
+                    {announcement.view_count !== undefined && (
                       <div style={{ fontSize: 12, color: '#10b981', marginTop: 4 }}>
                         <Eye size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                        {announcement.read_count} reads
+                        {announcement.view_count} reads
                       </div>
                     )}
                   </div>
@@ -660,7 +707,7 @@ export default function ParentCommunicationsPage() {
                   <label style={{ display: 'block', fontWeight: 500, marginBottom: 8 }}>Priority</label>
                   <select
                     value={composeData.priority}
-                    onChange={(e) => setComposeData(prev => ({ ...prev, priority: e.target.value as any }))}
+                    onChange={(e) => setComposeData(prev => ({ ...prev, priority: e.target.value as PriorityLevel }))}
                     className="input"
                     style={{ width: '100%' }}
                   >
@@ -672,8 +719,8 @@ export default function ParentCommunicationsPage() {
                 <div>
                   <label style={{ display: 'block', fontWeight: 500, marginBottom: 8 }}>Audience</label>
                   <select
-                    value={composeData.target_audience[0]}
-                    onChange={(e) => setComposeData(prev => ({ ...prev, target_audience: [e.target.value] }))}
+                    value={composeData.target_audience}
+                    onChange={(e) => setComposeData(prev => ({ ...prev, target_audience: e.target.value as TargetAudience }))}
                     className="input"
                     style={{ width: '100%' }}
                   >

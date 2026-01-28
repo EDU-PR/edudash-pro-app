@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -23,6 +23,7 @@ function formatSchoolName(slug: string | null): string {
 
 export default function DashChatPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [email, setEmail] = useState<string>('');
   const [userId, setUserId] = useState<string>();
@@ -32,6 +33,7 @@ export default function DashChatPage() {
   const [showExamBuilder, setShowExamBuilder] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
+  const initialPrompt = searchParams.get('prompt') || '';
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -71,6 +73,12 @@ export default function DashChatPage() {
     setShowSidebar(false);
   };
 
+  useEffect(() => {
+    if (initialPrompt && !activeConversationId) {
+      handleNewConversation();
+    }
+  }, [initialPrompt, activeConversationId]);
+
   return (
     <ParentShell tenantSlug={formatSchoolName(slug)} userEmail={email}>
       {/* Full viewport height container - No scroll */}
@@ -89,7 +97,7 @@ export default function DashChatPage() {
       >
         {/* Header - Fixed below topnav, aligned with content */}
         <header className="flex-shrink-0 py-3 border-b border-gray-800 bg-gray-950 flex items-center justify-between gap-3 z-20" style={{
-          marginTop: 'var(--topnav-h, 56px)',
+          marginTop: 'var(--topnav-offset, 56px)',
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
           backdropFilter: 'blur(12px)',
@@ -156,7 +164,7 @@ export default function DashChatPage() {
             style={{
               position: 'fixed',
               left: 0,
-              top: 'calc(var(--topnav-h, 56px) + 57px)',
+              top: 'calc(var(--topnav-offset, 56px) + 57px)',
               bottom: 0,
               width: '280px',
               zIndex: 10
@@ -210,9 +218,9 @@ export default function DashChatPage() {
             {hydrated && activeConversationId && (
               <ChatInterface
                 conversationId={activeConversationId}
-                onNewConversation={handleNewConversation}
                 userId={userId}
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
+                initialPrompt={initialPrompt || undefined}
               />
             )}
 

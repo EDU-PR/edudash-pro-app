@@ -207,22 +207,27 @@ export default function StudentDetailScreen() {
       const attendanceRate = totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
       const lastAttendance = attendanceData?.[0]?.attendance_date;
 
-      // Get financial data - summary for outstanding fees
-      const { data: financialData } = await assertSupabase()
-        .from('financial_transactions')
-        .select('amount, status, type')
-        .eq('student_id', studentId)
-        .eq('type', 'fee_payment');
+      // Get financial data - outstanding fees from student_fees (source of truth)
+      const { data: feeData, error: feeError } = await assertSupabase()
+        .from('student_fees')
+        .select('amount_outstanding, status, final_amount')
+        .eq('student_id', studentId);
 
-      const outstandingFees = financialData
-        ?.filter(f => f.status === 'pending')
-        ?.reduce((sum, f) => sum + f.amount, 0) || 0;
+      if (feeError) {
+        console.error('Error loading student fees:', feeError);
+      }
+
+      const outstandingFees = (feeData || []).reduce((sum, fee) => {
+        const outstanding = fee.amount_outstanding ?? 0;
+        return sum + outstanding;
+      }, 0);
 
       // Get child-specific transaction history (last 10)
       const { data: transactionsData } = await assertSupabase()
         .from('financial_transactions')
         .select('*')
         .eq('student_id', studentId)
+        .eq('preschool_id', schoolId)
         .order('created_at', { ascending: false })
         .limit(10);
 

@@ -10,7 +10,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/bump-sw-version.mjs",
     "build": "next build",
-    "postbuild": "node scripts/notify-deployment.js || true",
+    "postbuild": "node scripts/notify-deployment.mjs || true",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

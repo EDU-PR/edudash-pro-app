@@ -126,6 +126,8 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     { id: 'uniforms', label: t('dashboard.uniform_sizes', { defaultValue: 'Uniforms' }), icon: 'shirt-outline', route: '/screens/principal-uniforms', color: theme.info },
     { id: 'parent-links', label: t('dashboard.parent_links', { defaultValue: 'Connect Parent' }), icon: 'link', route: '/screens/principal-parent-requests', color: theme.info },
     { id: 'payments', label: t('dashboard.review_payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/principal-fee-overview', color: theme.info },
+    { id: 'fee-management', label: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', route: '/screens/admin/fee-management', color: theme.success },
+    { id: 'dash-studio', label: t('dashboard.dash_studio', { defaultValue: 'Dash Studio' }), icon: 'sparkles', route: '/screens/dash-studio', color: theme.primary },
   ];
 
   const needsAttention: NeedsAttentionItem[] = [

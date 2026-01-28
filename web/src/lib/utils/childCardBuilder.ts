@@ -12,6 +12,8 @@ interface ChildData {
   last_name: string;
   date_of_birth?: string;
   class_id?: string;
+  preschool_id?: string | null;
+  student_id?: string | null;
   avatar_url?: string | null;
   profile_picture_url?: string | null;
   classes?: {
@@ -37,6 +39,9 @@ export function buildChildCardFromData(
     grade: child.classes?.grade_level || 'Preschool',
     className: child.classes?.name || (child.class_id ? `Class ${String(child.class_id).slice(-4)}` : null),
     classId: child.class_id || undefined,
+    preschoolId: child.preschool_id || null,
+    preschoolName: null,
+    studentCode: child.student_id || null,
     lastActivity: metrics.lastActivity,
     homeworkPending: metrics.homeworkPending,
     upcomingEvents: metrics.upcomingEvents,

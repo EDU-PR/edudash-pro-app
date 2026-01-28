@@ -1,11 +1,14 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 interface AdBannerPlaceholderProps {
   onUpgrade: () => void;
   variant?: "top" | "bottom";
 }
 
 export function AdBannerPlaceholder({ onUpgrade, variant = "top" }: AdBannerPlaceholderProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="card"
@@ -17,13 +20,15 @@ export function AdBannerPlaceholder({ onUpgrade, variant = "top" }: AdBannerPlac
       }}
     >
       <div style={{ fontWeight: 600, marginBottom: 6 }}>
-        {variant === "top" ? "Sponsored learning tips" : "Support the app"}
+        {variant === "top"
+          ? t("dashboard.parent.ad_banner.top_title", { defaultValue: "Sponsored learning tips" })
+          : t("dashboard.parent.ad_banner.bottom_title", { defaultValue: "Support the app" })}
       </div>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        Upgrade to remove ads and unlock extra parent tools.
+        {t("dashboard.parent.ad_banner.description", { defaultValue: "Upgrade to remove ads and unlock extra parent tools." })}
       </div>
       <button className="btn btnPrimary" onClick={onUpgrade}>
-        Upgrade
+        {t("dashboard.parent.ad_banner.cta", { defaultValue: "Upgrade" })}
       </button>
     </div>
   );

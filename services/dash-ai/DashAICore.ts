@@ -541,7 +541,7 @@ export class DashAICore {
       return {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'assistant',
-        content: response.content || 'I apologize, but I encountered an issue processing your request.',
+        content: response.content || 'I ran into a hiccup while preparing your help. Please try again or add a bit more detail.',
         timestamp: Date.now(),
         metadata: languageOverride ? { detected_language: languageOverride } : undefined,
       };
@@ -550,7 +550,7 @@ export class DashAICore {
       return {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'assistant',
-        content: "I'm sorry, I'm having trouble processing that right now. Could you please try again?",
+        content: "I’m having trouble right now. Please try again, or tell me your grade/subject and I’ll guide you step-by-step.",
         timestamp: Date.now(),
       };
     }

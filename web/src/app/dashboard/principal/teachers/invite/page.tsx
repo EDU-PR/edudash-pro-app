@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { ArrowLeft, UserPlus, Mail, User, Phone, BookOpen, Send } from 'lucide-react';
+import { ArrowLeft, UserPlus, Mail, User, Phone, BookOpen, Send, Share2 } from 'lucide-react';
+import { InviteContactModal } from '@/components/messaging/InviteContactModal';
 
 export default function InviteTeacherPage() {
   const router = useRouter();
@@ -15,6 +16,9 @@ export default function InviteTeacherPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -29,6 +33,85 @@ export default function InviteTeacherPage() {
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
   const preschoolId = profile?.preschoolId;
+  const inviterDisplayName = profile
+    ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || 'A principal'
+    : 'A principal';
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const inviteLink = preschoolId
+    ? `${baseUrl}/sign-up/teacher?ref=${preschoolId}&invited=true`
+    : `${baseUrl}/sign-up/teacher`;
+
+  const generateReadableCode = (length = 8) => {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < length; i += 1) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  };
+
+  const ensureInviteCode = async () => {
+    if (!preschoolId) return null;
+    if (inviteCode) return inviteCode;
+
+    setInviteCodeLoading(true);
+    try {
+      const { data: existing } = await supabase
+        .from('school_invitation_codes')
+        .select('code')
+        .eq('preschool_id', preschoolId)
+        .eq('invitation_type', 'teacher')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.code) {
+        setInviteCode(existing.code);
+        return existing.code;
+      }
+
+      const newCode = generateReadableCode(8);
+      const { data: created, error: createError } = await supabase
+        .from('school_invitation_codes')
+        .insert({
+          code: newCode,
+          invitation_type: 'teacher',
+          preschool_id: preschoolId,
+          invited_by: userId || null,
+          description: 'Teacher invite',
+          is_active: true,
+          metadata: {
+            source: 'principal_dashboard',
+            role: 'teacher',
+            inviter_id: userId || null,
+          },
+        })
+        .select('code')
+        .single();
+
+      if (createError) {
+        console.error('Failed to create teacher invite code:', createError);
+        return null;
+      }
+
+      if (created?.code) {
+        setInviteCode(created.code);
+        return created.code;
+      }
+    } catch (err) {
+      console.error('Failed to load teacher invite code:', err);
+    } finally {
+      setInviteCodeLoading(false);
+    }
+
+    return null;
+  };
+
+  const handleOpenShareModal = async () => {
+    setShowInviteModal(true);
+    await ensureInviteCode();
+  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -91,13 +174,24 @@ export default function InviteTeacherPage() {
 
       if (insertError) throw insertError;
 
-      // TODO: Send invitation email if formData.send_email is true
-      // This would typically call an Edge Function to send the email
       if (formData.send_email) {
-        console.log('TODO: Send invitation email to', formData.email);
-        // await supabase.functions.invoke('send-teacher-invitation', {
-        //   body: { teacher_id: teacher.id, email: formData.email }
-        // });
+        const response = await fetch('/api/invites/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'email',
+            email: formData.email.toLowerCase(),
+            inviteLink,
+            preschoolName,
+            inviterName: inviterDisplayName,
+            inviteRole: 'teacher',
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || 'Failed to send invitation email');
+        }
       }
 
       setSuccess(true);
@@ -337,6 +431,35 @@ export default function InviteTeacherPage() {
                   </div>
                 </label>
               </div>
+
+              <div style={{ 
+                padding: 16, 
+                borderRadius: 8, 
+                background: 'var(--surface-2)',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}>
+                <div style={{ minWidth: 220 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Share invite link</div>
+                  <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+                    Send via SMS, WhatsApp, or social apps
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btnSecondary"
+                  onClick={handleOpenShareModal}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                  disabled={inviteCodeLoading}
+                >
+                  <Share2 size={16} />
+                  {inviteCodeLoading ? 'Preparing...' : 'Share Link'}
+                </button>
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -362,6 +485,19 @@ export default function InviteTeacherPage() {
           </form>
         </div>
       </div>
+      <InviteContactModal
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        preschoolId={preschoolId}
+        preschoolName={preschoolName}
+        inviterName={inviterDisplayName}
+        inviterId={userId}
+        inviteRole="teacher"
+        invitePath="/sign-up/teacher"
+        inviteCode={inviteCode || undefined}
+        defaultEmail={formData.email}
+        defaultPhone={formData.phone}
+      />
     </PrincipalShell>
   );
 }

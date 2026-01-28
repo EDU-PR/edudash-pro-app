@@ -1,9 +1,9 @@
 /**
  * ChildProgressBadges Component
- * 
+ *
  * Displays visual progress indicators and achievement badges for children.
  * Shows learning milestones, attendance streaks, and special achievements.
- * 
+ *
  * Features:
  * - Animated progress rings
  * - Achievement badges with icons
@@ -13,7 +13,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  AppState,
   View,
   Text,
   StyleSheet,
@@ -22,6 +21,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
@@ -50,18 +50,6 @@ interface ChildProgressBadgesProps {
   onBadgePress?: (badge: Badge) => void;
 }
 
-// Predefined badge definitions
-const BADGE_DEFINITIONS: Omit<Badge, 'earned_at' | 'progress'>[] = [
-  { id: 'attendance_star', name: 'Attendance Star', description: '5-day attendance streak!', icon: 'star', color: '#F59E0B' },
-  { id: 'homework_hero', name: 'Homework Hero', description: 'Completed all homework this week', icon: 'trophy', color: '#10B981' },
-  { id: 'helping_hand', name: 'Helping Hand', description: 'Helped a friend today', icon: 'heart', color: '#EC4899' },
-  { id: 'creative_genius', name: 'Creative Genius', description: 'Outstanding artwork', icon: 'color-palette', color: '#8B5CF6' },
-  { id: 'math_wizard', name: 'Math Wizard', description: 'Excellent counting skills', icon: 'calculator', color: '#3B82F6' },
-  { id: 'bookworm', name: 'Bookworm', description: 'Loves story time', icon: 'book', color: '#6366F1' },
-  { id: 'super_listener', name: 'Super Listener', description: 'Always follows instructions', icon: 'ear', color: '#06B6D4' },
-  { id: 'kindness_champ', name: 'Kindness Champion', description: 'Shows kindness to everyone', icon: 'happy', color: '#F472B6' },
-];
-
 export function ChildProgressBadges({
   studentId,
   compact = false,
@@ -69,12 +57,24 @@ export function ChildProgressBadges({
   onBadgePress,
 }: ChildProgressBadgesProps) {
   const { theme } = useTheme();
+  const { t, i18n } = useTranslation();
   const [earnedBadges, setEarnedBadges] = useState<Badge[]>([]);
   const [progressStats, setProgressStats] = useState<ProgressStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  
+
   const styles = useMemo(() => createStyles(theme, compact), [theme, compact]);
+
+  const badgeDefinitions = useMemo<Badge[]>(() => [
+    { id: 'attendance_star', name: t('dashboard.parent.progress.badges.attendance_star.name', { defaultValue: 'Attendance Star' }), description: t('dashboard.parent.progress.badges.attendance_star.description', { defaultValue: '5-day attendance streak!' }), icon: 'star', color: '#F59E0B' },
+    { id: 'homework_hero', name: t('dashboard.parent.progress.badges.homework_hero.name', { defaultValue: 'Homework Hero' }), description: t('dashboard.parent.progress.badges.homework_hero.description', { defaultValue: 'Completed all homework this week' }), icon: 'trophy', color: '#10B981' },
+    { id: 'helping_hand', name: t('dashboard.parent.progress.badges.helping_hand.name', { defaultValue: 'Helping Hand' }), description: t('dashboard.parent.progress.badges.helping_hand.description', { defaultValue: 'Helped a friend today' }), icon: 'heart', color: '#EC4899' },
+    { id: 'creative_genius', name: t('dashboard.parent.progress.badges.creative_genius.name', { defaultValue: 'Creative Genius' }), description: t('dashboard.parent.progress.badges.creative_genius.description', { defaultValue: 'Outstanding artwork' }), icon: 'color-palette', color: '#8B5CF6' },
+    { id: 'math_wizard', name: t('dashboard.parent.progress.badges.math_wizard.name', { defaultValue: 'Math Wizard' }), description: t('dashboard.parent.progress.badges.math_wizard.description', { defaultValue: 'Excellent counting skills' }), icon: 'calculator', color: '#3B82F6' },
+    { id: 'bookworm', name: t('dashboard.parent.progress.badges.bookworm.name', { defaultValue: 'Bookworm' }), description: t('dashboard.parent.progress.badges.bookworm.description', { defaultValue: 'Loves story time' }), icon: 'book', color: '#6366F1' },
+    { id: 'super_listener', name: t('dashboard.parent.progress.badges.super_listener.name', { defaultValue: 'Super Listener' }), description: t('dashboard.parent.progress.badges.super_listener.description', { defaultValue: 'Always follows instructions' }), icon: 'ear', color: '#06B6D4' },
+    { id: 'kindness_champ', name: t('dashboard.parent.progress.badges.kindness_champ.name', { defaultValue: 'Kindness Champion' }), description: t('dashboard.parent.progress.badges.kindness_champ.description', { defaultValue: 'Shows kindness to everyone' }), icon: 'happy', color: '#F472B6' },
+  ], [t]);
 
   const loadProgress = useCallback(async () => {
     if (!studentId) {
@@ -84,7 +84,7 @@ export function ChildProgressBadges({
 
     try {
       const supabase = assertSupabase();
-      
+
       // Attendance progress (last 7 days, deduped per date)
       const today = new Date();
       const weekStart = new Date(today);
@@ -120,7 +120,7 @@ export function ChildProgressBadges({
       // Calculate homework completion - out of 4 per week
       let completedHomework = 0;
       let totalHomework = 4; // Weekly homework target is 4
-      
+
       if (studentData?.class_id) {
         // Get assignments for this week
         const { data: assignments } = await supabase
@@ -129,20 +129,20 @@ export function ChildProgressBadges({
           .eq('class_id', studentData.class_id)
           .gte('created_at', weekStart.toISOString())
           .lte('due_date', new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString());
-        
+
         const assignmentIds = assignments?.map(a => a.id) || [];
-        
+
         if (assignmentIds.length > 0) {
           const { data: submissions } = await supabase
             .from('homework_submissions')
             .select('assignment_id, status')
             .eq('student_id', studentId)
             .in('assignment_id', assignmentIds);
-          
-          completedHomework = submissions?.filter(h => 
+
+          completedHomework = submissions?.filter(h =>
             h.status === 'submitted' || h.status === 'graded'
           ).length || 0;
-          
+
           // Use actual assignments count, but default to 4 if less
           totalHomework = Math.max(assignmentIds.length, 4);
         }
@@ -151,14 +151,14 @@ export function ChildProgressBadges({
       // Set progress stats
       setProgressStats([
         {
-          label: 'Attendance',
+          label: t('dashboard.parent.progress.stats.attendance', { defaultValue: 'Attendance' }),
           value: presentDays,
           max: 5,
           color: '#10B981',
           icon: 'calendar-outline',
         },
         {
-          label: 'Homework',
+          label: t('dashboard.parent.progress.stats.homework', { defaultValue: 'Homework' }),
           value: completedHomework,
           max: totalHomework,
           color: '#3B82F6',
@@ -174,15 +174,15 @@ export function ChildProgressBadges({
         .order('earned_at', { ascending: false });
 
       const badges: Badge[] = [];
-      
+
       // Map database achievements to badges
       if (achievementsData && achievementsData.length > 0) {
         achievementsData.forEach((achievement: any) => {
-          const matchingDef = BADGE_DEFINITIONS.find(
-            b => b.id === achievement.achievement_type || 
+          const matchingDef = badgeDefinitions.find(
+            b => b.id === achievement.achievement_type ||
                  b.name.toLowerCase() === achievement.achievement_name.toLowerCase()
           );
-          
+
           if (matchingDef) {
             badges.push({
               ...matchingDef,
@@ -196,7 +196,7 @@ export function ChildProgressBadges({
             // Custom achievement not in predefined list
             badges.push({
               id: achievement.id,
-              name: achievement.achievement_name,
+              name: achievement.achievement_name || t('dashboard.parent.progress.badges.default_name', { defaultValue: 'Achievement' }),
               description: achievement.description || '',
               icon: achievement.achievement_icon || 'star',
               color: achievement.achievement_color || '#F59E0B',
@@ -205,75 +205,77 @@ export function ChildProgressBadges({
           }
         });
       }
-      
+
       // Add attendance badge based on current progress
       if (presentDays >= 5 && !badges.find(b => b.id === 'attendance_star')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'attendance_star')!, earned_at: new Date().toISOString() });
+        badges.push({ ...badgeDefinitions.find(b => b.id === 'attendance_star')!, earned_at: new Date().toISOString() });
       } else if (presentDays >= 3 && !badges.find(b => b.id === 'attendance_star')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'attendance_star')!, progress: (presentDays / 5) * 100 });
+        badges.push({ ...badgeDefinitions.find(b => b.id === 'attendance_star')!, progress: (presentDays / 5) * 100 });
       }
 
       // Add homework badge based on current progress
       if (completedHomework >= totalHomework && !badges.find(b => b.id === 'homework_hero')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'homework_hero')!, earned_at: new Date().toISOString() });
+        badges.push({ ...badgeDefinitions.find(b => b.id === 'homework_hero')!, earned_at: new Date().toISOString() });
       } else if (completedHomework > 0 && !badges.find(b => b.id === 'homework_hero')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'homework_hero')!, progress: (completedHomework / totalHomework) * 100 });
-      }
-
-      // Add helping_hand and bookworm with real progress from activities
-      // Check if student has shared work or helped others (from daily_activities or similar)
-      const { data: helpingActivities } = await supabase
-        .from('student_achievements')
-        .select('id')
-        .eq('student_id', studentId)
-        .or('achievement_type.eq.helping_hand,achievement_name.ilike.%help%,category.eq.social')
-        .limit(5);
-      
-      const helpingCount = helpingActivities?.length || 0;
-      if (helpingCount >= 3 && !badges.find(b => b.id === 'helping_hand')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'helping_hand')!, earned_at: new Date().toISOString() });
-      } else if (!badges.find(b => b.id === 'helping_hand')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'helping_hand')!, progress: Math.min((helpingCount / 3) * 100, 99) });
-      }
-
-      // Check reading/storytime activities for bookworm
-      const { data: readingActivities } = await supabase
-        .from('student_achievements')
-        .select('id')
-        .eq('student_id', studentId)
-        .or('achievement_type.eq.bookworm,achievement_name.ilike.%read%,achievement_name.ilike.%story%,category.eq.reading')
-        .limit(5);
-      
-      const readingCount = readingActivities?.length || 0;
-      if (readingCount >= 5 && !badges.find(b => b.id === 'bookworm')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'bookworm')!, earned_at: new Date().toISOString() });
-      } else if (!badges.find(b => b.id === 'bookworm')) {
-        badges.push({ ...BADGE_DEFINITIONS.find(b => b.id === 'bookworm')!, progress: Math.min((readingCount / 5) * 100, 99) });
+        badges.push({ ...badgeDefinitions.find(b => b.id === 'homework_hero')!, progress: (completedHomework / totalHomework) * 100 });
       }
 
       setEarnedBadges(badges);
       setLastUpdated(new Date().toISOString());
     } catch (err) {
-      console.error('[ChildProgressBadges] Error:', err);
+      // silent
     } finally {
       setLoading(false);
     }
-  }, [studentId]);
+  }, [badgeDefinitions, studentId, t]);
 
   useEffect(() => {
     loadProgress();
   }, [loadProgress]);
 
+  // AppState listener to refresh data when app becomes active
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
         loadProgress();
       }
     });
-    return () => {
-      subscription.remove();
-    };
+
+    return () => subscription.remove();
   }, [loadProgress]);
+
+  // Real-time updates for attendance & achievements
+  useEffect(() => {
+    if (!studentId) return;
+
+    const supabase = assertSupabase();
+    const attendanceSub = supabase
+      .channel(`attendance_${studentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance', filter: `student_id=eq.${studentId}` },
+        () => {
+          loadProgress();
+        }
+      )
+      .subscribe();
+
+    const achievementsSub = supabase
+      .channel(`achievements_${studentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'student_achievements', filter: `student_id=eq.${studentId}` },
+        () => {
+          loadProgress();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(attendanceSub);
+      supabase.removeChannel(achievementsSub);
+    };
+  }, [studentId, loadProgress]);
 
   const visibleBadges = useMemo(() => {
     const earned = earnedBadges.filter((badge) => badge.earned_at);
@@ -282,72 +284,22 @@ export function ChildProgressBadges({
     return [...earned, ...inProgress].slice(0, maxBadges);
   }, [earnedBadges, compact]);
 
-  // Set up realtime subscription for attendance and achievements updates
-  useEffect(() => {
-    if (!studentId) return;
-    
-    const supabase = assertSupabase();
-    
-    // Subscribe to attendance changes for this student
-    const attendanceChannel = supabase
-      .channel(`child-progress-attendance-${studentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'attendance',
-          filter: `student_id=eq.${studentId}`,
-        },
-        () => {
-          console.log('[ChildProgressBadges] Attendance updated');
-          loadProgress();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to achievement changes for this student
-    const achievementsChannel = supabase
-      .channel(`child-progress-achievements-${studentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'student_achievements',
-          filter: `student_id=eq.${studentId}`,
-        },
-        () => {
-          console.log('[ChildProgressBadges] Achievements updated');
-          loadProgress();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(attendanceChannel);
-      supabase.removeChannel(achievementsChannel);
-    };
-  }, [studentId, loadProgress]);
-
   const renderProgressRing = (stat: ProgressStat) => {
-    const percentage = stat.max > 0 ? Math.min((stat.value / stat.max) * 100, 100) : 0;
-    const ringSize = compact ? 50 : 60;
-    const strokeWidth = compact ? 4 : 5;
+    const progress = Math.round((stat.value / stat.max) * 100);
 
     return (
-      <View key={stat.label} style={styles.progressRingContainer}>
-        <View style={[styles.progressRing, { width: ringSize, height: ringSize }]}>
-          {/* Background circle */}
-          <View style={[styles.progressRingBg, { borderColor: `${stat.color}20`, borderWidth: strokeWidth }]} />
+      <View key={stat.label} style={styles.progressItem}>
+        <View style={[styles.progressRing, { borderColor: `${stat.color}30` }]}
+        >
           {/* Progress indicator (simplified - in production use SVG) */}
-          <View style={[styles.progressRingProgress, { backgroundColor: stat.color }]}>
-            <Ionicons name={stat.icon as any} size={compact ? 18 : 22} color="#FFF" />
-          </View>
+          <View style={[styles.progressRingProgress, { backgroundColor: stat.color, height: `${progress}%` }]} />
+          <Text style={[styles.progressValue, { color: theme.text }]}
+          >
+            {stat.value}/{stat.max}
+          </Text>
         </View>
-        <Text style={[styles.progressLabel, { color: theme.text }]}>{stat.label}</Text>
-        <Text style={[styles.progressValue, { color: stat.color }]}>
-          {stat.value}/{stat.max}
+        <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+          {stat.label}
         </Text>
       </View>
     );
@@ -355,7 +307,6 @@ export function ChildProgressBadges({
 
   const renderBadge = (badge: Badge) => {
     const isEarned = !!badge.earned_at;
-    const progress = badge.progress || 100;
 
     return (
       <TouchableOpacity
@@ -366,33 +317,31 @@ export function ChildProgressBadges({
           !isEarned && styles.badgeItemLocked,
         ]}
         onPress={() => onBadgePress?.(badge)}
-        activeOpacity={0.7}
       >
         <View style={[styles.badgeIcon, { backgroundColor: isEarned ? badge.color : `${badge.color}30` }]}>
-          <Ionicons 
-            name={badge.icon as any} 
-            size={compact ? 18 : 22} 
-            color={isEarned ? '#FFF' : badge.color} 
+          <Ionicons
+            name={badge.icon as any}
+            size={20}
+            color={isEarned ? '#FFF' : badge.color}
           />
           {!isEarned && (
-            <View style={[styles.progressOverlay, { backgroundColor: badge.color }]}>
-              <Text style={styles.progressText}>{Math.round(progress)}%</Text>
+            <View style={styles.progressBadge}>
+              <Text style={styles.progressBadgeText}>{Math.round(badge.progress || 0)}%</Text>
             </View>
           )}
         </View>
-        {!compact && (
-          <>
-            <Text style={[styles.badgeName, { color: theme.text }]} numberOfLines={1}>
-              {badge.name}
-            </Text>
-            <Text style={[styles.badgeDesc, { color: theme.textSecondary }]} numberOfLines={1}>
-              {badge.description}
-            </Text>
-          </>
-        )}
+
+        <View style={styles.badgeInfo}>
+          <Text style={[styles.badgeName, { color: theme.text }]}>{badge.name}</Text>
+          <Text style={[styles.badgeDescription, { color: theme.textSecondary }]}>
+            {badge.description}
+          </Text>
+        </View>
+
         {isEarned && (
-          <View style={[styles.earnedIndicator, { backgroundColor: badge.color }]}>
-            <Ionicons name="checkmark" size={10} color="#FFF" />
+          <View style={[styles.earnedBadge, { backgroundColor: badge.color }]}
+          >
+            <Ionicons name="checkmark" size={12} color="#FFF" />
           </View>
         )}
       </TouchableOpacity>
@@ -407,49 +356,52 @@ export function ChildProgressBadges({
     );
   }
 
+  // Don't render if no data
+  if (progressStats.length === 0 && earnedBadges.length === 0) {
+    return null;
+  }
+
+  const earnedCount = earnedBadges.filter(b => b.earned_at).length;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.card }]}>
       {showHeader && (
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Ionicons name="ribbon" size={20} color="#F59E0B" />
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Progress & Acknowledgement
+            <Ionicons name="ribbon" size={20} color={theme.primary} />
+            <Text style={[styles.headerTitle, { color: theme.text }]}
+            >
+              {t('dashboard.parent.progress.title', { defaultValue: 'Progress & Achievements' })}
             </Text>
           </View>
           {!compact && lastUpdated && (
-            <Text style={[styles.headerMeta, { color: theme.textSecondary }]}>
-              Updated {new Date(lastUpdated).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+            <Text style={[styles.lastUpdated, { color: theme.textTertiary }]}>
+              {t('dashboard.parent.progress.last_updated', { defaultValue: 'Updated {{time}}', time: new Date(lastUpdated).toLocaleTimeString(i18n.language || 'en-ZA', { hour: '2-digit', minute: '2-digit' }) })}
             </Text>
           )}
         </View>
       )}
 
       {/* Progress Stats */}
-      {!compact && progressStats.length > 0 && (
-        <View style={styles.progressStatsRow}>
-          {progressStats.map(renderProgressRing)}
-        </View>
-      )}
+      <View style={styles.progressStatsContainer}>
+        {progressStats.map(renderProgressRing)}
+      </View>
 
       {/* Badges */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.badgesContainer}
-      >
+      <View style={styles.badgesContainer}>
         {visibleBadges.map(renderBadge)}
-      </ScrollView>
+      </View>
 
-      {/* Encouragement message */}
+      {/* Summary */}
       {!compact && (
-        <View style={[styles.encouragement, { backgroundColor: `${theme.success}10` }]}>
-          <Ionicons name="sparkles" size={16} color={theme.success} />
-          <Text style={[styles.encouragementText, { color: theme.success }]}>
-            {earnedBadges.filter(b => b.earned_at).length > 0 
-              ? `Great job! ${earnedBadges.filter(b => b.earned_at).length} badge${earnedBadges.filter(b => b.earned_at).length > 1 ? 's' : ''} earned.`
-              : 'Keep going! New updates will show here.'
-            }
+        <View style={[styles.summaryContainer, { backgroundColor: theme.background }]}>
+          <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
+            {earnedCount > 0
+              ? t('dashboard.parent.progress.summary.great_job', {
+                  defaultValue: 'Great job! {{count}} badge earned.',
+                  count: earnedCount,
+                })
+              : t('dashboard.parent.progress.summary.keep_going', { defaultValue: 'Keep going! Your child is making progress.' })}
           </Text>
         </View>
       )}
@@ -461,7 +413,7 @@ const createStyles = (theme: any, compact: boolean) =>
   StyleSheet.create({
     container: {
       borderRadius: 16,
-      padding: compact ? 12 : 16,
+      padding: 16,
       marginBottom: 16,
     },
     loadingContainer: {
@@ -483,116 +435,105 @@ const createStyles = (theme: any, compact: boolean) =>
       fontSize: 18,
       fontWeight: '600',
     },
-    headerMeta: {
-      fontSize: 12,
-      fontWeight: '500',
+    lastUpdated: {
+      fontSize: 11,
     },
-    progressStatsRow: {
+    progressStatsContainer: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginBottom: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+      marginBottom: 16,
     },
-    progressRingContainer: {
+    progressItem: {
       alignItems: 'center',
+      gap: 8,
     },
     progressRing: {
-      position: 'relative',
-      justifyContent: 'center',
+      width: compact ? 60 : 70,
+      height: compact ? 60 : 70,
+      borderRadius: compact ? 30 : 35,
+      borderWidth: 4,
+      overflow: 'hidden',
       alignItems: 'center',
-    },
-    progressRingBg: {
-      position: 'absolute',
-      width: '100%',
-      height: '100%',
-      borderRadius: 100,
+      justifyContent: 'center',
     },
     progressRingProgress: {
-      width: '70%',
-      height: '70%',
-      borderRadius: 100,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    progressLabel: {
-      fontSize: 13,
-      fontWeight: '500',
-      marginTop: 6,
+      position: 'absolute',
+      bottom: 0,
+      width: '100%',
+      borderRadius: 8,
     },
     progressValue: {
+      fontSize: compact ? 14 : 16,
+      fontWeight: '700',
+    },
+    progressLabel: {
       fontSize: 12,
-      fontWeight: '600',
+      textAlign: 'center',
     },
     badgesContainer: {
-      paddingVertical: 4,
-      gap: 10,
+      gap: 12,
     },
     badgeItem: {
-      padding: compact ? 8 : 12,
-      borderRadius: 12,
+      flexDirection: 'row',
       alignItems: 'center',
-      minWidth: compact ? 60 : 90,
-      marginRight: 10,
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(128, 128, 128, 0.2)',
     },
     badgeItemLocked: {
       opacity: 0.7,
     },
     badgeIcon: {
-      width: compact ? 36 : 48,
-      height: compact ? 36 : 48,
-      borderRadius: compact ? 18 : 24,
-      justifyContent: 'center',
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
-      marginBottom: compact ? 0 : 8,
+      justifyContent: 'center',
       position: 'relative',
     },
-    progressOverlay: {
+    progressBadge: {
       position: 'absolute',
       bottom: -4,
       right: -4,
-      paddingHorizontal: 4,
+      backgroundColor: '#111827',
+      borderRadius: 10,
+      paddingHorizontal: 6,
       paddingVertical: 2,
-      borderRadius: 8,
     },
-    progressText: {
+    progressBadgeText: {
       color: '#FFF',
-      fontSize: 8,
-      fontWeight: '700',
+      fontSize: 10,
+      fontWeight: '600',
+    },
+    badgeInfo: {
+      flex: 1,
+      marginLeft: 12,
     },
     badgeName: {
-      fontSize: 12,
+      fontSize: 15,
       fontWeight: '600',
-      textAlign: 'center',
+      marginBottom: 2,
     },
-    badgeDesc: {
-      fontSize: 10,
-      textAlign: 'center',
-      marginTop: 2,
+    badgeDescription: {
+      fontSize: 12,
+      lineHeight: 16,
     },
-    earnedIndicator: {
-      position: 'absolute',
-      top: 4,
-      right: 4,
-      width: 16,
-      height: 16,
-      borderRadius: 8,
+    earnedBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
       justifyContent: 'center',
-      alignItems: 'center',
     },
-    encouragement: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      borderRadius: 10,
+    summaryContainer: {
       marginTop: 12,
-      gap: 8,
+      padding: 12,
+      borderRadius: 12,
     },
-    encouragementText: {
+    summaryText: {
       fontSize: 13,
-      fontWeight: '500',
-      flex: 1,
+      textAlign: 'center',
     },
   });
 

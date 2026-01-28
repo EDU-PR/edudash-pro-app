@@ -308,7 +308,7 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
       }
 
       // Format response
-      const rawContent = data?.content || data?.text || 'I apologize, but I received an empty response.';
+      const rawContent = data?.content || data?.text || 'I received an empty response. Please resend or add a bit more detail.';
       const content = formatAssistantContent(String(rawContent));
       const tokensIn = data?.usage?.tokens_in || data?.tokensIn || 0;
       const tokensOut = data?.usage?.tokens_out || data?.tokensOut || 0;
@@ -463,15 +463,15 @@ function extractExamContext(text: string): ExamContext {
 }
 
 // Helper: Format error message
-function formatErrorMessage(error: any): string {
-  let errorContent = '❌ Sorry, I encountered an error. Please try again.';
+function formatErrorMessage(error: unknown): string {
+  let errorContent = '❌ I hit a snag while preparing your help. Please try again or rephrase your question.';
   
   if (error && typeof error === 'object' && 'message' in error) {
-    const errorMsg = String(error.message).toLowerCase();
+    const errorMsg = String((error as { message: string }).message).toLowerCase();
     
     // Check for Claude API quota limit
     if (errorMsg.includes('workspace api usage limits') || errorMsg.includes('regain access on')) {
-      const dateMatch = String(error.message).match(/(\d{4}-\d{2}-\d{2})/);
+      const dateMatch = String((error as { message: string }).message).match(/(\d{4}-\d{2}-\d{2})/);
       if (dateMatch) {
         const resetDate = new Date(dateMatch[1]);
         const formattedDate = resetDate.toLocaleDateString('en-US', { 
@@ -479,23 +479,23 @@ function formatErrorMessage(error: any): string {
           day: 'numeric', 
           year: 'numeric' 
         });
-        errorContent = `🚫 **AI Service Quota Exceeded**\n\nOur Claude API quota has been exhausted. Service will resume on **${formattedDate}**.\n\nThis is a platform-wide limit, not your personal quota. We apologize for the inconvenience.`;
+        errorContent = `🚫 **AI Service Quota Reached**\n\nThe shared AI quota is exhausted. Service will resume on **${formattedDate}**.\n\nThis is platform-wide (not your personal quota). You can still ask questions and I’ll help as soon as it’s back.`;
       } else {
-        errorContent = `🚫 **AI Service Quota Exceeded**\n\nOur AI provider's quota has been reached. Please contact support for updates.`;
+        errorContent = `🚫 **AI Service Quota Reached**\n\nThe shared AI quota is exhausted. Please check back soon.`;
       }
     } else if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
-      errorContent = `⏳ **Rate Limit**\n\nToo many requests. Please wait a moment before sending another message.\n\n**Technical details:** ${error.message}`;
+      errorContent = `⏳ **Rate Limit**\n\nToo many requests right now. Please wait a moment, then send your message again.`;
     } else if (errorMsg.includes('quota') || errorMsg.includes('quota_exceeded')) {
       errorContent = `📊 **Daily Quota Reached**\n\nYou've used all your AI messages for today. Your quota will reset tomorrow, or upgrade your plan for more messages!\n\n💡 *Tip: Check the quota bar at the top of the chat to track your usage.*`;
     } else if (errorMsg.includes('503') || errorMsg.includes('service unavailable') || errorMsg.includes('edge function')) {
-      errorContent = `🔧 **Service Unavailable (503)**\n\nThe AI service is temporarily down or being updated. Please try again in a few moments.\n\n**Error:** ${error.message}`;
+      errorContent = `🔧 **Service Unavailable (503)**\n\nThe AI service is temporarily down. Please try again in a few minutes.`;
     } else if (errorMsg.includes('timeout')) {
       errorContent = '⏱️ **Request Timeout** - Your request took too long. Try sending a shorter message or breaking it into parts.';
     } else if (errorMsg.includes('network') || errorMsg.includes('fetch')) {
       errorContent = '🌐 **Network Error** - Please check your internet connection and try again.';
     } else {
       // Show actual error message for debugging
-      errorContent = `❌ **Error**\n\n${error.message}\n\nIf this persists, please contact support with this error message.`;
+      errorContent = `❌ **Error**\n\nSomething unexpected happened. Please try again, or share what you were trying to do and I’ll guide you.`;
     }
   }
   

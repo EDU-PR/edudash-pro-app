@@ -15,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
+import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
 import { ApplicationWithDetails, ApplicationStatus } from '@/types/hiring';
+import type { TeacherReference, TeacherRatingSummary } from '@/types/teacher-reputation';
 
 export default function ApplicationReviewScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId: string }>();
@@ -26,6 +28,8 @@ export default function ApplicationReviewScreen() {
   const [loading, setLoading] = useState(true);
   const [application, setApplication] = useState<(ApplicationWithDetails & { resume_url?: string; created_at?: string }) | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [ratingSummary, setRatingSummary] = useState<TeacherRatingSummary | null>(null);
+  const [references, setReferences] = useState<TeacherReference[]>([]);
 
   const loadApplication = async () => {
     if (!applicationId) return;
@@ -34,6 +38,18 @@ export default function ApplicationReviewScreen() {
       setLoading(true);
       const data = await HiringHubService.getApplicationById(applicationId);
       setApplication(data);
+      const candidateProfileId = data?.candidate_profile?.id as string | undefined;
+      if (candidateProfileId) {
+        const [summary, refs] = await Promise.all([
+          TeacherReputationService.getRatingSummaryByCandidateProfileId(candidateProfileId),
+          TeacherReputationService.getReferencesByCandidateProfileId(candidateProfileId),
+        ]);
+        setRatingSummary(summary);
+        setReferences(refs);
+      } else {
+        setRatingSummary(null);
+        setReferences([]);
+      }
     } catch (error: any) {
       console.error('Error loading application:', error);
       Alert.alert('Error', error.message || 'Failed to load application');
@@ -176,6 +192,23 @@ export default function ApplicationReviewScreen() {
     }
   };
 
+  const renderStars = (rating?: number | null, size = 16) => {
+    if (!rating) return null;
+    const rounded = Math.round(rating);
+    return (
+      <View style={styles.starRow}>
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <Ionicons
+            key={idx}
+            name={idx + 1 <= rounded ? 'star' : 'star-outline'}
+            size={size}
+            color={idx + 1 <= rounded ? '#F59E0B' : '#D1D5DB'}
+          />
+        ))}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -249,6 +282,53 @@ export default function ApplicationReviewScreen() {
               <Text style={styles.infoValue}>{application.candidate_phone}</Text>
             </View>
           )}
+        </View>
+
+        {/* References */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>References</Text>
+            {application.candidate_profile?.id && (
+              <TouchableOpacity
+                style={styles.viewAllButton}
+                onPress={() =>
+                  router.push({
+                    pathname: '/screens/teacher-references',
+                    params: { candidateProfileId: application.candidate_profile?.id },
+                  })
+                }
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {ratingSummary?.avg_rating ? (
+            <View style={styles.ratingSummaryRow}>
+              {renderStars(ratingSummary.avg_rating, 18)}
+              <Text style={styles.ratingSummaryText}>
+                {ratingSummary.avg_rating.toFixed(1)} ({ratingSummary.rating_count || 0})
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.noResumeText}>No ratings yet</Text>
+          )}
+
+          {references.slice(0, 2).map((reference) => (
+            <View key={reference.id} style={styles.referenceCard}>
+                <View style={styles.referenceHeader}>
+                  <View>
+                    <Text style={styles.referenceSchool}>{reference.school_name || 'School'}</Text>
+                    {reference.principal_name ? (
+                      <Text style={styles.referenceAuthor}>{reference.principal_name}</Text>
+                    ) : null}
+                  </View>
+                  {renderStars(reference.rating_overall, 14)}
+                </View>
+              {reference.comment ? (
+                <Text style={styles.referenceComment}>{reference.comment}</Text>
+              ) : null}
+            </View>
+          ))}
         </View>
 
         {/* Cover Letter */}
@@ -402,6 +482,39 @@ const createStyles = (theme: any) =>
       color: theme.text,
       marginBottom: 12,
     },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    viewAllButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      backgroundColor: theme.primary + '15',
+      borderRadius: 999,
+    },
+    viewAllText: {
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    ratingSummaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    ratingSummaryText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    starRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
     infoRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -447,6 +560,33 @@ const createStyles = (theme: any) =>
       fontStyle: 'italic',
       textAlign: 'center',
       padding: 16,
+    },
+    referenceCard: {
+      backgroundColor: theme.background,
+      borderRadius: 10,
+      padding: 12,
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    referenceHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    referenceSchool: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    referenceAuthor: {
+      fontSize: 11,
+      color: theme.textSecondary,
+    },
+    referenceComment: {
+      fontSize: 12,
+      color: theme.textSecondary,
     },
     actionsSection: {
       marginTop: 8,

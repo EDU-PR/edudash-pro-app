@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import { Award, BookOpen, CalendarCheck, Sparkles } from "lucide-react";
 
@@ -56,17 +57,39 @@ interface ChildProgressBadgesCardProps {
   showHeader?: boolean;
 }
 
-const BADGE_DEFINITIONS: Badge[] = [
-  { id: "attendance_star", name: "Attendance Star", description: "5-day attendance streak", icon: Award, color: "#f59e0b" },
-  { id: "homework_hero", name: "Homework Hero", description: "Completed all homework this week", icon: BookOpen, color: "#3b82f6" },
-  { id: "helping_hand", name: "Helping Hand", description: "Helped a friend today", icon: Sparkles, color: "#ec4899" },
-];
-
 export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildProgressBadgesCardProps) {
+  const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ProgressStat[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
+
+  const badgeDefinitions = useMemo<Badge[]>(
+    () => [
+      {
+        id: "attendance_star",
+        name: t("dashboard.parent.progress.badges.attendance_star.name", { defaultValue: "Attendance Star" }),
+        description: t("dashboard.parent.progress.badges.attendance_star.description", { defaultValue: "5-day attendance streak" }),
+        icon: Award,
+        color: "#f59e0b",
+      },
+      {
+        id: "homework_hero",
+        name: t("dashboard.parent.progress.badges.homework_hero.name", { defaultValue: "Homework Hero" }),
+        description: t("dashboard.parent.progress.badges.homework_hero.description", { defaultValue: "Completed all homework this week" }),
+        icon: BookOpen,
+        color: "#3b82f6",
+      },
+      {
+        id: "helping_hand",
+        name: t("dashboard.parent.progress.badges.helping_hand.name", { defaultValue: "Helping Hand" }),
+        description: t("dashboard.parent.progress.badges.helping_hand.description", { defaultValue: "Helped a friend today" }),
+        icon: Sparkles,
+        color: "#ec4899",
+      },
+    ],
+    [t]
+  );
 
   const loadProgress = useCallback(async () => {
     if (!studentId) {
@@ -140,14 +163,14 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
 
       setStats([
         {
-          label: "Attendance",
+          label: t("dashboard.parent.progress.stats.attendance", { defaultValue: "Attendance" }),
           value: presentDays,
           max: 5,
           color: "#10b981",
           icon: CalendarCheck,
         },
         {
-          label: "Homework",
+          label: t("dashboard.parent.progress.stats.homework", { defaultValue: "Homework" }),
           value: completedHomework,
           max: totalHomework,
           color: "#3b82f6",
@@ -166,9 +189,12 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
       const mappedBadges: Badge[] = [];
 
       achievementRows.forEach((row) => {
-        const definition = BADGE_DEFINITIONS.find((badge) => badge.id === row.achievement_type);
+        const definition = badgeDefinitions.find((badge) => badge.id === row.achievement_type);
         const color = row.achievement_color || definition?.color || "#f59e0b";
-        const name = row.achievement_name || definition?.name || "Achievement";
+        const name =
+          row.achievement_name ||
+          definition?.name ||
+          t("dashboard.parent.progress.badges.default_name", { defaultValue: "Achievement" });
         const description = row.description || definition?.description || "";
         mappedBadges.push({
           id: row.id,
@@ -183,13 +209,13 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
       // Add progress-based badges if not earned
       if (!mappedBadges.some((badge) => badge.id === "attendance_star")) {
         mappedBadges.push({
-          ...BADGE_DEFINITIONS.find((badge) => badge.id === "attendance_star")!,
+          ...badgeDefinitions.find((badge) => badge.id === "attendance_star")!,
           progress: Math.min((presentDays / 5) * 100, 100),
         });
       }
       if (!mappedBadges.some((badge) => badge.id === "homework_hero")) {
         mappedBadges.push({
-          ...BADGE_DEFINITIONS.find((badge) => badge.id === "homework_hero")!,
+          ...badgeDefinitions.find((badge) => badge.id === "homework_hero")!,
           progress: Math.min((completedHomework / totalHomework) * 100, 100),
         });
       }
@@ -207,8 +233,8 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
   if (loading) {
     return (
       <div className="card">
-        <div className="sectionTitle">Progress & Achievements</div>
-        <div className="muted">Loading progress...</div>
+        <div className="sectionTitle">{t("dashboard.parent.progress.title", { defaultValue: "Progress & Achievements" })}</div>
+        <div className="muted">{t("dashboard.parent.progress.loading", { defaultValue: "Loading progress..." })}</div>
       </div>
     );
   }
@@ -221,7 +247,7 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
     <div className="card">
       {showHeader && (
         <div className="sectionTitle" style={{ marginBottom: 16 }}>
-          Progress & Achievements
+          {t("dashboard.parent.progress.title", { defaultValue: "Progress & Achievements" })}
         </div>
       )}
 
@@ -270,7 +296,7 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
                   <div style={{ fontSize: 12, color: "var(--muted)" }}>{badge.description}</div>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: badge.color }}>
-                  {earned ? "Earned" : `${Math.round(progress)}%`}
+                  {earned ? t("dashboard.parent.progress.badges.earned", { defaultValue: "Earned" }) : `${Math.round(progress)}%`}
                 </div>
               </div>
             </div>

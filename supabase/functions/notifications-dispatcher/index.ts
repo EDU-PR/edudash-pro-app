@@ -78,6 +78,15 @@ interface NotificationContext {
   child_name?: string;
   parent_name?: string;
   registration_id?: string;
+  // POP uploads
+  pop_upload_id?: string;
+  upload_type?: string;
+  payment_amount?: number;
+  payment_reference?: string;
+  // Forms
+  form_id?: string;
+  form_title?: string;
+  form_audience?: string[];
 }
 
 // Notification template type
@@ -127,9 +136,17 @@ interface NotificationRequest {
   child_name?: string;
   parent_name?: string;
   parent_id?: string;
+  // POP uploads
+  pop_upload_id?: string;
+  upload_type?: string;
+  payment_amount?: number;
+  payment_reference?: string;
   recipient_email?: string;
   recipient_emails?: string[];
   context?: Record<string, unknown>;
+  form_id?: string;
+  form_title?: string;
+  form_audience?: string[];
   // Custom payload
   custom_payload?: Record<string, unknown>;
   template_override?: Partial<NotificationTemplate>;
@@ -191,6 +208,19 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'high',
       channelId: 'announcements'
+    },
+    form_published: {
+      title: "New Form Available",
+      body: context.form_title ? `${context.form_title} needs your response` : "A new form needs your response",
+      data: {
+        type: 'form',
+        form_id: context.form_id,
+        screen: 'forms'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'forms'
     },
     homework_graded: {
       title: "Homework Graded",
@@ -666,7 +696,7 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
     attendance_recorded: {
       title: '📋 Attendance Recorded',
       body: context.student_name && context.attendance_status
-        ? `${context.student_name} was marked ${context.attendance_status} today`
+        ? `${context.student_name} was marked ${context.attendance_status}${context.attendance_date ? ` on ${context.attendance_date}` : ''}`
         : context.class_name 
           ? `Attendance recorded for ${context.class_name}`
           : 'Attendance has been recorded for your child',
@@ -715,6 +745,22 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'normal',
       channelId: 'general'
+    },
+    pop_uploaded: {
+      title: '💳 POP Uploaded',
+      body: context.student_name
+        ? `${context.parent_name ? `${context.parent_name} uploaded POP for ${context.student_name}` : `${context.student_name} uploaded proof of payment`}${context.payment_amount ? ` (R${Number(context.payment_amount).toFixed(2)})` : ''}${context.payment_reference ? ` • Ref: ${context.payment_reference}` : ''}`
+        : 'New proof of payment uploaded',
+      data: {
+        type: 'payments',
+        pop_upload_id: context.pop_upload_id,
+        student_id: context.student_id,
+        screen: 'pop-review'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'billing'
     },
     
     // Child Registration notifications
@@ -949,6 +995,30 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
       }
       break;
 
+    case 'form_published':
+      if (request.preschool_id) {
+        const targetAudience = request.target_audience && request.target_audience.length > 0
+          ? request.target_audience
+          : ['parents', 'teachers', 'staff'];
+        const targetRoles: string[] = [];
+        if (targetAudience.includes('parents')) targetRoles.push('parent');
+        if (targetAudience.includes('teachers')) targetRoles.push('teacher');
+        if (targetAudience.includes('staff')) targetRoles.push('staff');
+
+        if (targetRoles.length > 0) {
+          const { data: recipients } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('role', targetRoles)
+            .eq('is_active', true)
+            .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`);
+          if (recipients) {
+            userIds.push(...recipients.map((p: { id: string }) => p.id));
+          }
+        }
+      }
+      break;
+
     case 'homework_graded':
       if (request.student_id) {
         const { data: student } = await supabase
@@ -1171,6 +1241,37 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           
           if (users) {
             userIds.push(...users.map((u: { id: string }) => u.id));
+          }
+        }
+      }
+      break;
+
+    case 'pop_uploaded':
+      if (request.preschool_id) {
+        const { data: principals } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+          .in('role', ['principal', 'principal_admin', 'admin'])
+          .eq('is_active', true);
+        if (principals) {
+          userIds.push(...principals.map((p: { id: string }) => p.id));
+        }
+      } else if (request.pop_upload_id) {
+        const { data: upload } = await supabase
+          .from('pop_uploads')
+          .select('preschool_id')
+          .eq('id', request.pop_upload_id)
+          .single();
+        if (upload?.preschool_id) {
+          const { data: principals } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`preschool_id.eq.${upload.preschool_id},organization_id.eq.${upload.preschool_id}`)
+            .in('role', ['principal', 'principal_admin', 'admin'])
+            .eq('is_active', true);
+          if (principals) {
+            userIds.push(...principals.map((p: { id: string }) => p.id));
           }
         }
       }
@@ -1582,6 +1683,18 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         }
         break;
 
+      case 'form_published':
+        if (request.form_id) {
+          context.form_id = request.form_id;
+        }
+        if (request.form_title) {
+          context.form_title = request.form_title;
+        }
+        if (request.target_audience) {
+          context.form_audience = request.target_audience;
+        }
+        break;
+
       // Attendance notifications
       case 'attendance_recorded':
       case 'attendance_absent':
@@ -1644,6 +1757,46 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
           }
           if (request.custom_payload.total_count !== undefined) {
             context.total_count = request.custom_payload.total_count as number;
+          }
+        }
+        break;
+
+      case 'pop_uploaded':
+        if (request.pop_upload_id) {
+          const { data: upload } = await supabase
+            .from('pop_uploads')
+            .select(`
+              id,
+              upload_type,
+              payment_amount,
+              payment_reference,
+              preschool_id,
+              student_id,
+              uploaded_by,
+              student:student_id (
+                first_name,
+                last_name
+              ),
+              uploader:uploaded_by (
+                first_name,
+                last_name
+              )
+            `)
+            .eq('id', request.pop_upload_id)
+            .single();
+
+          if (upload) {
+            context.pop_upload_id = upload.id;
+            context.upload_type = upload.upload_type;
+            context.payment_amount = upload.payment_amount ?? undefined;
+            context.payment_reference = upload.payment_reference ?? undefined;
+            context.student_id = upload.student_id;
+            if (upload.student) {
+              context.student_name = `${upload.student.first_name || ''} ${upload.student.last_name || ''}`.trim();
+            }
+            if (upload.uploader) {
+              context.parent_name = `${upload.uploader.first_name || ''} ${upload.uploader.last_name || ''}`.trim();
+            }
           }
         }
         break;
@@ -1844,7 +1997,7 @@ async function recordNotification(
  * Map event types to notification UI types
  */
 function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' | 'success' | 'error' {
-  const warningTypes = ['payment_overdue', 'fee_due_soon', 'emergency', 'urgent_announcement'];
+  const warningTypes = ['payment_overdue', 'fee_due_soon', 'emergency', 'urgent_announcement', 'pop_uploaded'];
   const successTypes = ['payment_received', 'assignment_graded', 'homework_submitted'];
   const errorTypes = ['payment_failed', 'registration_rejected'];
   
@@ -1858,9 +2011,9 @@ function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' |
  * Get notification category for filtering in the UI
  */
 function getNotificationCategory(eventType: string): string {
-  const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement'];
+  const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement', 'form_published'];
   const homeworkEvents = ['homework_assigned', 'homework_due', 'homework_graded', 'assignment_graded', 'homework_submitted'];
-  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked'];
+  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked', 'pop_uploaded'];
   
   if (schoolEvents.includes(eventType)) return 'school';
   if (homeworkEvents.includes(eventType)) return 'homework';

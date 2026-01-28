@@ -6,6 +6,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 
 export interface PendingTeacher {
   id: string;
@@ -307,6 +308,29 @@ export async function approveTeacher(
       .update({ status: 'approved' })
       .eq('school_id', preschoolId)
       .eq('accepted_by', teacherId);
+
+    // 5. Track employment history (for references & reputation)
+    const { data: existingEmployment, error: employmentError } = await supabase
+      .from('teacher_employment_history')
+      .select('id')
+      .eq('teacher_user_id', teacherId)
+      .eq('organization_id', preschoolId)
+      .is('end_date', null)
+      .maybeSingle();
+
+    if (employmentError) {
+      logger.warn('TeacherApproval', 'Employment history lookup warning', employmentError);
+    } else if (!existingEmployment) {
+      await supabase
+        .from('teacher_employment_history')
+        .insert({
+          teacher_user_id: teacherId,
+          organization_id: preschoolId,
+          principal_id: reviewerId,
+          status: 'active',
+          start_date: new Date().toISOString().split('T')[0],
+        });
+    }
 
     return {
       success: true,

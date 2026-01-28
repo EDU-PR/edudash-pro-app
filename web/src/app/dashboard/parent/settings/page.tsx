@@ -1,16 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { changeLanguage, getCurrentLanguage } from '@/lib/i18n';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { Settings, User, Bell, Lock, Globe, Moon, Sun, Upload, LogOut, Camera, AlertTriangle, CreditCard, ChevronRight, Phone, Mail, Check, X, Loader2, Users, MessageCircle } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { t } = useTranslation();
   const [userEmail, setUserEmail] = useState<string>();
   const [userId, setUserId] = useState<string>();
   const { slug } = useTenantSlug(userId);
@@ -75,7 +78,12 @@ export default function SettingsPage() {
         setEmailNotifications(prefs.email_notifications !== false);
         setPushNotifications(prefs.push_notifications === true);
         setWhatsappNotifications(prefs.whatsapp_notifications === true);
-        setLanguage(prefs.language || 'en-ZA');
+        const preferredLanguage = prefs.language || `${getCurrentLanguage()}-ZA`;
+        setLanguage(preferredLanguage);
+        const normalized = preferredLanguage.split('-')[0];
+        if (normalized) {
+          changeLanguage(normalized as 'en' | 'af' | 'zu');
+        }
         setDarkMode(prefs.dark_mode !== false);
       }
     };
@@ -148,7 +156,7 @@ export default function SettingsPage() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error: any) {
       console.error('Failed to save preferences:', error);
-      setSaveError(error.message || 'Failed to save preferences');
+      setSaveError(error.message || t('settings.parent.errors.save_preferences_failed', { defaultValue: 'Failed to save preferences' }));
     } finally {
       setSavingPreferences(false);
     }
@@ -186,6 +194,10 @@ export default function SettingsPage() {
   // Handle language change with persistence
   const handleLanguageChange = async (newLanguage: string) => {
     setLanguage(newLanguage);
+    const normalized = newLanguage.split('-')[0];
+    if (normalized) {
+      await changeLanguage(normalized as 'en' | 'af' | 'zu');
+    }
     
     // Save to database
     if (userId) {
@@ -213,12 +225,12 @@ export default function SettingsPage() {
     
     // Validate file
     if (file.size > 2 * 1024 * 1024) {
-      setSaveError('Image must be less than 2MB');
+      setSaveError(t('settings.parent.errors.image_too_large', { defaultValue: 'Image must be less than 2MB' }));
       return;
     }
     
     if (!file.type.startsWith('image/')) {
-      setSaveError('Please upload an image file');
+      setSaveError(t('settings.parent.errors.image_invalid', { defaultValue: 'Please upload an image file' }));
       return;
     }
     
@@ -255,7 +267,7 @@ export default function SettingsPage() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error: any) {
       console.error('Avatar upload failed:', error);
-      setSaveError(error.message || 'Failed to upload avatar');
+      setSaveError(error.message || t('settings.parent.errors.avatar_upload_failed', { defaultValue: 'Failed to upload avatar' }));
     } finally {
       setUploadingAvatar(false);
     }
@@ -288,7 +300,7 @@ export default function SettingsPage() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error: any) {
       console.error('Save failed:', error);
-      setSaveError(error.message || 'Failed to save changes');
+      setSaveError(error.message || t('settings.parent.errors.save_failed', { defaultValue: 'Failed to save changes' }));
     } finally {
       setSaving(false);
     }
@@ -296,12 +308,12 @@ export default function SettingsPage() {
   
   const handlePasswordChange = async () => {
     if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match');
+      setPasswordError(t('settings.parent.errors.password_mismatch', { defaultValue: 'Passwords do not match' }));
       return;
     }
     
     if (newPassword.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
+      setPasswordError(t('settings.parent.errors.password_too_short', { defaultValue: 'Password must be at least 6 characters' }));
       return;
     }
     
@@ -320,7 +332,7 @@ export default function SettingsPage() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error: any) {
       console.error('Password change failed:', error);
-      setPasswordError(error.message || 'Failed to change password');
+      setPasswordError(error.message || t('settings.parent.errors.password_change_failed', { defaultValue: 'Failed to change password' }));
     } finally {
       setChangingPassword(false);
     }
@@ -338,7 +350,7 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     const confirmed = typeof window !== 'undefined'
-      ? window.confirm('Are you sure you want to permanently delete your EduDash Pro account? This action cannot be undone and will remove access immediately.')
+      ? window.confirm(t('settings.parent.delete.confirm', { defaultValue: 'Are you sure you want to permanently delete your EduDash Pro account? This action cannot be undone and will remove access immediately.' }))
       : false;
 
     if (!confirmed) return;
@@ -360,7 +372,7 @@ export default function SettingsPage() {
       router.push('/sign-in?accountDeleted=1');
     } catch (err) {
       console.error('[ParentSettings] delete account failed', err);
-      setDeleteError('We could not delete your account right now. Please try again or contact support.');
+      setDeleteError(t('settings.parent.delete.error', { defaultValue: 'We could not delete your account right now. Please try again or contact support.' }));
     } finally {
       setDeletingAccount(false);
     }
@@ -394,7 +406,7 @@ export default function SettingsPage() {
           </div>
         </header>
         <main className="content container">
-          Loading...
+          {t('settings.parent.loading', { defaultValue: 'Loading...' })}
         </main>
       </div>
     );
@@ -421,7 +433,7 @@ export default function SettingsPage() {
             animation: 'slideIn 0.3s ease-out'
           }}>
             <Check className="icon16" />
-            <span>Settings saved successfully!</span>
+            <span>{t('settings.parent.saved_success', { defaultValue: 'Settings saved successfully!' })}</span>
           </div>
         )}
         
@@ -449,8 +461,12 @@ export default function SettingsPage() {
               </svg>
             </button>
             <div>
-              <h1 className="h1" style={{ marginBottom: 0 }}>Settings</h1>
-              <p className="muted">Manage your account preferences</p>
+              <h1 className="h1" style={{ marginBottom: 0 }}>
+                {t('settings.parent.title', { defaultValue: 'Settings' })}
+              </h1>
+              <p className="muted">
+                {t('settings.parent.subtitle', { defaultValue: 'Manage your account preferences' })}
+              </p>
             </div>
           </div>
         </div>
@@ -462,12 +478,16 @@ export default function SettingsPage() {
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <User className="icon20" style={{ color: 'var(--primary)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Profile</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.profile.title', { defaultValue: 'Profile' })}
+                </h2>
               </div>
               <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
                 {/* Profile Picture */}
                 <div>
-                  <label className="label">Profile Picture</label>
+                  <label className="label">
+                    {t('settings.parent.profile.picture', { defaultValue: 'Profile Picture' })}
+                  </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
                     <div style={{ position: 'relative' }}>
                       {uploadingAvatar ? (
@@ -477,12 +497,12 @@ export default function SettingsPage() {
                       ) : avatarUrl ? (
                         <img
                           src={avatarUrl}
-                          alt="Profile"
+                          alt={t('settings.parent.profile.picture_alt', { defaultValue: 'Profile' })}
                           style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--primary)' }}
                         />
                       ) : (
                         <div className="avatar" style={{ width: 80, height: 80, fontSize: 28, border: '2px solid var(--primary)' }}>
-                          {fullName?.[0]?.toUpperCase() || userEmail?.[0]?.toUpperCase() || 'U'}
+                          {fullName?.[0]?.toUpperCase() || userEmail?.[0]?.toUpperCase() || t('settings.parent.profile.avatar_fallback', { defaultValue: 'U' })}
                         </div>
                       )}
                       <label style={{
@@ -511,8 +531,12 @@ export default function SettingsPage() {
                       </label>
                     </div>
                     <div>
-                      <p style={{ fontSize: 14, marginBottom: 4 }}>Upload a profile picture</p>
-                      <p className="muted" style={{ fontSize: 12 }}>JPG, PNG or GIF (Max 2MB)</p>
+                      <p style={{ fontSize: 14, marginBottom: 4 }}>
+                        {t('settings.parent.profile.upload_hint', { defaultValue: 'Upload a profile picture' })}
+                      </p>
+                      <p className="muted" style={{ fontSize: 12 }}>
+                        {t('settings.parent.profile.upload_formats', { defaultValue: 'JPG, PNG or GIF (Max 2MB)' })}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -520,7 +544,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="label">
                     <Mail className="icon16" style={{ marginRight: 'var(--space-1)', display: 'inline-block', verticalAlign: 'middle' }} />
-                    Email
+                    {t('settings.parent.profile.email', { defaultValue: 'Email' })}
                   </label>
                   <input
                     type="email"
@@ -532,10 +556,12 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="label">Full Name</label>
+                  <label className="label">
+                    {t('settings.parent.profile.full_name', { defaultValue: 'Full Name' })}
+                  </label>
                   <input
                     type="text"
-                    placeholder="Enter your full name"
+                    placeholder={t('settings.parent.profile.full_name_placeholder', { defaultValue: 'Enter your full name' })}
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="input"
@@ -545,16 +571,18 @@ export default function SettingsPage() {
                 <div>
                   <label className="label">
                     <Phone className="icon16" style={{ marginRight: 'var(--space-1)', display: 'inline-block', verticalAlign: 'middle' }} />
-                    Phone Number
+                    {t('settings.parent.profile.phone', { defaultValue: 'Phone Number' })}
                   </label>
                   <input
                     type="tel"
-                    placeholder="e.g. +27 82 123 4567"
+                    placeholder={t('settings.parent.profile.phone_placeholder', { defaultValue: 'e.g. +27 82 123 4567' })}
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     className="input"
                   />
-                  <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-1)' }}>Used for notifications and account recovery</p>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-1)' }}>
+                    {t('settings.parent.profile.phone_hint', { defaultValue: 'Used for notifications and account recovery' })}
+                  </p>
                 </div>
                 
                 {saveError && (
@@ -571,7 +599,9 @@ export default function SettingsPage() {
                   style={{ width: 'fit-content', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
                 >
                   {saving && <Loader2 className="icon16 animate-spin" />}
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving
+                    ? t('settings.parent.profile.saving', { defaultValue: 'Saving...' })
+                    : t('settings.parent.profile.save_changes', { defaultValue: 'Save Changes' })}
                 </button>
               </div>
             </div>
@@ -580,7 +610,7 @@ export default function SettingsPage() {
             {saveSuccess && (
               <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 50, background: 'var(--success)', color: 'white', padding: '12px 24px', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', animation: 'slideIn 0.3s ease-out' }}>
                 <Check className="icon16" />
-                <span>Changes saved successfully!</span>
+                <span>{t('settings.parent.profile.save_success', { defaultValue: 'Changes saved successfully!' })}</span>
               </div>
             )}
 
@@ -588,13 +618,19 @@ export default function SettingsPage() {
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <Bell className="icon20" style={{ color: 'var(--primary)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Notifications</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.notifications.title', { defaultValue: 'Notifications' })}
+                </h2>
               </div>
               <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
                 <div className="listItem">
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Email Notifications</div>
-                    <div className="muted" style={{ fontSize: 12 }}>Receive updates via email</div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      {t('settings.parent.notifications.email.title', { defaultValue: 'Email Notifications' })}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t('settings.parent.notifications.email.subtitle', { defaultValue: 'Receive updates via email' })}
+                    </div>
                   </div>
                   <button 
                     onClick={() => setEmailNotifications(!emailNotifications)}
@@ -605,8 +641,12 @@ export default function SettingsPage() {
                 </div>
                 <div className="listItem">
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>Push Notifications</div>
-                    <div className="muted" style={{ fontSize: 12 }}>Receive push notifications</div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      {t('settings.parent.notifications.push.title', { defaultValue: 'Push Notifications' })}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t('settings.parent.notifications.push.subtitle', { defaultValue: 'Receive push notifications' })}
+                    </div>
                   </div>
                   <button 
                     onClick={() => setPushNotifications(!pushNotifications)}
@@ -617,8 +657,12 @@ export default function SettingsPage() {
                 </div>
                 <div className="listItem">
                   <div>
-                    <div style={{ fontWeight: 600, marginBottom: 4 }}>WhatsApp Notifications</div>
-                    <div className="muted" style={{ fontSize: 12 }}>Receive updates via WhatsApp</div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      {t('settings.parent.notifications.whatsapp.title', { defaultValue: 'WhatsApp Notifications' })}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t('settings.parent.notifications.whatsapp.subtitle', { defaultValue: 'Receive updates via WhatsApp' })}
+                    </div>
                   </div>
                   <button 
                     onClick={() => setWhatsappNotifications(!whatsappNotifications)}
@@ -637,9 +681,11 @@ export default function SettingsPage() {
                   <div>
                     <div style={{ fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                       <Phone className="icon16" />
-                      Call Ringtones
+                      {t('settings.parent.notifications.ringtones.title', { defaultValue: 'Call Ringtones' })}
                     </div>
-                    <div className="muted" style={{ fontSize: 12 }}>Customize ringtones and call sounds</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t('settings.parent.notifications.ringtones.subtitle', { defaultValue: 'Customize ringtones and call sounds' })}
+                    </div>
                   </div>
                   <ChevronRight className="icon16" style={{ color: 'var(--muted)' }} />
                 </div>
@@ -651,7 +697,9 @@ export default function SettingsPage() {
                 style={{ marginTop: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', opacity: savingPreferences ? 0.6 : 1 }}
               >
                 {savingPreferences && <Loader2 className="icon16 animate-spin" />}
-                {savingPreferences ? 'Saving...' : 'Save Notification Preferences'}
+                {savingPreferences
+                  ? t('settings.parent.notifications.saving', { defaultValue: 'Saving...' })
+                  : t('settings.parent.notifications.save', { defaultValue: 'Save Notification Preferences' })}
               </button>
             </div>
 
@@ -660,13 +708,15 @@ export default function SettingsPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                   <Users className="icon20" style={{ color: 'var(--primary)' }} />
-                  <h2 className="h2" style={{ margin: 0 }}>Linked Children</h2>
+                  <h2 className="h2" style={{ margin: 0 }}>
+                    {t('settings.parent.children.title', { defaultValue: 'Linked Children' })}
+                  </h2>
                 </div>
                 <button 
                   onClick={() => router.push('/dashboard/parent/register-child')}
                   className="btn btnSmall btnPrimary"
                 >
-                  Add Child
+                  {t('settings.parent.children.add_child', { defaultValue: 'Add Child' })}
                 </button>
               </div>
               {loadingChildren ? (
@@ -675,13 +725,13 @@ export default function SettingsPage() {
                 </div>
               ) : linkedChildren.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--muted)' }}>
-                  <p>No children linked to your account yet.</p>
+                  <p>{t('settings.parent.children.empty', { defaultValue: 'No children linked to your account yet.' })}</p>
                   <button 
                     onClick={() => router.push('/dashboard/parent/register-child')}
                     className="btn btnPrimary"
                     style={{ marginTop: 'var(--space-3)' }}
                   >
-                    Register a Child
+                    {t('settings.parent.children.register_child', { defaultValue: 'Register a Child' })}
                   </button>
                 </div>
               ) : (
@@ -695,7 +745,7 @@ export default function SettingsPage() {
                         <div>
                           <div style={{ fontWeight: 600, marginBottom: 2 }}>{child.first_name} {child.last_name}</div>
                           <div className="muted" style={{ fontSize: 12 }}>
-                            {child.grade || 'No grade'} {child.class?.name ? `• ${child.class.name}` : ''}
+                            {child.grade || t('settings.parent.children.no_grade', { defaultValue: 'No grade' })} {child.class?.name ? `• ${child.class.name}` : ''}
                           </div>
                         </div>
                       </div>
@@ -710,12 +760,18 @@ export default function SettingsPage() {
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <CreditCard className="icon20" style={{ color: 'var(--primary)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Subscription & Billing</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.billing.title', { defaultValue: 'Subscription & Billing' })}
+                </h2>
               </div>
               <div className="listItem" style={{ cursor: 'pointer' }} onClick={() => router.push('/dashboard/parent/subscription')}>
                 <div>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Manage Subscription</div>
-                  <div className="muted" style={{ fontSize: 12 }}>View your plan, usage, and upgrade options</div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    {t('settings.parent.billing.manage.title', { defaultValue: 'Manage Subscription' })}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {t('settings.parent.billing.manage.subtitle', { defaultValue: 'View your plan, usage, and upgrade options' })}
+                  </div>
                 </div>
                 <ChevronRight className="icon20" style={{ color: 'var(--textMuted)' }} />
               </div>
@@ -729,12 +785,18 @@ export default function SettingsPage() {
                 ) : (
                   <Sun className="icon20" style={{ color: 'var(--primary)' }} />
                 )}
-                <h2 className="h2" style={{ margin: 0 }}>Appearance</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.appearance.title', { defaultValue: 'Appearance' })}
+                </h2>
               </div>
               <div className="listItem">
                 <div>
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Dark Mode</div>
-                  <div className="muted" style={{ fontSize: 12 }}>Toggle dark mode</div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    {t('settings.parent.appearance.dark_mode', { defaultValue: 'Dark Mode' })}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {t('settings.parent.appearance.dark_mode_hint', { defaultValue: 'Toggle dark mode' })}
+                  </div>
                 </div>
                 <button
                   onClick={handleDarkModeToggle}
@@ -752,19 +814,21 @@ export default function SettingsPage() {
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <Globe className="icon20" style={{ color: 'var(--primary)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Language</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.language.title', { defaultValue: 'Language' })}
+                </h2>
               </div>
               <select 
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value)}
                 className="input"
               >
-                <option value="en-ZA">English (South Africa)</option>
-                <option value="af-ZA">Afrikaans</option>
-                <option value="zu-ZA">Zulu</option>
-                <option value="xh-ZA">Xhosa</option>
-                <option value="st-ZA">Sesotho</option>
-                <option value="tn-ZA">Setswana</option>
+                <option value="en-ZA">{t('settings.parent.language.en', { defaultValue: 'English (South Africa)' })}</option>
+                <option value="af-ZA">{t('settings.parent.language.af', { defaultValue: 'Afrikaans' })}</option>
+                <option value="zu-ZA">{t('settings.parent.language.zu', { defaultValue: 'Zulu' })}</option>
+                <option value="xh-ZA">{t('settings.parent.language.xh', { defaultValue: 'Xhosa' })}</option>
+                <option value="st-ZA">{t('settings.parent.language.st', { defaultValue: 'Sesotho' })}</option>
+                <option value="tn-ZA">{t('settings.parent.language.tn', { defaultValue: 'Setswana' })}</option>
               </select>
             </div>
 
@@ -772,14 +836,16 @@ export default function SettingsPage() {
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <Lock className="icon20" style={{ color: 'var(--primary)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Security</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.security.title', { defaultValue: 'Security' })}
+                </h2>
               </div>
               <button 
                 onClick={() => setShowPasswordModal(true)}
                 className="btn btnSecondary" 
                 style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
               >
-                <span>Change Password</span>
+                <span>{t('settings.parent.security.change_password', { defaultValue: 'Change Password' })}</span>
                 <Lock className="icon16" style={{ marginLeft: 'auto', color: 'var(--textMuted)' }} />
               </button>
             </div>
@@ -788,10 +854,12 @@ export default function SettingsPage() {
             <div className="card" style={{ borderColor: 'var(--danger-border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                 <LogOut className="icon20" style={{ color: 'var(--danger)' }} />
-                <h2 className="h2" style={{ margin: 0 }}>Sign Out</h2>
+                <h2 className="h2" style={{ margin: 0 }}>
+                  {t('settings.parent.sign_out.title', { defaultValue: 'Sign Out' })}
+                </h2>
               </div>
               <p className="muted" style={{ marginBottom: 'var(--space-3)' }}>
-                Sign out from your account on this device.
+                {t('settings.parent.sign_out.description', { defaultValue: 'Sign out from your account on this device.' })}
               </p>
               <button
                 onClick={handleSignOut}
@@ -810,7 +878,9 @@ export default function SettingsPage() {
                 }}
               >
                 <LogOut className="icon16" />
-                {signingOut ? 'Signing out...' : 'Sign Out'}
+                {signingOut
+                  ? t('settings.parent.sign_out.signing_out', { defaultValue: 'Signing out...' })
+                  : t('settings.parent.sign_out.button', { defaultValue: 'Sign Out' })}
               </button>
             </div>
 
@@ -818,15 +888,17 @@ export default function SettingsPage() {
             <div className="card p-md border-2 border-red-800/40 bg-red-950/20">
               <div className="flex items-center gap-3 mb-6">
                 <AlertTriangle className="w-5 h-5 text-red-400" />
-                <h2 className="text-lg font-semibold text-red-200">Delete Account</h2>
+                <h2 className="text-lg font-semibold text-red-200">
+                  {t('settings.parent.delete.title', { defaultValue: 'Delete Account' })}
+                </h2>
               </div>
               <p className="text-sm text-red-200/80 mb-3">
-                Permanently delete your EduDash Pro account, remove access to all Dash AI features, and end your subscription. This cannot be undone.
+                {t('settings.parent.delete.description', { defaultValue: 'Permanently delete your EduDash Pro account, remove access to all Dash AI features, and end your subscription. This cannot be undone.' })}
               </p>
               <ul className="text-xs text-red-100/70 mb-4 space-y-1 list-disc list-inside">
-                <li>All devices will be signed out immediately</li>
-                <li>Your subscription and trial benefits will stop</li>
-                <li>Some records may be retained for regulatory requirements</li>
+                <li>{t('settings.parent.delete.bullet.sign_out', { defaultValue: 'All devices will be signed out immediately' })}</li>
+                <li>{t('settings.parent.delete.bullet.subscription_stop', { defaultValue: 'Your subscription and trial benefits will stop' })}</li>
+                <li>{t('settings.parent.delete.bullet.retention', { defaultValue: 'Some records may be retained for regulatory requirements' })}</li>
               </ul>
               {deleteError && (
                 <div className="mb-3 rounded-md border border-red-500/50 bg-red-900/40 px-3 py-2 text-xs text-red-100">
@@ -839,7 +911,9 @@ export default function SettingsPage() {
                 className="w-full px-4 py-3 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 disabled:from-gray-700 disabled:to-gray-700 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:cursor-not-allowed shadow-lg hover:shadow-red-700/40"
               >
                 <AlertTriangle className="w-4 h-4" />
-                {deletingAccount ? 'Deleting account?' : 'Delete My Account'}
+                {deletingAccount
+                  ? t('settings.parent.delete.deleting', { defaultValue: 'Deleting account?' })
+                  : t('settings.parent.delete.button', { defaultValue: 'Delete My Account' })}
               </button>
             </div>
           </div>
@@ -853,7 +927,7 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <h3 style={{ fontSize: 20, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Lock className="icon20" style={{ color: 'var(--primary)' }} />
-                Change Password
+                {t('settings.parent.password.modal_title', { defaultValue: 'Change Password' })}
               </h3>
               <button
                 onClick={() => {
@@ -870,10 +944,12 @@ export default function SettingsPage() {
             
             <div style={{ display: 'grid', gap: 16 }}>
               <div>
-                <label className="label">New Password</label>
+                <label className="label">
+                  {t('settings.parent.password.new_label', { defaultValue: 'New Password' })}
+                </label>
                 <input
                   type="password"
-                  placeholder="Enter new password"
+                  placeholder={t('settings.parent.password.new_placeholder', { defaultValue: 'Enter new password' })}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="input"
@@ -881,10 +957,12 @@ export default function SettingsPage() {
               </div>
               
               <div>
-                <label className="label">Confirm Password</label>
+                <label className="label">
+                  {t('settings.parent.password.confirm_label', { defaultValue: 'Confirm Password' })}
+                </label>
                 <input
                   type="password"
-                  placeholder="Confirm new password"
+                  placeholder={t('settings.parent.password.confirm_placeholder', { defaultValue: 'Confirm new password' })}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="input"
@@ -909,7 +987,7 @@ export default function SettingsPage() {
                   className="btn btnSecondary"
                   style={{ flex: 1 }}
                 >
-                  Cancel
+                  {t('common.cancel', { defaultValue: 'Cancel' })}
                 </button>
                 <button
                   onClick={handlePasswordChange}
@@ -918,7 +996,9 @@ export default function SettingsPage() {
                   style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (changingPassword || !newPassword || !confirmPassword) ? 0.6 : 1, cursor: (changingPassword || !newPassword || !confirmPassword) ? 'not-allowed' : 'pointer' }}
                 >
                   {changingPassword && <Loader2 className="icon16 animate-spin" />}
-                  {changingPassword ? 'Changing...' : 'Change Password'}
+                  {changingPassword
+                    ? t('settings.parent.password.changing', { defaultValue: 'Changing...' })
+                    : t('settings.parent.password.change_button', { defaultValue: 'Change Password' })}
                 </button>
               </div>
             </div>

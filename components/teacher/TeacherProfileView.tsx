@@ -117,6 +117,18 @@ export function TeacherProfileView({
               {selectedTeacherHasSeat ? 'Message (Has Seat)' : 'Message (No Seat)'}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.referenceButton]}
+            onPress={() =>
+              router.push({
+                pathname: '/screens/teacher-reference-create',
+                params: { teacherUserId: teacher.teacherUserId, teacherName: fullName },
+              })
+            }
+          >
+            <Ionicons name="star" size={16} color="#fff" />
+            <Text style={styles.actionButtonText}>Leave Reference</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.seatActionsRow}>
@@ -389,6 +401,9 @@ const createStyles = (theme?: ThemeColors) =>
     },
     messageButton: {
       backgroundColor: '#2563eb',
+    },
+    referenceButton: {
+      backgroundColor: '#f59e0b',
     },
     assignButton: {
       backgroundColor: '#059669',

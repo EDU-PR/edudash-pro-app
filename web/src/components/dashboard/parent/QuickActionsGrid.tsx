@@ -2,15 +2,16 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
-import { 
+import { useTranslation } from 'react-i18next';
+import {
   BookOpen, FileText, BarChart3, MessageCircle, Calendar, DollarSign,
-  Users, GraduationCap, Sparkles, Search, Settings, Home, Target,
-  Lightbulb, Award, Zap, MapPin, Library, FileCheck, Bot, Phone, Video, ChevronDown,
+  Users, Sparkles, Target, Library, FileCheck, Bot, Phone, Video, ChevronDown, Settings,
   CheckCircle2
 } from 'lucide-react';
 import { QuickCallModal } from '@/components/calls/QuickCallModal';
 
 interface QuickAction {
+  id: string;
   icon: any;
   label: string;
   href: string;
@@ -37,6 +38,7 @@ interface QuickActionsGridProps {
 
 export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0, userId, preschoolId, feesDue }: QuickActionsGridProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [showMessagesDropdown, setShowMessagesDropdown] = useState(false);
   const [showQuickCallModal, setShowQuickCallModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -55,14 +57,19 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
   const getQuickActions = (): QuickAction[] => {
     const feesSubtitle = (() => {
       if (!feesDue?.dueDate) return undefined;
-      if (feesDue.overdue) return 'Overdue';
+      if (feesDue.overdue) return t('dashboard.parent.quick_actions.fees.overdue', { defaultValue: 'Overdue' });
       const dueDate = new Date(feesDue.dueDate);
       if (Number.isNaN(dueDate.getTime())) return undefined;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const daysUntil = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysUntil <= 0) return 'Due today';
-      if (daysUntil <= 3) return `Due in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`;
+      if (daysUntil <= 0) return t('dashboard.parent.quick_actions.fees.due_today', { defaultValue: 'Due today' });
+      if (daysUntil <= 3) {
+        return t('dashboard.parent.quick_actions.fees.due_in_days', {
+          defaultValue: 'Due in {{count}} day',
+          count: daysUntil,
+        });
+      }
       return undefined;
     })();
 
@@ -70,49 +77,49 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
 
     // Organization-linked actions (common for all with organization)
     const organizationActions: QuickAction[] = hasOrganization ? [
-      { icon: MessageCircle, label: 'Messages', href: '/dashboard/parent/messages', color: '#8b5cf6' },
-      { icon: FileText, label: 'Homework', href: '/dashboard/parent/homework', color: '#f59e0b' },
-      { icon: Calendar, label: 'Calendar', href: '/dashboard/parent/calendar', color: '#06b6d4' },
-      { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#10b981' },
-      { icon: CheckCircle2, label: 'Attendance', href: '/dashboard/parent/attendance', color: '#22c55e' },
-      { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#3b82f6' },
-      { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
+      { id: 'messages', icon: MessageCircle, label: t('navigation.messages', { defaultValue: 'Messages' }), href: '/dashboard/parent/messages', color: '#8b5cf6' },
+      { id: 'homework', icon: FileText, label: t('homework.title', { defaultValue: 'Homework' }), href: '/dashboard/parent/homework', color: '#f59e0b' },
+      { id: 'calendar', icon: Calendar, label: t('navigation.calendar', { defaultValue: 'Calendar' }), href: '/dashboard/parent/calendar', color: '#06b6d4' },
+      { id: 'progress', icon: BarChart3, label: t('dashboard.progress', { defaultValue: 'Progress' }), href: '/dashboard/parent/progress', color: '#10b981' },
+      { id: 'attendance', icon: CheckCircle2, label: t('parent.attendance', { defaultValue: 'Attendance' }), href: '/dashboard/parent/attendance', color: '#22c55e' },
+      { id: 'ebooks', icon: Library, label: t('dashboard.parent.quick_actions.ebooks', { defaultValue: 'E-Books' }), href: '/dashboard/parent/ebooks', color: '#3b82f6' },
+      { id: 'robotics_lab', icon: Bot, label: t('dashboard.parent.quick_actions.robotics_lab', { defaultValue: 'Robotics Lab' }), href: '/dashboard/parent/robotics', color: '#f59e0b' },
       ...(isExamEligible ? [
-        { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/generate-exam', color: '#10b981' },
-        { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
+        { id: 'exam_prep', icon: Target, label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), href: '/dashboard/parent/generate-exam', color: '#10b981' },
+        { id: 'my_exams', icon: FileCheck, label: t('dashboard.parent.quick_actions.my_exams', { defaultValue: 'My Exams' }), href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
       ] : []),
-      { icon: DollarSign, label: 'Payments', href: '/dashboard/parent/payments', color: '#f59e0b', subtitle: feesSubtitle, glow: feesGlow },
-      { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
-      { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
+      { id: 'payments', icon: DollarSign, label: t('dashboard.parent.quick_actions.payments', { defaultValue: 'Payments' }), href: '/dashboard/parent/payments', color: '#f59e0b', subtitle: feesSubtitle, glow: feesGlow },
+      { id: 'children', icon: Users, label: t('navigation.children', { defaultValue: 'My Children' }), href: '/dashboard/parent/children', color: '#8b5cf6' },
+      { id: 'chat_with_dash', icon: Sparkles, label: t('dashboard.parent.quick_actions.chat_with_dash', { defaultValue: 'Chat with Dash' }), href: '/dashboard/parent/dash-chat', color: '#ec4899' },
     ] : [];
 
     // Independent parents - grade-appropriate actions
     if (!hasOrganization) {
-      const baseActions = [
-        { icon: Users, label: 'My Children', href: '/dashboard/parent/children', color: '#8b5cf6' },
-        { icon: Sparkles, label: 'Chat with Dash', href: '/dashboard/parent/dash-chat', color: '#ec4899' },
-        { icon: Bot, label: 'Robotics Lab', href: '/dashboard/parent/robotics', color: '#f59e0b' },
-        { icon: Library, label: 'E-Books', href: '/dashboard/parent/ebooks', color: '#06b6d4' },
+      const baseActions: QuickAction[] = [
+        { id: 'children', icon: Users, label: t('navigation.children', { defaultValue: 'My Children' }), href: '/dashboard/parent/children', color: '#8b5cf6' },
+        { id: 'chat_with_dash', icon: Sparkles, label: t('dashboard.parent.quick_actions.chat_with_dash', { defaultValue: 'Chat with Dash' }), href: '/dashboard/parent/dash-chat', color: '#ec4899' },
+        { id: 'robotics_lab', icon: Bot, label: t('dashboard.parent.quick_actions.robotics_lab', { defaultValue: 'Robotics Lab' }), href: '/dashboard/parent/robotics', color: '#f59e0b' },
+        { id: 'ebooks', icon: Library, label: t('dashboard.parent.quick_actions.ebooks', { defaultValue: 'E-Books' }), href: '/dashboard/parent/ebooks', color: '#06b6d4' },
       ];
 
       // Grade 4+ gets exam features
       if (isExamEligible) {
         baseActions.push(
-          { icon: Target, label: 'Exam Prep', href: '/dashboard/parent/exam-prep', color: '#10b981' },
-          { icon: FileCheck, label: 'My Exams', href: '/dashboard/parent/my-exams', color: '#0ea5e9' }
+          { id: 'exam_prep', icon: Target, label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), href: '/dashboard/parent/exam-prep', color: '#10b981' },
+          { id: 'my_exams', icon: FileCheck, label: t('dashboard.parent.quick_actions.my_exams', { defaultValue: 'My Exams' }), href: '/dashboard/parent/my-exams', color: '#0ea5e9' }
         );
       }
 
       // All grades get these
       baseActions.push(
-        { icon: BookOpen, label: 'Lessons', href: '/dashboard/parent/lessons', color: '#10b981' },
-        { icon: BarChart3, label: 'Progress', href: '/dashboard/parent/progress', color: '#06b6d4' },
-        { icon: Settings, label: 'Settings', href: '/dashboard/parent/settings', color: '#6366f1' }
+        { id: 'lessons', icon: BookOpen, label: t('dashboard.parent.quick_actions.lessons', { defaultValue: 'Lessons' }), href: '/dashboard/parent/lessons', color: '#10b981' },
+        { id: 'progress', icon: BarChart3, label: t('dashboard.progress', { defaultValue: 'Progress' }), href: '/dashboard/parent/progress', color: '#06b6d4' },
+        { id: 'settings', icon: Settings, label: t('navigation.settings', { defaultValue: 'Settings' }), href: '/dashboard/parent/settings', color: '#6366f1' }
       );
 
       return baseActions;
     }
-    
+
     // Organization-linked parents (k12, preschool, aftercare)
     return organizationActions;
   };
@@ -121,9 +128,11 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
 
   return (
     <div className="section">
-      <div className="sectionTitle">Quick Actions</div>
-      <div style={{ 
-        display: 'grid', 
+      <div className="sectionTitle">
+        {t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
+      </div>
+      <div style={{
+        display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: '12px',
       }}
@@ -131,15 +140,15 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
       >
         {actions.map((action) => {
           const Icon = action.icon;
-          const isChatWithDash = action.label === 'Chat with Dash';
-          const isMessages = action.label === 'Messages';
-          const isHomework = action.label === 'Homework';
+          const isChatWithDash = action.id === 'chat_with_dash';
+          const isMessages = action.id === 'messages';
+          const isHomework = action.id === 'homework';
           const hasUnread = isMessages && unreadCount > 0;
           const hasPendingHomework = isHomework && homeworkCount > 0;
           const badgeCount = isMessages ? unreadCount : isHomework ? homeworkCount : 0;
           const showBadge = hasUnread || hasPendingHomework;
           const shouldGlow = Boolean(action.glow) || showBadge;
-          
+
           // Messages button gets special dropdown treatment
           if (isMessages) {
             return (
@@ -209,8 +218,8 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     <Icon size={24} style={{ color: action.color }} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ 
-                      fontSize: 14, 
+                    <span style={{
+                      fontSize: 14,
                       fontWeight: 600,
                       color: 'var(--text-primary)'
                     }}>
@@ -222,7 +231,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{action.subtitle}</div>
                   )}
                 </button>
-                
+
                 {/* Dropdown Menu */}
                 {showMessagesDropdown && (
                   <div style={{
@@ -260,7 +269,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     >
                       <MessageCircle size={18} style={{ color: '#8b5cf6' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        Go to Messages
+                        {t('dashboard.parent.quick_actions.messages.go_to', { defaultValue: 'Go to Messages' })}
                       </span>
                     </button>
                     <button
@@ -285,7 +294,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     >
                       <Phone size={18} style={{ color: '#10b981' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        Voice Call
+                        {t('dashboard.parent.quick_actions.messages.voice_call', { defaultValue: 'Voice Call' })}
                       </span>
                     </button>
                     <button
@@ -309,7 +318,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                     >
                       <Video size={18} style={{ color: '#3b82f6' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        Video Call
+                        {t('dashboard.parent.quick_actions.messages.video_call', { defaultValue: 'Video Call' })}
                       </span>
                     </button>
                   </div>
@@ -317,15 +326,15 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
               </div>
             );
           }
-          
+
           // Regular button for other actions
-              return (
+          return (
             <button
               key={action.href}
               onClick={() => router.push(action.href)}
               className="qa"
               style={{
-                background: isChatWithDash 
+                background: isChatWithDash
                   ? 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)'
                   : 'var(--surface-1)',
                 border: (hasUnread || hasPendingHomework || action.glow)
@@ -345,8 +354,8 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
                 minHeight: '120px',
                 boxShadow: (hasUnread || hasPendingHomework || action.glow)
                   ? '0 0 0 3px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.4)'
-                  : isChatWithDash 
-                  ? '0 4px 20px rgba(236, 72, 153, 0.5)' 
+                  : isChatWithDash
+                  ? '0 4px 20px rgba(236, 72, 153, 0.5)'
                   : 'none',
                 position: 'relative',
                 animation: (hasUnread || hasPendingHomework || action.glow) ? 'pulse-glow 2s ease-in-out infinite' : 'none',
@@ -398,8 +407,8 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
               }}>
                 <Icon size={24} style={{ color: isChatWithDash ? 'white' : action.color }} />
               </div>
-              <span style={{ 
-                fontSize: 14, 
+              <span style={{
+                fontSize: 14,
                 fontWeight: 600,
                 color: isChatWithDash ? 'white' : 'var(--text-primary)'
               }}>
@@ -456,7 +465,7 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
             box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.3), 0 6px 30px rgba(139, 92, 246, 0.6);
           }
         }
-        
+
         @media (min-width: 640px) {
           .quick-actions-grid {
             grid-template-columns: repeat(3, 1fr) !important;
