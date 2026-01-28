@@ -58,6 +58,8 @@ const DEFAULT_COLLAPSED_SECTIONS = [
   'quick-actions',
   'uniform-sizes',
   'live-classes',
+  'teacher-notes',
+  'progress',
   'birthdays',
   'daily-activities',
 ];
@@ -661,46 +663,62 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         </CollapsibleSection>
 
         {/* Teacher Quick Notes - Show notes from teacher to parent */}
-        {activeChildId ? (
-          <TeacherQuickNotes
-            studentId={activeChildId}
-            maxItems={3}
-            showHeader={true}
-          />
-        ) : (
-          <EmptyState
-            icon="chatbubbles-outline"
-            title={t('dashboard.parent.empty.teacher_notes.title', { defaultValue: 'Teacher notes preview' })}
-            description={t('dashboard.parent.empty.teacher_notes.description', {
-              defaultValue: 'Notes from educators will appear here after a child is linked.',
-            })}
-            actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
-            onActionPress={() => router.push('/screens/register-child' as any)}
-            size="small"
-            secondary
-          />
-        )}
+        <CollapsibleSection
+          title={t('dashboard.parent.section.teacher_notes', { defaultValue: 'Teacher Notes' })}
+          sectionId="teacher-notes"
+          icon="chatbubbles"
+          defaultCollapsed={collapsedSections.has('teacher-notes')}
+          onToggle={toggleSection}
+        >
+          {activeChildId ? (
+            <TeacherQuickNotes
+              studentId={activeChildId}
+              maxItems={3}
+              showHeader={false}
+            />
+          ) : (
+            <EmptyState
+              icon="chatbubbles-outline"
+              title={t('dashboard.parent.empty.teacher_notes.title', { defaultValue: 'Teacher notes preview' })}
+              description={t('dashboard.parent.empty.teacher_notes.description', {
+                defaultValue: 'Notes from educators will appear here after a child is linked.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Child Progress & Achievements */}
-        {activeChildId ? (
-          <ChildProgressBadges
-            studentId={activeChildId}
-            compact={false}
-            showHeader={true}
-          />
-        ) : (
-          <EmptyState
-            icon="ribbon-outline"
-            title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
-            description={t('dashboard.parent.empty.progress.description', {
-              defaultValue: 'Track milestones and achievements once a child is linked.',
-            })}
-            actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
-            onActionPress={() => router.push('/screens/register-child' as any)}
-            size="small"
-            secondary
-          />
-        )}
+        <CollapsibleSection
+          title={t('dashboard.parent.section.progress', { defaultValue: 'Progress & Achievements' })}
+          sectionId="progress"
+          icon="ribbon"
+          defaultCollapsed={collapsedSections.has('progress')}
+          onToggle={toggleSection}
+        >
+          {activeChildId ? (
+            <ChildProgressBadges
+              studentId={activeChildId}
+              compact={false}
+              showHeader={false}
+            />
+          ) : (
+            <EmptyState
+              icon="ribbon-outline"
+              title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
+              description={t('dashboard.parent.empty.progress.description', {
+                defaultValue: 'Track milestones and achievements once a child is linked.',
+              })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onActionPress={() => router.push('/screens/register-child' as any)}
+              size="small"
+              secondary
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Upcoming Birthdays in Class */}
         <CollapsibleSection 

@@ -67,11 +67,15 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  const { childrenCards } = useChildrenData(userId || undefined);
+  const { childrenCards, activeChildId } = useChildrenData(userId || undefined);
+  const activeChild = useMemo(
+    () => childrenCards.find((child) => child.id === activeChildId),
+    [childrenCards, activeChildId]
+  );
   const hasExamEligibleChild = useMemo(() => {
-    if (!childrenCards || childrenCards.length === 0) return false;
-    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
-  }, [childrenCards]);
+    if (!activeChild) return false;
+    return getGradeNumber(activeChild.grade) >= 4;
+  }, [activeChild]);
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);

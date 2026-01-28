@@ -36,16 +36,18 @@ const SUBJECTS = [
 export default function ExamPrepPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { profile, userName, preschoolName, hasOrganization, unreadCount, loading, childrenCards } = useParentDashboardData();
+  const { profile, userName, preschoolName, hasOrganization, unreadCount, loading, childrenCards, activeChildId } = useParentDashboardData();
 
+  const activeChild = useMemo(
+    () => childrenCards.find((child) => child.id === activeChildId),
+    [childrenCards, activeChildId]
+  );
   const hasExamEligibleChild = useMemo(() => {
-    if (!childrenCards || childrenCards.length === 0) return false;
-    return childrenCards.some((child) => {
-      const match = child.grade?.match(/\d+/);
-      const gradeNum = match ? parseInt(match[0], 10) : 0;
-      return gradeNum >= 4;
-    });
-  }, [childrenCards]);
+    if (!activeChild) return false;
+    const match = activeChild.grade?.match(/\d+/);
+    const gradeNum = match ? parseInt(match[0], 10) : 0;
+    return gradeNum >= 4;
+  }, [activeChild]);
   
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
