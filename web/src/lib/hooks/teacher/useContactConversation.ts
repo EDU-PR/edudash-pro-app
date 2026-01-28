@@ -45,19 +45,47 @@ export function useContactConversation(
       
       // Create new thread
       const threadType = contactRole === 'parent' ? 'parent-teacher' : 'general';
-      const { data: newThread, error: threadError } = await supabase
+      const threadPayload = {
+        preschool_id: preschoolId,
+        subject: `Conversation with ${contactRole}`,
+        created_by: teacherId,
+        type: threadType,
+        last_message_at: new Date().toISOString(),
+      };
+
+      let newThread: { id: string } | null = null;
+      const { data: createdThread, error: threadError } = await supabase
         .from('message_threads')
-        .insert({
-          preschool_id: preschoolId,
-          subject: `Conversation with ${contactRole}`,
-          created_by: teacherId,
-          type: threadType,
-          last_message_at: new Date().toISOString()
-        })
+        .insert(threadPayload)
         .select()
         .single();
-      
-      if (threadError) throw threadError;
+
+      if (threadError) {
+        const errorMessage = threadError.message?.toLowerCase() || '';
+        if (errorMessage.includes('created_by')) {
+          const { data: fallbackThread, error: fallbackError } = await supabase
+            .from('message_threads')
+            .insert({
+              preschool_id: preschoolId,
+              subject: `Conversation with ${contactRole}`,
+              type: threadType,
+              last_message_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (fallbackError) throw fallbackError;
+          newThread = fallbackThread;
+        } else {
+          throw threadError;
+        }
+      } else {
+        newThread = createdThread;
+      }
+
+      if (!newThread?.id) {
+        throw new Error('Unable to create conversation.');
+      }
       
       // Add participants
       await supabase.from('message_participants').insert([

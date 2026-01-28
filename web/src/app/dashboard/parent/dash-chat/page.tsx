@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
@@ -9,7 +9,8 @@ import { ChatInterface } from '@/components/dash-chat/ChatInterface';
 import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
-import { ArrowLeft, Sparkles, Menu, X, FileText } from 'lucide-react';
+import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
+import { Sparkles, Menu, X, FileText } from 'lucide-react';
 
 // Format school name for display
 function formatSchoolName(slug: string | null): string {
@@ -20,6 +21,12 @@ function formatSchoolName(slug: string | null): string {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+const getGradeNumber = (gradeString?: string): number => {
+  if (!gradeString) return 0;
+  const match = gradeString.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+};
 
 export default function DashChatPage() {
   const router = useRouter();
@@ -34,6 +41,12 @@ export default function DashChatPage() {
   const [hydrated, setHydrated] = useState(false);
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
   const initialPrompt = searchParams.get('prompt') || '';
+  const { childrenCards } = useChildrenData(userId || undefined);
+  const hasExamEligibleChild = useMemo(() => {
+    if (!childrenCards || childrenCards.length === 0) return false;
+    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
+  }, [childrenCards]);
+  const canUseExamBuilder = hasExamEligibleChild;
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -133,14 +146,16 @@ export default function DashChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowExamBuilder(true)}
-              aria-label="Create exam with AI"
-              className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
-            >
-              <FileText size={14} aria-hidden="true" />
-              <span className="hidden md:inline">Create Exam</span>
-            </button>
+            {canUseExamBuilder && (
+              <button
+                onClick={() => setShowExamBuilder(true)}
+                aria-label="Create exam with AI"
+                className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+              >
+                <FileText size={14} aria-hidden="true" />
+                <span className="hidden md:inline">Create Exam</span>
+              </button>
+            )}
             <button
               onClick={handleNewConversation}
               aria-label="Start new conversation"
@@ -221,6 +236,7 @@ export default function DashChatPage() {
                 userId={userId}
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
                 initialPrompt={initialPrompt || undefined}
+                canUseExamBuilder={canUseExamBuilder}
               />
             )}
 
@@ -231,7 +247,11 @@ export default function DashChatPage() {
                     <Sparkles size={32} aria-hidden="true" />
                   </div>
                   <h2 className="text-xl font-bold m-0">Start Your First Chat</h2>
-                  <p className="text-sm text-gray-400 m-0 mb-2">Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.</p>
+                  <p className="text-sm text-gray-400 m-0 mb-2">
+                    {canUseExamBuilder
+                      ? 'Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.'
+                      : 'Ask Dash anything about curriculum topics, multilingual support, or age-appropriate learning support.'}
+                  </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button
                       onClick={handleNewConversation}
@@ -240,20 +260,22 @@ export default function DashChatPage() {
                       <Sparkles size={16} aria-hidden="true" />
                       New Chat
                     </button>
-                    <button
-                      onClick={() => setShowExamBuilder(true)}
-                      className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
-                    >
-                      <FileText size={16} aria-hidden="true" />
-                      Create Exam
-                    </button>
+                    {canUseExamBuilder && (
+                      <button
+                        onClick={() => setShowExamBuilder(true)}
+                        className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                      >
+                        <FileText size={16} aria-hidden="true" />
+                        Create Exam
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             )}
             
             {/* Exam Builder Modal */}
-            {hydrated && showExamBuilder && (
+            {hydrated && showExamBuilder && canUseExamBuilder && (
               <div
                 role="dialog"
                 aria-modal="true"

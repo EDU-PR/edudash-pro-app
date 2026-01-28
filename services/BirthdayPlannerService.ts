@@ -70,7 +70,7 @@ const calculateAge = (dateOfBirth: string, onDate: Date = new Date()): number =>
   if (monthDiff < 0 || (monthDiff === 0 && onDate.getDate() < dob.getDate())) {
     age--;
   }
-  return age + 1; // Return age they're turning, not current age
+  return Math.max(age, 0); // Age on the target date (birthday)
 };
 
 const getThisYearsBirthday = (dateOfBirth: string): Date => {

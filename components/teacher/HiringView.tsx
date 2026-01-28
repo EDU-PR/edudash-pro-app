@@ -15,10 +15,14 @@ import {
   RefreshControl,
   StyleSheet,
   Alert,
+  Share,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
+import * as Clipboard from 'expo-clipboard';
+import { buildTeacherInviteLink, buildTeacherInviteMessage } from '@/lib/utils/teacherInviteLink';
 import type { AvailableTeacher, TeacherInvite } from '@/types/teacher-management';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 
@@ -35,6 +39,8 @@ interface HiringViewProps {
   onRadiusChange: (km: number) => void;
   onRefresh: () => void;
   onLoadInvites: () => Promise<void>;
+  schoolName?: string | null;
+  inviterName?: string | null;
 }
 
 export function HiringView({
@@ -50,8 +56,61 @@ export function HiringView({
   onRadiusChange,
   onRefresh,
   onLoadInvites,
+  schoolName,
+  inviterName,
 }: HiringViewProps) {
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+
+  const openShareOptions = async (inviteToken: string, inviteEmail: string) => {
+    const message = buildTeacherInviteMessage({
+      token: inviteToken,
+      email: inviteEmail,
+      schoolName,
+      inviterName,
+      roleLabel: 'teacher',
+    });
+    const inviteLink = buildTeacherInviteLink(inviteToken, inviteEmail);
+
+    const openWhatsApp = async () => {
+      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert('WhatsApp not available', 'Install WhatsApp to use this option.');
+        return;
+      }
+      await Linking.openURL(url);
+    };
+
+    const openSms = async () => {
+      const url = `sms:?body=${encodeURIComponent(message)}`;
+      await Linking.openURL(url);
+    };
+
+    const openEmail = async () => {
+      const subject = encodeURIComponent(`EduDash Pro Teacher Invite`);
+      const body = encodeURIComponent(message);
+      const url = `mailto:${inviteEmail}?subject=${subject}&body=${body}`;
+      await Linking.openURL(url);
+    };
+
+    const copyLink = async () => {
+      await Clipboard.setStringAsync(inviteLink);
+      Alert.alert('Copied', 'Invite link copied to clipboard.');
+    };
+
+    const shareGeneric = async () => {
+      await Share.share({ message, url: inviteLink });
+    };
+
+    Alert.alert('Invite ready', 'Choose how you want to send the invite.', [
+      { text: 'Share', onPress: shareGeneric },
+      { text: 'WhatsApp', onPress: openWhatsApp },
+      { text: 'SMS', onPress: openSms },
+      { text: 'Email', onPress: openEmail },
+      { text: 'Copy Link', onPress: copyLink },
+      { text: 'Close', style: 'cancel' },
+    ]);
+  };
 
   const handleInvite = async (teacher: AvailableTeacher) => {
     try {
@@ -60,13 +119,13 @@ export function HiringView({
         Alert.alert('Missing email', 'This teacher profile has no email.');
         return;
       }
-      await TeacherInviteService.createInvite({
+      const invite = await TeacherInviteService.createInvite({
         schoolId: preschoolId,
         email: teacher.email,
         invitedBy: userId || '',
       });
       await onLoadInvites();
-      Alert.alert('Invite sent', `Invitation sent to ${teacher.email}`);
+      await openShareOptions(invite.token, teacher.email);
     } catch (_e) {
       console.error('Invite error:', _e);
       Alert.alert('Error', 'Failed to send invite.');

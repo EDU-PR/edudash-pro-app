@@ -41,15 +41,16 @@ export const useChildHomework = (studentId: string | undefined, userId: string |
       // Get student's class_id
       const { data: student, error: studentError } = await client
         .from('students')
-        .select('class_id')
+        .select('class_id, preschool_id, organization_id')
         .eq('id', studentId)
         .maybeSingle();
       
       if (studentError) throw studentError;
       if (!student?.class_id) return [];
+      const schoolId = student.organization_id || student.preschool_id || null;
       
       // Get assignments for the class
-      const { data: assignments, error: assignmentsError } = await client
+      let assignmentsQuery = client
         .from('homework_assignments')
         .select(`
           id,
@@ -65,17 +66,29 @@ export const useChildHomework = (studentId: string | undefined, userId: string |
         `)
         .eq('class_id', student.class_id)
         .order('due_date', { ascending: true });
+
+      if (schoolId) {
+        assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);
+      }
+
+      const { data: assignments, error: assignmentsError } = await assignmentsQuery;
       
       if (assignmentsError) throw assignmentsError;
       if (!assignments) return [];
       
       // Get submissions for each assignment
       const assignmentIds = assignments.map((a: any) => a.id);
-      const { data: submissions } = await client
+      let submissionsQuery = client
         .from('homework_submissions')
         .select('id, assignment_id, submitted_at, status, grade, feedback')
         .eq('student_id', studentId)
         .in('assignment_id', assignmentIds);
+
+      if (schoolId) {
+        submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+      }
+
+      const { data: submissions } = await submissionsQuery;
       
       // Map submissions to assignments
       const assignmentsWithSubmissions = assignments.map((assignment: any) => ({
@@ -104,19 +117,26 @@ export const useHomeworkStats = (studentId: string | undefined, userId: string |
       // Get student's class_id
       const { data: student } = await client
         .from('students')
-        .select('class_id')
+        .select('class_id, preschool_id, organization_id')
         .eq('id', studentId)
         .maybeSingle();
       
       if (!student?.class_id) return { total: 0, completed: 0, pending: 0, overdue: 0 };
+      const schoolId = student.organization_id || student.preschool_id || null;
       
       const today = new Date().toISOString().split('T')[0];
       
       // Get all assignments
-      const { data: assignments } = await client
+      let assignmentsQuery = client
         .from('homework_assignments')
         .select('id, due_date')
         .eq('class_id', student.class_id);
+
+      if (schoolId) {
+        assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);
+      }
+
+      const { data: assignments } = await assignmentsQuery;
       
       if (!assignments || assignments.length === 0) {
         return { total: 0, completed: 0, pending: 0, overdue: 0 };
@@ -124,11 +144,17 @@ export const useHomeworkStats = (studentId: string | undefined, userId: string |
       
       // Get submissions
       const assignmentIds = assignments.map((a: any) => a.id);
-      const { data: submissions } = await client
+      let submissionsQuery = client
         .from('homework_submissions')
         .select('assignment_id, status')
         .eq('student_id', studentId)
         .in('assignment_id', assignmentIds);
+
+      if (schoolId) {
+        submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+      }
+
+      const { data: submissions } = await submissionsQuery;
       
       const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
       

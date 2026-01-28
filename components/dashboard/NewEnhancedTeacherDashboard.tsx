@@ -30,6 +30,7 @@ import { track } from '@/lib/analytics';
 import { PendingParentLinkRequests } from './PendingParentLinkRequests';
 import { TeacherMetricsCard } from './teacher/TeacherMetricsCard';
 import { TeacherQuickActionCard } from './teacher/TeacherQuickActionCard';
+import { BirthdayDonationRegister } from './teacher/BirthdayDonationRegister';
 import { useNewEnhancedTeacherState } from '@/hooks/useNewEnhancedTeacherState';
 import { useTeacherStudents } from '@/hooks/useTeacherStudents';
 import { StudentSummaryCard } from '@/components/dashboard/shared';
@@ -224,6 +225,14 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
               />
             ))}
           </View>
+        </View>
+
+        {/* Birthday Donations */}
+        <View style={styles.section}>
+          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
+            <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}</Text>
+          </View>
+          <BirthdayDonationRegister organizationId={organizationId} />
         </View>
 
         {/* My Students */}

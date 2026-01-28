@@ -317,6 +317,7 @@ export default function PaymentFlowScreen() {
       <BankSelectionSheet
         visible={showBankSelector}
         onClose={() => setShowBankSelector(false)}
+        autoOpenHomeScreen
       />
     </SafeAreaView>
   );

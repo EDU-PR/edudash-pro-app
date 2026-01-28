@@ -176,10 +176,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const toggleSection = useCallback((sectionId: string, isCollapsed?: boolean) => {
     setCollapsedSections(prev => {
       if (isCollapsed === false) {
-        return new Set(DEFAULT_COLLAPSED_SECTIONS);
+        return new Set(DEFAULT_COLLAPSED_SECTIONS.filter(id => id !== sectionId));
       }
       if (isCollapsed === true) {
-        return new Set(DEFAULT_COLLAPSED_SECTIONS.filter(id => id !== sectionId));
+        return new Set(DEFAULT_COLLAPSED_SECTIONS);
       }
       if (!prev.has(sectionId)) {
         return new Set(DEFAULT_COLLAPSED_SECTIONS.filter(id => id !== sectionId));

@@ -125,6 +125,37 @@
     "school_capacity": "Umthamo wesikole",
     "pending_approvals": "Okusadinga ukugunyazwa",
     "requiring_approval": "Kudinga ukugunyazwa",
+    "birthday_donations": {
+      "title": "Iminikelo Yosuku Lokuzalwa",
+      "subtitle": "Bhala umnikelo wosuku lwamanje we-R25 wamaphakheji omcimbi.",
+      "principal_subtitle": "Landelela iminikelo yansuku zonke nenyanga yamaphakheji omcimbi.",
+      "today_label": "Namuhla",
+      "expected_amount": "Okulindelekile",
+      "total_received": "Okutholiwe",
+      "remaining": "Okusele",
+      "record_button": "Bhala Umnikelo",
+      "record_error": "Kwehlulekile ukubhala umnikelo.",
+      "no_birthdays": "Azikho izinsuku zokuzalwa namuhla. Irejista ivaliwe.",
+      "limit_warning": "Kutholakale izinsuku zokuzalwa ezingaphezu kwezimbili. Xhumana no-admin ukuze kulungiswe.",
+      "amount_label": "Inani Lomnikelo",
+      "amount_error": "Faka inani elivumelekile.",
+      "method_label": "Indlela yokukhokha",
+      "note_label": "Amanothi (okuzikhethela)",
+      "note_placeholder": "Faka amanothi...",
+      "none_today": "Azikho izinsuku zokuzalwa namuhla.",
+      "no_entries": "Azikho izinkokhelo eziqoshiwe.",
+      "recent_title": "Okufakiwe kwanamuhla",
+      "month_label": "Le nyanga",
+      "month_progress": "{{percent}}% eqoqwe ezinsukwini zokuzalwa eziyi-{{days}}",
+      "refresh": "Vuselela",
+      "no_org": "Xhuma iphrofayela yesikole ukuze ulandele iminikelo.",
+      "methods": {
+        "cash": "Imali",
+        "eft": "EFT",
+        "card": "Ikhadi",
+        "other": "Okunye"
+      }
+    },
     "vs_last_month": "uma kuqhathaniswa nenyanga edlule",
     "this_month": "kule nyanga",
     "no_school_assigned_text": "Asikho isikole esinikelwe",
@@ -154,6 +185,12 @@
         "my_children": "Izingane zami",
         "uniform_sizes": "Osayizi bama-uniform",
         "recent_activity": "Umsebenzi wakamuva",
+        "homework": "Umsebenzi wesikole",
+        "live_classes": "Amakilasi aphilayo",
+        "teacher_notes": "Amanothi othisha",
+        "progress": "Intuthuko & Izimpumelelo",
+        "birthdays": "Izinsuku zokuzalwa ezizayo",
+        "daily_activity": "Umsebenzi wansuku zonke",
         "practice_at_home": "Zijwayeze ekhaya",
         "early_learning_activities": "Imisebenzi yokufunda kusenesikhathi",
         "early_learning_tips": "Amathiphu okufunda kusenesikhathi kubazali",
@@ -161,7 +198,12 @@
       },
       "child_card": {
         "homework": "Umsebenzi wasekhaya",
-        "events": "Izehlakalo"
+        "events": "Izehlakalo",
+        "attendance": "Ukuya esikoleni",
+        "pending_homework": "Umsebenzi osele",
+        "upcoming_events": "Imicimbi ezayo",
+        "message": "Umlayezo",
+        "last_activity": "Umsebenzi wokugcina:"
       },
       "activity": {
         "homework_graded": {
@@ -628,6 +670,13 @@
         "title": "IMODI YOKUHLolwa",
         "description": "Izivivinyo zokuzijwayeza, amanothi wokubuyekeza nezeluleko zokugcina ukuze uphumelele!",
         "cta": "Qala ukulungiselela izivivinyo"
+      },
+      "exam_prep": {
+        "locked": {
+          "title": "Ukulungiselela Izivivinyo Kuvaliwe",
+          "description": "Ukulungiselela izivivinyo kutholakala kubafundi beBanga 4+ kuphela. Xhumanisa ingane yeBanga 4 noma ngaphezulu ukuze uvule lesi sigaba.",
+          "cta": "Buyela Ku-Dashboard"
+        }
       }
     }
   },

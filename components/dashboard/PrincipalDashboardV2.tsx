@@ -21,6 +21,7 @@ import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 import { StudentSummaryCard } from '@/components/dashboard/shared';
 import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
+import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
@@ -377,6 +378,16 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             compact
             onViewAll={() => router.push('/screens/birthday-chart' as any)}
           />
+        </View>
+
+        {/* Birthday Donations */}
+        <SectionHeader
+          title={t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}
+          subtitle={t('dashboard.birthday_donations.principal_subtitle', { defaultValue: 'Track daily birthday pack contributions' })}
+          theme={theme}
+        />
+        <View style={styles.card}>
+          <BirthdayDonationSummaryCard organizationId={organizationId} />
         </View>
 
         {/* Parent Requests */}

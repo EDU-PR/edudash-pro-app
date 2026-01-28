@@ -5,6 +5,26 @@
 -- Purpose: Add tables for parent reactions and comments on student activities
 -- ============================================================================
 
+-- Ensure base tables exist for foreign keys (shadow DB safety)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+CREATE TABLE IF NOT EXISTS public.students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_id UUID,
+  guardian_id UUID
+);
+
+ALTER TABLE public.students
+  ADD COLUMN IF NOT EXISTS parent_id UUID,
+  ADD COLUMN IF NOT EXISTS guardian_id UUID;
+
+CREATE TABLE IF NOT EXISTS public.student_activity_feed (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID REFERENCES public.students(id) ON DELETE CASCADE
+);
+
 -- Create activity_reactions table
 CREATE TABLE IF NOT EXISTS public.activity_reactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

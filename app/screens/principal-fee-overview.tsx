@@ -416,13 +416,22 @@ export default function PrincipalFeeOverviewScreen() {
           <View style={styles.summarySection}>
             <View style={styles.summaryHeader}>
               <Text style={styles.sectionTitle}>Financial Overview</Text>
-              <TouchableOpacity
-                style={styles.expensesButton}
-                onPress={() => router.push('/screens/financial-dashboard')}
-              >
-                <Ionicons name="cash-outline" size={16} color={theme.primary} />
-                <Text style={styles.expensesButtonText}>Expenses & Petty Cash</Text>
-              </TouchableOpacity>
+              <View style={styles.summaryActions}>
+                <TouchableOpacity
+                  style={styles.expensesButton}
+                  onPress={() => router.push('/screens/financial-dashboard')}
+                >
+                  <Ionicons name="cash-outline" size={16} color={theme.primary} />
+                  <Text style={styles.expensesButtonText}>Expenses & Petty Cash</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.manageFeesButton}
+                  onPress={() => router.push('/screens/admin/fee-management')}
+                >
+                  <Ionicons name="wallet-outline" size={16} color={theme.primary} />
+                  <Text style={styles.expensesButtonText}>Manage Fee Structures</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.timeFilterRow}>
@@ -668,6 +677,13 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     marginBottom: 8,
     gap: 12,
   },
+  summaryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
   expensesButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -683,6 +699,17 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 12,
     fontWeight: '600',
     color: theme.text,
+  },
+  manageFeesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   timeFilterRow: {
     flexDirection: 'row',

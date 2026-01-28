@@ -1,6 +1,66 @@
 -- Fix organization_document_folders and organization_documents RLS to use security definer functions
 -- This prevents infinite recursion when these tables reference organization_members
 
+-- Ensure base tables exist (shadow DB compatibility)
+CREATE TABLE IF NOT EXISTS public.organization_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID,
+  user_id UUID,
+  seat_status TEXT,
+  member_type TEXT,
+  role TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.organization_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID,
+  access_level TEXT
+);
+
+CREATE TABLE IF NOT EXISTS public.organization_document_folders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+      AND column_name = 'seat_status'
+  ) THEN
+    ALTER TABLE public.organization_members ADD COLUMN seat_status TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+      AND column_name = 'member_type'
+  ) THEN
+    ALTER TABLE public.organization_members ADD COLUMN member_type TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+      AND column_name = 'role'
+  ) THEN
+    ALTER TABLE public.organization_members ADD COLUMN role TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_documents'
+      AND column_name = 'access_level'
+  ) THEN
+    ALTER TABLE public.organization_documents ADD COLUMN access_level TEXT;
+  END IF;
+END $$;
+
 -- First, ensure the required security definer functions exist
 -- Create user_can_view_org_document if it doesn't exist
 CREATE OR REPLACE FUNCTION user_can_view_org_document(doc_id UUID, doc_access_level TEXT)

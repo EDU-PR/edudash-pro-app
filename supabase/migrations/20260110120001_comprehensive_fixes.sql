@@ -13,21 +13,45 @@ BEGIN;
 DO $$
 DECLARE
   old_dob DATE;
+  has_dob boolean;
 BEGIN
-  SELECT date_of_birth INTO old_dob 
-  FROM students 
+  IF to_regclass('public.students') IS NULL THEN
+    RAISE NOTICE 'Skipping Mbali DOB update: students table missing';
+    RETURN;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'students'
+      AND column_name = 'date_of_birth'
+  ) INTO has_dob;
+
+  IF NOT has_dob THEN
+    RAISE NOTICE 'Skipping Mbali DOB update: students.date_of_birth missing';
+    RETURN;
+  END IF;
+
+  SELECT date_of_birth INTO old_dob
+  FROM public.students
   WHERE id = '074692f3-f5a3-4fea-977a-b726828e5067';
-  
+
+  IF old_dob IS NULL THEN
+    RAISE NOTICE 'Skipping Mbali DOB update: student not found';
+    RETURN;
+  END IF;
+
   RAISE NOTICE 'Old date of birth: %', old_dob;
-  
+
   -- Disable RLS temporarily for this session only
   SET LOCAL row_security = off;
-  
+
   -- Update Mbali's date of birth to make her 5 years old (born 2021)
-  UPDATE students
+  UPDATE public.students
   SET date_of_birth = '2021-01-15'
   WHERE id = '074692f3-f5a3-4fea-977a-b726828e5067';
-  
+
   RAISE NOTICE 'Updated Mbali Skosana date of birth to 2021-01-15 (age 5)';
 END $$;
 
@@ -39,18 +63,46 @@ COMMIT;
 -- Set teacher_id for AI-generated lessons that are missing it
 -- This will make them visible in the teacher dashboard
 
-UPDATE lessons
-SET teacher_id = (
-  SELECT id 
-  FROM profiles 
-  WHERE preschool_id = lessons.preschool_id 
-    AND role IN ('teacher', 'principal', 'principal_admin')
-    AND email IS NOT NULL
-  LIMIT 1
-)
-WHERE is_ai_generated = true 
-  AND teacher_id IS NULL
-  AND preschool_id = 'ba79097c-1b93-4b48-bcbe-df73878ab4d1';
+DO $$
+DECLARE
+  has_lessons_cols boolean;
+  has_profiles_cols boolean;
+BEGIN
+  IF to_regclass('public.lessons') IS NULL OR to_regclass('public.profiles') IS NULL THEN
+    RAISE NOTICE 'Skipping lesson teacher backfill: lessons or profiles table missing';
+    RETURN;
+  END IF;
+
+  SELECT COUNT(*) = 3 INTO has_lessons_cols
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'lessons'
+    AND column_name IN ('teacher_id', 'is_ai_generated', 'preschool_id');
+
+  SELECT COUNT(*) = 3 INTO has_profiles_cols
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'profiles'
+    AND column_name IN ('preschool_id', 'role', 'email');
+
+  IF NOT has_lessons_cols OR NOT has_profiles_cols THEN
+    RAISE NOTICE 'Skipping lesson teacher backfill: required columns missing';
+    RETURN;
+  END IF;
+
+  UPDATE public.lessons
+  SET teacher_id = (
+    SELECT id
+    FROM public.profiles
+    WHERE preschool_id = lessons.preschool_id
+      AND role IN ('teacher', 'principal', 'principal_admin')
+      AND email IS NOT NULL
+    LIMIT 1
+  )
+  WHERE is_ai_generated = true
+    AND teacher_id IS NULL
+    AND preschool_id = 'ba79097c-1b93-4b48-bcbe-df73878ab4d1';
+END $$;
 
 -- ========================================
 -- 3. ADD: Student deactivation function
@@ -162,21 +214,45 @@ GRANT EXECUTE ON FUNCTION public.reactivate_student(UUID) TO authenticated;
 -- 5. VERIFY: Check the fixes
 -- ========================================
 
--- Verify Mbali's age
-SELECT 
-  first_name,
-  last_name,
-  date_of_birth,
-  EXTRACT(YEAR FROM AGE(date_of_birth)) as age,
-  is_active
-FROM students
-WHERE id = '074692f3-f5a3-4fea-977a-b726828e5067';
+DO $$
+DECLARE
+  has_student_cols boolean;
+  has_lessons_cols boolean;
+BEGIN
+  IF to_regclass('public.students') IS NOT NULL THEN
+    SELECT COUNT(*) = 4 INTO has_student_cols
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'students'
+      AND column_name IN ('first_name', 'last_name', 'date_of_birth', 'is_active');
 
--- Verify lessons now have teacher_id
-SELECT 
-  COUNT(*) as total_ai_lessons,
-  COUNT(teacher_id) as lessons_with_teacher,
-  COUNT(*) FILTER (WHERE teacher_id IS NULL) as lessons_without_teacher
-FROM lessons
-WHERE is_ai_generated = true
-  AND preschool_id = 'ba79097c-1b93-4b48-bcbe-df73878ab4d1';
+    IF has_student_cols THEN
+      PERFORM 1
+      FROM public.students
+      WHERE id = '074692f3-f5a3-4fea-977a-b726828e5067';
+    ELSE
+      RAISE NOTICE 'Skipping Mbali verification: required students columns missing';
+    END IF;
+  ELSE
+    RAISE NOTICE 'Skipping Mbali verification: students table missing';
+  END IF;
+
+  IF to_regclass('public.lessons') IS NOT NULL THEN
+    SELECT COUNT(*) = 3 INTO has_lessons_cols
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'lessons'
+      AND column_name IN ('teacher_id', 'is_ai_generated', 'preschool_id');
+
+    IF has_lessons_cols THEN
+      PERFORM 1
+      FROM public.lessons
+      WHERE is_ai_generated = true
+        AND preschool_id = 'ba79097c-1b93-4b48-bcbe-df73878ab4d1';
+    ELSE
+      RAISE NOTICE 'Skipping lessons verification: required lessons columns missing';
+    END IF;
+  ELSE
+    RAISE NOTICE 'Skipping lessons verification: lessons table missing';
+  END IF;
+END $$;

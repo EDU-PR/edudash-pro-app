@@ -203,6 +203,102 @@ export default function DashStudioScreen() {
     }
   }, [prompt, canUseStudio, conversationId, startConversation, sendMessage, resetProgress, stopTimers, markProgressDone, isPlanning]);
 
+  const buildField = useCallback(
+    (label: string, type: FieldType, required = false, options?: string[]): FormField => ({
+      id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type,
+      label,
+      required,
+      options,
+    }),
+    []
+  );
+
+  const buildAutoForm = useCallback(() => {
+    const lower = prompt.toLowerCase();
+    const guardianLabel = terminology.guardians;
+    const instructorLabel = terminology.instructors;
+    let title = 'New form';
+    let description = 'Please complete this form.';
+    let audience: FormAudience[] = ['parents'];
+    let fields: FormField[] = [buildField('Your response', 'long_text', true)];
+
+    if (lower.includes('excursion') || lower.includes('trip')) {
+      title = 'Excursion Consent';
+      description = 'Capture consent, emergency contacts, and payment details.';
+      audience = ['parents'];
+      fields = [
+        buildField('Excursion date', 'date', true),
+        buildField('Emergency contact', 'short_text', true),
+        buildField('Allergies / medical notes', 'long_text'),
+        buildField('Consent approval', 'consent', true),
+        buildField('Excursion fee', 'fee_item'),
+      ];
+    } else if (lower.includes('meeting') || lower.includes('workshop')) {
+      title = `${guardianLabel} Meeting RSVP`;
+      description = 'Collect RSVPs, attendance counts, and questions.';
+      audience = ['parents'];
+      fields = [
+        buildField('Meeting date', 'date', true),
+        buildField('Number of attendees', 'number', true),
+        buildField('Questions for the host', 'long_text'),
+      ];
+    } else if (lower.includes('training') || lower.includes('staff')) {
+      title = `${instructorLabel} Training RSVP`;
+      description = 'Confirm attendance and availability for staff training.';
+      audience = ['teachers', 'staff'];
+      fields = [
+        buildField('Training date', 'date', true),
+        buildField('Preferred session', 'dropdown', true, ['Morning', 'Afternoon']),
+        buildField('Topics or focus areas', 'long_text'),
+      ];
+    }
+
+    return { title, description, audience, fields };
+  }, [prompt, terminology.guardians, terminology.instructors, buildField]);
+
+  const handleGenerateForm = useCallback(async () => {
+    if (!canUseStudio) {
+      Alert.alert('Premium Feature', 'Dash Studio is available on Premium/Pro tiers.');
+      return;
+    }
+    if (!organizationId) {
+      Alert.alert('Organization missing', 'Please refresh your profile and try again.');
+      return;
+    }
+    const formDraft = buildAutoForm();
+    if (!formDraft.title || formDraft.fields.length === 0) {
+      Alert.alert('Add details', 'Provide a clearer request so Dash can build the form.');
+      return;
+    }
+
+    setIsCreatingForm(true);
+    try {
+      const savedForm = await FormBuilderService.createForm({
+        organizationId,
+        title: formDraft.title,
+        description: formDraft.description,
+        audience: formDraft.audience,
+        fields: formDraft.fields,
+        status: 'published',
+      });
+
+      await FormBuilderService.notifyFormPublished({
+        organizationId: savedForm.organization_id,
+        formId: savedForm.id,
+        title: savedForm.title,
+        audience: formDraft.audience,
+      });
+
+      Alert.alert('Form published', `We notified ${formDraft.audience.join(', ')}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate the form.';
+      Alert.alert('Error', message);
+    } finally {
+      setIsCreatingForm(false);
+    }
+  }, [canUseStudio, organizationId, buildAutoForm]);
+
   const quotaText = tierStatus
     ? `${tierStatus.quotaUsed}/${tierStatus.quotaLimit} used today`
     : 'Usage data loading…';
@@ -469,95 +565,3 @@ const createStyles = (theme: ThemeColors) =>
     },
     moduleLabel: { fontSize: 12, fontWeight: '600' },
   });
-  const buildField = (label: string, type: FieldType, required = false, options?: string[]): FormField => ({
-    id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    type,
-    label,
-    required,
-    options,
-  });
-
-  const buildAutoForm = useCallback(() => {
-    const lower = prompt.toLowerCase();
-    const guardianLabel = terminology.guardians;
-    const instructorLabel = terminology.instructors;
-    let title = 'New form';
-    let description = 'Please complete this form.';
-    let audience: FormAudience[] = ['parents'];
-    let fields: FormField[] = [buildField('Your response', 'long_text', true)];
-
-    if (lower.includes('excursion') || lower.includes('trip')) {
-      title = 'Excursion Consent';
-      description = 'Capture consent, emergency contacts, and payment details.';
-      audience = ['parents'];
-      fields = [
-        buildField('Excursion date', 'date', true),
-        buildField('Emergency contact', 'short_text', true),
-        buildField('Allergies / medical notes', 'long_text'),
-        buildField('Consent approval', 'consent', true),
-        buildField('Excursion fee', 'fee_item'),
-      ];
-    } else if (lower.includes('meeting') || lower.includes('workshop')) {
-      title = `${guardianLabel} Meeting RSVP`;
-      description = 'Collect RSVPs, attendance counts, and questions.';
-      audience = ['parents'];
-      fields = [
-        buildField('Meeting date', 'date', true),
-        buildField('Number of attendees', 'number', true),
-        buildField('Questions for the host', 'long_text'),
-      ];
-    } else if (lower.includes('training') || lower.includes('staff')) {
-      title = `${instructorLabel} Training RSVP`;
-      description = 'Confirm attendance and availability for staff training.';
-      audience = ['teachers', 'staff'];
-      fields = [
-        buildField('Training date', 'date', true),
-        buildField('Preferred session', 'dropdown', true, ['Morning', 'Afternoon']),
-        buildField('Topics or focus areas', 'long_text'),
-      ];
-    }
-
-    return { title, description, audience, fields };
-  }, [prompt, terminology.guardians, terminology.instructors]);
-
-  const handleGenerateForm = useCallback(async () => {
-    if (!canUseStudio) {
-      Alert.alert('Premium Feature', 'Dash Studio is available on Premium/Pro tiers.');
-      return;
-    }
-    if (!organizationId) {
-      Alert.alert('Organization missing', 'Please refresh your profile and try again.');
-      return;
-    }
-    const formDraft = buildAutoForm();
-    if (!formDraft.title || formDraft.fields.length === 0) {
-      Alert.alert('Add details', 'Provide a clearer request so Dash can build the form.');
-      return;
-    }
-
-    setIsCreatingForm(true);
-    try {
-      const savedForm = await FormBuilderService.createForm({
-        organizationId,
-        title: formDraft.title,
-        description: formDraft.description,
-        audience: formDraft.audience,
-        fields: formDraft.fields,
-        status: 'published',
-      });
-
-      await FormBuilderService.notifyFormPublished({
-        organizationId: savedForm.organization_id,
-        formId: savedForm.id,
-        title: savedForm.title,
-        audience: formDraft.audience,
-      });
-
-      Alert.alert('Form published', `We notified ${formDraft.audience.join(', ')}.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to generate the form.';
-      Alert.alert('Error', message);
-    } finally {
-      setIsCreatingForm(false);
-    }
-  }, [canUseStudio, organizationId, buildAutoForm]);

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useMemo, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { ExamInteractiveView } from '@/components/dashboard/exam-prep/ExamInteractiveView';
@@ -20,13 +21,24 @@ type GenerateStatus = 'loading' | 'success' | 'error';
 function GenerateExamContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useTranslation();
   const {
     userId,
     profile,
     unreadCount,
     loading: dashboardLoading,
     hasOrganization,
+    childrenCards,
   } = useParentDashboardData();
+
+  const hasExamEligibleChild = useMemo(() => {
+    if (!childrenCards || childrenCards.length === 0) return false;
+    return childrenCards.some((child) => {
+      const match = child.grade?.match(/\d+/);
+      const gradeNum = match ? parseInt(match[0], 10) : 0;
+      return gradeNum >= 4;
+    });
+  }, [childrenCards]);
   
   // Simple state: loading → success/error
   const [status, setStatus] = useState<GenerateStatus>('loading');
@@ -205,6 +217,32 @@ function GenerateExamContent() {
       }}>
         <Loader2 className="icon32" style={{ animation: 'spin 1s linear infinite' }} />
       </div>
+    );
+  }
+
+  if (!hasExamEligibleChild) {
+    return (
+      <ParentShell
+        userEmail={profile?.email}
+        userName={profile?.firstName || 'User'}
+        preschoolName={profile?.preschoolName}
+        unreadCount={unreadCount}
+        hasOrganization={hasOrganization}
+      >
+        <div style={{ padding: 'var(--space-4)', maxWidth: 720, margin: '0 auto' }}>
+          <div className="card" style={{ padding: 'var(--space-4)' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+              {t('dashboard.parent.exam_prep.locked.title', { defaultValue: 'Exam Prep Locked' })}
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 16 }}>
+              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.' })}
+            </p>
+            <button className="btn btnSecondary" onClick={() => router.push('/dashboard/parent')}>
+              {t('dashboard.parent.exam_prep.locked.cta', { defaultValue: 'Back to Dashboard' })}
+            </button>
+          </div>
+        </div>
+      </ParentShell>
     );
   }
   

@@ -29,6 +29,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
+import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
 import { PushNotificationPrompt } from '@/components/PushNotificationPrompt';
 import { useBackButton } from '@/hooks/useBackButton';
 import { badgeManager } from '@/lib/utils/notification-badge';
@@ -46,6 +47,12 @@ interface ParentShellProps {
   hideHeader?: boolean;
 }
 
+const getGradeNumber = (gradeString?: string): number => {
+  if (!gradeString) return 0;
+  const match = gradeString.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+};
+
 export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle, hideHeader = false }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,6 +66,12 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [isPending, startTransition] = useTransition();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  const { childrenCards } = useChildrenData(userId || undefined);
+  const hasExamEligibleChild = useMemo(() => {
+    if (!childrenCards || childrenCards.length === 0) return false;
+    return childrenCards.some((child) => getGradeNumber(child.grade) >= 4);
+  }, [childrenCards]);
   
   // Get pending homework count
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -157,11 +170,11 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('preschool_id')
-        .eq('auth_user_id', user.id)
+        .select('preschool_id, organization_id')
+        .or(`id.eq.${user.id},auth_user_id.eq.${user.id}`)
         .maybeSingle();
 
-      setHasOrganization(!!profileData?.preschool_id);
+      setHasOrganization(!!profileData?.preschool_id || !!profileData?.organization_id);
     };
 
     checkOrganization();
@@ -178,7 +191,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: CheckCircle2 },
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
-        { href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen },
+        ...(hasExamEligibleChild
+          ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
+          : []),
         { href: '/dashboard/parent/payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: CreditCard },
         { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
@@ -189,13 +204,15 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), icon: Sparkles },
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
-        { href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen },
+        ...(hasExamEligibleChild
+          ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
+          : []),
         { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     }
-  }, [hasOrganization, homeworkCount, t, unreadCount]);
+  }, [hasOrganization, hasExamEligibleChild, homeworkCount, t, unreadCount]);
 
   return (
     <div className="app">

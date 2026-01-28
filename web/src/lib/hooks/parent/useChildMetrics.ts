@@ -54,13 +54,14 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
       // Get student data
       const { data: studentData } = await supabase
         .from('students')
-        .select('preschool_id, class_id')
+        .select('preschool_id, organization_id, class_id')
         .eq('id', childId)
         .single();
 
       if (!studentData) {
         throw new Error('Student not found');
       }
+      const schoolId = studentData.organization_id || studentData.preschool_id || null;
 
       // Fetch outstanding fees from student_fees table (or fallback to school_fee_structures)
       let feesDue: { amount: number; dueDate: string | null; overdue: boolean } | null = null;
@@ -87,12 +88,12 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
             dueDate: studentFees.due_date,
             overdue: isOverdue || studentFees.status === 'overdue',
           };
-        } else if (studentData.preschool_id) {
+        } else if (schoolId) {
           // Fallback: If no student_fees exist, check school_fee_structures for monthly tuition
           const { data: feeStructure, error: feeStructureError } = await supabase
             .from('school_fee_structures')
             .select('*')
-            .eq('preschool_id', studentData.preschool_id)
+            .eq('preschool_id', schoolId)
             .eq('is_active', true)
             .eq('fee_category', 'tuition')
             .limit(1)
@@ -131,22 +132,32 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
       // Pending homework
       let pendingHomework = 0;
       if (studentData.class_id) {
-        const { data: assignments } = await supabase
+        let assignmentsQuery = supabase
           .from('homework_assignments')
           .select('id')
           .eq('class_id', studentData.class_id)
-          .eq('preschool_id', studentData.preschool_id)
           .gte('due_date', today)
           .limit(10);
 
+        if (schoolId) {
+          assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);
+        }
+
+        const { data: assignments } = await assignmentsQuery;
+
         if (assignments && assignments.length > 0) {
           const assignmentIds = assignments.map((a: any) => a.id);
-          const { data: submissions } = await supabase
+          let submissionsQuery = supabase
             .from('homework_submissions')
             .select('assignment_id')
             .eq('student_id', childId)
-            .eq('preschool_id', studentData.preschool_id)
             .in('assignment_id', assignmentIds);
+
+          if (schoolId) {
+            submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+          }
+
+          const { data: submissions } = await submissionsQuery;
 
           const submittedIds = new Set(submissions?.map((s: any) => s.assignment_id) || []);
           pendingHomework = assignmentIds.filter((id: any) => !submittedIds.has(id)).length;
@@ -177,13 +188,18 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
       let upcomingEvents = 0;
       if (studentData.class_id) {
         try {
-          const { count } = await supabase
+          let eventsQuery = supabase
             .from('class_events')
             .select('id', { count: 'exact', head: true })
             .eq('class_id', studentData.class_id)
-            .eq('preschool_id', studentData.preschool_id)
             .gte('start_time', new Date().toISOString())
             .lte('start_time', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
+
+          if (schoolId) {
+            eventsQuery = eventsQuery.eq('preschool_id', schoolId);
+          }
+
+          const { count } = await eventsQuery;
 
           upcomingEvents = count || 0;
         } catch (err) {

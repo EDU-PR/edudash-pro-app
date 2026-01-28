@@ -4,7 +4,10 @@
 -- Add stem_category column if it doesn't exist
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'stem_category'
   ) THEN
@@ -17,7 +20,10 @@ END $$;
 -- Add is_published column if it doesn't exist (map from is_active)
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'is_published'
   ) THEN
@@ -34,7 +40,10 @@ END $$;
 -- Add description column if it doesn't exist (map from instructions)
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'description'
   ) THEN
@@ -51,7 +60,10 @@ END $$;
 -- Add created_by column if it doesn't exist (map from teacher_id)
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'created_by'
   ) THEN
@@ -68,7 +80,10 @@ END $$;
 -- Add play_count column if it doesn't exist (map from times_played)
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'play_count'
   ) THEN
@@ -85,7 +100,10 @@ END $$;
 -- Add average_score column if it doesn't exist (map from avg_score)
 DO $$ 
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) AND NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'interactive_activities' AND column_name = 'average_score'
   ) THEN
@@ -99,24 +117,40 @@ BEGIN
   END IF;
 END $$;
 
--- Now create the indexes that failed before
-CREATE INDEX IF NOT EXISTS idx_interactive_activities_stem_category 
-ON interactive_activities(stem_category) 
-WHERE stem_category IS NOT NULL;
+-- Now create the indexes and policy only if the table exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'interactive_activities'
+  ) THEN
+    EXECUTE $sql$
+      CREATE INDEX IF NOT EXISTS idx_interactive_activities_stem_category
+      ON interactive_activities(stem_category)
+      WHERE stem_category IS NOT NULL;
+    $sql$;
 
-CREATE INDEX IF NOT EXISTS idx_interactive_activities_published 
-ON interactive_activities(is_published) 
-WHERE is_published = true;
+    EXECUTE $sql$
+      CREATE INDEX IF NOT EXISTS idx_interactive_activities_published
+      ON interactive_activities(is_published)
+      WHERE is_published = true;
+    $sql$;
 
--- Fix the RLS policy that failed
-DROP POLICY IF EXISTS "parents_view_interactive_activities" ON interactive_activities;
-CREATE POLICY "parents_view_interactive_activities" ON interactive_activities
-  FOR SELECT USING (
-    is_published = true AND
-    EXISTS (
-      SELECT 1 FROM students s
-      JOIN profiles p ON p.id = auth.uid()
-      WHERE s.preschool_id = interactive_activities.preschool_id
-      AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
-    )
-  );
+    EXECUTE $sql$
+      DROP POLICY IF EXISTS "parents_view_interactive_activities" ON interactive_activities;
+    $sql$;
+
+    EXECUTE $sql$
+      CREATE POLICY "parents_view_interactive_activities" ON interactive_activities
+        FOR SELECT USING (
+          is_published = true AND
+          EXISTS (
+            SELECT 1 FROM students s
+            JOIN profiles p ON p.id = auth.uid()
+            WHERE s.preschool_id = interactive_activities.preschool_id
+            AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
+          )
+        );
+    $sql$;
+  END IF;
+END $$;

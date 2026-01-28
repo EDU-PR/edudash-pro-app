@@ -122,6 +122,7 @@ export default function HomeworkPage() {
     preschoolName,
     hasOrganization,
     tenantSlug,
+    profile,
     childrenCards,
     activeChildId,
     setActiveChildId,
@@ -146,7 +147,7 @@ export default function HomeworkPage() {
         // Get student data first
         const { data: studentData } = await supabase
           .from('students')
-          .select('preschool_id, class_id')
+          .select('preschool_id, organization_id, class_id')
           .eq('id', activeChildId)
           .single();
 
@@ -156,25 +157,36 @@ export default function HomeworkPage() {
           setHomeworkLoading(false);
           return;
         }
+        const schoolId = studentData.organization_id || studentData.preschool_id || null;
 
         // Fetch homework assignments for the class
-        const { data: assignments, error: hwError } = await supabase
+        let assignmentsQuery = supabase
           .from('homework_assignments')
           .select('*')
           .eq('class_id', studentData.class_id)
-          .eq('preschool_id', studentData.preschool_id)
           .order('due_date', { ascending: true });
+
+        if (schoolId) {
+          assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);
+        }
+
+        const { data: assignments, error: hwError } = await assignmentsQuery;
         
         if (hwError) throw hwError;
 
         // Fetch submissions for this student
         const assignmentIds = assignments?.map((assignment: { id: string }) => assignment.id) || [];
-        const submissionsResponse = assignmentIds.length > 0 ? await supabase
-          .from('homework_submissions')
-          .select('*')
-          .eq('student_id', activeChildId)
-          .eq('preschool_id', studentData.preschool_id)
-          .in('assignment_id', assignmentIds) : { data: [] as HomeworkSubmission[] };
+        const submissionsResponse = assignmentIds.length > 0 ? await (() => {
+          let submissionsQuery = supabase
+            .from('homework_submissions')
+            .select('*')
+            .eq('student_id', activeChildId)
+            .in('assignment_id', assignmentIds);
+          if (schoolId) {
+            submissionsQuery = submissionsQuery.eq('preschool_id', schoolId);
+          }
+          return submissionsQuery;
+        })() : { data: [] as HomeworkSubmission[] };
 
         const submissions = (submissionsResponse.data || []) as HomeworkSubmission[];
 
@@ -234,7 +246,7 @@ export default function HomeworkPage() {
   return (
     <ParentShell
       tenantSlug={tenantSlug}
-      userEmail={userId}
+      userEmail={profile?.email}
       userName={userName}
       preschoolName={preschoolName}
       hasOrganization={hasOrganization}

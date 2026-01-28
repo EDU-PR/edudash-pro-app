@@ -20,6 +20,7 @@ export default function POPHistoryPage() {
     preschoolName,
     hasOrganization,
     tenantSlug,
+    profile,
   } = useParentDashboardData();
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function POPHistoryPage() {
   return (
     <ParentShell
       tenantSlug={tenantSlug}
-      userEmail={userId}
+      userEmail={profile?.email}
       userName={userName}
       preschoolName={preschoolName}
       hasOrganization={hasOrganization}

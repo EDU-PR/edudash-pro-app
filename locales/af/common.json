@@ -195,6 +195,37 @@
     "school_capacity": "Skoolkapasiteit",
     "pending_approvals": "Hangende Goedkeurings",
     "requiring_approval": "Vereis goedkeuring",
+    "birthday_donations": {
+      "title": "Verjaardagbydraes",
+      "subtitle": "Teken vandag se R25-bydrae vir verjaardagpakke aan.",
+      "principal_subtitle": "Volg daaglikse en maandelikse verjaardagpak-bydraes.",
+      "today_label": "Vandag",
+      "expected_amount": "Verwag",
+      "total_received": "Ontvang",
+      "remaining": "Oorblywend",
+      "record_button": "Teken bydrae aan",
+      "record_error": "Kon bydrae nie aanteken nie.",
+      "no_birthdays": "Geen verjaarsdae vandag nie. Bydraeregister is gesluit.",
+      "limit_warning": "Meer as twee verjaarsdae opgespoor. Kontak admin om die rooster reg te stel.",
+      "amount_label": "Bydraebedrag",
+      "amount_error": "Voer 'n geldige bedrag in.",
+      "method_label": "Betaalmetode",
+      "note_label": "Notas (opsioneel)",
+      "note_placeholder": "Voeg enige notas by...",
+      "none_today": "Geen verjaarsdae vandag nie.",
+      "no_entries": "Geen bydraes aangeteken nie.",
+      "recent_title": "Vandag se inskrywings",
+      "month_label": "Hierdie maand",
+      "month_progress": "{{percent}}% ingevorder oor {{days}} verjaarsdagdae",
+      "refresh": "Herlaai",
+      "no_org": "Koppel jou skoolprofiel om bydraes te volg.",
+      "methods": {
+        "cash": "Kontant",
+        "eft": "EFT",
+        "card": "Kaart",
+        "other": "Ander"
+      }
+    },
     "vs_last_month": "teenoor verlede maand",
     "this_month": "hierdie maand",
     "no_school_assigned_text": "Geen Skool Toegewys Nie",
@@ -224,6 +255,12 @@
         "my_children": "My kinders",
         "uniform_sizes": "Uniformgroottes",
         "recent_activity": "Onlangse aktiwiteit",
+        "homework": "Huiswerk",
+        "live_classes": "Lewende klasse",
+        "teacher_notes": "Onderwysernotas",
+        "progress": "Vordering & Prestasies",
+        "birthdays": "Komende verjaarsdae",
+        "daily_activity": "Daaglikse aktiwiteit",
         "practice_at_home": "Oefen tuis",
         "early_learning_activities": "Vroeë leeraktiwiteite",
         "early_learning_tips": "Vroeë leertips vir ouers",
@@ -231,7 +268,12 @@
       },
       "child_card": {
         "homework": "Huiswerk",
-        "events": "Gebeure"
+        "events": "Gebeure",
+        "attendance": "Bywoning",
+        "pending_homework": "Hangende huiswerk",
+        "upcoming_events": "Komende gebeure",
+        "message": "Boodskap",
+        "last_activity": "Laaste aktiwiteit:"
       },
       "activity": {
         "homework_graded": {
@@ -698,6 +740,13 @@
         "title": "EKSAMEN MODUS",
         "description": "Oefentoetse, hersieningsnotas en laaste-minute wenke om jou eksamens te slaag!",
         "cta": "Begin eksamenvoorbereiding"
+      },
+      "exam_prep": {
+        "locked": {
+          "title": "Eksamenvoorbereiding Gesluit",
+          "description": "Eksamenvoorbereiding is beskikbaar vir Graad 4+ leerders. Koppel ’n Graad 4 of hoër kind om hierdie afdeling te ontsluit.",
+          "cta": "Terug na Dashboard"
+        }
       }
     }
   },

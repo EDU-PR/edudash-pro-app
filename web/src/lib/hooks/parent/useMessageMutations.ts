@@ -68,20 +68,49 @@ export const useCreateThread = () => {
       const client = createClient();
       
       // Create thread
-      const { data: thread, error: threadError } = await client
+      const threadPayload = {
+        preschool_id: preschoolId,
+        type,
+        subject,
+        student_id: studentId || null,
+        created_by: userId,
+        last_message_at: new Date().toISOString(),
+      };
+
+      let thread: { id: string } | null = null;
+      const { data: createdThread, error: threadError } = await client
         .from('message_threads')
-        .insert({
-          preschool_id: preschoolId,
-          type,
-          subject,
-          student_id: studentId || null,
-          created_by: userId,
-          last_message_at: new Date().toISOString()
-        })
+        .insert(threadPayload)
         .select()
         .single();
-      
-      if (threadError) throw threadError;
+
+      if (threadError) {
+        const errorMessage = threadError.message?.toLowerCase() || '';
+        if (errorMessage.includes('created_by')) {
+          const { data: fallbackThread, error: fallbackError } = await client
+            .from('message_threads')
+            .insert({
+              preschool_id: preschoolId,
+              type,
+              subject,
+              student_id: studentId || null,
+              last_message_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          if (fallbackError) throw fallbackError;
+          thread = fallbackThread;
+        } else {
+          throw threadError;
+        }
+      } else {
+        thread = createdThread;
+      }
+
+      if (!thread?.id) {
+        throw new Error('Unable to create conversation.');
+      }
       
       // Add participants
       const { error: participantsError } = await client
