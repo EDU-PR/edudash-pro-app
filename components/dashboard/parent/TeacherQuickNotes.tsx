@@ -1,9 +1,9 @@
 /**
  * TeacherQuickNotes Component
- * 
+ *
  * Displays quick notes/updates from teachers to parents about their child.
  * Shows daily highlights, concerns, achievements, or reminders.
- * 
+ *
  * Features:
  * - Note types with visual indicators (highlight, concern, achievement, reminder)
  * - Real-time updates
@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatRelativeTime } from '@/lib/utils/dateUtils';
@@ -48,15 +49,6 @@ interface TeacherQuickNotesProps {
   onAcknowledge?: (noteId: string) => void;
 }
 
-// Note type configuration
-const NOTE_TYPES = {
-  highlight: { icon: 'sunny', color: '#F59E0B', label: 'Daily Highlight' },
-  concern: { icon: 'alert-circle', color: '#EF4444', label: 'Please Note' },
-  achievement: { icon: 'trophy', color: '#10B981', label: 'Achievement' },
-  reminder: { icon: 'notifications', color: '#6366F1', label: 'Reminder' },
-  general: { icon: 'chatbubble', color: '#3B82F6', label: 'Note' },
-};
-
 export function TeacherQuickNotes({
   studentId,
   maxItems = 5,
@@ -65,11 +57,20 @@ export function TeacherQuickNotes({
   onAcknowledge,
 }: TeacherQuickNotesProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [notes, setNotes] = useState<TeacherNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
+
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const noteTypes = useMemo(() => ({
+    highlight: { icon: 'sunny', color: '#F59E0B', label: t('dashboard.parent.teacher_notes.types.highlight', { defaultValue: 'Daily Highlight' }) },
+    concern: { icon: 'alert-circle', color: '#EF4444', label: t('dashboard.parent.teacher_notes.types.concern', { defaultValue: 'Please Note' }) },
+    achievement: { icon: 'trophy', color: '#10B981', label: t('dashboard.parent.teacher_notes.types.achievement', { defaultValue: 'Achievement' }) },
+    reminder: { icon: 'notifications', color: '#6366F1', label: t('dashboard.parent.teacher_notes.types.reminder', { defaultValue: 'Reminder' }) },
+    general: { icon: 'chatbubble', color: '#3B82F6', label: t('dashboard.parent.teacher_notes.types.general', { defaultValue: 'Note' }) },
+  }), [t]);
 
   const loadNotes = useCallback(async () => {
     if (!studentId) {
@@ -79,10 +80,8 @@ export function TeacherQuickNotes({
 
     try {
       const supabase = assertSupabase();
-      
+
       // Get recent teacher notes for this student
-      // Note: We fetch notes first, then separately fetch teacher profile info
-      // because there's no direct FK from teacher_student_notes.teacher_id to profiles
       const { data, error } = await supabase
         .from('teacher_student_notes')
         .select('*')
@@ -91,20 +90,18 @@ export function TeacherQuickNotes({
         .limit(maxItems);
 
       if (error) {
-        // Table might not exist yet, gracefully handle
-        console.log('[TeacherQuickNotes] Notes table may not exist:', error.message);
         setNotes([]);
       } else {
         // Fetch teacher profiles separately if we have notes
-        const teacherIds = [...new Set((data || []).map((n: any) => n.teacher_id).filter(Boolean))];
+        const teacherIds = [...new Set((data || []).map((n: any) => n.teacher_id).filter(Boolean))]
         let teacherProfiles: Record<string, { first_name?: string; last_name?: string; avatar_url?: string }> = {};
-        
+
         if (teacherIds.length > 0) {
           const { data: profiles } = await supabase
             .from('profiles')
             .select('id, first_name, last_name, avatar_url')
             .in('id', teacherIds);
-          
+
           if (profiles) {
             teacherProfiles = profiles.reduce((acc: Record<string, any>, p: any) => {
               acc[p.id] = p;
@@ -112,33 +109,32 @@ export function TeacherQuickNotes({
             }, {});
           }
         }
-        
+
         const mapped = (data || []).map((n: any) => {
           const profile = teacherProfiles[n.teacher_id];
           return {
             ...n,
-            teacher_name: profile 
-              ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Teacher'
-              : 'Teacher',
+            teacher_name: profile
+              ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || t('roles.teacher', { defaultValue: 'Teacher' })
+              : t('roles.teacher', { defaultValue: 'Teacher' }),
             teacher_photo: profile?.avatar_url,
           };
         });
         setNotes(mapped);
       }
     } catch (err) {
-      console.error('[TeacherQuickNotes] Error:', err);
       setNotes([]);
     } finally {
       setLoading(false);
     }
-  }, [studentId, maxItems]);
+  }, [maxItems, studentId, t]);
 
   useEffect(() => {
     loadNotes();
 
     // Real-time subscription
     if (!studentId) return;
-    
+
     const supabase = assertSupabase();
     const subscription = supabase
       .channel(`teacher_notes_${studentId}`)
@@ -166,16 +162,16 @@ export function TeacherQuickNotes({
       const supabase = assertSupabase();
       await supabase
         .from('teacher_student_notes')
-        .update({ 
+        .update({
           acknowledged_at: new Date().toISOString(),
           is_read: true,
         })
         .eq('id', noteId);
-      
+
       loadNotes();
       onAcknowledge?.(noteId);
     } catch (err) {
-      console.error('[TeacherQuickNotes] Acknowledge error:', err);
+      // silent
     }
   };
 
@@ -184,7 +180,7 @@ export function TeacherQuickNotes({
   };
 
   const renderNote = ({ item }: { item: TeacherNote }) => {
-    const noteConfig = NOTE_TYPES[item.note_type] || NOTE_TYPES.general;
+    const noteConfig = noteTypes[item.note_type] || noteTypes.general;
     const isExpanded = expandedId === item.id;
     const isUnread = !item.is_read;
 
@@ -221,9 +217,9 @@ export function TeacherQuickNotes({
 
         {/* Note content */}
         <Text style={[styles.noteTitle, { color: theme.text }]}>
-          {item.title}
+          {item.title || t('dashboard.parent.teacher_notes.default_title', { defaultValue: 'Update' })}
         </Text>
-        <Text 
+        <Text
           style={[styles.noteContent, { color: theme.textSecondary }]}
           numberOfLines={isExpanded ? undefined : 2}
         >
@@ -235,7 +231,7 @@ export function TeacherQuickNotes({
           <View style={styles.expandedSection}>
             {item.teacher_name && (
               <Text style={[styles.teacherInfo, { color: theme.textTertiary }]}>
-                From: {item.teacher_name}
+                {t('dashboard.parent.teacher_notes.from_label', { defaultValue: 'From:' })} {item.teacher_name}
               </Text>
             )}
 
@@ -245,7 +241,9 @@ export function TeacherQuickNotes({
                 onPress={() => handleAcknowledge(item.id)}
               >
                 <Ionicons name="checkmark-circle" size={16} color="#FFF" />
-                <Text style={styles.acknowledgeText}>Acknowledge</Text>
+                <Text style={styles.acknowledgeText}>
+                  {t('dashboard.parent.teacher_notes.acknowledge', { defaultValue: 'Acknowledge' })}
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -253,7 +251,7 @@ export function TeacherQuickNotes({
               <View style={styles.acknowledgedBadge}>
                 <Ionicons name="checkmark-done" size={14} color={theme.success} />
                 <Text style={[styles.acknowledgedText, { color: theme.success }]}>
-                  Acknowledged
+                  {t('dashboard.parent.teacher_notes.acknowledged', { defaultValue: 'Acknowledged' })}
                 </Text>
               </View>
             )}
@@ -290,13 +288,17 @@ export function TeacherQuickNotes({
           <View style={styles.headerLeft}>
             <Ionicons name="chatbubbles" size={20} color={theme.primary} />
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              From Teacher
+              {t('dashboard.parent.teacher_notes.title', { defaultValue: 'From Teacher' })}
             </Text>
           </View>
           {notes.filter(n => !n.is_read).length > 0 && (
-            <View style={[styles.unreadBadge, { backgroundColor: theme.primary }]}>
+            <View style={[styles.unreadBadge, { backgroundColor: theme.primary }]}
+            >
               <Text style={styles.unreadCount}>
-                {notes.filter(n => !n.is_read).length} new
+                {t('dashboard.parent.teacher_notes.new_count', {
+                  defaultValue: '{{count}} new',
+                  count: notes.filter(n => !n.is_read).length,
+                })}
               </Text>
             </View>
           )}

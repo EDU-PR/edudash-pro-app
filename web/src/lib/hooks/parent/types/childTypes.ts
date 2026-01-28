@@ -11,6 +11,9 @@ export interface ChildCard {
   grade: string;
   className: string | null;
   classId?: string;
+  preschoolId?: string | null;
+  preschoolName?: string | null;
+  studentCode?: string | null;
   lastActivity: Date;
   homeworkPending: number;
   upcomingEvents: number;

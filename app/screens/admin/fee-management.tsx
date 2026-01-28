@@ -21,6 +21,8 @@ import {
   StyleSheet,
   Modal,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,9 +61,9 @@ const FEE_TYPES = [
   { value: 'materials', label: '🎨 Materials', icon: 'color-palette' },
   { value: 'transport', label: '🚌 Transport', icon: 'bus' },
   { value: 'meals', label: '🍽️ Meals', icon: 'restaurant' },
+  { value: 'uniform', label: '🎽 Uniform (Full set)', icon: 'shirt' },
   { value: 'uniform_tshirt', label: '👕 Uniform (T-shirt)', icon: 'shirt' },
   { value: 'uniform_shorts', label: '🩳 Uniform (Shorts)', icon: 'shirt' },
-  { value: 'uniform', label: '🎽 Uniform (Other)', icon: 'shirt' },
   { value: 'other', label: '📦 Other', icon: 'cube' },
 ];
 
@@ -507,17 +509,22 @@ export default function FeeManagementScreen() {
       {/* Fee Modal */}
       <Modal visible={showFeeModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {editingFee ? 'Edit Fee' : 'Add New Fee'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowFeeModal(false)}>
-                <Ionicons name="close" size={24} color={theme.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalBody}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboard}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>
+                  {editingFee ? 'Edit Fee' : 'Add New Fee'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowFeeModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               <Text style={[styles.label, { color: theme.text }]}>Fee Name *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -595,47 +602,53 @@ export default function FeeManagementScreen() {
                 />
                 <Text style={{ color: theme.text, marginLeft: 8 }}>Active</Text>
               </TouchableOpacity>
-            </ScrollView>
-            
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.surface }]}
-                onPress={() => setShowFeeModal(false)}
-              >
-                <Text style={{ color: theme.text }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.primary }]}
-                onPress={handleSaveFee}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color={theme.onPrimary} size="small" />
-                ) : (
-                  <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
-                    {editingFee ? 'Update' : 'Create'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              </ScrollView>
+              
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: theme.surface }]}
+                  onPress={() => setShowFeeModal(false)}
+                >
+                  <Text style={{ color: theme.text }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                  onPress={handleSaveFee}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={theme.onPrimary} size="small" />
+                  ) : (
+                    <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
+                      {editingFee ? 'Update' : 'Create'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
       {/* Promo Modal */}
       <Modal visible={showPromoModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {editingPromo ? 'Edit Promo' : 'Add New Promo'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowPromoModal(false)}>
-                <Ionicons name="close" size={24} color={theme.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalBody}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboard}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.text }]}>
+                  {editingPromo ? 'Edit Promo' : 'Add New Promo'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowPromoModal(false)}>
+                  <Ionicons name="close" size={24} color={theme.text} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
               <Text style={[styles.label, { color: theme.text }]}>Promo Code *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -714,30 +727,31 @@ export default function FeeManagementScreen() {
                 />
                 <Text style={{ color: theme.text, marginLeft: 8 }}>Active</Text>
               </TouchableOpacity>
-            </ScrollView>
-            
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.surface }]}
-                onPress={() => setShowPromoModal(false)}
-              >
-                <Text style={{ color: theme.text }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: '#10b981' }]}
-                onPress={handleSavePromo}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>
-                    {editingPromo ? 'Update' : 'Create'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              </ScrollView>
+              
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: theme.surface }]}
+                  onPress={() => setShowPromoModal(false)}
+                >
+                  <Text style={{ color: theme.text }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: '#10b981' }]}
+                  onPress={handleSavePromo}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>
+                      {editingPromo ? 'Update' : 'Create'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -819,6 +833,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
+  modalKeyboard: { flex: 1, justifyContent: 'flex-end' },
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

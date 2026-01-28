@@ -9,21 +9,7 @@
     "version": "1.0.0"
   },
   "common": {
-    "error": "Fout",
-    "success": "Sukses",
-    "ok": "OK",
-    "cancel": "Kanselleer",
-    "unexpected_error": "'n Onverwagte fout het voorgekom",
-    "or": "of",
-    "click_here": "Klik hier",
-    "go_now": "Gaan nou",
-    "try_again": "Probeer Weer",
-    "not_set": "Nie ingestel nie",
-    "enabled": "Geaktiveer",
-    "disabled": "Gedeaktiveer",
-    "not_available": "Nie beskikbaar nie",
-    "coming_soon": "Binnekort Beskikbaar",
-    "all": "Almal",
+    "all": "Alles",
     "last_7_days": "Laaste 7 dae",
     "last_30_days": "Laaste 30 dae",
     "all_time": "Alle tyd",
@@ -31,35 +17,53 @@
     "start_date": "Begindatum",
     "end_date": "Einddatum",
     "apply": "Pas toe",
-    "viewAll": "Bekyk Alles",
-    "ageYears": "{{age}} jaar oud",
-    "ageUnknown": "Ouderdom onbekend",
-    "noClass": "Geen klas toegewys nie",
-    "connectionError": "Verbindingsfout. Kontroleer asseblief jou internet.",
-    "loading": "Laai...",
-    "optional": "Opsioneel",
-    "add": "Voeg by",
-    "record": "Rekord",
-    "uploading": "Laai op...",
-    "important": "Belangrik",
-    "not_allowed": "Nie toegelaat nie",
+    "loading": "Laai tans...",
+    "child": "Kind",
+    "error": "Fout",
+    "success": "Sukses",
+    "warning": "Waarskuwing",
     "info": "Inligting",
-    "confirm": "Is jy seker?",
+    "ok": "OK",
     "yes": "Ja",
     "no": "Nee",
     "close": "Maak toe",
+    "submit": "Dien in",
+    "confirm": "Bevestig",
+    "continue": "Gaan voort",
+    "skip": "Slaan oor",
+    "not_set": "Nie gestel nie",
+    "enabled": "Ingeskakel",
+    "disabled": "Afgeskakel",
+    "not_available": "Nie beskikbaar nie",
+    "coming_soon": "Binnekort beskikbaar",
+    "done": "Klaar",
     "retry": "Probeer weer",
     "refresh": "Verfris",
-    "upgrade": "Opgradeer",
-    "submit": "Dien in",
-    "continue": "Gaan voort",
-    "done": "Klaar",
-    "view_details": "Bekyk Besonderhede",
-    "menu": "Menu",
-    "my_profile": "My Profiel",
-    "email": "E-pos",
+    "filter": "Filter",
+    "sort": "Sorteer",
+    "viewMore": "Wys meer",
+    "viewLess": "Wys minder",
+    "comingSoon": "Binnekort",
+    "notSet": "Nie gestel nie",
+    "available": "Beskikbaar",
+    "notAvailable": "Nie beskikbaar nie",
+    "required": "Vereis",
+    "optional": "Opsioneel",
+    "tryAgain": "Probeer weer",
+    "authenticate": "Verifieer",
+    "later": "Later",
+    "enable": "Skakel in",
+    "disable": "Skakel af",
+    "viewAll": "Wys Alles",
+    "email": "Email",
     "status": "Status",
-    "go_now": "Gaan nou"
+    "go_now": "Go now",
+    "cancel": "Kanselleer",
+    "add": "Voeg by",
+    "record": "Rekordeer",
+    "uploading": "Laai op...",
+    "important": "Belangrik",
+    "not_allowed": "Nie toegelaat nie"
   },
   "navigation": {
     "dashboard": "Kontrolepaneel",
@@ -166,7 +170,6 @@
     "unlock_premium_subtitle": "Gevorderde ontleding, KI-insigte & meer • Transformeer jou skool vandag!",
     "capacity_students": "{{current}} / {{capacity}} studente",
     "utilized_percentage": "{{percentage}}% benut",
-
     "financial_overview": "Finansiële Oorsig",
     "details": "Besonderhede",
     "monthly_revenue": "Maandelikse Inkomste",
@@ -179,7 +182,6 @@
     "need_help": "Het jy hulp nodig?",
     "contact_support_whatsapp": "Kontak ondersteuning via WhatsApp • Kry onmiddellike hulp",
     "whatsapp_not_connected": "Nie Verbind nie",
-
     "payment_history": "Betalingsgeskiedenis",
     "payment_history_subtitle": "Blaai, filtreer & voer betalingsrekords uit",
     "financial_overview_subtitle": "Bekyk inkomste, uitgawes & kontantvloei-tendense",
@@ -190,7 +192,6 @@
     "class_teacher_management": "Klas- & Onderwyserbestuur",
     "class_teacher_management_subtitle": "Ken onderwysers toe, bestuur klasse & verhoudings",
     "advanced_analytics": "Gevorderde Ontleding",
-
     "school_capacity": "Skoolkapasiteit",
     "pending_approvals": "Hangende Goedkeurings",
     "requiring_approval": "Vereis goedkeuring",
@@ -202,7 +203,503 @@
     "general_expenses": "Algemene Uitgawes",
     "no_description": "Geen beskrywing",
     "invalid_phone_number": "Ongeldige Telefoonnommer",
-    "enter_valid_phone": "Voer asseblief 'n geldige Suid-Afrikaanse selfoon nommer in"
+    "enter_valid_phone": "Voer asseblief 'n geldige Suid-Afrikaanse selfoon nommer in",
+    "progress": "Vordering",
+    "parent": {
+      "welcome_subtitle": "Welkom by jou ouer-dashboard",
+      "search_placeholder": "Soek huiswerk, boodskappe, kinders...",
+      "upgrade_title": "Ontsluit meer ouer-hulpmiddels",
+      "upgrade_description": "Kry huiswerkhulp, vordering-insigte, en verwyder advertensies deur op te gradeer.",
+      "hint": {
+        "quick_actions": {
+          "title": "Vinnige aksies",
+          "message": "Tik op enige kaart om vinnig toegang tot huiswerk, boodskappe, betalings of Dash AI te kry."
+        },
+        "live_classes": {
+          "title": "Lewende klasse",
+          "message": "Wanneer 'n onderwyser 'n lewende klas begin, kan jy hier onmiddellik aansluit."
+        }
+      },
+      "section": {
+        "my_children": "My kinders",
+        "uniform_sizes": "Uniformgroottes",
+        "recent_activity": "Onlangse aktiwiteit",
+        "practice_at_home": "Oefen tuis",
+        "early_learning_activities": "Vroeë leeraktiwiteite",
+        "early_learning_tips": "Vroeë leertips vir ouers",
+        "overview": "Vandag se oorsig"
+      },
+      "child_card": {
+        "homework": "Huiswerk",
+        "events": "Gebeure"
+      },
+      "activity": {
+        "homework_graded": {
+          "title": "Huiswerk nagesien",
+          "description": "{{name}} se \"{{assignment}}\" het {{grade}}% gekry"
+        },
+        "homework_submitted": {
+          "title": "Huiswerk ingedien",
+          "description": "{{name}} het \"{{assignment}}\" ingedien"
+        },
+        "message": {
+          "title": "Nuwe boodskap",
+          "no_subject": "Geen onderwerp"
+        },
+        "announcement": {
+          "title": "Skoolaankondiging"
+        },
+        "time": {
+          "just_now": "Nou net",
+          "minutes_ago": "{{count}}m gelede",
+          "hours_ago": "{{count}}h gelede",
+          "yesterday": "Gister",
+          "days_ago": "{{count}}d gelede"
+        },
+        "empty": {
+          "title": "Geen onlangse aktiwiteit",
+          "description": "Aktiwiteit sal hier verskyn soos jy en jou kind die platform gebruik"
+        }
+      },
+      "homework_card": {
+        "title": "Huiswerk",
+        "summary": {
+          "all_caught_up": "Alles is op datum! 🎉",
+          "assignments_pending": "{{count}} opdrag hangend",
+          "assignments_pending_plural": "{{count}} opdragte hangend"
+        },
+        "status": {
+          "overdue": "Agterstallig",
+          "due_today": "Vandag verskuldig",
+          "due_tomorrow": "Môre verskuldig",
+          "days_left": "{{count}} dae oor"
+        },
+        "empty": {
+          "title": "Geen hangende huiswerk",
+          "description": "Kom later terug vir nuwe opdragte"
+        },
+        "view_more": "Sien nog {{count}} opdrag",
+        "view_more_plural": "Sien nog {{count}} opdragte"
+      },
+      "teacher_notes": {
+        "title": "Van die Onderwyser",
+        "loading": "Laai notas...",
+        "new_count": "{{count}} nuut",
+        "default_title": "Opdatering",
+        "from_label": "Van:",
+        "acknowledge": "Erken",
+        "acknowledged": "Erken",
+        "types": {
+          "highlight": "Daaglikse hoogtepunt",
+          "concern": "Let asseblief op",
+          "achievement": "Prestasie",
+          "reminder": "Herinnering",
+          "general": "Nota"
+        },
+        "time": {
+          "just_now": "Nou net",
+          "minutes_ago": "{{count}}m gelede",
+          "hours_ago": "{{count}}h gelede",
+          "days_ago": "{{count}}d gelede"
+        }
+      },
+      "progress": {
+        "title": "Vordering & Prestasies",
+        "loading": "Laai vordering...",
+        "stats": {
+          "attendance": "Bywoning",
+          "homework": "Huiswerk"
+        },
+        "badges": {
+          "earned": "Verdien",
+          "default_name": "Prestasie",
+          "attendance_star": {
+            "name": "Bywoningster",
+            "description": "5-dae bywoningsreeks"
+          },
+          "homework_hero": {
+            "name": "Huiswerk Held",
+            "description": "Voltooi alle huiswerk hierdie week"
+          },
+          "helping_hand": {
+            "name": "Helpende Hand",
+            "description": "Het 'n vriend vandag gehelp"
+          },
+          "creative_genius": {
+            "name": "Kreatiewe Genie",
+            "description": "Uitstaande kunswerk"
+          },
+          "math_wizard": {
+            "name": "Wiskunde-towenaar",
+            "description": "Uitstekende telvaardighede"
+          },
+          "bookworm": {
+            "name": "Boekwurm",
+            "description": "Hou van storietyd"
+          },
+          "super_listener": {
+            "name": "Super Luisteraar",
+            "description": "Volg altyd instruksies"
+          },
+          "kindness_champ": {
+            "name": "Vriendelikheidskampioen",
+            "description": "Toon vriendelikheid aan almal"
+          }
+        },
+        "last_updated": "Bygewerk {{time}}",
+        "summary": {
+          "great_job": "Goeie werk! {{count}} kenteken verdien.",
+          "great_job_plural": "Goeie werk! {{count}} kentekens verdien.",
+          "keep_going": "Hou aan! Jou kind maak vordering."
+        }
+      },
+      "birthdays": {
+        "title": "Komende Verjaarsdae",
+        "loading": "Laai verjaarsdae...",
+        "view_chart": "Sien grafiek",
+        "turning_age": "Word {{age}}",
+        "today": "Vandag",
+        "in_days": "Oor {{count}} dae"
+      },
+      "uniform": {
+        "title": "Uniformgroottes",
+        "subtitle": "Bevestig asseblief elke kind se uniformgroottes en hoeveelhede. 'n Volledige stel is 1 T-hemp + 1 kortbroek.",
+        "empty": "Voeg eers 'n kind by om uniformgroottes in te dien.",
+        "loading": "Laai bestaande indienings...",
+        "labels": {
+          "child_name": "Kind se naam",
+          "age": "Ouderdom (jare)",
+          "tshirt_size": "T-hemp grootte",
+          "tshirts": "T-hemde",
+          "shorts": "Kortbroeke"
+        },
+        "placeholders": {
+          "child_name": "Kind se naam",
+          "age": "Ouderdom",
+          "select_size": "Kies grootte",
+          "default_one": "1"
+        },
+        "actions": {
+          "save": "Stoor",
+          "pay_now": "Betaal nou"
+        },
+        "status": {
+          "saving": "Stoor tans…",
+          "saved": "Gestoor"
+        },
+        "validation": {
+          "child_name": "Voer asseblief die kind se naam in.",
+          "tshirt_size": "Kies 'n T-hemp grootte.",
+          "age": "Voer 'n geldige ouderdom in (1-18).",
+          "tshirt_qty": "Voer 'n geldige aantal T-hemde in (1-20).",
+          "shorts_qty": "Voer 'n geldige aantal kortbroeke in (0-20)."
+        },
+        "errors": {
+          "load_existing": "Kon nie bestaande uniformgroottes laai nie.",
+          "load_pricing": "Kon nie uniformpryse laai nie.",
+          "save_failed": "Stoor het misluk"
+        },
+        "pricing": {
+          "title": "Pryse:",
+          "full_set": "Volledige stel {{amount}}",
+          "full_set_unset": "Volledige stel —",
+          "tshirt": "T-hemp {{amount}}",
+          "tshirt_unset": "T-hemp —",
+          "shorts": "Kortbroek {{amount}}",
+          "shorts_unset": "Kortbroek —"
+        },
+        "order": {
+          "title": "Bestelling:",
+          "sets": "{{count}} stel(le)",
+          "sets_zero": "0 stelle",
+          "extra_tshirts": "{{count}} ekstra T-hemde",
+          "extra_shorts": "{{count}} ekstra kortbroeke"
+        },
+        "total": {
+          "label": "Totaal:",
+          "unavailable": "Pryse nie opgestel nie",
+          "note": "Pryse is nog nie opgestel nie. Ons sal steeds 'n betalingsverwysing genereer."
+        },
+        "last_updated": "Laas opgedateer:",
+        "payment": {
+          "description": "Uniformbestelling • Grootte {{size}} • T-hemde {{tshirts}} • Kortbroeke {{shorts}}"
+        }
+      },
+      "daily_activity": {
+        "title": "Vandag se Aktiwiteite",
+        "loading": "Laai aktiwiteite...",
+        "labels": {
+          "teacher": "Onderwyser:",
+          "materials": "Materiaal:",
+          "objectives": "Doelwitte:",
+          "notes": "Notas:",
+          "learning_goals": "Leerdoelwitte",
+          "materials_used": "Materiaal gebruik",
+          "teacher_notes": "Onderwysernotas",
+          "added_by": "Bygevoeg deur {{name}}"
+        },
+        "empty": {
+          "title": "Geen aktiwiteite vandag gelog nie",
+          "description": "Kyk later weer vir opdaterings van jou kind se onderwyser"
+        }
+      },
+      "ad_banner": {
+        "top_title": "Geborgde leerwenke",
+        "bottom_title": "Ondersteun die app",
+        "description": "Gradeer op om advertensies te verwyder en ekstra ouer-hulpmiddels te ontsluit.",
+        "cta": "Gradeer op"
+      },
+      "pending_requests": {
+        "title": "Hangende Versoeke",
+        "loading": "Laai...",
+        "types": {
+          "registration": "Nuwe registrasie",
+          "claim": "Skakelversoek"
+        },
+        "requested_on": "Versoek {{date}}",
+        "footer": "Jou versoek wag op skoolgoedkeuring. Jy sal in kennis gestel word sodra dit hersien is.",
+        "footer_plural": "Jou versoeke wag op skoolgoedkeuring. Jy sal in kennis gestel word sodra dit hersien is."
+      },
+      "trial": {
+        "ends_today": "⏰ Proeftyd eindig vandag!",
+        "last_day": "Laaste dag van proeftyd",
+        "days_left": "{{count}} dae oor • {{plan}} proeftyd",
+        "upgrade": "Gradeer op"
+      },
+      "practice": {
+        "robotics": {
+          "title": "Robotika-oefening",
+          "description": "Verken robotbewegings, basiese programmering en sensor-aktiwiteite"
+        },
+        "ai": {
+          "title": "KI-aktiwiteite",
+          "description": "Ouderdomspaslike KI-leerspeletjies en patroonherkenning-aktiwiteite",
+          "prompt": "Help my om ouderdomspaslike KI-leeraktiwiteite vir my kind te skep",
+          "display": "KI-leeraktiwiteite"
+        },
+        "computer": {
+          "title": "Rekenaargeletterdheid",
+          "description": "Basiese vaardighede: tik, muisbeheer, app-navigasie, aanlynveiligheid",
+          "prompt": "Help my om my kind basiese rekenaarvaardighede te leer soos die gebruik van ’n muis, sleutelbord en veilige aanlynpraktyke",
+          "display": "Rekenaargeletterdheid-gids"
+        }
+      },
+      "early_learning": {
+        "heading": "Ondersteun jou kleuter se ontwikkeling",
+        "tips": {
+          "creative_play": {
+            "title": "🎨 Kreatiewe spel",
+            "description": "Moedig teken, verf en verbeeldingryke spel aan om kreatiwiteit en fynmotoriese vaardighede te ontwikkel."
+          },
+          "reading": {
+            "title": "📚 Saam lees",
+            "description": "Lees daagliks stories om taalvaardighede, woordeskat en 'n liefde vir boeke te bou."
+          },
+          "numbers": {
+            "title": "🔢 Syfers & vorms",
+            "description": "Gebruik alledaagse aktiwiteite om tel, kleure en vorms op ’n prettige manier bekend te stel."
+          },
+          "songs": {
+            "title": "🎵 Liedjies & rympies",
+            "description": "Sing liedjies en sê rympies op om geheue, ritme en fonologiese bewustheid te ontwikkel."
+          },
+          "social": {
+            "title": "🤝 Sosiale vaardighede",
+            "description": "Reël speelafsprake en leer deel, beurtneem en emosies uitdruk."
+          }
+        }
+      },
+      "overview": {
+        "unread_messages": "Ongeleesde boodskappe",
+        "missed_calls": "Gemiste oproepe",
+        "homework_pending": "Uitstaande huiswerk",
+        "attendance_rate": "Bywoningskoers"
+      },
+      "ai": {
+        "close": "Sluit"
+      },
+      "empty": {
+        "add_child": {
+          "title": "Voeg jou kind by",
+          "description": "Koppel 'n kind om huiswerk, vordering-insigte en persoonlike opdaterings te ontsluit.",
+          "cta": "Voeg kind by"
+        },
+        "uniform_sizes": {
+          "title": "Uniformgroottes-voorskou",
+          "description": "Koppel 'n kind aan 'n skool om uniformgroottes en opdaterings te sien."
+        },
+        "recent_activity": {
+          "title": "Onlangse aktiwiteit-voorskou",
+          "description": "Sodra 'n kind gekoppel is, sal jy huiswerk, boodskappe en aankondigings hier sien."
+        },
+        "homework": {
+          "title": "Huiswerk-voorskou",
+          "description": "Koppel 'n kind aan 'n skool om huiswerk te sien en in te dien."
+        },
+        "live_classes": {
+          "title": "Lewende klasse-voorskou",
+          "description": "Lewende klas-skakels verskyn hier sodra jou kind aan 'n skool gekoppel is."
+        },
+        "teacher_notes": {
+          "title": "Onderwysernotas-voorskou",
+          "description": "Notas van opvoeders verskyn hier wanneer 'n kind gekoppel is."
+        },
+        "progress": {
+          "title": "Vorderingkentekens-voorskou",
+          "description": "Volg mylpale en prestasies sodra 'n kind gekoppel is."
+        },
+        "birthdays": {
+          "title": "Komende verjaarsdae-voorskou",
+          "description": "Verjaarsdae vir jou kind se groep verskyn hier na koppeling."
+        },
+        "daily_activity": {
+          "title": "Daaglikse aktiwiteit-voorskou",
+          "description": "Daaglikse aktiwiteitsopdaterings verskyn hier sodra 'n kind gekoppel is."
+        },
+        "practice": {
+          "title": "Oefen tuis-voorskou",
+          "description": "Oefenaktiwiteite verskyn hier nadat 'n kind gekoppel is."
+        },
+        "early_learning_activities": {
+          "title": "Vroeë leeraktiwiteite-voorskou",
+          "description_preschool_only": "Hierdie aktiwiteite is beskikbaar vir kleuter-ouderdom kinders.",
+          "description_add_child": "Voeg 'n kind by om vroeë leeraktiwiteite te ontsluit."
+        },
+        "early_learning_tips": {
+          "title": "Vroeë leertips-voorskou",
+          "description_preschool_only": "Wenke is vir kleuter-ouderdom kinders.",
+          "description_add_child": "Voeg 'n kind by om vroeë leertips te ontsluit."
+        },
+        "overview": {
+          "title": "Oorsig-voorskou",
+          "description": "Koppel 'n kind aan 'n skool om bywoning, huiswerk en boodskappe te sien."
+        }
+      },
+      "dash_orb": {
+        "prompt": "Hoe kan ek my kind vandag ondersteun?",
+        "display": "Dash KI Helper"
+      },
+      "quick_actions": {
+        "fees": {
+          "overdue": "Agterstallig",
+          "due_today": "Vandag betaalbaar",
+          "due_in_days": "Betaalbaar oor {{count}} dag",
+          "due_in_days_plural": "Betaalbaar oor {{count}} dae"
+        },
+        "ebooks": "E-boeke",
+        "robotics_lab": "Robotika-laboratorium",
+        "exam_prep": "Eksamenvoorbereiding",
+        "my_exams": "My eksamens",
+        "payments": "Betalings",
+        "chat_with_dash": "Gesels met Dash",
+        "lessons": "Lesse",
+        "messages": {
+          "go_to": "Gaan na boodskappe",
+          "voice_call": "Stemoproep",
+          "video_call": "Video-oproep"
+        }
+      },
+      "empty_children": {
+        "homeschool": {
+          "title": "Begin jou tuisskoolreis",
+          "description": "Voeg jou kinders by om hul leer vordering te volg, CAPS-belynde kurrikulum te gebruik en ons KI-hulpmiddels te benut.",
+          "cta": "Voeg jou eerste leerder by"
+        },
+        "supplemental": {
+          "title": "Versterk jou kind se leer",
+          "description": "Voeg jou kinders by om ekstra lesse, oefeneksamens en persoonlike leerondersteuning te kry.",
+          "cta": "Voeg kind by"
+        },
+        "exploring": {
+          "title": "Welkom by digitale leer",
+          "description": "Sluit aan by EduDashPro Community School – verken Robotika, KI, Datawetenskap, Frontend en Backend Ontwikkeling. Bou digitale geletterdheid met advertensie-ondersteunde gratis toegang.",
+          "cta": "Begin"
+        },
+        "school": {
+          "title": "Voeg jou kinders by",
+          "description": "Koppel jou kinders om hul vordering te sien, met onderwysers te kommunikeer en op hoogte te bly van skoolaktiwiteite.",
+          "cta": "Voeg kind by"
+        },
+        "aftercare": {
+          "title": "Registreer jou kinders",
+          "description": "Voeg jou kinders by om naskoolskedules, daaglikse opdaterings en kommunikasie met personeel te kry.",
+          "cta": "Voeg kind by"
+        },
+        "default": {
+          "title": "Sluit aan by ons digitale gemeenskap",
+          "description": "Begin leer Robotika, KI, Datawetenskap en Sagteware-ontwikkeling. Onmiddellike toegang met gratis vlak (advertensie-ondersteunde daaglikse KI-limiete).",
+          "cta": "Voeg kind by"
+        }
+      },
+      "nav": {
+        "dashboard": "Kontrolepaneel",
+        "announcements": "Aankondigings",
+        "messages": "Boodskappe",
+        "homework": "Huiswerk",
+        "attendance": "Bywoning",
+        "my_children": "My kinders",
+        "exam_prep": "Eksamenvoorbereiding",
+        "payments": "Betalings",
+        "robotics": "Robotika",
+        "settings": "Instellings",
+        "dash_ai": "Dash AI",
+        "notifications": "Kennisgewings",
+        "menu": "Kieslys"
+      },
+      "profile": {
+        "menu": "Profielkieslys",
+        "ringtones": "Ringtone",
+        "sign_out": "Teken uit"
+      },
+      "powered_by": "Aangedryf deur Young Eagles",
+      "school_fallback": "Young Eagles",
+      "onboarding": {
+        "welcome": "Welkom by Young Eagles, {{name}}!",
+        "subtitle": "Om te begin moet jy jou rekening aan jou kind se skool koppel.",
+        "steps": {
+          "find_school": {
+            "title": "Vind jou kind se skool",
+            "description": "Soek vir jou kind wat reeds by hul voorskool geregistreer is"
+          },
+          "send_request": {
+            "title": "Stuur skakelversoek",
+            "description": "Die skool sal jou ouer-kind skakelversoek hersien en goedkeur"
+          },
+          "access_dashboard": {
+            "title": "Toegang tot dashboard",
+            "description": "Sodra dit goedgekeur is, sien huiswerk, boodskappe en jou kind se vordering"
+          }
+        },
+        "actions": {
+          "link_child": "Skakel my kind",
+          "register_child": "Registreer nuwe kind"
+        },
+        "tip_title": "💡 Wenke:",
+        "tip_body": "As jou kind reeds by ’n voorskool is wat Young Eagles gebruik, kies \"Skakel my kind\". As jy vir die eerste keer registreer, kies \"Registreer nuwe kind\"."
+      },
+      "stats": {
+        "overview": {
+          "title": "Aktiwiteitsoorsig",
+          "week": "Hierdie week",
+          "month": "Hierdie maand",
+          "homework_rate": "Huiswerktempo"
+        },
+        "cards": {
+          "total_children": "Totale kinders",
+          "active_classes": "Aktiewe klasse",
+          "upcoming_events": "Komende gebeure"
+        },
+        "recent": {
+          "title": "Onlangse aktiwiteit",
+          "empty": "Geen onlangse aktiwiteit"
+        }
+      },
+      "exam_week": {
+        "title": "EKSAMEN MODUS",
+        "description": "Oefentoetse, hersieningsnotas en laaste-minute wenke om jou eksamens te slaag!",
+        "cta": "Begin eksamenvoorbereiding"
+      }
+    }
   },
   "ai": {
     "homework": {
@@ -298,32 +795,22 @@
     }
   },
   "quick_actions": {
-    "manage_teachers": "Bestuur Onderwysers",
-    "manage_teachers_subtitle": "Huur, evalueer en bestuur personeel",
-    "student_enrollment": "Leerlinginskrywing",
-    "student_enrollment_subtitle": "Hersien aansoeke en skryf studente in",
-    "financial_reports": "Finansiële Verslae",
-    "financial_reports_subtitle": "Inkomste, uitgawes & voorspellings",
-    "school_settings": "Skoolinstellings",
-    "school_settings_subtitle": "Konfigureer beleide en voorkeure",
-    "create_announcement": "Skep Aankondiging",
-    "create_announcement_subtitle": "Lig alle ouers en personeel in",
-    "school_analytics": "Skoolanalise",
-    "enroll_student": "Skryf Student In",
-    "send_announcement": "Stuur Aankondiging",
-    "parent_requests": "Ouerversoeke",
-    "seat_management": "Sitplekbestuur",
-    "invite_parents": "Nooi Ouers",
-    "export_data": "Voer Data Uit",
-    "todays_stats": "Vandag se Statistiek",
-    "whatsapp_setup": "WhatsApp Opstelling",
-    "quick_settings": "Vinnige Instellings",
-    "create_lessons": "Skep Lesse",
-    "create_lessons_subtitle": "Genereer lesse & assesserings met KI",
-    "ai_quota_management": "KI-Kwota Bestuur",
-    "ai_quota_subtitle": "Allokeer KI-krediete & bestuur gebruiksperke",
-    "ai_lesson_generator": "✨ KI-Lesgenerator",
-    "view_ai_insights": "Sien KI-Insigte"
+    "seat_management_subtitle": "Assign or revoke teacher seats",
+    "quick_actions": "Vinnige Aksies",
+    "ai_homework_helper": "KI Huiswerk Helper",
+    "limit_reached": "Limiet bereik",
+    "requests_left": "{{count}} versoeke oor",
+    "whatsapp_connect": "WhatsApp Koppel",
+    "connect_with_teachers": "Koppel met onderwysers",
+    "whatsapp_premium_description": "Kry onmiddellike kommunikasie met onderwysers en ontvang intydse opdaterings oor take en vordering",
+    "learning_resources": "Leermateriaal",
+    "access_study_materials": "Toegang tot studiemateriaal",
+    "learning_resources_premium_description": "Verkry toegang tot premium studiemateriaal, interaktiewe inhoud en gekeurde opvoedkundige hulpbronne",
+    "progress_analytics": "Vorderingsontleding",
+    "track_your_performance": "Volg jou prestasie",
+    "upgrade_to_unlock": "Gradeer op om te ontsluit",
+    "progress_analytics_premium_description": "Kry gedetailleerde insigte in jou leer-vordering met gevorderde ontleding en prestasie-opsporing",
+    "ai_lessons": "KI Lesse"
   },
   "students": {
     "title": "Studente",
@@ -436,7 +923,121 @@
       "info": "Databeskerming inligting"
     },
     "manage_alerts": "Bestuur jou kennisgewings",
-    "notifications_coming_soon_desc": "Kennisgewing-instellings sal in die volgende opdatering beskikbaar wees."
+    "notifications_coming_soon_desc": "Kennisgewing-instellings sal in die volgende opdatering beskikbaar wees.",
+    "parent": {
+      "loading": "Laai...",
+      "saved_success": "Instellings is suksesvol gestoor!",
+      "title": "Instellings",
+      "subtitle": "Bestuur jou rekeningvoorkeure",
+      "errors": {
+        "image_too_large": "Beeld moet minder as 2MB wees",
+        "image_invalid": "Laai asseblief ’n beeldlêer op",
+        "avatar_upload_failed": "Kon nie profielprent oplaai nie",
+        "save_failed": "Kon nie veranderinge stoor nie",
+        "password_mismatch": "Wagwoorde stem nie ooreen nie",
+        "password_too_short": "Wagwoord moet ten minste 6 karakters wees",
+        "password_change_failed": "Kon nie wagwoord verander nie",
+        "save_preferences_failed": "Kon nie voorkeure stoor nie"
+      },
+      "delete": {
+        "confirm": "Is jy seker jy wil jou EduDash Pro-rekening permanent uitvee? Hierdie aksie kan nie ongedaan gemaak word nie en verwyder toegang onmiddellik.",
+        "error": "Ons kon nie jou rekening tans uitvee nie. Probeer weer of kontak ondersteuning.",
+        "title": "Skrap rekening",
+        "description": "Skrap jou EduDash Pro-rekening permanent, verwyder toegang tot alle Dash AI-funksies en beëindig jou intekening. Dit kan nie ongedaan gemaak word nie.",
+        "bullet": {
+          "sign_out": "Alle toestelle sal onmiddellik afgemeld word",
+          "subscription_stop": "Jou intekening en proefvoordele sal stop",
+          "retention": "Sommige rekords kan bewaar word vir regulatoriese vereistes"
+        },
+        "deleting": "Besig om rekening te skrap?",
+        "button": "Skrap my rekening"
+      },
+      "profile": {
+        "title": "Profiel",
+        "picture": "Profielprent",
+        "picture_alt": "Profiel",
+        "avatar_fallback": "U",
+        "upload_hint": "Laai ’n profielprent op",
+        "upload_formats": "JPG, PNG of GIF (maks 2MB)",
+        "email": "E-pos",
+        "full_name": "Volle naam",
+        "full_name_placeholder": "Voer jou volle naam in",
+        "phone": "Telefoonnommer",
+        "phone_placeholder": "bv. +27 82 123 4567",
+        "phone_hint": "Gebruik vir kennisgewings en rekeningherstel",
+        "saving": "Stoor...",
+        "save_changes": "Stoor veranderings",
+        "save_success": "Veranderinge is suksesvol gestoor!"
+      },
+      "notifications": {
+        "title": "Kennisgewings",
+        "email": {
+          "title": "E-poskennisgewings",
+          "subtitle": "Ontvang opdaterings per e-pos"
+        },
+        "push": {
+          "title": "Stootkennisgewings",
+          "subtitle": "Ontvang stootkennisgewings"
+        },
+        "whatsapp": {
+          "title": "WhatsApp-kennisgewings",
+          "subtitle": "Ontvang opdaterings via WhatsApp"
+        },
+        "ringtones": {
+          "title": "Oproep-luitone",
+          "subtitle": "Pas luitone en oproepklanke aan"
+        },
+        "saving": "Stoor...",
+        "save": "Stoor kennisgewingsvoorkeure"
+      },
+      "children": {
+        "title": "Gekoppelde kinders",
+        "add_child": "Voeg kind by",
+        "empty": "Geen kinders is nog aan jou rekening gekoppel nie.",
+        "register_child": "Registreer ’n kind",
+        "no_grade": "Geen graad"
+      },
+      "billing": {
+        "title": "Intekening en fakturering",
+        "manage": {
+          "title": "Bestuur intekening",
+          "subtitle": "Sien jou plan, gebruik en opgraderingsopsies"
+        }
+      },
+      "appearance": {
+        "title": "Voorkoms",
+        "dark_mode": "Donker modus",
+        "dark_mode_hint": "Skakel donker modus"
+      },
+      "language": {
+        "title": "Taal",
+        "en": "Engels (Suid-Afrika)",
+        "af": "Afrikaans",
+        "zu": "Zulu",
+        "xh": "Xhosa",
+        "st": "Sesotho",
+        "tn": "Setswana"
+      },
+      "security": {
+        "title": "Sekuriteit",
+        "change_password": "Verander wagwoord"
+      },
+      "sign_out": {
+        "title": "Meld af",
+        "description": "Meld af van jou rekening op hierdie toestel.",
+        "signing_out": "Besig om af te meld...",
+        "button": "Meld af"
+      },
+      "password": {
+        "modal_title": "Verander wagwoord",
+        "new_label": "Nuwe wagwoord",
+        "new_placeholder": "Voer nuwe wagwoord in",
+        "confirm_label": "Bevestig wagwoord",
+        "confirm_placeholder": "Bevestig nuwe wagwoord",
+        "changing": "Besig om te verander...",
+        "change_button": "Verander wagwoord"
+      }
+    }
   },
   "notifications": {
     "title": "Kennisgewings",
@@ -447,12 +1048,27 @@
     "reminderDue": "Herinnering: {{assignment}} is môre verskuldig"
   },
   "errors": {
-    "generic": "Iets het verkeerd gegaan. Probeer asseblief weer.",
-    "network": "Netwerkfout. Gaan asseblief jou verbinding na.",
-    "unauthorized": "Jy het nie toestemming om hierdie hulpbron te benader nie.",
+    "generic": "Iets het verkeerd geloop. Probeer asseblief weer.",
+    "network": "Netwerkfout. Kontroleer asseblief jou verbinding.",
+    "unauthorized": "Jy het nie toestemming om toegang tot hierdie hulpbron te verkry nie.",
     "notFound": "Die aangevraagde hulpbron is nie gevind nie.",
-    "validation": "Gaan asseblief jou invoer na en probeer weer.",
-    "serverError": "Bedienerfout. Probeer asseblief later weer."
+    "validation": "Kontroleer asseblief jou invoer en probeer weer.",
+    "serverError": "Bediener fout. Probeer asseblief later weer.",
+    "security": {
+      "validation_failed": "Validasie het misluk",
+      "content_type_required": "Content-Type moet application/json wees",
+      "request_too_large": "Versoek te groot. Maksimum grootte is {{maxSize}} KB",
+      "invalid_json": "Ongeldige JSON in versoek",
+      "invalid_parameters": "Ongeldige URL parameters",
+      "invalid_query": "Ongeldige navraag parameters",
+      "authentication_required": "Verifikasie benodig",
+      "invalid_token": "Ongeldige of verstreke verifikasie teken",
+      "insufficient_permissions": "Onvoldoende toestemmings",
+      "rate_limit_exceeded": "Te veel versoeke, probeer asseblief later weer",
+      "login_attempts_exceeded": "Te veel aanmeldpogings. Probeer asseblief later weer.",
+      "account_locked": "Rekening tydelik gesluit weens te veel mislukte aanmeldpogings. Probeer weer oor {{minutes}} minute.",
+      "internal_security_error": "Interne sekuriteitsfout"
+    }
   },
   "account": {
     "info": {
@@ -474,83 +1090,7 @@
     "saved": "Veranderinge suksesvol gestoor",
     "deleted": "Item suksesvol verwyder",
     "created": "Item suksesvol geskep",
-    "updated": "Item suksesvol bygewerk"
-  },
-  "common": {
-    "all": "Alles",
-    "last_7_days": "Laaste 7 dae",
-    "last_30_days": "Laaste 30 dae",
-    "all_time": "Alle tyd",
-    "custom_range": "Pasgemaakte reeks",
-    "start_date": "Begindatum",
-    "end_date": "Einddatum",
-    "apply": "Pas toe",
-    "loading": "Laai tans...",
-    "error": "Fout",
-    "success": "Sukses",
-    "warning": "Waarskuwing",
-    "info": "Inligting",
-    "ok": "OK",
-    "yes": "Ja",
-    "no": "Nee",
-    "close": "Maak toe",
-    "submit": "Dien in",
-    "confirm": "Bevestig",
-    "continue": "Gaan voort",
-    "skip": "Slaan oor",
-    "not_set": "Nie gestel nie",
-    "enabled": "Geaktiveer",
-    "disabled": "Uitgeskakel",
-    "not_available": "Nie beskikbaar nie",
-    "coming_soon": "Binnekort beskikbaar",
-    "done": "Klaar",
-    "retry": "Probeer weer",
-    "refresh": "Verfris",
-    "filter": "Filter",
-    "sort": "Sorteer",
-    "viewMore": "Wys meer",
-    "viewLess": "Wys minder",
-    "comingSoon": "Binnekort",
-    "notSet": "Nie gestel nie",
-    "enabled": "Ingeskakel",
-    "disabled": "Afgeskakel",
-    "available": "Beskikbaar",
-    "notAvailable": "Nie beskikbaar nie",
-    "required": "Vereis",
-    "optional": "Opsioneel",
-    "tryAgain": "Probeer weer",
-    "authenticate": "Verifieer",
-    "later": "Later",
-    "enable": "Skakel in",
-    "disable": "Skakel af",
-    "viewAll": "Wys Alles",
-    "email": "Email",
-    "status": "Status",
-    "go_now": "Go now",
-    "cancel": "Kanselleer",
-    "add": "Voeg by",
-    "record": "Rekordeer",
-    "uploading": "Laai op...",
-    "important": "Belangrik",
-    "not_allowed": "Nie toegelaat nie"
-  },
-  "quick_actions": {
-    "seat_management_subtitle": "Assign or revoke teacher seats",
-    "quick_actions": "Vinnige Aksies",
-    "ai_homework_helper": "KI Huiswerk Helper",
-    "limit_reached": "Limiet bereik",
-    "requests_left": "{{count}} versoeke oor",
-    "whatsapp_connect": "WhatsApp Koppel",
-    "connect_with_teachers": "Koppel met onderwysers",
-    "whatsapp_premium_description": "Kry onmiddellike kommunikasie met onderwysers en ontvang intydse opdaterings oor take en vordering",
-    "learning_resources": "Leermateriaal",
-    "access_study_materials": "Toegang tot studiemateriaal",
-    "learning_resources_premium_description": "Verkry toegang tot premium studiemateriaal, interaktiewe inhoud en gekeurde opvoedkundige hulpbronne",
-    "progress_analytics": "Vorderingsontleding",
-    "track_your_performance": "Volg jou prestasie",
-    "upgrade_to_unlock": "Gradeer op om te ontsluit",
-    "progress_analytics_premium_description": "Kry gedetailleerde insigte in jou leer-vordering met gevorderde ontleding en prestasie-opsporing",
-    "ai_lessons": "KI Lesse"
+    "updated": "Item suksesvol opgedateer"
   },
   "activity": {
     "loading": "Laai aktiwiteitsvoerstroom...",
@@ -879,35 +1419,6 @@
     "remove": "Verwyder",
     "close": "Maak toe"
   },
-  "errors": {
-    "generic": "Iets het verkeerd geloop. Probeer asseblief weer.",
-    "network": "Netwerkfout. Kontroleer asseblief jou verbinding.",
-    "unauthorized": "Jy het nie toestemming om toegang tot hierdie hulpbron te verkry nie.",
-    "notFound": "Die aangevraagde hulpbron is nie gevind nie.",
-    "validation": "Kontroleer asseblief jou invoer en probeer weer.",
-    "serverError": "Bediener fout. Probeer asseblief later weer.",
-    "security": {
-      "validation_failed": "Validasie het misluk",
-      "content_type_required": "Content-Type moet application/json wees",
-      "request_too_large": "Versoek te groot. Maksimum grootte is {{maxSize}} KB",
-      "invalid_json": "Ongeldige JSON in versoek",
-      "invalid_parameters": "Ongeldige URL parameters",
-      "invalid_query": "Ongeldige navraag parameters",
-      "authentication_required": "Verifikasie benodig",
-      "invalid_token": "Ongeldige of verstreke verifikasie teken",
-      "insufficient_permissions": "Onvoldoende toestemmings",
-      "rate_limit_exceeded": "Te veel versoeke, probeer asseblief later weer",
-      "login_attempts_exceeded": "Te veel aanmeldpogings. Probeer asseblief later weer.",
-      "account_locked": "Rekening tydelik gesluit weens te veel mislukte aanmeldpogings. Probeer weer oor {{minutes}} minute.",
-      "internal_security_error": "Interne sekuriteitsfout"
-    }
-  },
-  "success": {
-    "saved": "Veranderinge suksesvol gestoor",
-    "deleted": "Item suksesvol verwyder",
-    "created": "Item suksesvol geskep",
-    "updated": "Item suksesvol opgedateer"
-  },
   "alerts": {
     "success": "Sukses",
     "error": "Fout",
@@ -962,5 +1473,13 @@
       "withdrawn": "Versoek Teruggetrek",
       "failed": "Kon nie versoek stuur nie"
     }
+  },
+  "parent": {
+    "attendance": "Bywoning",
+    "fees_due_in_days": "Betaalbaar oor {{count}} dag",
+    "fees_due_in_days_plural": "Betaalbaar oor {{count}} dae",
+    "dash_explain_prompt": "Verduidelik vir my ’n konsep in eenvoudige terme.",
+    "dash_quiz_prompt": "Skep ’n kort oefenvraelys vir my kind.",
+    "dash_study_plan_prompt": "Skep ’n eenvoudige studierooster vir hierdie week."
   }
 }

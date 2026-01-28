@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { FileText, Clock, Calendar, ArrowRight, CheckCircle } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 
@@ -10,6 +11,7 @@ interface HomeworkCardProps {
 
 export function HomeworkCard({ userId }: HomeworkCardProps) {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const { pendingHomework, loading, count } = usePendingHomework(userId);
 
   // Get the most urgent homework (closest due date)
@@ -23,15 +25,15 @@ export function HomeworkCard({ userId }: HomeworkCardProps) {
     const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { text: 'Overdue', color: '#ef4444', urgent: true };
+      return { text: t('dashboard.parent.homework_card.status.overdue', { defaultValue: 'Overdue' }), color: '#ef4444', urgent: true };
     } else if (diffDays === 0) {
-      return { text: 'Due today', color: '#f59e0b', urgent: true };
+      return { text: t('dashboard.parent.homework_card.status.due_today', { defaultValue: 'Due today' }), color: '#f59e0b', urgent: true };
     } else if (diffDays === 1) {
-      return { text: 'Due tomorrow', color: '#f59e0b', urgent: false };
+      return { text: t('dashboard.parent.homework_card.status.due_tomorrow', { defaultValue: 'Due tomorrow' }), color: '#f59e0b', urgent: false };
     } else if (diffDays <= 3) {
-      return { text: `${diffDays} days left`, color: '#10b981', urgent: false };
+      return { text: t('dashboard.parent.homework_card.status.days_left', { defaultValue: '{{count}} days left', count: diffDays }), color: '#10b981', urgent: false };
     } else {
-      return { text: new Date(dueDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' }), color: 'var(--muted)', urgent: false };
+      return { text: new Date(dueDate).toLocaleDateString(i18n.language || 'en-ZA', { month: 'short', day: 'numeric' }), color: 'var(--muted)', urgent: false };
     }
   };
 
@@ -104,10 +106,15 @@ export function HomeworkCard({ userId }: HomeworkCardProps) {
           </div>
           <div>
             <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>
-              Homework
+              {t('dashboard.parent.homework_card.title', { defaultValue: 'Homework' })}
             </h3>
             <p style={{ fontSize: '14px', color: 'var(--muted)', margin: '2px 0 0 0' }}>
-              {count === 0 ? 'All caught up! 🎉' : `${count} assignment${count > 1 ? 's' : ''} pending`}
+              {count === 0
+                ? t('dashboard.parent.homework_card.summary.all_caught_up', { defaultValue: 'All caught up! 🎉' })
+                : t('dashboard.parent.homework_card.summary.assignments_pending', {
+                    defaultValue: '{{count}} assignment pending',
+                    count,
+                  })}
             </p>
           </div>
         </div>
@@ -147,10 +154,10 @@ export function HomeworkCard({ userId }: HomeworkCardProps) {
         >
           <CheckCircle size={48} color="#10b981" style={{ marginBottom: '12px', opacity: 0.8 }} />
           <p style={{ fontSize: '15px', color: 'var(--text)', fontWeight: 500, margin: '0 0 4px 0' }}>
-            No pending homework
+            {t('dashboard.parent.homework_card.empty.title', { defaultValue: 'No pending homework' })}
           </p>
           <p style={{ fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-            Check back later for new assignments
+            {t('dashboard.parent.homework_card.empty.description', { defaultValue: 'Check back later for new assignments' })}
           </p>
         </div>
       ) : (
@@ -235,7 +242,10 @@ export function HomeworkCard({ userId }: HomeworkCardProps) {
                 e.currentTarget.style.borderColor = 'var(--border)';
               }}
             >
-              View {count - 3} more assignment{count - 3 > 1 ? 's' : ''}
+              {t('dashboard.parent.homework_card.view_more', {
+                defaultValue: 'View {{count}} more assignment',
+                count: count - 3,
+              })}
             </button>
           )}
         </div>

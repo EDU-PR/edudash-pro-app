@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { useTierUpdates } from '@/hooks/useTierUpdates';
@@ -14,7 +15,6 @@ import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActiviti
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
 import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
-import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
 import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
 import { useParentOverviewMetrics } from '@/lib/hooks/parent/useParentOverviewMetrics';
@@ -32,86 +32,86 @@ import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, La
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 
-const COPY = {
-  greetings: {
-    morning: 'Good morning',
-    afternoon: 'Good afternoon',
-    evening: 'Good evening',
-  },
-  searchPlaceholder: 'Search homework, messages, children...',
-  upgradeBanner: {
-    title: 'Unlock more parent tools',
-    description: 'Get homework help, progress insights, and remove ads by upgrading.',
-  },
-  hints: {
-    quickActionsTitle: 'Quick Actions',
-    quickActionsMessage: 'Tap any card to quickly access homework, messages, payments, or Dash AI.',
-    liveClassesTitle: 'Live Classes',
-    liveClassesMessage: 'When a teacher starts a live class, you can join here instantly.',
-  },
-  sections: {
-    myChildren: 'My Children',
-    uniformSizes: 'Uniform Sizes',
-    recentActivity: 'Recent Activity',
-    practiceAtHome: 'Practice at Home',
-    earlyLearningActivities: 'Early Learning Activities',
-    earlyLearningTips: 'Early Learning Tips for Parents',
-    overview: "Today's Overview",
-  },
-  childCard: {
-    homework: 'Homework',
-    events: 'Events',
-  },
-  practiceCards: {
-    robotics: {
-      title: 'Robotics Practice',
-      description: 'Explore robot movements, basic programming, and sensor activities',
-    },
-    aiActivities: {
-      title: 'AI Activities',
-      description: 'Age-appropriate AI learning games and pattern recognition activities',
-    },
-    computerLiteracy: {
-      title: 'Computer Literacy',
-      description: 'Basic skills practice: typing, mouse control, app navigation, online safety',
-    },
-  },
-  earlyLearning: {
-    heading: "Supporting Your Preschooler's Development",
-    tips: [
-      {
-        title: '🎨 Creative Play',
-        description: 'Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills.',
-      },
-      {
-        title: '📚 Reading Together',
-        description: 'Read stories daily to build language skills, vocabulary, and a love for books.',
-      },
-      {
-        title: '🔢 Numbers & Shapes',
-        description: 'Use everyday activities to introduce counting, colors, and shapes in fun ways.',
-      },
-      {
-        title: '🎵 Songs & Rhymes',
-        description: 'Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness.',
-      },
-      {
-        title: '🤝 Social Skills',
-        description: 'Arrange playdates and teach sharing, turn-taking, and expressing emotions.',
-      },
-    ],
-  },
-  overviewCards: {
-    unreadMessages: 'Unread Messages',
-    missedCalls: 'Missed Calls',
-    homeworkPending: 'Homework Pending',
-    attendanceRate: 'Attendance Rate',
-  },
-  aiModalClose: 'Close',
-} as const;
-
 export default function ParentDashboard() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const COPY = useMemo(() => ({
+    greetings: {
+      morning: t('dashboard.good_morning', { defaultValue: 'Good morning' }),
+      afternoon: t('dashboard.good_afternoon', { defaultValue: 'Good afternoon' }),
+      evening: t('dashboard.good_evening', { defaultValue: 'Good evening' }),
+    },
+    searchPlaceholder: t('dashboard.parent.search_placeholder', { defaultValue: 'Search homework, messages, children...' }),
+    upgradeBanner: {
+      title: t('dashboard.parent.upgrade_title', { defaultValue: 'Unlock more parent tools' }),
+      description: t('dashboard.parent.upgrade_description', { defaultValue: 'Get homework help, progress insights, and remove ads by upgrading.' }),
+    },
+    hints: {
+      quickActionsTitle: t('dashboard.parent.hint.quick_actions.title', { defaultValue: 'Quick Actions' }),
+      quickActionsMessage: t('dashboard.parent.hint.quick_actions.message', { defaultValue: 'Tap any card to quickly access homework, messages, payments, or Dash AI.' }),
+      liveClassesTitle: t('dashboard.parent.hint.live_classes.title', { defaultValue: 'Live Classes' }),
+      liveClassesMessage: t('dashboard.parent.hint.live_classes.message', { defaultValue: 'When a teacher starts a live class, you can join here instantly.' }),
+    },
+    sections: {
+      myChildren: t('dashboard.parent.section.my_children', { defaultValue: 'My Children' }),
+      uniformSizes: t('dashboard.parent.section.uniform_sizes', { defaultValue: 'Uniform Sizes' }),
+      recentActivity: t('dashboard.parent.section.recent_activity', { defaultValue: 'Recent Activity' }),
+      practiceAtHome: t('dashboard.parent.section.practice_at_home', { defaultValue: 'Practice at Home' }),
+      earlyLearningActivities: t('dashboard.parent.section.early_learning_activities', { defaultValue: 'Early Learning Activities' }),
+      earlyLearningTips: t('dashboard.parent.section.early_learning_tips', { defaultValue: 'Early Learning Tips for Parents' }),
+      overview: t('dashboard.parent.section.overview', { defaultValue: "Today's Overview" }),
+    },
+    childCard: {
+      homework: t('dashboard.parent.child_card.homework', { defaultValue: 'Homework' }),
+      events: t('dashboard.parent.child_card.events', { defaultValue: 'Events' }),
+    },
+    practiceCards: {
+      robotics: {
+        title: t('dashboard.parent.practice.robotics.title', { defaultValue: 'Robotics Practice' }),
+        description: t('dashboard.parent.practice.robotics.description', { defaultValue: 'Explore robot movements, basic programming, and sensor activities' }),
+      },
+      aiActivities: {
+        title: t('dashboard.parent.practice.ai.title', { defaultValue: 'AI Activities' }),
+        description: t('dashboard.parent.practice.ai.description', { defaultValue: 'Age-appropriate AI learning games and pattern recognition activities' }),
+      },
+      computerLiteracy: {
+        title: t('dashboard.parent.practice.computer.title', { defaultValue: 'Computer Literacy' }),
+        description: t('dashboard.parent.practice.computer.description', { defaultValue: 'Basic skills practice: typing, mouse control, app navigation, online safety' }),
+      },
+    },
+    earlyLearning: {
+      heading: t('dashboard.parent.early_learning.heading', { defaultValue: "Supporting Your Preschooler's Development" }),
+      tips: [
+        {
+          title: t('dashboard.parent.early_learning.tips.creative_play.title', { defaultValue: '🎨 Creative Play' }),
+          description: t('dashboard.parent.early_learning.tips.creative_play.description', { defaultValue: 'Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills.' }),
+        },
+        {
+          title: t('dashboard.parent.early_learning.tips.reading.title', { defaultValue: '📚 Reading Together' }),
+          description: t('dashboard.parent.early_learning.tips.reading.description', { defaultValue: 'Read stories daily to build language skills, vocabulary, and a love for books.' }),
+        },
+        {
+          title: t('dashboard.parent.early_learning.tips.numbers.title', { defaultValue: '🔢 Numbers & Shapes' }),
+          description: t('dashboard.parent.early_learning.tips.numbers.description', { defaultValue: 'Use everyday activities to introduce counting, colors, and shapes in fun ways.' }),
+        },
+        {
+          title: t('dashboard.parent.early_learning.tips.songs.title', { defaultValue: '🎵 Songs & Rhymes' }),
+          description: t('dashboard.parent.early_learning.tips.songs.description', { defaultValue: 'Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness.' }),
+        },
+        {
+          title: t('dashboard.parent.early_learning.tips.social.title', { defaultValue: '🤝 Social Skills' }),
+          description: t('dashboard.parent.early_learning.tips.social.description', { defaultValue: 'Arrange playdates and teach sharing, turn-taking, and expressing emotions.' }),
+        },
+      ],
+    },
+    overviewCards: {
+      unreadMessages: t('dashboard.parent.overview.unread_messages', { defaultValue: 'Unread Messages' }),
+      missedCalls: t('dashboard.parent.overview.missed_calls', { defaultValue: 'Missed Calls' }),
+      homeworkPending: t('dashboard.parent.overview.homework_pending', { defaultValue: 'Homework Pending' }),
+      attendanceRate: t('dashboard.parent.overview.attendance_rate', { defaultValue: 'Attendance Rate' }),
+    },
+    aiModalClose: t('dashboard.parent.ai.close', { defaultValue: 'Close' }),
+  }), [t]);
   
   // Get all data from custom hook
   const {
@@ -140,12 +140,7 @@ export default function ParentDashboard() {
   
   // Local state
   const [greeting, setGreeting] = useState('');
-  const [showAskAI, setShowAskAI] = useState(false);
-  const [aiPrompt, setAIPrompt] = useState('');
-  const [aiDisplay, setAIDisplay] = useState('');
-  const [aiLanguage, setAILanguage] = useState('en-ZA');
-  const [aiInteractive, setAIInteractive] = useState(false);
-  const [openSection, setOpenSection] = useState<string | null>('children'); // Auto-open My Children by default
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   // Get pending homework count for badge
   const { count: homeworkCount } = usePendingHomework(userId || undefined);
@@ -182,19 +177,12 @@ export default function ParentDashboard() {
     language?: string, 
     enableInteractive?: boolean
   ) => {
-    setAIPrompt(prompt);
-    setAIDisplay(display);
-    setAILanguage(language || 'en-ZA');
-    setAIInteractive(enableInteractive || false);
-    setShowAskAI(true);
-  };
-
-  const handleCloseAI = () => {
-    setShowAskAI(false);
-    setAIPrompt('');
-    setAIDisplay('');
-    setAILanguage('en-ZA');
-    setAIInteractive(false);
+    const params = new URLSearchParams();
+    params.set('prompt', prompt);
+    if (display) params.set('display', display);
+    if (language) params.set('language', language);
+    if (enableInteractive) params.set('interactive', 'true');
+    router.push(`/dashboard/parent/dash-chat?${params.toString()}`);
   };
 
   // Loading state
@@ -212,9 +200,18 @@ export default function ParentDashboard() {
   // Calculate age of active child (for age-appropriate content)
   const getChildAge = (dateOfBirth?: string): number => {
     if (!dateOfBirth) return 0;
-    const dob = new Date(dateOfBirth);
-    const age = Math.floor((Date.now() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
-    return age;
+    const [yearStr, monthStr, dayStr] = dateOfBirth.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return 0;
+    const today = new Date();
+    let age = today.getFullYear() - year;
+    const monthDiff = (today.getMonth() + 1) - month;
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) {
+      age -= 1;
+    }
+    return Math.max(age, 0);
   };
 
   // Extract grade number from grade string (e.g., "Grade 4" -> 4)
@@ -234,6 +231,7 @@ export default function ParentDashboard() {
   
   // All children get access to general features (Dash Chat, Robotics, etc) with quotas
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);
+  const hasChildren = childrenCards.length > 0;
 
   const feesDue = metrics?.feesDue ?? null;
   const attendanceRate = overviewMetrics.attendanceRate;
@@ -242,6 +240,27 @@ export default function ParentDashboard() {
   const subscriptionTier = (profile?.subscription_tier || '').toLowerCase();
   const isFreeTier = !subscriptionTier || subscriptionTier === 'free';
   const showUpgradeBanner = isFreeTier && !trialStatus?.is_trial;
+
+  interface SectionEmptyStateProps {
+    title: string;
+    description: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  }
+
+  const SectionEmptyState = ({ title, description, actionLabel, onAction }: SectionEmptyStateProps) => (
+    <div className="card" style={{ display: 'grid', gap: 12 }}>
+      <div>
+        <div style={{ fontWeight: 600 }}>{title}</div>
+        <p style={{ margin: '6px 0 0', color: 'var(--muted)' }}>{description}</p>
+      </div>
+      {actionLabel && onAction && (
+        <button className="btn btn-primary" onClick={onAction}>
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <ParentShell
@@ -306,13 +325,13 @@ export default function ParentDashboard() {
           />
         )}
 
-        {childrenCards.length > 0 && (
-          <CollapsibleSection 
-            title={COPY.sections.myChildren}
-            icon={Users} 
-            isOpen={openSection === 'children'}
-            onToggle={() => setOpenSection(openSection === 'children' ? null : 'children')}
-          >
+        <CollapsibleSection 
+          title={COPY.sections.myChildren}
+          icon={Users} 
+          isOpen={openSection === 'children'}
+          onToggle={() => setOpenSection(openSection === 'children' ? null : 'children')}
+        >
+          {hasChildren ? (
             <div className="flex gap-3 overflow-x-auto" style={{ paddingBottom: 'var(--space-2)' }}>
               {childrenCards.map((child) => (
                 <div
@@ -352,114 +371,182 @@ export default function ParentDashboard() {
                 </div>
               ))}
             </div>
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.add_child.title', { defaultValue: 'Add your child' })}
+              description={t('dashboard.parent.empty.add_child.description', { defaultValue: 'Link a child to unlock homework, progress insights, and personalized updates.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Uniform Sizes (organization-linked parents only) */}
-        {hasOrganization && childrenCards.length > 0 && (
-          <CollapsibleSection
-            title={COPY.sections.uniformSizes}
-            icon={Shirt}
-            isOpen={openSection === 'uniforms'}
-            onToggle={() => setOpenSection(openSection === 'uniforms' ? null : 'uniforms')}
-          >
+        <CollapsibleSection
+          title={COPY.sections.uniformSizes}
+          icon={Shirt}
+          isOpen={openSection === 'uniforms'}
+          onToggle={() => setOpenSection(openSection === 'uniforms' ? null : 'uniforms')}
+        >
+          {hasOrganization && hasChildren ? (
             <UniformSizesWidget childrenCards={childrenCards} />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
+              description={t('dashboard.parent.empty.uniform_sizes.description', { defaultValue: 'Link a child to a school to see uniform sizes and sizing updates.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Quick Actions Grid - Show if children exist with age */}
-        {hasAnyChild && (
-          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-            {showQuickActionsHint && (
-              <OnboardingHint
-                title={COPY.hints.quickActionsTitle}
-                message={COPY.hints.quickActionsMessage}
-                onDismiss={dismissQuickActionsHint}
-              />
-            )}
-            <QuickActionsGrid 
-              usageType={usageType} 
-              hasOrganization={hasOrganization}
-              activeChildGrade={activeChildGrade}
-              isExamEligible={isExamEligible}
-              unreadCount={unreadCount}
-              homeworkCount={homeworkCount}
-              userId={userId}
-              preschoolId={profile?.preschoolId}
-              feesDue={feesDue}
+        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          {showQuickActionsHint && (
+            <OnboardingHint
+              title={COPY.hints.quickActionsTitle}
+              message={COPY.hints.quickActionsMessage}
+              onDismiss={dismissQuickActionsHint}
             />
-          </div>
-        )}
+          )}
+          <QuickActionsGrid 
+            usageType={usageType} 
+            hasOrganization={hasOrganization}
+            activeChildGrade={activeChildGrade}
+            isExamEligible={isExamEligible}
+            unreadCount={unreadCount}
+            homeworkCount={homeworkCount}
+            userId={userId}
+            preschoolId={profile?.preschoolId}
+            feesDue={feesDue}
+          />
+        </div>
 
         {/* Recent Activity Feed */}
-        {hasAnyChild && userId && (
+        {userId && (
           <CollapsibleSection 
             title={COPY.sections.recentActivity}
             icon={Activity} 
             isOpen={openSection === 'activity'}
             onToggle={() => setOpenSection(openSection === 'activity' ? null : 'activity')}
           >
-            <ActivityFeed 
-              userId={userId} 
-              activeChildId={activeChildId || undefined}
-              limit={8}
-            />
+            {hasChildren ? (
+              <ActivityFeed 
+                userId={userId} 
+                activeChildId={activeChildId || undefined}
+                limit={8}
+              />
+            ) : (
+              <SectionEmptyState
+                title={t('dashboard.parent.empty.recent_activity.title', { defaultValue: 'Recent activity preview' })}
+                description={t('dashboard.parent.empty.recent_activity.description', { defaultValue: "Once a child is linked, you'll see homework, messages, and announcements here." })}
+                actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+                onAction={() => router.push('/dashboard/parent/register-child')}
+              />
+            )}
           </CollapsibleSection>
         )}
 
         {/* Homework Card - Show if organization-linked */}
-        {hasOrganization && userId && (
+        {userId && (
           <div style={{ marginTop: 'var(--space-4)' }}>
-            <HomeworkCard userId={userId} />
+            {hasOrganization ? (
+              <HomeworkCard userId={userId} />
+            ) : (
+              <SectionEmptyState
+                title={t('dashboard.parent.empty.homework.title', { defaultValue: 'Homework preview' })}
+                description={t('dashboard.parent.empty.homework.description', { defaultValue: 'Link a child to a school to view and submit homework.' })}
+                actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+                onAction={() => router.push('/dashboard/parent/register-child')}
+              />
+            )}
           </div>
         )}
 
         {/* Live Lessons Section - Show if organization-linked with active child */}
-        {hasOrganization && activeChild && profile?.preschoolId && (
-          <div className="section" style={{ marginTop: 'var(--space-4)' }}>
-            {showLiveClassesHint && (
-              <div style={{ marginBottom: 'var(--space-3)' }}>
-                <OnboardingHint
-                  title={COPY.hints.liveClassesTitle}
-                  message={COPY.hints.liveClassesMessage}
-                  onDismiss={dismissLiveClassesHint}
-                />
-              </div>
-            )}
+        <div className="section" style={{ marginTop: 'var(--space-4)' }}>
+          {showLiveClassesHint && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <OnboardingHint
+                title={COPY.hints.liveClassesTitle}
+                message={COPY.hints.liveClassesMessage}
+                onDismiss={dismissLiveClassesHint}
+              />
+            </div>
+          )}
+          {hasOrganization && activeChild && profile?.preschoolId ? (
             <JoinLiveLessonWithToggle 
               preschoolId={profile.preschoolId} 
               classId={activeChild.classId}
             />
-          </div>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.live_classes.title', { defaultValue: 'Live classes preview' })}
+              description={t('dashboard.parent.empty.live_classes.description', { defaultValue: 'Live class links appear here once your child is linked to a school.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </div>
 
         {/* Teacher Notes */}
-        {hasOrganization && activeChildId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          {hasOrganization && activeChildId ? (
             <TeacherQuickNotesCard studentId={activeChildId} />
-          </div>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.teacher_notes.title', { defaultValue: 'Teacher notes preview' })}
+              description={t('dashboard.parent.empty.teacher_notes.description', { defaultValue: 'Notes from educators will appear here when a child is linked.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </div>
 
         {/* Child Progress & Achievements */}
-        {activeChildId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          {activeChildId ? (
             <ChildProgressBadgesCard studentId={activeChildId} />
-          </div>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
+              description={t('dashboard.parent.empty.progress.description', { defaultValue: 'Track milestones and achievements once a child is linked.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </div>
 
         {/* Upcoming Birthdays */}
-        {hasOrganization && activeChild?.classId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <UpcomingBirthdaysCard classId={activeChild.classId} />
-          </div>
-        )}
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          {hasOrganization && activeChild?.classId ? (
+            <UpcomingBirthdaysCard
+              classId={activeChild.classId}
+              onViewAll={() => router.push('/dashboard/parent/birthday-chart')}
+            />
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.birthdays.title', { defaultValue: 'Upcoming birthdays preview' })}
+              description={t('dashboard.parent.empty.birthdays.description', { defaultValue: "Birthdays for your child's group will appear here after linking." })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </div>
 
         {/* Daily Activity Feed */}
-        {hasOrganization && activeChild?.classId && (
-          <div style={{ marginTop: 'var(--space-4)' }}>
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          {hasOrganization && activeChild?.classId ? (
             <DailyActivityFeedCard classId={activeChild.classId} />
-          </div>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.daily_activity.title', { defaultValue: 'Daily activity preview' })}
+              description={t('dashboard.parent.empty.daily_activity.description', { defaultValue: 'Daily activity updates will show here once a child is linked.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </div>
 
         {/* Ad placeholders for free tier */}
         {showUpgradeBanner && (
@@ -469,13 +556,13 @@ export default function ParentDashboard() {
         )}
 
         {/* Practice at Home Hub - STEM Activities */}
-        {hasAnyChild && activeChild && (
-          <CollapsibleSection 
-            title={COPY.sections.practiceAtHome}
-            icon={Sparkles} 
-            isOpen={openSection === 'practice'}
-            onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
-          >
+        <CollapsibleSection 
+          title={COPY.sections.practiceAtHome}
+          icon={Sparkles} 
+          isOpen={openSection === 'practice'}
+          onToggle={() => setOpenSection(openSection === 'practice' ? null : 'practice')}
+        >
+          {hasAnyChild && activeChild ? (
             <div className="grid2" style={{ marginTop: 16 }}>
               <div 
                 className="card card-interactive" 
@@ -499,9 +586,9 @@ export default function ParentDashboard() {
               <div 
                 className="card card-interactive" 
                 onClick={() => {
-                  setAIPrompt('Help me create age-appropriate AI learning activities for my child');
-                  setAIDisplay('AI Learning Activities');
-                  setShowAskAI(true);
+                  setAIPrompt(t('dashboard.parent.practice.ai.prompt', { defaultValue: 'Help me create age-appropriate AI learning activities for my child' }));
+                  setAIDisplay(t('dashboard.parent.practice.ai.display', { defaultValue: 'AI Learning Activities' }));
+                  router.push('/dashboard/parent/dash-chat');
                 }}
                 style={{
                   background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
@@ -522,9 +609,9 @@ export default function ParentDashboard() {
               <div 
                 className="card card-interactive" 
                 onClick={() => {
-                  setAIPrompt('Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices');
-                  setAIDisplay('Computer Literacy Guide');
-                  setShowAskAI(true);
+                  setAIPrompt(t('dashboard.parent.practice.computer.prompt', { defaultValue: 'Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices' }));
+                  setAIDisplay(t('dashboard.parent.practice.computer.display', { defaultValue: 'Computer Literacy Guide' }));
+                  router.push('/dashboard/parent/dash-chat');
                 }}
                 style={{
                   background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
@@ -542,33 +629,49 @@ export default function ParentDashboard() {
                 </p>
               </div>
             </div>
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.practice.title', { defaultValue: 'Practice at home preview' })}
+              description={t('dashboard.parent.empty.practice.description', { defaultValue: 'Practice activities will appear here after a child is linked.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Early Learning Activities - ONLY for preschoolers */}
-        {allChildrenArePreschoolers && activeChild && (
-          <CollapsibleSection 
-            title={COPY.sections.earlyLearningActivities}
-            icon={BookOpen} 
-            isOpen={openSection === 'activities'}
-            onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
-          >
+        <CollapsibleSection 
+          title={COPY.sections.earlyLearningActivities}
+          icon={BookOpen} 
+          isOpen={openSection === 'activities'}
+          onToggle={() => setOpenSection(openSection === 'activities' ? null : 'activities')}
+        >
+          {allChildrenArePreschoolers && activeChild ? (
             <CAPSActivitiesWidget
               childAge={activeChildAge}
               childName={activeChild.firstName}
               onAskDashAI={(prompt, display) => handleAskFromActivity(prompt, display)}
             />
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.early_learning_activities.title', { defaultValue: 'Early learning activities preview' })}
+              description={hasChildren
+                ? t('dashboard.parent.empty.early_learning_activities.description_preschool_only', { defaultValue: 'These activities are available for preschool-age children.' })
+                : t('dashboard.parent.empty.early_learning_activities.description_add_child', { defaultValue: 'Add a child to unlock early learning activities.' })}
+              actionLabel={hasChildren ? undefined : t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={hasChildren ? undefined : () => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Preschool Learning Tips - ONLY for preschoolers */}
-        {allChildrenArePreschoolers && childrenCards.length > 0 && (
-          <CollapsibleSection 
-            title={COPY.sections.earlyLearningTips}
-            icon={Lightbulb} 
-            isOpen={openSection === 'tips'}
-            onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
-          >
+        <CollapsibleSection 
+          title={COPY.sections.earlyLearningTips}
+          icon={Lightbulb} 
+          isOpen={openSection === 'tips'}
+          onToggle={() => setOpenSection(openSection === 'tips' ? null : 'tips')}
+        >
+          {allChildrenArePreschoolers && childrenCards.length > 0 ? (
             <div className="card">
               <h3 style={{ marginBottom: 12 }}>{COPY.earlyLearning.heading}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -580,17 +683,26 @@ export default function ParentDashboard() {
                 ))}
               </div>
             </div>
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.early_learning_tips.title', { defaultValue: 'Early learning tips preview' })}
+              description={hasChildren
+                ? t('dashboard.parent.empty.early_learning_tips.description_preschool_only', { defaultValue: 'Tips are tailored for preschool-age children.' })
+                : t('dashboard.parent.empty.early_learning_tips.description_add_child', { defaultValue: 'Add a child to unlock early learning tips.' })}
+              actionLabel={hasChildren ? undefined : t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={hasChildren ? undefined : () => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* Overview Section (ONLY for organization-linked parents) */}
-        {hasOrganization && (
-          <CollapsibleSection 
-            title={COPY.sections.overview}
-            icon={BarChart3} 
-            isOpen={openSection === 'overview'}
-            onToggle={() => setOpenSection(openSection === 'overview' ? null : 'overview')}
-          >
+        <CollapsibleSection 
+          title={COPY.sections.overview}
+          icon={BarChart3} 
+          isOpen={openSection === 'overview'}
+          onToggle={() => setOpenSection(openSection === 'overview' ? null : 'overview')}
+        >
+          {hasOrganization ? (
             <div className="grid2">
               <MetricCard
                 title={COPY.overviewCards.unreadMessages}
@@ -621,62 +733,25 @@ export default function ParentDashboard() {
                 onPress={() => router.push('/dashboard/parent/progress')}
               />
             </div>
-          </CollapsibleSection>
-        )}
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.overview.title', { defaultValue: 'Overview preview' })}
+              description={t('dashboard.parent.empty.overview.description', { defaultValue: 'Link a child to a school to see attendance, homework, and messages.' })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
       </div>
 
       <DashOrbButton
         onClick={() => {
-          setAIPrompt('How can I support my child today?');
-          setAIDisplay('Dash AI Helper');
-          setShowAskAI(true);
+          const params = new URLSearchParams();
+          params.set('prompt', t('dashboard.parent.dash_orb.prompt', { defaultValue: 'How can I support my child today?' }));
+          params.set('display', t('dashboard.parent.dash_orb.display', { defaultValue: 'Dash AI Helper' }));
+          router.push(`/dashboard/parent/dash-chat?${params.toString()}`);
         }}
       />
-
-      {/* AI Widget Modal */}
-      {showAskAI && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 20
-        }}>
-          <div style={{ width: '100%', maxWidth: 800, position: 'relative' }}>
-            <button
-              onClick={handleCloseAI}
-              style={{
-                position: 'absolute',
-                top: -40,
-                right: 0,
-                background: 'rgba(255, 255, 255, 0.1)',
-                border: 'none',
-                borderRadius: 8,
-                padding: 8,
-                cursor: 'pointer',
-                color: 'white'
-              }}
-            >
-              {COPY.aiModalClose}
-            </button>
-            <AskAIWidget
-              fullscreen={true}
-              initialPrompt={aiPrompt}
-              displayMessage={aiDisplay}
-              language={aiLanguage}
-              enableInteractive={aiInteractive}
-              userId={userId}
-              onClose={handleCloseAI}
-            />
-          </div>
-        </div>
-      )}
     </ParentShell>
   );
 }

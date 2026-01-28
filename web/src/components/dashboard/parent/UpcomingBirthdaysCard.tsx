@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { Cake, PartyPopper } from "lucide-react";
@@ -28,6 +29,7 @@ interface UpcomingBirthdaysCardProps {
   classId?: string | null;
   maxItems?: number;
   showHeader?: boolean;
+  onViewAll?: () => void;
 }
 
 const isMissingSchema = (error?: PostgrestError | null) => {
@@ -35,9 +37,18 @@ const isMissingSchema = (error?: PostgrestError | null) => {
   return error.code === "42P01" || error.code === "42703";
 };
 
+const parseDateOnly = (value: string): Date | null => {
+  const [yearStr, monthStr, dayStr] = value.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
 const calculateUpcomingBirthday = (dob: string, today: Date) => {
-  const birthDate = new Date(dob);
-  if (Number.isNaN(birthDate.getTime())) return null;
+  const birthDate = parseDateOnly(dob);
+  if (!birthDate || Number.isNaN(birthDate.getTime())) return null;
 
   const currentYear = today.getFullYear();
   const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
@@ -45,7 +56,8 @@ const calculateUpcomingBirthday = (dob: string, today: Date) => {
     ? thisYearBirthday
     : new Date(currentYear + 1, birthDate.getMonth(), birthDate.getDate());
 
-  const daysUntil = Math.ceil((nextBirthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysUntil = Math.round((nextBirthday.getTime() - today.getTime()) / msPerDay);
   const ageTurning = nextBirthday.getFullYear() - birthDate.getFullYear();
 
   return { daysUntil, ageTurning };
@@ -55,7 +67,9 @@ export function UpcomingBirthdaysCard({
   classId,
   maxItems = 4,
   showHeader = true,
+  onViewAll,
 }: UpcomingBirthdaysCardProps) {
+  const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [birthdays, setBirthdays] = useState<UpcomingBirthday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +107,7 @@ export function UpcomingBirthdaysCard({
         acc.push({
           id: row.id,
           studentId: row.id,
-          firstName: row.first_name || "Student",
+          firstName: row.first_name || t("common.student", { defaultValue: "Student" }),
           lastName: row.last_name || "",
           daysUntil: calc.daysUntil,
           ageTurning: calc.ageTurning,
@@ -107,7 +121,7 @@ export function UpcomingBirthdaysCard({
 
     setBirthdays(upcoming);
     setLoading(false);
-  }, [classId, maxItems, supabase]);
+  }, [classId, maxItems, supabase, t]);
 
   useEffect(() => {
     void loadBirthdays();
@@ -116,8 +130,8 @@ export function UpcomingBirthdaysCard({
   if (loading) {
     return (
       <div className="card">
-        <div className="sectionTitle">Upcoming Birthdays</div>
-        <div className="muted">Loading birthdays...</div>
+        <div className="sectionTitle">{t("dashboard.parent.birthdays.title", { defaultValue: "Upcoming Birthdays" })}</div>
+        <div className="muted">{t("dashboard.parent.birthdays.loading", { defaultValue: "Loading birthdays..." })}</div>
       </div>
     );
   }
@@ -129,9 +143,29 @@ export function UpcomingBirthdaysCard({
   return (
     <div className="card">
       {showHeader && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <PartyPopper size={18} style={{ color: "var(--primary)" }} />
-          <div className="sectionTitle" style={{ margin: 0 }}>Upcoming Birthdays</div>
+          <div className="sectionTitle" style={{ margin: 0 }}>
+            {t("dashboard.parent.birthdays.title", { defaultValue: "Upcoming Birthdays" })}
+          </div>
+          </div>
+          {onViewAll && (
+            <button
+              onClick={onViewAll}
+              style={{
+                border: "1px solid var(--border)",
+                padding: "6px 10px",
+                borderRadius: 10,
+                background: "transparent",
+                color: "var(--text)",
+                fontSize: 12,
+                cursor: "pointer"
+              }}
+            >
+              {t("dashboard.parent.birthdays.view_chart", { defaultValue: "View chart" })}
+            </button>
+          )}
         </div>
       )}
       <div style={{ display: "grid", gap: 10 }}>
@@ -160,12 +194,14 @@ export function UpcomingBirthdaysCard({
                 {birthday.firstName} {birthday.lastName}
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                Turning {birthday.ageTurning}
+                {t("dashboard.parent.birthdays.turning_age", { defaultValue: "Turning {{age}}", age: birthday.ageTurning })}
               </div>
             </div>
             <div style={{ fontSize: 12, color: "var(--primary)", display: "flex", alignItems: "center", gap: 4 }}>
               <Cake size={14} />
-              {birthday.daysUntil === 0 ? "Today" : `In ${birthday.daysUntil} days`}
+              {birthday.daysUntil === 0
+                ? t("dashboard.parent.birthdays.today", { defaultValue: "Today" })
+                : t("dashboard.parent.birthdays.in_days", { defaultValue: "In {{count}} days", count: birthday.daysUntil })}
             </div>
           </div>
         ))}

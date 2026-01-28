@@ -1,9 +1,9 @@
 /**
  * DailyActivityFeed Component
- * 
+ *
  * Displays daily activities for a child's class to parents.
  * Shows what activities were done today, materials used, and learning objectives.
- * 
+ *
  * Features:
  * - Real-time updates via Supabase subscription
  * - Activity timeline with icons and colors
@@ -21,6 +21,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatTime } from '@/lib/utils/dateUtils';
@@ -87,10 +88,11 @@ export function DailyActivityFeed({
   onActivityPress,
 }: DailyActivityFeedProps) {
   const { theme } = useTheme();
+  const { t, i18n } = useTranslation();
   const [activities, setActivities] = useState<DailyActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
+
   const styles = useMemo(() => createStyles(theme), [theme]);
   const dateString = date.toISOString().split('T')[0];
 
@@ -102,7 +104,7 @@ export function DailyActivityFeed({
 
     try {
       const supabase = assertSupabase();
-      
+
       const { data, error } = await supabase
         .from('daily_activities')
         .select(`
@@ -120,9 +122,9 @@ export function DailyActivityFeed({
       } else {
         const mapped = (data || []).map((a: any) => ({
           ...a,
-          teacher_name: a.profiles 
-            ? `${a.profiles.first_name || ''} ${a.profiles.last_name || ''}`.trim()
-            : 'Teacher',
+          teacher_name: a.profiles
+            ? `${a.profiles.first_name || ''} ${a.profiles.last_name || ''}`.trim() || t('roles.teacher', { defaultValue: 'Teacher' })
+            : t('roles.teacher', { defaultValue: 'Teacher' }),
         }));
         setActivities(mapped);
       }
@@ -131,14 +133,14 @@ export function DailyActivityFeed({
     } finally {
       setLoading(false);
     }
-  }, [classId, dateString, maxItems]);
+  }, [classId, dateString, maxItems, t]);
 
   useEffect(() => {
     loadActivities();
 
     // Real-time subscription
     if (!classId) return;
-    
+
     const supabase = assertSupabase();
     const subscription = supabase
       .channel(`daily_activities_${classId}_${dateString}`)
@@ -202,7 +204,7 @@ export function DailyActivityFeed({
           </View>
 
           {item.description && (
-            <Text 
+            <Text
               style={[styles.activityDescription, { color: theme.textSecondary }]}
               numberOfLines={isExpanded ? undefined : 2}
             >
@@ -216,7 +218,7 @@ export function DailyActivityFeed({
               {item.learning_objectives && item.learning_objectives.length > 0 && (
                 <View style={styles.detailSection}>
                   <Text style={[styles.detailLabel, { color: theme.primary }]}>
-                    <Ionicons name="bulb" size={12} /> Learning Goals
+                    <Ionicons name="bulb" size={12} /> {t('dashboard.parent.daily_activity.labels.learning_goals', { defaultValue: 'Learning Goals' })}
                   </Text>
                   {item.learning_objectives.map((obj, i) => (
                     <Text key={i} style={[styles.detailText, { color: theme.textSecondary }]}>
@@ -229,7 +231,7 @@ export function DailyActivityFeed({
               {item.materials_needed && item.materials_needed.length > 0 && (
                 <View style={styles.detailSection}>
                   <Text style={[styles.detailLabel, { color: theme.warning }]}>
-                    <Ionicons name="cube" size={12} /> Materials Used
+                    <Ionicons name="cube" size={12} /> {t('dashboard.parent.daily_activity.labels.materials_used', { defaultValue: 'Materials Used' })}
                   </Text>
                   <Text style={[styles.detailText, { color: theme.textSecondary }]}>
                     {item.materials_needed.join(', ')}
@@ -240,7 +242,7 @@ export function DailyActivityFeed({
               {item.notes && (
                 <View style={styles.detailSection}>
                   <Text style={[styles.detailLabel, { color: theme.info }]}>
-                    <Ionicons name="document-text" size={12} /> Teacher Notes
+                    <Ionicons name="document-text" size={12} /> {t('dashboard.parent.daily_activity.labels.teacher_notes', { defaultValue: 'Teacher Notes' })}
                   </Text>
                   <Text style={[styles.detailText, { color: theme.textSecondary }]}>
                     {item.notes}
@@ -250,7 +252,7 @@ export function DailyActivityFeed({
 
               {item.teacher_name && (
                 <Text style={[styles.teacherName, { color: theme.textTertiary }]}>
-                  Added by {item.teacher_name}
+                  {t('dashboard.parent.daily_activity.labels.added_by', { defaultValue: 'Added by {{name}}', name: item.teacher_name })}
                 </Text>
               )}
             </View>
@@ -283,11 +285,12 @@ export function DailyActivityFeed({
           <View style={styles.headerLeft}>
             <Ionicons name="sunny" size={20} color="#F59E0B" />
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              Today's Activities
+              {t('dashboard.parent.daily_activity.title', { defaultValue: "Today's Activities" })}
             </Text>
           </View>
-          <Text style={[styles.headerDate, { color: theme.textSecondary }]}>
-            {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+          <Text style={[styles.headerDate, { color: theme.textSecondary }]}
+          >
+            {date.toLocaleDateString(i18n.language || 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
           </Text>
         </View>
       )}
@@ -295,11 +298,13 @@ export function DailyActivityFeed({
       {activities.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="calendar-outline" size={40} color={theme.textTertiary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            No activities logged yet today
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}
+          >
+            {t('dashboard.parent.daily_activity.empty.title', { defaultValue: 'No activities logged yet today' })}
           </Text>
-          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}>
-            Check back later for updates from your child's teacher
+          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}
+          >
+            {t('dashboard.parent.daily_activity.empty.description', { defaultValue: "Check back later for updates from your child's teacher" })}
           </Text>
         </View>
       ) : (

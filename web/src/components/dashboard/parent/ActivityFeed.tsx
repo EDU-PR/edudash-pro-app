@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { Clock, CheckCircle, MessageCircle, Megaphone, BookOpen, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -22,6 +23,7 @@ interface ActivityFeedProps {
 }
 
 export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeedProps) {
+  const { t, i18n } = useTranslation();
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
@@ -77,8 +79,13 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
               activities.push({
                 id: `graded-${sub.id}`,
                 type: 'homework_graded',
-                title: 'Homework Graded',
-                description: `${child?.first_name}'s "${sub.assignment?.title}" received ${sub.grade}%`,
+                title: t('dashboard.parent.activity.homework_graded.title', { defaultValue: 'Homework Graded' }),
+                description: t('dashboard.parent.activity.homework_graded.description', {
+                  defaultValue: "{{name}}'s \"{{assignment}}\" received {{grade}}%",
+                  name: child?.first_name ?? t('common.student', { defaultValue: 'Student' }),
+                  assignment: sub.assignment?.title ?? '',
+                  grade: sub.grade ?? 0,
+                }),
                 timestamp: sub.submitted_at,
                 link: `/dashboard/parent/homework`,
                 icon: sub.grade >= 75 ? 'success' : sub.grade >= 50 ? 'warning' : 'homework',
@@ -88,8 +95,12 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
               activities.push({
                 id: `submitted-${sub.id}`,
                 type: 'homework_submitted',
-                title: 'Homework Submitted',
-                description: `${child?.first_name} submitted "${sub.assignment?.title}"`,
+                title: t('dashboard.parent.activity.homework_submitted.title', { defaultValue: 'Homework Submitted' }),
+                description: t('dashboard.parent.activity.homework_submitted.description', {
+                  defaultValue: '{{name}} submitted \"{{assignment}}\"',
+                  name: child?.first_name ?? t('common.student', { defaultValue: 'Student' }),
+                  assignment: sub.assignment?.title ?? '',
+                }),
                 timestamp: sub.submitted_at,
                 link: `/dashboard/parent/homework`,
                 icon: 'homework',
@@ -113,8 +124,8 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
               activities.push({
                 id: `message-${msg.id}`,
                 type: 'message_received',
-                title: 'New Message',
-                description: msg.subject || 'No subject',
+                title: t('dashboard.parent.activity.message.title', { defaultValue: 'New Message' }),
+                description: msg.subject || t('dashboard.parent.activity.message.no_subject', { defaultValue: 'No subject' }),
                 timestamp: msg.created_at,
                 link: `/dashboard/parent/messages?id=${msg.id}`,
                 icon: 'message',
@@ -137,7 +148,7 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
               activities.push({
                 id: `announcement-${ann.id}`,
                 type: 'announcement',
-                title: 'School Announcement',
+                title: t('dashboard.parent.activity.announcement.title', { defaultValue: 'School Announcement' }),
                 description: ann.title,
                 timestamp: ann.published_at,
                 link: `/dashboard/parent/announcements`,
@@ -185,12 +196,12 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return time.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
+    if (diffMins < 1) return t('dashboard.parent.activity.time.just_now', { defaultValue: 'Just now' });
+    if (diffMins < 60) return t('dashboard.parent.activity.time.minutes_ago', { defaultValue: '{{count}}m ago', count: diffMins });
+    if (diffHours < 24) return t('dashboard.parent.activity.time.hours_ago', { defaultValue: '{{count}}h ago', count: diffHours });
+    if (diffDays === 1) return t('dashboard.parent.activity.time.yesterday', { defaultValue: 'Yesterday' });
+    if (diffDays < 7) return t('dashboard.parent.activity.time.days_ago', { defaultValue: '{{count}}d ago', count: diffDays });
+    return time.toLocaleDateString(i18n.language || 'en-ZA', { month: 'short', day: 'numeric' });
   };
 
   if (loading) {
@@ -205,9 +216,13 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
     return (
       <div className="card" style={{ padding: 32, textAlign: 'center' }}>
         <Clock className="icon48" style={{ margin: '0 auto', color: 'var(--textLight)' }} />
-        <h3 style={{ marginTop: 16, fontSize: 16, fontWeight: 600 }}>No recent activity</h3>
+        <h3 style={{ marginTop: 16, fontSize: 16, fontWeight: 600 }}>
+          {t('dashboard.parent.activity.empty.title', { defaultValue: 'No recent activity' })}
+        </h3>
         <p style={{ color: 'var(--textLight)', fontSize: 14, marginTop: 8 }}>
-          Activity will appear here as you and your child use the platform
+          {t('dashboard.parent.activity.empty.description', {
+            defaultValue: 'Activity will appear here as you and your child use the platform',
+          })}
         </p>
       </div>
     );

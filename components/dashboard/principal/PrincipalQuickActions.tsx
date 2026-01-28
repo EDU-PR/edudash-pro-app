@@ -216,6 +216,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       icon: 'wallet',
       color: '#10B981',
     },
+    {
+      id: 'dash-studio',
+      title: t('dashboard.dash_studio', { defaultValue: 'Dash Studio' }),
+      icon: 'sparkles',
+      color: '#6366F1',
+    },
   ];
 
   const handleActionPress = (actionId: string) => {
@@ -323,6 +329,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'fee-management':
         router.push('/screens/principal-fee-overview');
+        break;
+      case 'dash-studio':
+        router.push('/screens/dash-studio');
         break;
       default:
         Alert.alert(

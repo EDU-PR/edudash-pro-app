@@ -94,12 +94,15 @@ export interface Candidate {
 
 export interface AvailableTeacher {
   id: string;
+  candidateProfileId?: string;
   name: string;
   email: string;
   phone?: string;
   home_city?: string | null;
   home_postal_code?: string | null;
   distance_km?: number;
+  rating_average?: number | null;
+  rating_count?: number | null;
 }
 
 export interface TeacherInvite {

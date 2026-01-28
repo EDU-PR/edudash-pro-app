@@ -57,7 +57,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       // Get profile data from profiles table (includes role, usage_type, and trial info)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, preschool_id, role, usage_type, is_trial, trial_ends_at, trial_plan_tier, subscription_tier')
+        .select('first_name, last_name, preschool_id, organization_id, role, usage_type, is_trial, trial_ends_at, trial_plan_tier, subscription_tier')
         .eq('id', userId)
         .maybeSingle();
 
@@ -88,6 +88,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
 
       // Use preschool_id from profiles table
       const preschoolId = profileData?.preschool_id;
+      const organizationId = profileData?.organization_id;
       
       
       let preschoolName: string | undefined;
@@ -123,9 +124,18 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         console.log('🏘️ [useUserProfile] Displaying as: EduDash Pro Community (standalone user)');
       }
 
-      // Organization data - use preschool as organization for principals/teachers
-      const organizationId = preschoolId; // Map preschool_id to organizationId
-      const organizationName = preschoolName;
+      // Organization data - use organization_id when available, fallback to preschool
+      let organizationName: string | undefined;
+      if (organizationId) {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('name')
+          .eq('id', organizationId)
+          .maybeSingle();
+        organizationName = orgData?.name;
+      } else {
+        organizationName = preschoolName;
+      }
 
       const profileObj = {
         id: userId,
@@ -137,7 +147,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         preschoolId,
         preschoolName,
         preschoolSlug,
-        organizationId,
+        organizationId: organizationId || preschoolId,
         organizationName,
         preferredLanguage: 'en-ZA', // Default language
         is_trial: profileData?.is_trial,

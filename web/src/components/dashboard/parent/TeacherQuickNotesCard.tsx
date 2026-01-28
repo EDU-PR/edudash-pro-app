@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { AlertTriangle, Bell, CheckCircle2, MessageSquare, Star } from 'lucide-react';
@@ -46,33 +47,9 @@ interface TeacherQuickNotesCardProps {
   showHeader?: boolean;
 }
 
-const NOTE_TYPES: Record<
-  NoteType,
-  { label: string; color: string; icon: typeof Star }
-> = {
-  highlight: { label: 'Daily Highlight', color: '#f59e0b', icon: Star },
-  concern: { label: 'Please Note', color: '#ef4444', icon: AlertTriangle },
-  achievement: { label: 'Achievement', color: '#10b981', icon: CheckCircle2 },
-  reminder: { label: 'Reminder', color: '#6366f1', icon: Bell },
-  general: { label: 'Note', color: '#3b82f6', icon: MessageSquare },
-};
-
 const isMissingSchema = (error?: PostgrestError | null) => {
   if (!error) return false;
   return error.code === '42P01' || error.code === '42703';
-};
-
-const formatRelativeTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return '';
-  const diffMs = Date.now() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  if (diffMinutes < 1) return 'Just now';
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
 };
 
 export function TeacherQuickNotesCard({
@@ -80,10 +57,35 @@ export function TeacherQuickNotesCard({
   maxItems = 5,
   showHeader = true,
 }: TeacherQuickNotesCardProps) {
+  const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [notes, setNotes] = useState<TeacherNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const noteTypes = useMemo<Record<NoteType, { label: string; color: string; icon: typeof Star }>>(
+    () => ({
+      highlight: { label: t('dashboard.parent.teacher_notes.types.highlight', { defaultValue: 'Daily Highlight' }), color: '#f59e0b', icon: Star },
+      concern: { label: t('dashboard.parent.teacher_notes.types.concern', { defaultValue: 'Please Note' }), color: '#ef4444', icon: AlertTriangle },
+      achievement: { label: t('dashboard.parent.teacher_notes.types.achievement', { defaultValue: 'Achievement' }), color: '#10b981', icon: CheckCircle2 },
+      reminder: { label: t('dashboard.parent.teacher_notes.types.reminder', { defaultValue: 'Reminder' }), color: '#6366f1', icon: Bell },
+      general: { label: t('dashboard.parent.teacher_notes.types.general', { defaultValue: 'Note' }), color: '#3b82f6', icon: MessageSquare },
+    }),
+    [t]
+  );
+
+  const formatRelativeTime = useCallback((dateString: string): string => {
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    if (diffMinutes < 1) return t('dashboard.parent.teacher_notes.time.just_now', { defaultValue: 'Just now' });
+    if (diffMinutes < 60) return t('dashboard.parent.teacher_notes.time.minutes_ago', { defaultValue: '{{count}}m ago', count: diffMinutes });
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return t('dashboard.parent.teacher_notes.time.hours_ago', { defaultValue: '{{count}}h ago', count: diffHours });
+    const diffDays = Math.floor(diffHours / 24);
+    return t('dashboard.parent.teacher_notes.time.days_ago', { defaultValue: '{{count}}d ago', count: diffDays });
+  }, [t]);
 
   const loadNotes = useCallback(async () => {
     if (!studentId) {
@@ -133,14 +135,14 @@ export function TeacherQuickNotesCard({
       const mapped = rows.map((row) => {
         const profile = row.teacher_id ? teacherMap[row.teacher_id] : undefined;
         const teacherName = profile
-          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Teacher'
-          : 'Teacher';
+          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || t('roles.teacher', { defaultValue: 'Teacher' })
+          : t('roles.teacher', { defaultValue: 'Teacher' });
 
         return {
           id: row.id,
           studentId: row.student_id,
           noteType: (row.note_type || 'general') as NoteType,
-          title: row.title || 'Update',
+          title: row.title || t('dashboard.parent.teacher_notes.default_title', { defaultValue: 'Update' }),
           content: row.content || '',
           isRead: Boolean(row.is_read),
           requiresAcknowledgment: Boolean(row.requires_acknowledgment),
@@ -193,8 +195,8 @@ export function TeacherQuickNotesCard({
   if (loading) {
     return (
       <div className="card">
-        <div className="sectionTitle">From Teacher</div>
-        <div className="muted">Loading notes...</div>
+        <div className="sectionTitle">{t('dashboard.parent.teacher_notes.title', { defaultValue: 'From Teacher' })}</div>
+        <div className="muted">{t('dashboard.parent.teacher_notes.loading', { defaultValue: 'Loading notes...' })}</div>
       </div>
     );
   }
@@ -211,7 +213,9 @@ export function TeacherQuickNotesCard({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <MessageSquare size={18} style={{ color: 'var(--primary)' }} />
-            <div className="sectionTitle" style={{ margin: 0 }}>From Teacher</div>
+            <div className="sectionTitle" style={{ margin: 0 }}>
+              {t('dashboard.parent.teacher_notes.title', { defaultValue: 'From Teacher' })}
+            </div>
           </div>
           {unreadCount > 0 && (
             <span style={{
@@ -222,7 +226,7 @@ export function TeacherQuickNotesCard({
               fontSize: 12,
               fontWeight: 600,
             }}>
-              {unreadCount} new
+              {t('dashboard.parent.teacher_notes.new_count', { defaultValue: '{{count}} new', count: unreadCount })}
             </span>
           )}
         </div>
@@ -230,7 +234,7 @@ export function TeacherQuickNotesCard({
 
       <div style={{ display: 'grid', gap: 12 }}>
         {notes.map((note) => {
-          const config = NOTE_TYPES[note.noteType] || NOTE_TYPES.general;
+          const config = noteTypes[note.noteType] || noteTypes.general;
           const Icon = config.icon;
           const isExpanded = expandedId === note.id;
 
@@ -284,19 +288,21 @@ export function TeacherQuickNotesCard({
 
               {isExpanded && (
                 <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>From: {note.teacherName}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {t('dashboard.parent.teacher_notes.from_label', { defaultValue: 'From:' })} {note.teacherName}
+                  </div>
                   {note.requiresAcknowledgment && !note.acknowledgedAt && (
                     <button
                       className="btn btnPrimary"
                       onClick={() => handleAcknowledge(note.id)}
                       style={{ width: 'fit-content' }}
                     >
-                      Acknowledge
+                      {t('dashboard.parent.teacher_notes.acknowledge', { defaultValue: 'Acknowledge' })}
                     </button>
                   )}
                   {note.acknowledgedAt && (
                     <div style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>
-                      Acknowledged
+                      {t('dashboard.parent.teacher_notes.acknowledged', { defaultValue: 'Acknowledged' })}
                     </div>
                   )}
                 </div>

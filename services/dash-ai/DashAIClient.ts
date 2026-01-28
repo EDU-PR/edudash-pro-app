@@ -160,7 +160,7 @@ export class DashAIClient {
     } catch (error) {
       console.error('[DashAIClient] AI service call failed:', error);
       return {
-        content: 'I apologize, but I encountered an issue. Please try again.',
+        content: 'I ran into a hiccup while preparing your help. Try again, or tell me what you need and I’ll guide you step-by-step.',
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }

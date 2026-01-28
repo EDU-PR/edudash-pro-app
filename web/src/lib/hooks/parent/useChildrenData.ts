@@ -98,21 +98,29 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
       setError(null);
       const supabase = createClient();
 
-      const { data: profile } = await supabase.from('profiles').select('id, preschool_id').eq('id', userId).maybeSingle();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, preschool_id, organization_id')
+        .eq('id', userId)
+        .maybeSingle();
       if (!profile) {
         setError('Profile not found. Please complete registration or contact support.');
         setLoading(false);
         return;
       }
-      if (!profile.preschool_id) {
-        setChildren([]); setChildrenCards([]); setLoading(false);
-        return;
+      const scopeId = profile.preschool_id || profile.organization_id || null;
+
+      let query = supabase
+        .from('students')
+        .select(`id, first_name, last_name, class_id, is_active, preschool_id, student_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!students_class_id_fkey(id, name, grade_level)`)
+        .or(`parent_id.eq.${profile.id},guardian_id.eq.${profile.id}`)
+        .eq('is_active', true);
+
+      if (scopeId) {
+        query = query.or(`preschool_id.eq.${scopeId},organization_id.eq.${scopeId}`);
       }
 
-      const { data: students } = await supabase.from('students')
-        .select(`id, first_name, last_name, class_id, is_active, preschool_id, date_of_birth, parent_id, guardian_id, avatar_url, classes!students_class_id_fkey(id, name, grade_level)`)
-        .or(`parent_id.eq.${profile.id},guardian_id.eq.${profile.id}`)
-        .eq('is_active', true).eq('preschool_id', profile.preschool_id);
+      const { data: students } = await query;
 
       const data = students || [];
       setChildren(data);

@@ -7,8 +7,9 @@
 
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Sparkles, FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { MessageBubble } from './MessageBubble';
 import type { ChatMessage } from './types.js';
 
@@ -17,8 +18,8 @@ interface ChatMessagesProps {
   isTyping: boolean;
   onRetry?: (messageId: string, userMessage: ChatMessage) => void;
   onExamBuilderClick?: (context: { grade?: string; subject?: string; topics?: string[] }) => void;
-  showExamBuilder: boolean;
   examContext: { grade?: string; subject?: string; topics?: string[] };
+  onQuickPrompt?: (prompt: string) => void;
 }
 
 export function ChatMessages({
@@ -26,11 +27,19 @@ export function ChatMessages({
   isTyping,
   onRetry,
   onExamBuilderClick,
-  showExamBuilder,
   examContext,
+  onQuickPrompt,
 }: ChatMessagesProps) {
+  const { t } = useTranslation('common');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const quickPrompts = useMemo(
+    () => [
+      t('dashChat.quickPrompt1'),
+      t('dashChat.quickPrompt2'),
+      t('dashChat.quickPrompt3'),
+    ],
+    [t]
+  );
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -83,13 +92,13 @@ export function ChatMessages({
               fontWeight: 700,
               marginBottom: 12,
               color: 'var(--text)'
-            }}>Hi! I&apos;m Dash</h3>
+            }}>{t('dashChat.welcomeTitle')}</h3>
             <p style={{
               fontSize: 14,
               lineHeight: 1.5,
               maxWidth: 500,
               margin: '0 auto 24px'
-            }}>Ask me anything! I can help with homework, explain concepts, solve problems, and more.</p>
+            }}>{t('dashChat.welcomeBody')}</p>
             
             {/* Action Buttons */}
             <div style={{
@@ -101,7 +110,7 @@ export function ChatMessages({
               <button
                 onClick={() => {
                   // Focus the chat input
-                  const input = document.querySelector('textarea[placeholder*="Message"]') as HTMLTextAreaElement;
+                  const input = document.querySelector('textarea[data-chat-input="true"]') as HTMLTextAreaElement | null;
                   if (input) input.focus();
                 }}
                 style={{
@@ -129,8 +138,35 @@ export function ChatMessages({
                 }}
               >
                 <Sparkles size={16} />
-                Start Your First Chat
+                {t('dashChat.startFirstChat')}
               </button>
+            </div>
+
+            {/* Quick Prompts */}
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              marginTop: 16
+            }}>
+              {quickPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => onQuickPrompt?.(prompt)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 999,
+                    border: '1px solid #2f2f2f',
+                    background: 'rgba(124, 58, 237, 0.12)',
+                    color: 'var(--text)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -188,7 +224,7 @@ export function ChatMessages({
               }}
             >
               <FileText size={18} />
-              Launch Exam Builder
+              {t('dashChat.launchExamBuilder')}
               <Sparkles size={16} />
             </button>
           </div>

@@ -27,6 +27,7 @@
     "temp/**/*",
     "docs/**/*",
     "archive/**/*",
+    "legacy/**/*",
     "check-*.js",
     "test-*.js",
     "create-*.sql",

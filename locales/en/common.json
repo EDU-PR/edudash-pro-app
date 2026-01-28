@@ -35,6 +35,7 @@
     "loading": "Loading...",
     "search": "Search...",
     "now": "Now",
+    "child": "Child",
     "feature_in_development": "This feature is in development",
     "retry": "Retry",
     "upgrade": "Upgrade",
@@ -118,6 +119,43 @@
     "regions": "Regions",
     "finance": "Finance",
     "members": "Members"
+  },
+  "dashChat": {
+    "welcomeTitle": "Hi! I'm Dash",
+    "welcomeBody": "Tell me the learner's grade, subject, and topic. I'll teach step-by-step and ask one question at a time.",
+    "startFirstChat": "Start Your First Chat",
+    "launchExamBuilder": "Launch Exam Builder",
+    "quickPrompt1": "Grade 4 Mathematics: fractions",
+    "quickPrompt2": "Grade 7 English: figurative language",
+    "quickPrompt3": "Study plan for Grade 10 Life Sciences",
+    "tutorModeTitle": "Tutor Mode",
+    "tutorModeSubtitle": "Structured, interactive help for parents & learners",
+    "gradeLabel": "Grade",
+    "selectGrade": "Select grade",
+    "subjectLabel": "Subject",
+    "selectSubject": "Select subject",
+    "topicLabel": "Topic",
+    "topicPlaceholder": "e.g., fractions, photosynthesis",
+    "goalLabel": "Goal (optional)",
+    "goalPlaceholder": "e.g., homework help, exam prep",
+    "languageLabel": "Language",
+    "startTutorSession": "Start Tutor Session",
+    "clear": "Clear"
+  },
+  "birthdayChart": {
+    "title": "Birthday Chart",
+    "loading": "Loading birthdays...",
+    "studentFallback": "Student",
+    "totalStudentsSingle": "{{count}} student in total",
+    "totalStudentsMultiple": "{{count}} students in total",
+    "todaySingle": "{{name}} has a birthday today!",
+    "todayMultiple": "{{count}} birthdays today!",
+    "monthBirthdaysSingle": "{{count}} birthday",
+    "monthBirthdaysMultiple": "{{count}} birthdays",
+    "thisMonth": "This month",
+    "monthHeading": "{{month}} Birthdays",
+    "noneThisMonth": "No birthdays in this month.",
+    "turning": "Turning {{age}}"
   },
   "auth": {
     "resend_confirmation": "Resend confirmation email",
@@ -680,6 +718,502 @@
     },
     "category": {
       "choose_expense_category": "Choose an expense category:"
+    },
+    "progress": "Progress",
+    "parent": {
+      "welcome_subtitle": "Welcome to your parent dashboard",
+      "search_placeholder": "Search homework, messages, children...",
+      "upgrade_title": "Unlock more parent tools",
+      "upgrade_description": "Get homework help, progress insights, and remove ads by upgrading.",
+      "hint": {
+        "quick_actions": {
+          "title": "Quick Actions",
+          "message": "Tap any card to quickly access homework, messages, payments, or Dash AI."
+        },
+        "live_classes": {
+          "title": "Live Classes",
+          "message": "When a teacher starts a live class, you can join here instantly."
+        }
+      },
+      "section": {
+        "my_children": "My Children",
+        "uniform_sizes": "Uniform Sizes",
+        "recent_activity": "Recent Activity",
+        "practice_at_home": "Practice at Home",
+        "early_learning_activities": "Early Learning Activities",
+        "early_learning_tips": "Early Learning Tips for Parents",
+        "overview": "Today's Overview"
+      },
+      "child_card": {
+        "homework": "Homework",
+        "events": "Events"
+      },
+      "activity": {
+        "homework_graded": {
+          "title": "Homework Graded",
+          "description": "{{name}}'s \"{{assignment}}\" received {{grade}}%"
+        },
+        "homework_submitted": {
+          "title": "Homework Submitted",
+          "description": "{{name}} submitted \"{{assignment}}\""
+        },
+        "message": {
+          "title": "New Message",
+          "no_subject": "No subject"
+        },
+        "announcement": {
+          "title": "School Announcement"
+        },
+        "time": {
+          "just_now": "Just now",
+          "minutes_ago": "{{count}}m ago",
+          "hours_ago": "{{count}}h ago",
+          "yesterday": "Yesterday",
+          "days_ago": "{{count}}d ago"
+        },
+        "empty": {
+          "title": "No recent activity",
+          "description": "Activity will appear here as you and your child use the platform"
+        }
+      },
+      "homework_card": {
+        "title": "Homework",
+        "summary": {
+          "all_caught_up": "All caught up! 🎉",
+          "assignments_pending": "{{count}} assignment pending",
+          "assignments_pending_plural": "{{count}} assignments pending"
+        },
+        "status": {
+          "overdue": "Overdue",
+          "due_today": "Due today",
+          "due_tomorrow": "Due tomorrow",
+          "days_left": "{{count}} days left"
+        },
+        "empty": {
+          "title": "No pending homework",
+          "description": "Check back later for new assignments"
+        },
+        "view_more": "View {{count}} more assignment",
+        "view_more_plural": "View {{count}} more assignments"
+      },
+      "teacher_notes": {
+        "title": "From Teacher",
+        "loading": "Loading notes...",
+        "new_count": "{{count}} new",
+        "default_title": "Update",
+        "from_label": "From:",
+        "acknowledge": "Acknowledge",
+        "acknowledged": "Acknowledged",
+        "types": {
+          "highlight": "Daily Highlight",
+          "concern": "Please Note",
+          "achievement": "Achievement",
+          "reminder": "Reminder",
+          "general": "Note"
+        },
+        "time": {
+          "just_now": "Just now",
+          "minutes_ago": "{{count}}m ago",
+          "hours_ago": "{{count}}h ago",
+          "days_ago": "{{count}}d ago"
+        }
+      },
+      "progress": {
+        "title": "Progress & Achievements",
+        "loading": "Loading progress...",
+        "stats": {
+          "attendance": "Attendance",
+          "homework": "Homework"
+        },
+        "badges": {
+          "earned": "Earned",
+          "default_name": "Achievement",
+          "attendance_star": {
+            "name": "Attendance Star",
+            "description": "5-day attendance streak"
+          },
+          "homework_hero": {
+            "name": "Homework Hero",
+            "description": "Completed all homework this week"
+          },
+          "helping_hand": {
+            "name": "Helping Hand",
+            "description": "Helped a friend today"
+          },
+          "creative_genius": {
+            "name": "Creative Genius",
+            "description": "Outstanding artwork"
+          },
+          "math_wizard": {
+            "name": "Math Wizard",
+            "description": "Excellent counting skills"
+          },
+          "bookworm": {
+            "name": "Bookworm",
+            "description": "Loves story time"
+          },
+          "super_listener": {
+            "name": "Super Listener",
+            "description": "Always follows instructions"
+          },
+          "kindness_champ": {
+            "name": "Kindness Champion",
+            "description": "Shows kindness to everyone"
+          }
+        },
+        "last_updated": "Updated {{time}}",
+        "summary": {
+          "great_job": "Great job! {{count}} badge earned.",
+          "great_job_plural": "Great job! {{count}} badges earned.",
+          "keep_going": "Keep going! Your child is making progress."
+        }
+      },
+      "birthdays": {
+        "title": "Upcoming Birthdays",
+        "loading": "Loading birthdays...",
+        "view_chart": "View chart",
+        "turning_age": "Turning {{age}}",
+        "today": "Today",
+        "in_days": "In {{count}} days"
+      },
+      "uniform": {
+        "title": "Uniform Sizes",
+        "subtitle": "Please confirm each child's uniform sizes and quantities. A full set is 1 T-shirt + 1 shorts.",
+        "empty": "Add a child first to submit uniform sizes.",
+        "loading": "Loading existing submissions...",
+        "labels": {
+          "child_name": "Child Name",
+          "age": "Age (years)",
+          "tshirt_size": "T-shirt Size",
+          "tshirts": "T-shirts",
+          "shorts": "Shorts"
+        },
+        "placeholders": {
+          "child_name": "Child name",
+          "age": "Age",
+          "select_size": "Select size",
+          "default_one": "1"
+        },
+        "actions": {
+          "save": "Save",
+          "pay_now": "Pay now"
+        },
+        "status": {
+          "saving": "Saving…",
+          "saved": "Saved"
+        },
+        "validation": {
+          "child_name": "Please enter the child name.",
+          "tshirt_size": "Select a T-shirt size.",
+          "age": "Enter a valid age (1-18).",
+          "tshirt_qty": "Enter a valid number of T-shirts (1-20).",
+          "shorts_qty": "Enter a valid number of shorts (0-20)."
+        },
+        "errors": {
+          "load_existing": "Unable to load existing uniform sizes.",
+          "load_pricing": "Unable to load uniform pricing.",
+          "save_failed": "Save failed"
+        },
+        "pricing": {
+          "title": "Pricing:",
+          "full_set": "Full set {{amount}}",
+          "full_set_unset": "Full set —",
+          "tshirt": "T-shirt {{amount}}",
+          "tshirt_unset": "T-shirt —",
+          "shorts": "Shorts {{amount}}",
+          "shorts_unset": "Shorts —"
+        },
+        "order": {
+          "title": "Order:",
+          "sets": "{{count}} set(s)",
+          "sets_zero": "0 sets",
+          "extra_tshirts": "{{count}} extra T-shirts",
+          "extra_shorts": "{{count}} extra shorts"
+        },
+        "total": {
+          "label": "Total:",
+          "unavailable": "Pricing not configured",
+          "note": "Pricing is not configured yet. We will still generate a payment reference."
+        },
+        "last_updated": "Last updated:",
+        "payment": {
+          "description": "Uniform order • Size {{size}} • T-shirts {{tshirts}} • Shorts {{shorts}}"
+        }
+      },
+      "daily_activity": {
+        "title": "Today's Activities",
+        "loading": "Loading activities...",
+        "labels": {
+          "teacher": "Teacher:",
+          "materials": "Materials:",
+          "objectives": "Objectives:",
+          "notes": "Notes:",
+          "learning_goals": "Learning Goals",
+          "materials_used": "Materials Used",
+          "teacher_notes": "Teacher Notes",
+          "added_by": "Added by {{name}}"
+        },
+        "empty": {
+          "title": "No activities logged yet today",
+          "description": "Check back later for updates from your child's teacher"
+        }
+      },
+      "ad_banner": {
+        "top_title": "Sponsored learning tips",
+        "bottom_title": "Support the app",
+        "description": "Upgrade to remove ads and unlock extra parent tools.",
+        "cta": "Upgrade"
+      },
+      "pending_requests": {
+        "title": "Pending Requests",
+        "loading": "Loading...",
+        "types": {
+          "registration": "New registration",
+          "claim": "Link request"
+        },
+        "requested_on": "Requested {{date}}",
+        "footer": "Your request is awaiting school approval. You'll be notified once reviewed.",
+        "footer_plural": "Your requests are awaiting school approval. You'll be notified once reviewed."
+      },
+      "trial": {
+        "ends_today": "⏰ Trial Ends Today!",
+        "last_day": "Last Day of Trial",
+        "days_left": "{{count}} Days Left • {{plan}} Trial",
+        "upgrade": "Upgrade"
+      },
+      "practice": {
+        "robotics": {
+          "title": "Robotics Practice",
+          "description": "Explore robot movements, basic programming, and sensor activities"
+        },
+        "ai": {
+          "title": "AI Activities",
+          "description": "Age-appropriate AI learning games and pattern recognition activities",
+          "prompt": "Help me create age-appropriate AI learning activities for my child",
+          "display": "AI Learning Activities"
+        },
+        "computer": {
+          "title": "Computer Literacy",
+          "description": "Basic skills practice: typing, mouse control, app navigation, online safety",
+          "prompt": "Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices",
+          "display": "Computer Literacy Guide"
+        }
+      },
+      "early_learning": {
+        "heading": "Supporting Your Preschooler's Development",
+        "tips": {
+          "creative_play": {
+            "title": "🎨 Creative Play",
+            "description": "Encourage drawing, painting, and imaginative play to develop creativity and fine motor skills."
+          },
+          "reading": {
+            "title": "📚 Reading Together",
+            "description": "Read stories daily to build language skills, vocabulary, and a love for books."
+          },
+          "numbers": {
+            "title": "🔢 Numbers & Shapes",
+            "description": "Use everyday activities to introduce counting, colors, and shapes in fun ways."
+          },
+          "songs": {
+            "title": "🎵 Songs & Rhymes",
+            "description": "Sing songs and recite rhymes to develop memory, rhythm, and phonological awareness."
+          },
+          "social": {
+            "title": "🤝 Social Skills",
+            "description": "Arrange playdates and teach sharing, turn-taking, and expressing emotions."
+          }
+        }
+      },
+      "overview": {
+        "unread_messages": "Unread Messages",
+        "missed_calls": "Missed Calls",
+        "homework_pending": "Homework Pending",
+        "attendance_rate": "Attendance Rate"
+      },
+      "ai": {
+        "close": "Close"
+      },
+      "empty": {
+        "add_child": {
+          "title": "Add your child",
+          "description": "Link a child to unlock homework, progress insights, and personalized updates.",
+          "cta": "Add Child"
+        },
+        "uniform_sizes": {
+          "title": "Uniform sizes preview",
+          "description": "Link a child to a school to see uniform sizes and sizing updates."
+        },
+        "recent_activity": {
+          "title": "Recent activity preview",
+          "description": "Once a child is linked, you'll see homework, messages, and announcements here."
+        },
+        "homework": {
+          "title": "Homework preview",
+          "description": "Link a child to a school to view and submit homework."
+        },
+        "live_classes": {
+          "title": "Live classes preview",
+          "description": "Live class links appear here once your child is linked to a school."
+        },
+        "teacher_notes": {
+          "title": "Teacher notes preview",
+          "description": "Notes from educators will appear here when a child is linked."
+        },
+        "progress": {
+          "title": "Progress badges preview",
+          "description": "Track milestones and achievements once a child is linked."
+        },
+        "birthdays": {
+          "title": "Upcoming birthdays preview",
+          "description": "Birthdays for your child's group will appear here after linking."
+        },
+        "daily_activity": {
+          "title": "Daily activity preview",
+          "description": "Daily activity updates will show here once a child is linked."
+        },
+        "practice": {
+          "title": "Practice at home preview",
+          "description": "Practice activities will appear here after a child is linked."
+        },
+        "early_learning_activities": {
+          "title": "Early learning activities preview",
+          "description_preschool_only": "These activities are available for preschool-age children.",
+          "description_add_child": "Add a child to unlock early learning activities."
+        },
+        "early_learning_tips": {
+          "title": "Early learning tips preview",
+          "description_preschool_only": "Tips are tailored for preschool-age children.",
+          "description_add_child": "Add a child to unlock early learning tips."
+        },
+        "overview": {
+          "title": "Overview preview",
+          "description": "Link a child to a school to see attendance, homework, and messages."
+        }
+      },
+      "dash_orb": {
+        "prompt": "How can I support my child today?",
+        "display": "Dash AI Helper"
+      },
+      "quick_actions": {
+        "fees": {
+          "overdue": "Overdue",
+          "due_today": "Due today",
+          "due_in_days": "Due in {{count}} day",
+          "due_in_days_plural": "Due in {{count}} days"
+        },
+        "ebooks": "E-Books",
+        "robotics_lab": "Robotics Lab",
+        "exam_prep": "Exam Prep",
+        "my_exams": "My Exams",
+        "payments": "Payments",
+        "chat_with_dash": "Chat with Dash",
+        "lessons": "Lessons",
+        "messages": {
+          "go_to": "Go to Messages",
+          "voice_call": "Voice Call",
+          "video_call": "Video Call"
+        }
+      },
+      "empty_children": {
+        "homeschool": {
+          "title": "Start Your Homeschool Journey",
+          "description": "Add your children to begin tracking their learning progress, accessing CAPS-aligned curriculum, and using our AI-powered tools.",
+          "cta": "Add Your First Learner"
+        },
+        "supplemental": {
+          "title": "Boost Your Child's Learning",
+          "description": "Add your children to access extra lessons, practice exams, and personalized learning support.",
+          "cta": "Add Child"
+        },
+        "exploring": {
+          "title": "Welcome to Digital Learning",
+          "description": "Join EduDashPro Community School - explore Robotics, AI, Data Science, Frontend & Backend Development. Build digital literacy with ad-supported free access.",
+          "cta": "Get Started"
+        },
+        "school": {
+          "title": "Add Your Children",
+          "description": "Connect your children to start viewing their progress, communicating with teachers, and staying updated with school activities.",
+          "cta": "Add Child"
+        },
+        "aftercare": {
+          "title": "Register Your Children",
+          "description": "Add your children to access aftercare schedules, daily updates, and communication with staff.",
+          "cta": "Add Child"
+        },
+        "default": {
+          "title": "Join Our Digital Community",
+          "description": "Start learning Robotics, AI, Data Science, and Software Development. Instant access with free tier (ad-supported daily AI limits).",
+          "cta": "Add Child"
+        }
+      },
+      "nav": {
+        "dashboard": "Dashboard",
+        "announcements": "Announcements",
+        "messages": "Messages",
+        "homework": "Homework",
+        "attendance": "Attendance",
+        "my_children": "My Children",
+        "exam_prep": "Exam Prep",
+        "payments": "Payments",
+        "robotics": "Robotics",
+        "settings": "Settings",
+        "dash_ai": "Dash AI",
+        "notifications": "Notifications",
+        "menu": "Menu"
+      },
+      "profile": {
+        "menu": "Profile menu",
+        "ringtones": "Ringtones",
+        "sign_out": "Sign Out"
+      },
+      "powered_by": "Powered by Young Eagles",
+      "school_fallback": "Young Eagles",
+      "onboarding": {
+        "welcome": "Welcome to Young Eagles, {{name}}!",
+        "subtitle": "To get started, you need to link your account to your child's school.",
+        "steps": {
+          "find_school": {
+            "title": "Find Your Child's School",
+            "description": "Search for your child who is already registered at their preschool"
+          },
+          "send_request": {
+            "title": "Send Link Request",
+            "description": "The school will review and approve your parent-child link request"
+          },
+          "access_dashboard": {
+            "title": "Access Dashboard",
+            "description": "Once approved, view homework, messages, and your child's progress"
+          }
+        },
+        "actions": {
+          "link_child": "Link My Child",
+          "register_child": "Register New Child"
+        },
+        "tip_title": "💡 Tip:",
+        "tip_body": "If your child is already enrolled at a preschool using Young Eagles, use \"Link My Child\". If registering for the first time, use \"Register New Child\"."
+      },
+      "stats": {
+        "overview": {
+          "title": "Activity Overview",
+          "week": "This Week",
+          "month": "This Month",
+          "homework_rate": "Homework Rate"
+        },
+        "cards": {
+          "total_children": "Total Children",
+          "active_classes": "Active Classes",
+          "upcoming_events": "Upcoming Events"
+        },
+        "recent": {
+          "title": "Recent Activity",
+          "empty": "No recent activity"
+        }
+      },
+      "exam_week": {
+        "title": "EXAM MODE",
+        "description": "Practice tests, revision notes & last-minute tips to ace your exams!",
+        "cta": "Start Exam Prep"
+      }
     }
   },
   "announcement": {
@@ -956,7 +1490,13 @@
     "startConversation": "Start Your Conversation",
     "startConversationDesc": "Send your first message to start chatting with your child's teacher.",
     "typeMessage": "Type your message...",
-    "messageSendError": "Failed to send message. Please try again."
+    "messageSendError": "Failed to send message. Please try again.",
+    "attendance": "Attendance",
+    "fees_due_in_days": "Due in {{count}} day",
+    "fees_due_in_days_plural": "Due in {{count}} days",
+    "dash_explain_prompt": "Explain a concept to me in simple terms.",
+    "dash_quiz_prompt": "Create a short practice quiz for my child.",
+    "dash_study_plan_prompt": "Create a simple study plan for this week."
   },
   "pop": {
     "uploadProofOfPayment": "Upload Proof of Payment",
@@ -1337,6 +1877,120 @@
       "dash_fab_subtitle": "Floating button to chat with Dash AI",
       "replay_tutorial_title": "Replay App Tutorial",
       "replay_tutorial_completed": "View the app introduction again"
+    },
+    "parent": {
+      "loading": "Loading...",
+      "saved_success": "Settings saved successfully!",
+      "title": "Settings",
+      "subtitle": "Manage your account preferences",
+      "errors": {
+        "image_too_large": "Image must be less than 2MB",
+        "image_invalid": "Please upload an image file",
+        "avatar_upload_failed": "Failed to upload avatar",
+        "save_failed": "Failed to save changes",
+        "password_mismatch": "Passwords do not match",
+        "password_too_short": "Password must be at least 6 characters",
+        "password_change_failed": "Failed to change password",
+        "save_preferences_failed": "Failed to save preferences"
+      },
+      "delete": {
+        "confirm": "Are you sure you want to permanently delete your EduDash Pro account? This action cannot be undone and will remove access immediately.",
+        "error": "We could not delete your account right now. Please try again or contact support.",
+        "title": "Delete Account",
+        "description": "Permanently delete your EduDash Pro account, remove access to all Dash AI features, and end your subscription. This cannot be undone.",
+        "bullet": {
+          "sign_out": "All devices will be signed out immediately",
+          "subscription_stop": "Your subscription and trial benefits will stop",
+          "retention": "Some records may be retained for regulatory requirements"
+        },
+        "deleting": "Deleting account?",
+        "button": "Delete My Account"
+      },
+      "profile": {
+        "title": "Profile",
+        "picture": "Profile Picture",
+        "picture_alt": "Profile",
+        "avatar_fallback": "U",
+        "upload_hint": "Upload a profile picture",
+        "upload_formats": "JPG, PNG or GIF (Max 2MB)",
+        "email": "Email",
+        "full_name": "Full Name",
+        "full_name_placeholder": "Enter your full name",
+        "phone": "Phone Number",
+        "phone_placeholder": "e.g. +27 82 123 4567",
+        "phone_hint": "Used for notifications and account recovery",
+        "saving": "Saving...",
+        "save_changes": "Save Changes",
+        "save_success": "Changes saved successfully!"
+      },
+      "notifications": {
+        "title": "Notifications",
+        "email": {
+          "title": "Email Notifications",
+          "subtitle": "Receive updates via email"
+        },
+        "push": {
+          "title": "Push Notifications",
+          "subtitle": "Receive push notifications"
+        },
+        "whatsapp": {
+          "title": "WhatsApp Notifications",
+          "subtitle": "Receive updates via WhatsApp"
+        },
+        "ringtones": {
+          "title": "Call Ringtones",
+          "subtitle": "Customize ringtones and call sounds"
+        },
+        "saving": "Saving...",
+        "save": "Save Notification Preferences"
+      },
+      "children": {
+        "title": "Linked Children",
+        "add_child": "Add Child",
+        "empty": "No children linked to your account yet.",
+        "register_child": "Register a Child",
+        "no_grade": "No grade"
+      },
+      "billing": {
+        "title": "Subscription & Billing",
+        "manage": {
+          "title": "Manage Subscription",
+          "subtitle": "View your plan, usage, and upgrade options"
+        }
+      },
+      "appearance": {
+        "title": "Appearance",
+        "dark_mode": "Dark Mode",
+        "dark_mode_hint": "Toggle dark mode"
+      },
+      "language": {
+        "title": "Language",
+        "en": "English (South Africa)",
+        "af": "Afrikaans",
+        "zu": "Zulu",
+        "xh": "Xhosa",
+        "st": "Sesotho",
+        "tn": "Setswana"
+      },
+      "security": {
+        "title": "Security",
+        "change_password": "Change Password"
+      },
+      "sign_out": {
+        "title": "Sign Out",
+        "description": "Sign out from your account on this device.",
+        "signing_out": "Signing out...",
+        "button": "Sign Out"
+      },
+      "password": {
+        "modal_title": "Change Password",
+        "new_label": "New Password",
+        "new_placeholder": "Enter new password",
+        "confirm_label": "Confirm Password",
+        "confirm_placeholder": "Confirm new password",
+        "changing": "Changing...",
+        "change_button": "Change Password"
+      }
     }
   },
   "trends": {

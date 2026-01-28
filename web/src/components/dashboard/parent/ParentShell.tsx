@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useTransition, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import {
   MessageCircle,
@@ -48,6 +49,7 @@ interface ParentShellProps {
 export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle, hideHeader = false }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useTranslation();
   const supabase = createClient();
   const avatarLetter = useMemo(() => (userEmail?.[0] || 'U').toUpperCase(), [userEmail]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -170,30 +172,30 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
     if (hasOrganization) {
       // Organization-linked parents see school-focused nav
       return [
-        { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/dashboard/parent/announcements', label: 'Announcements', icon: Megaphone },
-        { href: '/dashboard/parent/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
-        { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
-        { href: '/dashboard/parent/attendance', label: 'Attendance', icon: CheckCircle2 },
-        { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
-        { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
-        { href: '/dashboard/parent/payments', label: 'Payments', icon: CreditCard },
-        { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
-        { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },
+        { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
+        { href: '/dashboard/parent/announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: Megaphone },
+        { href: '/dashboard/parent/messages', label: t('dashboard.parent.nav.messages', { defaultValue: 'Messages' }), icon: MessageCircle, badge: unreadCount },
+        { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        { href: '/dashboard/parent/attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: CheckCircle2 },
+        { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
+        { href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen },
+        { href: '/dashboard/parent/payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: CreditCard },
+        { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
+        { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     } else {
       // Independent parents see learning-focused nav
       return [
-        { href: '/dashboard/parent', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: 'Dash AI', icon: Sparkles },
-        { href: '/dashboard/parent/homework', label: 'Homework', icon: Clipboard, badge: homeworkCount },
-        { href: '/dashboard/parent/exam-prep', label: 'Exam Prep', icon: BookOpen },
-        { href: '/dashboard/parent/robotics', label: 'Robotics', icon: Sparkles },
-        { href: '/dashboard/parent/children', label: 'My Children', icon: Users },
-        { href: '/dashboard/parent/settings', label: 'Settings', icon: Settings },
+        { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
+        { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), icon: Sparkles },
+        { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        { href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen },
+        { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
+        { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
+        { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     }
-  }, [hasOrganization, unreadCount, homeworkCount]);
+  }, [hasOrganization, homeworkCount, t, unreadCount]);
 
   return (
     <div className="app">
@@ -203,7 +205,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
             <div className="leftGroup">
               <button 
                 className="iconBtn mobile-nav-btn" 
-                aria-label="Menu" 
+                aria-label={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })} 
                 onClick={() => setMobileNavOpen(true)}
               >
                 <Menu className="icon20" />
@@ -218,14 +220,14 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 </div>
               ) : (
                 <div className="chip" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Young Eagles
+                  {t('dashboard.parent.school_fallback', { defaultValue: 'Young Eagles' })}
                 </div>
               )}
             </div>
             <div className="rightGroup" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
               <button
                 className="iconBtn"
-                aria-label="Notifications"
+                aria-label={t('dashboard.parent.nav.notifications', { defaultValue: 'Notifications' })}
                 onClick={() => router.push('/dashboard/parent/notifications')}
                 style={{ position: 'relative' }}
               >
@@ -257,7 +259,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   className="avatar" 
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   style={{ cursor: 'pointer', border: 'none', background: 'inherit' }}
-                  aria-label="Profile menu"
+                  aria-label={t('dashboard.parent.profile.menu', { defaultValue: 'Profile menu' })}
                 >
                   {avatarLetter}
                 </button>
@@ -282,7 +284,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                       borderBottom: '1px solid var(--border)',
                     }}>
                       <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-                        {userName || 'Parent'}
+                        {userName || t('roles.parent', { defaultValue: 'Parent' })}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {userEmail}
@@ -313,7 +315,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     >
                       <Users size={16} style={{ color: 'var(--text-secondary)' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        My Children
+                        {t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' })}
                       </span>
                     </button>
 
@@ -340,7 +342,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     >
                       <Settings size={16} style={{ color: 'var(--text-secondary)' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        Settings
+                        {t('dashboard.parent.nav.settings', { defaultValue: 'Settings' })}
                       </span>
                     </button>
 
@@ -367,7 +369,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     >
                       <Phone size={16} style={{ color: 'var(--text-secondary)' }} />
                       <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-                        Ringtones
+                        {t('dashboard.parent.profile.ringtones', { defaultValue: 'Ringtones' })}
                       </span>
                     </button>
 
@@ -400,7 +402,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     >
                       <LogOut size={16} style={{ color: 'var(--danger, #ef4444)' }} />
                       <span style={{ fontSize: 14, fontWeight: 500 }}>
-                        Sign Out
+                        {t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign Out' })}
                       </span>
                     </button>
                   </div>
@@ -436,9 +438,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                   onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
                 >
                   <LogOut className="navIcon" />
-                  <span>Sign out</span>
+                  <span>{t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
                 </button>
-                <div className="brandPill w-full text-center">Powered by Young Eagles</div>
+                <div className="brandPill w-full text-center">{t('dashboard.parent.powered_by', { defaultValue: 'Powered by Young Eagles' })}</div>
               </div>
             </div>
           </aside>
@@ -460,11 +462,11 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
             className="mobile-nav-drawer"
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Menu</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}</h3>
               <button 
                 onClick={() => setMobileNavOpen(false)}
                 className="iconBtn"
-                aria-label="Close"
+                aria-label={t('common.close', { defaultValue: 'Close' })}
               >
                 <X className="icon20" />
               </button>
@@ -482,7 +484,6 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log('[ParentShell] Navigating to:', it.href);
                       // Close drawer immediately
                       setMobileNavOpen(false);
                       // Navigate after a tiny delay to ensure drawer animation starts
@@ -513,9 +514,11 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                 }}
               >
                 <LogOut className="navIcon" />
-                <span>Sign out</span>
+                <span>{t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
               </button>
-              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>Powered by Young Eagles</div>
+              <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>
+                {t('dashboard.parent.powered_by', { defaultValue: 'Powered by Young Eagles' })}
+              </div>
             </div>
           </div>
         </>

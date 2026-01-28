@@ -102,7 +102,6 @@
     "unlock_premium_subtitle": "Ukuhlaziya okuthuthukile, ukuhlakanipha kwe-AI & okuningi • Shintsha isikole sakho namuhla!",
     "capacity_students": "{{current}} / {{capacity}} abafundi",
     "utilized_percentage": "{{percentage}}% kusetshenzisiwe",
-
     "financial_overview": "Uhlolojikelele lwezezimali",
     "details": "Imininingwane",
     "monthly_revenue": "Imali engenayo yanyanga zonke",
@@ -114,7 +113,6 @@
     "upgrade": "Thuthukisa",
     "need_help": "Udinga usizo?",
     "contact_support_whatsapp": "Xhumana nosizo nge-WhatsApp • Thola usizo ngokushesha",
-
     "payment_history": "Umlando wezinkokhelo",
     "payment_history_subtitle": "Bheka, hlunga & khupha amarekhodi ezinkokhelo",
     "financial_overview_subtitle": "Bheka imali engenayo, izindleko & izitayela zokugeleza kwemali",
@@ -124,7 +122,6 @@
     "petty_cash_subtitle": "Phatha izindleko zansuku zonke & imali esesandleni",
     "class_teacher_management": "Ukuphatha amakilasi nothisha",
     "class_teacher_management_subtitle": "Nika uthisha amakilasi, phatha amakilasi & izilinganiso",
-
     "school_capacity": "Umthamo wesikole",
     "pending_approvals": "Okusadinga ukugunyazwa",
     "requiring_approval": "Kudinga ukugunyazwa",
@@ -136,7 +133,503 @@
     "general_expenses": "Izindleko ezijwayelekile",
     "no_description": "Asikho incazelo",
     "invalid_phone_number": "Inombolo yefoni engalungile",
-    "enter_valid_phone": "Sicela ufake inombolo yocingo ye-South Africa esebenzayo"
+    "enter_valid_phone": "Sicela ufake inombolo yocingo ye-South Africa esebenzayo",
+    "progress": "Inqubekelaphambili",
+    "parent": {
+      "welcome_subtitle": "Siyakwamukela kudeshibhodi yomzali",
+      "search_placeholder": "Sesha umsebenzi wasekhaya, imilayezo, izingane...",
+      "upgrade_title": "Vula amathuluzi amaningi omzali",
+      "upgrade_description": "Thola usizo lomsebenzi wasekhaya, ukuqonda inqubekelaphambili, futhi ususe izikhangiso ngokuthuthukisa.",
+      "hint": {
+        "quick_actions": {
+          "title": "Izenzo ezisheshayo",
+          "message": "Thepha noma yiliphi ikhadi ukuze ufinyelele ngokushesha umsebenzi wasekhaya, imilayezo, izinkokhelo, noma i-Dash AI."
+        },
+        "live_classes": {
+          "title": "Amakilasi abukhoma",
+          "message": "Uma uthisha eqala ikilasi elibukhoma, ungajoyina lapha masinyane."
+        }
+      },
+      "section": {
+        "my_children": "Izingane zami",
+        "uniform_sizes": "Osayizi bama-uniform",
+        "recent_activity": "Umsebenzi wakamuva",
+        "practice_at_home": "Zijwayeze ekhaya",
+        "early_learning_activities": "Imisebenzi yokufunda kusenesikhathi",
+        "early_learning_tips": "Amathiphu okufunda kusenesikhathi kubazali",
+        "overview": "Ukubuka konke kwanamuhla"
+      },
+      "child_card": {
+        "homework": "Umsebenzi wasekhaya",
+        "events": "Izehlakalo"
+      },
+      "activity": {
+        "homework_graded": {
+          "title": "Umsebenzi ubekwe amamaki",
+          "description": "Umsebenzi ka-{{name}} \"{{assignment}}\" uthole {{grade}}%"
+        },
+        "homework_submitted": {
+          "title": "Umsebenzi uthunyelwe",
+          "description": "{{name}} uthumele \"{{assignment}}\""
+        },
+        "message": {
+          "title": "Umlayezo omusha",
+          "no_subject": "Akunasihloko"
+        },
+        "announcement": {
+          "title": "Isimemezelo sesikole"
+        },
+        "time": {
+          "just_now": "Manje nje",
+          "minutes_ago": "{{count}}m edlule",
+          "hours_ago": "{{count}}h edlule",
+          "yesterday": "Izolo",
+          "days_ago": "{{count}}d edlule"
+        },
+        "empty": {
+          "title": "Akukho msebenzi osanda kwenzeka",
+          "description": "Umsebenzi uzovela lapha njengoba wena nengane yakho nisebenzisa ipulatifomu"
+        }
+      },
+      "homework_card": {
+        "title": "Umsebenzi wasekhaya",
+        "summary": {
+          "all_caught_up": "Konke kuhamba kahle! 🎉",
+          "assignments_pending": "{{count}} umsebenzi osalindile",
+          "assignments_pending_plural": "{{count}} imisebenzi esalindile"
+        },
+        "status": {
+          "overdue": "Sekudlule isikhathi",
+          "due_today": "Kufanele namuhla",
+          "due_tomorrow": "Kufanele kusasa",
+          "days_left": "{{count}} izinsuku ezisele"
+        },
+        "empty": {
+          "title": "Awukho umsebenzi osalindile",
+          "description": "Buyela kamuva ukuze uthole imisebenzi emisha"
+        },
+        "view_more": "Buka eminye {{count}} umsebenzi",
+        "view_more_plural": "Buka eminye {{count}} imisebenzi"
+      },
+      "teacher_notes": {
+        "title": "Okuvela Kothisha",
+        "loading": "Ilayisha amanothi...",
+        "new_count": "{{count}} okusha",
+        "default_title": "Ukubuyekezwa",
+        "from_label": "Okuvela:",
+        "acknowledge": "Qinisekisa",
+        "acknowledged": "Kuqinisekisiwe",
+        "types": {
+          "highlight": "Okugqamile kwansuku zonke",
+          "concern": "Qaphela",
+          "achievement": "Impumelelo",
+          "reminder": "Isikhumbuzo",
+          "general": "Inothi"
+        },
+        "time": {
+          "just_now": "Manje nje",
+          "minutes_ago": "{{count}}m edlule",
+          "hours_ago": "{{count}}h edlule",
+          "days_ago": "{{count}}d edlule"
+        }
+      },
+      "progress": {
+        "title": "Inqubekelaphambili & Impumelelo",
+        "loading": "Ilayisha inqubekelaphambili...",
+        "stats": {
+          "attendance": "Ukuya esikoleni",
+          "homework": "Umsebenzi wasekhaya"
+        },
+        "badges": {
+          "earned": "Kuzuzwe",
+          "default_name": "Impumelelo",
+          "attendance_star": {
+            "name": "Inkanyezi yokuba khona",
+            "description": "Uchungechunge lwezinsuku ezi-5 zokuba khona"
+          },
+          "homework_hero": {
+            "name": "Iqhawe lomsebenzi wasekhaya",
+            "description": "Uqede wonke umsebenzi kuleli sonto"
+          },
+          "helping_hand": {
+            "name": "Isandla esisizayo",
+            "description": "Usize umngani namuhla"
+          },
+          "creative_genius": {
+            "name": "Ubulukhuni bokudala",
+            "description": "Ubuciko obugqamile"
+          },
+          "math_wizard": {
+            "name": "Umlingo wezibalo",
+            "description": "Amakhono amahle okubala"
+          },
+          "bookworm": {
+            "name": "Uthanda izincwadi",
+            "description": "Uthanda isikhathi sezindaba"
+          },
+          "super_listener": {
+            "name": "Umulaleli omkhulu",
+            "description": "Uhlala elandela imiyalo"
+          },
+          "kindness_champ": {
+            "name": "Umqhawe womusa",
+            "description": "Ubonisa umusa kuwo wonke umuntu"
+          }
+        },
+        "last_updated": "Kubuyekeziwe {{time}}",
+        "summary": {
+          "great_job": "Umsebenzi omuhle! {{count}} ibheji litholakele.",
+          "great_job_plural": "Umsebenzi omuhle! {{count}} amabheji atholakele.",
+          "keep_going": "Qhubeka! Ingane yakho iyathuthuka."
+        }
+      },
+      "birthdays": {
+        "title": "Izinsuku Zokuzalwa Ezizayo",
+        "loading": "Ilayisha izinsuku zokuzalwa...",
+        "view_chart": "Buka ishadi",
+        "turning_age": "Uba {{age}}",
+        "today": "Namuhla",
+        "in_days": "Ezinsukwini ezi-{{count}}"
+      },
+      "uniform": {
+        "title": "Osayizi bama-uniform",
+        "subtitle": "Sicela uqinisekise osayizi namaphakathi ezingane. Isethi ephelele iqukethe i-T-shirt 1 + ama-shorts 1.",
+        "empty": "Engeza ingane kuqala ukuze uthumele osayizi bama-uniform.",
+        "loading": "Ilayisha okuhanjisiwe okukhona...",
+        "labels": {
+          "child_name": "Igama lengane",
+          "age": "Iminyaka (iminyaka)",
+          "tshirt_size": "Usayizi we-T-shirt",
+          "tshirts": "Ama-T-shirt",
+          "shorts": "Ama-shorts"
+        },
+        "placeholders": {
+          "child_name": "Igama lengane",
+          "age": "Iminyaka",
+          "select_size": "Khetha usayizi",
+          "default_one": "1"
+        },
+        "actions": {
+          "save": "Londoloza",
+          "pay_now": "Khokha manje"
+        },
+        "status": {
+          "saving": "Iyalondoloza…",
+          "saved": "Kulondoloziwe"
+        },
+        "validation": {
+          "child_name": "Sicela ufake igama lengane.",
+          "tshirt_size": "Khetha usayizi we-T-shirt.",
+          "age": "Faka iminyaka esebenzayo (1-18).",
+          "tshirt_qty": "Faka inani elifanele lama-T-shirt (1-20).",
+          "shorts_qty": "Faka inani elifanele lama-shorts (0-20)."
+        },
+        "errors": {
+          "load_existing": "Ayikwazanga ukulayisha osayizi bama-uniform abakhona.",
+          "load_pricing": "Ayikwazanga ukulayisha amanani ama-uniform.",
+          "save_failed": "Ukulondoloza kwehlulekile"
+        },
+        "pricing": {
+          "title": "Amanani:",
+          "full_set": "Isethi ephelele {{amount}}",
+          "full_set_unset": "Isethi ephelele —",
+          "tshirt": "T-shirt {{amount}}",
+          "tshirt_unset": "T-shirt —",
+          "shorts": "Ama-shorts {{amount}}",
+          "shorts_unset": "Ama-shorts —"
+        },
+        "order": {
+          "title": "I-oda:",
+          "sets": "{{count}} isethi",
+          "sets_zero": "0 amasethi",
+          "extra_tshirts": "{{count}} ama-T-shirt engeziwe",
+          "extra_shorts": "{{count}} ama-shorts engeziwe"
+        },
+        "total": {
+          "label": "Isamba:",
+          "unavailable": "Amanani awakasethwa",
+          "note": "Amanani awakasethwa. Sizokhiqiza isithenjwa sokukhokha."
+        },
+        "last_updated": "Kugcine ukubuyekezwa:",
+        "payment": {
+          "description": "I-oda le-uniform • Usayizi {{size}} • Ama-T-shirt {{tshirts}} • Ama-shorts {{shorts}}"
+        }
+      },
+      "daily_activity": {
+        "title": "Imisebenzi Yanamuhla",
+        "loading": "Ilayisha imisebenzi...",
+        "labels": {
+          "teacher": "Uthisha:",
+          "materials": "Izinto ezidingekayo:",
+          "objectives": "Izinhloso:",
+          "notes": "Amanothi:",
+          "learning_goals": "Izinhloso zokufunda",
+          "materials_used": "Izinto ezisetshenzisiwe",
+          "teacher_notes": "Amanothi kothisha",
+          "added_by": "Kungezwe ngu {{name}}"
+        },
+        "empty": {
+          "title": "Azikho izenzo ezibhalwe namuhla",
+          "description": "Buyela kamuva ukuze uthole izibuyekezo zothisha wengane yakho"
+        }
+      },
+      "ad_banner": {
+        "top_title": "Amathiphu okufunda axhaswe",
+        "bottom_title": "Sekela uhlelo lokusebenza",
+        "description": "Thuthukisa ukuze ususe izikhangiso futhi uvule amathuluzi amaningi omzali.",
+        "cta": "Thuthukisa"
+      },
+      "pending_requests": {
+        "title": "Izicelo Ezisalindile",
+        "loading": "Ilayisha...",
+        "types": {
+          "registration": "Ukubhalisa okusha",
+          "claim": "Isicelo sokuxhumanisa"
+        },
+        "requested_on": "Kucelwe {{date}}",
+        "footer": "Isicelo sakho silindele ukuvunywa yisikole. Uzokwaziswa uma sesibuyekezwe.",
+        "footer_plural": "Izicelo zakho zilindele ukuvunywa yisikole. Uzokwaziswa uma sezibuyekezwe."
+      },
+      "trial": {
+        "ends_today": "⏰ I-Trial iphela namuhla!",
+        "last_day": "Usuku lokugcina lwe-trial",
+        "days_left": "{{count}} izinsuku ezisele • {{plan}} trial",
+        "upgrade": "Thuthukisa"
+      },
+      "practice": {
+        "robotics": {
+          "title": "Ukuziqeqesha kwe-robotics",
+          "description": "Hlola ukunyakaza kwamarobhothi, ukuhlela okuyisisekelo, nemisebenzi yezinzwa"
+        },
+        "ai": {
+          "title": "Imisebenzi ye-AI",
+          "description": "Imidlalo yokufunda ye-AI efanele ubudala kanye nemisebenzi yokuqaphela amaphethini",
+          "prompt": "Ngisize ngidale imisebenzi yokufunda ye-AI efanele ubudala bengane yami",
+          "display": "Imisebenzi yokufunda ye-AI"
+        },
+        "computer": {
+          "title": "Ulwazi lwekhompyutha",
+          "description": "Imisebenzi eyisisekelo: ukutayipha, ukulawula igundane, ukuzulazula ku-app, ukuphepha ku-inthanethi",
+          "prompt": "Ngisize ngifundise ingane yami amakhono ayisisekelo ekhompyutheni njengokusebenzisa igundane, ikhibhodi, nokuphepha ku-inthanethi",
+          "display": "Umhlahlandlela wolwazi lwekhompyutha"
+        }
+      },
+      "early_learning": {
+        "heading": "Ukusekela ukuthuthuka kwengane yasenkulisa",
+        "tips": {
+          "creative_play": {
+            "title": "🎨 Umdlalo wokudala",
+            "description": "Khuthaza ukudweba, ukupenda, nokudlala okucabangayo ukuze kuthuthukiswe ubuciko namakhono emisipha emincane."
+          },
+          "reading": {
+            "title": "📚 Ukufunda ndawonye",
+            "description": "Funda izindaba nsuku zonke ukuze kwakheke amakhono olimi, amagama, nothando lwezincwadi."
+          },
+          "numbers": {
+            "title": "🔢 Izinombolo nezimo",
+            "description": "Sebenzisa imisebenzi yansuku zonke ukwethula ukubala, imibala, nezimo ngendlela ejabulisayo."
+          },
+          "songs": {
+            "title": "🎵 Izingoma nezihlabelelo",
+            "description": "Cula izingoma futhi usho izihlabelelo ukuze kuthuthukiswe inkumbulo, isiqinisi, nokuqonda imisindo."
+          },
+          "social": {
+            "title": "🤝 Amakhono okuxhumana",
+            "description": "Hlela izikhathi zokudlala futhi ufundise ukwabelana, ukushintshana, nokukhombisa imizwa."
+          }
+        }
+      },
+      "overview": {
+        "unread_messages": "Imilayezo engafundiwe",
+        "missed_calls": "Izingcingo eziphuthelwe",
+        "homework_pending": "Umsebenzi wasekhaya osalindile",
+        "attendance_rate": "Izinga lokuba khona"
+      },
+      "ai": {
+        "close": "Vala"
+      },
+      "empty": {
+        "add_child": {
+          "title": "Engeza ingane yakho",
+          "description": "Xhumanisa ingane ukuze uvule umsebenzi wasekhaya, ukuqonda inqubekelaphambili, nezibuyekezo ezenzelwe wena.",
+          "cta": "Engeza ingane"
+        },
+        "uniform_sizes": {
+          "title": "Ukuhlola osayizi bama-uniform",
+          "description": "Xhumanisa ingane esikoleni ukuze ubone osayizi bama-uniform nezibuyekezo."
+        },
+        "recent_activity": {
+          "title": "Ukuhlola umsebenzi wakamuva",
+          "description": "Uma ingane isixhunyiwe, uzobona umsebenzi wasekhaya, imilayezo, nezaziso lapha."
+        },
+        "homework": {
+          "title": "Ukuhlola umsebenzi wasekhaya",
+          "description": "Xhumanisa ingane esikoleni ukuze ubone futhi uthumele umsebenzi wasekhaya."
+        },
+        "live_classes": {
+          "title": "Ukuhlola amakilasi abukhoma",
+          "description": "Izixhumanisi zamakilasi abukhoma zizovela lapha uma ingane ixhunyiwe esikoleni."
+        },
+        "teacher_notes": {
+          "title": "Ukuhlola amanothi othisha",
+          "description": "Amanothi othisha azovela lapha uma ingane ixhunyiwe."
+        },
+        "progress": {
+          "title": "Ukuhlola amabheji enqubekelaphambili",
+          "description": "Landela izigaba ezibalulekile nezimpumelelo uma ingane ixhunyiwe."
+        },
+        "birthdays": {
+          "title": "Ukuhlola izinsuku zokuzalwa ezizayo",
+          "description": "Izinsuku zokuzalwa zeqembu lengane yakho zizovela lapha uma ixhunyiwe."
+        },
+        "daily_activity": {
+          "title": "Ukuhlola umsebenzi wansuku zonke",
+          "description": "Izibuyekezo zomsebenzi wansuku zonke zizovela lapha uma ingane ixhunyiwe."
+        },
+        "practice": {
+          "title": "Ukuhlola ukuzijwayeza ekhaya",
+          "description": "Imisebenzi yokuzijwayeza izovela lapha uma ingane ixhunyiwe."
+        },
+        "early_learning_activities": {
+          "title": "Ukuhlola imisebenzi yokufunda kusenesikhathi",
+          "description_preschool_only": "Le misebenzi itholakala ezinganeni zasenkulisa.",
+          "description_add_child": "Engeza ingane ukuze uvule imisebenzi yokufunda kusenesikhathi."
+        },
+        "early_learning_tips": {
+          "title": "Ukuhlola amathiphu okufunda kusenesikhathi",
+          "description_preschool_only": "Amathiphu enzelwe izingane zasenkulisa.",
+          "description_add_child": "Engeza ingane ukuze uvule amathiphu okufunda kusenesikhathi."
+        },
+        "overview": {
+          "title": "Ukuhlola ukubuka konke",
+          "description": "Xhumanisa ingane esikoleni ukuze ubone ukubakhona, umsebenzi wasekhaya, nemilayezo."
+        }
+      },
+      "dash_orb": {
+        "prompt": "Ngingasiza kanjani ingane yami namuhla?",
+        "display": "Usizo lwe-Dash AI"
+      },
+      "quick_actions": {
+        "fees": {
+          "overdue": "Sekwedlule isikhathi",
+          "due_today": "Kukhokhwa namuhla",
+          "due_in_days": "Kukhokhwa ezinsukwini eziyi-{{count}}",
+          "due_in_days_plural": "Kukhokhwa ezinsukwini eziyi-{{count}}"
+        },
+        "ebooks": "Ama-E-books",
+        "robotics_lab": "Ilebhu ye-robotics",
+        "exam_prep": "Ukulungiselela izivivinyo",
+        "my_exams": "Izivivinyo zami",
+        "payments": "Izinkokhelo",
+        "chat_with_dash": "Xoxa noDash",
+        "lessons": "Izifundo",
+        "messages": {
+          "go_to": "Iya emilayezweni",
+          "voice_call": "Ucingo lwezwi",
+          "video_call": "Ucingo lwevidiyo"
+        }
+      },
+      "empty_children": {
+        "homeschool": {
+          "title": "Qala uhambo lwakho lokufunda ekhaya",
+          "description": "Engeza izingane zakho ukuze uqale ukulandelela inqubekelaphambili yazo, uthole ikharikhulamu ehambisana ne-CAPS, futhi usebenzise amathuluzi ethu e-AI.",
+          "cta": "Engeza umfundi wakho wokuqala"
+        },
+        "supplemental": {
+          "title": "Khulisa ukufunda kwengane yakho",
+          "description": "Engeza izingane zakho ukuze zithole izifundo ezengeziwe, izivivinyo zokuqeqesha, kanye nosizo lokufunda olwenziwe ngendlela yabo.",
+          "cta": "Engeza ingane"
+        },
+        "exploring": {
+          "title": "Siyakwamukela ekufundeni kwedijithali",
+          "description": "Joyina i-EduDashPro Community School – hlola i-Robotics, i-AI, i-Data Science, ukuthuthukisa i-Frontend ne-Backend. Yakha ulwazi lwedijithali ngokufinyelela kwamahhala okusekelwa izikhangiso.",
+          "cta": "Qala"
+        },
+        "school": {
+          "title": "Engeza izingane zakho",
+          "description": "Xhumanisa izingane zakho ukuze uqale ukubona inqubekelaphambili, uxhumane nothisha, futhi uhlale unolwazi ngezinto zesikole.",
+          "cta": "Engeza ingane"
+        },
+        "aftercare": {
+          "title": "Bhalisa izingane zakho",
+          "description": "Engeza izingane zakho ukuze zithole izinhlelo ze-aftercare, izibuyekezo zansuku zonke, kanye nokuxhumana nabasebenzi.",
+          "cta": "Engeza ingane"
+        },
+        "default": {
+          "title": "Joyina umphakathi wethu wedijithali",
+          "description": "Qala ukufunda i-Robotics, i-AI, i-Data Science, kanye nokuthuthukisa isoftware. Ukufinyelela okusheshayo nge-level yamahhala (imikhawulo ye-AI yosuku okusekelwe izikhangiso).",
+          "cta": "Engeza ingane"
+        }
+      },
+      "nav": {
+        "dashboard": "Ideshibhodi",
+        "announcements": "Izimemezelo",
+        "messages": "Imilayezo",
+        "homework": "Umsebenzi wasekhaya",
+        "attendance": "Ukuya esikoleni",
+        "my_children": "Izingane zami",
+        "exam_prep": "Ukulungiselela izivivinyo",
+        "payments": "Izinkokhelo",
+        "robotics": "Robotics",
+        "settings": "Izilungiselelo",
+        "dash_ai": "Dash AI",
+        "notifications": "Izaziso",
+        "menu": "Imenyu"
+      },
+      "profile": {
+        "menu": "Imenyu yephrofayela",
+        "ringtones": "Amathoni okukhala",
+        "sign_out": "Phuma"
+      },
+      "powered_by": "Kuxhaswe yi-Young Eagles",
+      "school_fallback": "Young Eagles",
+      "onboarding": {
+        "welcome": "Siyakwamukela e-Young Eagles, {{name}}!",
+        "subtitle": "Ukuze uqale, xhumanisa i-akhawunti yakho nesikole sengane yakho.",
+        "steps": {
+          "find_school": {
+            "title": "Thola isikole sengane yakho",
+            "description": "Sesha ingane yakho esivele ibhalisiwe enkulisa"
+          },
+          "send_request": {
+            "title": "Thumela isicelo sokuxhumanisa",
+            "description": "Isikole sizobuyekeza bese sivumela isicelo sakho sokuxhumanisa umzali nengane"
+          },
+          "access_dashboard": {
+            "title": "Finyelela ideshibhodi",
+            "description": "Uma kuvunywe, bona umsebenzi wasekhaya, imilayezo, kanye nenqubekelaphambili yengane yakho"
+          }
+        },
+        "actions": {
+          "link_child": "Xhumanisa ingane yami",
+          "register_child": "Bhalisa ingane entsha"
+        },
+        "tip_title": "💡 Icebo:",
+        "tip_body": "Uma ingane yakho isivele ibhalisiwe enkuliseni esebenzisa i-Young Eagles, sebenzisa \"Xhumanisa ingane yami\". Uma ubhalisa okokuqala, sebenzisa \"Bhalisa ingane entsha\"."
+      },
+      "stats": {
+        "overview": {
+          "title": "Ukubuka konke komsebenzi",
+          "week": "Kuleli sonto",
+          "month": "Kule nyanga",
+          "homework_rate": "Izinga lomsebenzi wasekhaya"
+        },
+        "cards": {
+          "total_children": "Izingane zonke",
+          "active_classes": "Amakilasi asebenzayo",
+          "upcoming_events": "Imicimbi ezayo"
+        },
+        "recent": {
+          "title": "Umsebenzi wakamuva",
+          "empty": "Akukho msebenzi osanda kwenzeka"
+        }
+      },
+      "exam_week": {
+        "title": "IMODI YOKUHLolwa",
+        "description": "Izivivinyo zokuzijwayeza, amanothi wokubuyekeza nezeluleko zokugcina ukuze uphumelele!",
+        "cta": "Qala ukulungiselela izivivinyo"
+      }
+    }
   },
   "ai": {
     "homework": {
@@ -290,7 +783,121 @@
     "about": "Mayelana",
     "support": "Usizo",
     "termsOfService": "Imigomo Yesevisi",
-    "privacyPolicy": "Inqubomgomo Yobumfihlo"
+    "privacyPolicy": "Inqubomgomo Yobumfihlo",
+    "parent": {
+      "loading": "Iyalayisha...",
+      "saved_success": "Izilungiselelo zilondoloziwe ngempumelelo!",
+      "title": "Izilungiselelo",
+      "subtitle": "Phatha izintandokazi ze-akhawunti yakho",
+      "errors": {
+        "image_too_large": "Isithombe kumele sibe ngaphansi kuka-2MB",
+        "image_invalid": "Sicela ulayishe ifayela lesithombe",
+        "avatar_upload_failed": "Yehlulekile ukulayisha isithombe sephrofayela",
+        "save_failed": "Yehlulekile ukulondoloza izinguquko",
+        "password_mismatch": "Amaphasiwedi awafani",
+        "password_too_short": "Iphasiwedi kumele ibe okungenani izinhlamvu ezi-6",
+        "password_change_failed": "Yehlulekile ukushintsha iphasiwedi",
+        "save_preferences_failed": "Yehlulekile ukulondoloza izintandokazi"
+      },
+      "delete": {
+        "confirm": "Uqinisekile ukuthi ufuna ukususa unomphela i-akhawunti yakho ye-EduDash Pro? Lesi senzo asibuyiseki futhi sizosusa ukufinyelela ngokushesha.",
+        "error": "Asikwazanga ukususa i-akhawunti yakho okwamanje. Sicela uzame futhi noma uxhumane nosizo.",
+        "title": "Susa i-akhawunti",
+        "description": "Susa unomphela i-akhawunti yakho ye-EduDash Pro, ususe ukufinyelela kuzo zonke izici ze-Dash AI, futhi uqedele ukubhalisa kwakho. Lokhu akunakuhlehliswa.",
+        "bullet": {
+          "sign_out": "Yonke imishini izophuma ngokushesha",
+          "subscription_stop": "Ukubhalisa kwakho nezinzuzo zesivivinyo kuzoma",
+          "retention": "Ezinye irekhodi zingagcinwa ngenxa yezimfuneko zomthetho"
+        },
+        "deleting": "Uyisusa i-akhawunti?",
+        "button": "Susa i-akhawunti yami"
+      },
+      "profile": {
+        "title": "Iphrofayela",
+        "picture": "Isithombe sephrofayela",
+        "picture_alt": "Iphrofayela",
+        "avatar_fallback": "U",
+        "upload_hint": "Layisha isithombe sephrofayela",
+        "upload_formats": "JPG, PNG noma GIF (Okuningi 2MB)",
+        "email": "I-imeyili",
+        "full_name": "Igama eligcwele",
+        "full_name_placeholder": "Faka igama lakho eligcwele",
+        "phone": "Inombolo yocingo",
+        "phone_placeholder": "isb. +27 82 123 4567",
+        "phone_hint": "Isetshenziselwa izaziso nokubuyiselwa kwe-akhawunti",
+        "saving": "Iyagcina...",
+        "save_changes": "Londoloza izinguquko",
+        "save_success": "Izinguquko zilondoloziwe ngempumelelo!"
+      },
+      "notifications": {
+        "title": "Izaziso",
+        "email": {
+          "title": "Izaziso ze-imeyili",
+          "subtitle": "Thola izibuyekezo nge-imeyili"
+        },
+        "push": {
+          "title": "Izaziso eziphushwayo",
+          "subtitle": "Thola izaziso eziphushwayo"
+        },
+        "whatsapp": {
+          "title": "Izaziso ze-WhatsApp",
+          "subtitle": "Thola izibuyekezo nge-WhatsApp"
+        },
+        "ringtones": {
+          "title": "Amaringithoni ocingo",
+          "subtitle": "Yenza ngezifiso amaringithoni nemisindo yokushaya"
+        },
+        "saving": "Iyagcina...",
+        "save": "Londoloza izintandokazi zezaziso"
+      },
+      "children": {
+        "title": "Izingane ezixhunyiwe",
+        "add_child": "Engeza ingane",
+        "empty": "Azikho izingane ezixhunyiwe ku-akhawunti yakho okwamanje.",
+        "register_child": "Bhalisa ingane",
+        "no_grade": "Alikho ibanga"
+      },
+      "billing": {
+        "title": "Ukubhalisa nokukhokha",
+        "manage": {
+          "title": "Phatha ukubhalisa",
+          "subtitle": "Buka uhlelo lwakho, ukusetshenziswa, nezinketho zokuthuthukisa"
+        }
+      },
+      "appearance": {
+        "title": "Ukubukeka",
+        "dark_mode": "Imodi emnyama",
+        "dark_mode_hint": "Shintsha imodi emnyama"
+      },
+      "language": {
+        "title": "Ulimi",
+        "en": "IsiNgisi (Ningizimu Afrika)",
+        "af": "IsiBhunu",
+        "zu": "IsiZulu",
+        "xh": "IsiXhosa",
+        "st": "Sesotho",
+        "tn": "Setswana"
+      },
+      "security": {
+        "title": "Ukuphepha",
+        "change_password": "Shintsha iphasiwedi"
+      },
+      "sign_out": {
+        "title": "Phuma",
+        "description": "Phuma ku-akhawunti yakho kule divayisi.",
+        "signing_out": "Iphuma...",
+        "button": "Phuma"
+      },
+      "password": {
+        "modal_title": "Shintsha iphasiwedi",
+        "new_label": "Iphasiwedi entsha",
+        "new_placeholder": "Faka iphasiwedi entsha",
+        "confirm_label": "Qinisekisa iphasiwedi",
+        "confirm_placeholder": "Qinisekisa iphasiwedi entsha",
+        "changing": "Iyatshintsha...",
+        "change_button": "Shintsha iphasiwedi"
+      }
+    }
   },
   "notifications": {
     "title": "Izaziso",
@@ -327,6 +934,7 @@
   },
   "common": {
     "loading": "Iyalayisha...",
+    "child": "Ingane",
     "error": "Iphutha",
     "success": "Impumelelo",
     "warning": "Isexwayiso",
@@ -460,5 +1068,13 @@
       "withdrawn": "Isicelo Sihoxisiwe",
       "failed": "Yehlulekile ukuthumela isicelo"
     }
+  },
+  "parent": {
+    "attendance": "Ukuya esikoleni",
+    "fees_due_in_days": "Kukhokhwa ezinsukwini eziyi-{{count}}",
+    "fees_due_in_days_plural": "Kukhokhwa ezinsukwini eziyi-{{count}}",
+    "dash_explain_prompt": "Chaza umqondo kimi ngamazwi alula.",
+    "dash_quiz_prompt": "Dala imibuzo emifushane yokuzijwayeza yengane yami.",
+    "dash_study_plan_prompt": "Dala uhlelo olulula lokufunda lwale viki."
   }
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function TeacherSignUpPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -16,6 +17,46 @@ export default function TeacherSignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteSchool, setInviteSchool] = useState<{ id: string; name: string } | null>(null);
+  const [validatingInvite, setValidatingInvite] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("invite");
+    if (!code) return;
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setInviteCode(trimmed);
+    setValidatingInvite(true);
+    supabase
+      .rpc("validate_invitation_code", { p_code: trimmed })
+      .then(({ data, error: inviteError }) => {
+        if (inviteError || !data) {
+          setInviteSchool(null);
+          return;
+        }
+
+        if (typeof data === "object" && "valid" in data) {
+          if (!(data as { valid?: boolean }).valid) {
+            setInviteSchool(null);
+            return;
+          }
+          const schoolNameValue = String((data as { school_name?: string }).school_name || "");
+          const schoolId = String((data as { school_id?: string }).school_id || "");
+          if (schoolNameValue && schoolId) {
+            setInviteSchool({ id: schoolId, name: schoolNameValue });
+            setSchoolName(schoolNameValue);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Invite code validation failed:", err);
+        setInviteSchool(null);
+      })
+      .finally(() => setValidatingInvite(false));
+  }, [supabase]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,8 +74,6 @@ export default function TeacherSignUpPage() {
     }
 
     setLoading(true);
-
-    const supabase = createClient();
 
     // Create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -69,6 +108,7 @@ export default function TeacherSignUpPage() {
       .from('profiles')
       .update({
         role: 'teacher',
+        ...(inviteSchool?.id ? { preschool_id: inviteSchool.id, organization_id: inviteSchool.id, seat_status: 'pending' } : {}),
         // phone_number not in profiles schema - may need to add if required
       })
       .eq('id', authData.user.id);
@@ -150,6 +190,15 @@ export default function TeacherSignUpPage() {
                 style={{ width: "100%", padding: "12px 14px", background: "#1a1a1f", border: "1px solid #2a2a2f", borderRadius: 8, color: "#fff", fontSize: 14, boxSizing: "border-box" }}
               />
               <p style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Your principal will invite you to join your school</p>
+              {inviteCode && (
+                <p style={{ fontSize: 12, color: inviteSchool ? "#22c55e" : "#fbbf24", marginTop: 6 }}>
+                  {validatingInvite
+                    ? "Validating invite code..."
+                    : inviteSchool
+                      ? `Invite code verified for ${inviteSchool.name}. We'll connect you after signup.`
+                      : "Invite code could not be verified yet. You can still sign up and contact your principal."}
+                </p>
+              )}
             </div>
 
             <div>

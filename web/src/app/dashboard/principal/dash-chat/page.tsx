@@ -79,7 +79,7 @@ export default function PrincipalDashChatPage() {
       >
         {/* Header - Fixed below topnav, aligned with content */}
         <header className="flex-shrink-0 py-3 border-b border-gray-800 bg-gray-950 flex items-center justify-between gap-3 z-20" style={{
-          marginTop: 'var(--topnav-h, 56px)',
+          marginTop: 'var(--topnav-offset, 56px)',
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
           paddingRight: 'max(1rem, env(safe-area-inset-right))',
           backdropFilter: 'blur(12px)',
@@ -146,7 +146,7 @@ export default function PrincipalDashChatPage() {
             style={{
               position: 'fixed',
               left: 0,
-              top: 'calc(var(--topnav-h, 56px) + 57px)',
+              top: 'calc(var(--topnav-offset, 56px) + 57px)',
               bottom: 0,
               width: '280px',
               zIndex: 10
@@ -200,9 +200,9 @@ export default function PrincipalDashChatPage() {
             {hydrated && activeConversationId && (
               <ChatInterface
                 conversationId={activeConversationId}
-                onNewConversation={handleNewConversation}
                 userId={userId}
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
+                showTutorPanel={false}
               />
             )}
 

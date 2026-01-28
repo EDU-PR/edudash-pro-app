@@ -24,7 +24,7 @@ export interface ProofOfPayment {
   
   // Purpose
   payment_purpose: string;
-  fee_type?: 'tuition' | 'registration' | 'activity' | 'transport' | 'meals' | 'uniform' | 'other';
+  fee_type?: 'tuition' | 'registration' | 'activity' | 'transport' | 'meals' | 'uniform' | 'uniform_tshirt' | 'uniform_shorts' | 'other';
   month_year?: string;
   
   // Documents

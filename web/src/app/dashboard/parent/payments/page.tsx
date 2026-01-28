@@ -43,12 +43,13 @@ interface StudentFee {
   due_date: string;
   grace_period_days?: number;
   paid_date?: string;
-  status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived';
+  status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived' | 'pending_verification';
   payment_method?: string;
   student?: {
     first_name: string;
     last_name: string;
   };
+  pop_status?: 'pending' | 'approved' | 'rejected' | 'needs_revision';
 }
 
 interface FeeStructure {
@@ -65,6 +66,17 @@ interface RegistrationDocs {
   student_birth_certificate_url: string | null;
   student_clinic_card_url: string | null;
   guardian_id_document_url: string | null;
+}
+
+interface POPUpload {
+  id: string;
+  student_id: string;
+  upload_type: string;
+  status: 'pending' | 'approved' | 'rejected' | 'needs_revision';
+  payment_amount?: number | null;
+  payment_date?: string | null;
+  payment_reference?: string | null;
+  created_at: string;
 }
 
 export default function PaymentsPage() {
@@ -168,6 +180,29 @@ export default function PaymentsPage() {
         showWarning: true 
       };
     }
+  };
+
+  const resolvePopStatus = (fee: StudentFee, uploads: POPUpload[]): POPUpload['status'] | undefined => {
+    if (!fee.due_date) return undefined;
+    const feeDate = new Date(fee.due_date);
+    if (Number.isNaN(feeDate.getTime())) return undefined;
+
+    const matching = uploads.find((upload) => {
+      if (!upload.payment_date && !upload.payment_amount) return false;
+      if (upload.payment_date) {
+        const paymentDate = new Date(upload.payment_date);
+        if (!Number.isNaN(paymentDate.getTime())) {
+          const sameMonth = paymentDate.getMonth() === feeDate.getMonth() && paymentDate.getFullYear() === feeDate.getFullYear();
+          if (sameMonth) return true;
+        }
+      }
+      if (typeof upload.payment_amount === 'number') {
+        return Math.abs(upload.payment_amount - fee.amount) < 10;
+      }
+      return false;
+    });
+
+    return matching?.status;
   };
 
   const buildDocumentStatus = (docs: RegistrationDocs | null): PendingDocumentStatus[] => {
@@ -304,6 +339,15 @@ export default function PaymentsPage() {
     if (!selectedChildId) return;
 
     const fetchFees = async () => {
+      const { data: uploads } = await supabase
+        .from('pop_uploads')
+        .select('id, student_id, upload_type, status, payment_amount, payment_date, payment_reference, created_at')
+        .eq('student_id', selectedChildId)
+        .eq('upload_type', 'proof_of_payment')
+        .order('created_at', { ascending: false });
+
+      const popData = (uploads || []) as POPUpload[];
+
       // Get student fees for this child
       const { data: fees } = await supabase
         .from('student_fees')
@@ -312,7 +356,16 @@ export default function PaymentsPage() {
         .order('due_date', { ascending: true });
 
       if (fees && fees.length > 0) {
-        setStudentFees(fees as StudentFee[]);
+        const mappedFees = (fees as StudentFee[]).map((fee) => {
+          const popStatus = resolvePopStatus(fee, popData);
+          const isPendingVerification = popStatus === 'pending' && fee.status !== 'paid' && fee.status !== 'waived';
+          return {
+            ...fee,
+            pop_status: popStatus,
+            status: isPendingVerification ? 'pending_verification' : fee.status,
+          };
+        });
+        setStudentFees(mappedFees);
       }
 
       // Get fee structure for the child's school
@@ -385,16 +438,43 @@ export default function PaymentsPage() {
 
   // Calculate upcoming and paid fees
   const upcomingFees = useMemo(() => {
-    return studentFees.filter(f => f.status === 'pending' || f.status === 'overdue' || f.status === 'partially_paid');
+    return studentFees.filter(f => 
+      f.status === 'pending' || 
+      f.status === 'overdue' || 
+      f.status === 'partially_paid' ||
+      f.status === 'pending_verification'
+    );
   }, [studentFees]);
 
   const paidFees = useMemo(() => {
     return studentFees.filter(f => f.status === 'paid');
   }, [studentFees]);
 
+  const pendingVerificationFees = useMemo(() => {
+    return studentFees.filter(f => f.status === 'pending_verification');
+  }, [studentFees]);
+
+  const actionableUpcomingFees = useMemo(() => {
+    return upcomingFees.filter(f => f.status !== 'pending_verification');
+  }, [upcomingFees]);
+
+  const pendingVerificationCount = pendingVerificationFees.length;
+  const trulyPendingCount = Math.max(upcomingFees.length - pendingVerificationCount, 0);
+
   // Calculate outstanding balance
   const outstandingBalance = useMemo(() => {
-    return upcomingFees.reduce((sum, f) => sum + f.amount, 0);
+    const today = new Date();
+    const dueSoonCutoff = new Date();
+    dueSoonCutoff.setDate(dueSoonCutoff.getDate() + 7);
+    return upcomingFees
+      .filter(f => f.status !== 'pending_verification')
+      .filter(f => {
+        if (!f.due_date) return true;
+        const dueDate = new Date(f.due_date);
+        if (Number.isNaN(dueDate.getTime())) return true;
+        return dueDate <= dueSoonCutoff;
+      })
+      .reduce((sum, f) => sum + f.amount, 0);
   }, [upcomingFees]);
 
   // Get selected child info
@@ -454,6 +534,23 @@ export default function PaymentsPage() {
           }}>
             <AlertCircle className="w-3 h-3" />
             Overdue
+          </span>
+        );
+      case 'pending_verification':
+        return (
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 10px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            color: '#f59e0b',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: 600,
+          }}>
+            <Clock className="w-3 h-3" />
+            Awaiting Verification
           </span>
         );
       case 'waived':
@@ -688,8 +785,27 @@ export default function PaymentsPage() {
                         {formatCurrency(outstandingBalance)}
                       </div>
                       <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>
-                        {outstandingBalance === 0 ? '✅ All caught up!' : `${upcomingFees.length} payment(s) pending`}
+                        {outstandingBalance === 0 && pendingVerificationCount === 0
+                          ? '✅ All caught up!'
+                          : pendingVerificationCount > 0 && trulyPendingCount === 0
+                            ? 'Payments pending approval'
+                            : `${trulyPendingCount} payment(s) pending`}
                       </p>
+                      {pendingVerificationCount > 0 && (
+                        <div style={{ 
+                          marginTop: 'var(--space-2)',
+                          padding: '4px 10px',
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: '#f59e0b',
+                          display: 'inline-block',
+                        }}>
+                          {pendingVerificationCount} payment{pendingVerificationCount !== 1 ? 's' : ''} pending approval
+                        </div>
+                      )}
                       {outstandingBalance > 0 && feeStatus.label && (
                         <div style={{ 
                           marginTop: 'var(--space-2)',
@@ -727,12 +843,27 @@ export default function PaymentsPage() {
                     <span className="muted" style={{ fontSize: 13 }}>Next Payment Due</span>
                     <Calendar className="w-5 h-5" style={{ color: 'var(--primary)' }} />
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 'bold' }}>
-                    {upcomingFees.length > 0 ? formatDate(upcomingFees[0].due_date) : 'None'}
-                  </div>
-                  <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>
-                    {upcomingFees.length > 0 ? getFeeTypeLabel(upcomingFees[0].fee_type) : 'No upcoming payments'}
-                  </p>
+                  {(() => {
+                    const nextFee = actionableUpcomingFees[0] || pendingVerificationFees[0] || null;
+                    if (!nextFee) {
+                      return (
+                        <>
+                          <div style={{ fontSize: 24, fontWeight: 'bold' }}>None</div>
+                          <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>No upcoming payments</p>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <div style={{ fontSize: 24, fontWeight: 'bold' }}>
+                          {nextFee.status === 'pending_verification' ? 'Awaiting verification' : formatDate(nextFee.due_date)}
+                        </div>
+                        <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>
+                          {getFeeTypeLabel(nextFee.fee_type)}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="card" style={{ padding: 'var(--space-4)' }}>
@@ -809,10 +940,13 @@ export default function PaymentsPage() {
                     <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
                       {upcomingFees.map((fee) => {
                         const feeStatus = getFeeStatusColor(fee.due_date, fee.grace_period_days || 7);
+                        const isPendingVerification = fee.status === 'pending_verification';
+                        const amountColor = isPendingVerification ? '#f59e0b' : feeStatus.color;
                         return (
                         <div key={fee.id} className="card" style={{ 
                           padding: 'var(--space-4)',
-                          border: `1px solid ${feeStatus.borderColor}`,
+                          border: `1px solid ${isPendingVerification ? 'rgba(245, 158, 11, 0.4)' : feeStatus.borderColor}`,
+                          opacity: isPendingVerification ? 0.8 : 1,
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-3)' }}>
                             <div style={{ flex: 1 }}>
@@ -832,26 +966,26 @@ export default function PaymentsPage() {
                               <div style={{ 
                                 marginTop: 'var(--space-2)',
                                 padding: '4px 10px',
-                                background: feeStatus.bgColor,
-                                border: `1px solid ${feeStatus.borderColor}`,
+                                background: isPendingVerification ? 'rgba(245, 158, 11, 0.12)' : feeStatus.bgColor,
+                                border: `1px solid ${isPendingVerification ? 'rgba(245, 158, 11, 0.35)' : feeStatus.borderColor}`,
                                 borderRadius: 6,
                                 fontSize: 12,
                                 fontWeight: 600,
-                                color: feeStatus.color,
+                                color: isPendingVerification ? '#f59e0b' : feeStatus.color,
                                 display: 'inline-block',
                               }}>
-                                {feeStatus.label}
+                                {isPendingVerification ? 'Awaiting Verification' : feeStatus.label}
                               </div>
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 'var(--space-2)', color: feeStatus.color }}>
+                              <div style={{ fontSize: 24, fontWeight: 'bold', marginBottom: 'var(--space-2)', color: amountColor }}>
                                 {formatCurrency(fee.amount)}
                               </div>
                               {getStatusBadge(fee.status)}
                             </div>
                           </div>
                           {/* Warning for late payments */}
-                          {feeStatus.showWarning && (
+                          {feeStatus.showWarning && !isPendingVerification && (
                             <div style={{ 
                               padding: 'var(--space-2) var(--space-3)',
                               background: 'rgba(239, 68, 68, 0.1)',
@@ -868,11 +1002,29 @@ export default function PaymentsPage() {
                               Late payment penalties may be incurred. Please pay as soon as possible.
                             </div>
                           )}
+                          {isPendingVerification && (
+                            <div style={{ 
+                              padding: 'var(--space-2) var(--space-3)',
+                              background: 'rgba(245, 158, 11, 0.12)',
+                              border: '1px solid rgba(245, 158, 11, 0.35)',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              color: '#f59e0b',
+                              marginBottom: 'var(--space-3)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 'var(--space-2)',
+                            }}>
+                              <Clock className="w-4 h-4" />
+                              POP uploaded. The school is reviewing your payment.
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
                             <button
                               className="btn btnPrimary"
                               style={{ flex: 1 }}
                               onClick={() => handlePayNow(fee)}
+                              disabled={isPendingVerification}
                             >
                               <CreditCard className="icon16" />
                               Pay Now
@@ -880,6 +1032,7 @@ export default function PaymentsPage() {
                             <button
                               className="btn btnSecondary"
                               onClick={() => router.push(`/dashboard/parent/payments/pop-upload?child=${selectedChildId ?? ''}&feeId=${fee.id}`)}
+                              disabled={isPendingVerification}
                             >
                               <Upload className="icon16" />
                               Upload Proof

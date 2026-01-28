@@ -152,13 +152,13 @@ export const ChildCard: React.FC<ChildCardProps> = ({
       
       <View style={styles.childStats}>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Attendance</Text>
+          <Text style={styles.statLabel}>{t('dashboard.parent.child_card.attendance', { defaultValue: 'Attendance' })}</Text>
           <Text style={[styles.childStatValue, { color: theme.success }]}>
             {child.progressScore}%
           </Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Pending Homework</Text>
+          <Text style={styles.statLabel}>{t('dashboard.parent.child_card.pending_homework', { defaultValue: 'Pending Homework' })}</Text>
           <Text style={[
             styles.childStatValue, 
             child.homeworkPending > 0 ? { color: theme.warning } : { color: theme.success }
@@ -167,7 +167,7 @@ export const ChildCard: React.FC<ChildCardProps> = ({
           </Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Upcoming Events</Text>
+          <Text style={styles.statLabel}>{t('dashboard.parent.child_card.upcoming_events', { defaultValue: 'Upcoming Events' })}</Text>
           <Text style={[styles.childStatValue, { color: theme.primary }]}>
             {child.upcomingEvents}
           </Text>
@@ -180,7 +180,7 @@ export const ChildCard: React.FC<ChildCardProps> = ({
           onPress={onAttendancePress}
         >
           <Ionicons name="calendar" size={16} color={theme.primary} />
-          <Text style={[styles.actionText, { color: theme.primary }]}>Attendance</Text>
+          <Text style={[styles.actionText, { color: theme.primary }]}>{t('dashboard.parent.child_card.attendance', { defaultValue: 'Attendance' })}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -188,7 +188,7 @@ export const ChildCard: React.FC<ChildCardProps> = ({
           onPress={onHomeworkPress}
         >
           <Ionicons name="book" size={16} color={theme.success} />
-          <Text style={[styles.actionText, { color: theme.success }]}>Homework</Text>
+          <Text style={[styles.actionText, { color: theme.success }]}>{t('dashboard.parent.child_card.homework', { defaultValue: 'Homework' })}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -196,13 +196,13 @@ export const ChildCard: React.FC<ChildCardProps> = ({
           onPress={onMessagePress}
         >
           <Ionicons name="chatbubble" size={16} color={theme.accent} />
-          <Text style={[styles.actionText, { color: theme.accent }]}>Message</Text>
+          <Text style={[styles.actionText, { color: theme.accent }]}>{t('dashboard.parent.child_card.message', { defaultValue: 'Message' })}</Text>
         </TouchableOpacity>
       </View>
       
       <View style={styles.lastActivityContainer}>
         <Text style={styles.lastActivityText}>
-          Last activity: {child.lastActivity.toLocaleDateString()}
+          {t('dashboard.parent.child_card.last_activity', { defaultValue: 'Last activity:' })} {child.lastActivity.toLocaleDateString()}
         </Text>
       </View>
     </View>

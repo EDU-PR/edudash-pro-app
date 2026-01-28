@@ -7,9 +7,10 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { ChatMessages } from './ChatMessages';
+import { TutorModePanel } from './TutorModePanel';
 import { ChatInput } from './ChatInput';
 import { ImageUpload } from './ImageUpload';
 import { ExamBuilderLauncher } from './ExamBuilderLauncher';
@@ -18,25 +19,27 @@ import type { ChatMessage, SelectedImage } from './types';
 
 interface ChatInterfaceProps {
   conversationId: string;
-  onNewConversation?: () => void;
   initialMessages?: ChatMessage[];
   userId?: string;
   onMessageSent?: () => void; // Callback when message is successfully sent
+  initialPrompt?: string;
+  showTutorPanel?: boolean;
 }
 
 export function ChatInterface({
   conversationId,
-  onNewConversation,
   initialMessages = [],
   userId,
-  onMessageSent
+  onMessageSent,
+  initialPrompt,
+  showTutorPanel = true
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showExamBuilder, setShowExamBuilder] = useState(false);
-  const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const initialPromptSentRef = useRef(false);
 
   const {
     isLoading,
@@ -50,7 +53,6 @@ export function ChatInterface({
     messages, 
     setMessages,
     userId,
-    onQuotaExceeded: () => setQuotaExceeded(true),
     onMessageSent
   });
 
@@ -60,6 +62,13 @@ export function ChatInterface({
       loadConversation();
     }
   }, [conversationId, initialMessages.length, loadConversation]);
+
+  useEffect(() => {
+    if (!initialPrompt || !conversationId || initialPromptSentRef.current) return;
+    if (messages.length > 0) return;
+    initialPromptSentRef.current = true;
+    void sendMessage(initialPrompt, [], undefined);
+  }, [conversationId, initialPrompt, messages.length, sendMessage]);
 
   // Handle send
   const handleSend = async (messageText?: string, voiceData?: { blob: Blob; base64: string }) => {
@@ -112,8 +121,22 @@ export function ChatInterface({
     setShowExamBuilder(true);
   };
 
+  const handleQuickPrompt = (prompt: string) => {
+    setInput(prompt);
+    const inputEl = document.querySelector('textarea[data-chat-input=\"true\"]') as HTMLTextAreaElement | null;
+    inputEl?.focus();
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden relative">
+      {showTutorPanel && (
+        <TutorModePanel
+          onStart={(prompt) => {
+            setInput(prompt);
+            void sendMessage(prompt, [], undefined);
+          }}
+        />
+      )}
       {/* Exam Builder Overlay */}
       {showExamBuilder && (
         <div className="absolute inset-0 z-50">
@@ -132,8 +155,8 @@ export function ChatInterface({
         isTyping={isTyping}
         onRetry={handleRetry}
         onExamBuilderClick={handleExamBuilderClick}
-        showExamBuilder={showExamBuilder}
         examContext={examContext}
+        onQuickPrompt={handleQuickPrompt}
       />
 
       {/* Image Upload Modal */}

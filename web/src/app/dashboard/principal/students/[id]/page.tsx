@@ -114,7 +114,7 @@ export default function StudentDetailPage() {
       setLoading(true);
       try {
         // First try to get student with guardian_id relationship
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('students')
           .select(`
             *,

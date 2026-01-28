@@ -516,7 +516,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
       if (!response.ok) throw new Error('AI request failed');
       
       const data = await response.json();
-      const aiContent = data.content || data.message || 'I apologize, I couldn\'t process that. Could you try asking again?';
+      const aiContent = data.content || data.message || 'That didn’t go through yet. Please try again or add a bit more detail.';
       
       // Add AI response
       const aiMsg: ChatMessage = {
@@ -1232,6 +1232,10 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
 
   const handleSelectThread = (threadId: string) => {
+    if (threadId === DASH_AI_THREAD_ID) {
+      router.push('/dashboard/parent/dash-chat');
+      return;
+    }
     setSelectedThreadId(threadId);
   };
 
@@ -2223,7 +2227,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
             style={{
               position: 'fixed',
               right: 0,
-              top: 'var(--topnav-h)',
+              top: 'var(--topnav-offset)',
               bottom: 0,
               width: 320,
               borderLeft: '1px solid rgba(148, 163, 184, 0.1)',
@@ -2496,12 +2500,13 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
         preschoolId={profile?.preschoolId}
         preschoolName={profile?.preschoolName}
         inviterName={profile ? `${profile.firstName || ''} ${profile.lastName || ''}`.trim() : undefined}
+        inviterId={userId}
       />
       <NewChatModal
         isOpen={newChatModalOpen}
         onClose={() => setNewChatModalOpen(false)}
         onSelectContact={handleStartChatWithContact}
-        onSelectDashAI={() => setSelectedThreadId(DASH_AI_THREAD_ID)}
+        onSelectDashAI={() => router.push('/dashboard/parent/dash-chat')}
         onInviteNew={() => {
           setNewChatModalOpen(false);
           setInviteModalOpen(true);

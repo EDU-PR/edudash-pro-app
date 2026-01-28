@@ -13,6 +13,7 @@ interface InviteRequest {
   inviteLink: string;
   preschoolName?: string;
   inviterName?: string;
+  inviteRole?: 'parent' | 'teacher' | 'staff' | 'member';
 }
 
 /**
@@ -22,7 +23,14 @@ interface InviteRequest {
 export async function POST(request: NextRequest) {
   try {
     const body: InviteRequest = await request.json();
-    const { type, email, phone, inviteLink, preschoolName, inviterName } = body;
+    const { type, email, inviteLink, preschoolName, inviterName, inviteRole } = body;
+    const roleLabel = inviteRole === 'teacher'
+      ? 'teacher'
+      : inviteRole === 'staff'
+        ? 'staff member'
+        : inviteRole === 'member'
+          ? 'member'
+          : 'parent';
 
     if (type === 'email') {
       if (!email) {
@@ -43,11 +51,12 @@ export async function POST(request: NextRequest) {
       const { error: emailError } = await resend.emails.send({
         from: 'EduDash Pro <noreply@edudashpro.org.za>',
         to: email,
-        subject: `${inviterName || 'Someone'} invited you to join ${preschoolName || 'EduDash Pro'}`,
+        subject: `${inviterName || 'Someone'} invited you to join ${preschoolName || 'EduDash Pro'} as a ${roleLabel}`,
         html: generateInviteEmailHtml({
-          inviterName: inviterName || 'A teacher',
+          inviterName: inviterName || 'A team member',
           preschoolName: preschoolName || 'EduDash Pro',
           inviteLink,
+          roleLabel,
         }),
       });
 
@@ -88,8 +97,12 @@ function generateInviteEmailHtml(params: {
   inviterName: string;
   preschoolName: string;
   inviteLink: string;
+  roleLabel: string;
 }): string {
-  const { inviterName, preschoolName, inviteLink } = params;
+  const { inviterName, preschoolName, inviteLink, roleLabel } = params;
+  const inviteBodyText = roleLabel === 'parent'
+    ? "EduDash Pro helps parents stay connected with their child's school. Get updates, communicate with teachers, and track progress—all in one place."
+    : 'EduDash Pro helps school teams collaborate and stay connected. Share updates, coordinate with families, and keep everything organized—all in one place.';
 
   return `
 <!DOCTYPE html>
@@ -120,11 +133,11 @@ function generateInviteEmailHtml(params: {
                 You're Invited! 🎉
               </h1>
               <p style="margin: 0 0 24px 0; font-size: 15px; color: rgba(255, 255, 255, 0.7); text-align: center; line-height: 1.5;">
-                <strong style="color: white;">${inviterName}</strong> has invited you to join <strong style="color: white;">${preschoolName}</strong> on EduDash Pro.
+                <strong style="color: white;">${inviterName}</strong> has invited you to join <strong style="color: white;">${preschoolName}</strong> as a ${roleLabel} on EduDash Pro.
               </p>
               
               <p style="margin: 0 0 24px 0; font-size: 14px; color: rgba(255, 255, 255, 0.6); text-align: center; line-height: 1.6;">
-                EduDash Pro helps parents stay connected with their child's preschool. Get updates on homework, communicate with teachers, and track your child's progress—all in one place.
+                ${inviteBodyText}
               </p>
               
               <!-- CTA Button -->

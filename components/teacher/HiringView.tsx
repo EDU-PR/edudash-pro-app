@@ -17,6 +17,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import type { AvailableTeacher, TeacherInvite } from '@/types/teacher-management';
 import type { ThemeColors } from '@/contexts/ThemeContext';
@@ -72,6 +73,31 @@ export function HiringView({
     }
   };
 
+  const handleViewReferences = (teacher: AvailableTeacher) => {
+    if (!teacher.id) return;
+    router.push({
+      pathname: '/screens/teacher-references',
+      params: { teacherUserId: teacher.id },
+    });
+  };
+
+  const renderRatingStars = (rating?: number | null) => {
+    if (!rating) return null;
+    const rounded = Math.round(rating);
+    return (
+      <View style={styles.ratingStars}>
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <Ionicons
+            key={idx}
+            name={idx + 1 <= rounded ? 'star' : 'star-outline'}
+            size={14}
+            color={idx + 1 <= rounded ? '#F59E0B' : '#D1D5DB'}
+          />
+        ))}
+      </View>
+    );
+  };
+
   const handleRevokeInvite = async (inviteId: string) => {
     try {
       await TeacherInviteService.revoke(inviteId);
@@ -93,12 +119,27 @@ export function HiringView({
               (item.home_postal_code ? ` • ${item.home_postal_code}` : '')}
             {item.distance_km !== undefined && ` • ${item.distance_km.toFixed(1)} km away`}
           </Text>
+          {item.rating_average ? (
+            <View style={styles.ratingRow}>
+              {renderRatingStars(item.rating_average)}
+              <Text style={styles.ratingText}>
+                {item.rating_average.toFixed(1)}
+                {item.rating_count ? ` (${item.rating_count})` : ''}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.ratingEmpty}>No ratings yet</Text>
+          )}
         </View>
         <TouchableOpacity style={styles.inviteButton} onPress={() => handleInvite(item)}>
           <Ionicons name="send" size={16} color="#fff" />
           <Text style={styles.inviteButtonText}>Invite</Text>
         </TouchableOpacity>
       </View>
+      <TouchableOpacity style={styles.referencesButton} onPress={() => handleViewReferences(item)}>
+        <Ionicons name="star-outline" size={16} color="#0f172a" />
+        <Text style={styles.referencesText}>View References</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -294,6 +335,25 @@ const createStyles = (theme?: ThemeColors) =>
       fontSize: 12,
       color: theme?.textSecondary || '#9ca3af',
     },
+    ratingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 6,
+    },
+    ratingStars: {
+      flexDirection: 'row',
+      marginRight: 6,
+    },
+    ratingText: {
+      color: theme?.text || '#0f172a',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    ratingEmpty: {
+      color: theme?.textSecondary || '#94a3b8',
+      fontSize: 12,
+      marginTop: 6,
+    },
     inviteButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -307,6 +367,22 @@ const createStyles = (theme?: ThemeColors) =>
       color: '#fff',
       fontWeight: '700',
       fontSize: 13,
+    },
+    referencesButton: {
+      marginTop: 12,
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#F1F5F9',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+    },
+    referencesText: {
+      color: '#0f172a',
+      fontSize: 12,
+      fontWeight: '600',
     },
     revokeButton: {
       flexDirection: 'row',

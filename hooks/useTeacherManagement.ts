@@ -12,6 +12,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import { TeacherDocumentsService, TeacherDocument, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 import { useSeatLimits, useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
+import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
 import type { 
   Teacher, 
   Candidate, 
@@ -370,15 +371,34 @@ export function useTeacherManagement(
               (x.home_postal_code || '').toLowerCase().includes(term)
             );
           }
-          setAvailableTeachers(list.map((x) => ({
-            id: x.user_id || '',
-            name: x.full_name || x.email || 'Teacher',
-            email: x.email || '',
-            phone: x.phone,
-            home_city: x.home_city,
-            home_postal_code: x.home_postal_code,
-            distance_km: x.distance_km,
-          })));
+          const userIds = list.map((x) => x.user_id).filter((id): id is string => !!id);
+          const ratingsByUser = await TeacherReputationService.getRatingSummariesByTeacherIds(userIds);
+
+          const enriched = list.map((x) => {
+            const summary = x.user_id ? ratingsByUser[x.user_id] : undefined;
+            return {
+              id: x.user_id || '',
+              name: x.full_name || x.email || 'Teacher',
+              email: x.email || '',
+              phone: x.phone,
+              home_city: x.home_city,
+              home_postal_code: x.home_postal_code,
+              distance_km: x.distance_km,
+              rating_average: summary?.avg_rating ?? null,
+              rating_count: summary?.rating_count ?? null,
+            };
+          });
+
+          const sorted = [...enriched].sort((a, b) => {
+            const ratingA = a.rating_average ?? 0;
+            const ratingB = b.rating_average ?? 0;
+            if (ratingA !== ratingB) return ratingB - ratingA;
+            const distA = a.distance_km ?? Number.MAX_VALUE;
+            const distB = b.distance_km ?? Number.MAX_VALUE;
+            return distA - distB;
+          });
+
+          setAvailableTeachers(sorted);
           return;
         }
       }
@@ -410,7 +430,22 @@ export function useTeacherManagement(
           home_city: (u.city as string) || null,
           home_postal_code: (u.postal_code as string) || null,
         }));
-        setAvailableTeachers(fallbackList);
+
+        const userIds = fallbackList.map((u) => u.id).filter((id): id is string => !!id);
+        const ratingsByUser = await TeacherReputationService.getRatingSummariesByTeacherIds(userIds);
+
+        const enriched = fallbackList.map((u) => ({
+          ...u,
+          rating_average: ratingsByUser[u.id]?.avg_rating ?? null,
+          rating_count: ratingsByUser[u.id]?.rating_count ?? null,
+        }));
+        const sorted = [...enriched].sort((a, b) => {
+          const ratingA = a.rating_average ?? 0;
+          const ratingB = b.rating_average ?? 0;
+          if (ratingA !== ratingB) return ratingB - ratingA;
+          return a.name.localeCompare(b.name);
+        });
+        setAvailableTeachers(sorted);
       }
     } catch (_e) {
       console.error('Failed to load available teachers:', _e);

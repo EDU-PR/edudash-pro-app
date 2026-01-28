@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { assertSupabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -11,6 +11,9 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
 import { useAuth, usePermissions } from '@/contexts/AuthContext'
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal'
+import { Ionicons } from '@expo/vector-icons'
+import DateTimePicker from '@react-native-community/datetimepicker'
+import { format } from 'date-fns'
 
 // Alert modal state interface
 interface AlertState {
@@ -20,6 +23,8 @@ interface AlertState {
   type: 'info' | 'warning' | 'success' | 'error';
   buttons: AlertButton[];
 }
+
+type AttendanceStatus = 'present' | 'absent' | 'late'
 
 export default function AttendanceScreen() {
   const { profile, loading: authLoading, profileLoading } = useAuth()
@@ -52,7 +57,7 @@ export default function AttendanceScreen() {
   const canAccessAttendance = isTeacher || isPrincipal
 
   // Redirect non-authorized users
-  const hasRedirectedRef = React.useRef(false)
+  const hasRedirectedRef = useRef(false)
   useEffect(() => {
     if (hasRedirectedRef.current) return
     if (!authLoading && !profileLoading && profile) {
@@ -77,14 +82,18 @@ export default function AttendanceScreen() {
   const { schoolId, schoolName, loading: schoolLoading } = useTeacherSchool()
 
   const [classId, setClassId] = useState<string | null>(null)
-  const [today, setToday] = useState<string>('')
+  const [attendanceDate, setAttendanceDate] = useState<string>('')
+  const [dateValue, setDateValue] = useState<Date>(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
   // Status map: 'present' | 'absent' | 'late'
-  const [statusMap, setStatusMap] = useState<Record<string, 'present' | 'absent' | 'late'>>({})
+  const [statusMap, setStatusMap] = useState<Record<string, AttendanceStatus>>({})
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    const d = new Date()
-    setToday(d.toISOString().slice(0, 10))
+    const todayDate = new Date()
+    const todayKey = todayDate.toISOString().slice(0, 10)
+    setAttendanceDate(todayKey)
+    setDateValue(todayDate)
   }, [])
 
   // Refresh function to refetch classes and students data
@@ -128,7 +137,7 @@ export default function AttendanceScreen() {
 
   // Fetch students filtered by class (which is already school-scoped)
   const studentsQuery = useQuery({
-    queryKey: ['students_for_attendance', classId, schoolId],
+    queryKey: ['students_for_attendance', classId, schoolId, attendanceDate],
     queryFn: async () => {
       if (!schoolId) return []
       let q = assertSupabase()
@@ -149,12 +158,32 @@ export default function AttendanceScreen() {
       }) as { id: string; first_name: string; last_name: string; class_id: string | null; is_active: boolean | null }[]
       
       // Default all to present
-      const next: Record<string, 'present' | 'absent' | 'late'> = {}
+      const next: Record<string, AttendanceStatus> = {}
       for (const s of uniqueArr) next[s.id] = 'present'
+      
+      // If we have a date, load any existing attendance to prefill
+      if (attendanceDate && uniqueArr.length > 0) {
+        const studentIds = uniqueArr.map(s => s.id)
+        const { data: attendanceRows, error: attendanceError } = await assertSupabase()
+          .from('attendance')
+          .select('student_id,status')
+          .eq('attendance_date', attendanceDate)
+          .or(`organization_id.eq.${schoolId},organization_id.is.null`)
+          .in('student_id', studentIds)
+        
+        if (!attendanceError && attendanceRows?.length) {
+          attendanceRows.forEach(row => {
+            if (row?.student_id && row?.status) {
+              next[row.student_id] = row.status as AttendanceStatus
+            }
+          })
+        }
+      }
+      
       setStatusMap(next)
       return uniqueArr
     },
-    enabled: !!classId && !!schoolId,
+    enabled: !!classId && !!schoolId && !!attendanceDate,
   })
 
   const cycleStatus = (sid: string) => {
@@ -168,7 +197,7 @@ export default function AttendanceScreen() {
 
   const markAll = (value: 'present' | 'absent' | 'late') => {
     setStatusMap(prev => {
-      const next: Record<string, 'present' | 'absent' | 'late'> = {}
+      const next: Record<string, AttendanceStatus> = {}
       Object.keys(prev).forEach(k => { next[k] = value })
       return next
     })
@@ -176,6 +205,12 @@ export default function AttendanceScreen() {
 
   const onSubmit = async () => {
     if (!classId) { showAlert('Select class', 'Please select a class first.', 'warning'); return }
+    if (!attendanceDate) { showAlert('Select date', 'Please select an attendance date.', 'warning'); return }
+    const todayKey = new Date().toISOString().slice(0, 10)
+    if (attendanceDate > todayKey) {
+      showAlert('Invalid date', 'Attendance cannot be recorded for a future date.', 'warning')
+      return
+    }
     const students = studentsQuery.data || []
     const entries = students.map(s => ({ student_id: s.id, status: statusMap[s.id] || 'present' }))
     const presentCount = entries.filter(e => e.status === 'present').length
@@ -188,13 +223,40 @@ export default function AttendanceScreen() {
       const { data: auth } = await assertSupabase().auth.getUser()
       const authUserId = auth?.user?.id || null
       
-      const { error: insertError } = await assertSupabase().from('attendance').insert(entries.map(e => ({
+      const studentIds = entries.map(e => e.student_id)
+      
+      // Remove any existing records for this date (to allow edits for past dates)
+      if (studentIds.length > 0) {
+        const { error: deleteError } = await assertSupabase()
+          .from('attendance')
+          .delete()
+          .in('student_id', studentIds)
+          .eq('attendance_date', attendanceDate)
+          .or(`organization_id.eq.${schoolId},organization_id.is.null`)
+        
+        if (deleteError) {
+          console.error('[Attendance] Delete error:', deleteError)
+          throw deleteError
+        }
+      }
+      
+      const attendanceRows: {
+        student_id: string;
+        status: AttendanceStatus;
+        attendance_date: string;
+        recorded_by: string | null;
+        organization_id?: string;
+      }[] = entries.map(e => ({
         student_id: e.student_id,
         status: e.status,
-        attendance_date: today,
+        attendance_date: attendanceDate,
         recorded_by: authUserId,
         organization_id: schoolId || undefined,
-      })) as any)
+      }))
+      
+      const { error: insertError } = await assertSupabase()
+        .from('attendance')
+        .insert(attendanceRows)
       
       if (insertError) {
         console.error('[Attendance] Insert error:', insertError)
@@ -205,46 +267,30 @@ export default function AttendanceScreen() {
       try {
         const { data: sessionData } = await assertSupabase().auth.getSession()
         if (sessionData?.session?.access_token) {
-          // Get students who were absent or late - notify their parents
-          const absentStudentIds = entries.filter(e => e.status === 'absent').map(e => e.student_id)
-          const lateStudentIds = entries.filter(e => e.status === 'late').map(e => e.student_id)
+          const notifyPromises = entries.map(entry => {
+            const event_type = entry.status === 'present'
+              ? 'attendance_recorded'
+              : entry.status === 'late'
+                ? 'attendance_late'
+                : 'attendance_absent'
+            
+            return assertSupabase().functions.invoke('notifications-dispatcher', {
+              body: {
+                event_type,
+                student_id: entry.student_id,
+                preschool_id: schoolId,
+                attendance_date: attendanceDate,
+                attendance_status: entry.status,
+                send_immediately: true,
+              },
+              headers: {
+                Authorization: `Bearer ${sessionData.session.access_token}`,
+              },
+            })
+          })
           
-          // Send notifications for absent students (higher priority)
-          if (absentStudentIds.length > 0) {
-            for (const studentId of absentStudentIds) {
-              await assertSupabase().functions.invoke('notifications-dispatcher', {
-                body: {
-                  event_type: 'attendance_absent',
-                  student_id: studentId,
-                  preschool_id: schoolId,
-                  attendance_date: today,
-                  attendance_status: 'absent',
-                  send_immediately: true,
-                },
-                headers: {
-                  Authorization: `Bearer ${sessionData.session.access_token}`,
-                },
-              })
-            }
-          }
-          
-          // Send notifications for late students
-          if (lateStudentIds.length > 0) {
-            for (const studentId of lateStudentIds) {
-              await assertSupabase().functions.invoke('notifications-dispatcher', {
-                body: {
-                  event_type: 'attendance_late',
-                  student_id: studentId,
-                  preschool_id: schoolId,
-                  attendance_date: today,
-                  attendance_status: 'late',
-                  send_immediately: true,
-                },
-                headers: {
-                  Authorization: `Bearer ${sessionData.session.access_token}`,
-                },
-              })
-            }
+          if (notifyPromises.length > 0) {
+            await Promise.all(notifyPromises)
           }
         }
       } catch (notifyError) {
@@ -252,8 +298,8 @@ export default function AttendanceScreen() {
         console.warn('[Attendance] Failed to send notifications:', notifyError)
       }
 
-      track('edudash.attendance.submit', { classId, presentCount, lateCount, absentCount, total: entries.length, date: today })
-      showAlert('Attendance recorded', `Marked ${presentCount} present, ${lateCount} late, ${absentCount} absent for ${today}.`, 'success', [
+      track('edudash.attendance.submit', { classId, presentCount, lateCount, absentCount, total: entries.length, date: attendanceDate })
+      showAlert('Attendance recorded', `Marked ${presentCount} present, ${lateCount} late, ${absentCount} absent for ${attendanceDate}.`, 'success', [
         { text: 'View History', onPress: () => router.push('/screens/attendance-history') },
         { text: 'Done', onPress: () => router.back() },
       ])
@@ -266,6 +312,7 @@ export default function AttendanceScreen() {
 
   const classes = classesQuery.data || []
   const students = studentsQuery.data || []
+  const formattedDate = attendanceDate ? format(new Date(`${attendanceDate}T00:00:00`), 'PPP') : 'Select date'
 
   return (
     <View style={{ flex: 1 }}>
@@ -311,7 +358,34 @@ export default function AttendanceScreen() {
               {schoolName && (
                 <Text style={[styles.subtitle, { marginBottom: 4 }]}>{schoolName}</Text>
               )}
-              <Text style={styles.subtitle}>Date: {today}</Text>
+              <View style={styles.dateRow}>
+                <Text style={styles.subtitle}>Date: {formattedDate}</Text>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={palette.primary} />
+                  <Text style={[styles.dateButtonText, { color: palette.primary }]}>Change</Text>
+                </TouchableOpacity>
+              </View>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={dateValue}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  maximumDate={new Date()}
+                  onChange={(_, selectedDate) => {
+                    if (Platform.OS !== 'ios') {
+                      setShowDatePicker(false)
+                    }
+                    if (selectedDate) {
+                      const nextKey = selectedDate.toISOString().slice(0, 10)
+                      setAttendanceDate(nextKey)
+                      setDateValue(selectedDate)
+                    }
+                  }}
+                />
+              )}
 
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
             <Text style={styles.cardTitle}>Class</Text>
@@ -427,4 +501,7 @@ const styles = StyleSheet.create({
   historyBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 2 },
   historyText: { fontWeight: '700' },
   dim: { opacity: 0.6 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8 },
+  dateButtonText: { fontWeight: '700' },
 })

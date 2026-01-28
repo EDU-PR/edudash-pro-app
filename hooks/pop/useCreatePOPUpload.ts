@@ -73,6 +73,25 @@ export const useCreatePOPUpload = () => {
         throw new Error(`Failed to save upload: ${dbError.message}`);
       }
       
+      if (newUpload?.upload_type === 'proof_of_payment') {
+        try {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'pop_uploaded',
+              pop_upload_id: newUpload.id,
+              preschool_id: profile.preschool_id,
+              student_id: newUpload.student_id,
+              upload_type: newUpload.upload_type,
+              payment_amount: newUpload.payment_amount,
+              payment_reference: newUpload.payment_reference,
+              send_immediately: true,
+            },
+          });
+        } catch (notifyError) {
+          logger.warn('POPUpload', 'Failed to notify POP upload:', notifyError);
+        }
+      }
+
       logger.info('POP upload completed successfully');
       return newUpload;
     },

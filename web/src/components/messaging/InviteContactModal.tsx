@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { 
   X, 
@@ -11,7 +11,8 @@ import {
   Copy, 
   Check,
   MessageSquare,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Share2
 } from 'lucide-react';
 
 interface InviteContactModalProps {
@@ -20,9 +21,15 @@ interface InviteContactModalProps {
   preschoolId?: string;
   preschoolName?: string;
   inviterName?: string;
+  inviterId?: string;
+  inviteRole?: 'parent' | 'teacher' | 'staff' | 'member';
+  invitePath?: string;
+  inviteCode?: string;
+  defaultEmail?: string;
+  defaultPhone?: string;
 }
 
-type InviteMethod = 'email' | 'sms' | 'link' | 'whatsapp';
+type InviteMethod = 'email' | 'sms' | 'link' | 'whatsapp' | 'share';
 
 export function InviteContactModal({
   isOpen,
@@ -30,6 +37,12 @@ export function InviteContactModal({
   preschoolId,
   preschoolName,
   inviterName,
+  inviterId,
+  inviteRole = 'parent',
+  invitePath,
+  inviteCode,
+  defaultEmail,
+  defaultPhone,
 }: InviteContactModalProps) {
   const supabase = createClient();
   const [inviteMethod, setInviteMethod] = useState<InviteMethod>('email');
@@ -40,13 +53,54 @@ export function InviteContactModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setInviteMethod('email');
+    setEmail(defaultEmail || '');
+    setPhone(defaultPhone || '');
+    setError(null);
+    setSuccess(false);
+    setCopied(false);
+  }, [defaultEmail, defaultPhone, isOpen]);
+
+  const normalizedRole = inviteRole || 'parent';
+  const roleLabel = normalizedRole === 'teacher'
+    ? 'teacher'
+    : normalizedRole === 'staff'
+      ? 'staff member'
+      : normalizedRole === 'member'
+        ? 'member'
+        : 'parent';
+  const logMetadata = { role: normalizedRole, inviterId };
+  const emailPlaceholder = normalizedRole === 'teacher' ? 'teacher@example.com' : 'parent@example.com';
+
   // Generate invite link
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const inviteLink = preschoolId 
-    ? `${baseUrl}/sign-up/parent?ref=${preschoolId}&invited=true`
-    : `${baseUrl}/sign-up`;
+  const resolvedInvitePath = invitePath
+    || (normalizedRole === 'teacher'
+      ? '/sign-up/teacher'
+      : '/sign-up/parent');
+  const inviteLink = (() => {
+    if (!baseUrl) {
+      if (inviteCode) {
+        return `${resolvedInvitePath}?invite=${encodeURIComponent(inviteCode)}`;
+      }
+      return resolvedInvitePath;
+    }
 
-  const inviteMessage = `Hi! ${inviterName || 'Someone'} invited you to join ${preschoolName || 'EduDash Pro'} - a platform to stay connected with your child's school. Sign up here: ${inviteLink}`;
+    const url = new URL(resolvedInvitePath, baseUrl);
+    if (inviteCode) {
+      url.searchParams.set('invite', inviteCode);
+    }
+    if (preschoolId) {
+      url.searchParams.set('ref', preschoolId);
+    }
+    url.searchParams.set('invited', 'true');
+    return url.toString();
+  })();
+
+  const inviteMessage = `Hi! ${inviterName || 'Someone'} invited you to join ${preschoolName || 'EduDash Pro'} as a ${roleLabel}. Sign up here: ${inviteLink}`;
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   const handleSendEmail = async () => {
     if (!email.trim()) {
@@ -85,6 +139,8 @@ export function InviteContactModal({
         invite_target: email.toLowerCase(),
         invite_link: inviteLink,
         status: 'sent',
+        sender_id: inviterId,
+        metadata: logMetadata,
       }).then(() => {}).catch(() => {}); // Silent fail for logging
 
       // Send invite email via API
@@ -97,6 +153,7 @@ export function InviteContactModal({
           inviteLink,
           preschoolName,
           inviterName,
+          inviteRole: normalizedRole,
         }),
       });
 
@@ -152,6 +209,8 @@ export function InviteContactModal({
         invite_target: cleanPhone,
         invite_link: inviteLink,
         status: 'sent',
+        sender_id: inviterId,
+        metadata: logMetadata,
       }).then(() => {}).catch(() => {});
 
       // For SMS, we'll open the native SMS app with pre-filled message
@@ -183,6 +242,8 @@ export function InviteContactModal({
       invite_target: cleanPhone,
       invite_link: inviteLink,
       status: 'sent',
+      sender_id: inviterId,
+      metadata: logMetadata,
     }).then(() => {}).catch(() => {});
   };
 
@@ -198,11 +259,46 @@ export function InviteContactModal({
         invite_target: 'clipboard',
         invite_link: inviteLink,
         status: 'copied',
+        sender_id: inviterId,
+        metadata: logMetadata,
       }).then(() => {}).catch(() => {});
 
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!canShare) {
+      await handleCopyLink();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: `${preschoolName || 'EduDash Pro'} Invite`,
+        text: inviteMessage,
+        url: inviteLink,
+      });
+
+      supabase.from('invite_logs').insert({
+        preschool_id: preschoolId,
+        invite_type: 'share',
+        invite_target: 'share-sheet',
+        invite_link: inviteLink,
+        status: 'sent',
+        sender_id: inviterId,
+        metadata: logMetadata,
+      }).then(() => {}).catch(() => {});
+
+      setSuccess(true);
+      setTimeout(() => {
+        setSuccess(false);
+        onClose();
+      }, 2000);
+    } catch (err) {
+      // Ignore share sheet cancellations
     }
   };
 
@@ -270,10 +366,10 @@ export function InviteContactModal({
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'white' }}>
-                Invite Contact
+                Invite {roleLabel}
               </h2>
               <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-                Invite someone to join {preschoolName || 'EduDash Pro'}
+                Invite a {roleLabel} to join {preschoolName || 'EduDash Pro'}
               </p>
             </div>
           </div>
@@ -308,6 +404,7 @@ export function InviteContactModal({
             { id: 'sms' as InviteMethod, icon: Phone, label: 'SMS' },
             { id: 'whatsapp' as InviteMethod, icon: MessageSquare, label: 'WhatsApp' },
             { id: 'link' as InviteMethod, icon: LinkIcon, label: 'Copy Link' },
+            ...(canShare ? [{ id: 'share' as InviteMethod, icon: Share2, label: 'Share' }] : []),
           ].map((method) => (
             <button
               key={method.id}
@@ -399,7 +496,7 @@ export function InviteContactModal({
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="parent@example.com"
+                      placeholder={emailPlaceholder}
                       style={{
                         width: '100%',
                         padding: '14px 16px',
@@ -626,6 +723,58 @@ export function InviteContactModal({
                         Copy Link
                       </>
                     )}
+                  </button>
+                </div>
+              )}
+
+              {inviteMethod === 'share' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'rgba(255,255,255,0.7)',
+                        marginBottom: 8,
+                      }}
+                    >
+                      Share Invite
+                    </label>
+                    <div
+                      style={{
+                        padding: '14px 16px',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: 12,
+                        fontSize: 13,
+                        color: 'rgba(255,255,255,0.7)',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {inviteMessage}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleShare}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '14px 20px',
+                      background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
+                      border: 'none',
+                      borderRadius: 12,
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: 'white',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Share2 size={18} />
+                    Open Share Sheet
                   </button>
                 </div>
               )}
