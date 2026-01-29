@@ -36,6 +36,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild, type FeeStructureCandidate } from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -393,6 +394,8 @@ export default function RegistrationDetailScreen() {
       if (regError) throw regError;
 
       // Generate student_id code
+      const year = new Date().getFullYear().toString().slice(-2);
+      let orgCode = 'STU';
       let studentIdCode: string;
       try {
         const { data: org } = await supabase
@@ -401,8 +404,7 @@ export default function RegistrationDetailScreen() {
           .eq('id', regData.preschool_id)
           .single();
 
-        const orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
-        const year = new Date().getFullYear().toString().slice(-2);
+        orgCode = org?.name?.substring(0, 3).toUpperCase() || 'STU';
 
         const { count } = await supabase
           .from('students')
@@ -416,34 +418,85 @@ export default function RegistrationDetailScreen() {
         studentIdCode = `STU-${new Date().getFullYear().toString().slice(-2)}-${Date.now().toString().slice(-4)}`;
       }
 
-      // Create student record
-      const { data: newStudent, error: studentError } = await supabase
-        .from('students')
-        .insert({
-          student_id: studentIdCode,
-          first_name: regData.child_first_name?.trim() || regData.child_first_name,
-          last_name: regData.child_last_name?.trim() || regData.child_last_name,
-          date_of_birth: regData.child_birth_date,
-          gender: regData.child_gender,
-          enrollment_date: enrollmentDate,
-          medical_conditions: regData.medical_info,
-          allergies: regData.dietary_requirements,
-          notes: regData.special_needs ? `Special needs: ${regData.special_needs}` : regData.notes,
-          emergency_contact_name: regData.emergency_contact_name,
-          emergency_contact_phone: regData.emergency_contact_phone,
-          parent_id: regData.parent_id,
-          guardian_id: regData.parent_id,
-          registration_fee_amount: regData.registration_fee_amount || 0,
-          registration_fee_paid: regData.registration_fee_paid || false,
-          payment_verified: regData.payment_verified || false,
-          preschool_id: regData.preschool_id,
-          is_active: true,
-          status: 'active',
-        })
-        .select('id')
-        .single();
+      const studentPayloadBase = {
+        first_name: regData.child_first_name?.trim() || regData.child_first_name,
+        last_name: regData.child_last_name?.trim() || regData.child_last_name,
+        date_of_birth: regData.child_birth_date,
+        gender: regData.child_gender,
+        enrollment_date: enrollmentDate,
+        medical_conditions: regData.medical_info,
+        allergies: regData.dietary_requirements,
+        notes: regData.special_needs ? `Special needs: ${regData.special_needs}` : regData.notes,
+        emergency_contact_name: regData.emergency_contact_name,
+        emergency_contact_phone: regData.emergency_contact_phone,
+        parent_id: regData.parent_id,
+        guardian_id: regData.parent_id,
+        registration_fee_amount: regData.registration_fee_amount || 0,
+        registration_fee_paid: regData.registration_fee_paid || false,
+        payment_verified: regData.payment_verified || false,
+        preschool_id: regData.preschool_id,
+        is_active: true,
+        status: 'active',
+      };
 
-      if (studentError) throw studentError;
+      const createStudentRecord = async (studentCode: string) => {
+        return supabase
+          .from('students')
+          .insert({
+            student_id: studentCode,
+            ...studentPayloadBase,
+          })
+          .select('id')
+          .single();
+      };
+
+      let newStudent: { id: string } | null = null;
+      let studentError: PostgrestError | null = null;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const { data, error } = await createStudentRecord(studentIdCode);
+
+        if (!error && data) {
+          newStudent = { id: data.id };
+          break;
+        }
+
+        studentError = error;
+        const isConflict = error?.code === '23505' || error?.message?.toLowerCase().includes('duplicate');
+
+        if (!isConflict) {
+          break;
+        }
+
+        const canLookupExisting = Boolean(
+          studentPayloadBase.first_name &&
+          studentPayloadBase.last_name &&
+          studentPayloadBase.date_of_birth
+        );
+
+        if (canLookupExisting) {
+          const { data: existingStudent } = await supabase
+            .from('students')
+            .select('id')
+            .eq('preschool_id', regData.preschool_id)
+            .eq('first_name', studentPayloadBase.first_name)
+            .eq('last_name', studentPayloadBase.last_name)
+            .eq('date_of_birth', studentPayloadBase.date_of_birth)
+            .maybeSingle();
+
+          if (existingStudent?.id) {
+            newStudent = { id: existingStudent.id };
+            break;
+          }
+        }
+
+        const randomSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+        studentIdCode = `${orgCode}-${year}-${randomSuffix}`;
+      }
+
+      if (!newStudent) {
+        throw studentError ?? new Error('Failed to create student record');
+      }
 
       // Link parent to student in junction table (for multi-parent support)
       if (regData.parent_id) {
