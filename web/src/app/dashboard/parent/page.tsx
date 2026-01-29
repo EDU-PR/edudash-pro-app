@@ -19,6 +19,7 @@ import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
 import { useParentOverviewMetrics } from '@/lib/hooks/parent/useParentOverviewMetrics';
 import { useOnboardingHint } from '@/lib/hooks/useOnboardingHint';
+import { getGradeNumber, isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { TeacherQuickNotesCard } from '@/components/dashboard/parent/TeacherQuickNotesCard';
 import { ChildProgressBadgesCard } from '@/components/dashboard/parent/ChildProgressBadgesCard';
 import { DailyActivityFeedCard } from '@/components/dashboard/parent/DailyActivityFeedCard';
@@ -160,7 +161,7 @@ export default function ParentDashboard() {
     if (hour < 12) setGreeting(COPY.greetings.morning);
     else if (hour < 18) setGreeting(COPY.greetings.afternoon);
     else setGreeting(COPY.greetings.evening);
-  }, []);
+  }, [COPY.greetings.morning, COPY.greetings.afternoon, COPY.greetings.evening]);
 
   // Auth guard
   useEffect(() => {
@@ -223,20 +224,13 @@ export default function ParentDashboard() {
     return Math.max(age, 0);
   };
 
-  // Extract grade number from grade string (e.g., "Grade 4" -> 4)
-  const getGradeNumber = (gradeString?: string): number => {
-    if (!gradeString) return 0;
-    const match = gradeString.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 0;
-  };
-  
   const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
   const activeChildGrade = activeChild ? getGradeNumber(activeChild.grade) : 0;
 
   // Check if ALL children are preschoolers (under 6 years)
   const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
-  // Grade 4+ gets exam features (based on active child)
-  const hasExamEligibleChild = activeChildGrade >= 4;
+  // Grade 4+ and school-age learners only
+  const hasExamEligibleChild = activeChild ? isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth) : false;
   
   // All children get access to general features (Dash Chat, Robotics, etc) with quotas
   const hasAnyChild = childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth);

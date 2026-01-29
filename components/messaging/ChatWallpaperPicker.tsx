@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 export interface WallpaperSelection {
   type: 'preset' | 'url';
@@ -108,8 +109,8 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
   const handleImageUpload = async () => {
     try {
       // Request permission
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         return;
       }
 

@@ -68,7 +68,8 @@
     "search": "Soek...",
     "student": "Leerling",
     "upgrade": "Gradeer op",
-    "name": "Naam"
+    "name": "Naam",
+    "not_now": "Nie nou nie"
   },
   "navigation": {
     "dashboard": "Kontrolepaneel",
@@ -156,13 +157,17 @@
   },
   "dashboard": {
     "welcome": "Welkom terug, {{name}}!",
+    "parentDashboard": "Ouerpaneelbord",
     "quickActions": "Vinnige Aksies",
     "recentActivity": "Onlangse Aktiwiteit",
+    "recent_activity": "Onlangse Aktiwiteit",
+    "upcoming_events": "Komende Gebeure",
     "statistics": "Statistieke",
     "notifications": "Kennisgewings",
     "noActivity": "Geen onlangse aktiwiteit",
     "loading": "Laai paneelbord...",
     "accessDenied": "Toegang Geweier",
+    "noChildren": "Nog geen gekoppelde kinders nie",
     "principal_hub": "Skoolhoof Sentrum",
     "managing_school": "Bestuur {{schoolName}}",
     "school_overview": "Skool Oorsig",
@@ -351,7 +356,8 @@
           "minutes_ago": "{{count}}m gelede",
           "hours_ago": "{{count}}h gelede",
           "days_ago": "{{count}}d gelede"
-        }
+        },
+        "empty": "Nog geen notas van onderwysers nie."
       },
       "progress": {
         "title": "Vordering & Prestasies",
@@ -401,7 +407,8 @@
           "great_job": "Goeie werk! {{count}} kenteken verdien.",
           "great_job_plural": "Goeie werk! {{count}} kentekens verdien.",
           "keep_going": "Hou aan! Jou kind maak vordering."
-        }
+        },
+        "empty": "Nog geen vorderingdata nie."
       },
       "birthdays": {
         "title": "Komende Verjaarsdae",
@@ -409,7 +416,8 @@
         "view_chart": "Sien grafiek",
         "turning_age": "Word {{age}}",
         "today": "Vandag",
-        "in_days": "Oor {{count}} dae"
+        "in_days": "Oor {{count}} dae",
+        "none": "Geen komende verjaarsdae nog nie."
       },
       "uniform": {
         "title": "Uniformgroottes",
@@ -537,8 +545,8 @@
           "added_by": "Bygevoeg deur {{name}}"
         },
         "empty": {
-          "title": "Geen aktiwiteite vandag gelog nie",
-          "description": "Kyk later weer vir opdaterings van jou kind se onderwyser"
+          "title": "Nog geen aktiwiteite vandag nie",
+          "description": "Kom later terug vir opdaterings van jou kind se onderwyser"
         }
       },
       "ad_banner": {
@@ -803,6 +811,37 @@
           "description": "Eksamenvoorbereiding is beskikbaar vir Graad 4+ leerders. Koppel ’n Graad 4 of hoër kind om hierdie afdeling te ontsluit.",
           "cta": "Terug na Dashboard"
         }
+      },
+      "community_school": "EduDash Pro Gemeenskapskool",
+      "k12": {
+        "weekly_reports": "Weeklikse verslae",
+        "ai_tools": {
+          "title": "KI- en leerhulpmiddels"
+        },
+        "school_type": {
+          "k12": "K-12 Skool",
+          "combined": "K-12 Skool",
+          "primary": "Laerskool",
+          "secondary": "Hoërskool",
+          "community_school": "Gemeenskapskool"
+        },
+        "upgrade": {
+          "title": "Gradeer op vir meer KI-hulp",
+          "description": "Ontsluit meer Dash KI-hulp, oefenhulpmiddels en verwyder beperkings."
+        },
+        "exam_prep": {
+          "unavailable_title": "Eksamvoorbereiding nie beskikbaar nie",
+          "unavailable_message": "Eksamvoorbereiding is tans in hierdie bou gedeaktiveer. Probeer asseblief later weer.",
+          "locked_title": "Eksamvoorbereiding gesluit",
+          "locked_message": "Eksamvoorbereiding vereis 'n {{tier}}-plan of hoër.\n\nGradeer jou intekening op om hierdie funksie te ontsluit."
+        },
+        "dash_ai": {
+          "subtitle": "Kry onmiddellik huiswerkhulp en studiewenke"
+        },
+        "communication": {
+          "title": "Skoolkommunikasie",
+          "subtitle": "Bly verbind met onderwysers en skoolopdaterings"
+        }
       }
     },
     "feature_coming_soon": "Hierdie funksie kom binnekort!",
@@ -813,7 +852,8 @@
     "upcoming_birthdays": "Komende verjaarsdae",
     "upgrade_value": "Spaar tyd met KI-huiswerkhulp",
     "upgrade_value_preschool": "Spaar tyd met Dash KI-ondersteuning",
-    "view_chart": "Sien grafiek"
+    "view_chart": "Sien grafiek",
+    "upcoming_events_empty": "Geen komende geleenthede nie"
   },
   "ai": {
     "homework": {

@@ -1,0 +1,164 @@
+BEGIN;
+
+ALTER TABLE public.birthday_donation_days
+  DROP CONSTRAINT IF EXISTS birthday_donation_days_birthday_count_check;
+
+ALTER TABLE public.birthday_donation_days
+  ADD CONSTRAINT birthday_donation_days_birthday_count_check CHECK (birthday_count >= 0);
+
+CREATE OR REPLACE FUNCTION public.record_birthday_donation(
+  org_id uuid,
+  donation_day date,
+  donation_amount numeric,
+  donation_method text DEFAULT NULL,
+  donation_note text DEFAULT NULL,
+  recorded_by_user uuid DEFAULT NULL,
+  payer_student_id uuid DEFAULT NULL,
+  birthday_student_id uuid DEFAULT NULL,
+  class_id uuid DEFAULT NULL
+)
+RETURNS public.birthday_donation_days
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'extensions', 'auth'
+AS $$
+DECLARE
+  birthday_count integer := 0;
+  target_recorded_by uuid := COALESCE(recorded_by_user, auth.uid());
+  day_row public.birthday_donation_days;
+BEGIN
+  IF org_id IS NULL THEN
+    RAISE EXCEPTION 'Organization is required';
+  END IF;
+
+  IF donation_day IS NULL THEN
+    RAISE EXCEPTION 'Donation date is required';
+  END IF;
+
+  IF donation_amount IS NULL OR donation_amount <= 0 THEN
+    RAISE EXCEPTION 'Donation amount must be greater than zero';
+  END IF;
+
+  IF (payer_student_id IS NULL AND birthday_student_id IS NOT NULL)
+     OR (payer_student_id IS NOT NULL AND birthday_student_id IS NULL) THEN
+    RAISE EXCEPTION 'Payer student and birthday student must be provided together';
+  END IF;
+
+  IF payer_student_id IS NOT NULL THEN
+    PERFORM 1
+    FROM public.students
+    WHERE id = payer_student_id
+      AND (organization_id = org_id OR preschool_id = org_id)
+      AND COALESCE(is_active, true) IS TRUE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Payer student not found for organization';
+    END IF;
+  END IF;
+
+  IF birthday_student_id IS NOT NULL THEN
+    PERFORM 1
+    FROM public.students
+    WHERE id = birthday_student_id
+      AND (organization_id = org_id OR preschool_id = org_id)
+      AND COALESCE(is_active, true) IS TRUE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Birthday student not found for organization';
+    END IF;
+  END IF;
+
+  IF class_id IS NOT NULL THEN
+    PERFORM 1
+    FROM public.classes
+    WHERE id = class_id
+      AND (organization_id = org_id OR preschool_id = org_id);
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Class not found for organization';
+    END IF;
+  END IF;
+
+  SELECT COUNT(*)::int INTO birthday_count
+  FROM public.students
+  WHERE (organization_id = org_id OR preschool_id = org_id)
+    AND COALESCE(is_active, true) IS TRUE
+    AND date_of_birth IS NOT NULL
+    AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM donation_day)
+    AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM donation_day);
+
+  IF birthday_count < 1 THEN
+    RAISE EXCEPTION 'No birthdays found for this date';
+  END IF;
+
+  IF payer_student_id IS NOT NULL AND birthday_student_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.birthday_donations
+      WHERE organization_id = org_id
+        AND donation_date = donation_day
+        AND public.birthday_donations.payer_student_id = payer_student_id
+        AND public.birthday_donations.birthday_student_id = birthday_student_id
+    ) THEN
+      SELECT * INTO day_row
+      FROM public.birthday_donation_days
+      WHERE organization_id = org_id
+        AND donation_date = donation_day;
+
+      RETURN day_row;
+    END IF;
+  END IF;
+
+  INSERT INTO public.birthday_donations (
+    organization_id,
+    donation_date,
+    amount,
+    payment_method,
+    note,
+    recorded_by,
+    payer_student_id,
+    birthday_student_id,
+    class_id
+  ) VALUES (
+    org_id,
+    donation_day,
+    donation_amount,
+    donation_method,
+    donation_note,
+    target_recorded_by,
+    payer_student_id,
+    birthday_student_id,
+    class_id
+  );
+
+  INSERT INTO public.birthday_donation_days (
+    organization_id,
+    donation_date,
+    birthday_count,
+    expected_amount,
+    total_received,
+    created_by,
+    updated_by
+  ) VALUES (
+    org_id,
+    donation_day,
+    birthday_count,
+    25,
+    donation_amount,
+    target_recorded_by,
+    target_recorded_by
+  )
+  ON CONFLICT (organization_id, donation_date)
+  DO UPDATE SET
+    birthday_count = EXCLUDED.birthday_count,
+    total_received = birthday_donation_days.total_received + EXCLUDED.total_received,
+    updated_by = target_recorded_by,
+    updated_at = now();
+
+  SELECT * INTO day_row
+  FROM public.birthday_donation_days
+  WHERE organization_id = org_id
+    AND donation_date = donation_day;
+
+  RETURN day_row;
+END;
+$$;
+
+COMMIT;

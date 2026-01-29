@@ -6,6 +6,17 @@
 -- 1. Fix video_calls table - ensure proper FK constraints and RLS policies
 -- ============================================================================
 
+-- Ensure video_calls table exists with core columns used by policies/indexes
+CREATE TABLE IF NOT EXISTS video_calls (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    teacher_id UUID REFERENCES profiles(id),
+    class_id UUID REFERENCES classes(id),
+    preschool_id UUID REFERENCES preschools(id),
+    status TEXT,
+    scheduled_start TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- First, check if video_calls table exists and has proper structure
 DO $$
 BEGIN
@@ -54,6 +65,18 @@ DROP POLICY IF EXISTS "Principals can manage school video calls" ON video_calls;
 -- 4. Create comprehensive RLS policies for video_calls
 -- ============================================================================
 
+-- Ensure participants table exists before policies that reference it
+CREATE TABLE IF NOT EXISTS video_call_participants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_call_id UUID NOT NULL REFERENCES video_calls(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ,
+    left_at TIMESTAMPTZ,
+    role VARCHAR(50) DEFAULT 'participant',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(video_call_id, user_id)
+);
+
 -- SELECT: Users can view video calls at their school or that they're invited to
 CREATE POLICY "video_calls_select_policy" ON video_calls
     FOR SELECT
@@ -73,13 +96,6 @@ CREATE POLICY "video_calls_select_policy" ON video_calls
             SELECT 1 FROM video_call_participants vcp
             WHERE vcp.video_call_id = video_calls.id
             AND vcp.user_id = auth.uid()
-        )
-        OR
-        -- Parents can see calls for their children's classes
-        EXISTS (
-            SELECT 1 FROM students s
-            WHERE s.class_id = video_calls.class_id
-            AND (s.parent_id = auth.uid() OR s.guardian_id = auth.uid())
         )
     );
 

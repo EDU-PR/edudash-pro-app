@@ -9,12 +9,15 @@ interface BirthdayDonationSummaryCardProps {
   organizationId?: string | null;
 }
 
+const padDatePart = (value: number) => String(value).padStart(2, '0');
+const formatDateKey = (date: Date) => `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+
 export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardProps> = ({ organizationId }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const todayString = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayString = useMemo(() => formatDateKey(new Date()), []);
   const [daySummary, setDaySummary] = useState<BirthdayDonationDay | null>(null);
   const [monthSummary, setMonthSummary] = useState<BirthdayDonationMonthSummary>({
     totalExpected: 0,
@@ -28,8 +31,8 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     return {
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
+      start: formatDateKey(start),
+      end: formatDateKey(end),
     };
   }, []);
 

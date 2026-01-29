@@ -10,24 +10,46 @@
 
 -- Check if policy exists before creating (idempotent)
 DO $$
+DECLARE
+  has_join_requests boolean;
+  has_org_members boolean;
+  has_member_type boolean;
+  extra_clause text := '';
 BEGIN
+  has_join_requests := to_regclass('public.join_requests') IS NOT NULL;
+  has_org_members := to_regclass('public.organization_members') IS NOT NULL;
+
+  IF NOT has_join_requests THEN
+    RETURN;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+      AND column_name = 'member_type'
+  ) INTO has_member_type;
+
+  IF has_org_members AND has_member_type THEN
+    extra_clause := 'OR EXISTS (
+        SELECT 1 FROM public.organization_members om
+        WHERE om.user_id = auth.uid()
+          AND om.organization_id = join_requests.organization_id
+          AND om.member_type IN (''president'', ''secretary'', ''ceo'', ''board_member'', ''executive'', ''staff'', ''youth_president'', ''youth_secretary'')
+      )';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies 
     WHERE tablename = 'join_requests' 
     AND policyname = 'Admins can delete invite codes'
   ) THEN
-    CREATE POLICY "Admins can delete invite codes"
-    ON public.join_requests
-    FOR DELETE
-    TO authenticated
-    USING (
-      invited_by = auth.uid()
-      OR EXISTS (
-        SELECT 1 FROM public.organization_members om
-        WHERE om.user_id = auth.uid()
-        AND om.organization_id = join_requests.organization_id
-        AND om.member_type IN ('president', 'secretary', 'ceo', 'board_member', 'executive', 'staff', 'youth_president', 'youth_secretary')
-      )
+    EXECUTE format(
+      'CREATE POLICY "Admins can delete invite codes" ON public.join_requests
+       FOR DELETE TO authenticated
+       USING (invited_by = auth.uid() %s)',
+      extra_clause
     );
   END IF;
 END $$;

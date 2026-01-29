@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { assertSupabase } from '../../lib/supabase';
+import { ensureImageLibraryPermission } from '../../lib/utils/mediaLibrary';
 
 // ====================================================================
 // TYPES
@@ -90,8 +91,8 @@ export function StudentHomeworkSubmit({
   };
 
   const requestMediaLibraryPermission = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+    const hasPermission = await ensureImageLibraryPermission();
+    if (!hasPermission) {
       Alert.alert(
         'Photo Library Permission Required',
         'Please allow photo library access to select homework photos.',

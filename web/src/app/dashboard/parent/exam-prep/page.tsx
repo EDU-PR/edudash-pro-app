@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
+import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { BookOpen, Target, FileText, Sparkles } from 'lucide-react';
 
 const GRADES = [
@@ -44,9 +45,7 @@ export default function ExamPrepPage() {
   );
   const hasExamEligibleChild = useMemo(() => {
     if (!activeChild) return false;
-    const match = activeChild.grade?.match(/\d+/);
-    const gradeNum = match ? parseInt(match[0], 10) : 0;
-    return gradeNum >= 4;
+    return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild]);
   
   const [selectedGrade, setSelectedGrade] = useState('');
@@ -92,7 +91,7 @@ export default function ExamPrepPage() {
               {t('dashboard.parent.exam_prep.locked.title', { defaultValue: 'Exam Prep Locked' })}
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: 16 }}>
-              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.' })}
+              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ school-age learners. Link a Grade 4 or higher child to unlock this section.' })}
             </p>
             <button
               className="btn btnSecondary"

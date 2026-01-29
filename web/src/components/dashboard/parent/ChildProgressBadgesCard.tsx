@@ -240,7 +240,18 @@ export function ChildProgressBadgesCard({ studentId, showHeader = true }: ChildP
   }
 
   if (stats.length === 0 && badges.length === 0) {
-    return null;
+    return (
+      <div className="card">
+        {showHeader && (
+          <div className="sectionTitle" style={{ marginBottom: 8 }}>
+            {t("dashboard.parent.progress.title", { defaultValue: "Progress & Achievements" })}
+          </div>
+        )}
+        <div className="muted">
+          {t("dashboard.parent.progress.empty", { defaultValue: "No progress data yet." })}
+        </div>
+      </div>
+    );
   }
 
   return (

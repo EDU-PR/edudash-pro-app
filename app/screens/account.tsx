@@ -17,6 +17,7 @@ import {
 } from "@/lib/biometrics";
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { assertSupabase } from "@/lib/supabase";
+import { ensureImageLibraryPermission } from "@/lib/utils/mediaLibrary";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
@@ -273,8 +274,8 @@ export default function AccountScreen() {
   // Image handling
   const pickImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert("Permission needed", "We need camera roll permissions to select a profile picture.");
         return;
       }

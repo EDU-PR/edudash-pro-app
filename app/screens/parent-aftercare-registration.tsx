@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { Ionicons } from '@expo/vector-icons';
 
 // EduDash Pro Community School ID
@@ -147,8 +148,8 @@ export default function ParentAftercareRegistrationScreen() {
   // Handle POP upload
   const handlePopUpload = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission Required', 'Please allow access to your photos to upload proof of payment.');
         return;
       }

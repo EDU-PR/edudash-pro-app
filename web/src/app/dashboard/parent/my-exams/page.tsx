@@ -10,12 +10,7 @@ import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
-
-const getGradeNumber = (gradeString?: string): number => {
-  if (!gradeString) return 0;
-  const match = gradeString.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
-};
+import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
 
 interface SavedExam {
   id: string;
@@ -54,7 +49,7 @@ export default function MyExamsPage() {
   );
   const hasExamEligibleChild = useMemo(() => {
     if (childrenLoading || !activeChild) return false;
-    return getGradeNumber(activeChild.grade) >= 4;
+    return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild, childrenLoading]);
   
   useEffect(() => {
@@ -176,7 +171,7 @@ export default function MyExamsPage() {
               {t('dashboard.parent.exam_prep.locked.title', { defaultValue: 'Exam Prep Locked' })}
             </h2>
             <p style={{ color: 'var(--muted)', marginBottom: 'var(--space-3)' }}>
-              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.' })}
+              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ school-age learners. Link a Grade 4 or higher child to unlock this section.' })}
             </p>
             <button className="btn btnPrimary" onClick={() => router.push('/dashboard/parent')}>
               {t('dashboard.parent.exam_prep.locked.cta', { defaultValue: 'Back to Dashboard' })}

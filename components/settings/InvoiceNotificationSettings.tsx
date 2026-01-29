@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 // Hooks and Services
 import {
@@ -102,8 +103,8 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
   const handleImagePicker = useCallback(async () => {
     try {
       // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission needed', 'Please allow access to your photo library to upload a signature.');
         return;
       }

@@ -9,7 +9,8 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { track } from '@/lib/analytics';
-import { styles } from './_dashboard.styles';
+import type { ThemeColors } from '@/contexts/ThemeContext';
+import { styles } from './K12ParentDashboard.styles';
 
 export interface Child {
   id: string;
@@ -27,7 +28,7 @@ export interface Child {
 
 interface ChildCardProps {
   child: Child;
-  colors: any;
+  colors: ThemeColors;
 }
 
 export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (

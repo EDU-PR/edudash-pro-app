@@ -129,6 +129,9 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       .split(/\n+/)
       .filter(line => !/^\s*User:\s*/i.test(line))
       .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
+      .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
+      .filter(line => !/^\s*Return ONLY JSON/i.test(line))
+      .filter(line => !/TUTOR_PAYLOAD/i.test(line))
       .join('\n');
   };
 

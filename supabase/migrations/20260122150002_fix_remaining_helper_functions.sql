@@ -2,6 +2,20 @@
 -- This migration fixes all functions that query profiles table with WHERE id = auth.uid()
 -- The correct pattern is WHERE auth_user_id = auth.uid()
 
+DO $sql$
+BEGIN
+  IF to_regclass('public.profiles') IS NOT NULL THEN
+    ALTER TABLE public.profiles
+      ADD COLUMN IF NOT EXISTS auth_user_id uuid,
+      ADD COLUMN IF NOT EXISTS email text,
+      ADD COLUMN IF NOT EXISTS role text,
+      ADD COLUMN IF NOT EXISTS preschool_id uuid,
+      ADD COLUMN IF NOT EXISTS organization_id uuid,
+      ADD COLUMN IF NOT EXISTS first_name text,
+      ADD COLUMN IF NOT EXISTS last_name text;
+  END IF;
+END $sql$;
+
 -- ============================================================================
 -- 1. Fix get_user_preschool_id
 -- ============================================================================
@@ -209,7 +223,7 @@ $$;
 -- ============================================================================
 -- 12. Fix user_can_read_profile
 -- ============================================================================
-CREATE OR REPLACE FUNCTION public.user_can_read_profile(target_profile_id uuid)
+CREATE OR REPLACE FUNCTION public.user_can_read_profile(profile_user_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 STABLE
@@ -235,14 +249,14 @@ BEGIN
   END IF;
 
   -- Can always read own profile
-  IF current_user_profile.id = target_profile_id THEN
+  IF current_user_profile.id = profile_user_id THEN
     RETURN TRUE;
   END IF;
 
   -- Get target profile
   SELECT * INTO target_profile
   FROM public.profiles
-  WHERE id = target_profile_id;
+  WHERE id = profile_user_id;
 
   IF target_profile IS NULL THEN
     RETURN FALSE;

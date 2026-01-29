@@ -3,6 +3,14 @@
 -- auth.users UUID which maps to profiles.auth_user_id, NOT profiles.id
 -- Solution: Change all p.id = auth.uid() to p.auth_user_id = auth.uid()
 
+DO $sql$
+BEGIN
+  IF to_regclass('public.profiles') IS NOT NULL THEN
+    ALTER TABLE public.profiles
+      ADD COLUMN IF NOT EXISTS auth_user_id uuid;
+  END IF;
+END $sql$;
+
 -- ============================================================================
 -- 1. Fix user_can_manage_classes
 -- ============================================================================

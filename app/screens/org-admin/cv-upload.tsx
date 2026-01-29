@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { normalizeRole } from '@/lib/rbac';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 export default function CVUploadScreen() {
   const { t } = useTranslation();
@@ -71,8 +72,8 @@ export default function CVUploadScreen() {
         return;
       }
 
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert(
           t('common.permission_required', { defaultValue: 'Permission Required' }),
           t('cv_upload.photo_permission', { defaultValue: 'Please grant photo library access' })
@@ -375,5 +376,4 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   noteText: { flex: 1, color: theme.textSecondary, fontSize: 13, lineHeight: 18 },
 });
-
 

@@ -3,7 +3,7 @@
  * 
  * Custom hook that extracts business logic from DashAssistant component.
  * Handles message state, conversation management, attachments, and AI interactions.
- * Voice input enabled for paid tier users (Starter, Plus).
+ * Voice input enabled for paid tiers and a limited free daily budget.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -69,6 +69,17 @@ function resolveAgeBand(ageYears?: number | null, grade?: string | null): string
   }
 
   return null;
+}
+
+const FREE_VOICE_BUDGET_MS = 10 * 60 * 1000;
+const FREE_VOICE_BUDGET_KEY_PREFIX = '@dash_voice_free_budget_';
+
+function getTodayKey(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function buildVoiceBudgetKey(dayKey?: string): string {
+  return `${FREE_VOICE_BUDGET_KEY_PREFIX}${dayKey || getTodayKey()}`;
 }
 
 interface AlertState {
@@ -228,12 +239,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
+  const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
   
   // Voice input state
   const [isRecording, setIsRecording] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
   const voiceSessionRef = useRef<VoiceSession | null>(null);
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
+  const voiceInputStartAtRef = useRef<number | null>(null);
   
   // Alert state for premium modals (replaces native Alert.alert)
   const [alertState, setAlertState] = useState<AlertState>({
@@ -270,6 +283,44 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     learnerContextRef.current = learnerContext;
   }, [learnerContext]);
+
+  const isFreeTier = (tier || 'free').toLowerCase().includes('free');
+
+  const loadVoiceBudget = useCallback(async () => {
+    if (!isFreeTier) {
+      setVoiceBudgetRemainingMs(null);
+      return;
+    }
+    try {
+      const raw = await AsyncStorage.getItem(buildVoiceBudgetKey());
+      if (!raw) {
+        setVoiceBudgetRemainingMs(FREE_VOICE_BUDGET_MS);
+        return;
+      }
+      const parsed = JSON.parse(raw) as { usedMs?: number };
+      const usedMs = typeof parsed?.usedMs === 'number' ? parsed.usedMs : 0;
+      setVoiceBudgetRemainingMs(Math.max(FREE_VOICE_BUDGET_MS - usedMs, 0));
+    } catch {
+      setVoiceBudgetRemainingMs(FREE_VOICE_BUDGET_MS);
+    }
+  }, [isFreeTier]);
+
+  const consumeVoiceBudget = useCallback(async (deltaMs: number) => {
+    if (!isFreeTier || deltaMs <= 0) return;
+    const key = buildVoiceBudgetKey();
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      const parsed = raw ? (JSON.parse(raw) as { usedMs?: number }) : { usedMs: 0 };
+      const usedMs = typeof parsed?.usedMs === 'number' ? parsed.usedMs : 0;
+      const nextUsed = Math.max(0, usedMs + deltaMs);
+      await AsyncStorage.setItem(key, JSON.stringify({ usedMs: nextUsed }));
+      setVoiceBudgetRemainingMs(Math.max(FREE_VOICE_BUDGET_MS - nextUsed, 0));
+    } catch {}
+  }, [isFreeTier]);
+
+  useEffect(() => {
+    loadVoiceBudget();
+  }, [loadVoiceBudget]);
 
   useEffect(() => {
     let mounted = true;
@@ -562,7 +613,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const buildTutorQuestionPrompt = useCallback((session: TutorSession, userText: string) => {
     const contextParts = [
-      'You are Dash, an interactive tutor for K-12 learners.',
+      'You are Dash, an interactive tutor for learners.',
       `Mode: ${session.mode}.`,
       session.subject ? `Subject: ${session.subject}.` : null,
       session.grade ? `Grade: ${session.grade}.` : null,
@@ -578,7 +629,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const buildTutorEvaluationPrompt = useCallback((session: TutorSession, learnerAnswer: string) => {
     const contextParts = [
-      'You are Dash, an interactive tutor for K-12 learners.',
+      'You are Dash, an interactive tutor for learners.',
       `Mode: ${session.mode}.`,
       session.subject ? `Subject: ${session.subject}.` : null,
       session.grade ? `Grade: ${session.grade}.` : null,
@@ -593,6 +644,69 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     ].filter(Boolean).join('\n');
 
     return `${contextParts}\n<TUTOR_PAYLOAD>{"is_correct":true,"score":100,"feedback":"...","correct_answer":"...","explanation":"...","misconception":"...","follow_up_question":"...","next_expected_answer":"..."}</TUTOR_PAYLOAD>`;
+  }, []);
+
+  const buildTutorSystemContext = useCallback((
+    session: TutorSession,
+    options: {
+      phase: 'start' | 'evaluate';
+      learnerContext?: LearnerContext | null;
+    }
+  ) => {
+    const learner = options.learnerContext;
+    const normalizedSchool = (learner?.schoolType || '').toLowerCase();
+    const ageBand = learner?.ageBand || null;
+    const isPreschool = normalizedSchool.includes('preschool') ||
+      normalizedSchool.includes('ecd') ||
+      normalizedSchool.includes('early') ||
+      ageBand === '3-5' ||
+      ageBand === '6-8';
+
+    const levelGuidance = isPreschool
+      ? [
+          'PRESCHOOL MODE:',
+          '- Use very simple language and short sentences.',
+          '- Focus on play-based learning, colors, shapes, counting to 10, letters/sounds, and everyday objects.',
+          '- Keep questions extremely short and concrete.',
+          '- Avoid K-12 framing or advanced concepts.',
+          '- Praise effort and keep tone warm and playful.',
+        ].join('\n')
+      : [
+          'K-12 MODE:',
+          '- Match the learner grade and keep the difficulty age-appropriate.',
+          '- Use short steps and ask one question at a time.',
+        ].join('\n');
+
+    const baseLines = [
+      'TUTOR MODE OVERRIDE:',
+      `Mode: ${session.mode}.`,
+      learner?.learnerName ? `Learner: ${learner.learnerName}.` : null,
+      learner?.grade ? `Grade: ${learner.grade}.` : session.grade ? `Grade: ${session.grade}.` : null,
+      session.subject ? `Subject: ${session.subject}.` : null,
+      session.topic ? `Topic: ${session.topic}.` : null,
+      ageBand ? `Age band: ${ageBand}.` : null,
+      learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
+      levelGuidance,
+      'Ask ONE question only and stop. Do not add extra questions or commentary.',
+      'If grade or topic is missing, ask a single clarifying question instead.',
+      'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
+    ];
+
+    if (options.phase === 'evaluate') {
+      baseLines.push(
+        `Question: ${session.currentQuestion || 'N/A'}`,
+        session.expectedAnswer ? `Expected answer: ${session.expectedAnswer}` : null,
+        'Evaluate the learner’s latest message as the answer.',
+        'If incorrect, provide a gentle hint and ask ONE follow-up question.'
+      );
+      baseLines.push(
+        'JSON keys: is_correct, score (0-100), feedback, correct_answer, explanation, misconception, follow_up_question, next_expected_answer.'
+      );
+    } else {
+      baseLines.push('JSON keys: question, expected_answer, subject, grade, topic, difficulty, next_step.');
+    }
+
+    return baseLines.filter(Boolean).join('\n');
   }, []);
 
   const parseTutorPayload = useCallback((content: string): TutorPayload | null => {
@@ -720,13 +834,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     ));
   }, []);
 
+  const hasFreeVoiceBudget = voiceBudgetRemainingMs === null
+    ? true
+    : voiceBudgetRemainingMs > 0;
+
   // Check if user has TTS/voice features
-  // Note: 'trial' users DO have TTS access (aligned with Edge Function tier list)
+  // Note: Free tier gets a limited daily voice budget
   const hasTTSAccess = useCallback(() => {
-    const freeTiers = ['free', ''];
-    const currentTier = tier?.toLowerCase().replace(/-/g, '_') || 'free';
-    return !freeTiers.includes(currentTier);
-  }, [tier]);
+    if (!isFreeTier) return true;
+    return hasFreeVoiceBudget;
+  }, [isFreeTier, hasFreeVoiceBudget]);
 
   const stopSpeaking = useCallback(async () => {
     if (!dashInstance) return;
@@ -757,11 +874,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       return;
     }
 
-    // Check tier for TTS access
+    // Check tier for TTS access / free budget
     if (!hasTTSAccess()) {
       showAlert({
-        title: 'Voice Playback - Premium',
-        message: 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
+        title: isFreeTier ? 'Daily Voice Limit Reached' : 'Voice Playback - Premium',
+        message: isFreeTier
+          ? 'You’ve used today’s 10 minutes of voice. Upgrade for unlimited voice and voice input.'
+          : 'Text-to-speech is a premium feature available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Dash reads responses aloud\n• Voice input\n• Voice commands',
         type: 'info',
         icon: 'volume-high-outline',
         buttons: [
@@ -788,6 +907,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
 
     try {
+      if (isFreeTier && message.content) {
+        const estimatedMs = Math.max(1500, Math.round((message.content.length / 12.5) * 1000));
+        await consumeVoiceBudget(estimatedMs);
+      }
       setIsSpeaking(true);
       setSpeakingMessageId(message.id);
       
@@ -828,7 +951,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsSpeaking(false);
       setSpeakingMessageId(null);
     }
-  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled, stopSpeaking]);
+  }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled, stopSpeaking, isFreeTier, consumeVoiceBudget]);
 
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
@@ -884,6 +1007,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       let displayText = userText;
       let tutorAction: 'start' | 'evaluate' | null = null;
       let tutorModeForMetadata: TutorMode | null = null;
+      let tutorContextOverride: string | null = null;
 
       const activeSession = tutorSessionRef.current;
       const stopTutor = isTutorStopIntent(userText);
@@ -895,7 +1019,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (activeSession?.awaitingAnswer && !stopTutor) {
         tutorAction = 'evaluate';
         tutorModeForMetadata = activeSession.mode;
-        outgoingText = buildTutorEvaluationPrompt(activeSession, userText);
+        outgoingText = userText;
+        tutorContextOverride = buildTutorSystemContext(activeSession, {
+          phase: 'evaluate',
+          learnerContext: learnerContextRef.current || learnerContext,
+        });
       } else if (tutorIntent && !stopTutor) {
         const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
         const newSession: TutorSession = {
@@ -915,7 +1043,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setTutorSession(newSession);
         tutorAction = 'start';
         tutorModeForMetadata = newSession.mode;
-        outgoingText = buildTutorQuestionPrompt(newSession, userText);
+        outgoingText = userText;
+        tutorContextOverride = buildTutorSystemContext(newSession, {
+          phase: 'start',
+          learnerContext: learnerContextRef.current || learnerContext,
+        });
       }
       const localUserMessage: DashMessage = {
         id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -962,7 +1094,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               return newContent;
             });
             scrollToBottom({ animated: true, delay: 60 });
-          }
+          },
+          tutorContextOverride ? { contextOverride: tutorContextOverride } : undefined
         );
         
         setStreamingMessageId(null);
@@ -972,8 +1105,20 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         response = await dashInstance.sendMessage(
           outgoingText, 
           undefined, 
-          uploadedAttachments.length > 0 ? uploadedAttachments : undefined
+          uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          undefined,
+          tutorContextOverride ? { contextOverride: tutorContextOverride } : undefined
         );
+      }
+
+      if (tutorAction && response?.content) {
+        const promptLeak = /return only json|tutor_payload|you are dash, an interactive tutor/i.test(response.content);
+        if (promptLeak && !parseTutorPayload(response.content)) {
+          response = {
+            ...response,
+            content: 'I had a hiccup setting up the tutor. Please try again or tell me the topic and grade.'
+          };
+        }
       }
 
       const tutorPayload = parseTutorPayload(response?.content || '');
@@ -1180,6 +1325,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     getMaxQuestions,
     buildTutorQuestionPrompt,
     buildTutorEvaluationPrompt,
+    buildTutorSystemContext,
     parseTutorPayload,
     buildTutorDisplayContent,
     extractTutorQuestionFromText,
@@ -1354,6 +1500,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (voiceSessionRef.current && voiceSessionRef.current.isActive()) {
         await voiceSessionRef.current.stop();
       }
+      if (isFreeTier && voiceInputStartAtRef.current) {
+        const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
+        consumeVoiceBudget(deltaMs);
+        voiceInputStartAtRef.current = null;
+      }
       setIsRecording(false);
       setPartialTranscript('');
     } catch (error) {
@@ -1361,15 +1512,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsRecording(false);
       setPartialTranscript('');
     }
-  }, []);
+  }, [isFreeTier, consumeVoiceBudget]);
 
   // Handle voice input mic press - START/STOP toggle
   const handleInputMicPress = useCallback(async () => {
-    // Check tier for voice features
+    // Check tier for voice features / free budget
     if (!hasTTSAccess()) {
       showAlert({
-        title: 'Voice Features - Premium',
-        message: 'Voice input and text-to-speech are premium features available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Voice input (speak to Dash)\n• Text-to-speech (Dash reads responses)\n• Voice commands',
+        title: isFreeTier ? 'Daily Voice Limit Reached' : 'Voice Features - Premium',
+        message: isFreeTier
+          ? 'You’ve used today’s 10 minutes of voice. Upgrade for unlimited voice input and playback.'
+          : 'Voice input and text-to-speech are premium features available on Starter and Plus plans.\n\nUpgrade to unlock:\n• Voice input (speak to Dash)\n• Text-to-speech (Dash reads responses)\n• Voice commands',
         type: 'info',
         icon: 'mic-outline',
         buttons: [
@@ -1513,6 +1666,11 @@ You can also use text input to chat with Dash.`;
           setInputText(text);
           setPartialTranscript('');
           setIsRecording(false);
+          if (isFreeTier && voiceInputStartAtRef.current) {
+            const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
+            consumeVoiceBudget(deltaMs);
+            voiceInputStartAtRef.current = null;
+          }
           
           // Haptic feedback for completion
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -1528,6 +1686,7 @@ You can also use text input to chat with Dash.`;
       if (started) {
         setIsRecording(true);
         setPartialTranscript('');
+        voiceInputStartAtRef.current = Date.now();
         
         // Track voice input start
         track('edudash.voice.input_started', {
@@ -1555,7 +1714,7 @@ You can also use text input to chat with Dash.`;
         buttons: [{ text: 'OK', style: 'default' }]
       });
     }
-  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale]);
+  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale, isFreeTier, consumeVoiceBudget]);
 
   // Cleanup voice session on unmount
   useEffect(() => {

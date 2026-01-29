@@ -4,118 +4,296 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTeacherStudents, type TeacherStudentSummary } from '@/hooks/useTeacherStudents';
 import { BirthdayDonationsService } from '@/features/birthday-donations/services/BirthdayDonationsService';
 import type {
-  BirthdayDonationBirthdays,
-  BirthdayDonationDay,
   BirthdayDonationEntry,
 } from '@/features/birthday-donations/types/birthdayDonations.types';
-import { z } from 'zod';
+import { notifyBirthdayDonationPaid } from '@/lib/notify';
+import { assertSupabase } from '@/lib/supabase';
+import { getOrganizationType } from '@/lib/tenant/compat';
 
 interface BirthdayDonationRegisterProps {
   organizationId?: string | null;
 }
 
-const AMOUNT_SCHEMA = z.coerce.number().positive();
-
+const DEFAULT_AMOUNT = 25;
 const PAYMENT_METHODS = ['cash', 'eft', 'card', 'other'] as const;
+const MAX_UPCOMING_BIRTHDAYS = 6;
 type PaymentMethod = typeof PAYMENT_METHODS[number];
 
-const DEFAULT_AMOUNT = 25;
+interface UpcomingBirthday {
+  student: TeacherStudentSummary;
+  nextDate: Date;
+  daysUntil: number;
+}
+
+interface StudentRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  date_of_birth: string | null;
+  class_id: string | null;
+  parent_id: string | null;
+  guardian_id: string | null;
+  classes?: {
+    name?: string | null;
+  } | null;
+}
+
+const padDatePart = (value: number) => String(value).padStart(2, '0');
+const formatDateKey = (date: Date) => `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+
+const parseDateParts = (value?: string | null): { month: number; day: number } | null => {
+  if (!value) return null;
+  const datePart = value.split('T')[0] || value;
+  const [year, month, day] = datePart.split('-').map((part) => Number(part));
+  if (!year || !month || !day) return null;
+  return { month, day };
+};
+
+const getUpcomingBirthdays = (students: TeacherStudentSummary[]): UpcomingBirthday[] => {
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const upcoming: UpcomingBirthday[] = [];
+  const dayMs = 1000 * 60 * 60 * 24;
+
+  students.forEach((student) => {
+    const parts = parseDateParts(student.dateOfBirth);
+    if (!parts) return;
+
+    const thisYearBirthday = new Date(startOfToday.getFullYear(), parts.month - 1, parts.day);
+    const nextDate = thisYearBirthday < startOfToday
+      ? new Date(startOfToday.getFullYear() + 1, parts.month - 1, parts.day)
+      : thisYearBirthday;
+
+    const diffMs = nextDate.getTime() - startOfToday.getTime();
+    const daysUntil = Math.round(diffMs / dayMs);
+    upcoming.push({ student, nextDate, daysUntil });
+  });
+
+  upcoming.sort((a, b) => {
+    if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil;
+    return `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`);
+  });
+
+  return upcoming.slice(0, MAX_UPCOMING_BIRTHDAYS);
+};
 
 export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> = ({ organizationId }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { user, profile } = useAuth();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const orgType = useMemo(() => getOrganizationType(profile), [profile]);
+  const isPreschool = orgType === 'preschool';
 
-  const todayString = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [birthdays, setBirthdays] = useState<BirthdayDonationBirthdays[]>([]);
-  const [daySummary, setDaySummary] = useState<BirthdayDonationDay | null>(null);
-  const [donations, setDonations] = useState<BirthdayDonationEntry[]>([]);
-  const [amount, setAmount] = useState(String(DEFAULT_AMOUNT));
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedBirthdayId, setSelectedBirthdayId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [note, setNote] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [donations, setDonations] = useState<BirthdayDonationEntry[]>([]);
+  const [loadingDonations, setLoadingDonations] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [schoolStudents, setSchoolStudents] = useState<TeacherStudentSummary[]>([]);
+  const [loadingSchoolStudents, setLoadingSchoolStudents] = useState(false);
 
-  const birthdayCount = birthdays.length;
-  const expectedAmount = daySummary?.expectedAmount ?? DEFAULT_AMOUNT;
-  const totalReceived = daySummary?.totalReceived ?? 0;
-  const remainingAmount = Math.max(expectedAmount - totalReceived, 0);
-  const hasTooManyBirthdays = birthdayCount > 2;
-  const hasNoBirthdays = birthdayCount === 0;
+  const {
+    students: teacherStudents,
+    loading: teacherStudentsLoading,
+  } = useTeacherStudents({ teacherId: user?.id || null, organizationId, limit: 0 });
 
-  const loadData = useCallback(async () => {
+  const loadSchoolStudents = useCallback(async () => {
     if (!organizationId) return;
-    setLoading(true);
+    setLoadingSchoolStudents(true);
     setError(null);
     try {
-      const [birthdaysData, summaryData, donationsData] = await Promise.all([
-        BirthdayDonationsService.getTodayBirthdays(organizationId, todayString),
-        BirthdayDonationsService.getDaySummary(organizationId, todayString),
-        BirthdayDonationsService.getDonationsForDay(organizationId, todayString),
-      ]);
-      setBirthdays(birthdaysData);
-      setDaySummary(summaryData);
-      setDonations(donationsData);
+      const { data, error: queryError } = await assertSupabase()
+        .from('students')
+        .select('id, first_name, last_name, avatar_url, date_of_birth, class_id, parent_id, guardian_id, classes(name)')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .eq('is_active', true)
+        .order('first_name');
+
+      if (queryError) throw new Error(queryError.message);
+
+      const mapped = (data as StudentRow[] | null || []).map((student) => ({
+        id: student.id,
+        firstName: student.first_name || 'Child',
+        lastName: student.last_name || '',
+        avatarUrl: student.avatar_url ?? null,
+        dateOfBirth: student.date_of_birth ?? null,
+        className: student.classes?.name ?? null,
+        classId: student.class_id ?? null,
+        parentId: student.parent_id ?? null,
+        guardianId: student.guardian_id ?? null,
+      }));
+
+      setSchoolStudents(mapped);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load students';
+      setError(message);
+    } finally {
+      setLoadingSchoolStudents(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (isPreschool) {
+      void loadSchoolStudents();
+    }
+  }, [isPreschool, loadSchoolStudents]);
+
+  const activeStudents = isPreschool ? schoolStudents : teacherStudents;
+  const activeStudentsLoading = isPreschool ? loadingSchoolStudents : teacherStudentsLoading;
+  const teacherStudentIds = useMemo(() => new Set(teacherStudents.map((student) => student.id)), [teacherStudents]);
+
+  const classGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; name: string; students: TeacherStudentSummary[] }>();
+
+    if (isPreschool) {
+      return Array.from(groups.values());
+    }
+
+    activeStudents.forEach((student) => {
+      const classId = student.classId || 'unassigned';
+      const className = student.className || t('dashboard.class_unassigned', { defaultValue: 'Unassigned' });
+      const group = groups.get(classId) || { id: classId, name: className, students: [] };
+      group.students.push(student);
+      groups.set(classId, group);
+    });
+
+    return Array.from(groups.values());
+  }, [activeStudents, isPreschool, t]);
+
+  useEffect(() => {
+    if (!isPreschool && !selectedClassId && classGroups.length > 0) {
+      setSelectedClassId(classGroups[0].id);
+    }
+  }, [classGroups, isPreschool, selectedClassId]);
+
+  const selectedClass = useMemo(
+    () => classGroups.find((group) => group.id === selectedClassId) || null,
+    [classGroups, selectedClassId]
+  );
+
+  const classStudents = isPreschool ? teacherStudents : (selectedClass?.students ?? []);
+  const birthdaySourceStudents = isPreschool ? schoolStudents : classStudents;
+  const upcomingBirthdays = useMemo(() => getUpcomingBirthdays(birthdaySourceStudents), [birthdaySourceStudents]);
+
+  useEffect(() => {
+    if (upcomingBirthdays.length === 0) {
+      if (selectedBirthdayId !== null) {
+        setSelectedBirthdayId(null);
+      }
+      return;
+    }
+
+    const exists = selectedBirthdayId && upcomingBirthdays.some((entry) => entry.student.id === selectedBirthdayId);
+    if (!exists) {
+      setSelectedBirthdayId(upcomingBirthdays[0].student.id);
+    }
+  }, [selectedBirthdayId, upcomingBirthdays]);
+
+  const selectedBirthday = useMemo(() => (
+    upcomingBirthdays.find((entry) => entry.student.id === selectedBirthdayId) || upcomingBirthdays[0] || null
+  ), [selectedBirthdayId, upcomingBirthdays]);
+
+  const donationDate = selectedBirthday ? formatDateKey(selectedBirthday.nextDate) : null;
+  const classIdForRecord = !isPreschool && selectedClassId && selectedClassId !== 'unassigned' ? selectedClassId : undefined;
+
+  const loadDonations = useCallback(async () => {
+    if (!organizationId || !donationDate || !selectedBirthday) return;
+    setLoadingDonations(true);
+    setError(null);
+    try {
+      const data = await BirthdayDonationsService.getDonationsForBirthday(
+        organizationId,
+        donationDate,
+        selectedBirthday.student.id,
+        classIdForRecord
+      );
+      setDonations(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load donations';
       setError(message);
     } finally {
-      setLoading(false);
+      setLoadingDonations(false);
     }
-  }, [organizationId, todayString]);
+  }, [organizationId, donationDate, selectedBirthday, classIdForRecord]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadDonations();
+  }, [loadDonations]);
 
-  const handleRecordDonation = async () => {
-    if (!organizationId) return;
+  const visibleDonations = useMemo(() => (
+    isPreschool
+      ? donations.filter((entry) => !entry.payerStudentId || teacherStudentIds.has(entry.payerStudentId))
+      : donations
+  ), [donations, isPreschool, teacherStudentIds]);
+
+  const paidStudentIds = useMemo(() => new Set(
+    visibleDonations
+      .map((entry) => entry.payerStudentId)
+      .filter((id): id is string => Boolean(id))
+  ), [visibleDonations]);
+
+  const payerStudents = useMemo(
+    () => classStudents.filter((student) => student.id !== selectedBirthday?.student.id),
+    [classStudents, selectedBirthday]
+  );
+
+  const paidStudents = payerStudents.filter((student) => paidStudentIds.has(student.id));
+  const unpaidStudents = payerStudents.filter((student) => !paidStudentIds.has(student.id));
+
+  const schoolPayerCount = useMemo(() => (
+    birthdaySourceStudents.filter((student) => student.id !== selectedBirthday?.student.id).length
+  ), [birthdaySourceStudents, selectedBirthday]);
+  const classExpectedAmount = payerStudents.length * DEFAULT_AMOUNT;
+  const expectedAmount = isPreschool ? schoolPayerCount * DEFAULT_AMOUNT : classExpectedAmount;
+  const totalReceived = (isPreschool ? donations : visibleDonations).reduce((sum, entry) => sum + entry.amount, 0);
+  const classReceived = visibleDonations.reduce((sum, entry) => sum + entry.amount, 0);
+  const remainingAmount = Math.max(expectedAmount - totalReceived, 0);
+
+  const handleMarkPaid = useCallback(async (student: TeacherStudentSummary) => {
+    if (!organizationId || !donationDate || !selectedBirthday) return;
+    setSavingId(student.id);
     setError(null);
-
-    if (hasNoBirthdays) {
-      setError(t('dashboard.birthday_donations.no_birthdays', { defaultValue: 'No birthdays today. Donation register is closed.' }));
-      return;
-    }
-
-    if (hasTooManyBirthdays) {
-      setError(t('dashboard.birthday_donations.limit_warning', { defaultValue: 'More than two birthdays detected. Please contact admin to correct the roster.' }));
-      return;
-    }
-
-    let amountValue: number;
-    try {
-      amountValue = AMOUNT_SCHEMA.parse(amount);
-    } catch {
-      setError(t('dashboard.birthday_donations.amount_error', { defaultValue: 'Enter a valid amount.' }));
-      return;
-    }
-
-    setSaving(true);
     try {
       await BirthdayDonationsService.recordDonation(organizationId, {
-        donationDate: todayString,
-        amount: amountValue,
+        donationDate,
+        amount: DEFAULT_AMOUNT,
         paymentMethod,
-        note: note.trim() || undefined,
+        payerStudentId: student.id,
+        birthdayStudentId: selectedBirthday.student.id,
+        classId: classIdForRecord,
       });
-      setAmount(String(DEFAULT_AMOUNT));
-      setNote('');
-      await loadData();
+
+      const parentId = student.parentId || student.guardianId || null;
+      if (parentId) {
+        await notifyBirthdayDonationPaid(parentId, {
+          payer_child_name: `${student.firstName} ${student.lastName}`.trim(),
+          birthday_child_name: `${selectedBirthday.student.firstName} ${selectedBirthday.student.lastName}`.trim(),
+          donation_amount: DEFAULT_AMOUNT,
+          donation_date: donationDate,
+        });
+      }
+
+      await loadDonations();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('dashboard.birthday_donations.record_error', { defaultValue: 'Failed to record donation.' });
+      const message = err instanceof Error ? err.message : 'Failed to record donation.';
       setError(message);
     } finally {
-      setSaving(false);
+      setSavingId(null);
     }
-  };
+  }, [organizationId, donationDate, selectedBirthday, paymentMethod, classIdForRecord, loadDonations]);
 
   if (!organizationId) {
     return (
@@ -129,113 +307,193 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}</Text>
-      <Text style={styles.subtitle}>{t('dashboard.birthday_donations.subtitle', { defaultValue: 'Record today\'s R25 donation for birthday packs.' })}</Text>
+      <Text style={styles.subtitle}>
+        {isPreschool
+          ? t('dashboard.birthday_donations.subtitle_school', { defaultValue: 'Mark R25 birthday contributions for the whole school.' })
+          : t('dashboard.birthday_donations.subtitle', { defaultValue: 'Mark R25 birthday contributions for your class.' })}
+      </Text>
 
-      {loading ? (
+      {activeStudentsLoading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={theme.primary} />
           <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
         </View>
       ) : (
         <>
-          <View style={styles.rowBetween}>
-            <Text style={styles.label}>{t('dashboard.birthday_donations.today_label', { defaultValue: 'Birthdays today' })}</Text>
-            <Text style={styles.value}>{birthdayCount}</Text>
-          </View>
-          <View style={styles.birthdayList}>
-            {birthdays.length === 0 ? (
-              <Text style={styles.muted}>{t('dashboard.birthday_donations.none_today', { defaultValue: 'No birthdays today.' })}</Text>
-            ) : (
-              birthdays.map((birthday) => (
-                <Text key={birthday.id} style={styles.birthdayName}>
-                  • {birthday.firstName} {birthday.lastName}{birthday.className ? ` (${birthday.className})` : ''}
-                </Text>
-              ))
-            )}
-          </View>
-
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>{t('dashboard.birthday_donations.expected_amount', { defaultValue: 'Expected' })}</Text>
-              <Text style={styles.summaryValue}>R{expectedAmount.toFixed(2)}</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>{t('dashboard.birthday_donations.total_received', { defaultValue: 'Received' })}</Text>
-              <Text style={styles.summaryValue}>R{totalReceived.toFixed(2)}</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>{t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}</Text>
-              <Text style={styles.summaryValue}>R{remainingAmount.toFixed(2)}</Text>
-            </View>
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.label}>{t('dashboard.birthday_donations.amount_label', { defaultValue: 'Donation amount' })}</Text>
-            <TextInput
-              style={styles.input}
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="numeric"
-              placeholder="25"
-              placeholderTextColor={theme.textSecondary}
-            />
-
-            <Text style={styles.label}>{t('dashboard.birthday_donations.method_label', { defaultValue: 'Payment method' })}</Text>
-            <View style={styles.methodRow}>
-              {PAYMENT_METHODS.map((method) => {
-                const selected = method === paymentMethod;
+          {!isPreschool && classGroups.length > 1 && (
+            <View style={styles.classRow}>
+              {classGroups.map((group) => {
+                const selected = group.id === selectedClassId;
                 return (
                   <TouchableOpacity
-                    key={method}
-                    style={[styles.methodChip, selected && { backgroundColor: theme.primary }]}
-                    onPress={() => setPaymentMethod(method)}
+                    key={group.id}
+                    style={[styles.classChip, selected && { backgroundColor: theme.primary }]}
+                    onPress={() => setSelectedClassId(group.id)}
                   >
-                    <Text style={[styles.methodText, selected && { color: '#fff' }]}>
-                      {t(`dashboard.birthday_donations.methods.${method}`, { defaultValue: method.toUpperCase() })}
-                    </Text>
+                    <Text style={[styles.classChipText, selected && { color: '#fff' }]}>{group.name}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
+          )}
 
-            <Text style={styles.label}>{t('dashboard.birthday_donations.note_label', { defaultValue: 'Notes (optional)' })}</Text>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={note}
-              onChangeText={setNote}
-              placeholder={t('dashboard.birthday_donations.note_placeholder', { defaultValue: 'Add any notes...' })}
-              placeholderTextColor={theme.textSecondary}
-              multiline
-            />
-          </View>
+          {!isPreschool && !selectedClass && (
+            <Text style={styles.muted}>{t('dashboard.birthday_donations.no_class', { defaultValue: 'No class assigned yet.' })}</Text>
+          )}
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
-
-          <TouchableOpacity
-            style={[styles.submitButton, (saving || hasNoBirthdays || hasTooManyBirthdays) && styles.submitDisabled]}
-            onPress={handleRecordDonation}
-            disabled={saving || hasNoBirthdays || hasTooManyBirthdays}
-          >
-            <Text style={styles.submitText}>
-              {saving
-                ? t('common.saving', { defaultValue: 'Saving...' })
-                : t('dashboard.birthday_donations.record_button', { defaultValue: 'Record Donation' })}
+          {upcomingBirthdays.length === 0 && (
+            <Text style={styles.muted}>
+              {isPreschool
+                ? t('dashboard.birthday_donations.no_birthdays_school', { defaultValue: 'No upcoming birthdays for the school.' })
+                : t('dashboard.birthday_donations.no_birthdays', { defaultValue: 'No upcoming birthdays for this class.' })}
             </Text>
-          </TouchableOpacity>
+          )}
 
-          <View style={styles.recentSection}>
-            <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.recent_title', { defaultValue: 'Today\'s entries' })}</Text>
-            {donations.length === 0 ? (
-              <Text style={styles.muted}>{t('dashboard.birthday_donations.no_entries', { defaultValue: 'No donations recorded yet.' })}</Text>
-            ) : (
-              donations.map((entry) => (
-                <View key={entry.id} style={styles.recentRow}>
-                  <Text style={styles.recentAmount}>R{entry.amount.toFixed(2)}</Text>
-                  <Text style={styles.recentMeta}>{entry.paymentMethod || t('dashboard.birthday_donations.methods.cash', { defaultValue: 'Cash' })}</Text>
+          {upcomingBirthdays.length > 0 && (
+            <View style={styles.birthdayPicker}>
+              <Text style={styles.label}>{t('dashboard.birthday_donations.select_birthday', { defaultValue: 'Select birthday' })}</Text>
+              <View style={styles.birthdayPickerList}>
+                {upcomingBirthdays.map((entry) => {
+                  const selected = entry.student.id === selectedBirthday?.student.id;
+                  const metaText = entry.daysUntil === 0
+                    ? t('dashboard.birthday_donations.today', { defaultValue: 'Today' })
+                    : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: entry.daysUntil });
+
+                  return (
+                    <TouchableOpacity
+                      key={entry.student.id}
+                      style={[styles.birthdayChip, selected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                      onPress={() => setSelectedBirthdayId(entry.student.id)}
+                    >
+                      <Text style={[styles.birthdayChipName, selected && { color: '#fff' }]}>
+                        {entry.student.firstName} {entry.student.lastName}
+                      </Text>
+                      <Text style={[styles.birthdayChipMeta, selected && { color: '#fff' }]}>
+                        {entry.nextDate.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })} • {metaText}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {selectedBirthday && (
+            <View style={styles.birthdayCard}>
+              <Text style={styles.label}>{t('dashboard.birthday_donations.selected_label', { defaultValue: 'Selected birthday' })}</Text>
+              <Text style={styles.birthdayName}>
+                {selectedBirthday.student.firstName} {selectedBirthday.student.lastName}
+              </Text>
+              <Text style={styles.muted}>
+                {selectedBirthday.nextDate.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                {` • ${selectedBirthday.daysUntil === 0
+                  ? t('dashboard.birthday_donations.today', { defaultValue: 'Today' })
+                  : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: selectedBirthday.daysUntil })}`}
+              </Text>
+            </View>
+          )}
+
+          {selectedBirthday && (
+            <>
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>
+                    {isPreschool
+                      ? t('dashboard.birthday_donations.expected_school', { defaultValue: 'School target' })
+                      : t('dashboard.birthday_donations.expected_amount', { defaultValue: 'Expected' })}
+                  </Text>
+                  <Text style={styles.summaryValue}>R{expectedAmount.toFixed(2)}</Text>
                 </View>
-              ))
-            )}
-          </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>
+                    {isPreschool
+                      ? t('dashboard.birthday_donations.received_school', { defaultValue: 'School received' })
+                      : t('dashboard.birthday_donations.total_received', { defaultValue: 'Received' })}
+                  </Text>
+                  <Text style={styles.summaryValue}>R{totalReceived.toFixed(2)}</Text>
+                </View>
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>
+                    {isPreschool
+                      ? t('dashboard.birthday_donations.remaining_school', { defaultValue: 'School remaining' })
+                      : t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}
+                  </Text>
+                  <Text style={styles.summaryValue}>R{remainingAmount.toFixed(2)}</Text>
+                </View>
+              </View>
+              {isPreschool && (
+                <Text style={styles.muted}>
+                  {t('dashboard.birthday_donations.class_progress', {
+                    defaultValue: 'Your class: R{{received}} of R{{expected}}',
+                    received: classReceived.toFixed(2),
+                    expected: classExpectedAmount.toFixed(2),
+                  })}
+                </Text>
+              )}
+
+              <View style={styles.formSection}>
+                <Text style={styles.label}>{t('dashboard.birthday_donations.method_label', { defaultValue: 'Payment method' })}</Text>
+                <View style={styles.methodRow}>
+                  {PAYMENT_METHODS.map((method) => {
+                    const selected = method === paymentMethod;
+                    return (
+                      <TouchableOpacity
+                        key={method}
+                        style={[styles.methodChip, selected && { backgroundColor: theme.primary }]}
+                        onPress={() => setPaymentMethod(method)}
+                      >
+                        <Text style={[styles.methodText, selected && { color: '#fff' }]}>
+                          {t(`dashboard.birthday_donations.methods.${method}`, { defaultValue: method.toUpperCase() })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              <View style={styles.listSection}>
+                <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.pending_title', { defaultValue: 'Not paid yet' })}</Text>
+                {loadingDonations ? (
+                  <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
+                ) : unpaidStudents.length === 0 ? (
+                  <Text style={styles.muted}>{t('dashboard.birthday_donations.all_paid', { defaultValue: 'Everyone is paid up 🎉' })}</Text>
+                ) : (
+                  unpaidStudents.map((student) => (
+                    <View key={student.id} style={styles.studentRow}>
+                      <Text style={styles.studentName}>{student.firstName} {student.lastName}</Text>
+                      <TouchableOpacity
+                        style={styles.payButton}
+                        onPress={() => handleMarkPaid(student)}
+                        disabled={savingId === student.id}
+                      >
+                        <Text style={styles.payButtonText}>
+                          {savingId === student.id
+                            ? t('common.saving', { defaultValue: 'Saving...' })
+                            : t('dashboard.birthday_donations.mark_paid', { defaultValue: 'Mark paid' })}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              <View style={styles.listSection}>
+                <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.paid_title', { defaultValue: 'Paid' })}</Text>
+                {paidStudents.length === 0 ? (
+                  <Text style={styles.muted}>{t('dashboard.birthday_donations.no_paid', { defaultValue: 'No payments recorded yet.' })}</Text>
+                ) : (
+                  paidStudents.map((student) => (
+                    <View key={student.id} style={styles.studentRow}>
+                      <Text style={styles.studentName}>{student.firstName} {student.lastName}</Text>
+                      <Text style={styles.paidBadge}>{t('dashboard.birthday_donations.paid_badge', { defaultValue: 'Paid' })}</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </>
+          )}
         </>
       )}
     </View>
@@ -266,34 +524,72 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   label: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.textSecondary,
-    marginTop: 12,
     marginBottom: 6,
-  },
-  value: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.text,
   },
   muted: {
     fontSize: 12,
     color: theme.textSecondary,
   },
-  birthdayList: {
+  classRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  classChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  classChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  birthdayPicker: {
+    marginBottom: 12,
+  },
+  birthdayPickerList: {
+    gap: 8,
+  },
+  birthdayChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  birthdayChipName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  birthdayChipMeta: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  birthdayCard: {
+    backgroundColor: theme.background,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
     marginBottom: 12,
   },
   birthdayName: {
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '700',
     color: theme.text,
+    marginBottom: 4,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -319,21 +615,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     marginTop: 4,
   },
   formSection: {
-    marginTop: 4,
-  },
-  input: {
-    backgroundColor: theme.background,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: theme.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: theme.text,
-    fontSize: 14,
-  },
-  noteInput: {
-    minHeight: 60,
-    textAlignVertical: 'top',
+    marginBottom: 12,
   },
   methodRow: {
     flexDirection: 'row',
@@ -353,48 +635,46 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     color: theme.text,
     fontWeight: '600',
   },
-  submitButton: {
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: theme.primary,
-    alignItems: 'center',
-  },
-  submitDisabled: {
-    opacity: 0.5,
-  },
-  submitText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  errorText: {
-    marginTop: 8,
-    color: theme.error,
-    fontSize: 12,
-  },
-  recentSection: {
-    marginTop: 16,
+  listSection: {
+    marginTop: 12,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: theme.text,
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  recentRow: {
+  studentRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
-  recentAmount: {
+  studentName: {
     fontSize: 13,
-    fontWeight: '700',
     color: theme.text,
   },
-  recentMeta: {
+  payButton: {
+    backgroundColor: theme.primary,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  payButtonText: {
     fontSize: 12,
-    color: theme.textSecondary,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  paidBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.success,
+  },
+  errorText: {
+    marginTop: 8,
+    color: theme.error,
+    fontSize: 12,
   },
 });

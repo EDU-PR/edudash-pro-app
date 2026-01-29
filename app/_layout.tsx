@@ -56,6 +56,7 @@ import { PlayStoreUpdateChecker } from '../components/updates/PlayStoreUpdateChe
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
 import { useFABVisibility } from '../hooks/useFABVisibility';
+import { useRouteInterstitial } from '../hooks/useRouteInterstitial';
 import { setupPWAMetaTags } from '../lib/utils/pwa';
 import { injectWebStyles } from '../lib/utils/web-styles';
 import * as Linking from 'expo-linking';
@@ -82,6 +83,7 @@ function LayoutContent() {
   // Route guards (auth + mobile web)
   useAuthGuard();
   useMobileWebGuard();
+  useRouteInterstitial();
   
   // Force StatusBar re-render when theme changes
   useEffect(() => {

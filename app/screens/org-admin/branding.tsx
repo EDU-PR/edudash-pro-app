@@ -12,6 +12,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { assertSupabase } from '@/lib/supabase';
 import { base64ToUint8Array } from '@/lib/utils/base64';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
 
@@ -74,8 +75,8 @@ export default function OrgBrandingScreen() {
         return;
       }
 
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert(
           t('common.permission_required', { defaultValue: 'Permission Required' }),
           t('common.photo_permission', { defaultValue: 'Please grant photo library access to upload a logo' })
@@ -375,5 +376,4 @@ const createStyles = (theme: any) => StyleSheet.create({
   label: { color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 },
   input: { height: 44, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, fontSize: 16 },
 });
-
 

@@ -7,11 +7,13 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail, Class } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface ClassInfoSectionProps {
   student: StudentDetail;
   classes: Class[];
-  theme: any;
+  theme: ThemeColors;
+  canAssignClass: boolean;
   onAssignClass: () => void;
 }
 
@@ -19,6 +21,7 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
   student,
   classes,
   theme,
+  canAssignClass,
   onAssignClass,
 }) => {
   const styles = createStyles(theme);
@@ -27,7 +30,7 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Class Information</Text>
-        {classes.length > 0 && (
+        {canAssignClass && classes.length > 0 && (
           <TouchableOpacity onPress={onAssignClass}>
             <Text style={styles.editText}>Assign Class</Text>
           </TouchableOpacity>
@@ -48,7 +51,7 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
         <View style={styles.unassignedClass}>
           <Ionicons name="alert-circle" size={20} color="#F59E0B" />
           <Text style={styles.unassignedText}>Not assigned to any class</Text>
-          {classes.length > 0 && (
+          {canAssignClass && classes.length > 0 && (
             <TouchableOpacity 
               style={styles.assignButton}
               onPress={onAssignClass}
@@ -62,7 +65,7 @@ export const ClassInfoSection: React.FC<ClassInfoSectionProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

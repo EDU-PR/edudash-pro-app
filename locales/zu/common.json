@@ -84,12 +84,16 @@
   },
   "dashboard": {
     "welcome": "Siyakwamukela futhi, {{name}}!",
+    "parentDashboard": "Ideshibhodi Yomzali",
     "quickActions": "Izenzo Ezisheshayo",
     "recentActivity": "Umsebenzi Wakamuva",
+    "recent_activity": "Umsebenzi Wakamuva",
+    "upcoming_events": "Imicimbi Ezayo",
     "statistics": "Izibalo",
     "notifications": "Izaziso",
     "noActivity": "Awukho umsebenzi wakamuva",
     "loading": "Ilayisha ideshibhodi...",
+    "noChildren": "Akukabikho izingane ezixhunyiwe",
     "principal_hub": "Indawo Kanthishanhloko",
     "managing_school": "Ukuphatha {{schoolName}}",
     "school_overview": "Ukubuka Isikole",
@@ -276,7 +280,8 @@
           "minutes_ago": "{{count}}m edlule",
           "hours_ago": "{{count}}h edlule",
           "days_ago": "{{count}}d edlule"
-        }
+        },
+        "empty": "Azikho amanothi othisha okwamanje."
       },
       "progress": {
         "title": "Inqubekelaphambili & Impumelelo",
@@ -326,7 +331,8 @@
           "great_job": "Umsebenzi omuhle! {{count}} ibheji litholakele.",
           "great_job_plural": "Umsebenzi omuhle! {{count}} amabheji atholakele.",
           "keep_going": "Qhubeka! Ingane yakho iyathuthuka."
-        }
+        },
+        "empty": "Azikho izibalo zenqubekelaphambili okwamanje."
       },
       "birthdays": {
         "title": "Izinsuku Zokuzalwa Ezizayo",
@@ -334,7 +340,8 @@
         "view_chart": "Buka ishadi",
         "turning_age": "Uba {{age}}",
         "today": "Namuhla",
-        "in_days": "Ezinsukwini ezi-{{count}}"
+        "in_days": "Ezinsukwini ezi-{{count}}",
+        "none": "Azikho izinsuku zokuzalwa ezizayo okwamanje."
       },
       "uniform": {
         "title": "Osayizi bama-uniform",
@@ -462,8 +469,8 @@
           "added_by": "Kungezwe ngu {{name}}"
         },
         "empty": {
-          "title": "Azikho izenzo ezibhalwe namuhla",
-          "description": "Buyela kamuva ukuze uthole izibuyekezo zothisha wengane yakho"
+          "title": "Akukho msebenzi obhaliwe namuhla okwamanje",
+          "description": "Buyela kamuva ukuze uthole izibuyekezo ezivela kuthisha wengane yakho"
         }
       },
       "ad_banner": {
@@ -728,6 +735,37 @@
           "description": "Ukulungiselela izivivinyo kutholakala kubafundi beBanga 4+ kuphela. Xhumanisa ingane yeBanga 4 noma ngaphezulu ukuze uvule lesi sigaba.",
           "cta": "Buyela Ku-Dashboard"
         }
+      },
+      "community_school": "Isikole Somphakathi i-EduDash Pro",
+      "k12": {
+        "weekly_reports": "Imibiko yamasonto onke",
+        "ai_tools": {
+          "title": "Amathuluzi e-AI nokufunda"
+        },
+        "school_type": {
+          "k12": "Isikole se-K-12",
+          "combined": "Isikole se-K-12",
+          "primary": "Isikole samabanga aphansi",
+          "secondary": "Isikole samabanga aphezulu",
+          "community_school": "Isikole somphakathi"
+        },
+        "upgrade": {
+          "title": "Thuthukisa ukuze uthole usizo oluningi lwe-AI",
+          "description": "Vula usizo oluthe xaxa lwe-Dash AI, amathuluzi okuziqeqesha, futhi ususe imikhawulo."
+        },
+        "exam_prep": {
+          "unavailable_title": "Ukulungiselela izivivinyo akutholakali",
+          "unavailable_message": "Ukulungiselela izivivinyo kuvaliwe kule nguqulo. Sicela uzame futhi kamuva.",
+          "locked_title": "Ukulungiselela izivivinyo kukhiyiwe",
+          "locked_message": "Ukulungiselela izivivinyo kudinga uhlelo lwe-{{tier}} noma olungaphezulu.\n\nThuthukisa ukubhalisa kwakho ukuze uvule leli khono."
+        },
+        "dash_ai": {
+          "subtitle": "Thola usizo lwasekhaya nemiyalelo yokufunda ngokushesha"
+        },
+        "communication": {
+          "title": "Ukuxhumana kwesikole",
+          "subtitle": "Hlala uxhumene nothisha nezibuyekezo zesikole"
+        }
       }
     },
     "feature_coming_soon": "Lesi siciyezo sizofika maduze!",
@@ -738,7 +776,8 @@
     "upcoming_birthdays": "Izinsuku zokuzalwa ezizayo",
     "upgrade_value": "Yonga isikhathi ngosizo lwe-AI lomsebenzi wasekhaya",
     "upgrade_value_preschool": "Yonga isikhathi ngosizo lwe-Dash AI",
-    "view_chart": "Buka ishadi"
+    "view_chart": "Buka ishadi",
+    "upcoming_events_empty": "Ayikho imicimbi ezayo"
   },
   "ai": {
     "homework": {
@@ -1077,7 +1116,8 @@
     "student": "Umfundi",
     "upgrade": "Thuthukisa",
     "viewAll": "Buka konke",
-    "name": "Igama"
+    "name": "Igama",
+    "not_now": "Hhayi manje"
   },
   "quick_actions": {
     "seat_management_subtitle": "Assign or revoke teacher seats"

@@ -20,6 +20,9 @@ const recordSchema = z.object({
   amount: z.number().positive(),
   paymentMethod: z.string().max(50).optional(),
   note: z.string().max(500).optional(),
+  payerStudentId: z.string().uuid().optional(),
+  birthdayStudentId: z.string().uuid().optional(),
+  classId: z.string().uuid().optional(),
 });
 
 type RecordRequest = z.infer<typeof recordSchema>;
@@ -100,20 +103,64 @@ serve(async (req) => {
 
     const payload: RecordRequest = parsed.data;
 
-    const { data: dayRow, error: recordError } = await serviceClient
-      .rpc('record_birthday_donation', {
-        org_id: organizationId,
-        donation_day: payload.donationDate,
-        donation_amount: payload.amount,
-        donation_method: payload.paymentMethod ?? null,
-        donation_note: payload.note ?? null,
-        recorded_by_user: user.id,
-      })
+    const rpcPayload = {
+      org_id: organizationId,
+      donation_day: payload.donationDate,
+      donation_amount: payload.amount,
+      donation_method: payload.paymentMethod ?? null,
+      donation_note: payload.note ?? null,
+      recorded_by_user: user.id,
+      p_payer_student_id: payload.payerStudentId ?? null,
+      p_birthday_student_id: payload.birthdayStudentId ?? null,
+      p_class_id: payload.classId ?? null,
+    };
+
+    let dayRow: unknown = null;
+    let recordError: { message?: string } | null = null;
+
+    const primary = await serviceClient
+      .rpc('record_birthday_donation', rpcPayload)
       .maybeSingle();
+    dayRow = primary.data;
+    recordError = primary.error;
+
+    const msg = String(recordError?.message || '');
+    const shouldRetry =
+      !dayRow &&
+      recordError &&
+      (msg.includes('record_birthday_donation') && msg.includes('does not exist'));
+
+    if (shouldRetry) {
+      const fallback = await serviceClient
+        .rpc('record_birthday_donation', {
+          org_id: organizationId,
+          donation_day: payload.donationDate,
+          donation_amount: payload.amount,
+          donation_method: payload.paymentMethod ?? null,
+          donation_note: payload.note ?? null,
+          recorded_by_user: user.id,
+          p_payer_student_id: payload.payerStudentId ?? null,
+          p_birthday_student_id: payload.birthdayStudentId ?? null,
+          p_class_id: payload.classId ?? null,
+        })
+        .maybeSingle();
+      dayRow = fallback.data;
+      recordError = fallback.error;
+    }
 
     if (recordError) {
-      return new Response(JSON.stringify({ success: false, error: recordError.message }), {
-        status: 400,
+      console.error('[birthday-donations] record_birthday_donation failed', {
+        payload: rpcPayload,
+        error: recordError,
+      });
+      return new Response(JSON.stringify({
+        success: false,
+        error: recordError.message,
+        code: (recordError as any).code,
+        details: (recordError as any).details,
+        hint: (recordError as any).hint,
+      }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

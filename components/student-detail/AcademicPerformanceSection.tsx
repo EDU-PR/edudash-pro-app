@@ -6,10 +6,11 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { StudentDetail } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface AcademicPerformanceSectionProps {
   student: StudentDetail;
-  theme: any;
+  theme: ThemeColors;
 }
 
 export const AcademicPerformanceSection: React.FC<AcademicPerformanceSectionProps> = ({
@@ -42,7 +43,7 @@ export const AcademicPerformanceSection: React.FC<AcademicPerformanceSectionProp
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

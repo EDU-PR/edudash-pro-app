@@ -202,7 +202,18 @@ export function TeacherQuickNotesCard({
   }
 
   if (notes.length === 0) {
-    return null;
+    return (
+      <div className="card">
+        {showHeader && (
+          <div className="sectionTitle">
+            {t('dashboard.parent.teacher_notes.title', { defaultValue: 'From Teacher' })}
+          </div>
+        )}
+        <div className="muted">
+          {t('dashboard.parent.teacher_notes.empty', { defaultValue: 'No notes from teachers yet.' })}
+        </div>
+      </div>
+    );
   }
 
   const unreadCount = notes.filter((note) => !note.isRead).length;

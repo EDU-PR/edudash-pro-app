@@ -461,7 +461,8 @@ export class DashAICore {
     content: string,
     conversationId?: string,
     attachments?: any[],
-    onStreamChunk?: (chunk: string) => void
+    onStreamChunk?: (chunk: string) => void,
+    options?: { contextOverride?: string | null }
   ): Promise<DashMessage> {
     let convId = conversationId || this.conversation.getCurrentConversationId();
     if (!convId) {
@@ -484,7 +485,8 @@ export class DashAICore {
       content,
       convId,
       attachments,
-      onStreamChunk
+      onStreamChunk,
+      options?.contextOverride
     );
 
     await this.conversation.addMessageToConversation(convId, assistantMessage);
@@ -496,7 +498,8 @@ export class DashAICore {
     userInput: string,
     conversationId: string,
     attachments?: any[],
-    onStreamChunk?: (chunk: string) => void
+    onStreamChunk?: (chunk: string) => void,
+    contextOverride?: string | null
   ): Promise<DashMessage> {
     try {
       const conversation = await this.conversation.getConversation(conversationId);
@@ -506,6 +509,7 @@ export class DashAICore {
       const personality = this.profileManager.getPersonality();
       const strictLanguageMode = personality?.strict_language_mode === true;
       const langDirective = this.promptBuilder.buildLanguageDirective(strictLanguageMode);
+      const systemPrompt = this.promptBuilder.buildSystemPrompt();
       const shouldStream = typeof onStreamChunk === 'function';
       const userProfile = this.getUserProfile();
       const languageOverride = strictLanguageMode ? null : this.detectLanguageOverride(userInput);
@@ -523,10 +527,12 @@ export class DashAICore {
         : '';
 
       const contextParts = [
+        systemPrompt,
         `User role: ${userProfile?.role || 'educator'}`,
         childrenContext,
         tutoringGuidance,
         languageOverrideDirective || langDirective,
+        contextOverride || null,
       ].filter(Boolean);
 
       const response = await this.aiClient.callAIService({

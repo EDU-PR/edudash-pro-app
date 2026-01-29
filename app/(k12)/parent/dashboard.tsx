@@ -8,7 +8,7 @@
  * - k12, k12_school, combined, primary, secondary, community_school
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,42 +26,26 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useTranslation } from 'react-i18next';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
-import { styles } from './_dashboard.styles';
-import { ChildCard } from './_ChildCard';
-import { useK12ParentData } from './_useK12ParentData';
+import { styles } from '@/domains/k12/components/K12ParentDashboard.styles';
+import { ChildCard } from '@/domains/k12/components/K12ParentChildCard';
+import { useK12ParentData } from '@/domains/k12/hooks/useK12ParentData';
 import DashOrb from '@/components/dash-orb';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { TierBadge } from '@/components/ui/TierBadge';
 import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 
-// Quick action items for K-12 parent
-const quickActions = [
-  { id: 'children', icon: 'people', label: 'Children', route: '/screens/parent-children', color: '#4F46E5' },
-  { id: 'progress', icon: 'ribbon', label: 'Progress', route: '/screens/parent-progress', color: '#10B981' },
-  { id: 'attendance', icon: 'calendar-outline', label: 'Attendance', route: '/screens/parent-attendance', color: '#F59E0B' },
-  { id: 'messages', icon: 'chatbubbles', label: 'Messages', route: '/screens/parent-messages', color: '#3B82F6' },
-  { id: 'payments', icon: 'card', label: 'Payments', route: '/screens/parent-payments', color: '#8B5CF6' },
-  { id: 'announcements', icon: 'megaphone', label: 'News', route: '/screens/parent-announcements', color: '#EF4444' },
-];
-
-// Second row of quick actions - AI/Study features from PWA
-const aiQuickActions = [
-  { id: 'dash-ai', icon: 'sparkles', label: 'Dash AI', route: '/screens/dash-assistant', color: '#7C3AED' },
-  { id: 'exam-prep', icon: 'school', label: 'Exam Prep', route: '/screens/exam-prep', color: '#EC4899' },
-  { id: 'homework', icon: 'document-text', label: 'Homework', route: '/screens/homework', color: '#06B6D4' },
-  { id: 'weekly-report', icon: 'stats-chart', label: 'Reports', route: '/screens/parent-weekly-report', color: '#F97316' },
-];
-
 export default function K12ParentDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { profile, user, loading: authLoading, profileLoading } = useAuth();
   const permissions = usePermissions();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const { tier } = useSubscription();
   const flags = getFeatureFlagsSync();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
@@ -71,10 +55,11 @@ export default function K12ParentDashboardScreen() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile
-  const schoolName = (profile as any)?.organization_membership?.organization_name || 
-                     (profile as any)?.organization_name || 
-                     'EduDash Pro Community School';
-  const userName = profile?.full_name || profile?.email?.split('@')[0] || 'Parent';
+  const communitySchoolName = t('dashboard.parent.community_school', { defaultValue: 'EduDash Pro Community School' });
+  const schoolName = (profile as any)?.organization_membership?.organization_name ||
+                     (profile as any)?.organization_name ||
+                     communitySchoolName;
+  const userName = profile?.full_name || profile?.email?.split('@')[0] || t('roles.parent', { defaultValue: 'Parent' });
   const schoolType = params.schoolType || (profile as any)?.organization_membership?.school_type || 'k12';
   const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
 
@@ -138,14 +123,13 @@ export default function K12ParentDashboardScreen() {
       return;
     }
     router.push(route as any);
-    console.log('[K12 Parent] Quick action:', actionId, route);
   };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour < 12) return t('dashboard.good_morning', { defaultValue: 'Good morning' });
+    if (hour < 17) return t('dashboard.good_afternoon', { defaultValue: 'Good afternoon' });
+    return t('dashboard.good_evening', { defaultValue: 'Good evening' });
   };
 
   const tierLower = String(tier || 'free').toLowerCase();
@@ -170,6 +154,49 @@ export default function K12ParentDashboardScreen() {
   const tierForCaps = normalizeTierForCapabilities(tier);
   const canUseExamPrep = flags.exam_prep_enabled && hasCapability(tierForCaps, 'exam.practice');
   const requiredExamTier = getRequiredTier('exam.practice');
+  const quickActions = useMemo(() => ([
+    { id: 'children', icon: 'people', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), route: '/screens/parent-children', color: '#4F46E5' },
+    { id: 'progress', icon: 'ribbon', label: t('dashboard.progress', { defaultValue: 'Progress' }), route: '/screens/parent-progress', color: '#10B981' },
+    { id: 'attendance', icon: 'calendar-outline', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), route: '/screens/parent-attendance', color: '#F59E0B' },
+    { id: 'messages', icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), route: '/screens/parent-messages', color: '#3B82F6' },
+    { id: 'payments', icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), route: '/screens/parent-payments', color: '#8B5CF6' },
+    { id: 'announcements', icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), route: '/screens/parent-announcements', color: '#EF4444' },
+  ]), [t]);
+
+  const aiQuickActions = useMemo(() => ([
+    { id: 'dash-ai', icon: 'sparkles', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), route: '/screens/dash-assistant', color: '#7C3AED' },
+    { id: 'exam-prep', icon: 'school', label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), route: '/screens/exam-prep', color: '#EC4899' },
+    { id: 'homework', icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), route: '/screens/homework', color: '#06B6D4' },
+    { id: 'weekly-report', icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), route: '/screens/parent-weekly-report', color: '#F97316' },
+  ]), [t]);
+
+  const schoolTypeLabel = useMemo(() => {
+    switch (schoolType) {
+      case 'combined':
+        return t('dashboard.parent.k12.school_type.combined', { defaultValue: 'K-12 School' });
+      case 'primary':
+        return t('dashboard.parent.k12.school_type.primary', { defaultValue: 'Primary School' });
+      case 'secondary':
+        return t('dashboard.parent.k12.school_type.secondary', { defaultValue: 'Secondary School' });
+      case 'community_school':
+        return t('dashboard.parent.k12.school_type.community_school', { defaultValue: 'Community School' });
+      default:
+        return t('dashboard.parent.k12.school_type.k12', { defaultValue: 'K-12 School' });
+    }
+  }, [schoolType, t]);
+
+  const navItems = useMemo(() => ([
+    { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: '/(k12)/parent/dashboard' },
+    { id: 'children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: 'people', route: '/screens/parent-children' },
+    { id: 'progress', label: t('dashboard.progress', { defaultValue: 'Progress' }), icon: 'ribbon', route: '/screens/parent-progress' },
+    { id: 'attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: 'calendar-outline', route: '/screens/parent-attendance' },
+    { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', route: '/screens/parent-messages' },
+    { id: 'payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/parent-payments' },
+    { id: 'announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: 'megaphone', route: '/screens/parent-announcements' },
+    { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: '/screens/parent-weekly-report' },
+    { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
+    { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
+  ]), [t]);
 
   // Loading state
   if (authLoading || profileLoading) {
@@ -178,7 +205,7 @@ export default function K12ParentDashboardScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-            Loading dashboard...
+            {t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
           </Text>
         </View>
       </SafeAreaView>
@@ -193,12 +220,14 @@ export default function K12ParentDashboardScreen() {
           <TouchableOpacity
             style={styles.hamburgerButton}
             onPress={() => setIsDrawerOpen(true)}
-            accessibilityLabel="Open navigation menu"
+            accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}
           >
             <Ionicons name="menu" size={28} color={theme.text} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrapper}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Parent Dashboard</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              {t('dashboard.parentDashboard', { defaultValue: 'Parent Dashboard' })}
+            </Text>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -267,7 +296,7 @@ export default function K12ParentDashboardScreen() {
                   onPress={() => router.push('/pricing')}
                 >
                   <Text style={[styles.greetingUpgradeText, { color: theme.primary }]}>
-                    Upgrade
+                    {t('common.upgrade', { defaultValue: 'Upgrade' })}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -287,10 +316,7 @@ export default function K12ParentDashboardScreen() {
           >
             <Ionicons name="school" size={14} color="#FFFFFF" />
             <Text style={styles.schoolTypeBadgeText}>
-              {schoolType === 'combined' ? 'K-12 School' : 
-               schoolType === 'primary' ? 'Primary School' :
-               schoolType === 'secondary' ? 'Secondary School' :
-               schoolType === 'community_school' ? 'Community School' : 'K-12 School'}
+              {schoolTypeLabel}
             </Text>
           </LinearGradient>
         </View>
@@ -299,8 +325,8 @@ export default function K12ParentDashboardScreen() {
         <InlineUpgradeBanner
           screen="k12_parent_dashboard"
           feature="dashboard_upgrade"
-          title="Upgrade for more AI help"
-          description="Unlock more Dash AI help, practice tools, and remove limits."
+          title={t('dashboard.parent.k12.upgrade.title', { defaultValue: 'Upgrade for more AI help' })}
+          description={t('dashboard.parent.k12.upgrade.description', { defaultValue: 'Unlock more Dash AI help, practice tools, and remove limits.' })}
         />
 
         {/* Ad Banner + Upgrade CTA (free tier only) */}
@@ -308,14 +334,16 @@ export default function K12ParentDashboardScreen() {
 
         {/* Children Cards */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Your Children</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            {t('dashboard.parent.section.my_children', { defaultValue: 'My Children' })}
+          </Text>
           {dataLoading ? (
             <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 20 }} />
           ) : children.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
               <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                No children linked to your account yet
+                {t('dashboard.noChildren', { defaultValue: 'No linked children yet' })}
               </Text>
             </View>
           ) : (
@@ -327,7 +355,9 @@ export default function K12ParentDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Actions</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            {t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
+          </Text>
           <View style={styles.quickActionsGrid}>
             {quickActions.map((action) => (
               <TouchableOpacity
@@ -347,7 +377,9 @@ export default function K12ParentDashboardScreen() {
 
         {/* AI & Learning Tools - PWA Feature Migration */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>AI & Learning Tools</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            {t('dashboard.parent.k12.ai_tools.title', { defaultValue: 'AI & Learning Tools' })}
+          </Text>
           <View style={styles.quickActionsGrid}>
             {aiQuickActions.map((action) => {
               const isExamPrep = action.id === 'exam-prep';
@@ -364,20 +396,24 @@ export default function K12ParentDashboardScreen() {
                   if (isDisabled) {
                     if (!flags.exam_prep_enabled) {
                       Alert.alert(
-                        'Exam Prep Unavailable',
-                        'Exam Prep is currently disabled in this build. Please try again later.',
-                        [{ text: 'OK', style: 'default' }]
+                        t('dashboard.parent.k12.exam_prep.unavailable_title', { defaultValue: 'Exam Prep Unavailable' }),
+                        t('dashboard.parent.k12.exam_prep.unavailable_message', { defaultValue: 'Exam Prep is currently disabled in this build. Please try again later.' }),
+                        [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }]
                       );
                       return;
                     }
 
-                    const tierLabel = requiredExamTier ? requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1) : 'Starter';
+                    const tierLabel = requiredExamTier
+                      ? t(`subscription.${requiredExamTier}`, {
+                          defaultValue: requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1),
+                        })
+                      : t('subscription.starter', { defaultValue: 'Starter' });
                     Alert.alert(
-                      'Exam Prep Locked',
-                      `Exam Prep requires ${tierLabel} plan or higher.\n\nUpgrade your subscription to unlock this feature.`,
+                      t('dashboard.parent.k12.exam_prep.locked_title', { defaultValue: 'Exam Prep Locked' }),
+                      t('dashboard.parent.k12.exam_prep.locked_message', { defaultValue: 'Exam Prep requires {{tier}} plan or higher.\\n\\nUpgrade your subscription to unlock this feature.', tier: tierLabel }),
                       [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Upgrade', onPress: () => router.push('/screens/subscription-setup' as any) }
+                        { text: t('common.not_now', { defaultValue: 'Not now' }), style: 'cancel' },
+                        { text: t('common.upgrade', { defaultValue: 'Upgrade' }), onPress: () => router.push('/screens/subscription-setup' as any) }
                       ]
                     );
                     return;
@@ -422,9 +458,11 @@ export default function K12ParentDashboardScreen() {
                 <Ionicons name="sparkles" size={28} color="#FFFFFF" />
               </View>
               <View style={styles.dashAIText}>
-                <Text style={styles.dashAITitle}>Ask Dash AI</Text>
+                <Text style={styles.dashAITitle}>
+                  {t('parent.ask_dash', { defaultValue: 'Ask Dash AI' })}
+                </Text>
                 <Text style={styles.dashAISubtitle}>
-                  Get instant homework help & study tips
+                  {t('dashboard.parent.k12.dash_ai.subtitle', { defaultValue: 'Get instant homework help & study tips' })}
                 </Text>
               </View>
             </View>
@@ -435,18 +473,22 @@ export default function K12ParentDashboardScreen() {
         {/* Recent Updates */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Updates</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              {t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })}
+            </Text>
             <TouchableOpacity onPress={() => {
               track('k12.parent.see_all_updates_tap', { user_id: user?.id });
             }}>
-              <Text style={[styles.seeAllText, { color: theme.primary }]}>See All</Text>
+              <Text style={[styles.seeAllText, { color: theme.primary }]}>
+                {t('common.see_all', { defaultValue: 'See All' })}
+              </Text>
             </TouchableOpacity>
           </View>
           {recentUpdates.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="newspaper-outline" size={32} color={theme.textSecondary} />
               <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                No recent updates
+                {t('dashboard.noActivity', { defaultValue: 'No recent activity' })}
               </Text>
             </View>
           ) : (
@@ -471,19 +513,23 @@ export default function K12ParentDashboardScreen() {
         {/* Upcoming Events */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Upcoming Events</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              {t('dashboard.upcoming_events', { defaultValue: 'Upcoming Events' })}
+            </Text>
             <TouchableOpacity onPress={() => {
               track('k12.parent.see_all_events_tap', { user_id: user?.id });
               router.push('/screens/parent-events' as any);
             }}>
-              <Text style={[styles.seeAllText, { color: theme.primary }]}>See All</Text>
+              <Text style={[styles.seeAllText, { color: theme.primary }]}>
+                {t('common.see_all', { defaultValue: 'See All' })}
+              </Text>
             </TouchableOpacity>
           </View>
           {upcomingEvents.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="calendar-outline" size={32} color={theme.textSecondary} />
               <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                No upcoming events
+                {t('dashboard.upcoming_events_empty', { defaultValue: 'No upcoming events' })}
               </Text>
             </View>
           ) : (
@@ -534,9 +580,11 @@ export default function K12ParentDashboardScreen() {
                 <Ionicons name="school" size={28} color="#FFFFFF" />
               </View>
               <View style={styles.communicationText}>
-                <Text style={styles.communicationTitle}>School Communication</Text>
+                <Text style={styles.communicationTitle}>
+                  {t('dashboard.parent.k12.communication.title', { defaultValue: 'School Communication' })}
+                </Text>
                 <Text style={styles.communicationSubtitle}>
-                  Stay connected with teachers and school updates
+                  {t('dashboard.parent.k12.communication.subtitle', { defaultValue: 'Stay connected with teachers and school updates' })}
                 </Text>
               </View>
             </View>
@@ -556,18 +604,7 @@ export default function K12ParentDashboardScreen() {
       <MobileNavDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        navItems={[
-          { id: 'home', label: 'Dashboard', icon: 'home', route: '/(k12)/parent/dashboard' },
-          { id: 'children', label: 'My Children', icon: 'people', route: '/screens/parent-children' },
-          { id: 'progress', label: 'Progress', icon: 'ribbon', route: '/screens/parent-progress' },
-          { id: 'attendance', label: 'Attendance', icon: 'calendar-outline', route: '/screens/parent-attendance' },
-          { id: 'messages', label: 'Messages', icon: 'chatbubbles', route: '/screens/parent-messages' },
-          { id: 'payments', label: 'Payments', icon: 'card', route: '/screens/parent-payments' },
-          { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/parent-announcements' },
-          { id: 'reports', label: 'Weekly Reports', icon: 'stats-chart', route: '/screens/parent-weekly-report' },
-          { id: 'account', label: 'Account', icon: 'person-circle', route: '/screens/account' },
-          { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
-        ]}
+        navItems={navItems}
       />
     </SafeAreaView>
   );

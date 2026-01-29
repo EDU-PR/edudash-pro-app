@@ -70,16 +70,37 @@ BEGIN
     END IF;
 END $$;
 
--- Verification query
-SELECT 
-    p.email,
-    p.full_name,
-    p.role as profile_role,
-    om.member_type,
-    om.role as org_role,
-    om.membership_status,
-    o.name as organization_name
-FROM profiles p
-LEFT JOIN organization_members om ON om.user_id = p.id
-LEFT JOIN organizations o ON o.id = om.organization_id
-WHERE p.email = 'banyanekarabo3@gmail.com';
+DO $$
+DECLARE
+    has_profiles boolean;
+    has_org_members boolean;
+    has_organizations boolean;
+    has_full_name boolean;
+BEGIN
+    has_profiles := to_regclass('public.profiles') IS NOT NULL;
+    has_org_members := to_regclass('public.organization_members') IS NOT NULL;
+    has_organizations := to_regclass('public.organizations') IS NOT NULL;
+
+    IF NOT has_profiles THEN
+        RETURN;
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'profiles'
+          AND column_name = 'full_name'
+    ) INTO has_full_name;
+
+    IF NOT has_full_name THEN
+        RETURN;
+    END IF;
+
+    -- Verification query (intentionally not returning rows in migration context)
+    PERFORM 1
+    FROM profiles p
+    LEFT JOIN organization_members om ON om.user_id = p.id
+    LEFT JOIN organizations o ON o.id = om.organization_id
+    WHERE p.email = 'banyanekarabo3@gmail.com';
+END $$;

@@ -1,443 +1,355 @@
 -- Migration: Fix ALL RLS policies that incorrectly use parent_id/guardian_id = auth.uid()
--- 
--- PROBLEM: Many policies check parent_id = auth.uid() or guardian_id = auth.uid()
--- But parent_id and guardian_id columns contain profile.id values (UUIDs), not auth.users UUIDs.
--- The auth.uid() function returns the auth.users UUID, which maps to profiles.auth_user_id,
--- NOT to profiles.id
---
--- SOLUTION: 
--- 1. Created helper functions that properly join to profiles table
--- 2. Replaced all buggy policies with ones using these helper functions
---
--- Helper functions created:
--- - is_parent_of_student(student_id UUID) - Check if current user is parent of specific student
--- - get_my_children_ids() - Returns all student IDs for current parent
--- - get_my_children_class_ids() - Returns all class IDs of current parent's children
--- - get_my_children_preschool_ids() - Returns all preschool IDs of current parent's children
+-- Adds helper functions and guards policy creation based on table/column existence.
 
--- ============================================================================
--- HELPER FUNCTIONS
--- ============================================================================
+DO $sql$
+DECLARE
+  has_students boolean := to_regclass('public.students') IS NOT NULL;
+  has_profiles boolean := to_regclass('public.profiles') IS NOT NULL;
+  has_classes boolean := to_regclass('public.classes') IS NOT NULL;
+  has_user_can_view_classes boolean := to_regprocedure('public.user_can_view_classes(uuid, uuid)') IS NOT NULL;
 
--- Check if current user is parent/guardian of a specific student
-CREATE OR REPLACE FUNCTION public.is_parent_of_student(p_student_id UUID)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public', 'extensions', 'auth'
-AS $$
+  has_classes_preschool_id boolean := false;
+  has_classes_teacher_id boolean := false;
+
+  helpers_ready boolean := false;
 BEGIN
-    RETURN EXISTS (
-        SELECT 1 FROM students s
-        JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
+  IF has_students THEN
+    ALTER TABLE public.students
+      ADD COLUMN IF NOT EXISTS parent_id uuid,
+      ADD COLUMN IF NOT EXISTS guardian_id uuid,
+      ADD COLUMN IF NOT EXISTS class_id uuid,
+      ADD COLUMN IF NOT EXISTS preschool_id uuid;
+  END IF;
+
+  IF has_profiles THEN
+    ALTER TABLE public.profiles
+      ADD COLUMN IF NOT EXISTS auth_user_id uuid,
+      ADD COLUMN IF NOT EXISTS organization_id uuid,
+      ADD COLUMN IF NOT EXISTS preschool_id uuid,
+      ADD COLUMN IF NOT EXISTS role text;
+  END IF;
+
+  IF has_classes THEN
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'classes' AND column_name = 'preschool_id'
+    ) INTO has_classes_preschool_id;
+
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'classes' AND column_name = 'teacher_id'
+    ) INTO has_classes_teacher_id;
+  END IF;
+
+  helpers_ready := has_students AND has_profiles;
+
+  -- Helper functions
+  IF helpers_ready THEN
+    CREATE OR REPLACE FUNCTION public.is_parent_of_student(p_student_id UUID)
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    STABLE
+    SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'auth'
+    AS $$
+    BEGIN
+      RETURN EXISTS (
+        SELECT 1 FROM public.students s
+        JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
         WHERE s.id = p_student_id
-        AND p.auth_user_id = auth.uid()
-    );
-END;
-$$;
+          AND p.auth_user_id = auth.uid()
+      );
+    END;
+    $$;
 
--- Get all student IDs for current parent
-CREATE OR REPLACE FUNCTION public.get_my_children_ids()
-RETURNS SETOF UUID
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public', 'extensions', 'auth'
-AS $$
-    SELECT s.id FROM students s
-    JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
-    WHERE p.auth_user_id = auth.uid();
-$$;
+    CREATE OR REPLACE FUNCTION public.get_my_children_ids()
+    RETURNS SETOF UUID
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'auth'
+    AS $$
+      SELECT s.id FROM public.students s
+      JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
+      WHERE p.auth_user_id = auth.uid();
+    $$;
 
--- Get all class IDs of current parent's children
-CREATE OR REPLACE FUNCTION public.get_my_children_class_ids()
-RETURNS SETOF UUID
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public', 'extensions', 'auth'
-AS $$
-    SELECT DISTINCT s.class_id FROM students s
-    JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
-    WHERE p.auth_user_id = auth.uid()
-    AND s.class_id IS NOT NULL;
-$$;
+    CREATE OR REPLACE FUNCTION public.get_my_children_class_ids()
+    RETURNS SETOF UUID
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'auth'
+    AS $$
+      SELECT DISTINCT s.class_id FROM public.students s
+      JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
+      WHERE p.auth_user_id = auth.uid()
+        AND s.class_id IS NOT NULL;
+    $$;
 
--- Get all preschool IDs of current parent's children
-CREATE OR REPLACE FUNCTION public.get_my_children_preschool_ids()
-RETURNS SETOF UUID
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public', 'extensions', 'auth'
-AS $$
-    SELECT DISTINCT s.preschool_id FROM students s
-    JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
-    WHERE p.auth_user_id = auth.uid()
-    AND s.preschool_id IS NOT NULL;
-$$;
+    CREATE OR REPLACE FUNCTION public.get_my_children_preschool_ids()
+    RETURNS SETOF UUID
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'auth'
+    AS $$
+      SELECT DISTINCT s.preschool_id FROM public.students s
+      JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
+      WHERE p.auth_user_id = auth.uid()
+        AND s.preschool_id IS NOT NULL;
+    $$;
 
--- ============================================================================
--- STUDENTS TABLE POLICIES
--- ============================================================================
+    COMMENT ON FUNCTION public.get_my_children_ids() IS 'Returns student IDs where current user is parent/guardian. Uses auth_user_id for proper auth check.';
+    COMMENT ON FUNCTION public.get_my_children_class_ids() IS 'Returns class IDs of students where current user is parent/guardian.';
+    COMMENT ON FUNCTION public.get_my_children_preschool_ids() IS 'Returns preschool IDs of students where current user is parent/guardian.';
+    COMMENT ON FUNCTION public.is_parent_of_student(UUID) IS 'Check if current authenticated user is parent/guardian of given student.';
+  END IF;
 
-DROP POLICY IF EXISTS parents_view_school_students ON students;
-CREATE POLICY parents_view_school_students ON students
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND (
-            students.parent_id = p.id 
-            OR students.guardian_id = p.id
-            OR COALESCE(p.organization_id, p.preschool_id) = students.preschool_id
-        )
-    )
-);
+  -- Students policies
+  IF helpers_ready THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_school_students ON public.students';
+    EXECUTE 'CREATE POLICY parents_view_school_students ON public.students FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND (students.parent_id = p.id OR students.guardian_id = p.id OR COALESCE(p.organization_id, p.preschool_id) = students.preschool_id)))';
 
-DROP POLICY IF EXISTS students_parent_access ON students;
-CREATE POLICY students_parent_access ON students
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND p.role = 'parent'
-        AND (
-            students.parent_id = p.id 
-            OR students.guardian_id = p.id
-            OR COALESCE(p.organization_id, p.preschool_id) = students.preschool_id
-        )
-    )
-);
+    EXECUTE 'DROP POLICY IF EXISTS students_parent_access ON public.students';
+    EXECUTE 'CREATE POLICY students_parent_access ON public.students FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND p.role = ''parent'' AND (students.parent_id = p.id OR students.guardian_id = p.id OR COALESCE(p.organization_id, p.preschool_id) = students.preschool_id)))';
 
-DROP POLICY IF EXISTS students_parent_update_own_children ON students;
-CREATE POLICY students_parent_update_own_children ON students
-FOR UPDATE TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND (students.parent_id = p.id OR students.guardian_id = p.id)
-    )
-)
-WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND (students.parent_id = p.id OR students.guardian_id = p.id)
-    )
-);
+    EXECUTE 'DROP POLICY IF EXISTS students_parent_update_own_children ON public.students';
+    EXECUTE 'CREATE POLICY students_parent_update_own_children ON public.students FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND (students.parent_id = p.id OR students.guardian_id = p.id))) WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND (students.parent_id = p.id OR students.guardian_id = p.id)))';
+  END IF;
 
--- ============================================================================
--- CLASSES TABLE POLICIES
--- ============================================================================
+  -- Classes policies
+  IF helpers_ready AND has_classes AND has_classes_preschool_id AND has_classes_teacher_id THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_classes ON public.classes';
+    IF has_user_can_view_classes THEN
+      EXECUTE 'CREATE POLICY parents_view_child_classes ON public.classes FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.students s JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id) WHERE p.auth_user_id = auth.uid() AND s.class_id = classes.id) OR public.user_can_view_classes(classes.preschool_id, classes.teacher_id))';
+    ELSE
+      EXECUTE 'CREATE POLICY parents_view_child_classes ON public.classes FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.students s JOIN public.profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id) WHERE p.auth_user_id = auth.uid() AND s.class_id = classes.id))';
+    END IF;
 
-DROP POLICY IF EXISTS parents_view_child_classes ON classes;
-CREATE POLICY parents_view_child_classes ON classes
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM students s
-        JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
-        WHERE p.auth_user_id = auth.uid()
-        AND s.class_id = classes.id
-    )
-    OR user_can_view_classes(preschool_id, teacher_id)
-);
+    EXECUTE 'DROP POLICY IF EXISTS classes_org_members_select ON public.classes';
+    EXECUTE 'CREATE POLICY classes_org_members_select ON public.classes FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND COALESCE(p.organization_id, p.preschool_id) = classes.preschool_id))';
+  END IF;
 
-DROP POLICY IF EXISTS classes_org_members_select ON classes;
-CREATE POLICY classes_org_members_select ON classes
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND COALESCE(p.organization_id, p.preschool_id) = classes.preschool_id
-    )
-);
+  -- Homework assignments
+  IF helpers_ready AND to_regclass('public.homework_assignments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS homework_assignments_parent_read_access ON public.homework_assignments';
+    EXECUTE 'CREATE POLICY homework_assignments_parent_read_access ON public.homework_assignments FOR SELECT TO authenticated USING (class_id IN (SELECT public.get_my_children_class_ids()) OR preschool_id IN (SELECT public.get_my_children_preschool_ids()))';
+  END IF;
 
--- ============================================================================
--- ALL OTHER TABLES - Using helper functions
--- ============================================================================
+  -- Attendance records
+  IF helpers_ready AND to_regclass('public.attendance_records') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS attendance_records_parent_access ON public.attendance_records';
+    EXECUTE 'CREATE POLICY attendance_records_parent_access ON public.attendance_records FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- homework_assignments
-DROP POLICY IF EXISTS homework_assignments_parent_read_access ON homework_assignments;
-CREATE POLICY homework_assignments_parent_read_access ON homework_assignments
-FOR SELECT TO authenticated
-USING (
-    class_id IN (SELECT get_my_children_class_ids())
-    OR preschool_id IN (SELECT get_my_children_preschool_ids())
-);
+  -- Invoices
+  IF helpers_ready AND to_regclass('public.invoices') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS invoices_parent_access ON public.invoices';
+    EXECUTE 'CREATE POLICY invoices_parent_access ON public.invoices FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- attendance_records
-DROP POLICY IF EXISTS attendance_records_parent_access ON attendance_records;
-CREATE POLICY attendance_records_parent_access ON attendance_records
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Video calls
+  IF helpers_ready AND to_regclass('public.video_calls') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS video_calls_parent_select ON public.video_calls';
+    EXECUTE 'CREATE POLICY video_calls_parent_select ON public.video_calls FOR SELECT TO authenticated USING (class_id IN (SELECT public.get_my_children_class_ids()) OR preschool_id IN (SELECT public.get_my_children_preschool_ids()))';
+  END IF;
 
--- invoices
-DROP POLICY IF EXISTS invoices_parent_access ON invoices;
-CREATE POLICY invoices_parent_access ON invoices
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Emergency contacts
+  IF helpers_ready AND to_regclass('public.emergency_contacts') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS emergency_contacts_parent_child ON public.emergency_contacts';
+    EXECUTE 'CREATE POLICY emergency_contacts_parent_child ON public.emergency_contacts FOR ALL TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- video_calls
-DROP POLICY IF EXISTS video_calls_parent_select ON video_calls;
-CREATE POLICY video_calls_parent_select ON video_calls
-FOR SELECT TO authenticated
-USING (
-    class_id IN (SELECT get_my_children_class_ids())
-    OR preschool_id IN (SELECT get_my_children_preschool_ids())
-);
+  -- Homework submissions
+  IF helpers_ready AND to_regclass('public.homework_submissions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS homework_submissions_parent_child ON public.homework_submissions';
+    EXECUTE 'CREATE POLICY homework_submissions_parent_child ON public.homework_submissions FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- emergency_contacts
-DROP POLICY IF EXISTS emergency_contacts_parent_child ON emergency_contacts;
-CREATE POLICY emergency_contacts_parent_child ON emergency_contacts
-FOR ALL TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student enrollments
+  IF helpers_ready AND to_regclass('public.student_enrollments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS student_enrollments_parent_child ON public.student_enrollments';
+    EXECUTE 'CREATE POLICY student_enrollments_parent_child ON public.student_enrollments FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- homework_submissions
-DROP POLICY IF EXISTS homework_submissions_parent_child ON homework_submissions;
-CREATE POLICY homework_submissions_parent_child ON homework_submissions
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Activity progress
+  IF helpers_ready AND to_regclass('public.activity_progress') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS activity_progress_parent_child ON public.activity_progress';
+    EXECUTE 'CREATE POLICY activity_progress_parent_child ON public.activity_progress FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- student_enrollments
-DROP POLICY IF EXISTS student_enrollments_parent_child ON student_enrollments;
-CREATE POLICY student_enrollments_parent_child ON student_enrollments
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Assignment submissions
+  IF helpers_ready AND to_regclass('public.assignment_submissions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS assignment_submissions_parent_child ON public.assignment_submissions';
+    EXECUTE 'CREATE POLICY assignment_submissions_parent_child ON public.assignment_submissions FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- activity_progress
-DROP POLICY IF EXISTS activity_progress_parent_child ON activity_progress;
-CREATE POLICY activity_progress_parent_child ON activity_progress
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student parent relationships
+  IF helpers_ready AND to_regclass('public.student_parent_relationships') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their relationships" ON public.student_parent_relationships';
+    EXECUTE 'CREATE POLICY parents_view_their_relationships ON public.student_parent_relationships FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- assignment_submissions
-DROP POLICY IF EXISTS assignment_submissions_parent_child ON assignment_submissions;
-CREATE POLICY assignment_submissions_parent_child ON assignment_submissions
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Attendance
+  IF helpers_ready AND to_regclass('public.attendance') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS attendance_parent_child ON public.attendance';
+    EXECUTE 'CREATE POLICY attendance_parent_child ON public.attendance FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- student_parent_relationships
-DROP POLICY IF EXISTS "Parents can view their relationships" ON student_parent_relationships;
-CREATE POLICY parents_view_their_relationships ON student_parent_relationships
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student fees
+  IF helpers_ready AND to_regclass('public.student_fees') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS student_fees_parent_child ON public.student_fees';
+    EXECUTE 'CREATE POLICY student_fees_parent_child ON public.student_fees FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- attendance
-DROP POLICY IF EXISTS attendance_parent_child ON attendance;
-CREATE POLICY attendance_parent_child ON attendance
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Activity attempts
+  IF helpers_ready AND to_regclass('public.activity_attempts') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS activity_attempts_parent_child ON public.activity_attempts';
+    EXECUTE 'CREATE POLICY activity_attempts_parent_child ON public.activity_attempts FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
 
--- student_fees
-DROP POLICY IF EXISTS student_fees_parent_child ON student_fees;
-CREATE POLICY student_fees_parent_child ON student_fees
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+    EXECUTE 'DROP POLICY IF EXISTS activity_attempts_update ON public.activity_attempts';
+    EXECUTE 'CREATE POLICY activity_attempts_update ON public.activity_attempts FOR UPDATE TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- activity_attempts
-DROP POLICY IF EXISTS activity_attempts_parent_child ON activity_attempts;
-CREATE POLICY activity_attempts_parent_child ON activity_attempts
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Parent child links
+  IF helpers_ready AND to_regclass('public.parent_child_links') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parent_child_links_access ON public.parent_child_links';
+    EXECUTE 'CREATE POLICY parent_child_links_access ON public.parent_child_links FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND (parent_child_links.parent_id = p.id OR parent_child_links.child_id IN (SELECT public.get_my_children_ids()))))';
+  END IF;
 
-DROP POLICY IF EXISTS activity_attempts_update ON activity_attempts;
-CREATE POLICY activity_attempts_update ON activity_attempts
-FOR UPDATE TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Class assignments
+  IF helpers_ready AND to_regclass('public.class_assignments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS class_assignments_parent_child ON public.class_assignments';
+    EXECUTE 'CREATE POLICY class_assignments_parent_child ON public.class_assignments FOR SELECT TO authenticated USING (class_id IN (SELECT public.get_my_children_class_ids()))';
+  END IF;
 
--- parent_child_links
-DROP POLICY IF EXISTS parent_child_links_access ON parent_child_links;
-CREATE POLICY parent_child_links_access ON parent_child_links
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND (parent_child_links.parent_id = p.id OR parent_child_links.child_id IN (SELECT get_my_children_ids()))
-    )
-);
+  -- Gradebook entries
+  IF helpers_ready AND to_regclass('public.gradebook_entries') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their children''s gradebook entries" ON public.gradebook_entries';
+    EXECUTE 'CREATE POLICY parents_view_children_gradebook_entries ON public.gradebook_entries FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- class_assignments
-DROP POLICY IF EXISTS class_assignments_parent_child ON class_assignments;
-CREATE POLICY class_assignments_parent_child ON class_assignments
-FOR SELECT TO authenticated
-USING (class_id IN (SELECT get_my_children_class_ids()));
+  -- Course grades
+  IF helpers_ready AND to_regclass('public.course_grades') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their children''s course grades" ON public.course_grades';
+    EXECUTE 'CREATE POLICY parents_view_children_course_grades ON public.course_grades FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- gradebook_entries
-DROP POLICY IF EXISTS "Parents can view their children's gradebook entries" ON gradebook_entries;
-CREATE POLICY parents_view_children_gradebook_entries ON gradebook_entries
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student progress
+  IF helpers_ready AND to_regclass('public.student_progress') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their children''s progress" ON public.student_progress';
+    EXECUTE 'CREATE POLICY parents_view_children_progress ON public.student_progress FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- course_grades
-DROP POLICY IF EXISTS "Parents can view their children's course grades" ON course_grades;
-CREATE POLICY parents_view_children_course_grades ON course_grades
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- School fee structures
+  IF helpers_ready AND to_regclass('public.school_fee_structures') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view fee structures for their children''s school" ON public.school_fee_structures';
+    EXECUTE 'CREATE POLICY parents_view_fee_structures ON public.school_fee_structures FOR SELECT TO authenticated USING (preschool_id IN (SELECT public.get_my_children_preschool_ids()))';
+  END IF;
 
--- student_progress
-DROP POLICY IF EXISTS "Parents can view their children's progress" ON student_progress;
-CREATE POLICY parents_view_children_progress ON student_progress
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student fee assignments
+  IF helpers_ready AND to_regclass('public.student_fee_assignments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their children''s fees" ON public.student_fee_assignments';
+    EXECUTE 'CREATE POLICY parents_view_children_fees ON public.student_fee_assignments FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- school_fee_structures
-DROP POLICY IF EXISTS "Parents can view fee structures for their children's school" ON school_fee_structures;
-CREATE POLICY parents_view_fee_structures ON school_fee_structures
-FOR SELECT TO authenticated
-USING (preschool_id IN (SELECT get_my_children_preschool_ids()));
+  -- Fee payments
+  IF helpers_ready AND to_regclass('public.fee_payments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Parents can view their payments" ON public.fee_payments';
+    EXECUTE 'CREATE POLICY parents_view_their_payments ON public.fee_payments FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- student_fee_assignments
-DROP POLICY IF EXISTS "Parents can view their children's fees" ON student_fee_assignments;
-CREATE POLICY parents_view_children_fees ON student_fee_assignments
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Scheduled lessons
+  IF helpers_ready AND to_regclass('public.scheduled_lessons') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS scheduled_lessons_parent_select ON public.scheduled_lessons';
+    EXECUTE 'CREATE POLICY scheduled_lessons_parent_select ON public.scheduled_lessons FOR SELECT TO authenticated USING (class_id IN (SELECT public.get_my_children_class_ids()))';
+  END IF;
 
--- fee_payments
-DROP POLICY IF EXISTS "Parents can view their payments" ON fee_payments;
-CREATE POLICY parents_view_their_payments ON fee_payments
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Child registration requests
+  IF helpers_ready AND to_regclass('public.child_registration_requests') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS child_registration_requests_parent_update ON public.child_registration_requests';
+    EXECUTE 'CREATE POLICY child_registration_requests_parent_update ON public.child_registration_requests FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND child_registration_requests.parent_id = p.id))';
 
--- scheduled_lessons
-DROP POLICY IF EXISTS scheduled_lessons_parent_select ON scheduled_lessons;
-CREATE POLICY scheduled_lessons_parent_select ON scheduled_lessons
-FOR SELECT TO authenticated
-USING (class_id IN (SELECT get_my_children_class_ids()));
+    EXECUTE 'DROP POLICY IF EXISTS child_registration_requests_parent_view ON public.child_registration_requests';
+    EXECUTE 'CREATE POLICY child_registration_requests_parent_view ON public.child_registration_requests FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND child_registration_requests.parent_id = p.id))';
+  END IF;
 
--- child_registration_requests
-DROP POLICY IF EXISTS child_registration_requests_parent_update ON child_registration_requests;
-CREATE POLICY child_registration_requests_parent_update ON child_registration_requests
-FOR UPDATE TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND child_registration_requests.parent_id = p.id
-    )
-);
+  -- Student achievements
+  IF helpers_ready AND to_regclass('public.student_achievements') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS achievements_select ON public.student_achievements';
+    EXECUTE 'CREATE POLICY achievements_select ON public.student_achievements FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
-DROP POLICY IF EXISTS child_registration_requests_parent_view ON child_registration_requests;
-CREATE POLICY child_registration_requests_parent_view ON child_registration_requests
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM profiles p
-        WHERE p.auth_user_id = auth.uid()
-        AND child_registration_requests.parent_id = p.id
-    )
-);
+  -- Student streaks
+  IF helpers_ready AND to_regclass('public.student_streaks') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS streaks_select ON public.student_streaks';
+    EXECUTE 'CREATE POLICY streaks_select ON public.student_streaks FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- student_achievements
-DROP POLICY IF EXISTS achievements_select ON student_achievements;
-CREATE POLICY achievements_select ON student_achievements
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Interactive activities
+  IF helpers_ready AND to_regclass('public.interactive_activities') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS interactive_activities_select ON public.interactive_activities';
+    EXECUTE 'CREATE POLICY interactive_activities_select ON public.interactive_activities FOR SELECT TO authenticated USING (preschool_id IN (SELECT public.get_my_children_preschool_ids()) OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.auth_user_id = auth.uid() AND COALESCE(p.organization_id, p.preschool_id) = interactive_activities.preschool_id))';
 
--- student_streaks
-DROP POLICY IF EXISTS streaks_select ON student_streaks;
-CREATE POLICY streaks_select ON student_streaks
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_interactive_activities ON public.interactive_activities';
+    EXECUTE 'CREATE POLICY parents_view_interactive_activities ON public.interactive_activities FOR SELECT TO authenticated USING (preschool_id IN (SELECT public.get_my_children_preschool_ids()))';
+  END IF;
 
--- interactive_activities
-DROP POLICY IF EXISTS interactive_activities_select ON interactive_activities;
-CREATE POLICY interactive_activities_select ON interactive_activities
-FOR SELECT TO authenticated
-USING (preschool_id IN (SELECT get_my_children_preschool_ids())
-   OR EXISTS (
-       SELECT 1 FROM profiles p
-       WHERE p.auth_user_id = auth.uid()
-       AND COALESCE(p.organization_id, p.preschool_id) = interactive_activities.preschool_id
-   ));
+  -- Student activity feed
+  IF helpers_ready AND to_regclass('public.student_activity_feed') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS activity_feed_select ON public.student_activity_feed';
+    EXECUTE 'CREATE POLICY activity_feed_select ON public.student_activity_feed FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
-DROP POLICY IF EXISTS parents_view_interactive_activities ON interactive_activities;
-CREATE POLICY parents_view_interactive_activities ON interactive_activities
-FOR SELECT TO authenticated
-USING (preschool_id IN (SELECT get_my_children_preschool_ids()));
+  -- Teacher student notes
+  IF helpers_ready AND to_regclass('public.teacher_student_notes') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_acknowledge_notes ON public.teacher_student_notes';
+    EXECUTE 'CREATE POLICY parents_acknowledge_notes ON public.teacher_student_notes FOR UPDATE TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
 
--- student_activity_feed
-DROP POLICY IF EXISTS activity_feed_select ON student_activity_feed;
-CREATE POLICY activity_feed_select ON student_activity_feed
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_notes ON public.teacher_student_notes';
+    EXECUTE 'CREATE POLICY parents_view_child_notes ON public.teacher_student_notes FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- teacher_student_notes
-DROP POLICY IF EXISTS parents_acknowledge_notes ON teacher_student_notes;
-CREATE POLICY parents_acknowledge_notes ON teacher_student_notes
-FOR UPDATE TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Weekly learning reports
+  IF helpers_ready AND to_regclass('public.weekly_learning_reports') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS weekly_reports_parent_select ON public.weekly_learning_reports';
+    EXECUTE 'CREATE POLICY weekly_reports_parent_select ON public.weekly_learning_reports FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
-DROP POLICY IF EXISTS parents_view_child_notes ON teacher_student_notes;
-CREATE POLICY parents_view_child_notes ON teacher_student_notes
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Activity reactions
+  IF helpers_ready AND to_regclass('public.activity_reactions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS activity_reactions_parent_select ON public.activity_reactions';
+    EXECUTE 'CREATE POLICY activity_reactions_parent_select ON public.activity_reactions FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.student_activity_feed saf WHERE saf.id = activity_reactions.activity_id AND saf.student_id IN (SELECT public.get_my_children_ids())))';
+  END IF;
 
--- weekly_learning_reports
-DROP POLICY IF EXISTS weekly_reports_parent_select ON weekly_learning_reports;
-CREATE POLICY weekly_reports_parent_select ON weekly_learning_reports
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Activity comments
+  IF helpers_ready AND to_regclass('public.activity_comments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS activity_comments_parent_select ON public.activity_comments';
+    EXECUTE 'CREATE POLICY activity_comments_parent_select ON public.activity_comments FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.student_activity_feed saf WHERE saf.id = activity_comments.activity_id AND saf.student_id IN (SELECT public.get_my_children_ids())))';
+  END IF;
 
--- activity_reactions
-DROP POLICY IF EXISTS activity_reactions_parent_select ON activity_reactions;
-CREATE POLICY activity_reactions_parent_select ON activity_reactions
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM student_activity_feed saf
-        WHERE saf.id = activity_reactions.activity_id
-        AND saf.student_id IN (SELECT get_my_children_ids())
-    )
-);
+  -- Lesson assignments
+  IF helpers_ready AND to_regclass('public.lesson_assignments') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_assignments ON public.lesson_assignments';
+    EXECUTE 'CREATE POLICY parents_view_child_assignments ON public.lesson_assignments FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- activity_comments
-DROP POLICY IF EXISTS activity_comments_parent_select ON activity_comments;
-CREATE POLICY activity_comments_parent_select ON activity_comments
-FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM student_activity_feed saf
-        WHERE saf.id = activity_comments.activity_id
-        AND saf.student_id IN (SELECT get_my_children_ids())
-    )
-);
+  -- Lesson completions
+  IF helpers_ready AND to_regclass('public.lesson_completions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_completions ON public.lesson_completions';
+    EXECUTE 'CREATE POLICY parents_view_child_completions ON public.lesson_completions FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- lesson_assignments
-DROP POLICY IF EXISTS parents_view_child_assignments ON lesson_assignments;
-CREATE POLICY parents_view_child_assignments ON lesson_assignments
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
+  -- Student progress summary
+  IF helpers_ready AND to_regclass('public.student_progress_summary') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_progress_summary ON public.student_progress_summary';
+    EXECUTE 'CREATE POLICY parents_view_child_progress_summary ON public.student_progress_summary FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
 
--- lesson_completions
-DROP POLICY IF EXISTS parents_view_child_completions ON lesson_completions;
-CREATE POLICY parents_view_child_completions ON lesson_completions
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
-
--- student_progress_summary
-DROP POLICY IF EXISTS parents_view_child_progress_summary ON student_progress_summary;
-CREATE POLICY parents_view_child_progress_summary ON student_progress_summary
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
-
--- stem_progress
-DROP POLICY IF EXISTS parents_view_child_stem_progress ON stem_progress;
-CREATE POLICY parents_view_child_stem_progress ON stem_progress
-FOR SELECT TO authenticated
-USING (student_id IN (SELECT get_my_children_ids()));
-
--- ============================================================================
--- COMMENTS
--- ============================================================================
-COMMENT ON FUNCTION get_my_children_ids() IS 'Returns student IDs where current user is parent/guardian. Uses auth_user_id for proper auth check.';
-COMMENT ON FUNCTION get_my_children_class_ids() IS 'Returns class IDs of students where current user is parent/guardian.';
-COMMENT ON FUNCTION get_my_children_preschool_ids() IS 'Returns preschool IDs of students where current user is parent/guardian.';
-COMMENT ON FUNCTION is_parent_of_student(UUID) IS 'Check if current authenticated user is parent/guardian of given student.';
+  -- STEM progress
+  IF helpers_ready AND to_regclass('public.stem_progress') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_child_stem_progress ON public.stem_progress';
+    EXECUTE 'CREATE POLICY parents_view_child_stem_progress ON public.stem_progress FOR SELECT TO authenticated USING (student_id IN (SELECT public.get_my_children_ids()))';
+  END IF;
+END $sql$;

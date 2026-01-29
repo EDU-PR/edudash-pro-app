@@ -984,6 +984,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     backgroundColor: theme.primary + '15',
+    cursor: 'pointer',
   },
   editButtonText: {
     color: theme.primary,
@@ -1045,6 +1046,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
+    cursor: 'pointer',
   },
   saveButtonText: {
     color: '#fff',
@@ -1055,6 +1057,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 10,
     borderWidth: 1,
+    cursor: 'pointer',
   },
   payButtonText: {
     fontWeight: '700',
@@ -1092,6 +1095,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
+    cursor: 'pointer',
   },
   matchButtonText: {
     fontSize: 12,

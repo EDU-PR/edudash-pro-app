@@ -43,7 +43,7 @@ const AppPreferencesContext = createContext<AppPreferencesContextValue | undefin
 
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppPreferencesState>({
-    showDashFAB: true,
+    showDashFAB: false,
     fabPosition: null,
     tutorialCompleted: false,
     bottomNavAutoHide: true, // Default to auto-hide
@@ -62,7 +62,7 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
         ]);
 
         setState({
-          showDashFAB: showDashFAB !== 'false', // Default true
+          showDashFAB: showDashFAB === 'true', // Default false
           fabPosition: fabPosition ? JSON.parse(fabPosition) : null,
           tutorialCompleted: tutorialCompleted === 'true',
           bottomNavAutoHide: bottomNavAutoHide !== 'false', // Default true
@@ -156,7 +156,7 @@ export function useAppPreferencesSafe() {
     return useAppPreferences();
   } catch {
     return {
-      showDashFAB: true,
+      showDashFAB: false,
       fabPosition: null,
       tutorialCompleted: true,
       bottomNavAutoHide: true,

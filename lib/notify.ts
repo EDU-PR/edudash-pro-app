@@ -95,6 +95,22 @@ export async function notifySubscriptionPendingPayment(preschool_id: string, sub
   })
 }
 
+export async function notifyBirthdayDonationPaid(
+  user_id: string,
+  payload: {
+    payer_child_name?: string;
+    birthday_child_name?: string;
+    donation_amount?: number;
+    donation_date?: string;
+  }
+) {
+  return dispatch('birthday_donation_paid', {
+    user_ids: [user_id],
+    custom_payload: payload,
+    include_push: true,
+  })
+}
+
 // ============================================================================
 // School Calendar Event Notifications
 // ============================================================================

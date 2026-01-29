@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
+import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import {
   MessageCircle,
   Users,
@@ -47,12 +48,6 @@ interface ParentShellProps {
   hideHeader?: boolean;
 }
 
-const getGradeNumber = (gradeString?: string): number => {
-  if (!gradeString) return 0;
-  const match = gradeString.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
-};
-
 export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, unreadCount = 0, hasOrganization: hasOrganizationProp, children, contentClassName, contentStyle, hideHeader = false }: ParentShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -74,7 +69,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   );
   const hasExamEligibleChild = useMemo(() => {
     if (!activeChild) return false;
-    return getGradeNumber(activeChild.grade) >= 4;
+    return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild]);
   
   // Get pending homework count

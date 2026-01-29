@@ -167,21 +167,36 @@ BEGIN
 END;
 $$;
 
--- Verify the changes
-SELECT 
-  s.id AS student_id,
-  s.first_name,
-  s.last_name,
-  s.date_of_birth,
-  EXTRACT(YEAR FROM age(CURRENT_DATE, s.date_of_birth)) AS age,
-  p.email AS parent_email,
-  sf.amount,
-  sf.final_amount,
-  sf.status,
-  sf.due_date
-FROM students s
-JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
-LEFT JOIN student_fees sf ON sf.student_id = s.id
-WHERE p.email = 'charitydube217@gmail.com'
-  AND s.is_active = true
-ORDER BY s.first_name, sf.due_date DESC;
+DO $$
+DECLARE
+  has_students boolean;
+  has_profiles boolean;
+  has_date_of_birth boolean;
+BEGIN
+  has_students := to_regclass('public.students') IS NOT NULL;
+  has_profiles := to_regclass('public.profiles') IS NOT NULL;
+
+  IF NOT has_students OR NOT has_profiles THEN
+    RETURN;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'students'
+      AND column_name = 'date_of_birth'
+  ) INTO has_date_of_birth;
+
+  IF NOT has_date_of_birth THEN
+    RETURN;
+  END IF;
+
+  -- Verification query (intentionally not returning rows in migration context)
+  PERFORM 1
+  FROM students s
+  JOIN profiles p ON (s.parent_id = p.id OR s.guardian_id = p.id)
+  LEFT JOIN student_fees sf ON sf.student_id = s.id
+  WHERE p.email = 'charitydube217@gmail.com'
+    AND s.is_active = true;
+END $$;

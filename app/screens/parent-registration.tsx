@@ -237,6 +237,7 @@ export default function ParentRegistrationScreen() {
                   id: selectedOrgId,
                   name: schoolData?.name || 'School',
                   type: 'preschool',
+                  userId: user.id,
                 }));
                 
                 console.log('[ParentRegistration] Set active organization to preschool:', selectedOrgId);
@@ -284,6 +285,7 @@ export default function ParentRegistrationScreen() {
             id: selectedOrgId,
             name: schoolData?.name || 'EduDash Pro Community School',
             type: 'preschool',
+            userId: user.id,
           }));
           
           console.log('[ParentRegistration] Set organization to:', schoolData?.name || selectedOrgId);

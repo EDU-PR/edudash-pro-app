@@ -30,6 +30,12 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const [ageBandLoaded, setAgeBandLoaded] = useState(false);
   const [lastConversationId, setLastConversationId] = useState<string | null>(null);
 
+  const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
+  const isPreschool = normalizedSchool.includes('preschool') ||
+    normalizedSchool.includes('ecd') ||
+    normalizedSchool.includes('early');
+  const lockAgeBand = !!learnerContext?.ageBand && (learnerContext?.role === 'student' || learnerContext?.role === 'learner');
+
   const ageChips = useMemo(() => ([
     { id: 'auto', label: 'Auto' },
     { id: '3-5', label: '3–5' },
@@ -39,6 +45,11 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     { id: '16-18', label: '16–18' },
     { id: 'adult', label: 'Adult' },
   ]), []);
+
+  const visibleAgeChips = useMemo(() => {
+    if (!isPreschool) return ageChips;
+    return ageChips.filter(chip => ['auto', '3-5', '6-8'].includes(chip.id));
+  }, [ageChips, isPreschool]);
 
   useEffect(() => {
     let mounted = true;
@@ -80,18 +91,28 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
 
   useEffect(() => {
     if (!learnerContext?.ageBand) return;
+    if (lockAgeBand) {
+      setAgeBand(learnerContext.ageBand);
+      return;
+    }
     setAgeBand(prev => (prev === 'auto' ? learnerContext.ageBand || prev : prev));
-  }, [learnerContext?.ageBand]);
+  }, [learnerContext?.ageBand, lockAgeBand]);
 
   useEffect(() => {
     if (!ageBandLoaded) return;
-    AsyncStorage.setItem('@dash_ai_age_band', ageBand).catch(() => {});
-    onAgeBandChange?.(ageBand);
-  }, [ageBand, ageBandLoaded, onAgeBandChange]);
+    if (!lockAgeBand) {
+      AsyncStorage.setItem('@dash_ai_age_band', ageBand).catch(() => {});
+      onAgeBandChange?.(ageBand);
+      return;
+    }
+    if (learnerContext?.ageBand) {
+      onAgeBandChange?.(learnerContext.ageBand);
+    }
+  }, [ageBand, ageBandLoaded, onAgeBandChange, lockAgeBand, learnerContext?.ageBand]);
 
   const buildPrompt = (intent: string, topic?: string) => {
     const ageLabel = ageChips.find((chip) => chip.id === ageBand)?.label || ageBand;
-    const agePrefix = ageBand === 'auto' ? '' : `Age group: ${ageLabel}. `;
+    const agePrefix = lockAgeBand || ageBand === 'auto' ? '' : `Age group: ${ageLabel}. `;
     const topicPrefix = topic ? `Topic: ${topic}. ` : '';
     return `${agePrefix}${topicPrefix}${intent}`;
   };
@@ -114,10 +135,12 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
           </View>
           <View style={styles.emptyStateHeroText}>
             <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-              Your personal tutor
+              {isPreschool ? 'Your play‑based tutor' : 'Your personal tutor'}
             </Text>
             <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-              Tell me what you’re stuck on. I’ll diagnose, teach, and practice with you.
+              {isPreschool
+                ? 'Tell me what your child is learning. I’ll use stories and simple questions.'
+                : 'Tell me what you’re stuck on. I’ll diagnose, teach, and practice with you.'}
             </Text>
           </View>
         </View>
@@ -125,21 +148,33 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         <View style={styles.primaryCtasRow}>
           <TouchableOpacity
             style={[styles.primaryCta, { backgroundColor: theme.primary }]}
-            onPress={() => sendTutorIntent('Ask me one short diagnostic question first, then explain step-by-step in simple language.')}
+            onPress={() => sendTutorIntent(
+              isPreschool
+                ? 'Use a short story and ask one simple question to get started.'
+                : 'Ask me one short diagnostic question first, then explain step-by-step in simple language.'
+            )}
           >
             <Ionicons name="bulb-outline" size={18} color={theme.onPrimary || '#fff'} />
             <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Explain it</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.primaryCta, { backgroundColor: theme.success || '#16a34a' }]}
-            onPress={() => sendTutorIntent('Give me one practice question to diagnose my level. Wait for my answer before continuing.')}
+            onPress={() => sendTutorIntent(
+              isPreschool
+                ? 'Give one playful practice question. Wait for the answer before continuing.'
+                : 'Give me one practice question to diagnose my level. Wait for my answer before continuing.'
+            )}
           >
             <Ionicons name="pencil-outline" size={18} color={theme.onPrimary || '#fff'} />
             <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Help me solve</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.primaryCta, { backgroundColor: theme.warning || '#f59e0b' }]}
-            onPress={() => sendTutorIntent('Quiz me with 5 questions, starting easy and getting harder.')}
+            onPress={() => sendTutorIntent(
+              isPreschool
+                ? 'Quiz with 3 very easy questions using colors, shapes, or counting.'
+                : 'Quiz me with 5 questions, starting easy and getting harder.'
+            )}
           >
             <Ionicons name="school-outline" size={18} color={theme.onPrimary || '#fff'} />
             <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Test me</Text>
@@ -160,7 +195,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
           </View>
         )}
         <View style={styles.chipRow}>
-          {ageChips.map((chip) => {
+          {visibleAgeChips.map((chip) => {
             const active = chip.id === ageBand;
             return (
               <TouchableOpacity
@@ -170,7 +205,11 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
                   { borderColor: active ? theme.primary : theme.border },
                   active && { backgroundColor: theme.primary + '22' },
                 ]}
-                onPress={() => setAgeBand(chip.id)}
+                onPress={() => {
+                  if (lockAgeBand) return;
+                  setAgeBand(chip.id);
+                }}
+                disabled={lockAgeBand}
               >
                 <Text style={[styles.ageChipText, { color: active ? theme.primary : theme.textSecondary }]}>
                   {chip.label}

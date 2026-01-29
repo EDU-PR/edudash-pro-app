@@ -74,7 +74,7 @@ export const useParentDashboard = () => {
       }
 
       // Fetch parent user from profiles table
-      const { data: parentUser, error: parentError } = await supabase
+      let { data: parentUser, error: parentError } = await supabase
         .from('profiles')
         .select('id, preschool_id, first_name, last_name, role, organization_id')
         .eq('auth_user_id', user.id)
@@ -82,6 +82,20 @@ export const useParentDashboard = () => {
 
       if (parentError) {
         logError('Parent user fetch error:', parentError);
+      }
+      
+      // Fallback: some deployments use profiles.id = auth.users.id without auth_user_id
+      if (!parentUser) {
+        const { data: parentById, error: parentByIdError } = await supabase
+          .from('profiles')
+          .select('id, preschool_id, first_name, last_name, role, organization_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (parentByIdError) {
+          logError('Parent user fetch (id) error:', parentByIdError);
+        } else if (parentById) {
+          parentUser = parentById;
+        }
       }
 
       let dashboardData: ParentDashboardData;

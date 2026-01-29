@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { BirthdayChartWeb, type WebStudentBirthday } from '@/components/dashboard/parent/BirthdayChartWeb';
+import { calculateAgeOnDate, getNextBirthdayDate, parseDateOnly } from '@/lib/utils/dateUtils';
 
 interface StudentRow {
   id: string;
@@ -16,36 +17,6 @@ interface StudentRow {
   avatar_url: string | null;
   classes?: { name?: string | null } | Array<{ name?: string | null }> | null;
 }
-
-const parseDateOnly = (value: string): Date | null => {
-  const [yearStr, monthStr, dayStr] = value.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-};
-
-const calculateAgeTurning = (dateOfBirth: string, onDate: Date): number => {
-  const dob = parseDateOnly(dateOfBirth);
-  if (!dob) return 0;
-  let age = onDate.getFullYear() - dob.getFullYear();
-  const monthDiff = onDate.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && onDate.getDate() < dob.getDate())) {
-    age -= 1;
-  }
-  return Math.max(age, 0);
-};
-
-const getNextBirthday = (dateOfBirth: string, today: Date): Date | null => {
-  const dob = parseDateOnly(dateOfBirth);
-  if (!dob) return null;
-  const next = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
-  if (next < today) {
-    next.setFullYear(today.getFullYear() + 1);
-  }
-  return next;
-};
 
 export default function ParentBirthdayChartPage() {
   const router = useRouter();
@@ -105,8 +76,8 @@ export default function ParentBirthdayChartPage() {
       today.setHours(0, 0, 0, 0);
       const mapped = (data || []).map((row: StudentRow) => {
         const dob = row.date_of_birth || '';
-        const nextBirthday = dob ? getNextBirthday(dob, today) : null;
-        const ageTurning = dob && nextBirthday ? calculateAgeTurning(dob, nextBirthday) : 0;
+        const nextBirthday = dob ? getNextBirthdayDate(dob, today) : null;
+        const ageTurning = dob && nextBirthday ? calculateAgeOnDate(dob, nextBirthday) : 0;
         const classData = Array.isArray(row.classes) ? row.classes[0] : row.classes;
         return {
           id: `birthday-${row.id}`,

@@ -18,6 +18,7 @@ import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
 import { formatPaymentDate } from '@/lib/utils/payment-utils';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 
@@ -73,8 +74,8 @@ export function PaymentUploadModal({
 
   const handleImagePicker = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission Required', 'Camera roll permission is required.');
         return;
       }

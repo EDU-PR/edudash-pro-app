@@ -28,6 +28,9 @@ const DonationSchema = z.object({
   payment_method: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   recorded_by: z.string().nullable().optional(),
+  payer_student_id: z.string().nullable().optional(),
+  birthday_student_id: z.string().nullable().optional(),
+  class_id: z.string().nullable().optional(),
   created_at: z.string(),
 });
 
@@ -49,6 +52,9 @@ const RecordInputSchema = z.object({
   amount: z.number().positive(),
   paymentMethod: z.string().optional(),
   note: z.string().optional(),
+  payerStudentId: z.string().uuid().optional(),
+  birthdayStudentId: z.string().uuid().optional(),
+  classId: z.string().uuid().optional(),
 });
 
 const mapDay = (row: z.infer<typeof DaySchema>): BirthdayDonationDay => ({
@@ -71,6 +77,9 @@ const mapDonation = (row: z.infer<typeof DonationSchema>): BirthdayDonationEntry
   paymentMethod: row.payment_method ?? null,
   note: row.note ?? null,
   recordedBy: row.recorded_by ?? null,
+  payerStudentId: row.payer_student_id ?? null,
+  birthdayStudentId: row.birthday_student_id ?? null,
+  classId: row.class_id ?? null,
   createdAt: row.created_at,
 });
 
@@ -111,6 +120,31 @@ export class BirthdayDonationsService {
     return parsed.success ? parsed.data.map(mapDonation) : [];
   }
 
+  static async getDonationsForBirthday(
+    organizationId: string,
+    donationDate: string,
+    birthdayStudentId: string,
+    classId?: string | null
+  ): Promise<BirthdayDonationEntry[]> {
+    const supabase = assertSupabase();
+    let query = supabase
+      .from('birthday_donations')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('donation_date', donationDate)
+      .eq('birthday_student_id', birthdayStudentId)
+      .order('created_at', { ascending: false });
+
+    if (classId) {
+      query = query.eq('class_id', classId);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+    const parsed = z.array(DonationSchema).safeParse(data);
+    return parsed.success ? parsed.data.map(mapDonation) : [];
+  }
+
   static async getTodayBirthdays(organizationId: string, donationDate: string): Promise<BirthdayDonationBirthdays[]> {
     const supabase = assertSupabase();
     const [year, month, day] = donationDate.split('-');
@@ -133,8 +167,10 @@ export class BirthdayDonationsService {
     return parsed.data
       .filter((student) => {
         if (!student.date_of_birth) return false;
-        const date = new Date(student.date_of_birth);
-        return date.getMonth() + 1 === monthInt && date.getDate() === dayInt;
+        const datePart = student.date_of_birth.split('T')[0] || student.date_of_birth;
+        const [dobYear, dobMonth, dobDay] = datePart.split('-').map((part) => Number(part));
+        if (!dobYear || !dobMonth || !dobDay) return false;
+        return dobMonth === monthInt && dobDay === dayInt;
       })
       .map(mapBirthday);
   }
@@ -153,11 +189,65 @@ export class BirthdayDonationsService {
         amount: parsed.amount,
         paymentMethod: parsed.paymentMethod,
         note: parsed.note,
+        payerStudentId: parsed.payerStudentId,
+        birthdayStudentId: parsed.birthdayStudentId,
+        classId: parsed.classId,
       },
     });
 
     if (error || !data?.success || !data?.data) {
-      throw new Error(error?.message || data?.error || 'Failed to record donation');
+      let errorDetails: { error?: string; code?: string; details?: string; hint?: string } | null = null;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        const url = supabaseUrl();
+        if (accessToken && url) {
+          const response = await fetch(`${url}/functions/v1/birthday-donations`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              action: 'record',
+              donationDate: parsed.donationDate,
+              amount: parsed.amount,
+              paymentMethod: parsed.paymentMethod,
+              note: parsed.note,
+              payerStudentId: parsed.payerStudentId,
+              birthdayStudentId: parsed.birthdayStudentId,
+              classId: parsed.classId,
+            }),
+          });
+          const json = await response.json().catch(() => null);
+          if (json && typeof json === 'object') {
+            errorDetails = {
+              error: (json as any).error,
+              code: (json as any).code,
+              details: (json as any).details,
+              hint: (json as any).hint,
+            };
+          }
+        }
+      } catch {
+        // ignore secondary fetch errors
+      }
+
+      console.error('[BirthdayDonations] recordDonation failed', {
+        error,
+        data,
+        errorDetails,
+        payload: parsed,
+        organizationId,
+      });
+      const detail = errorDetails?.details ? ` (${errorDetails.details})` : '';
+      const hint = errorDetails?.hint ? ` ${errorDetails.hint}` : '';
+      throw new Error(
+        errorDetails?.error ||
+        error?.message ||
+        data?.error ||
+        `Failed to record donation${detail}${hint}`
+      );
     }
 
     const dayParsed = DaySchema.safeParse(data.data);
@@ -195,5 +285,15 @@ export class BirthdayDonationsService {
     const totalExpected = rows.data.reduce((sum, row) => sum + row.expected_amount, 0);
     const totalReceived = rows.data.reduce((sum, row) => sum + row.total_received, 0);
     return { totalExpected, totalReceived, daysWithBirthdays: rows.data.length };
+  }
+}
+
+function supabaseUrl(): string | null {
+  try {
+    const Constants = require('expo-constants');
+    const extra = Constants?.expoConfig?.extra || {};
+    return extra.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || null;
+  } catch {
+    return process.env.EXPO_PUBLIC_SUPABASE_URL || null;
   }
 }
