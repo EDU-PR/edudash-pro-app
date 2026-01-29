@@ -21,6 +21,22 @@ import {
 } from './useNotificationStorage';
 import { Notification, NotificationType } from '@/components/notifications/types';
 
+interface AnnouncementRow {
+  id: string;
+  title: string | null;
+  content: string | null;
+  priority: string | null;
+  published_at: string | null;
+  created_at: string;
+  author_id: string | null;
+}
+
+interface AuthorProfile {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 /**
  * Map push notification type to display type
  */
@@ -200,15 +216,31 @@ async function fetchNotifications(userId: string, userPreschoolId?: string | nul
       const { data: announcements } = await client
         .from('announcements')
         .select(`
-          id, title, content, priority, published_at, created_at,
-          author:profiles!author_id(first_name, last_name)
+          id, title, content, priority, published_at, created_at, author_id
         `)
         .eq('preschool_id', userPreschoolId)
         .eq('is_published', true)
         .order('published_at', { ascending: false })
         .limit(10);
       
-      if (announcements?.length) {
+      const announcementRows = (announcements || []) as AnnouncementRow[];
+      if (announcementRows.length) {
+        const authorIds = announcementRows
+          .map((a) => a.author_id)
+          .filter((id): id is string => Boolean(id));
+
+        let authorMap = new Map<string, AuthorProfile>();
+        if (authorIds.length) {
+          const { data: authors } = await client
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', authorIds);
+
+          authorMap = new Map(
+            ((authors || []) as AuthorProfile[]).map((author) => [author.id, author])
+          );
+        }
+
         // Get viewed announcement IDs for this user
         const { data: viewedAnnouncements } = await client
           .from('announcement_views')
@@ -217,13 +249,14 @@ async function fetchNotifications(userId: string, userPreschoolId?: string | nul
         
         const viewedIds = new Set((viewedAnnouncements || []).map((v: any) => v.announcement_id));
         
-        announcements.forEach((a: any) => {
+        announcementRows.forEach((a) => {
           const notifId = `announce-${a.id}`;
           const isRead = viewedIds.has(a.id) || readIds.has(notifId);
           
           if (!isNotificationCleared(notifId, a.published_at || a.created_at, clearedIds, clearedBeforeDate)) {
-            const authorName = a.author 
-              ? `${a.author.first_name || ''} ${a.author.last_name || ''}`.trim()
+            const author = a.author_id ? authorMap.get(a.author_id) : null;
+            const authorName = author
+              ? `${author.first_name || ''} ${author.last_name || ''}`.trim()
               : 'School';
             
             notifications.push({
