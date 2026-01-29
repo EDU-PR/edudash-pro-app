@@ -14,7 +14,7 @@ import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 export default function PrincipalParentRequestsScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
-  const schoolId = (profile?.organization_id as string) || null;
+  const schoolId = (profile?.organization_id as string) || (profile?.preschool_id as string) || null;
   const [requests, setRequests] = useState<GuardianRequest[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [studentIdMap, setStudentIdMap] = useState<Record<string, string>>({});

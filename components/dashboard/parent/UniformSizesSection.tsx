@@ -8,6 +8,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
+import { useTranslation } from 'react-i18next';
 
 const SIZE_OPTIONS = [
   '2-3',
@@ -115,12 +116,15 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children, schoolName }) => {
   const { theme } = useTheme();
   const { terminology } = useOrganizationTerminology();
+  const { t } = useTranslation();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
   const memberLabel = terminology.member;
   const memberLabelLower = memberLabel.toLowerCase();
   const institutionLabel = terminology.institution;
+  const nameLabel = `${memberLabel} ${t('common.name', { defaultValue: 'Name' })}`;
+  const namePlaceholder = `${memberLabelLower} ${t('common.name', { defaultValue: 'name' }).toLowerCase()}`;
   const [entries, setEntries] = useState<Record<string, UniformEntry>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -192,7 +196,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 tshirtNumber: isReturning ? row.tshirt_number || next[row.student_id]?.tshirtNumber || '' : '',
                 sampleSupplied,
                 status: 'saved',
-                message: 'Saved',
+                message: t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' }),
                 updatedAt: row.updated_at || null,
                 isEditing: false,
               };
@@ -201,7 +205,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           });
         }
       } catch (error: unknown) {
-        setLoadError(getErrorMessage(error, 'Unable to load uniform sizes.'));
+        setLoadError(getErrorMessage(
+          error,
+          t('dashboard.parent.uniform.errors.load_existing', { defaultValue: 'Unable to load uniform sizes.' })
+        ));
       } finally {
         setLoading(false);
       }
@@ -336,31 +343,52 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const shortsQty = parseInt(entry.shortsQuantity, 10);
 
     if (!childName) {
-      updateEntry(childId, { status: 'error', message: 'Please enter the child name.' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.child_name', { defaultValue: 'Please enter the child name.' }),
+      });
       return;
     }
     if (!entry.tshirtSize) {
-      updateEntry(childId, { status: 'error', message: 'Select a T-shirt size.' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_size', { defaultValue: 'Select a T-shirt size.' }),
+      });
       return;
     }
     if (!Number.isFinite(ageValue) || ageValue < 1 || ageValue > 18) {
-      updateEntry(childId, { status: 'error', message: 'Enter a valid age (1-18).' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.age', { defaultValue: 'Enter a valid age (1-18).' }),
+      });
       return;
     }
     if (entry.isReturning && !tshirtNumber) {
-      updateEntry(childId, { status: 'error', message: 'Enter the returning T-shirt number.' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_number', { defaultValue: 'Enter the returning T-shirt number.' }),
+      });
       return;
     }
     if (entry.isReturning && tshirtNumber && !/^\d{1,6}$/.test(tshirtNumber)) {
-      updateEntry(childId, { status: 'error', message: 'T-shirt number must be 1-6 digits.' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_number_format', { defaultValue: 'T-shirt number must be 1-6 digits.' }),
+      });
       return;
     }
     if (!Number.isFinite(tshirtQty) || tshirtQty < 1 || tshirtQty > 20) {
-      updateEntry(childId, { status: 'error', message: 'Enter a valid number of T-shirts (1-20).' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_qty', { defaultValue: 'Enter a valid number of T-shirts (1-20).' }),
+      });
       return;
     }
     if (!Number.isFinite(shortsQty) || shortsQty < 0 || shortsQty > 20) {
-      updateEntry(childId, { status: 'error', message: 'Enter a valid number of shorts (0-20).' });
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.shorts_qty', { defaultValue: 'Enter a valid number of shorts (0-20).' }),
+      });
       return;
     }
 
@@ -397,7 +425,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         [childId]: {
           ...prev[childId],
           status: 'saved',
-          message: 'Saved',
+          message: t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' }),
           updatedAt: data?.updated_at || new Date().toISOString(),
           isEditing: false,
         },
@@ -405,7 +433,14 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     } catch (error: unknown) {
       setEntries((prev) => ({
         ...prev,
-        [childId]: { ...prev[childId], status: 'error', message: getErrorMessage(error, 'Save failed') },
+        [childId]: {
+          ...prev[childId],
+          status: 'error',
+          message: getErrorMessage(
+            error,
+            t('dashboard.parent.uniform.errors.save_failed', { defaultValue: 'Save failed' })
+          ),
+        },
       }));
     }
   };
@@ -414,8 +449,15 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     const preschoolId = child.preschoolId || null;
     if (!preschoolId) {
       showAlert({
-        title: `${institutionLabel} not found`,
-        message: `We could not find the ${institutionLabel.toLowerCase()} for this ${memberLabelLower}.`,
+        title: t('dashboard.parent.uniform.alerts.institution_missing.title', {
+          defaultValue: '{{institution}} not found',
+          institution: institutionLabel,
+        }),
+        message: t('dashboard.parent.uniform.alerts.institution_missing.message', {
+          defaultValue: 'We could not find the {{institution}} for this {{member}}.',
+          institution: institutionLabel.toLowerCase(),
+          member: memberLabelLower,
+        }),
         type: 'error',
       });
       return;
@@ -423,8 +465,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
     if (!entry.tshirtSize) {
       showAlert({
-        title: 'Missing size',
-        message: 'Please select a T-shirt size before paying.',
+        title: t('dashboard.parent.uniform.alerts.missing_size.title', { defaultValue: 'Missing size' }),
+        message: t('dashboard.parent.uniform.alerts.missing_size.message', { defaultValue: 'Please select a T-shirt size before paying.' }),
         type: 'warning',
       });
       return;
@@ -438,8 +480,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
     if (!totalItems || totalItems <= 0) {
       showAlert({
-        title: 'Missing quantities',
-        message: 'Enter the number of T-shirts and shorts before paying.',
+        title: t('dashboard.parent.uniform.alerts.missing_quantities.title', { defaultValue: 'Missing quantities' }),
+        message: t('dashboard.parent.uniform.alerts.missing_quantities.message', { defaultValue: 'Enter the number of T-shirts and shorts before paying.' }),
         type: 'warning',
       });
       return;
@@ -458,23 +500,29 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
     if (!hasAnyPricing) {
       showAlert({
-        title: 'Uniform pricing not set',
-        message: 'Uniform pricing is not configured yet. We will still generate a reference for you.',
+        title: t('dashboard.parent.uniform.alerts.pricing_missing.title', { defaultValue: 'Uniform pricing not set' }),
+        message: t('dashboard.parent.uniform.alerts.pricing_missing.message', {
+          defaultValue: 'Uniform pricing is not configured yet. We will still generate a reference for you.',
+        }),
         type: 'warning',
       });
     } else if ((remainingTshirts > 0 && tshirtPrice <= 0) || (remainingShorts > 0 && shortsPrice <= 0)) {
       showAlert({
-        title: 'Uniform pricing incomplete',
-        message: 'Some uniform items do not have a price yet. We will still generate a reference for you.',
+        title: t('dashboard.parent.uniform.alerts.pricing_incomplete.title', { defaultValue: 'Uniform pricing incomplete' }),
+        message: t('dashboard.parent.uniform.alerts.pricing_incomplete.message', {
+          defaultValue: 'Some uniform items do not have a price yet. We will still generate a reference for you.',
+        }),
         type: 'warning',
       });
     }
 
     const descriptionParts = [
-      'Uniform order',
-      entry.tshirtSize ? `Size ${entry.tshirtSize}` : null,
-      `T-shirts ${tshirtQty}`,
-      `Shorts ${shortsQty}`,
+      t('dashboard.parent.uniform.payment.description', {
+        defaultValue: 'Uniform order • Size {{size}} • T-shirts {{tshirts}} • Shorts {{shorts}}',
+        size: entry.tshirtSize || '-',
+        tshirts: tshirtQty,
+        shorts: shortsQty,
+      }),
     ].filter(Boolean);
 
     const referenceCode = child.studentCode || `UNIFORM-${child.id.slice(0, 6).toUpperCase()}`;
@@ -497,7 +545,9 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     return (
       <>
         <View style={[styles.card, { backgroundColor: theme.surface }]}>
-          <Text style={styles.emptyText}>Add a child to submit uniform sizes.</Text>
+          <Text style={styles.emptyText}>
+            {t('dashboard.parent.uniform.empty', { defaultValue: 'Add a child to submit uniform sizes.' })}
+          </Text>
         </View>
         <AlertModal {...alertProps} />
       </>
@@ -508,14 +558,14 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     <>
       <View>
         <View style={styles.header}>
-          <Text style={styles.title}>Uniform Sizes</Text>
-          <Text style={styles.subtitle}>Select sizes, quantities, and add a returning number if needed.</Text>
+          <Text style={styles.title}>{t('dashboard.parent.uniform.title', { defaultValue: 'Uniform Sizes' })}</Text>
+          <Text style={styles.subtitle}>{t('dashboard.parent.uniform.subtitle', { defaultValue: 'Select sizes, quantities, and add a returning number if needed.' })}</Text>
         </View>
 
         {loading && (
           <View style={styles.inlineRow}>
             <ActivityIndicator size="small" color={theme.primary} />
-            <Text style={styles.mutedText}>Loading existing submissions...</Text>
+            <Text style={styles.mutedText}>{t('dashboard.parent.uniform.loading', { defaultValue: 'Loading existing submissions...' })}</Text>
           </View>
         )}
         {loadError && <Text style={styles.errorText}>{loadError}</Text>}
@@ -546,26 +596,37 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                   <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
                   <View style={styles.statusPill}>
                     <Ionicons name="checkmark-circle" size={14} color={theme.success} />
-                    <Text style={styles.statusPillText}>Confirmed</Text>
+                    <Text style={styles.statusPillText}>
+                      {t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' })}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.summaryText}>
-                  Size: {entry.tshirtSize || '—'} • T-shirts: {entry.tshirtQuantity} • Shorts: {entry.shortsQuantity}
+                  {t('dashboard.parent.uniform.summary.details', { defaultValue: 'Size:' })} {entry.tshirtSize || '—'} •{' '}
+                  {t('dashboard.parent.uniform.labels.tshirts', { defaultValue: 'T-shirts' })} {entry.tshirtQuantity} •{' '}
+                  {t('dashboard.parent.uniform.labels.shorts', { defaultValue: 'Shorts' })} {entry.shortsQuantity}
                 </Text>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Total estimate</Text>
+                  <Text style={styles.summaryLabel}>{t('dashboard.parent.uniform.total.label', { defaultValue: 'Total:' })}</Text>
                   <Text style={styles.summaryValue}>
-                    {hasPricing ? formatCurrency(totalAmount) : 'Pricing not configured'}
+                    {hasPricing
+                      ? formatCurrency(totalAmount)
+                      : t('dashboard.parent.uniform.total.unavailable', { defaultValue: 'Pricing not configured' })}
                   </Text>
                 </View>
                 {entry.isReturning && entry.tshirtNumber ? (
-                  <Text style={styles.summaryText}>Back number: {entry.tshirtNumber}</Text>
+                  <Text style={styles.summaryText}>
+                    {t('dashboard.parent.uniform.labels.back_number', { defaultValue: 'Back number:' })} {entry.tshirtNumber}
+                  </Text>
                 ) : null}
                 {entry.updatedAt ? (
-                  <Text style={styles.updatedText}>Last updated: {new Date(entry.updatedAt).toLocaleString('en-ZA')}</Text>
+                  <Text style={styles.updatedText}>
+                    {t('dashboard.parent.uniform.last_updated', { defaultValue: 'Last updated:' })}{' '}
+                    {new Date(entry.updatedAt).toLocaleString('en-ZA')}
+                  </Text>
                 ) : null}
                 <TouchableOpacity style={styles.editButton} onPress={() => setEditing(child.id, true)}>
-                  <Text style={styles.editButtonText}>Edit Order</Text>
+                  <Text style={styles.editButtonText}>{t('dashboard.parent.uniform.actions.edit', { defaultValue: 'Edit order' })}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -580,81 +641,91 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                   </View>
                   <View>
                     <Text style={styles.childName}>{child.firstName} {child.lastName}</Text>
-                    <Text style={styles.helperText}>Complete the uniform form below.</Text>
+                    <Text style={styles.helperText}>
+                      {t('dashboard.parent.uniform.helper.complete_form', { defaultValue: 'Complete the uniform form below.' })}
+                    </Text>
                   </View>
                 </View>
                 {entry.status === 'saved' && (
                   <View style={styles.statusPill}>
                     <Ionicons name="checkmark-circle" size={14} color={theme.success} />
-                    <Text style={styles.statusPillText}>Saved</Text>
+                    <Text style={styles.statusPillText}>
+                      {t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' })}
+                    </Text>
                   </View>
                 )}
               </View>
 
-            <Text style={styles.sectionTitle}>Details</Text>
-            <Text style={styles.label}>{memberLabel} Name</Text>
+            <Text style={styles.sectionTitle}>
+              {t('dashboard.parent.uniform.sections.details', { defaultValue: 'Details & Sizes' })}
+            </Text>
+            <Text style={styles.label}>{nameLabel}</Text>
             <TextInput
               style={styles.input}
               value={entry.childName}
               onChangeText={(text) => updateEntry(child.id, { childName: text })}
-              placeholder={`${memberLabelLower} name`}
+              placeholder={namePlaceholder}
               placeholderTextColor={theme.textSecondary}
             />
 
-            <Text style={styles.label}>Age (years)</Text>
+            <Text style={styles.label}>{t('dashboard.parent.uniform.labels.age', { defaultValue: 'Age (years)' })}</Text>
             <TextInput
               style={styles.input}
               value={entry.ageYears}
               onChangeText={(text) => updateEntry(child.id, { ageYears: text })}
-              placeholder="Age"
+              placeholder={t('dashboard.parent.uniform.placeholders.age', { defaultValue: 'Age' })}
               placeholderTextColor={theme.textSecondary}
               keyboardType="number-pad"
             />
 
-            <Text style={styles.sectionTitle}>Sizes & Quantities</Text>
-            <Text style={styles.label}>T-shirt Size</Text>
+            <Text style={styles.sectionTitle}>
+              {t('dashboard.parent.uniform.sections.sizes', { defaultValue: 'Sizes & Quantities' })}
+            </Text>
+            <Text style={styles.label}>{t('dashboard.parent.uniform.labels.tshirt_size', { defaultValue: 'T-shirt Size' })}</Text>
             <View style={styles.pickerWrap}>
               <Picker
                 selectedValue={entry.tshirtSize}
                 onValueChange={(value) => updateEntry(child.id, { tshirtSize: value })}
                 style={styles.picker}
               >
-                <Picker.Item label="Select size" value="" />
+                <Picker.Item label={t('dashboard.parent.uniform.placeholders.select_size', { defaultValue: 'Select size' })} value="" />
                 {SIZE_OPTIONS.map((size) => (
                   <Picker.Item key={size} label={size} value={size} />
                 ))}
               </Picker>
             </View>
 
-            <Text style={styles.label}>Number of T-shirts</Text>
+            <Text style={styles.label}>{t('dashboard.parent.uniform.labels.tshirts', { defaultValue: 'T-shirts' })}</Text>
             <TextInput
               style={styles.input}
               value={entry.tshirtQuantity}
               onChangeText={(text) => updateEntry(child.id, { tshirtQuantity: text })}
-              placeholder="e.g. 1"
+              placeholder={t('dashboard.parent.uniform.placeholders.default_one', { defaultValue: '1' })}
               placeholderTextColor={theme.textSecondary}
               keyboardType="number-pad"
               maxLength={2}
             />
 
-            <Text style={styles.label}>Number of Shorts</Text>
+            <Text style={styles.label}>{t('dashboard.parent.uniform.labels.shorts', { defaultValue: 'Shorts' })}</Text>
             <TextInput
               style={styles.input}
               value={entry.shortsQuantity}
               onChangeText={(text) => updateEntry(child.id, { shortsQuantity: text })}
-              placeholder="e.g. 1"
+              placeholder={t('dashboard.parent.uniform.placeholders.default_one', { defaultValue: '1' })}
               placeholderTextColor={theme.textSecondary}
               keyboardType="number-pad"
               maxLength={2}
             />
 
-            <Text style={styles.label}>Full sets (1 set = 1 T-shirt + 1 shorts)</Text>
+            <Text style={styles.label}>
+              {t('dashboard.parent.uniform.labels.full_sets', { defaultValue: 'Full sets (1 set = 1 T-shirt + 1 shorts)' })}
+            </Text>
             <View style={styles.setRow}>
               <TextInput
                 style={[styles.input, styles.setInput]}
                 value={impliedSetQty ? String(impliedSetQty) : ''}
                 onChangeText={(text) => setFullSetQuantity(child.id, text)}
-                placeholder="e.g. 1"
+                placeholder={t('dashboard.parent.uniform.placeholders.default_one', { defaultValue: '1' })}
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="number-pad"
                 maxLength={2}
@@ -663,30 +734,54 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 style={[styles.matchButton, { borderColor: theme.primary }]}
                 onPress={() => setFullSetQuantity(child.id, entry.tshirtQuantity)}
               >
-                <Text style={[styles.matchButtonText, { color: theme.primary }]}>Match to T-shirt qty</Text>
+                <Text style={[styles.matchButtonText, { color: theme.primary }]}>
+                  {t('dashboard.parent.uniform.actions.match_tshirt', { defaultValue: 'Match to T-shirt qty' })}
+                </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.helperText}>This sets both quantities to the same value. You can still edit them separately above.</Text>
+            <Text style={styles.helperText}>
+              {t('dashboard.parent.uniform.helper.full_sets', { defaultValue: 'This sets both quantities to the same value. You can still edit them separately above.' })}
+            </Text>
 
             <View style={styles.pricingCard}>
-              <Text style={styles.pricingTitle}>Pricing summary</Text>
+              <Text style={styles.pricingTitle}>{t('dashboard.parent.uniform.pricing.title', { defaultValue: 'Pricing summary' })}</Text>
               <Text style={styles.pricingText}>
-                Full set: {setPrice > 0 ? formatCurrency(setPrice) : '—'} • T-shirt: {tshirtPrice > 0 ? formatCurrency(tshirtPrice) : '—'} • Shorts: {shortsPrice > 0 ? formatCurrency(shortsPrice) : '—'}
+                {(setPrice > 0
+                  ? t('dashboard.parent.uniform.pricing.full_set', { defaultValue: 'Full set {{amount}}', amount: formatCurrency(setPrice) })
+                  : t('dashboard.parent.uniform.pricing.full_set_unset', { defaultValue: 'Full set —' })
+                )} • {(tshirtPrice > 0
+                  ? t('dashboard.parent.uniform.pricing.tshirt', { defaultValue: 'T-shirt {{amount}}', amount: formatCurrency(tshirtPrice) })
+                  : t('dashboard.parent.uniform.pricing.tshirt_unset', { defaultValue: 'T-shirt —' })
+                )} • {(shortsPrice > 0
+                  ? t('dashboard.parent.uniform.pricing.shorts', { defaultValue: 'Shorts {{amount}}', amount: formatCurrency(shortsPrice) })
+                  : t('dashboard.parent.uniform.pricing.shorts_unset', { defaultValue: 'Shorts —' })
+                )}
               </Text>
               <Text style={styles.pricingText}>
-                Sets: {impliedSetQty} • Extra T-shirts: {orderExtraTshirts} • Extra Shorts: {orderExtraShorts}
+                {t('dashboard.parent.uniform.order.sets', { defaultValue: '{{count}} set(s)', count: impliedSetQty })} •{' '}
+                {t('dashboard.parent.uniform.order.extra_tshirts', { defaultValue: '{{count}} extra T-shirts', count: orderExtraTshirts })} •{' '}
+                {t('dashboard.parent.uniform.order.extra_shorts', { defaultValue: '{{count}} extra shorts', count: orderExtraShorts })}
               </Text>
               <Text style={styles.pricingTotal}>
-                Total: {hasPricing ? formatCurrency(totalAmount) : 'Pricing not configured'}
+                {t('dashboard.parent.uniform.total.label', { defaultValue: 'Total:' })}{' '}
+                {hasPricing
+                  ? formatCurrency(totalAmount)
+                  : t('dashboard.parent.uniform.total.unavailable', { defaultValue: 'Pricing not configured' })}
               </Text>
               {!hasPricing ? (
-                <Text style={styles.pricingHint}>We can still generate a reference if pricing is not set yet.</Text>
+                <Text style={styles.pricingHint}>
+                  {t('dashboard.parent.uniform.total.note', { defaultValue: 'Pricing is not set yet. We will still generate a payment reference.' })}
+                </Text>
               ) : null}
             </View>
 
-            <Text style={styles.sectionTitle}>Notes</Text>
+            <Text style={styles.sectionTitle}>
+              {t('dashboard.parent.uniform.sections.notes', { defaultValue: 'Notes' })}
+            </Text>
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Sample supplied?</Text>
+              <Text style={styles.toggleLabel}>
+                {t('dashboard.parent.uniform.labels.sample_supplied', { defaultValue: 'Sample supplied?' })}
+              </Text>
               <Switch
                 value={entry.sampleSupplied}
                 onValueChange={(value) => updateEntry(child.id, { sampleSupplied: value })}
@@ -694,10 +789,14 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 thumbColor={entry.sampleSupplied ? '#fff' : theme.textSecondary}
               />
             </View>
-            <Text style={styles.helperText}>Turn this on if you sent a sample T-shirt for sizing.</Text>
+            <Text style={styles.helperText}>
+              {t('dashboard.parent.uniform.helper.sample_supplied', { defaultValue: 'Turn this on if you sent a sample T-shirt for sizing.' })}
+            </Text>
 
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Returning student?</Text>
+              <Text style={styles.toggleLabel}>
+                {t('dashboard.parent.uniform.labels.returning_student', { defaultValue: 'Returning student?' })}
+              </Text>
               <Switch
                 value={entry.isReturning}
                 onValueChange={(value) => updateEntry(child.id, { isReturning: value, tshirtNumber: value ? entry.tshirtNumber : '' })}
@@ -705,21 +804,27 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 thumbColor={entry.isReturning ? '#fff' : theme.textSecondary}
               />
             </View>
-            <Text style={styles.helperText}>Turn this on if your child is returning and already has a back number.</Text>
+            <Text style={styles.helperText}>
+              {t('dashboard.parent.uniform.helper.returning_student', { defaultValue: 'Turn this on if your child is returning and already has a back number.' })}
+            </Text>
 
             {entry.isReturning ? (
               <>
-                <Text style={styles.label}>T-shirt Number</Text>
+                <Text style={styles.label}>
+                  {t('dashboard.parent.uniform.labels.tshirt_number', { defaultValue: 'T-shirt Number' })}
+                </Text>
                 <TextInput
                   style={styles.input}
                   value={entry.tshirtNumber}
                   onChangeText={(text) => updateEntry(child.id, { tshirtNumber: text })}
-                  placeholder="e.g. 08"
+                  placeholder={t('dashboard.parent.uniform.placeholders.tshirt_number', { defaultValue: 'e.g. 08' })}
                   placeholderTextColor={theme.textSecondary}
                   keyboardType="number-pad"
                   maxLength={6}
                 />
-                <Text style={styles.helperText}>Use the number that should appear on the back.</Text>
+                <Text style={styles.helperText}>
+                  {t('dashboard.parent.uniform.helper.back_number', { defaultValue: 'Use the number that should appear on the back.' })}
+                </Text>
               </>
             ) : null}
 
@@ -730,7 +835,9 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 disabled={entry.status === 'saving'}
               >
                 <Text style={styles.saveButtonText}>
-                  {entry.status === 'saving' ? 'Saving...' : 'Save'}
+                  {entry.status === 'saving'
+                    ? t('dashboard.parent.uniform.status.saving', { defaultValue: 'Saving...' })
+                    : t('dashboard.parent.uniform.actions.save', { defaultValue: 'Save' })}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -741,12 +848,16 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 onPress={() => handlePayNow(child, entry)}
                 disabled={!canPayNow(entry)}
               >
-                <Text style={[styles.payButtonText, { color: theme.primary }]}>Pay Now</Text>
+                <Text style={[styles.payButtonText, { color: theme.primary }]}>
+                  {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay Now' })}
+                </Text>
               </TouchableOpacity>
               {entry.status === 'saved' && (
                 <View style={styles.statusRow}>
                   <Ionicons name="checkmark-circle" size={16} color={theme.success} />
-                  <Text style={[styles.statusText, { color: theme.success }]}>Saved</Text>
+                  <Text style={[styles.statusText, { color: theme.success }]}>
+                    {t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' })}
+                  </Text>
                 </View>
               )}
               {entry.status === 'error' && (
@@ -759,7 +870,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
             {entry.updatedAt && (
               <Text style={styles.updatedText}>
-                Last updated: {new Date(entry.updatedAt).toLocaleString('en-ZA')}
+                {t('dashboard.parent.uniform.last_updated', { defaultValue: 'Last updated:' })}{' '}
+                {new Date(entry.updatedAt).toLocaleString('en-ZA')}
               </Text>
             )}
           </View>

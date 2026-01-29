@@ -1,0 +1,3 @@
+-- Placeholder migration file to align with remote history.
+-- The migration 20251230_soa_youth_wing_and_finance was applied remotely.
+-- No-op locally.

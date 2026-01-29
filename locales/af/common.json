@@ -63,7 +63,12 @@
     "record": "Rekordeer",
     "uploading": "Laai op...",
     "important": "Belangrik",
-    "not_allowed": "Nie toegelaat nie"
+    "not_allowed": "Nie toegelaat nie",
+    "noClass": "Geen klas toegeken",
+    "search": "Soek...",
+    "student": "Leerling",
+    "upgrade": "Gradeer op",
+    "name": "Naam"
   },
   "navigation": {
     "dashboard": "Kontrolepaneel",
@@ -81,7 +86,10 @@
     "search": "Soek",
     "retry": "Probeer Weer",
     "close": "Maak Toe",
-    "switch_account": "Wissel rekening"
+    "switch_account": "Wissel rekening",
+    "calendar": "Kalender",
+    "children": "Kinders",
+    "messages": "Boodskappe"
   },
   "auth": {
     "signIn": "Teken In",
@@ -413,17 +421,25 @@
           "age": "Ouderdom (jare)",
           "tshirt_size": "T-hemp grootte",
           "tshirts": "T-hemde",
-          "shorts": "Kortbroeke"
+          "shorts": "Kortbroeke",
+          "full_sets": "Volledige stelle (1 stel = 1 T-hemp + 1 kortbroek)",
+          "sample_supplied": "Monster voorsien?",
+          "returning_student": "Terugkerende leerder?",
+          "tshirt_number": "T-hemp nommer",
+          "back_number": "Rugnommer:"
         },
         "placeholders": {
           "child_name": "Kind se naam",
           "age": "Ouderdom",
           "select_size": "Kies grootte",
-          "default_one": "1"
+          "default_one": "1",
+          "tshirt_number": "bv. 08"
         },
         "actions": {
           "save": "Stoor",
-          "pay_now": "Betaal nou"
+          "pay_now": "Betaal nou",
+          "edit": "Wysig bestelling",
+          "match_tshirt": "Pas by T-hemp aantal"
         },
         "status": {
           "saving": "Stoor tans…",
@@ -434,7 +450,9 @@
           "tshirt_size": "Kies 'n T-hemp grootte.",
           "age": "Voer 'n geldige ouderdom in (1-18).",
           "tshirt_qty": "Voer 'n geldige aantal T-hemde in (1-20).",
-          "shorts_qty": "Voer 'n geldige aantal kortbroeke in (0-20)."
+          "shorts_qty": "Voer 'n geldige aantal kortbroeke in (0-20).",
+          "tshirt_number": "Voer die terugkerende T-hemp nommer in.",
+          "tshirt_number_format": "T-hemp nommer moet 1-6 syfers wees."
         },
         "errors": {
           "load_existing": "Kon nie bestaande uniformgroottes laai nie.",
@@ -465,6 +483,44 @@
         "last_updated": "Laas opgedateer:",
         "payment": {
           "description": "Uniformbestelling • Grootte {{size}} • T-hemde {{tshirts}} • Kortbroeke {{shorts}}"
+        },
+        "helper": {
+          "full_sets": "Dit stel albei hoeveelhede op dieselfde waarde. Jy kan dit steeds apart bo aanpas.",
+          "complete_form": "Voltooi die uniformvorm hieronder.",
+          "sample_supplied": "Skakel dit aan as jy 'n monster T-hemp vir grootte gestuur het.",
+          "returning_student": "Skakel dit aan as jou kind terugkeer en reeds 'n rugnommer het.",
+          "back_number": "Gebruik die nommer wat agter op die hemp moet verskyn."
+        },
+        "sections": {
+          "details": "Besonderhede & Groottes",
+          "sizes": "Groottes & Hoeveelhede",
+          "notes": "Notas"
+        },
+        "summary": {
+          "details": "Grootte:",
+          "subtitle": "Uniformbestelling gestoor."
+        },
+        "alerts": {
+          "institution_missing": {
+            "title": "{{institution}} nie gevind nie",
+            "message": "Ons kon nie die {{institution}} vir hierdie {{member}} vind nie."
+          },
+          "missing_size": {
+            "title": "Grootte ontbreek",
+            "message": "Kies asseblief 'n T-hemp grootte voordat jy betaal."
+          },
+          "missing_quantities": {
+            "title": "Hoeveelhede ontbreek",
+            "message": "Voer die aantal T-hemde en kortbroeke in voordat jy betaal."
+          },
+          "pricing_missing": {
+            "title": "Uniformpryse nie gestel nie",
+            "message": "Uniformpryse is nog nie opgestel nie. Ons sal steeds 'n verwysing vir jou genereer."
+          },
+          "pricing_incomplete": {
+            "title": "Uniformpryse onvolledig",
+            "message": "Sommige uniforme items het nog nie pryse nie. Ons sal steeds 'n verwysing vir jou genereer."
+          }
         }
       },
       "daily_activity": {
@@ -748,7 +804,16 @@
           "cta": "Terug na Dashboard"
         }
       }
-    }
+    },
+    "feature_coming_soon": "Hierdie funksie kom binnekort!",
+    "quick_actions": "Vinnige aksies",
+    "todays_activities": "Vandag se aktiwiteite",
+    "todays_overview": "Vandag se oorsig",
+    "uniform_sizes": "Uniformgroottes",
+    "upcoming_birthdays": "Komende verjaarsdae",
+    "upgrade_value": "Spaar tyd met KI-huiswerkhulp",
+    "upgrade_value_preschool": "Spaar tyd met Dash KI-ondersteuning",
+    "view_chart": "Sien grafiek"
   },
   "ai": {
     "homework": {
@@ -1173,7 +1238,12 @@
       "school_default": "Skoolverstek",
       "user": "Gebruikerinstelling",
       "unknown": "Onbekend"
-    }
+    },
+    "enterprise": "Enterprise",
+    "free": "Gratis",
+    "plus": "Plus",
+    "premium": "Premium",
+    "starter": "Starter"
   },
   "lessons_create": {
     "title": "Skep Les",
@@ -1529,6 +1599,47 @@
     "fees_due_in_days_plural": "Betaalbaar oor {{count}} dae",
     "dash_explain_prompt": "Verduidelik vir my ’n konsep in eenvoudige terme.",
     "dash_quiz_prompt": "Skep ’n kort oefenvraelys vir my kind.",
-    "dash_study_plan_prompt": "Skep ’n eenvoudige studierooster vir hierdie week."
+    "dash_study_plan_prompt": "Skep ’n eenvoudige studierooster vir hierdie week.",
+    "ai_homework_help": "KI Huiswerkhulp",
+    "ask_dash": "Vra Dash KI",
+    "assigned_lessons": "Toegewysde lesse",
+    "attendance_rate": "Bywoningskoers",
+    "calls": "Oproepe",
+    "check_attendance": "Kontroleer bywoning",
+    "dash_explain": "Verduidelik 'n konsep",
+    "dash_quiz": "Oefenvraelys",
+    "dash_study_plan": "Studierooster",
+    "events": "Gebeure",
+    "homework_pending": "Hangende huiswerk",
+    "learning_hub": "Leerhub",
+    "messages": "Boodskappe",
+    "missed_calls": "Gemiste oproepe",
+    "payments": "Betalings",
+    "selectChild": "Kies kind",
+    "unread_messages": "Ongeleesde boodskappe",
+    "view_grades": "Sien punte",
+    "view_homework": "Sien huiswerk"
+  },
+  "birthdayChart": {
+    "title": "Verjaarsdaggrafiek",
+    "loading": "Laai verjaarsdae...",
+    "studentFallback": "Leerling",
+    "totalStudentsSingle": "{{count}} leerling in totaal",
+    "totalStudentsMultiple": "{{count}} leerders in totaal",
+    "todaySingle": "{{name}} verjaar vandag!",
+    "todayMultiple": "{{count}} verjaarsdae vandag!",
+    "monthBirthdaysSingle": "{{count}} verjaardag",
+    "monthBirthdaysMultiple": "{{count}} verjaarsdae",
+    "thisMonth": "Hierdie maand",
+    "monthHeading": "{{month}} Verjaarsdae",
+    "noneThisMonth": "Geen verjaarsdae in hierdie maand nie.",
+    "turning": "Word {{age}}"
+  },
+  "calls": {
+    "live_classes": "Lewende klasse"
+  },
+  "hints": {
+    "quick_actions_message": "Tik op enige kaart hieronder om vinnig toegang tot huiswerk, boodskappe, fooie te kry of hulp van ons KI-assistent.",
+    "live_classes_message": "Wanneer jou kind se onderwyser 'n lewende klas begin, sal jy dit hier sien. Tik om aan te sluit en saam te kyk!"
   }
 }
