@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail, Transaction, formatCurrency } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 interface FinancialStatusSectionProps {
@@ -15,7 +16,7 @@ interface FinancialStatusSectionProps {
   transactions: Transaction[];
   showDetails: boolean;
   onToggleDetails: () => void;
-  theme: any;
+  theme: ThemeColors;
   /** Whether the current user is a principal (can mark payments) */
   isPrincipal?: boolean;
   /** Callback when a payment is marked as received */
@@ -32,9 +33,10 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
   onMarkPaymentReceived,
 }) => {
   const styles = createStyles(theme);
+  type PaymentMethod = 'cash' | 'eft' | 'card' | 'other';
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'eft' | 'card' | 'other'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alertState, setAlertState] = useState<{
@@ -94,7 +96,7 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
     }
   };
 
-  const paymentMethods = [
+  const paymentMethods: { id: PaymentMethod; label: string; icon: string }[] = [
     { id: 'cash', label: 'Cash', icon: 'cash-outline' },
     { id: 'eft', label: 'EFT', icon: 'swap-horizontal-outline' },
     { id: 'card', label: 'Card', icon: 'card-outline' },
@@ -228,7 +230,7 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
                         borderColor: paymentMethod === method.id ? theme.primary : theme.border,
                       }
                     ]}
-                    onPress={() => setPaymentMethod(method.id as any)}
+                    onPress={() => setPaymentMethod(method.id)}
                   >
                     <Ionicons 
                       name={method.icon as any} 
@@ -299,7 +301,7 @@ export const FinancialStatusSection: React.FC<FinancialStatusSectionProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

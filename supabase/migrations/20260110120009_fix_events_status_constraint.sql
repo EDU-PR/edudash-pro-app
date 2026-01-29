@@ -4,49 +4,57 @@
 -- Description: Add CHECK constraint to events.status column to prevent 400 errors
 -- ============================================================================
 
--- First, drop any existing constraint on status if it exists
-DO $$ 
+DO $$
 BEGIN
+  -- Skip if events table does not exist (shadow DB compatibility)
+  IF to_regclass('public.events') IS NULL THEN
+    RETURN;
+  END IF;
+
   -- Drop existing constraint if it exists
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint 
-    WHERE conname LIKE '%events_status%' 
-    AND conrelid = 'public.events'::regclass
+  EXECUTE 'ALTER TABLE public.events DROP CONSTRAINT IF EXISTS events_status_check';
+
+  -- Add CHECK constraint if missing
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'events_status_check'
+      AND conrelid = 'public.events'::regclass
   ) THEN
-    ALTER TABLE public.events DROP CONSTRAINT IF EXISTS events_status_check;
+    EXECUTE $ddl$
+      ALTER TABLE public.events
+      ADD CONSTRAINT events_status_check
+      CHECK (
+        status IS NULL
+        OR status IN (
+          'pending',
+          'proposed',
+          'draft',
+          'scheduled',
+          'ongoing',
+          'completed',
+          'cancelled',
+          'published',
+          'unpublished'
+        )
+      )
+    $ddl$;
+  END IF;
+
+  -- Add indexes for better query performance
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_events_status ON public.events(status) WHERE status IS NOT NULL';
+  EXECUTE 'CREATE INDEX IF NOT EXISTS idx_events_preschool_status_filtered ON public.events(preschool_id, status) WHERE preschool_id IS NOT NULL AND status IS NOT NULL';
+
+  -- Comment on the constraint
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'events_status_check'
+      AND conrelid = 'public.events'::regclass
+  ) THEN
+    EXECUTE $ddl$
+      COMMENT ON CONSTRAINT events_status_check ON public.events IS
+      'Ensures status values are valid: pending, proposed, draft (for membership events), scheduled, ongoing, completed, cancelled (for calendar events), or published/unpublished (for published events)'
+    $ddl$;
   END IF;
 END $$;
-
--- Add CHECK constraint to support common event statuses
--- This includes both the membership event statuses (pending, proposed, draft)
--- and standard event statuses (scheduled, ongoing, completed, cancelled, published)
-ALTER TABLE public.events 
-ADD CONSTRAINT events_status_check 
-CHECK (
-  status IS NULL 
-  OR status IN (
-    'pending', 
-    'proposed', 
-    'draft', 
-    'scheduled', 
-    'ongoing', 
-    'completed', 
-    'cancelled',
-    'published',
-    'unpublished'
-  )
-);
-
--- Add index on status for better query performance
-CREATE INDEX IF NOT EXISTS idx_events_status 
-ON public.events(status) 
-WHERE status IS NOT NULL;
-
--- Add index on preschool_id and status for better query performance
-CREATE INDEX IF NOT EXISTS idx_events_preschool_status_filtered 
-ON public.events(preschool_id, status) 
-WHERE preschool_id IS NOT NULL AND status IS NOT NULL;
-
--- Comment on the constraint
-COMMENT ON CONSTRAINT events_status_check ON public.events IS 
-'Ensures status values are valid: pending, proposed, draft (for membership events), scheduled, ongoing, completed, cancelled (for calendar events), or published/unpublished (for published events)';

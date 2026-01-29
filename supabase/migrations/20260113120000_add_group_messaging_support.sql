@@ -1,3 +1,29 @@
+DO $do$
+BEGIN
+  IF to_regclass('public.message_threads') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.message_participants') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.messages') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.classes') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.profiles') IS NULL THEN
+    RETURN;
+  END IF;
+
+  IF to_regclass('public.students') IS NULL THEN
+    RETURN;
+  END IF;
+
 -- =========================================================================
 -- Migration: Add Group Messaging Support
 -- Description: Enhances message_threads table to support group chats,
@@ -398,19 +424,18 @@ $$;
 -- =========================================================================
 -- Create unique constraint for message_participants if not exists
 -- =========================================================================
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint 
-    WHERE conname = 'message_participants_thread_user_unique'
-  ) THEN
+IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint 
+  WHERE conname = 'message_participants_thread_user_unique'
+) THEN
+  BEGIN
     ALTER TABLE message_participants
     ADD CONSTRAINT message_participants_thread_user_unique UNIQUE (thread_id, user_id);
-  END IF;
-EXCEPTION
-  WHEN duplicate_object THEN
-    NULL; -- Constraint already exists
-END $$;
+  EXCEPTION
+    WHEN duplicate_object THEN
+      NULL; -- Constraint already exists
+  END;
+END IF;
 
 -- =========================================================================
 -- Update RLS policies for group messaging
@@ -472,3 +497,4 @@ GRANT EXECUTE ON FUNCTION create_parent_group TO authenticated;
 GRANT EXECUTE ON FUNCTION create_announcement_channel TO authenticated;
 GRANT EXECUTE ON FUNCTION add_group_participants TO authenticated;
 GRANT EXECUTE ON FUNCTION remove_group_participant TO authenticated;
+END $do$;

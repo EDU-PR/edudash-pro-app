@@ -23,4 +23,11 @@
 -- Note: Teacher RBAC access control is enforced in app/screens/class-teacher-management.tsx
 -- Only principals, admins, principal_admin, and super_admin roles can access this screen
 
-COMMENT ON TABLE subscriptions IS 'School subscriptions - linked to subscription_plans via plan_id, and to preschools via school_id';
+DO $$
+BEGIN
+  IF to_regclass('public.subscriptions') IS NOT NULL THEN
+    EXECUTE $ddl$
+      COMMENT ON TABLE subscriptions IS 'School subscriptions - linked to subscription_plans via plan_id, and to preschools via school_id'
+    $ddl$;
+  END IF;
+END $$;

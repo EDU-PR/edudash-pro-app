@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -9,6 +9,8 @@ import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import { track } from '@/lib/analytics';
 import { debug, warn } from '@/lib/debug';
 import { usePathname } from 'expo-router';
+import { isAuthLikeRoute } from '@/lib/ads/routeClassifier';
+import { WebInterstitial } from '@/components/ads/WebInterstitial';
 
 interface AdsContextType {
   ready: boolean;
@@ -45,20 +47,6 @@ const RATE_LIMITS = {
   appOpenDelay: 12 * 1000, // Show after 12 seconds to avoid jarring UX
 };
 
-function isAuthLikeRoute(pathname: string | null): boolean {
-  if (!pathname) return true;
-  return (
-    pathname.startsWith('/(auth)') ||
-    pathname === '/' ||
-    pathname.startsWith('/sign-in') ||
-    pathname.startsWith('/landing') ||
-    pathname.includes('auth-callback') ||
-    pathname.includes('reset-password') ||
-    pathname.includes('profiles-gate') ||
-    pathname.includes('onboarding')
-  );
-}
-
 export function AdsProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [appStartTime, setAppStartTime] = useState<number>(Date.now());
@@ -68,11 +56,15 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const authReady = !authLoading && !profileLoading;
+  const isWeb = Platform.OS === 'web';
+  const isAndroid = Platform.OS === 'android';
   const freeTierAdsEnabled = process.env.EXPO_PUBLIC_ENABLE_FREE_TIER_ADS !== 'false';
+  const webAdsEnabled = process.env.EXPO_PUBLIC_ENABLE_WEB_ADS !== 'false';
   const adsEnabledEnv =
     process.env.EXPO_PUBLIC_ENABLE_ADS !== '0' &&
     freeTierAdsEnabled;
   const roleEligible = isAdsEligibleUser(profile);
+  const platformEligible = isAndroid || (isWeb && webAdsEnabled);
 
   // Determine if ads should be enabled
   const shouldEnableAds = useMemo(() => {
@@ -80,13 +72,27 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       subscriptionReady &&
       authReady &&
       tier === 'free' &&
-      Platform.OS === 'android' && // Respect Android-only development mode
+      platformEligible &&
       adsEnabledEnv &&
       roleEligible
     );
-  }, [subscriptionReady, authReady, tier, adsEnabledEnv, roleEligible]);
+  }, [subscriptionReady, authReady, tier, platformEligible, adsEnabledEnv, roleEligible]);
 
-  const canShowBanner = shouldEnableAds;
+  const canShowBanner = shouldEnableAds && isAndroid;
+  const [webInterstitial, setWebInterstitial] = useState<{ visible: boolean; tag: string }>({
+    visible: false,
+    tag: '',
+  });
+
+  const closeWebInterstitial = useCallback(() => {
+    setWebInterstitial({ visible: false, tag: '' });
+  }, []);
+
+  const showWebInterstitial = useCallback(async (tag: string): Promise<boolean> => {
+    if (!isWeb) return false;
+    setWebInterstitial({ visible: true, tag });
+    return true;
+  }, [isWeb]);
 
   // Reset app-open attempt state when the user changes or ads become disabled.
   useEffect(() => {
@@ -103,7 +109,7 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
         setAppStartTime(startTime);
         await AsyncStorage.setItem(STORAGE_KEYS.appStartTime, startTime.toString());
 
-        if (shouldEnableAds) {
+        if (shouldEnableAds && !isWeb) {
           debug('[AdsProvider] Initializing AdMob for free tier user');
           const initialized = await initializeAdMob();
           
@@ -276,7 +282,9 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Attempt to show interstitial
-      const shown = await showInterstitialAd(tag);
+      const shown = isWeb
+        ? await showWebInterstitial(tag)
+        : await showInterstitialAd(tag);
       
       if (shown) {
         // Update rate limiting storage
@@ -397,7 +405,9 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const shown = await showAppOpenAd(PLACEMENT_KEYS.INTERSTITIAL_APP_OPEN);
+      const shown = isWeb
+        ? await showWebInterstitial(PLACEMENT_KEYS.INTERSTITIAL_APP_OPEN)
+        : await showAppOpenAd(PLACEMENT_KEYS.INTERSTITIAL_APP_OPEN);
       if (!shown) return;
 
       const now = Date.now();
@@ -427,7 +437,18 @@ export function AdsProvider({ children }: { children: React.ReactNode }) {
     [ready, canShowBanner]
   );
 
-  return <AdsContext.Provider value={value}>{children}</AdsContext.Provider>;
+  return (
+    <AdsContext.Provider value={value}>
+      {children}
+      {isWeb && (
+        <WebInterstitial
+          visible={webInterstitial.visible}
+          tag={webInterstitial.tag}
+          onClose={closeWebInterstitial}
+        />
+      )}
+    </AdsContext.Provider>
+  );
 }
 
 export function useAds() {

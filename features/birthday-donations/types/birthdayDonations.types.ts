@@ -18,6 +18,9 @@ export interface BirthdayDonationEntry {
   paymentMethod?: string | null;
   note?: string | null;
   recordedBy?: string | null;
+  payerStudentId?: string | null;
+  birthdayStudentId?: string | null;
+  classId?: string | null;
   createdAt: string;
 }
 
@@ -34,6 +37,9 @@ export interface RecordBirthdayDonationInput {
   amount: number;
   paymentMethod?: string;
   note?: string;
+  payerStudentId?: string;
+  birthdayStudentId?: string;
+  classId?: string;
 }
 
 export interface BirthdayDonationMonthSummary {

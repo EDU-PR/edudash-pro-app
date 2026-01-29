@@ -6,10 +6,11 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { StudentDetail } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface MedicalInfoSectionProps {
   student: StudentDetail;
-  theme: any;
+  theme: ThemeColors;
   editMode: boolean;
   editedStudent: Partial<StudentDetail>;
   onEditChange: (updates: Partial<StudentDetail>) => void;
@@ -107,7 +108,7 @@ export const MedicalInfoSection: React.FC<MedicalInfoSectionProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

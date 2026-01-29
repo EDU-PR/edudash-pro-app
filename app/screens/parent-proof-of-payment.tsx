@@ -20,6 +20,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { formatFileSize } from '@/lib/popUpload';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 // Payment method options
 const PAYMENT_METHODS = [
@@ -225,8 +226,8 @@ export default function ProofOfPaymentScreen() {
   
   const handleImagePicker = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert(
           t('common.error'),
           'Camera roll permission is required to select images.'

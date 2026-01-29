@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { uploadMultipleImages } from '@/lib/ai/simple-image-upload';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 
@@ -180,8 +181,8 @@ export default function TeacherPostActivityScreen() {
 
   const pickImages = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission needed', 'Please grant permission to access photos');
         return;
       }

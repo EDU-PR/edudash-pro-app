@@ -65,7 +65,13 @@ export interface IDashAIAssistant {
   getAllConversations(): Promise<DashConversation[]>;
   deleteConversation(conversationId: string): Promise<void>;
   addMessageToConversation(conversationId: string, message: DashMessage): Promise<void>;
-  sendMessage(content: string, conversationId?: string, attachments?: any[], onStreamChunk?: (chunk: string) => void): Promise<DashMessage>;
+  sendMessage(
+    content: string,
+    conversationId?: string,
+    attachments?: any[],
+    onStreamChunk?: (chunk: string) => void,
+    options?: { contextOverride?: string | null }
+  ): Promise<DashMessage>;
 
   // Tasks & Reminders
   createTask(title: string, description: string, type?: DashTask['type'], assignedTo?: string): Promise<DashTask>;
@@ -219,10 +225,11 @@ export class DashAIAssistant implements IDashAIAssistant {
     content: string, 
     conversationId?: string, 
     attachments?: any[],
-    onStreamChunk?: (chunk: string) => void
+    onStreamChunk?: (chunk: string) => void,
+    options?: { contextOverride?: string | null }
   ): Promise<DashMessage> {
     // Delegate to DashAICore which now handles AI calls
-    return this.core.sendMessage(content, conversationId, attachments, onStreamChunk);
+    return this.core.sendMessage(content, conversationId, attachments, onStreamChunk, options);
   }
 
   // Tasks & Reminders - delegate to facade

@@ -2,8 +2,8 @@
   "expo": {
     "name": "EduDashPro",
     "slug": "edupro-final",
-    "owner": "edudashproplay-store",
-    "version": "1.0.24",
+    "owner": "dash-t",
+    "version": "1.0.26",
     "runtimeVersion": "1.0.23",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -54,8 +54,6 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.BLUETOOTH",
@@ -75,7 +73,7 @@
       "blockedPermissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "versionCode": 29,
+      "versionCode": 31,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -219,7 +217,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "accd5738-9ee6-434c-a3be-668d9674f541"
+        "projectId": "d3bb7cfc-56c8-4266-be3a-9892dab09c0c"
       },
       "EXPO_PUBLIC_SUPABASE_URL": "https://lvvvjywrmpcqrpvuptdi.supabase.co",
       "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8",
@@ -227,7 +225,7 @@
       "DAILY_API_KEY": "0b8cc0a4f6563bc59aef55b512b4e29666c21148170eb8b04e25dc82f0f1d52b"
     },
     "updates": {
-      "url": "https://u.expo.dev/accd5738-9ee6-434c-a3be-668d9674f541"
+      "url": "https://u.expo.dev/d3bb7cfc-56c8-4266-be3a-9892dab09c0c"
     }
   }
 }

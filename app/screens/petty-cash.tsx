@@ -19,6 +19,7 @@ import { navigateBack } from '@/lib/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 // Modular components
 import { PettyCashSummaryCard } from '@/components/petty-cash/PettyCashSummary';
@@ -212,8 +213,8 @@ export default function PettyCashScreen() {
           text: t('receipt.choose_from_gallery', { defaultValue: 'Choose from Gallery' }),
           onPress: async () => {
             try {
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== 'granted') {
+              const hasPermission = await ensureImageLibraryPermission();
+              if (!hasPermission) {
                 Alert.alert(t('receipt.permission_required'), t('receipt.gallery_permission'));
                 return;
               }

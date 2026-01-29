@@ -126,18 +126,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).dashboardSwitching) {
-      console.log('[ParentDashboard] Clearing stuck dashboardSwitching flag');
+      logger.debug('[ParentDashboard] Clearing stuck dashboardSwitching flag');
       delete (window as any).dashboardSwitching;
     }
     // Refresh subscription data on dashboard mount to ensure tier is up-to-date
     // This handles cases where payment was completed but tier wasn't refreshed
-    console.log('[ParentDashboard] Mount - triggering subscription refresh, current tier:', tier, 'ready:', subscriptionReady);
+    logger.debug('[ParentDashboard] Mount - triggering subscription refresh', { tier, subscriptionReady });
     refreshSubscription();
   }, []);  // Only run on mount, not when tier changes to avoid loops
 
   // Log tier changes for debugging
   useEffect(() => {
-    console.log('[ParentDashboard] Tier updated:', tier, 'subscriptionReady:', subscriptionReady);
+    logger.debug('[ParentDashboard] Tier updated', { tier, subscriptionReady });
   }, [tier, subscriptionReady]);
 
   // Update children state when dashboard data changes
@@ -478,12 +478,12 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           
           // Debug logging
           if (__DEV__) {
-            console.log('[ParentDashboard] Upgrade banner check:', {
+            logger.debug('[ParentDashboard] Upgrade banner check', {
               tier,
               tierLower,
               isFreeTier,
               subscriptionReady,
-              shouldShowBanner
+              shouldShowBanner,
             });
           }
           

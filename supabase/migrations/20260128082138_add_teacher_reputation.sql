@@ -1,6 +1,10 @@
 -- Teacher reputation + market profile support
 
 -- Candidate profiles: public market info + location
+create table if not exists public.candidate_profiles (
+  id uuid primary key default gen_random_uuid()
+);
+
 alter table if exists public.candidate_profiles
   add column if not exists user_id uuid;
 

@@ -26,8 +26,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
+import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+import { normalizeRole } from '@/lib/rbac/profile-utils';
 
 // Shared components
 import {
@@ -98,7 +99,14 @@ export default function StudentDetailScreen() {
   const [childTransactions, setChildTransactions] = useState<Transaction[]>([]);
   
   // Role-based checks
-  const isPrincipal = ['principal', 'principal_admin', 'admin'].includes(profile?.role || '');
+  const normalizedRole = normalizeRole(profile?.role || '') ?? 'parent';
+  const isPrincipal = normalizedRole === 'principal_admin' || normalizedRole === 'super_admin';
+  const isTeacher = normalizedRole === 'teacher';
+  const isParent = normalizedRole === 'parent';
+  const canEditStudent = isPrincipal || isTeacher;
+  const canAssignClass = isPrincipal;
+  const canViewParentContact = !isParent;
+  const canViewFinancial = isPrincipal;
 
   const loadStudentData = async () => {
     if (!studentId || !user) {
@@ -207,31 +215,36 @@ export default function StudentDetailScreen() {
       const attendanceRate = totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
       const lastAttendance = attendanceData?.[0]?.attendance_date;
 
-      // Get financial data - outstanding fees from student_fees (source of truth)
-      const { data: feeData, error: feeError } = await assertSupabase()
-        .from('student_fees')
-        .select('amount_outstanding, status, final_amount')
-        .eq('student_id', studentId);
+      let outstandingFees = 0;
+      if (canViewFinancial) {
+        // Get financial data - outstanding fees from student_fees (source of truth)
+        const { data: feeData, error: feeError } = await assertSupabase()
+          .from('student_fees')
+          .select('amount_outstanding, status, final_amount')
+          .eq('student_id', studentId);
 
-      if (feeError) {
-        console.error('Error loading student fees:', feeError);
+        if (feeError) {
+          console.error('Error loading student fees:', feeError);
+        }
+
+        outstandingFees = (feeData || []).reduce((sum, fee) => {
+          const outstanding = fee.amount_outstanding ?? 0;
+          return sum + outstanding;
+        }, 0);
+
+        // Get child-specific transaction history (last 10)
+        const { data: transactionsData } = await assertSupabase()
+          .from('financial_transactions')
+          .select('*')
+          .eq('student_id', studentId)
+          .eq('preschool_id', schoolId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        setChildTransactions(transactionsData || []);
+      } else {
+        setChildTransactions([]);
       }
-
-      const outstandingFees = (feeData || []).reduce((sum, fee) => {
-        const outstanding = fee.amount_outstanding ?? 0;
-        return sum + outstanding;
-      }, 0);
-
-      // Get child-specific transaction history (last 10)
-      const { data: transactionsData } = await assertSupabase()
-        .from('financial_transactions')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('preschool_id', schoolId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      setChildTransactions(transactionsData || []);
 
       const processedStudent: StudentDetail = {
         ...studentData,
@@ -252,7 +265,7 @@ export default function StudentDetailScreen() {
       setStudent(processedStudent);
 
       // Load available classes for assignment (Principal only)
-      if (['principal', 'principal_admin', 'admin'].includes(userProfile?.role || profile?.role || '')) {
+      if (canAssignClass || ['principal', 'principal_admin', 'admin'].includes(userProfile?.role || profile?.role || '')) {
         const { data: classesData } = await assertSupabase()
           .from('classes')
           .select(`
@@ -340,6 +353,7 @@ export default function StudentDetailScreen() {
   };
 
   const handleEditToggle = () => {
+    if (!canEditStudent) return;
     if (editMode) {
       setEditMode(false);
       setEditedStudent({});
@@ -357,6 +371,7 @@ export default function StudentDetailScreen() {
   };
 
   const handleSave = async () => {
+    if (!canEditStudent) return;
     if (!student || !editedStudent) return;
 
     try {
@@ -584,9 +599,11 @@ export default function StudentDetailScreen() {
           </View>
         ) : (
           <View style={{ flexDirection: 'row', gap: 16 }}>
-            <TouchableOpacity onPress={handleEditToggle}>
-              <Ionicons name="create" size={24} color={theme.primary} />
-            </TouchableOpacity>
+            {canEditStudent && (
+              <TouchableOpacity onPress={handleEditToggle}>
+                <Ionicons name="create" size={24} color={theme.primary} />
+              </TouchableOpacity>
+            )}
             {isPrincipal && (
               <TouchableOpacity onPress={handleRemoveStudent} disabled={saving}>
                 <Ionicons name="person-remove-outline" size={24} color={theme.error} />
@@ -614,6 +631,7 @@ export default function StudentDetailScreen() {
           student={student}
           classes={classes}
           theme={theme}
+          canAssignClass={canAssignClass}
           onAssignClass={() => setShowClassAssignment(true)}
         />
 
@@ -624,50 +642,56 @@ export default function StudentDetailScreen() {
         />
 
         {/* Parent/Guardian Contact */}
-        <ParentContactSection
-          student={student}
-          theme={theme}
-        />
+        {canViewParentContact && (
+          <ParentContactSection
+            student={student}
+            theme={theme}
+          />
+        )}
 
         {/* Progress Reports */}
         <ProgressReportsSection
           student={student}
-          isPrincipal={isPrincipal}
+          mode={isPrincipal ? 'principal' : isTeacher ? 'teacher' : 'parent'}
           theme={theme}
         />
 
         {/* Financial Status */}
-        <FinancialStatusSection
-          student={student}
-          transactions={childTransactions}
-          showDetails={showFinancialDetails}
-          onToggleDetails={() => setShowFinancialDetails(!showFinancialDetails)}
-          theme={theme}
-          isPrincipal={isPrincipal}
-          onMarkPaymentReceived={handleMarkPaymentReceived}
-        />
+        {canViewFinancial && (
+          <FinancialStatusSection
+            student={student}
+            transactions={childTransactions}
+            showDetails={showFinancialDetails}
+            onToggleDetails={() => setShowFinancialDetails(!showFinancialDetails)}
+            theme={theme}
+            isPrincipal={isPrincipal}
+            onMarkPaymentReceived={handleMarkPaymentReceived}
+          />
+        )}
 
         {/* Medical & Emergency Information */}
         <MedicalInfoSection
           student={student}
           theme={theme}
-          editMode={editMode}
+          editMode={editMode && canEditStudent}
           editedStudent={editedStudent}
           onEditChange={setEditedStudent}
         />
       </ScrollView>
 
       {/* Class Assignment Modal */}
-      <ClassAssignmentModal
-        visible={showClassAssignment}
-        student={student}
-        classes={classes}
-        selectedClassId={selectedClassId}
-        onSelectClass={setSelectedClassId}
-        onSave={handleAssignClass}
-        onClose={() => setShowClassAssignment(false)}
-        theme={theme}
-      />
+      {canAssignClass && (
+        <ClassAssignmentModal
+          visible={showClassAssignment}
+          student={student}
+          classes={classes}
+          selectedClassId={selectedClassId}
+          onSelectClass={setSelectedClassId}
+          onSave={handleAssignClass}
+          onClose={() => setShowClassAssignment(false)}
+          theme={theme}
+        />
+      )}
 
       <AlertModal
         visible={alertState.visible}
@@ -681,7 +705,7 @@ export default function StudentDetailScreen() {
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,

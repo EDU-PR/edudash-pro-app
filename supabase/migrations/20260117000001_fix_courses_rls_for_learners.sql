@@ -4,58 +4,142 @@
 --        the SELECT policy is too restrictive. Learners who are organization members
 --        should see all active courses in their organization.
 
-BEGIN;
-
--- Drop existing select policy and recreate with broader access for learners
-DROP POLICY IF EXISTS "courses_organization_members_select" ON public.courses;
-
--- Organization members can SELECT courses in their organization
--- This includes regular members (learners), not just executives
-CREATE POLICY "courses_organization_members_select"
-ON public.courses
-FOR SELECT
-TO authenticated
-USING (
-  -- User is an active organization member of the course's organization (any member type)
-  EXISTS (
+DO $$
+DECLARE
+  courses_exists BOOLEAN;
+  org_members_exists BOOLEAN;
+  enrollments_exists BOOLEAN;
+  has_org_id BOOLEAN;
+  has_instructor_id BOOLEAN;
+  has_is_active BOOLEAN;
+  has_deleted_at BOOLEAN;
+  has_membership_status BOOLEAN;
+  membership_filter TEXT := '';
+  org_members_clause TEXT := '';
+  enrollments_clause TEXT := '';
+  instructor_clause TEXT := '';
+  active_clause TEXT := '';
+  policy_conditions TEXT := '';
+BEGIN
+  SELECT EXISTS (
     SELECT 1
-    FROM public.organization_members om
-    WHERE om.user_id = auth.uid()
-      AND om.organization_id = courses.organization_id
-      AND om.membership_status = 'active'
-  )
-  -- OR user is the instructor
-  OR instructor_id = auth.uid()
-  -- OR user is enrolled in the course
-  OR EXISTS (
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'courses'
+  ) INTO courses_exists;
+
+  IF NOT courses_exists THEN
+    RAISE NOTICE 'Skipping courses RLS update: public.courses table not found';
+    RETURN;
+  END IF;
+
+  SELECT EXISTS (
     SELECT 1
-    FROM public.enrollments e
-    WHERE e.course_id = courses.id
-      AND e.student_id = auth.uid()
-      AND e.is_active = true
-  )
-  -- OR course is active (allows browsing all active courses)
-  OR (is_active = true AND deleted_at IS NULL)
-);
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+  ) INTO org_members_exists;
 
--- Add additional policy for browsing all public active courses
--- This allows learners who aren't organization members to discover courses
-DROP POLICY IF EXISTS "courses_public_browse" ON public.courses;
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'enrollments'
+  ) INTO enrollments_exists;
 
-CREATE POLICY "courses_public_browse"
-ON public.courses
-FOR SELECT
-TO authenticated
-USING (
-  is_active = true 
-  AND deleted_at IS NULL
-);
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'courses'
+      AND column_name = 'organization_id'
+  ) INTO has_org_id;
 
--- Add comments
-COMMENT ON POLICY "courses_organization_members_select" ON public.courses IS
-'Allows all authenticated users to view active courses. Organization members see their org courses, enrolled students see their courses, and all active courses are browseable.';
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'courses'
+      AND column_name = 'instructor_id'
+  ) INTO has_instructor_id;
 
-COMMENT ON POLICY "courses_public_browse" ON public.courses IS
-'Allows all authenticated users to browse active courses for discovery and enrollment.';
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'courses'
+      AND column_name = 'is_active'
+  ) INTO has_is_active;
 
-COMMIT;
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'courses'
+      AND column_name = 'deleted_at'
+  ) INTO has_deleted_at;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'organization_members'
+      AND column_name = 'membership_status'
+  ) INTO has_membership_status;
+
+  IF org_members_exists AND has_org_id THEN
+    IF has_membership_status THEN
+      membership_filter := ' AND om.membership_status = ''active''';
+    END IF;
+    org_members_clause := format(
+      'EXISTS (SELECT 1 FROM public.organization_members om WHERE om.user_id = auth.uid() AND om.organization_id = courses.organization_id%s)',
+      membership_filter
+    );
+  END IF;
+
+  IF enrollments_exists THEN
+    enrollments_clause := 'EXISTS (SELECT 1 FROM public.enrollments e WHERE e.course_id = courses.id AND e.student_id = auth.uid() AND e.is_active = true)';
+  END IF;
+
+  IF has_instructor_id THEN
+    instructor_clause := 'instructor_id = auth.uid()';
+  END IF;
+
+  IF has_is_active THEN
+    active_clause := 'is_active = true';
+    IF has_deleted_at THEN
+      active_clause := 'is_active = true AND deleted_at IS NULL';
+    END IF;
+  ELSIF has_deleted_at THEN
+    active_clause := 'deleted_at IS NULL';
+  ELSE
+    active_clause := 'true';
+  END IF;
+
+  policy_conditions := active_clause;
+  IF org_members_clause <> '' THEN
+    policy_conditions := policy_conditions || ' OR ' || org_members_clause;
+  END IF;
+  IF instructor_clause <> '' THEN
+    policy_conditions := policy_conditions || ' OR ' || instructor_clause;
+  END IF;
+  IF enrollments_clause <> '' THEN
+    policy_conditions := policy_conditions || ' OR ' || enrollments_clause;
+  END IF;
+
+  EXECUTE 'DROP POLICY IF EXISTS "courses_organization_members_select" ON public.courses';
+  EXECUTE format(
+    'CREATE POLICY "courses_organization_members_select" ON public.courses FOR SELECT TO authenticated USING (%s)',
+    policy_conditions
+  );
+
+  EXECUTE 'DROP POLICY IF EXISTS "courses_public_browse" ON public.courses';
+  EXECUTE format(
+    'CREATE POLICY "courses_public_browse" ON public.courses FOR SELECT TO authenticated USING (%s)',
+    active_clause
+  );
+
+  EXECUTE 'COMMENT ON POLICY "courses_organization_members_select" ON public.courses IS ''Allows all authenticated users to view active courses. Organization members see their org courses, enrolled students see their courses, and all active courses are browseable.''';
+  EXECUTE 'COMMENT ON POLICY "courses_public_browse" ON public.courses IS ''Allows all authenticated users to browse active courses for discovery and enrollment.''';
+END;
+$$;

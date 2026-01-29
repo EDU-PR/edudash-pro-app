@@ -8,20 +8,26 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
+
+export type ProgressReportMode = 'principal' | 'teacher' | 'parent';
 
 interface ProgressReportsSectionProps {
   student: StudentDetail;
-  isPrincipal: boolean;
-  theme: any;
+  mode: ProgressReportMode;
+  theme: ThemeColors;
 }
 
 export const ProgressReportsSection: React.FC<ProgressReportsSectionProps> = ({
   student,
-  isPrincipal,
+  mode,
   theme,
 }) => {
   const router = useRouter();
   const styles = createStyles(theme);
+  const isPrincipal = mode === 'principal';
+  const isTeacher = mode === 'teacher';
+  const isParent = mode === 'parent';
 
   return (
     <View style={styles.section}>
@@ -31,8 +37,10 @@ export const ProgressReportsSection: React.FC<ProgressReportsSectionProps> = ({
         onPress={() => {
           if (isPrincipal) {
             router.push('/screens/principal-report-review');
-          } else {
+          } else if (isTeacher) {
             router.push(`/screens/progress-report-creator?student_id=${student.id}`);
+          } else {
+            router.push('/screens/parent-progress');
           }
         }}
       >
@@ -42,10 +50,18 @@ export const ProgressReportsSection: React.FC<ProgressReportsSectionProps> = ({
           </View>
           <View style={styles.progressReportText}>
             <Text style={styles.progressReportTitle}>
-              {isPrincipal ? 'Review Progress Reports' : 'Create Progress Report'}
+              {isPrincipal
+                ? 'Review Progress Reports'
+                : isTeacher
+                ? 'Create Progress Report'
+                : 'View Progress Reports'}
             </Text>
             <Text style={styles.progressReportSubtitle}>
-              {isPrincipal ? 'View and approve student reports' : 'Send academic progress to parents'}
+              {isPrincipal
+                ? 'View and approve student reports'
+                : isTeacher
+                ? 'Send academic progress to parents'
+                : 'Track progress and weekly summaries'}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -55,7 +71,7 @@ export const ProgressReportsSection: React.FC<ProgressReportsSectionProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

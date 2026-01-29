@@ -102,11 +102,22 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
 
       // Fallback: Check user's preschool for branding (for preschool staff/parents)
       // Use auth_user_id to lookup profile (NOT profiles.id!)
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('preschool_id')
         .eq('auth_user_id', user.id)
         .maybeSingle();
+
+      if (!profile && !profileError) {
+        const { data: profileById, error: profileByIdError } = await supabase
+          .from('profiles')
+          .select('preschool_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!profileByIdError && profileById) {
+          profile = profileById;
+        }
+      }
 
       if (profile?.preschool_id) {
         console.log('[Branding] User has preschool_id:', profile.preschool_id);

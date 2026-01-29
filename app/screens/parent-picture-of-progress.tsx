@@ -20,6 +20,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { SubPageHeader } from '@/components/SubPageHeader';
 import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { formatFileSize } from '@/lib/popUpload';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import ProfileImageService from '@/services/ProfileImageService';
 import { PictureOfProgressAI, ImageAnalysisResult } from '@/services/PictureOfProgressAI';
 import { useCelebration } from '@/hooks/useCelebration';
@@ -391,8 +392,8 @@ export default function PictureOfProgressScreen() {
   
   const handleImagePicker = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert(
           t('common.error'),
           'Camera roll permission is required to select images.'

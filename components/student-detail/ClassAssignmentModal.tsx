@@ -8,6 +8,7 @@ import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { StudentDetail, Class } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface ClassAssignmentModalProps {
   visible: boolean;
@@ -17,7 +18,7 @@ interface ClassAssignmentModalProps {
   onSelectClass: (classId: string) => void;
   onSave: () => void;
   onClose: () => void;
-  theme: any;
+  theme: ThemeColors;
 }
 
 export const ClassAssignmentModal: React.FC<ClassAssignmentModalProps> = ({
@@ -77,7 +78,7 @@ export const ClassAssignmentModal: React.FC<ClassAssignmentModalProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: theme.card,

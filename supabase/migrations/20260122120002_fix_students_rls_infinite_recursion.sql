@@ -74,86 +74,169 @@ $$;
 -- ============================================================================
 -- 3. Drop all old students policies that caused recursion
 -- ============================================================================
-DROP POLICY IF EXISTS parents_view_school_students ON students;
-DROP POLICY IF EXISTS students_parent_access ON students;
-DROP POLICY IF EXISTS students_teacher_access ON students;
-DROP POLICY IF EXISTS students_principal_access ON students;
-DROP POLICY IF EXISTS students_select_by_preschool_authenticated ON students;
-DROP POLICY IF EXISTS students_superadmin_access ON students;
-DROP POLICY IF EXISTS students_service_full ON students;
-DROP POLICY IF EXISTS students_tenant_isolation_select ON students;
-DROP POLICY IF EXISTS students_tenant_modify ON students;
-DROP POLICY IF EXISTS students_parent_insert_own_children ON students;
-DROP POLICY IF EXISTS students_parent_update_own_children ON students;
+DO $sql$
+DECLARE
+  has_students boolean := to_regclass('public.students') IS NOT NULL;
+  has_profiles boolean := to_regclass('public.profiles') IS NOT NULL;
 
--- ============================================================================
--- 4. Create new, non-recursive students policies
--- ============================================================================
+  has_students_preschool_id boolean := false;
+  has_students_parent_id boolean := false;
+  has_students_guardian_id boolean := false;
 
--- Service role bypass
-CREATE POLICY students_service_bypass ON students
-FOR ALL
-USING (
-  (SELECT current_setting('role', true)) = 'service_role'
-  OR (SELECT current_setting('is_superuser', true))::boolean = true
-);
+  has_profiles_auth_user_id boolean := false;
+  has_profiles_org_id boolean := false;
+  has_profiles_preschool_id boolean := false;
+  has_profiles_role boolean := false;
 
--- Super admin access (uses SECURITY DEFINER function)
-CREATE POLICY students_superadmin_all ON students
-FOR ALL
-USING (is_superadmin_safe());
+  has_is_superadmin_safe boolean := to_regprocedure('public.is_superadmin_safe()') IS NOT NULL;
 
--- School staff (principals, teachers, admins) can view all students in their school
-CREATE POLICY students_school_staff_select ON students
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.auth_user_id = auth.uid()
-      AND COALESCE(p.organization_id, p.preschool_id) = students.preschool_id
-  )
-);
+  user_match text;
+  school_match text;
+  role_filter text;
+  policy_sql text;
+BEGIN
+  IF has_students THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'students'
+        AND column_name = 'preschool_id'
+    ) INTO has_students_preschool_id;
 
--- School admins can modify students
-CREATE POLICY students_school_admin_modify ON students
-FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.auth_user_id = auth.uid()
-      AND COALESCE(p.organization_id, p.preschool_id) = students.preschool_id
-      AND p.role IN ('principal', 'admin', 'super_admin', 'superadmin', 'preschool_admin')
-  )
-);
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'students'
+        AND column_name = 'parent_id'
+    ) INTO has_students_parent_id;
 
--- Parents can view their own children
-CREATE POLICY students_parent_own_children ON students
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.auth_user_id = auth.uid()
-      AND (students.parent_id = p.id OR students.guardian_id = p.id)
-  )
-);
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'students'
+        AND column_name = 'guardian_id'
+    ) INTO has_students_guardian_id;
+  END IF;
 
--- Parents can update their own children (limited fields controlled at app level)
-CREATE POLICY students_parent_update_children ON students
-FOR UPDATE
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.auth_user_id = auth.uid()
-      AND (students.parent_id = p.id OR students.guardian_id = p.id)
-  )
-);
+  IF has_profiles THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'profiles'
+        AND column_name = 'auth_user_id'
+    ) INTO has_profiles_auth_user_id;
 
--- ============================================================================
--- Add comments
--- ============================================================================
-COMMENT ON POLICY students_service_bypass ON students IS 'Allow service role full access';
-COMMENT ON POLICY students_superadmin_all ON students IS 'Allow super admins full access';
-COMMENT ON POLICY students_school_staff_select ON students IS 'Allow school staff to view students in their school';
-COMMENT ON POLICY students_school_admin_modify ON students IS 'Allow school admins to modify students';
-COMMENT ON POLICY students_parent_own_children ON students IS 'Allow parents to view their own children';
-COMMENT ON POLICY students_parent_update_children ON students IS 'Allow parents to update their own children';
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'profiles'
+        AND column_name = 'organization_id'
+    ) INTO has_profiles_org_id;
+
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'profiles'
+        AND column_name = 'preschool_id'
+    ) INTO has_profiles_preschool_id;
+
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'profiles'
+        AND column_name = 'role'
+    ) INTO has_profiles_role;
+  END IF;
+
+  IF has_students THEN
+    EXECUTE 'DROP POLICY IF EXISTS parents_view_school_students ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_parent_access ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_teacher_access ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_principal_access ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_select_by_preschool_authenticated ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_superadmin_access ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_service_full ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_tenant_isolation_select ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_tenant_modify ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_parent_insert_own_children ON public.students';
+    EXECUTE 'DROP POLICY IF EXISTS students_parent_update_own_children ON public.students';
+  END IF;
+
+  IF has_students THEN
+    EXECUTE 'CREATE POLICY students_service_bypass ON public.students FOR ALL USING ((SELECT current_setting(''role'', true)) = ''service_role'' OR (SELECT current_setting(''is_superuser'', true))::boolean = true)';
+    EXECUTE 'COMMENT ON POLICY students_service_bypass ON public.students IS ''Allow service role full access''';
+
+    IF has_is_superadmin_safe THEN
+      EXECUTE 'CREATE POLICY students_superadmin_all ON public.students FOR ALL USING (public.is_superadmin_safe())';
+      EXECUTE 'COMMENT ON POLICY students_superadmin_all ON public.students IS ''Allow super admins full access''';
+    END IF;
+
+    IF has_profiles AND has_students_preschool_id AND (has_profiles_org_id OR has_profiles_preschool_id) THEN
+      user_match := CASE WHEN has_profiles_auth_user_id THEN 'p.auth_user_id = auth.uid()' ELSE 'p.id = auth.uid()' END;
+
+      IF has_profiles_org_id AND has_profiles_preschool_id THEN
+        school_match := 'COALESCE(p.organization_id, p.preschool_id) = students.preschool_id';
+      ELSIF has_profiles_org_id THEN
+        school_match := 'p.organization_id = students.preschool_id';
+      ELSE
+        school_match := 'p.preschool_id = students.preschool_id';
+      END IF;
+
+      policy_sql := format(
+        'CREATE POLICY students_school_staff_select ON public.students FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE %s AND %s))',
+        user_match,
+        school_match
+      );
+      EXECUTE policy_sql;
+      EXECUTE 'COMMENT ON POLICY students_school_staff_select ON public.students IS ''Allow school staff to view students in their school''';
+
+      role_filter := '';
+      IF has_profiles_role THEN
+        role_filter := ' AND p.role IN (''principal'', ''admin'', ''super_admin'', ''superadmin'', ''preschool_admin'')';
+      END IF;
+
+      policy_sql := format(
+        'CREATE POLICY students_school_admin_modify ON public.students FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE %s%s AND %s))',
+        user_match,
+        role_filter,
+        school_match
+      );
+      EXECUTE policy_sql;
+      EXECUTE 'COMMENT ON POLICY students_school_admin_modify ON public.students IS ''Allow school admins to modify students''';
+    END IF;
+
+    IF has_profiles AND (has_students_parent_id OR has_students_guardian_id) THEN
+      user_match := CASE WHEN has_profiles_auth_user_id THEN 'p.auth_user_id = auth.uid()' ELSE 'p.id = auth.uid()' END;
+      policy_sql := format(
+        'CREATE POLICY students_parent_own_children ON public.students FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE %s AND (%s)))',
+        user_match,
+        CASE
+          WHEN has_students_parent_id AND has_students_guardian_id THEN '(students.parent_id = p.id OR students.guardian_id = p.id)'
+          WHEN has_students_parent_id THEN '(students.parent_id = p.id)'
+          ELSE '(students.guardian_id = p.id)'
+        END
+      );
+      EXECUTE policy_sql;
+      EXECUTE 'COMMENT ON POLICY students_parent_own_children ON public.students IS ''Allow parents to view their own children''';
+
+      policy_sql := format(
+        'CREATE POLICY students_parent_update_children ON public.students FOR UPDATE USING (EXISTS (SELECT 1 FROM public.profiles p WHERE %s AND (%s)))',
+        user_match,
+        CASE
+          WHEN has_students_parent_id AND has_students_guardian_id THEN '(students.parent_id = p.id OR students.guardian_id = p.id)'
+          WHEN has_students_parent_id THEN '(students.parent_id = p.id)'
+          ELSE '(students.guardian_id = p.id)'
+        END
+      );
+      EXECUTE policy_sql;
+      EXECUTE 'COMMENT ON POLICY students_parent_update_children ON public.students IS ''Allow parents to update their own children''';
+    END IF;
+  END IF;
+END $sql$;

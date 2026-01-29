@@ -33,6 +33,7 @@
     "manage": "Manage",
     "viewAll": "View All",
     "loading": "Loading...",
+    "saving": "Saving...",
     "search": "Search...",
     "now": "Now",
     "child": "Child",
@@ -92,7 +93,8 @@
     "account": "Account",
     "settings": "Settings",
     "student": "Student",
-    "name": "Name"
+    "name": "Name",
+    "not_now": "Not now"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -783,6 +785,12 @@
         "early_learning_tips": "Early Learning Tips for Parents",
         "overview": "Today's Overview"
       },
+      "daily_activity": {
+        "empty": {
+          "title": "No activities logged yet today",
+          "description": "Check back later for updates from your child's teacher"
+        }
+      },
       "child_card": {
         "homework": "Homework",
         "events": "Events",
@@ -860,7 +868,8 @@
           "minutes_ago": "{{count}}m ago",
           "hours_ago": "{{count}}h ago",
           "days_ago": "{{count}}d ago"
-        }
+        },
+        "empty": "No notes from teachers yet."
       },
       "progress": {
         "title": "Progress & Achievements",
@@ -910,7 +919,8 @@
           "great_job": "Great job! {{count}} badge earned.",
           "great_job_plural": "Great job! {{count}} badges earned.",
           "keep_going": "Keep going! Your child is making progress."
-        }
+        },
+        "empty": "No progress data yet."
       },
       "birthdays": {
         "title": "Upcoming Birthdays",
@@ -918,7 +928,8 @@
         "view_chart": "View chart",
         "turning_age": "Turning {{age}}",
         "today": "Today",
-        "in_days": "In {{count}} days"
+        "in_days": "In {{count}} days",
+        "none": "No upcoming birthdays yet."
       },
       "uniform": {
         "title": "Uniform Sizes",
@@ -1312,6 +1323,37 @@
           "description": "Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.",
           "cta": "Back to Dashboard"
         }
+      },
+      "community_school": "EduDash Pro Community School",
+      "k12": {
+        "weekly_reports": "Weekly Reports",
+        "ai_tools": {
+          "title": "AI & Learning Tools"
+        },
+        "school_type": {
+          "k12": "K-12 School",
+          "combined": "K-12 School",
+          "primary": "Primary School",
+          "secondary": "Secondary School",
+          "community_school": "Community School"
+        },
+        "upgrade": {
+          "title": "Upgrade for more AI help",
+          "description": "Unlock more Dash AI help, practice tools, and remove limits."
+        },
+        "exam_prep": {
+          "unavailable_title": "Exam Prep Unavailable",
+          "unavailable_message": "Exam Prep is currently disabled in this build. Please try again later.",
+          "locked_title": "Exam Prep Locked",
+          "locked_message": "Exam Prep requires {{tier}} plan or higher.\n\nUpgrade your subscription to unlock this feature."
+        },
+        "dash_ai": {
+          "subtitle": "Get instant homework help & study tips"
+        },
+        "communication": {
+          "title": "School Communication",
+          "subtitle": "Stay connected with teachers and school updates"
+        }
       }
     },
     "todays_activities": "Today's Activities",
@@ -1319,7 +1361,8 @@
     "upcoming_birthdays": "Upcoming Birthdays 🎂",
     "upgrade_value": "Save time with AI homework help",
     "upgrade_value_preschool": "Save time with Dash AI support",
-    "view_chart": "View Chart"
+    "view_chart": "View Chart",
+    "upcoming_events_empty": "No upcoming events"
   },
   "announcement": {
     "create_announcement": "Create Announcement",
@@ -2248,6 +2291,13 @@
     "parent_plus": "Parent Plus",
     "plus_feature": "Plus",
     "free": "Free",
+    "tiers": {
+      "free": "Free"
+    },
+    "tierSource": {
+      "profile": "profile",
+      "caption": "Source: {{source}}"
+    },
     "currentPlan": "Current Plan",
     "changePlanFor": "Change Plan - {{name}}",
     "selectNewPlan": "Select New Plan ({{count}} available)",

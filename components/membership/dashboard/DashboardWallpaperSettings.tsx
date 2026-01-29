@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { assertSupabase } from '@/lib/supabase';
 import Slider from '@react-native-community/slider';
 import type { DashboardSettings } from './types';
@@ -77,8 +78,8 @@ export function DashboardWallpaperSettings({
 
   const pickImage = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission Required', 'Please allow access to your photo library to upload a wallpaper.');
         return;
       }

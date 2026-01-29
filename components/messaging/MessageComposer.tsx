@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { toast } from '@/components/ui/ToastProvider';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
 import { CYAN_BORDER, CYAN_PRIMARY, CYAN_GLOW } from './theme';
@@ -147,9 +148,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     }
     
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const hasPermission = await ensureImageLibraryPermission();
       
-      if (!permissionResult.granted) {
+      if (!hasPermission) {
         Alert.alert(
           'Permission Required',
           'Please grant gallery access to attach images.'

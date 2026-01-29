@@ -72,8 +72,14 @@ export function OrganizationSwitcher({
       
       // Get active organization from storage
       const storedActiveOrg = await AsyncStorage.getItem(ACTIVE_ORG_KEY);
-      const activeOrg = storedActiveOrg ? JSON.parse(storedActiveOrg) : null;
-      setActiveOrgId(activeOrg?.id || profile?.organization_id || profile?.preschool_id);
+      const activeOrg = storedActiveOrg
+        ? (JSON.parse(storedActiveOrg) as { id?: string; userId?: string })
+        : null;
+      if (activeOrg?.userId && activeOrg.userId !== user.id) {
+        await AsyncStorage.removeItem(ACTIVE_ORG_KEY);
+      }
+      const safeActiveOrgId = activeOrg?.userId === user.id ? activeOrg?.id : null;
+      setActiveOrgId(safeActiveOrgId || profile?.organization_id || profile?.preschool_id);
 
       // 1. Get preschool from profile (EduDash system)
       if (profile?.preschool_id) {
@@ -196,6 +202,7 @@ export function OrganizationSwitcher({
         id: org.id,
         name: org.name,
         type: org.type,
+        userId: user!.id,
       }));
 
       // Refresh profile to pick up changes
@@ -375,21 +382,26 @@ export function OrganizationSwitcher({
 }
 
 // Helper function to get active organization from storage
-export async function getActiveOrganization(): Promise<UserOrganization | null> {
+export async function getActiveOrganization(userId?: string): Promise<UserOrganization | null> {
   try {
     const stored = await AsyncStorage.getItem(ACTIVE_ORG_KEY);
-    return stored ? JSON.parse(stored) : null;
+    const parsed = stored ? (JSON.parse(stored) as UserOrganization & { userId?: string }) : null;
+    if (parsed?.userId && userId && parsed.userId !== userId) {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
 }
 
 // Helper function to set active organization
-export async function setActiveOrganization(org: UserOrganization): Promise<void> {
+export async function setActiveOrganization(org: UserOrganization, userId?: string): Promise<void> {
   await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
     id: org.id,
     name: org.name,
     type: org.type,
+    userId,
   }));
 }
 

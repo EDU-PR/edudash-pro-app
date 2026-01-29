@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import StudentAvatarService from '@/services/StudentAvatarService';
 
 export default function ParentChildrenScreen() {
@@ -96,11 +97,11 @@ export default function ParentChildrenScreen() {
 
   const handleAvatarUpload = useCallback(async (childId: string, source: 'camera' | 'library') => {
     try {
-      const permissionResult = source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const hasPermission = source === 'camera'
+        ? (await ImagePicker.requestCameraPermissionsAsync()).status === 'granted'
+        : await ensureImageLibraryPermission();
       
-      if (permissionResult.status !== 'granted') {
+      if (!hasPermission) {
         Alert.alert(
           'Permission required',
           source === 'camera'

@@ -154,7 +154,21 @@ export function DailyActivityFeedCard({
   }
 
   if (activities.length === 0) {
-    return null;
+    return (
+      <div className="card">
+        {showHeader && (
+          <div className="sectionTitle">
+            {t("dashboard.parent.daily_activity.title", { defaultValue: "Today's Activities" })}
+          </div>
+        )}
+        <div className="muted" style={{ fontWeight: 600 }}>
+          {t("dashboard.parent.daily_activity.empty.title", { defaultValue: "No activities logged yet today" })}
+        </div>
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {t("dashboard.parent.daily_activity.empty.description", { defaultValue: "Check back later for updates from your child's teacher" })}
+        </div>
+      </div>
+    );
   }
 
   return (

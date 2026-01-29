@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
+import { calculateAgeOnDate, getDaysUntilDate, getNextBirthdayDate } from "@/lib/utils/dateUtils";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { Cake, PartyPopper } from "lucide-react";
 
@@ -37,28 +38,12 @@ const isMissingSchema = (error?: PostgrestError | null) => {
   return error.code === "42P01" || error.code === "42703";
 };
 
-const parseDateOnly = (value: string): Date | null => {
-  const [yearStr, monthStr, dayStr] = value.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-};
-
 const calculateUpcomingBirthday = (dob: string, today: Date) => {
-  const birthDate = parseDateOnly(dob);
-  if (!birthDate || Number.isNaN(birthDate.getTime())) return null;
+  const nextBirthday = getNextBirthdayDate(dob, today);
+  if (!nextBirthday || Number.isNaN(nextBirthday.getTime())) return null;
 
-  const currentYear = today.getFullYear();
-  const thisYearBirthday = new Date(currentYear, birthDate.getMonth(), birthDate.getDate());
-  const nextBirthday = thisYearBirthday >= today
-    ? thisYearBirthday
-    : new Date(currentYear + 1, birthDate.getMonth(), birthDate.getDate());
-
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const daysUntil = Math.round((nextBirthday.getTime() - today.getTime()) / msPerDay);
-  const ageTurning = nextBirthday.getFullYear() - birthDate.getFullYear();
+  const daysUntil = getDaysUntilDate(nextBirthday, today);
+  const ageTurning = calculateAgeOnDate(dob, nextBirthday);
 
   return { daysUntil, ageTurning };
 };
@@ -136,38 +121,47 @@ export function UpcomingBirthdaysCard({
     );
   }
 
+  const header = showHeader ? (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <PartyPopper size={18} style={{ color: "var(--primary)" }} />
+        <div className="sectionTitle" style={{ margin: 0 }}>
+          {t("dashboard.parent.birthdays.title", { defaultValue: "Upcoming Birthdays" })}
+        </div>
+      </div>
+      {onViewAll && (
+        <button
+          onClick={onViewAll}
+          style={{
+            border: "1px solid var(--border)",
+            padding: "6px 10px",
+            borderRadius: 10,
+            background: "transparent",
+            color: "var(--text)",
+            fontSize: 12,
+            cursor: "pointer"
+          }}
+        >
+          {t("dashboard.parent.birthdays.view_chart", { defaultValue: "View chart" })}
+        </button>
+      )}
+    </div>
+  ) : null;
+
   if (birthdays.length === 0) {
-    return null;
+    return (
+      <div className="card">
+        {header}
+        <div className="muted">
+          {t("dashboard.parent.birthdays.none", { defaultValue: "No upcoming birthdays yet." })}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="card">
-      {showHeader && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <PartyPopper size={18} style={{ color: "var(--primary)" }} />
-          <div className="sectionTitle" style={{ margin: 0 }}>
-            {t("dashboard.parent.birthdays.title", { defaultValue: "Upcoming Birthdays" })}
-          </div>
-          </div>
-          {onViewAll && (
-            <button
-              onClick={onViewAll}
-              style={{
-                border: "1px solid var(--border)",
-                padding: "6px 10px",
-                borderRadius: 10,
-                background: "transparent",
-                color: "var(--text)",
-                fontSize: 12,
-                cursor: "pointer"
-              }}
-            >
-              {t("dashboard.parent.birthdays.view_chart", { defaultValue: "View chart" })}
-            </button>
-          )}
-        </div>
-      )}
+      {header}
       <div style={{ display: "grid", gap: 10 }}>
         {birthdays.map((birthday) => (
           <div

@@ -3,101 +3,158 @@
 -- Issue: Teachers can't save lessons because RLS policies reference 'users' table
 -- which doesn't contain their data (data is in 'profiles' table)
 
-BEGIN;
+DO $$
+DECLARE
+  has_lessons boolean;
+  has_profiles boolean;
+  has_teacher_id boolean;
+  has_preschool_id boolean;
+  has_is_public boolean;
+BEGIN
+  has_lessons := to_regclass('public.lessons') IS NOT NULL;
+  has_profiles := to_regclass('public.profiles') IS NOT NULL;
 
--- Drop old policies that reference 'users' table
-DROP POLICY IF EXISTS "lessons_teacher_access" ON public.lessons;
-DROP POLICY IF EXISTS "lessons_tenant_access" ON public.lessons;
+  IF NOT has_lessons OR NOT has_profiles THEN
+    RETURN;
+  END IF;
 
--- Create new teacher access policy using profiles
-CREATE POLICY "lessons_teacher_insert"
-ON public.lessons
-FOR INSERT
-TO authenticated
-WITH CHECK (
-  teacher_id = auth.uid()
-  AND EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role = 'teacher'
-    AND p.preschool_id = lessons.preschool_id
-  )
-);
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'lessons'
+      AND column_name = 'teacher_id'
+  ) INTO has_teacher_id;
 
-CREATE POLICY "lessons_teacher_update"
-ON public.lessons
-FOR UPDATE
-TO authenticated
-USING (
-  teacher_id = auth.uid()
-  AND EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role = 'teacher'
-    AND p.preschool_id = lessons.preschool_id
-  )
-)
-WITH CHECK (
-  teacher_id = auth.uid()
-  AND EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role = 'teacher'
-    AND p.preschool_id = lessons.preschool_id
-  )
-);
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'lessons'
+      AND column_name = 'preschool_id'
+  ) INTO has_preschool_id;
 
-CREATE POLICY "lessons_teacher_delete"
-ON public.lessons
-FOR DELETE
-TO authenticated
-USING (
-  teacher_id = auth.uid()
-  AND EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role = 'teacher'
-    AND p.preschool_id = lessons.preschool_id
-  )
-);
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'lessons'
+      AND column_name = 'is_public'
+  ) INTO has_is_public;
 
-CREATE POLICY "lessons_teacher_select"
-ON public.lessons
-FOR SELECT
-TO authenticated
-USING (
-  -- Teachers can see their own lessons
-  teacher_id = auth.uid()
-  OR
-  -- Teachers can see lessons from their school
-  preschool_id IN (
-    SELECT p.preschool_id FROM public.profiles p WHERE p.id = auth.uid()
-  )
-  OR
-  -- Public lessons are visible to all
-  is_public = true
-);
+  IF NOT has_teacher_id OR NOT has_preschool_id THEN
+    RETURN;
+  END IF;
 
--- Create principal/admin access policy using profiles
-CREATE POLICY "lessons_principal_access"
-ON public.lessons
-FOR ALL
-TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role IN ('principal', 'admin', 'preschool_admin')
-    AND p.preschool_id = lessons.preschool_id
-  )
-)
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = auth.uid()
-    AND p.role IN ('principal', 'admin', 'preschool_admin')
-    AND p.preschool_id = lessons.preschool_id
-  )
-);
+  EXECUTE 'DROP POLICY IF EXISTS "lessons_teacher_access" ON public.lessons';
+  EXECUTE 'DROP POLICY IF EXISTS "lessons_tenant_access" ON public.lessons';
 
-COMMIT;
+  EXECUTE $ddl$
+    CREATE POLICY "lessons_teacher_insert"
+    ON public.lessons
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (
+      teacher_id = auth.uid()
+      AND EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role = 'teacher'
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+  $ddl$;
+
+  EXECUTE $ddl$
+    CREATE POLICY "lessons_teacher_update"
+    ON public.lessons
+    FOR UPDATE
+    TO authenticated
+    USING (
+      teacher_id = auth.uid()
+      AND EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role = 'teacher'
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+    WITH CHECK (
+      teacher_id = auth.uid()
+      AND EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role = 'teacher'
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+  $ddl$;
+
+  EXECUTE $ddl$
+    CREATE POLICY "lessons_teacher_delete"
+    ON public.lessons
+    FOR DELETE
+    TO authenticated
+    USING (
+      teacher_id = auth.uid()
+      AND EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role = 'teacher'
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+  $ddl$;
+
+  IF has_is_public THEN
+    EXECUTE $ddl$
+      CREATE POLICY "lessons_teacher_select"
+      ON public.lessons
+      FOR SELECT
+      TO authenticated
+      USING (
+        teacher_id = auth.uid()
+        OR preschool_id IN (
+          SELECT p.preschool_id FROM public.profiles p WHERE p.id = auth.uid()
+        )
+        OR is_public = true
+      )
+    $ddl$;
+  ELSE
+    EXECUTE $ddl$
+      CREATE POLICY "lessons_teacher_select"
+      ON public.lessons
+      FOR SELECT
+      TO authenticated
+      USING (
+        teacher_id = auth.uid()
+        OR preschool_id IN (
+          SELECT p.preschool_id FROM public.profiles p WHERE p.id = auth.uid()
+        )
+      )
+    $ddl$;
+  END IF;
+
+  EXECUTE $ddl$
+    CREATE POLICY "lessons_principal_access"
+    ON public.lessons
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role IN ('principal', 'admin', 'preschool_admin')
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM public.profiles p
+        WHERE p.id = auth.uid()
+        AND p.role IN ('principal', 'admin', 'preschool_admin')
+        AND p.preschool_id = lessons.preschool_id
+      )
+    )
+  $ddl$;
+END $$;

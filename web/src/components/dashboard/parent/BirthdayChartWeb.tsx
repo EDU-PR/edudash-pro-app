@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Cake, PartyPopper } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { parseDateOnly } from '@/lib/utils/dateUtils';
 
 export interface WebStudentBirthday {
   id: string;
@@ -18,26 +19,18 @@ interface BirthdayChartWebProps {
   birthdays: WebStudentBirthday[];
 }
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-const parseDateOnly = (value: string): Date | null => {
-  const [yearStr, monthStr, dayStr] = value.split('-');
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-};
+const MONTHS = Array.from({ length: 12 }, (_, index) => index);
 
 export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
-  const { t } = useTranslation('common');
+  const { t, i18n } = useTranslation('common');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const today = new Date();
   const todayMonth = today.getMonth();
   const todayDate = today.getDate();
+  const monthLabels = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(i18n.language || 'en', { month: 'long' });
+    return MONTHS.map((monthIndex) => formatter.format(new Date(2020, monthIndex, 1)));
+  }, [i18n.language]);
 
   const grouped = useMemo(() => {
     const map = new Map<number, WebStudentBirthday[]>();
@@ -107,13 +100,13 @@ export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-        {MONTHS.map((month, index) => {
+        {MONTHS.map((monthIndex, index) => {
           const list = grouped.get(index) || [];
           const isSelected = selectedMonth === index;
           const isCurrent = index === todayMonth;
           return (
             <button
-              key={month}
+              key={monthIndex}
               onClick={() => setSelectedMonth(isSelected ? null : index)}
               style={{
                 padding: 12,
@@ -126,7 +119,7 @@ export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
                 position: 'relative'
               }}
             >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{month}</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{monthLabels[index]}</div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                 {list.length === 1
                   ? t('birthdayChart.monthBirthdaysSingle', { count: list.length })
@@ -152,7 +145,7 @@ export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
       {selectedMonth !== null && (
         <div style={{ marginTop: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>
-            {t('birthdayChart.monthHeading', { month: MONTHS[selectedMonth] })}
+            {t('birthdayChart.monthHeading', { month: monthLabels[selectedMonth] })}
           </div>
           {selectedList.length === 0 ? (
             <div className="muted">{t('birthdayChart.noneThisMonth')}</div>

@@ -8,7 +8,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
-import type { Child } from './_ChildCard';
+import type { Child } from '@/domains/k12/components/K12ParentChildCard';
 
 export interface RecentUpdate {
   id: string;

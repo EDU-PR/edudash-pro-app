@@ -10,6 +10,7 @@ import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
+import { getGradeNumber } from '@/lib/utils/gradeUtils';
 import { Sparkles, Menu, X, FileText } from 'lucide-react';
 
 // Format school name for display
@@ -21,12 +22,6 @@ function formatSchoolName(slug: string | null): string {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
-
-const getGradeNumber = (gradeString?: string): number => {
-  if (!gradeString) return 0;
-  const match = gradeString.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
-};
 
 export default function DashChatPage() {
   const router = useRouter();

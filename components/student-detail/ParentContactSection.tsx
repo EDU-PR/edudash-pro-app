@@ -7,11 +7,12 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StudentDetail } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface ParentContactSectionProps {
   student: StudentDetail;
-  theme: any;
+  theme: ThemeColors;
 }
 
 export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
@@ -101,7 +102,7 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   section: {
     margin: 16,
     backgroundColor: theme.surface,

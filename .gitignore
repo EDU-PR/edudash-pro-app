@@ -19,6 +19,7 @@ out/
 .env.local
 .env.production
 .env.*.local
+.env.eas
 
 # Expo
 .expo/

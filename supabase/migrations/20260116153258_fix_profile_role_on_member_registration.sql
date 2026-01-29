@@ -265,12 +265,66 @@ END;
 $$;
 
 -- Grant execute permissions
-GRANT EXECUTE ON FUNCTION public.register_organization_member TO anon;
-GRANT EXECUTE ON FUNCTION public.register_organization_member TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO anon;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO authenticated;
+GRANT EXECUTE ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) TO anon;
+GRANT EXECUTE ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO authenticated;
 
-COMMENT ON FUNCTION public.register_organization_member IS 
+COMMENT ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) IS
 'Creates an organization member record and updates the user profile role. Returns JSON with success status, action taken, and member details.';
 
 -- Fix any existing members whose profile role doesn't match their member_type
@@ -280,7 +334,16 @@ DECLARE
     v_record RECORD;
     v_new_role TEXT;
     v_update_count INT := 0;
+    has_profiles boolean;
+    has_org_members boolean;
 BEGIN
+    has_profiles := to_regclass('public.profiles') IS NOT NULL;
+    has_org_members := to_regclass('public.organization_members') IS NOT NULL;
+
+    IF NOT has_profiles OR NOT has_org_members THEN
+        RETURN;
+    END IF;
+
     FOR v_record IN 
         SELECT DISTINCT
             p.id as user_id,
@@ -309,17 +372,26 @@ BEGIN
     RAISE NOTICE 'Total profiles updated: %', v_update_count;
 END $$;
 
--- Verification: Show profiles that now have correct roles
-SELECT 
-    p.email,
-    p.role as profile_role,
-    om.member_type,
-    om.membership_status,
-    o.name as organization_name
-FROM profiles p
-INNER JOIN organization_members om ON om.user_id = p.id
-INNER JOIN organizations o ON o.id = om.organization_id
-WHERE om.member_type LIKE 'youth_%'
-   OR om.member_type IN ('learner', 'member')
-ORDER BY om.member_type, p.email
-LIMIT 20;
+DO $$
+DECLARE
+    has_profiles boolean;
+    has_org_members boolean;
+    has_organizations boolean;
+BEGIN
+    has_profiles := to_regclass('public.profiles') IS NOT NULL;
+    has_org_members := to_regclass('public.organization_members') IS NOT NULL;
+    has_organizations := to_regclass('public.organizations') IS NOT NULL;
+
+    IF NOT has_profiles OR NOT has_org_members OR NOT has_organizations THEN
+        RETURN;
+    END IF;
+
+    -- Verification query (intentionally not returning rows in migration context)
+    PERFORM 1
+    FROM profiles p
+    INNER JOIN organization_members om ON om.user_id = p.id
+    INNER JOIN organizations o ON o.id = om.organization_id
+    WHERE om.member_type LIKE 'youth_%'
+       OR om.member_type IN ('learner', 'member')
+    LIMIT 1;
+END $$;

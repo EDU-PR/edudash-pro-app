@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -220,11 +221,11 @@ export default function ParentDocumentUploadScreen() {
   // Pick from camera/gallery
   const handlePickImage = async (docType: DocumentType, useCamera: boolean) => {
     try {
-      const permission = useCamera
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const hasPermission = useCamera
+        ? (await ImagePicker.requestCameraPermissionsAsync()).status === 'granted'
+        : await ensureImageLibraryPermission();
 
-      if (permission.status !== 'granted') {
+      if (!hasPermission) {
         Alert.alert(
           'Permission Required',
           `Please grant ${useCamera ? 'camera' : 'photo library'} access to upload documents.`

@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import * as Sentry from 'sentry-expo';
 import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
@@ -187,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionChecker>(createPermissionChecker(null));
   const [lastRefreshAttempt, setLastRefreshAttempt] = useState<number>(0);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Fetch enhanced user profile
   const fetchProfile = useCallback(async (userId: string) => {
@@ -543,6 +544,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // #region agent log
         console.log('[DEBUG_AGENT] AuthStateChange', JSON.stringify({event,userId:s?.user?.id,email:s?.user?.email,mounted,timestamp:Date.now()}));
         // #endregion
+        
+        const nextUserId = s?.user?.id ?? null;
+        const lastUserId = lastUserIdRef.current;
+        if (event === 'SIGNED_IN' && lastUserId && nextUserId && lastUserId !== nextUserId) {
+          console.log('[AuthContext] Detected user switch, clearing cached profile and permissions');
+          setProfile(null);
+          setPermissions(createPermissionChecker(null));
+          setProfileLoading(true);
+        }
+        lastUserIdRef.current = nextUserId;
         
         setSession(s ?? null);
         setUser(s?.user ?? null);

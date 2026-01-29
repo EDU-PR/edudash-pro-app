@@ -7,6 +7,7 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { ExamInteractiveView } from '@/components/dashboard/exam-prep/ExamInteractiveView';
 import { createClient } from '@/lib/supabase/client';
+import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { Loader2, AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
 
 /**
@@ -38,9 +39,7 @@ function GenerateExamContent() {
   );
   const hasExamEligibleChild = useMemo(() => {
     if (!activeChild) return false;
-    const match = activeChild.grade?.match(/\d+/);
-    const gradeNum = match ? parseInt(match[0], 10) : 0;
-    return gradeNum >= 4;
+    return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild]);
   
   // Simple state: loading → success/error
@@ -238,7 +237,7 @@ function GenerateExamContent() {
               {t('dashboard.parent.exam_prep.locked.title', { defaultValue: 'Exam Prep Locked' })}
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: 14, marginBottom: 16 }}>
-              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ learners. Link a Grade 4 or higher child to unlock this section.' })}
+              {t('dashboard.parent.exam_prep.locked.description', { defaultValue: 'Exam prep is available for Grade 4+ school-age learners. Link a Grade 4 or higher child to unlock this section.' })}
             </p>
             <button className="btn btnSecondary" onClick={() => router.push('/dashboard/parent')}>
               {t('dashboard.parent.exam_prep.locked.cta', { defaultValue: 'Back to Dashboard' })}

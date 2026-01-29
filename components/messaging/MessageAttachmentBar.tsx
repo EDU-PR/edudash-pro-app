@@ -26,6 +26,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import {
   useAudioRecorder,
   useAudioRecorderState,
@@ -169,9 +170,9 @@ export function MessageAttachmentBar({
     setIsLoading(true);
     
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const hasPermission = await ensureImageLibraryPermission();
       
-      if (!permissionResult.granted) {
+      if (!hasPermission) {
         Alert.alert(
           t('common.permissionRequired', { defaultValue: 'Permission Required' }),
           t('messages.galleryPermission', { defaultValue: 'Please grant gallery access to attach images.' })

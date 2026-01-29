@@ -56,7 +56,7 @@ CREATE TABLE public.learner_documents (
   
   -- Expiry (for documents like ID, driver's license)
   expiry_date DATE,
-  is_expired BOOLEAN GENERATED ALWAYS AS (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE) STORED,
+  is_expired BOOLEAN NOT NULL DEFAULT false,
   
   -- Document specific metadata (JSON for flexibility)
   metadata JSONB DEFAULT '{}'::jsonb,
@@ -75,6 +75,21 @@ CREATE INDEX idx_learner_documents_learner_id ON public.learner_documents(learne
 CREATE INDEX idx_learner_documents_type ON public.learner_documents(document_type);
 CREATE INDEX idx_learner_documents_status ON public.learner_documents(status);
 CREATE INDEX idx_learner_documents_created ON public.learner_documents(created_at DESC);
+
+-- Keep is_expired in sync with expiry_date
+CREATE OR REPLACE FUNCTION set_learner_documents_is_expired()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.is_expired := NEW.expiry_date IS NOT NULL AND NEW.expiry_date < CURRENT_DATE;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS learner_documents_set_is_expired ON public.learner_documents;
+CREATE TRIGGER learner_documents_set_is_expired
+  BEFORE INSERT OR UPDATE ON public.learner_documents
+  FOR EACH ROW
+  EXECUTE FUNCTION set_learner_documents_is_expired();
 
 -- Add updated_at trigger
 CREATE OR REPLACE FUNCTION update_learner_documents_updated_at()
@@ -162,28 +177,76 @@ FOR DELETE
 TO authenticated
 USING (learner_id = auth.uid());
 
--- Admins/Verifiers can view all documents
-CREATE POLICY "learner_documents_admin_all"
-ON public.learner_documents
-FOR ALL
-TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles p
-    WHERE p.id = auth.uid()
-    AND p.role IN ('super_admin', 'admin', 'principal')
-  )
-  OR EXISTS (
-    SELECT 1 FROM organization_members om
-    WHERE om.user_id = auth.uid()
-    AND om.membership_status = 'active'
-    AND om.member_type IN (
-      'youth_president', 'youth_secretary', 
-      'president', 'secretary_general', 
-      'ceo', 'national_admin'
-    )
-  )
-);
+-- Admins/Verifiers can view all documents (guard for missing columns)
+DO $admin_policy$
+DECLARE
+  has_profiles BOOLEAN;
+  has_profile_role BOOLEAN;
+  has_org_members BOOLEAN;
+  has_om_user_id BOOLEAN;
+  has_om_member_type BOOLEAN;
+  has_om_membership_status BOOLEAN;
+  profile_clause TEXT := '';
+  org_clause TEXT := '';
+  policy_condition TEXT := '';
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'profiles'
+  ) INTO has_profiles;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'role'
+  ) INTO has_profile_role;
+
+  IF has_profiles AND has_profile_role THEN
+    profile_clause := 'EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN (''super_admin'', ''admin'', ''principal''))';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'organization_members'
+  ) INTO has_org_members;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'user_id'
+  ) INTO has_om_user_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'member_type'
+  ) INTO has_om_member_type;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'membership_status'
+  ) INTO has_om_membership_status;
+
+  IF has_org_members AND has_om_user_id AND has_om_member_type THEN
+    org_clause := 'EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = auth.uid()';
+    IF has_om_membership_status THEN
+      org_clause := org_clause || ' AND om.membership_status = ''active''';
+    END IF;
+    org_clause := org_clause || ' AND om.member_type IN (''youth_president'', ''youth_secretary'', ''president'', ''secretary_general'', ''ceo'', ''national_admin''))';
+  END IF;
+
+  IF profile_clause = '' AND org_clause = '' THEN
+    RAISE NOTICE 'Skipping learner_documents_admin_all policy: required columns missing';
+    RETURN;
+  END IF;
+
+  policy_condition := profile_clause;
+  IF policy_condition <> '' AND org_clause <> '' THEN
+    policy_condition := policy_condition || ' OR ' || org_clause;
+  ELSIF policy_condition = '' THEN
+    policy_condition := org_clause;
+  END IF;
+
+  EXECUTE 'CREATE POLICY learner_documents_admin_all ON public.learner_documents FOR ALL TO authenticated USING (' || policy_condition || ')';
+END;
+$admin_policy$;
 
 -- Service role has full access
 CREATE POLICY "learner_documents_service_role"
@@ -197,85 +260,36 @@ WITH CHECK (true);
 -- 4. STORAGE RLS POLICIES
 -- ============================================================================
 
--- Enable RLS on storage.objects
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+DO $storage_policies$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'storage' AND table_name = 'objects'
+  ) THEN
+    BEGIN
+      EXECUTE 'ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY';
 
--- Drop existing learner-documents policies
-DROP POLICY IF EXISTS "learner_docs_upload" ON storage.objects;
-DROP POLICY IF EXISTS "learner_docs_view_own" ON storage.objects;
-DROP POLICY IF EXISTS "learner_docs_update_own" ON storage.objects;
-DROP POLICY IF EXISTS "learner_docs_delete_own" ON storage.objects;
-DROP POLICY IF EXISTS "learner_docs_admin_view" ON storage.objects;
+      EXECUTE 'DROP POLICY IF EXISTS learner_docs_upload ON storage.objects';
+      EXECUTE 'DROP POLICY IF EXISTS learner_docs_view_own ON storage.objects';
+      EXECUTE 'DROP POLICY IF EXISTS learner_docs_update_own ON storage.objects';
+      EXECUTE 'DROP POLICY IF EXISTS learner_docs_delete_own ON storage.objects';
+      EXECUTE 'DROP POLICY IF EXISTS learner_docs_admin_view ON storage.objects';
 
--- Users can upload to their own folder
-CREATE POLICY "learner_docs_upload"
-ON storage.objects
-FOR INSERT
-TO authenticated
-WITH CHECK (
-  bucket_id = 'learner-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
+      EXECUTE 'CREATE POLICY learner_docs_upload ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = ''learner-documents'' AND (storage.foldername(name))[1] = auth.uid()::text)';
+      EXECUTE 'CREATE POLICY learner_docs_view_own ON storage.objects FOR SELECT TO authenticated USING (bucket_id = ''learner-documents'' AND (storage.foldername(name))[1] = auth.uid()::text)';
+      EXECUTE 'CREATE POLICY learner_docs_update_own ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = ''learner-documents'' AND (storage.foldername(name))[1] = auth.uid()::text) WITH CHECK (bucket_id = ''learner-documents'' AND (storage.foldername(name))[1] = auth.uid()::text)';
+      EXECUTE 'CREATE POLICY learner_docs_delete_own ON storage.objects FOR DELETE TO authenticated USING (bucket_id = ''learner-documents'' AND (storage.foldername(name))[1] = auth.uid()::text)';
 
--- Users can view their own documents
-CREATE POLICY "learner_docs_view_own"
-ON storage.objects
-FOR SELECT
-TO authenticated
-USING (
-  bucket_id = 'learner-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
-
--- Users can update their own documents
-CREATE POLICY "learner_docs_update_own"
-ON storage.objects
-FOR UPDATE
-TO authenticated
-USING (
-  bucket_id = 'learner-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-)
-WITH CHECK (
-  bucket_id = 'learner-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
-
--- Users can delete their own documents
-CREATE POLICY "learner_docs_delete_own"
-ON storage.objects
-FOR DELETE
-TO authenticated
-USING (
-  bucket_id = 'learner-documents'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
-
--- Admins can view all learner documents
-CREATE POLICY "learner_docs_admin_view"
-ON storage.objects
-FOR SELECT
-TO authenticated
-USING (
-  bucket_id = 'learner-documents'
-  AND (
-    EXISTS (
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid()
-      AND p.role IN ('super_admin', 'admin', 'principal')
-    )
-    OR EXISTS (
-      SELECT 1 FROM organization_members om
-      WHERE om.user_id = auth.uid()
-      AND om.membership_status = 'active'
-      AND om.member_type IN (
-        'youth_president', 'youth_secretary',
-        'president', 'secretary_general',
-        'ceo', 'national_admin'
-      )
-    )
-  )
-);
+      EXECUTE 'CREATE POLICY learner_docs_admin_view ON storage.objects FOR SELECT TO authenticated USING (bucket_id = ''learner-documents'' AND (EXISTS (SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role IN (''super_admin'', ''admin'', ''principal'')) OR EXISTS (SELECT 1 FROM organization_members om WHERE om.user_id = auth.uid() AND om.member_type IN (''youth_president'', ''youth_secretary'', ''president'', ''secretary_general'', ''ceo'', ''national_admin''))))';
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        RAISE NOTICE 'Skipping storage.objects policies: insufficient privilege';
+    END;
+  ELSE
+    RAISE NOTICE 'Skipping storage.objects policies: storage.objects table missing';
+  END IF;
+END;
+$storage_policies$;
 
 -- ============================================================================
 -- 5. HELPER FUNCTIONS

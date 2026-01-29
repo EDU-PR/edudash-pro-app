@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';

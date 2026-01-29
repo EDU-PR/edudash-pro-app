@@ -25,6 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { MemberIDCardFront, MemberIDCardBack } from '@/components/membership/MemberIDCard';
@@ -155,8 +156,8 @@ export default function MemberIDCardScreen() {
           text: 'Choose from Library',
           onPress: async () => {
             try {
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== 'granted') {
+              const hasPermission = await ensureImageLibraryPermission();
+              if (!hasPermission) {
                 Alert.alert('Permission Required', 'Photo library permission is required.');
                 return;
               }
@@ -184,8 +185,8 @@ export default function MemberIDCardScreen() {
     
     try {
       // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission Required', 'Photo library permission is required to crop the image.');
         return;
       }

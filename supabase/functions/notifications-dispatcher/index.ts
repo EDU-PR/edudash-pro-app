@@ -869,6 +869,26 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       priority: 'high',
       channelId: 'general'
     },
+    birthday_donation_paid: {
+      title: '✅ Birthday Donation Recorded',
+      body: context.payer_child_name && context.birthday_child_name
+        ? `${context.payer_child_name}'s contribution for ${context.birthday_child_name}'s birthday has been recorded.`
+        : context.birthday_child_name
+          ? `Your birthday contribution for ${context.birthday_child_name} has been recorded.`
+          : 'Your birthday donation has been recorded.',
+      data: {
+        type: 'birthday',
+        screen: 'birthday-planner',
+        payer_child_name: context.payer_child_name,
+        birthday_child_name: context.birthday_child_name,
+        donation_amount: context.donation_amount || 25,
+        donation_date: context.donation_date,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'general'
+    },
     fee_due_soon: {
       title: '💳 Fee Due Soon',
       body: context.child_name && context.due_date

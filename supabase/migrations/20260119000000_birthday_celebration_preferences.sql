@@ -39,44 +39,85 @@ ON birthday_celebration_preferences(student_id);
 -- Enable RLS
 ALTER TABLE birthday_celebration_preferences ENABLE ROW LEVEL SECURITY;
 
--- Policy: Parents can view and manage their own children's preferences
-DROP POLICY IF EXISTS birthday_prefs_parent_policy ON birthday_celebration_preferences;
-CREATE POLICY birthday_prefs_parent_policy ON birthday_celebration_preferences
-FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM students s
-    WHERE s.id = birthday_celebration_preferences.student_id
-    AND s.parent_id = auth.uid()
-  )
-);
+DO $policies$
+DECLARE
+  has_students BOOLEAN;
+  has_parent_id BOOLEAN;
+  has_class_id BOOLEAN;
+  has_preschool_id BOOLEAN;
+  has_classes BOOLEAN;
+  has_teacher_id BOOLEAN;
+  has_profiles BOOLEAN;
+  has_profile_preschool_id BOOLEAN;
+  has_profile_role BOOLEAN;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'students'
+  ) INTO has_students;
 
--- Policy: Teachers can view preferences for students in their classes
-DROP POLICY IF EXISTS birthday_prefs_teacher_view_policy ON birthday_celebration_preferences;
-CREATE POLICY birthday_prefs_teacher_view_policy ON birthday_celebration_preferences
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM students s
-    JOIN classes c ON s.class_id = c.id
-    WHERE s.id = birthday_celebration_preferences.student_id
-    AND c.teacher_id = auth.uid()
-  )
-);
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'parent_id'
+  ) INTO has_parent_id;
 
--- Policy: Principals can view all preferences in their school
-DROP POLICY IF EXISTS birthday_prefs_principal_view_policy ON birthday_celebration_preferences;
-CREATE POLICY birthday_prefs_principal_view_policy ON birthday_celebration_preferences
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM students s
-    JOIN profiles p ON p.id = auth.uid()
-    WHERE s.id = birthday_celebration_preferences.student_id
-    AND s.preschool_id = p.preschool_id
-    AND p.role = 'principal'
-  )
-);
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'class_id'
+  ) INTO has_class_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'students' AND column_name = 'preschool_id'
+  ) INTO has_preschool_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'classes'
+  ) INTO has_classes;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'classes' AND column_name = 'teacher_id'
+  ) INTO has_teacher_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'profiles'
+  ) INTO has_profiles;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'preschool_id'
+  ) INTO has_profile_preschool_id;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'role'
+  ) INTO has_profile_role;
+
+  IF has_students AND has_parent_id THEN
+    EXECUTE 'DROP POLICY IF EXISTS birthday_prefs_parent_policy ON birthday_celebration_preferences';
+    EXECUTE 'CREATE POLICY birthday_prefs_parent_policy ON birthday_celebration_preferences FOR ALL USING (EXISTS (SELECT 1 FROM students s WHERE s.id = birthday_celebration_preferences.student_id AND s.parent_id = auth.uid()))';
+  ELSE
+    RAISE NOTICE 'Skipping parent birthday prefs policy: students.parent_id missing';
+  END IF;
+
+  IF has_students AND has_class_id AND has_classes AND has_teacher_id THEN
+    EXECUTE 'DROP POLICY IF EXISTS birthday_prefs_teacher_view_policy ON birthday_celebration_preferences';
+    EXECUTE 'CREATE POLICY birthday_prefs_teacher_view_policy ON birthday_celebration_preferences FOR SELECT USING (EXISTS (SELECT 1 FROM students s JOIN classes c ON s.class_id = c.id WHERE s.id = birthday_celebration_preferences.student_id AND c.teacher_id = auth.uid()))';
+  ELSE
+    RAISE NOTICE 'Skipping teacher birthday prefs policy: students.class_id or classes.teacher_id missing';
+  END IF;
+
+  IF has_students AND has_preschool_id AND has_profiles AND has_profile_preschool_id AND has_profile_role THEN
+    EXECUTE 'DROP POLICY IF EXISTS birthday_prefs_principal_view_policy ON birthday_celebration_preferences';
+    EXECUTE 'CREATE POLICY birthday_prefs_principal_view_policy ON birthday_celebration_preferences FOR SELECT USING (EXISTS (SELECT 1 FROM students s JOIN profiles p ON p.id = auth.uid() WHERE s.id = birthday_celebration_preferences.student_id AND s.preschool_id = p.preschool_id AND p.role = ''principal''))';
+  ELSE
+    RAISE NOTICE 'Skipping principal birthday prefs policy: required profiles/students columns missing';
+  END IF;
+END;
+$policies$;
 
 -- Function to auto-update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_birthday_prefs_updated_at()

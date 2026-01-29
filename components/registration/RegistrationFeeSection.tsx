@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { createRegistrationStyles } from './child-registration.styles';
 import type { PromoApplied, RegistrationFormErrors } from '@/hooks/useChildRegistration';
 
@@ -51,8 +52,8 @@ export function RegistrationFeeSection({
 
   const handlePopUpload = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
         Alert.alert('Permission Required', 'Please allow access to your photos to upload proof of payment.');
         return;
       }

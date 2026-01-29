@@ -2,6 +2,28 @@
 -- Extends existing messaging infrastructure for Soil of Africa organization messaging
 -- Supports regional, wing, and national communication channels
 
+-- Ensure base tables exist in shadow environments
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id UUID PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS public.organization_regions (
+  id UUID PRIMARY KEY,
+  organization_id UUID REFERENCES public.organizations(id)
+);
+
+CREATE TABLE IF NOT EXISTS public.organization_members (
+  id UUID PRIMARY KEY,
+  organization_id UUID REFERENCES public.organizations(id),
+  user_id UUID REFERENCES auth.users(id)
+);
+
+ALTER TABLE public.organization_members
+  ADD COLUMN IF NOT EXISTS member_type TEXT;
+
+ALTER TABLE public.organization_members
+  ADD COLUMN IF NOT EXISTS region_id UUID;
+
 -- ============================================================================
 -- 1. SOA Message Threads Table
 -- ============================================================================

@@ -126,6 +126,5 @@ ON public.organization_documents
 FOR SELECT
 USING (public.user_can_view_org_document(id, access_level));
 
-COMMENT ON FUNCTION public.user_can_view_org_document IS 
+COMMENT ON FUNCTION public.user_can_view_org_document(UUID, TEXT) IS 
 'Checks if a user can view a document based on access level. National executives can see ALL admin_only documents including those from youth, women, and veterans wings.';
-

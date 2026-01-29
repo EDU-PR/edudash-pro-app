@@ -6,10 +6,11 @@
 import React from 'react';
 import { View, Text, Image, TextInput, StyleSheet } from 'react-native';
 import { StudentDetail, formatAge } from './types';
+import type { ThemeColors } from '@/contexts/ThemeContext';
 
 interface ProfileCardProps {
   student: StudentDetail;
-  theme: any;
+  theme: ThemeColors;
   editMode: boolean;
   editedStudent: Partial<StudentDetail>;
   onEditChange: (updates: Partial<StudentDetail>) => void;
@@ -80,7 +81,7 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: ThemeColors) => StyleSheet.create({
   profileCard: {
     margin: 16,
     backgroundColor: theme.surface,

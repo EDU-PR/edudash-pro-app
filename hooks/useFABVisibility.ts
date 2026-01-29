@@ -79,6 +79,11 @@ export const useFABVisibility = (pathname: string | null) => {
       return true;
     }
 
+    // Birthday and calendar views - keep UI clean
+    if (pathname.includes('birthday') || pathname.includes('calendar')) {
+      return true;
+    }
+
     // PWA install page - hide FAB on installation instructions
     if (pathname === '/pwa-install' || pathname.startsWith('/pwa-install')) {
       return true;

@@ -98,6 +98,7 @@ function mapNotificationType(notifType: string): NotificationType {
     'birthday_today_teacher': 'birthday',
     'birthday_classmates_notification': 'birthday',
     'birthday_donation_reminder': 'birthday',
+    'birthday_donation_paid': 'birthday',
   };
   return typeMap[notifType] || 'system';
 }

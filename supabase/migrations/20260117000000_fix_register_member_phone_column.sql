@@ -257,11 +257,65 @@ BEGIN
 END;
 $$;
 
--- Grant execute permissions
-GRANT EXECUTE ON FUNCTION public.register_organization_member TO anon;
-GRANT EXECUTE ON FUNCTION public.register_organization_member TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO anon;
-GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type TO authenticated;
+-- Grant execute permissions (use full signatures to avoid overload ambiguity)
+GRANT EXECUTE ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) TO anon;
+GRANT EXECUTE ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_profile_role_from_member_type(text) TO authenticated;
 
-COMMENT ON FUNCTION public.register_organization_member IS 
+COMMENT ON FUNCTION public.register_organization_member(
+  uuid,
+  uuid,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  text,
+  date,
+  text,
+  text,
+  text,
+  text
+) IS 
 'Creates an organization member record and updates the user profile role. Returns JSON with success status, action taken, and member details. Fixed: Uses phone column instead of phone_number.';

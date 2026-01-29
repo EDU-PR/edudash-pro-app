@@ -172,6 +172,7 @@ const PROFILE_STORAGE_KEY = 'edudash_profile';
 const SUPABASE_STORAGE_KEY = 'edudash-auth-session';
 const LEGACY_SESSION_KEYS = ['edudash_user_session', 'edudash_user_profile'] as const;
 const ACTIVE_CHILD_KEYS = ['@edudash_active_child_id', 'edudash_active_child_id'] as const;
+const ACTIVE_ORG_KEYS = ['@active_organization'] as const;
 const REFRESH_THRESHOLD = parseInt(process.env.EXPO_PUBLIC_SESSION_REFRESH_THRESHOLD || '300000'); // 5 minutes
 
 let sessionRefreshTimer: any = null;
@@ -241,13 +242,19 @@ async function clearStoredData(): Promise<void> {
       try {
         await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
         await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
+        await Promise.all(ACTIVE_ORG_KEYS.map((key) => AsyncStorage.removeItem(key)));
       } catch (e) {
         console.debug('AsyncStorage clear skipped:', e);
       }
     }
 
     // Clear Supabase auth session and legacy keys from cross-platform storage
-    const extraKeys = [SUPABASE_STORAGE_KEY, ...LEGACY_SESSION_KEYS, ...ACTIVE_CHILD_KEYS];
+    const extraKeys = [
+      SUPABASE_STORAGE_KEY,
+      ...LEGACY_SESSION_KEYS,
+      ...ACTIVE_CHILD_KEYS,
+      ...ACTIVE_ORG_KEYS,
+    ];
     await Promise.all(extraKeys.map((key) => supabaseStorage.removeItem(key)));
     
     console.log('[SessionManager] All stored data cleared successfully');
@@ -960,6 +967,7 @@ export async function signOut(): Promise<void> {
   try {
     console.log('[SessionManager] Starting sign-out process...');
     const session = await getStoredSession();
+    const currentUserId = session?.user_id;
     const sessionDuration = session 
       ? Math.round((Date.now() - (session.expires_at * 1000 - 3600000)) / 1000 / 60)
       : 0;
@@ -968,6 +976,17 @@ export async function signOut(): Promise<void> {
     if (sessionRefreshTimer) {
       clearTimeout(sessionRefreshTimer);
       sessionRefreshTimer = null;
+    }
+
+    // Best-effort: clear user-scoped offline cache to prevent cross-account data bleed
+    if (currentUserId) {
+      try {
+        const { offlineCacheService } = await import('@/lib/services/offlineCacheService');
+        await offlineCacheService.clearUserCache(currentUserId);
+        console.log('[SessionManager] Cleared offline cache for user:', currentUserId);
+      } catch (cacheError) {
+        console.warn('[SessionManager] Failed to clear offline cache (non-fatal):', cacheError);
+      }
     }
 
     // Clear stored data FIRST to prevent any race conditions with getSession() calls

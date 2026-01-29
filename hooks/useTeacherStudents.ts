@@ -9,6 +9,9 @@ export interface TeacherStudentSummary {
   avatarUrl: string | null;
   dateOfBirth: string | null;
   className: string | null;
+  classId: string | null;
+  parentId: string | null;
+  guardianId: string | null;
 }
 
 interface UseTeacherStudentsParams {
@@ -34,7 +37,7 @@ export const useTeacherStudents = ({ teacherId, organizationId, limit = 4 }: Use
     try {
       let query = assertSupabase()
         .from('classes')
-        .select('id, name, preschool_id, organization_id, students(id, first_name, last_name, avatar_url, date_of_birth, is_active)')
+        .select('id, name, preschool_id, organization_id, students(id, first_name, last_name, avatar_url, date_of_birth, is_active, parent_id, guardian_id)')
         .eq('teacher_id', teacherId)
         .eq('active', true);
 
@@ -50,6 +53,7 @@ export const useTeacherStudents = ({ teacherId, organizationId, limit = 4 }: Use
       const flattened: TeacherStudentSummary[] = [];
       (data || []).forEach((cls) => {
         const className = cls.name || null;
+        const classId = cls.id || null;
         (cls.students as Array<{
           id: string;
           first_name: string | null;
@@ -57,6 +61,8 @@ export const useTeacherStudents = ({ teacherId, organizationId, limit = 4 }: Use
           avatar_url: string | null;
           date_of_birth: string | null;
           is_active?: boolean | null;
+          parent_id?: string | null;
+          guardian_id?: string | null;
         }> | null || []).forEach((student) => {
           if (student.is_active === false) return;
           flattened.push({
@@ -66,11 +72,14 @@ export const useTeacherStudents = ({ teacherId, organizationId, limit = 4 }: Use
             avatarUrl: student.avatar_url ?? null,
             dateOfBirth: student.date_of_birth ?? null,
             className,
+            classId,
+            parentId: student.parent_id ?? null,
+            guardianId: student.guardian_id ?? null,
           });
         });
       });
 
-      setStudents(flattened.slice(0, limit));
+      setStudents(limit > 0 ? flattened.slice(0, limit) : flattened);
     } catch (err) {
       logger.error('[useTeacherStudents] Failed to fetch teacher students:', err);
       setError(err instanceof Error ? err.message : 'Failed to load students');
