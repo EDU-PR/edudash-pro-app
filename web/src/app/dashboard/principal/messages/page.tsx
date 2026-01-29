@@ -24,6 +24,7 @@ import { VoiceRecordingOverlay } from '@/components/messaging/VoiceRecordingOver
 import { getMessageDisplayText } from '@/lib/messaging/messageContent';
 import { 
   type MessageThread,
+  type ParticipantProfile,
   DASH_AI_THREAD_ID, 
   DASH_AI_USER_ID,
   createDashAIThread
@@ -80,7 +81,9 @@ const PrincipalThreadItem = ({ thread, isActive, onSelect, currentUserId }: Thre
   const groupName = getGroupDisplayName(thread);
 
   const otherParticipant = participants.find((p) => p.user_id !== currentUserId);
-  const otherProfile = otherParticipant?.user_profile || otherParticipant?.profiles;
+  const otherProfile = (otherParticipant
+    ? ('profiles' in otherParticipant ? otherParticipant.profiles : otherParticipant.user_profile)
+    : undefined) as ParticipantProfile | undefined;
   const contactName = otherProfile
     ? `${otherProfile.first_name || ''} ${otherProfile.last_name || ''}`.trim()
     : 'Contact';
@@ -1322,7 +1325,7 @@ function PrincipalMessagesPage() {
       const participants = thread.message_participants || thread.participants || [];
       const participantNames = participants
         .map((participant) => {
-          const profile = participant.user_profile || participant.profiles;
+          const profile = ('profiles' in participant ? participant.profiles : participant.user_profile) as ParticipantProfile | undefined;
           if (!profile) return '';
           return `${profile.first_name || ''} ${profile.last_name || ''}`.trim().toLowerCase();
         })
@@ -1380,13 +1383,19 @@ function PrincipalMessagesPage() {
       : contactParticipant?.user_profile
         ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
         : 'Contact';
+  const currentIsAdmin = currentParticipant && 'is_admin' in currentParticipant
+    ? Boolean(currentParticipant.is_admin)
+    : false;
+  const currentCanSend = currentParticipant && 'can_send_messages' in currentParticipant
+    ? currentParticipant.can_send_messages
+    : undefined;
   const canSendMessages = (() => {
     if (isDashAISelected) return true;
     if (!selectedThread) return false;
     if (isGroupSelected) {
-      if (currentParticipant?.is_admin) return true;
+      if (currentIsAdmin) return true;
       if (selectedThread.allow_replies === false) return false;
-      if (currentParticipant?.can_send_messages === false) return false;
+      if (currentCanSend === false) return false;
       return true;
     }
     return true;
@@ -1663,7 +1672,6 @@ function PrincipalMessagesPage() {
         userName={profile?.firstName}
         preschoolName={profile?.preschoolName}
         preschoolId={profile?.preschoolId}
-        userId={userId}
         unreadCount={totalUnread}
         contentStyle={{ padding: 0, margin: 0, overflow: 'hidden', height: '100vh', maxHeight: '100vh', position: 'relative' }}
       >

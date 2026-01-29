@@ -74,7 +74,7 @@ export default function ParentBirthdayChartPage() {
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const mapped = (data || []).map((row: StudentRow) => {
+      const mapped: WebStudentBirthday[] = (data || []).map((row: StudentRow): WebStudentBirthday => {
         const dob = row.date_of_birth || '';
         const nextBirthday = dob ? getNextBirthdayDate(dob, today) : null;
         const ageTurning = dob && nextBirthday ? calculateAgeOnDate(dob, nextBirthday) : 0;
@@ -87,7 +87,7 @@ export default function ParentBirthdayChartPage() {
           dateOfBirth: dob,
           ageTurning,
           className: classData?.name || null,
-        } as WebStudentBirthday;
+        };
       });
 
       mapped.sort((a, b) => {

@@ -32,7 +32,8 @@ export default function TeacherSignUpPage() {
     setValidatingInvite(true);
     supabase
       .rpc("validate_invitation_code", { p_code: trimmed })
-      .then(({ data, error: inviteError }) => {
+      .then((result: { data: unknown; error: { message?: string } | null }) => {
+        const { data, error: inviteError } = result;
         if (inviteError || !data) {
           setInviteSchool(null);
           return;
@@ -51,7 +52,7 @@ export default function TeacherSignUpPage() {
           }
         }
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error("Invite code validation failed:", err);
         setInviteSchool(null);
       })

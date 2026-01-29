@@ -144,7 +144,8 @@
     "goalPlaceholder": "e.g., homework help, exam prep",
     "languageLabel": "Language",
     "startTutorSession": "Start Tutor Session",
-    "clear": "Clear"
+    "clear": "Clear",
+    "goalPlaceholderPreschool": "e.g., counting, letter sounds, social skills"
   },
   "birthdayChart": {
     "title": "Birthday Chart",
@@ -481,7 +482,11 @@
         "eft": "EFT",
         "card": "Card",
         "other": "Other"
-      }
+      },
+      "mark_unpaid": "Mark unpaid",
+      "confirm_unpaid_title": "Mark unpaid?",
+      "confirm_unpaid_message": "This will remove the payment for {{name}}.",
+      "confirm_unpaid_cta": "Mark unpaid"
     },
     "ai_teaching_tools": "🤖 AI Teaching Tools",
     "my_classes": "📚 My Classes",
@@ -786,6 +791,18 @@
         "overview": "Today's Overview"
       },
       "daily_activity": {
+        "title": "Today's Activities",
+        "loading": "Loading activities...",
+        "labels": {
+          "teacher": "Teacher:",
+          "materials": "Materials:",
+          "objectives": "Objectives:",
+          "notes": "Notes:",
+          "learning_goals": "Learning Goals",
+          "materials_used": "Materials Used",
+          "teacher_notes": "Teacher Notes",
+          "added_by": "Added by {{name}}"
+        },
         "empty": {
           "title": "No activities logged yet today",
           "description": "Check back later for updates from your child's teacher"
@@ -1041,24 +1058,6 @@
             "title": "Uniform pricing incomplete",
             "message": "Some uniform items do not have a price yet. We will still generate a reference for you."
           }
-        }
-      },
-      "daily_activity": {
-        "title": "Today's Activities",
-        "loading": "Loading activities...",
-        "labels": {
-          "teacher": "Teacher:",
-          "materials": "Materials:",
-          "objectives": "Objectives:",
-          "notes": "Notes:",
-          "learning_goals": "Learning Goals",
-          "materials_used": "Materials Used",
-          "teacher_notes": "Teacher Notes",
-          "added_by": "Added by {{name}}"
-        },
-        "empty": {
-          "title": "No activities logged yet today",
-          "description": "Check back later for updates from your child's teacher"
         }
       },
       "ad_banner": {

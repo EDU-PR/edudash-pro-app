@@ -619,9 +619,10 @@ export default function ParentDashboard() {
               <div 
                 className="card card-interactive" 
                 onClick={() => {
-                  setAIPrompt(t('dashboard.parent.practice.ai.prompt', { defaultValue: 'Help me create age-appropriate AI learning activities for my child' }));
-                  setAIDisplay(t('dashboard.parent.practice.ai.display', { defaultValue: 'AI Learning Activities' }));
-                  router.push('/dashboard/parent/dash-chat');
+                  handleAskFromActivity(
+                    t('dashboard.parent.practice.ai.prompt', { defaultValue: 'Help me create age-appropriate AI learning activities for my child' }),
+                    t('dashboard.parent.practice.ai.display', { defaultValue: 'AI Learning Activities' })
+                  );
                 }}
                 style={{
                   background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
@@ -642,9 +643,10 @@ export default function ParentDashboard() {
               <div 
                 className="card card-interactive" 
                 onClick={() => {
-                  setAIPrompt(t('dashboard.parent.practice.computer.prompt', { defaultValue: 'Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices' }));
-                  setAIDisplay(t('dashboard.parent.practice.computer.display', { defaultValue: 'Computer Literacy Guide' }));
-                  router.push('/dashboard/parent/dash-chat');
+                  handleAskFromActivity(
+                    t('dashboard.parent.practice.computer.prompt', { defaultValue: 'Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices' }),
+                    t('dashboard.parent.practice.computer.display', { defaultValue: 'Computer Literacy Guide' })
+                  );
                 }}
                 style={{
                   background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',

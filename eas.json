@@ -119,16 +119,26 @@
         "EAS_PROJECT_ID": "playstore"
       }
     },
-    "playstore": {
-      "extends": "production",
-      "android": {
-        "buildType": "app-bundle",
-        "gradleCommand": ":app:bundleRelease"
-      },
-      "env": {
-        "EAS_PROJECT_ID": "playstore"
-      }
+  "playstore": {
+    "extends": "production",
+    "android": {
+      "buildType": "app-bundle",
+      "gradleCommand": ":app:bundleRelease"
     },
+    "env": {
+      "EAS_PROJECT_ID": "playstore"
+    }
+  },
+  "playstore-dash-t": {
+    "extends": "production",
+    "android": {
+      "buildType": "app-bundle",
+      "gradleCommand": ":app:bundleRelease"
+    },
+    "env": {
+      "EAS_PROJECT_ID": "dash-t"
+    }
+  },
     "playstore-apk": {
       "extends": "production",
       "android": { "buildType": "apk" },

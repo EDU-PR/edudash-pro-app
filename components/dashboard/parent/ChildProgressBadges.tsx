@@ -236,6 +236,9 @@ export function ChildProgressBadges({
 
   // AppState listener to refresh data when app becomes active
   useEffect(() => {
+    if (typeof AppState?.addEventListener !== 'function') {
+      return;
+    }
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         loadProgress();

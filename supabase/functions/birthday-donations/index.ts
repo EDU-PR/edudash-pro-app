@@ -25,7 +25,13 @@ const recordSchema = z.object({
   classId: z.string().uuid().optional(),
 });
 
+const unrecordSchema = z.object({
+  action: z.literal('unrecord'),
+  donationId: z.string().uuid(),
+});
+
 type RecordRequest = z.infer<typeof recordSchema>;
+type UnrecordRequest = z.infer<typeof unrecordSchema>;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -93,15 +99,87 @@ serve(async (req) => {
     }
 
     const json = await req.json();
-    const parsed = recordSchema.safeParse(json);
-    if (!parsed.success) {
-      return new Response(JSON.stringify({ success: false, error: 'Invalid request', details: parsed.error.flatten() }), {
+    const recordParsed = recordSchema.safeParse(json);
+    const unrecordParsed = unrecordSchema.safeParse(json);
+
+    if (!recordParsed.success && !unrecordParsed.success) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid request', details: recordParsed.error?.flatten?.() || unrecordParsed.error?.flatten?.() }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const payload: RecordRequest = parsed.data;
+    if (unrecordParsed.success) {
+      const payload: UnrecordRequest = unrecordParsed.data;
+
+      const { data: donationRow, error: donationError } = await serviceClient
+        .from('birthday_donations')
+        .select('id, donation_date, amount')
+        .eq('id', payload.donationId)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      if (donationError || !donationRow) {
+        return new Response(JSON.stringify({ success: false, error: 'Donation not found' }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { error: deleteError } = await serviceClient
+        .from('birthday_donations')
+        .delete()
+        .eq('id', payload.donationId)
+        .eq('organization_id', organizationId);
+
+      if (deleteError) {
+        return new Response(JSON.stringify({ success: false, error: deleteError.message }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: remainingRows, error: remainingError } = await serviceClient
+        .from('birthday_donations')
+        .select('amount')
+        .eq('organization_id', organizationId)
+        .eq('donation_date', donationRow.donation_date);
+
+      if (remainingError) {
+        return new Response(JSON.stringify({ success: false, error: remainingError.message }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const totalReceived = (remainingRows || []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+      const { data: dayRow, error: dayError } = await serviceClient
+        .from('birthday_donation_days')
+        .update({
+          total_received: totalReceived,
+          updated_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('organization_id', organizationId)
+        .eq('donation_date', donationRow.donation_date)
+        .select('*')
+        .maybeSingle();
+
+      if (dayError) {
+        return new Response(JSON.stringify({ success: false, error: dayError.message }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, data: dayRow }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const payload: RecordRequest = recordParsed.data;
 
     const rpcPayload = {
       org_id: organizationId,

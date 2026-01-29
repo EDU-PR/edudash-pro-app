@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
@@ -245,6 +246,16 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
       .filter((id): id is string => Boolean(id))
   ), [visibleDonations]);
 
+  const paidEntriesByStudentId = useMemo(() => {
+    const map = new Map<string, BirthdayDonationEntry>();
+    visibleDonations.forEach((entry) => {
+      if (entry.payerStudentId) {
+        map.set(entry.payerStudentId, entry);
+      }
+    });
+    return map;
+  }, [visibleDonations]);
+
   const payerStudents = useMemo(
     () => classStudents.filter((student) => student.id !== selectedBirthday?.student.id),
     [classStudents, selectedBirthday]
@@ -294,6 +305,21 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
       setSavingId(null);
     }
   }, [organizationId, donationDate, selectedBirthday, paymentMethod, classIdForRecord, loadDonations]);
+
+  const handleMarkUnpaid = useCallback(async (student: TeacherStudentSummary, donationEntry: BirthdayDonationEntry) => {
+    if (!organizationId || !donationEntry) return;
+    setSavingId(student.id);
+    setError(null);
+    try {
+      await BirthdayDonationsService.unrecordDonation(organizationId, donationEntry.id);
+      await loadDonations();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to remove donation.';
+      setError(message);
+    } finally {
+      setSavingId(null);
+    }
+  }, [organizationId, loadDonations]);
 
   if (!organizationId) {
     return (
@@ -487,7 +513,38 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                   paidStudents.map((student) => (
                     <View key={student.id} style={styles.studentRow}>
                       <Text style={styles.studentName}>{student.firstName} {student.lastName}</Text>
-                      <Text style={styles.paidBadge}>{t('dashboard.birthday_donations.paid_badge', { defaultValue: 'Paid' })}</Text>
+                      <View style={styles.paidActions}>
+                        <Text style={styles.paidBadge}>{t('dashboard.birthday_donations.paid_badge', { defaultValue: 'Paid' })}</Text>
+                        <TouchableOpacity
+                          style={styles.unpayButton}
+                          onPress={() => {
+                            const donationEntry = paidEntriesByStudentId.get(student.id);
+                            if (!donationEntry) return;
+                            Alert.alert(
+                              t('dashboard.birthday_donations.confirm_unpaid_title', { defaultValue: 'Mark unpaid?' }),
+                              t('dashboard.birthday_donations.confirm_unpaid_message', {
+                                defaultValue: 'This will remove the payment for {{name}}.',
+                                name: `${student.firstName} ${student.lastName}`.trim(),
+                              }),
+                              [
+                                { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+                                {
+                                  text: t('dashboard.birthday_donations.confirm_unpaid_cta', { defaultValue: 'Mark unpaid' }),
+                                  style: 'destructive',
+                                  onPress: () => handleMarkUnpaid(student, donationEntry),
+                                },
+                              ]
+                            );
+                          }}
+                          disabled={savingId === student.id}
+                        >
+                          <Text style={styles.unpayButtonText}>
+                            {savingId === student.id
+                              ? t('common.saving', { defaultValue: 'Saving...' })
+                              : t('dashboard.birthday_donations.mark_unpaid', { defaultValue: 'Mark unpaid' })}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))
                 )}
@@ -671,6 +728,23 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: theme.success,
+  },
+  paidActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  unpayButton: {
+    borderWidth: 1,
+    borderColor: theme.error,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  unpayButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.error,
   },
   errorText: {
     marginTop: 8,

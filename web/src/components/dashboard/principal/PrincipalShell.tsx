@@ -40,6 +40,7 @@ interface PrincipalShellProps {
   rightSidebar?: React.ReactNode;
   hideRightSidebar?: boolean; // Hide right sidebar on specific pages
   onOpenDashAI?: () => void; // Callback for opening Dash AI fullscreen on mobile
+  contentStyle?: React.CSSProperties;
 }
 
 export function PrincipalShell({ 
@@ -52,7 +53,8 @@ export function PrincipalShell({
   children,
   rightSidebar,
   hideRightSidebar = false,
-  onOpenDashAI 
+  onOpenDashAI,
+  contentStyle
 }: PrincipalShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -212,7 +214,7 @@ export function PrincipalShell({
           </div>
         </aside>
 
-        <main className="content">
+        <main className="content" style={contentStyle}>
           {children}
         </main>
 

@@ -31,6 +31,7 @@ import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
+import { calculateAge } from '@/lib/date-utils';
 import { styles } from '@/domains/k12/components/K12ParentDashboard.styles';
 import { ChildCard } from '@/domains/k12/components/K12ParentChildCard';
 import { useK12ParentData } from '@/domains/k12/hooks/useK12ParentData';
@@ -76,6 +77,24 @@ export default function K12ParentDashboardScreen() {
     dataLoading,
     fetchChildrenData,
   } = useK12ParentData(profile?.id, organizationId);
+
+  const getGradeNumber = (value?: string | null): number => {
+    if (!value) return 0;
+    const normalized = value.toLowerCase();
+    if (normalized.includes('grade r') || normalized.trim() === 'r') return 0;
+    const match = normalized.match(/\d{1,2}/);
+    return match ? Number(match[0]) : 0;
+  };
+
+  const hasExamEligibleChild = useMemo(() => {
+    if (!children || children.length === 0) return false;
+    return children.some((child) => {
+      const gradeNum = getGradeNumber(child.grade);
+      if (gradeNum < 4) return false;
+      const ageYears = calculateAge(child.dateOfBirth);
+      return ageYears === null || ageYears >= 6;
+    });
+  }, [children]);
 
   // Track dashboard view
   useEffect(() => {
@@ -152,7 +171,8 @@ export default function K12ParentDashboardScreen() {
   };
 
   const tierForCaps = normalizeTierForCapabilities(tier);
-  const canUseExamPrep = flags.exam_prep_enabled && hasCapability(tierForCaps, 'exam.practice');
+  const canShowExamPrep = hasExamEligibleChild;
+  const canUseExamPrep = flags.exam_prep_enabled && hasCapability(tierForCaps, 'exam.practice') && canShowExamPrep;
   const requiredExamTier = getRequiredTier('exam.practice');
   const quickActions = useMemo(() => ([
     { id: 'children', icon: 'people', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), route: '/screens/parent-children', color: '#4F46E5' },
@@ -165,10 +185,12 @@ export default function K12ParentDashboardScreen() {
 
   const aiQuickActions = useMemo(() => ([
     { id: 'dash-ai', icon: 'sparkles', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), route: '/screens/dash-assistant', color: '#7C3AED' },
-    { id: 'exam-prep', icon: 'school', label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), route: '/screens/exam-prep', color: '#EC4899' },
+    ...(canShowExamPrep ? [
+      { id: 'exam-prep', icon: 'school', label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), route: '/screens/exam-prep', color: '#EC4899' },
+    ] : []),
     { id: 'homework', icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), route: '/screens/homework', color: '#06B6D4' },
     { id: 'weekly-report', icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), route: '/screens/parent-weekly-report', color: '#F97316' },
-  ]), [t]);
+  ]), [t, canShowExamPrep]);
 
   const schoolTypeLabel = useMemo(() => {
     switch (schoolType) {

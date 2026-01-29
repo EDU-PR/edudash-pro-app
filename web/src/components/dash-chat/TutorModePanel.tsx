@@ -1,19 +1,27 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sparkles, GraduationCap, BookOpen, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getGradeNumber } from '@/lib/utils/gradeUtils';
 
 interface TutorModePanelProps {
   onStart: (prompt: string) => void;
+  learnerContext?: {
+    learnerName?: string | null;
+    grade?: string | null;
+    ageYears?: number | null;
+    usageType?: string | null;
+    schoolType?: string | null;
+  } | null;
 }
 
-const GRADES = [
+const K12_GRADES = [
   'Grade R', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
   'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'
 ];
 
-const SUBJECTS = [
+const K12_SUBJECTS = [
   'Mathematics',
   'English Home Language',
   'English First Additional Language',
@@ -33,9 +41,45 @@ const SUBJECTS = [
   'Life Orientation',
 ];
 
+const EARLY_SUBJECTS = [
+  'Literacy',
+  'Numeracy',
+  'Life Skills',
+  'Creative Arts',
+  'Early Learning',
+  'Phonics & Sounds',
+];
+
+const PRESCHOOL_GRADES = [
+  'Preschool (3-4)',
+  'Preschool (4-5)',
+  'Preschool (5-6)',
+  'Grade R',
+];
+
+const FOUNDATION_GRADES = [
+  'Grade R',
+  'Grade 1',
+  'Grade 2',
+  'Grade 3',
+];
+
 const LANGUAGES = ['English', 'Afrikaans', 'isiZulu'];
 
-export function TutorModePanel({ onStart }: TutorModePanelProps) {
+const formatGradeLabel = (value?: string | null): string => {
+  if (!value) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('grade')) return raw.replace(/\s+/g, ' ');
+  if (lower === 'r' || lower.includes('grade r')) return 'Grade R';
+  const match = raw.match(/\d+/);
+  if (match) return `Grade ${match[0]}`;
+  if (lower.includes('preschool') || lower.includes('pre-k') || lower.includes('prek')) return 'Preschool';
+  return raw;
+};
+
+export function TutorModePanel({ onStart, learnerContext }: TutorModePanelProps) {
   const { t } = useTranslation('common');
   const [grade, setGrade] = useState('');
   const [subject, setSubject] = useState('');
@@ -43,9 +87,42 @@ export function TutorModePanel({ onStart }: TutorModePanelProps) {
   const [goal, setGoal] = useState('');
   const [language, setLanguage] = useState('English');
 
+  const normalizedSchool = `${learnerContext?.schoolType || learnerContext?.usageType || ''}`.toLowerCase();
+  const gradeNumber = getGradeNumber(learnerContext?.grade || '');
+  const ageYears = learnerContext?.ageYears ?? null;
+  const isPreschoolContext =
+    normalizedSchool.includes('preschool') ||
+    normalizedSchool.includes('ecd') ||
+    normalizedSchool.includes('early') ||
+    gradeNumber === 0 ||
+    (typeof ageYears === 'number' && ageYears <= 5);
+  const isFoundationPhase = gradeNumber > 0 && gradeNumber <= 3;
+  const isEarlyLearner = isPreschoolContext || isFoundationPhase || (typeof ageYears === 'number' && ageYears <= 8);
+
+  const gradeOptions = useMemo(() => {
+    const base = isPreschoolContext
+      ? PRESCHOOL_GRADES
+      : isFoundationPhase
+        ? FOUNDATION_GRADES
+        : K12_GRADES;
+    const childLabel = formatGradeLabel(learnerContext?.grade);
+    if (childLabel && !base.includes(childLabel)) {
+      return [childLabel, ...base];
+    }
+    return base;
+  }, [isPreschoolContext, isFoundationPhase, learnerContext?.grade]);
+
+  const subjectOptions = useMemo(() => (isEarlyLearner ? EARLY_SUBJECTS : K12_SUBJECTS), [isEarlyLearner]);
+
+  useEffect(() => {
+    const childLabel = formatGradeLabel(learnerContext?.grade);
+    if (!childLabel) return;
+    setGrade((prev) => (prev ? prev : childLabel));
+  }, [learnerContext?.grade]);
+
   const prompt = useMemo(() => {
     const missing: string[] = [];
-    if (!grade) missing.push('grade');
+    if (!grade && !ageYears) missing.push('age or grade');
     if (!subject) missing.push('subject');
     if (!topic) missing.push('topic');
 
@@ -53,8 +130,27 @@ export function TutorModePanel({ onStart }: TutorModePanelProps) {
       ? `Missing info: ${missing.join(', ')}. Ask me for these before teaching.`
       : 'All key info provided.';
 
-    return `Tutor mode.\nGrade: ${grade || 'unknown'}.\nSubject: ${subject || 'unknown'}.\nTopic: ${topic || 'unknown'}.\nGoal: ${goal || 'help me understand and practice'}.\nPreferred language: ${language}.\n${missingText}\nStart with ONE short diagnostic question. Teach step-by-step. Ask one question at a time and wait for my response.`;
-  }, [grade, subject, topic, goal, language]);
+    const learnerName = learnerContext?.learnerName ? `Learner: ${learnerContext.learnerName}.` : '';
+    const ageLine = typeof ageYears === 'number' ? `Age: ${ageYears}.` : '';
+    const schoolLine = learnerContext?.schoolType || learnerContext?.usageType ? `School type: ${learnerContext?.schoolType || learnerContext?.usageType}.` : '';
+    const earlyRule = isEarlyLearner
+      ? 'Use play-based, gentle scaffolding. Avoid exam-prep language. Ask one simple question at a time.'
+      : 'Start with ONE short diagnostic question. Teach step-by-step. Ask one question at a time and wait for my response.';
+
+    return [
+      'Tutor mode.',
+      learnerName,
+      ageLine,
+      schoolLine,
+      `Grade: ${grade || 'unknown'}.`,
+      `Subject: ${subject || 'unknown'}.`,
+      `Topic: ${topic || 'unknown'}.`,
+      `Goal: ${goal || (isEarlyLearner ? 'help me learn with simple practice' : 'help me understand and practice')}.`,
+      `Preferred language: ${language}.`,
+      missingText,
+      earlyRule,
+    ].filter(Boolean).join('\n');
+  }, [grade, subject, topic, goal, language, learnerContext?.learnerName, learnerContext?.schoolType, learnerContext?.usageType, ageYears, isEarlyLearner]);
 
   return (
     <div className="border-b border-gray-800 bg-gray-950/80" style={{
@@ -89,7 +185,7 @@ export function TutorModePanel({ onStart }: TutorModePanelProps) {
                 }}
               >
                 <option value="">{t('dashChat.selectGrade')}</option>
-                {GRADES.map((g) => (
+                {gradeOptions.map((g) => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>
@@ -113,7 +209,7 @@ export function TutorModePanel({ onStart }: TutorModePanelProps) {
                 }}
               >
                 <option value="">{t('dashChat.selectSubject')}</option>
-                {SUBJECTS.map((s) => (
+                {subjectOptions.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -142,7 +238,7 @@ export function TutorModePanel({ onStart }: TutorModePanelProps) {
             <input
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              placeholder={t('dashChat.goalPlaceholder')}
+              placeholder={isEarlyLearner ? t('dashChat.goalPlaceholderPreschool', { defaultValue: 'e.g., counting, letter sounds, social skills' }) : t('dashChat.goalPlaceholder')}
               style={{
                 width: '100%',
                 padding: '8px 10px',
