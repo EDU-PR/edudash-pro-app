@@ -1,0 +1,6 @@
+[sqlfluff]
+dialect = postgres
+templater = raw
+max_line_length = 120
+ignore = parsing
+exclude_rules = LT01,LT02,LT05,LT06,LT09,LT12,LT14,CP01,CP02,CP03,CP04,CP05,AL01,AL03,AM01,AM04,AM05,RF02,RF03,RF04,RF05,RF06,ST06,CV11

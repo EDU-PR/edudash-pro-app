@@ -90,7 +90,9 @@
     "status": "Status",
     "see_all": "See All",
     "account": "Account",
-    "settings": "Settings"
+    "settings": "Settings",
+    "student": "Student",
+    "name": "Name"
   },
   "navigation": {
     "dashboard": "Dashboard",
@@ -928,17 +930,25 @@
           "age": "Age (years)",
           "tshirt_size": "T-shirt Size",
           "tshirts": "T-shirts",
-          "shorts": "Shorts"
+          "shorts": "Shorts",
+          "full_sets": "Full sets (1 set = 1 T-shirt + 1 shorts)",
+          "sample_supplied": "Sample supplied?",
+          "returning_student": "Returning student?",
+          "tshirt_number": "T-shirt Number",
+          "back_number": "Back number:"
         },
         "placeholders": {
           "child_name": "Child name",
           "age": "Age",
           "select_size": "Select size",
-          "default_one": "1"
+          "default_one": "1",
+          "tshirt_number": "e.g. 08"
         },
         "actions": {
           "save": "Save",
-          "pay_now": "Pay now"
+          "pay_now": "Pay now",
+          "edit": "Edit order",
+          "match_tshirt": "Match to T-shirt qty"
         },
         "status": {
           "saving": "Saving…",
@@ -949,7 +959,9 @@
           "tshirt_size": "Select a T-shirt size.",
           "age": "Enter a valid age (1-18).",
           "tshirt_qty": "Enter a valid number of T-shirts (1-20).",
-          "shorts_qty": "Enter a valid number of shorts (0-20)."
+          "shorts_qty": "Enter a valid number of shorts (0-20).",
+          "tshirt_number": "Enter the returning T-shirt number.",
+          "tshirt_number_format": "T-shirt number must be 1-6 digits."
         },
         "errors": {
           "load_existing": "Unable to load existing uniform sizes.",
@@ -980,6 +992,44 @@
         "last_updated": "Last updated:",
         "payment": {
           "description": "Uniform order • Size {{size}} • T-shirts {{tshirts}} • Shorts {{shorts}}"
+        },
+        "helper": {
+          "full_sets": "This sets both quantities to the same value. You can still edit them separately above.",
+          "complete_form": "Complete the uniform form below.",
+          "sample_supplied": "Turn this on if you sent a sample T-shirt for sizing.",
+          "returning_student": "Turn this on if your child is returning and already has a back number.",
+          "back_number": "Use the number that should appear on the back."
+        },
+        "sections": {
+          "details": "Details & Sizes",
+          "sizes": "Sizes & Quantities",
+          "notes": "Notes"
+        },
+        "summary": {
+          "details": "Size:",
+          "subtitle": "Uniform order saved."
+        },
+        "alerts": {
+          "institution_missing": {
+            "title": "{{institution}} not found",
+            "message": "We could not find the {{institution}} for this {{member}}."
+          },
+          "missing_size": {
+            "title": "Missing size",
+            "message": "Please select a T-shirt size before paying."
+          },
+          "missing_quantities": {
+            "title": "Missing quantities",
+            "message": "Enter the number of T-shirts and shorts before paying."
+          },
+          "pricing_missing": {
+            "title": "Uniform pricing not set",
+            "message": "Uniform pricing is not configured yet. We will still generate a reference for you."
+          },
+          "pricing_incomplete": {
+            "title": "Uniform pricing incomplete",
+            "message": "Some uniform items do not have a price yet. We will still generate a reference for you."
+          }
         }
       },
       "daily_activity": {
@@ -1263,7 +1313,13 @@
           "cta": "Back to Dashboard"
         }
       }
-    }
+    },
+    "todays_activities": "Today's Activities",
+    "uniform_sizes": "Uniform Sizes",
+    "upcoming_birthdays": "Upcoming Birthdays 🎂",
+    "upgrade_value": "Save time with AI homework help",
+    "upgrade_value_preschool": "Save time with Dash AI support",
+    "view_chart": "View Chart"
   },
   "announcement": {
     "create_announcement": "Create Announcement",
@@ -1545,7 +1601,13 @@
     "fees_due_in_days_plural": "Due in {{count}} days",
     "dash_explain_prompt": "Explain a concept to me in simple terms.",
     "dash_quiz_prompt": "Create a short practice quiz for my child.",
-    "dash_study_plan_prompt": "Create a simple study plan for this week."
+    "dash_study_plan_prompt": "Create a simple study plan for this week.",
+    "assigned_lessons": "Assigned Lessons",
+    "dash_explain": "Explain a Concept",
+    "dash_quiz": "Practice Quiz",
+    "dash_study_plan": "Study Plan",
+    "learning_hub": "Learning Hub",
+    "payments": "Payments"
   },
   "pop": {
     "uploadProofOfPayment": "Upload Proof of Payment",
@@ -2205,7 +2267,9 @@
     "seatsLabel": "Seats",
     "paymentRequiredNotice": "Payment required - The school principal will be notified via email and push notification to complete payment via PayFast.",
     "notifySchoolToPay": "Notify School to Pay",
-    "confirmChange": "Confirm Change"
+    "confirmChange": "Confirm Change",
+    "plus": "Plus",
+    "premium": "Premium"
   },
   "calls": {
     "title": "Calls",
@@ -2874,5 +2938,9 @@
       "withdrawn": "Request Withdrawn",
       "failed": "Failed to send request"
     }
+  },
+  "hints": {
+    "quick_actions_message": "Tap any card below to quickly access homework, messages, fees, or get help from our AI assistant.",
+    "live_classes_message": "When your child's teacher starts a live class, you'll see it here. Tap to join and watch together!"
   }
 }

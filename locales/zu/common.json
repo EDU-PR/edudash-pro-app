@@ -18,7 +18,10 @@
     "delete": "Susa",
     "add": "Engeza",
     "search": "Sesha",
-    "switch_account": "Shintsha i-akhawunti"
+    "switch_account": "Shintsha i-akhawunti",
+    "calendar": "Ikhalenda",
+    "children": "Izingane",
+    "messages": "Imilayezo"
   },
   "auth": {
     "signIn": "Ngena",
@@ -343,17 +346,25 @@
           "age": "Iminyaka (iminyaka)",
           "tshirt_size": "Usayizi we-T-shirt",
           "tshirts": "Ama-T-shirt",
-          "shorts": "Ama-shorts"
+          "shorts": "Ama-shorts",
+          "full_sets": "Amasethi aphelele (1 isethi = 1 T-shirt + 1 short)",
+          "sample_supplied": "Isampula linikeziwe?",
+          "returning_student": "Umfundi obuyayo?",
+          "tshirt_number": "Inombolo ye-T-shirt",
+          "back_number": "Inombolo yangemuva:"
         },
         "placeholders": {
           "child_name": "Igama lengane",
           "age": "Iminyaka",
           "select_size": "Khetha usayizi",
-          "default_one": "1"
+          "default_one": "1",
+          "tshirt_number": "isb. 08"
         },
         "actions": {
           "save": "Londoloza",
-          "pay_now": "Khokha manje"
+          "pay_now": "Khokha manje",
+          "edit": "Hlela i-oda",
+          "match_tshirt": "Linganisa nenani le-T-shirt"
         },
         "status": {
           "saving": "Iyalondoloza…",
@@ -364,7 +375,9 @@
           "tshirt_size": "Khetha usayizi we-T-shirt.",
           "age": "Faka iminyaka esebenzayo (1-18).",
           "tshirt_qty": "Faka inani elifanele lama-T-shirt (1-20).",
-          "shorts_qty": "Faka inani elifanele lama-shorts (0-20)."
+          "shorts_qty": "Faka inani elifanele lama-shorts (0-20).",
+          "tshirt_number": "Faka inombolo ye-T-shirt yomfundi obuyayo.",
+          "tshirt_number_format": "Inombolo ye-T-shirt kufanele ibe amadijithi angu-1-6."
         },
         "errors": {
           "load_existing": "Ayikwazanga ukulayisha osayizi bama-uniform abakhona.",
@@ -395,6 +408,44 @@
         "last_updated": "Kugcine ukubuyekezwa:",
         "payment": {
           "description": "I-oda le-uniform • Usayizi {{size}} • Ama-T-shirt {{tshirts}} • Ama-shorts {{shorts}}"
+        },
+        "helper": {
+          "full_sets": "Lokhu kusetha womabili amanani ngokufanayo. Ungakwazi ukuwahlela ngokwehlukana ngenhla.",
+          "complete_form": "Gcwalisa ifomu le-uniform elingezansi.",
+          "sample_supplied": "Vula lokhu uma uthumele i-T-shirt yesampula yokulinganisa.",
+          "returning_student": "Vula lokhu uma ingane yakho ibuyayo futhi isivele inenombolo yangemuva.",
+          "back_number": "Sebenzisa inombolo okufanele ibe emuva."
+        },
+        "sections": {
+          "details": "Imininingwane & Osayizi",
+          "sizes": "Osayizi & Inani",
+          "notes": "Amanothi"
+        },
+        "summary": {
+          "details": "Usayizi:",
+          "subtitle": "I-oda le-uniform ligciniwe."
+        },
+        "alerts": {
+          "institution_missing": {
+            "title": "{{institution}} ayitholakali",
+            "message": "Asikwazanga ukuthola i-{{institution}} yaleli {{member}}."
+          },
+          "missing_size": {
+            "title": "Usayizi uyashoda",
+            "message": "Sicela ukhethe usayizi we-T-shirt ngaphambi kokukhokha."
+          },
+          "missing_quantities": {
+            "title": "Inani liyashoda",
+            "message": "Faka inani lama-T-shirt nama-shorts ngaphambi kokukhokha."
+          },
+          "pricing_missing": {
+            "title": "Amanani e-uniform awasethiwe",
+            "message": "Amanani e-uniform awakakamiselwa. Sizokwenza ireferensi yakho noma kunjalo."
+          },
+          "pricing_incomplete": {
+            "title": "Amanani e-uniform awaphelele",
+            "message": "Ezinye izinto ze-uniform azinamanani okwamanje. Sizokwenza ireferensi yakho noma kunjalo."
+          }
         }
       },
       "daily_activity": {
@@ -678,7 +729,16 @@
           "cta": "Buyela Ku-Dashboard"
         }
       }
-    }
+    },
+    "feature_coming_soon": "Lesi siciyezo sizofika maduze!",
+    "quick_actions": "Izenzo ezisheshayo",
+    "todays_activities": "Imisebenzi yanamuhla",
+    "todays_overview": "Ukubuka konke kwanamuhla",
+    "uniform_sizes": "Osayizi bama-uniform",
+    "upcoming_birthdays": "Izinsuku zokuzalwa ezizayo",
+    "upgrade_value": "Yonga isikhathi ngosizo lwe-AI lomsebenzi wasekhaya",
+    "upgrade_value_preschool": "Yonga isikhathi ngosizo lwe-Dash AI",
+    "view_chart": "Buka ishadi"
   },
   "ai": {
     "homework": {
@@ -1010,7 +1070,14 @@
     "enabled": "Kuvuliwe",
     "disabled": "Kukhubazekile",
     "not_available": "Akutholakali",
-    "coming_soon": "Kuyeza masinyane"
+    "coming_soon": "Kuyeza masinyane",
+    "cancel": "Khansela",
+    "noClass": "Asikho isigaba esinikeziwe",
+    "search": "Sesha...",
+    "student": "Umfundi",
+    "upgrade": "Thuthukisa",
+    "viewAll": "Buka konke",
+    "name": "Igama"
   },
   "quick_actions": {
     "seat_management_subtitle": "Assign or revoke teacher seats"
@@ -1049,7 +1116,12 @@
       "school_default": "Okuzenzakalelayo kwesikole",
       "user": "Uhlelo lomsebenzisi",
       "unknown": "Akwaziwa"
-    }
+    },
+    "enterprise": "Enterprise",
+    "free": "Mahhala",
+    "plus": "Plus",
+    "premium": "Premium",
+    "starter": "Starter"
   },
   "trends": {
     "up": "enyukayo",
@@ -1124,6 +1196,47 @@
     "fees_due_in_days_plural": "Kukhokhwa ezinsukwini eziyi-{{count}}",
     "dash_explain_prompt": "Chaza umqondo kimi ngamazwi alula.",
     "dash_quiz_prompt": "Dala imibuzo emifushane yokuzijwayeza yengane yami.",
-    "dash_study_plan_prompt": "Dala uhlelo olulula lokufunda lwale viki."
+    "dash_study_plan_prompt": "Dala uhlelo olulula lokufunda lwale viki.",
+    "ai_homework_help": "Usizo lwe-AI lomsebenzi wasekhaya",
+    "ask_dash": "Buza i-Dash AI",
+    "assigned_lessons": "Izifundo ezabiwe",
+    "attendance_rate": "Izinga lokuba khona",
+    "calls": "Izingcingo",
+    "check_attendance": "Hlola ukubakhona",
+    "dash_explain": "Chaza umqondo",
+    "dash_quiz": "Imibuzo yokuzijwayeza",
+    "dash_study_plan": "Uhlelo lokufunda",
+    "events": "Imicimbi",
+    "homework_pending": "Umsebenzi osele",
+    "learning_hub": "Isikhungo sokufunda",
+    "messages": "Imilayezo",
+    "missed_calls": "Izingcingo ezingaphendulwanga",
+    "payments": "Izinkokhelo",
+    "selectChild": "Khetha ingane",
+    "unread_messages": "Imilayezo engakafundwa",
+    "view_grades": "Buka amamaki",
+    "view_homework": "Buka umsebenzi wasekhaya"
+  },
+  "birthdayChart": {
+    "title": "Ishadi lezinsuku zokuzalwa",
+    "loading": "Ilayisha izinsuku zokuzalwa...",
+    "studentFallback": "Umfundi",
+    "totalStudentsSingle": "{{count}} umfundi ukuphela",
+    "totalStudentsMultiple": "{{count}} abafundi ukuphela",
+    "todaySingle": "{{name}} unomgubho wokuzalwa namuhla!",
+    "todayMultiple": "{{count}} izinsuku zokuzalwa namuhla!",
+    "monthBirthdaysSingle": "{{count}} usuku lokuzalwa",
+    "monthBirthdaysMultiple": "{{count}} izinsuku zokuzalwa",
+    "thisMonth": "Kule nyanga",
+    "monthHeading": "{{month}} Izinsuku zokuzalwa",
+    "noneThisMonth": "Azikho izinsuku zokuzalwa kule nyanga.",
+    "turning": "Uba {{age}}"
+  },
+  "calls": {
+    "live_classes": "Amakilasi abukhoma"
+  },
+  "hints": {
+    "quick_actions_message": "Thepha noma yiliphi ikhadi ngezansi ukuze ufinyelele ngokushesha umsebenzi wasekhaya, imilayezo, izinkokhelo, noma uthole usizo ku-AI wethu.",
+    "live_classes_message": "Uma uthisha wengane yakho eqala ikilasi elibukhoma, uzolibona lapha. Thepha ukuze ujoyine nibuke ndawonye!"
   }
 }
