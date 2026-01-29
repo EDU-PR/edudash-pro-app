@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as Sentry from 'sentry-expo';
 import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
@@ -187,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionChecker>(createPermissionChecker(null));
   const [lastRefreshAttempt, setLastRefreshAttempt] = useState<number>(0);
-  const lastUserIdRef = useRef<string | null>(null);
+  const lastUserIdRef = React.useRef<string | null>(null);
 
   // Fetch enhanced user profile
   const fetchProfile = useCallback(async (userId: string) => {

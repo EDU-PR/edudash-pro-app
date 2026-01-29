@@ -25,6 +25,13 @@ interface ChatInterfaceProps {
   initialPrompt?: string;
   showTutorPanel?: boolean;
   canUseExamBuilder?: boolean;
+  learnerContext?: {
+    learnerName?: string | null;
+    grade?: string | null;
+    ageYears?: number | null;
+    usageType?: string | null;
+    schoolType?: string | null;
+  } | null;
 }
 
 export function ChatInterface({
@@ -34,7 +41,8 @@ export function ChatInterface({
   onMessageSent,
   initialPrompt,
   showTutorPanel = true,
-  canUseExamBuilder = true
+  canUseExamBuilder = true,
+  learnerContext
 }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
@@ -134,6 +142,7 @@ export function ChatInterface({
     <div className="flex flex-col h-full overflow-hidden relative">
       {showTutorPanel && (
         <TutorModePanel
+          learnerContext={learnerContext || undefined}
           onStart={(prompt) => {
             setInput(prompt);
             void sendMessage(prompt, [], undefined);

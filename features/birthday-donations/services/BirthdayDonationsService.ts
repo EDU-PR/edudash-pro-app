@@ -57,6 +57,10 @@ const RecordInputSchema = z.object({
   classId: z.string().uuid().optional(),
 });
 
+const UnrecordInputSchema = z.object({
+  donationId: z.string().uuid(),
+});
+
 const mapDay = (row: z.infer<typeof DaySchema>): BirthdayDonationDay => ({
   id: row.id,
   organizationId: row.organization_id,
@@ -250,6 +254,34 @@ export class BirthdayDonationsService {
       );
     }
 
+    const dayParsed = DaySchema.safeParse(data.data);
+    if (!dayParsed.success) {
+      throw new Error('Invalid response from donation service');
+    }
+
+    return mapDay(dayParsed.data);
+  }
+
+  static async unrecordDonation(organizationId: string, donationId: string): Promise<BirthdayDonationDay | null> {
+    const supabase = assertSupabase();
+    const parsed = UnrecordInputSchema.parse({ donationId });
+    if (!organizationId) {
+      throw new Error('Organization is required');
+    }
+
+    const { data, error } = await supabase.functions.invoke('birthday-donations', {
+      body: {
+        action: 'unrecord',
+        donationId: parsed.donationId,
+      },
+    });
+
+    if (error || !data?.success) {
+      const detail = data?.error ? ` (${data.error})` : '';
+      throw new Error(error?.message || `Failed to remove donation${detail}`);
+    }
+
+    if (!data?.data) return null;
     const dayParsed = DaySchema.safeParse(data.data);
     if (!dayParsed.success) {
       throw new Error('Invalid response from donation service');

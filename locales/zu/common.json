@@ -161,7 +161,11 @@
         "eft": "EFT",
         "card": "Ikhadi",
         "other": "Okunye"
-      }
+      },
+      "mark_unpaid": "Maka njengengakhokhi",
+      "confirm_unpaid_title": "Maka njengengakhokhi?",
+      "confirm_unpaid_message": "Lokhu kuzokhipha inkokhelo ka-{{name}}.",
+      "confirm_unpaid_cta": "Maka njengengakhokhi"
     },
     "vs_last_month": "uma kuqhathaniswa nenyanga edlule",
     "this_month": "kule nyanga",
@@ -1278,5 +1282,28 @@
   "hints": {
     "quick_actions_message": "Thepha noma yiliphi ikhadi ngezansi ukuze ufinyelele ngokushesha umsebenzi wasekhaya, imilayezo, izinkokhelo, noma uthole usizo ku-AI wethu.",
     "live_classes_message": "Uma uthisha wengane yakho eqala ikilasi elibukhoma, uzolibona lapha. Thepha ukuze ujoyine nibuke ndawonye!"
+  },
+  "dashChat": {
+    "welcomeTitle": "Sawubona! NginguDash",
+    "welcomeBody": "Ngitshele ibanga lomfundi, isifundo, nesihloko. Ngizofundisa ngesinyathelo nesinyathelo futhi ngibuze umbuzo owodwa ngesikhathi.",
+    "startFirstChat": "Qala ingxoxo yakho yokuqala",
+    "launchExamBuilder": "Vula umakhi wovivinyo",
+    "quickPrompt1": "Ibanga 4 Izibalo: izingxenyana",
+    "quickPrompt2": "Ibanga 7 IsiNgisi: izifaniso",
+    "quickPrompt3": "Uhlelo lokufunda lweBanga 10 i-Life Sciences",
+    "tutorModeTitle": "Imodi yoThisha",
+    "tutorModeSubtitle": "Usizo oluhlelelekile, oluxhumanayo kubazali nabafundi",
+    "gradeLabel": "Ibanga",
+    "selectGrade": "Khetha ibanga",
+    "subjectLabel": "Isifundo",
+    "selectSubject": "Khetha isifundo",
+    "topicLabel": "Isihloko",
+    "topicPlaceholder": "isb. izingxenyana, i-photosynthesis",
+    "goalLabel": "Inhloso (uyazikhethela)",
+    "goalPlaceholder": "isb. usizo lwasekhaya, ukulungiselela uvivinyo",
+    "goalPlaceholderPreschool": "isb. ukubala, imisindo yezinhlamvu, amakhono okuxhumana",
+    "languageLabel": "Ulimi",
+    "startTutorSession": "Qala iseshini yokufundisa",
+    "clear": "Sula"
   }
 }

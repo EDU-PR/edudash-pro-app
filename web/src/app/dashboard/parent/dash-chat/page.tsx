@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
@@ -10,7 +10,9 @@ import { ConversationList } from '@/components/dash-chat/ConversationList';
 import { ExamBuilderLauncher } from '@/components/dash-chat/ExamBuilderLauncher';
 import { QuotaProgress } from '@/components/dash-chat/QuotaProgress';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
-import { getGradeNumber } from '@/lib/utils/gradeUtils';
+import { useUserProfile } from '@/lib/hooks/useUserProfile';
+import { getGradeNumber, isExamEligibleChild } from '@/lib/utils/gradeUtils';
+import { calculateAgeOnDate } from '@/lib/utils/dateUtils';
 import { Sparkles, Menu, X, FileText } from 'lucide-react';
 
 // Format school name for display
@@ -23,7 +25,7 @@ function formatSchoolName(slug: string | null): string {
     .join(' ');
 }
 
-export default function DashChatPage() {
+function DashChatPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -37,15 +39,23 @@ export default function DashChatPage() {
   const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
   const initialPrompt = searchParams.get('prompt') || '';
   const { childrenCards, activeChildId } = useChildrenData(userId || undefined);
+  const { profile } = useUserProfile(userId);
   const activeChild = useMemo(
     () => childrenCards.find((child) => child.id === activeChildId),
     [childrenCards, activeChildId]
   );
+  const childAgeYears = useMemo(() => {
+    if (!activeChild?.dateOfBirth) return null;
+    return calculateAgeOnDate(activeChild.dateOfBirth, new Date());
+  }, [activeChild?.dateOfBirth]);
   const hasExamEligibleChild = useMemo(() => {
     if (!activeChild) return false;
-    return getGradeNumber(activeChild.grade) >= 4;
+    return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild]);
-  const canUseExamBuilder = hasExamEligibleChild;
+  const normalizedUsage = String(profile?.usageType || '').toLowerCase();
+  const isPreschoolContext = normalizedUsage === 'preschool';
+  const isEarlyLearner = isPreschoolContext || getGradeNumber(activeChild?.grade) < 4 || (typeof childAgeYears === 'number' && childAgeYears <= 6);
+  const canUseExamBuilder = hasExamEligibleChild && !isPreschoolContext;
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -236,6 +246,13 @@ export default function DashChatPage() {
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
                 initialPrompt={initialPrompt || undefined}
                 canUseExamBuilder={canUseExamBuilder}
+                learnerContext={{
+                  learnerName: activeChild ? `${activeChild.firstName} ${activeChild.lastName}`.trim() : null,
+                  grade: activeChild?.grade || null,
+                  ageYears: childAgeYears,
+                  usageType: profile?.usageType || null,
+                  schoolType: profile?.usageType || null,
+                }}
               />
             )}
 
@@ -247,9 +264,11 @@ export default function DashChatPage() {
                   </div>
                   <h2 className="text-xl font-bold m-0">Start Your First Chat</h2>
                   <p className="text-sm text-gray-400 m-0 mb-2">
-                    {canUseExamBuilder
-                      ? 'Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.'
-                      : 'Ask Dash anything about curriculum topics, multilingual support, or age-appropriate learning support.'}
+                    {isEarlyLearner
+                      ? 'Ask Dash for play-based learning ideas, simple explanations, and age-appropriate practice.'
+                      : canUseExamBuilder
+                        ? 'Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.'
+                        : 'Ask Dash anything about curriculum topics, multilingual support, or age-appropriate learning support.'}
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button
@@ -288,5 +307,13 @@ export default function DashChatPage() {
         </div>
       </div>
     </ParentShell>
+  );
+}
+
+export default function DashChatPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashChatPageInner />
+    </Suspense>
   );
 }

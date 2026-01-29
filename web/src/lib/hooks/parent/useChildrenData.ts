@@ -27,6 +27,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
     setActiveChildIdState(id);
     if (typeof window !== 'undefined') {
       localStorage.setItem('edudash_active_child_id', id);
+      window.dispatchEvent(new CustomEvent('edudash_active_child_changed', { detail: id }));
     }
   }, []);
 
@@ -154,6 +155,28 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
   }, [userId, buildChildCard]);
 
   useEffect(() => { loadChildrenData(); }, [loadChildrenData]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleActiveChildChanged = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail && detail !== activeChildId) {
+        setActiveChildIdState(detail);
+      }
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== 'edudash_active_child_id') return;
+      if (event.newValue && event.newValue !== activeChildId) {
+        setActiveChildIdState(event.newValue);
+      }
+    };
+    window.addEventListener('edudash_active_child_changed', handleActiveChildChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('edudash_active_child_changed', handleActiveChildChanged);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [activeChildId]);
 
   useStudentSubscription({
     userId,

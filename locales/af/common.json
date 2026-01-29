@@ -237,7 +237,11 @@
         "eft": "EFT",
         "card": "Kaart",
         "other": "Ander"
-      }
+      },
+      "mark_unpaid": "Merk as onbetaal",
+      "confirm_unpaid_title": "Merk as onbetaal?",
+      "confirm_unpaid_message": "Dit sal die betaling vir {{name}} verwyder.",
+      "confirm_unpaid_cta": "Merk as onbetaal"
     },
     "vs_last_month": "teenoor verlede maand",
     "this_month": "hierdie maand",
@@ -1681,5 +1685,28 @@
   "hints": {
     "quick_actions_message": "Tik op enige kaart hieronder om vinnig toegang tot huiswerk, boodskappe, fooie te kry of hulp van ons KI-assistent.",
     "live_classes_message": "Wanneer jou kind se onderwyser 'n lewende klas begin, sal jy dit hier sien. Tik om aan te sluit en saam te kyk!"
+  },
+  "dashChat": {
+    "welcomeTitle": "Hallo! Ek is Dash",
+    "welcomeBody": "Sê vir my die leerder se graad, vak en onderwerp. Ek sal stap-vir-stap leer en een vraag op 'n slag vra.",
+    "startFirstChat": "Begin jou eerste gesels",
+    "launchExamBuilder": "Maak eksamenbouer oop",
+    "quickPrompt1": "Graad 4 Wiskunde: breuke",
+    "quickPrompt2": "Graad 7 Engels: beeldspraak",
+    "quickPrompt3": "Studieplan vir Graad 10 Lewenswetenskappe",
+    "tutorModeTitle": "Tutor-modus",
+    "tutorModeSubtitle": "Gestruktureerde, interaktiewe hulp vir ouers en leerders",
+    "gradeLabel": "Graad",
+    "selectGrade": "Kies graad",
+    "subjectLabel": "Vak",
+    "selectSubject": "Kies vak",
+    "topicLabel": "Onderwerp",
+    "topicPlaceholder": "bv. breuke, fotosintese",
+    "goalLabel": "Doel (opsioneel)",
+    "goalPlaceholder": "bv. huiswerkhulp, eksamenvoorbereiding",
+    "goalPlaceholderPreschool": "bv. tel, klankies, sosiale vaardighede",
+    "languageLabel": "Taal",
+    "startTutorSession": "Begin tutor-sessie",
+    "clear": "Maak skoon"
   }
 }

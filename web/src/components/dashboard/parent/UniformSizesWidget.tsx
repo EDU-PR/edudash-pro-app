@@ -229,7 +229,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
 
           (feeStructures || [])
             .filter((fee: UniformFeeRow) => isUniformFee(fee.fee_type, fee.name, fee.description))
-            .forEach((fee) => applyFee(fee.amount, fee.fee_type, fee.name, fee.description));
+            .forEach((fee: UniformFeeRow) => applyFee(fee.amount, fee.fee_type, fee.name, fee.description));
 
           const { data: schoolFees } = await supabase
             .from('school_fee_structures')
@@ -239,7 +239,9 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
 
           (schoolFees || [])
             .filter((fee: SchoolUniformFeeRow) => isUniformFee(fee.fee_category, fee.name, fee.description))
-            .forEach((fee) => applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description));
+            .forEach((fee: SchoolUniformFeeRow) =>
+              applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description)
+            );
 
           if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
