@@ -578,7 +578,9 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           if (!entry) return null;
           const preschoolId = child.preschoolId || '';
           const pricing = preschoolId ? uniformPricing[preschoolId] : undefined;
-          const hasPricing = Boolean(pricing && (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount));
+          const hasPricingConfigured = Boolean(
+            pricing && (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount)
+          );
           const tshirtQty = Number.isFinite(Number(entry.tshirtQuantity)) ? Number(entry.tshirtQuantity) : 0;
           const shortsQty = Number.isFinite(Number(entry.shortsQuantity)) ? Number(entry.shortsQuantity) : 0;
           const setPrice = pricing?.setAmount ?? pricing?.fallbackAmount ?? 0;
@@ -591,7 +593,6 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           const orderExtraTshirts = Math.max(tshirtQty - impliedSetQty, 0);
           const orderExtraShorts = Math.max(shortsQty - impliedSetQty, 0);
           const totalAmount = (setPrice * billableSetQty) + (tshirtPrice * remainingTshirts) + (shortsPrice * remainingShorts);
-          const hasPricing = Boolean(pricing && (setPrice > 0 || tshirtPrice > 0 || shortsPrice > 0));
 
           if (entry.status === 'saved' && !entry.isEditing) {
             return (
@@ -613,7 +614,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>{t('dashboard.parent.uniform.total.label', { defaultValue: 'Total:' })}</Text>
                   <Text style={styles.summaryValue}>
-                    {hasPricing
+                    {hasPricingConfigured
                       ? formatCurrency(totalAmount)
                       : t('dashboard.parent.uniform.total.unavailable', { defaultValue: 'Pricing not configured' })}
                   </Text>
@@ -847,10 +848,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
               <TouchableOpacity
                 style={[
                   styles.payButton,
-                  { borderColor: theme.primary, opacity: canPayNow(entry, hasPricing) ? 1 : 0.5 },
+                  { borderColor: theme.primary, opacity: canPayNow(entry, hasPricingConfigured) ? 1 : 0.5 },
                 ]}
                 onPress={() => handlePayNow(child, entry)}
-                disabled={!canPayNow(entry, hasPricing)}
+                disabled={!canPayNow(entry, hasPricingConfigured)}
               >
                 <Text style={[styles.payButtonText, { color: theme.primary }]}>
                   {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay Now' })}
