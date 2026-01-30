@@ -99,9 +99,27 @@ export function POPUploadForm({
       return;
     }
 
-    const amountValue = Number.parseFloat(paymentAmount);
+    const normalizedAmount = paymentAmount.replace(/,/g, '.').replace(/[^\d.]/g, '');
+    const amountValue = Number.parseFloat(normalizedAmount);
     if (!Number.isFinite(amountValue) || amountValue <= 0) {
       setValidationError('Please enter the amount paid');
+      return;
+    }
+
+    const normalizedDate = paymentDate?.trim();
+    if (!normalizedDate) {
+      setValidationError('Please select the payment date');
+      return;
+    }
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)
+      ? normalizedDate
+      : (() => {
+          const parsed = new Date(normalizedDate);
+          if (Number.isNaN(parsed.getTime())) return '';
+          return parsed.toISOString().split('T')[0];
+        })();
+    if (!isoDate) {
+      setValidationError('Payment date is invalid');
       return;
     }
     
@@ -122,7 +140,7 @@ export function POPUploadForm({
       file: selectedFile,
       payment_amount: amountValue,
       payment_method: paymentMethod,
-      payment_date: paymentDate,
+      payment_date: isoDate,
       payment_reference: studentCode, // Always use the child's unique code
       fee_id: feeId || undefined,
     });
