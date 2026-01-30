@@ -7,6 +7,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { DollarSign, Plus, Edit2, Trash2, ArrowLeft, Save } from 'lucide-react';
+import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
 
 interface FeeItem {
   id?: string;
@@ -15,6 +16,27 @@ interface FeeItem {
   frequency: 'once' | 'monthly' | 'quarterly' | 'annually';
   required: boolean;
   description?: string;
+}
+
+interface UniformFeeRow {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  fee_category?: string | null;
+  amount_cents: number;
+  is_active?: boolean | null;
+}
+
+interface UniformPricingState {
+  enabled: boolean;
+  setPrice: string;
+  tshirtPrice: string;
+  shortsPrice: string;
+  ids: {
+    set?: string;
+    tshirt?: string;
+    shorts?: string;
+  };
 }
 
 export default function FeesPage() {
@@ -27,6 +49,13 @@ export default function FeesPage() {
   const [fees, setFees] = useState<FeeItem[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingFee, setEditingFee] = useState<FeeItem | null>(null);
+  const [uniformPricing, setUniformPricing] = useState<UniformPricingState>({
+    enabled: false,
+    setPrice: '',
+    tshirtPrice: '',
+    shortsPrice: '',
+    ids: {},
+  });
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -49,6 +78,7 @@ export default function FeesPage() {
   useEffect(() => {
     if (!preschoolId) return;
     fetchFees();
+    fetchUniformPricing();
   }, [preschoolId]);
 
   const fetchFees = async () => {
@@ -71,6 +101,54 @@ export default function FeesPage() {
     }
   };
 
+  const fetchUniformPricing = async () => {
+    if (!preschoolId) return;
+
+    const { data, error } = await supabase
+      .from('school_fee_structures')
+      .select('id, name, description, fee_category, amount_cents, is_active')
+      .eq('preschool_id', preschoolId)
+      .eq('fee_category', 'uniform');
+
+    if (error) {
+      return;
+    }
+
+    const uniformRows: UniformFeeRow[] = Array.isArray(data) ? data : [];
+    const enabled = uniformRows.some((row) => row.is_active);
+    const ids: UniformPricingState['ids'] = {};
+    let setPrice = '';
+    let tshirtPrice = '';
+    let shortsPrice = '';
+
+    uniformRows.forEach((row) => {
+      if (!isUniformFee(row.fee_category, row.name, row.description)) return;
+      const itemType = getUniformItemType(row.fee_category, row.name, row.description);
+      const amount = row.amount_cents ? (row.amount_cents / 100).toFixed(2) : '';
+
+      if (itemType === 'set') {
+        ids.set = row.id;
+        if (!setPrice) setPrice = amount;
+      }
+      if (itemType === 'tshirt') {
+        ids.tshirt = row.id;
+        if (!tshirtPrice) tshirtPrice = amount;
+      }
+      if (itemType === 'shorts') {
+        ids.shorts = row.id;
+        if (!shortsPrice) shortsPrice = amount;
+      }
+    });
+
+    setUniformPricing({
+      enabled,
+      setPrice,
+      tshirtPrice,
+      shortsPrice,
+      ids,
+    });
+  };
+
   const handleSaveFees = async () => {
     if (!preschoolId) return;
     setSaving(true);
@@ -87,14 +165,103 @@ export default function FeesPage() {
         onConflict: 'preschool_id,setting_key',
       });
 
+    if (error) {
+      setSaving(false);
+      setMessage({ type: 'error', text: 'Failed to save fees. Please try again.' });
+      return;
+    }
+
+    const uniformSaveResult = await saveUniformPricing();
     setSaving(false);
 
-    if (error) {
-      setMessage({ type: 'error', text: 'Failed to save fees. Please try again.' });
-    } else {
-      setMessage({ type: 'success', text: 'Fees updated successfully!' });
-      setTimeout(() => setMessage(null), 3000);
+    if (!uniformSaveResult) {
+      setMessage({ type: 'error', text: 'Fees saved, but uniform pricing could not be updated.' });
+      return;
     }
+
+    setMessage({ type: 'success', text: 'Fees updated successfully!' });
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const saveUniformPricing = async (): Promise<boolean> => {
+    if (!preschoolId) return false;
+
+    if (!uniformPricing.enabled) {
+      const { error } = await supabase
+        .from('school_fee_structures')
+        .update({ is_active: false })
+        .eq('preschool_id', preschoolId)
+        .eq('fee_category', 'uniform');
+
+      return !error;
+    }
+
+    const setPrice = Number.parseFloat(uniformPricing.setPrice);
+    const tshirtPrice = Number.parseFloat(uniformPricing.tshirtPrice);
+    const shortsPrice = Number.parseFloat(uniformPricing.shortsPrice);
+
+    if (!Number.isFinite(setPrice) || !Number.isFinite(tshirtPrice) || !Number.isFinite(shortsPrice)) {
+      setMessage({ type: 'error', text: 'Please enter all uniform prices before saving.' });
+      return false;
+    }
+
+    const payloads = [
+      {
+        id: uniformPricing.ids.set,
+        preschool_id: preschoolId,
+        name: 'Uniform Set',
+        description: 'Uniform Set',
+        amount_cents: Math.round(setPrice * 100),
+        fee_category: 'uniform',
+        is_active: true,
+        currency: 'ZAR',
+      },
+      {
+        id: uniformPricing.ids.tshirt,
+        preschool_id: preschoolId,
+        name: 'Uniform T-shirt',
+        description: 'Uniform T-shirt',
+        amount_cents: Math.round(tshirtPrice * 100),
+        fee_category: 'uniform',
+        is_active: true,
+        currency: 'ZAR',
+      },
+      {
+        id: uniformPricing.ids.shorts,
+        preschool_id: preschoolId,
+        name: 'Uniform Shorts',
+        description: 'Uniform Shorts',
+        amount_cents: Math.round(shortsPrice * 100),
+        fee_category: 'uniform',
+        is_active: true,
+        currency: 'ZAR',
+      },
+    ];
+
+    const [setPayload, tshirtPayload, shortsPayload] = payloads;
+
+    const inserts = payloads.filter((row) => !row.id);
+    const updates = payloads.filter((row) => row.id);
+
+    if (updates.length) {
+      const { error: updateError } = await supabase
+        .from('school_fee_structures')
+        .upsert(updates, { onConflict: 'id' });
+      if (updateError) {
+        return false;
+      }
+    }
+
+    if (inserts.length) {
+      const { error: insertError } = await supabase
+        .from('school_fee_structures')
+        .insert(inserts.map(({ id, ...row }) => row));
+      if (insertError) {
+        return false;
+      }
+    }
+
+    return true;
   };
 
   const handleAddFee = (fee: FeeItem) => {
@@ -229,6 +396,67 @@ export default function FeesPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Uniform Pricing</h3>
+              <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
+                Enable uniform sales and set pricing for your school.
+              </p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={uniformPricing.enabled}
+                onChange={(e) => setUniformPricing((prev) => ({ ...prev, enabled: e.target.checked }))}
+              />
+              Enable Uniform Sales
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Full Set (R)</label>
+              <input
+                type="number"
+                className="input"
+                value={uniformPricing.setPrice}
+                onChange={(e) => setUniformPricing((prev) => ({ ...prev, setPrice: e.target.value }))}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                disabled={!uniformPricing.enabled}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>T-shirt Only (R)</label>
+              <input
+                type="number"
+                className="input"
+                value={uniformPricing.tshirtPrice}
+                onChange={(e) => setUniformPricing((prev) => ({ ...prev, tshirtPrice: e.target.value }))}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                disabled={!uniformPricing.enabled}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>Shorts Only (R)</label>
+              <input
+                type="number"
+                className="input"
+                value={uniformPricing.shortsPrice}
+                onChange={(e) => setUniformPricing((prev) => ({ ...prev, shortsPrice: e.target.value }))}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                disabled={!uniformPricing.enabled}
+              />
+            </div>
           </div>
         </div>
 
