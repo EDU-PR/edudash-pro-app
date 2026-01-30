@@ -308,7 +308,9 @@ export default function PaymentFlowScreen() {
         selectedChild={selectedChild}
         userId={user?.id || ''}
         preschoolId={preschoolId}
+        feeId={feeId}
         initialAmount={feeAmount || ''}
+        paymentPurpose={feeDescription || 'School Fees'}
         paymentForDate={feeDueDate}
         theme={theme}
       />

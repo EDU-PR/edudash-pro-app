@@ -30,6 +30,7 @@ interface PaymentUploadModalProps {
   selectedChild: PaymentChild | undefined;
   userId: string;
   preschoolId?: string;
+  feeId?: string;
   initialAmount?: string;
   initialReference?: string;
   paymentForDate?: string;
@@ -45,6 +46,7 @@ export function PaymentUploadModal({
   selectedChild,
   userId,
   preschoolId,
+  feeId,
   initialAmount = '',
   initialReference = '',
   paymentForDate,
@@ -132,14 +134,24 @@ export function PaymentUploadModal({
       const supabase = assertSupabase();
       const today = new Date();
       const last24Hours = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const normalizedPurpose = paymentPurpose?.trim() || 'School Fees';
+      const normalizedFeeId = feeId?.trim() || '';
 
       // Check for existing pending OR recently approved POP uploads for this student
-      const { data: existingPOPs, error: checkError } = await supabase
+      let popQuery = supabase
         .from('pop_uploads')
-        .select('id, status, created_at, payment_amount')
+        .select('id, status, created_at, payment_amount, description, fee_id')
         .eq('student_id', selectedChildId)
         .eq('upload_type', 'proof_of_payment')
-        .or(`status.in.(pending,submitted),and(status.eq.approved,created_at.gte.${last24Hours})`)
+        .or(`status.in.(pending,submitted),and(status.eq.approved,created_at.gte.${last24Hours})`);
+
+      if (normalizedFeeId) {
+        popQuery = popQuery.eq('fee_id', normalizedFeeId);
+      } else {
+        popQuery = popQuery.eq('description', normalizedPurpose);
+      }
+
+      const { data: existingPOPs, error: checkError } = await popQuery
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -225,6 +237,8 @@ export function PaymentUploadModal({
       const titlePrefix = paymentPurpose ? paymentPurpose : 'Payment';
       const popTitle = `${titlePrefix} - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`;
 
+      const normalizedPurpose = paymentPurpose?.trim() || 'School Fees';
+      const normalizedFeeId = feeId?.trim() || null;
       const { data: insertedPOP, error: dbError } = await supabase
         .from('pop_uploads')
         .insert({
@@ -233,6 +247,7 @@ export function PaymentUploadModal({
           preschool_id: finalPreschoolId,
           upload_type: 'proof_of_payment',
           title: popTitle,
+          description: normalizedPurpose,
           file_path: uploadResult.filePath,
           file_name: uploadResult.fileName || selectedFile.name,
           file_size: uploadResult.fileSize || selectedFile.size || 0,
@@ -240,6 +255,7 @@ export function PaymentUploadModal({
           payment_amount: paymentAmountNum, // Required by CHECK constraint
           payment_date: paymentDateValue, // Required by CHECK constraint (YYYY-MM-DD)
           payment_reference: paymentReference || studentCode,
+          fee_id: normalizedFeeId,
           status: 'pending',
         })
         .select()
