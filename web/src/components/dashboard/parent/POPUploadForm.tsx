@@ -15,19 +15,34 @@ interface POPUploadFormProps {
   linkedChildren: Child[];
   onSuccess?: () => void;
   onCancel?: () => void;
+  defaultChildId?: string;
+  defaultAmount?: number;
+  defaultDescription?: string;
 }
 
-export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUploadFormProps) {
+export function POPUploadForm({
+  linkedChildren,
+  onSuccess,
+  onCancel,
+  defaultChildId,
+  defaultAmount,
+  defaultDescription,
+}: POPUploadFormProps) {
   const { upload, uploading, error, success, reset } = useCreatePOPUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const initialChildId = linkedChildren.some((child) => child.id === defaultChildId)
+    ? defaultChildId
+    : linkedChildren[0]?.id || '';
+  const initialAmount = defaultAmount && defaultAmount > 0 ? defaultAmount.toFixed(2) : '';
   
   // Form state
-  const [selectedChild, setSelectedChild] = useState<string>(linkedChildren[0]?.id || '');
+  const [selectedChild, setSelectedChild] = useState<string>(initialChildId);
   const [paymentReference, setPaymentReference] = useState('');
-  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [paymentMethod, setPaymentMethod] = useState('EFT');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(defaultDescription ?? '');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -80,6 +95,12 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
       setValidationError('Please select a file and child');
       return;
     }
+
+    const amountValue = Number.parseFloat(paymentAmount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      setValidationError('Please enter the amount paid');
+      return;
+    }
     
     // Get the selected child's student_code for the payment reference
     const childData = linkedChildren.find(c => c.id === selectedChild);
@@ -91,7 +112,7 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
       title: `Payment - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`,
       description,
       file: selectedFile,
-      payment_amount: paymentAmount ? parseFloat(paymentAmount) : undefined,
+      payment_amount: amountValue,
       payment_method: paymentMethod,
       payment_date: paymentDate,
       payment_reference: studentCode, // Always use the child's unique code
@@ -212,7 +233,7 @@ export function POPUploadForm({ linkedChildren, onSuccess, onCancel }: POPUpload
       {/* Payment Amount */}
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-          Amount Paid <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(Optional)</span>
+          Amount Paid <span style={{ color: 'var(--primary)', fontWeight: 600 }}>*</span>
         </label>
         <div style={{ position: 'relative' }}>
           <span style={{ 
