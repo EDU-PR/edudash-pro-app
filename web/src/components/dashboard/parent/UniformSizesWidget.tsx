@@ -246,7 +246,12 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
             }));
 
           if (uniformSchoolFees.length > 0) {
-            uniformSchoolFees.forEach((fee) => applyFee(fee.amount, fee.feeType, fee.name, fee.description));
+            uniformSchoolFees.forEach((fee: {
+              amount: number;
+              feeType?: string | null;
+              name?: string | null;
+              description?: string | null;
+            }) => applyFee(fee.amount, fee.feeType, fee.name, fee.description));
           } else {
             const { data: feeStructures } = await supabase
               .from('fee_structures')
