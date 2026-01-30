@@ -28,6 +28,7 @@ export interface DashAssistantMessagesProps {
   onSendMessage?: (text: string) => void;
   onAgeBandChange?: (ageBand: string) => void;
   learnerContext?: LearnerContext | null;
+  bottomInset?: number;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -46,6 +47,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onSendMessage,
   onAgeBandChange,
   learnerContext,
+  bottomInset = 0,
 }) => {
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
@@ -95,7 +97,11 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   ]) as ViewStyle;
   const listContentStyle = StyleSheet.flatten([
     styles.messagesContent,
-    { backgroundColor: theme.background, flexGrow: 1 },
+    {
+      backgroundColor: theme.background,
+      flexGrow: 1,
+      paddingBottom: Math.max(140, (styles.messagesContent?.paddingBottom || 0) + bottomInset),
+    },
   ]) as ViewStyle;
 
   return (
@@ -107,6 +113,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       style={listStyle}
       contentContainerStyle={listContentStyle}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
       removeClippedSubviews={Platform.OS === 'android'}
       onScroll={(e: any) => {
         try {

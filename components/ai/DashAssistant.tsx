@@ -331,12 +331,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     );
   }
 
-    const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+    const Container: React.ElementType = KeyboardAvoidingView;
+    const keyboardOffset = insets.top + (Platform.OS === 'ios' ? 6 : 0);
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <Container 
         style={[styles.container, { backgroundColor: theme.background }]}
-        {...(Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: insets.top } : {})}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={keyboardOffset}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         
@@ -454,6 +456,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onSendMessage={(text) => sendMessage(text)}
           onAgeBandChange={handleAgeBandChange}
           learnerContext={learnerContext}
+          bottomInset={insets.bottom}
         />
 
         {/* Jump to end FAB */}
@@ -482,6 +485,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           setInputText={setInputText}
           enterToSend={enterToSend}
           selectedAttachments={selectedAttachments}
+          learnerContext={learnerContext}
           isLoading={isLoading}
           isUploading={isUploading}
           isRecording={isRecording}

@@ -13,6 +13,7 @@ interface ChildData {
   date_of_birth?: string;
   class_id?: string;
   preschool_id?: string | null;
+  organization_id?: string | null;
   student_id?: string | null;
   avatar_url?: string | null;
   profile_picture_url?: string | null;
@@ -31,6 +32,7 @@ export function buildChildCardFromData(
   child: ChildData,
   metrics: ChildMetrics
 ): ChildCard {
+  const preschoolId = child.preschool_id || child.organization_id || null;
   return {
     id: child.id,
     firstName: child.first_name,
@@ -39,7 +41,7 @@ export function buildChildCardFromData(
     grade: child.classes?.grade_level || 'Preschool',
     className: child.classes?.name || (child.class_id ? `Class ${String(child.class_id).slice(-4)}` : null),
     classId: child.class_id || undefined,
-    preschoolId: child.preschool_id || null,
+    preschoolId,
     preschoolName: null,
     studentCode: child.student_id || null,
     lastActivity: metrics.lastActivity,

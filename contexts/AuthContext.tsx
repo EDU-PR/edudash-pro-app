@@ -1,11 +1,11 @@
 import { logger } from '@/lib/logger';
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import * as Sentry from 'sentry-expo';
 import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
 import { track } from '@/lib/analytics';
 import { Platform } from 'react-native';
-import { routeAfterLogin } from '@/lib/routeAfterLogin';
+import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   fetchEnhancedUserProfile, 
@@ -187,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionChecker>(createPermissionChecker(null));
   const [lastRefreshAttempt, setLastRefreshAttempt] = useState<number>(0);
-  const lastUserIdRef = React.useRef<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Fetch enhanced user profile
   const fetchProfile = useCallback(async (userId: string) => {
@@ -738,6 +738,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   if (freshProfile && mounted) {
                     setProfile(freshProfile);
                     setPermissions(createPermissionChecker(freshProfile));
+                    if (s?.user?.id && freshProfile?.role) {
+                      try {
+                        clearAllNavigationLocks();
+                        void routeAfterLogin(s.user, freshProfile);
+                      } catch (routeError) {
+                        console.warn('[AuthContext] Post-refresh routing failed:', routeError);
+                      }
+                    }
                   }
                 })
                 .catch((err) => {

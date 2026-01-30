@@ -24,12 +24,19 @@ import type { DashAttachment } from '@/services/dash-ai/types';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
+interface LearnerContext {
+  ageBand?: string | null;
+  schoolType?: string | null;
+  role?: string | null;
+}
+
 interface DashInputBarProps {
   inputRef: React.RefObject<TextInput>;
   inputText: string;
   setInputText: (text: string) => void;
   enterToSend?: boolean;
   selectedAttachments: DashAttachment[];
+  learnerContext?: LearnerContext | null;
   isLoading: boolean;
   isUploading: boolean;
   isRecording?: boolean;
@@ -50,6 +57,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   setInputText,
   enterToSend = true,
   selectedAttachments,
+  learnerContext,
   isLoading,
   isUploading,
   isRecording = false,
@@ -157,13 +165,22 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const canShowTutorChips = !hasContent && !isRecording && !isLoading;
+  const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
+  const isPreschool = normalizedSchool.includes('preschool') || normalizedSchool.includes('ecd') || normalizedSchool.includes('early') || ['3-5', '6-8'].includes(learnerContext?.ageBand || '');
 
-  const quickChips = [
-    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this step-by-step in simple language. Ask one diagnostic question first.' },
-    { id: 'practice', label: 'Practice', icon: 'pencil-outline', prompt: 'Give me one practice question and wait for my answer before continuing.' },
-    { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: 'Quiz me with 5 questions, starting easy and getting harder.' },
-    { id: 'summary', label: 'Summarize', icon: 'sparkles-outline', prompt: 'Summarize the key ideas in 5 bullet points and ask one quick check question.' },
-  ];
+  const quickChips = isPreschool
+    ? [
+        { id: 'explain', label: 'Story Time', icon: 'book-outline', prompt: 'Use a short story and ask one simple question. Keep it playful and age-appropriate for preschool.' },
+        { id: 'practice', label: 'Play & Learn', icon: 'color-palette-outline', prompt: 'Give one playful practice question using colors, shapes, or counting. Wait for the answer before continuing.' },
+        { id: 'quiz', label: 'Quick Quiz', icon: 'happy-outline', prompt: 'Quiz with 3 very easy questions using colors, shapes, or counting. Keep it fun.' },
+        { id: 'summary', label: 'Recap', icon: 'sparkles-outline', prompt: 'Summarize in 3 simple bullet points with friendly tone, then ask one short check question.' },
+      ]
+    : [
+        { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this step-by-step in simple language. Ask one diagnostic question first.' },
+        { id: 'practice', label: 'Practice', icon: 'pencil-outline', prompt: 'Give me one practice question and wait for my answer before continuing.' },
+        { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: 'Quiz me with 5 questions, starting easy and getting harder.' },
+        { id: 'summary', label: 'Summarize', icon: 'sparkles-outline', prompt: 'Summarize the key ideas in 5 bullet points and ask one quick check question.' },
+      ];
 
   return (
     <View

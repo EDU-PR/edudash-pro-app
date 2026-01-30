@@ -737,6 +737,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               showHeader={false}
               maxItems={4}
               compact={true}
+              studentTapBehavior="none"
               onViewAll={() => router.push('/screens/birthday-chart' as any)}
             />
           ) : (

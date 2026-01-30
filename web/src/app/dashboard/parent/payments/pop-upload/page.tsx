@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
@@ -9,7 +9,7 @@ import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
 import { POPUploadForm } from '@/components/dashboard/parent/POPUploadForm';
 import { Upload, Info, ArrowLeft, History } from 'lucide-react';
 
-export default function POPUploadPage() {
+function POPUploadContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -157,5 +157,19 @@ export default function POPUploadPage() {
         </div>
       </div>
     </ParentShell>
+  );
+}
+
+export default function POPUploadPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="app" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div className="spinner"></div>
+        </div>
+      }
+    >
+      <POPUploadContent />
+    </Suspense>
   );
 }

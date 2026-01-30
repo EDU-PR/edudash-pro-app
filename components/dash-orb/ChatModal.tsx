@@ -104,7 +104,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
 
-  const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+  const Container: React.ElementType = KeyboardAvoidingView;
 
   useEffect(() => {
     if (visible && !showQuickActions) {
@@ -121,7 +121,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     >
       <Container
         style={[styles.modalContainer, { backgroundColor: theme.surface }]}
-        {...(Platform.OS === 'ios' ? { behavior: 'padding', keyboardVerticalOffset: insets.top } : {})}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 6 : 0)}
       >
         <View style={[styles.chatContainer, { backgroundColor: theme.surface }]}>
           {/* Header */}
@@ -232,8 +233,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <ScrollView
               ref={scrollViewRef}
               style={styles.messagesContainer}
-              contentContainerStyle={styles.messagesContent}
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(140, styles.messagesContent?.paddingBottom || 0) }]}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               <QuickActions
                 onAction={onQuickAction}
@@ -248,8 +250,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <ScrollView
               ref={scrollViewRef}
               style={styles.messagesContainer}
-              contentContainerStyle={styles.messagesContent}
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(140, styles.messagesContent?.paddingBottom || 0) }]}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {messages.length === 0 && (
                 <View style={{ paddingVertical: 24 }}>

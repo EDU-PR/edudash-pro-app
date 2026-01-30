@@ -3,7 +3,7 @@
  * Thread-based messaging list for principals
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   StyleSheet,
   RefreshControl,
   Platform,
+  TextInput,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -216,6 +217,7 @@ export default function PrincipalMessagesScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
 
@@ -252,6 +254,27 @@ export default function PrincipalMessagesScreen() {
   const handleGroups = useCallback(() => {
     router.push('/screens/group-management');
   }, []);
+
+  const filteredThreads = useMemo(() => {
+    if (!threads) return [];
+    if (!searchQuery.trim()) return threads;
+    const query = searchQuery.toLowerCase();
+    return threads.filter((thread) => {
+      const otherParticipant = thread.participants?.find((p: MessageParticipant) => p.user_id !== user?.id);
+      const participantName = otherParticipant?.user_profile
+        ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+        : '';
+      const studentName = thread.student
+        ? `${thread.student.first_name} ${thread.student.last_name}`.trim()
+        : '';
+      const lastMessage = thread.last_message?.content || '';
+      return (
+        participantName.toLowerCase().includes(query) ||
+        studentName.toLowerCase().includes(query) ||
+        lastMessage.toLowerCase().includes(query)
+      );
+    });
+  }, [threads, searchQuery, user?.id]);
 
   const styles = StyleSheet.create({
     container: {
@@ -296,6 +319,24 @@ export default function PrincipalMessagesScreen() {
     listContent: {
       paddingVertical: 12,
       paddingBottom: insets.bottom + 16,
+    },
+    searchContainer: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: theme.text,
     },
     quickActions: {
       flexDirection: 'row',
@@ -371,6 +412,7 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           onSettings={handleSettings}
+          onNewMessage={() => router.push('/screens/principal-new-message')}
         />
         <View style={styles.loadingContainer}>
           {[...Array(6)].map((_, i) => (
@@ -389,6 +431,7 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           onSettings={handleSettings}
+          onNewMessage={() => router.push('/screens/principal-new-message')}
         />
         <View style={styles.errorContainer}>
           <View style={styles.errorIcon}>
@@ -411,6 +454,7 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           onSettings={handleSettings}
+          onNewMessage={() => router.push('/screens/principal-new-message')}
         />
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
@@ -427,13 +471,58 @@ export default function PrincipalMessagesScreen() {
     );
   }
 
+  if (threads.length > 0 && filteredThreads.length === 0 && searchQuery.trim()) {
+    return (
+      <View style={styles.container}>
+        <MessagesListHeader
+          title={t('principal.messages', { defaultValue: 'Messages' })}
+          subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
+          onSettings={handleSettings}
+          onNewMessage={() => router.push('/screens/principal-new-message')}
+        />
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={16} color={theme.textSecondary} />
+          <TextInput
+            placeholder={t('principal.searchMessages', { defaultValue: 'Search messages...' })}
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+        </View>
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="search" size={48} color={theme.primary} />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {t('principal.noSearchResults', { defaultValue: 'No matches found' })}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {t('principal.noSearchResultsDesc', { defaultValue: 'Try a different name or keyword.' })}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MessagesListHeader
         title={t('principal.messages', { defaultValue: 'Messages' })}
         subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
         onSettings={handleSettings}
+        onNewMessage={() => router.push('/screens/principal-new-message')}
       />
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          placeholder={t('principal.searchMessages', { defaultValue: 'Search messages...' })}
+          placeholderTextColor={theme.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+        />
+      </View>
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.quickActionCard} onPress={handleAnnouncements}>
           <Ionicons name="megaphone" size={18} color={theme.primary} />
@@ -445,7 +534,7 @@ export default function PrincipalMessagesScreen() {
         </TouchableOpacity>
       </View>
       <FlatList
-        data={threads}
+        data={filteredThreads}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <ThreadItem

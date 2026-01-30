@@ -438,7 +438,7 @@ export default function PrincipalFormBuilderScreen() {
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>Audience</Text>
           <View style={styles.chipRow}>
-            {(['parents', 'teachers', 'staff'] as Audience[]).map((role) => {
+            {(['parents', 'teachers', 'staff'] as FormAudience[]).map((role) => {
               const active = audience.includes(role);
               return (
                 <TouchableOpacity

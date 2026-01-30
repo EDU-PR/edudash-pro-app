@@ -40,6 +40,7 @@ export interface RecordBirthdayDonationInput {
   payerStudentId?: string;
   birthdayStudentId?: string;
   classId?: string;
+  celebrationMode?: boolean;
 }
 
 export interface BirthdayDonationMonthSummary {

@@ -34,6 +34,8 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const isPreschool = normalizedSchool.includes('preschool') ||
     normalizedSchool.includes('ecd') ||
     normalizedSchool.includes('early');
+  const roleValue = (learnerContext?.role || '').toLowerCase();
+  const isStaff = ['teacher', 'principal', 'admin', 'manager', 'staff'].includes(roleValue);
   const lockAgeBand = !!learnerContext?.ageBand && (learnerContext?.role === 'student' || learnerContext?.role === 'learner');
 
   const ageChips = useMemo(() => ([
@@ -120,6 +122,38 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const sendTutorIntent = (intent: string, topic?: string) => {
     onSendMessage?.(buildPrompt(intent, topic));
   };
+
+  const staffActions = useMemo(() => {
+    if (!isStaff) return [];
+    const base = isPreschool
+      ? 'Use ECD language and play-based activities suitable for ages 3-6.'
+      : 'Use CAPS-aligned structure with clear objectives and lesson outcomes.';
+    return [
+      {
+        id: 'brainstorm-theme',
+        label: 'Theme & routines',
+        icon: 'sparkles-outline',
+        prompt: `Brainstorm a weekly theme plan with daily activities, circle time ideas, and parent tips. ${base}`,
+      },
+      {
+        id: 'daily-routine',
+        label: 'Daily routine',
+        icon: 'time-outline',
+        prompt: `Create a structured daily routine with transitions and classroom management cues. ${base}`,
+      },
+      {
+        id: 'interactive-lesson',
+        label: 'Interactive activity',
+        icon: 'hand-left-outline',
+        prompt: `Design a hands-on interactive activity that aligns with today's class lesson. Include materials, steps, and assessment. ${base}`,
+      },
+    ];
+  }, [isStaff, isPreschool]);
+
+  const lessonBuilderRoute = useMemo(() => {
+    if (!isStaff) return null;
+    return isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator';
+  }, [isStaff, isPreschool]);
 
   return (
     <View style={styles.emptyStateContainer}>
@@ -301,6 +335,63 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
           </TouchableOpacity>
         </View>
       </View>
+
+      {isStaff && (
+        <View style={styles.sectionBlock}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Planning & brainstorm</Text>
+          <View style={styles.quickActionsContainer}>
+            {staffActions.map((action) => (
+              <TouchableOpacity
+                key={action.id}
+                style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                activeOpacity={0.7}
+                onPress={() => sendTutorIntent(action.prompt)}
+              >
+                <View style={styles.actionButtonContent}>
+                  <Ionicons name={action.icon as any} size={20} color={theme.primary} />
+                  <Text style={[styles.actionButtonText, { color: theme.text }]}>{action.label}</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
+              </TouchableOpacity>
+            ))}
+            {lessonBuilderRoute && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                activeOpacity={0.7}
+                onPress={() => router.push(lessonBuilderRoute as any)}
+              >
+                <View style={styles.actionButtonContent}>
+                  <Ionicons name="book-outline" size={20} color={theme.primary} />
+                  <Text style={[styles.actionButtonText, { color: theme.text }]}>Open lesson builder</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              activeOpacity={0.7}
+              onPress={() => router.push('/screens/brainstorm-room')}
+            >
+              <View style={styles.actionButtonContent}>
+                <Ionicons name="people-outline" size={20} color={theme.primary} />
+                <Text style={[styles.actionButtonText, { color: theme.text }]}>Open brainstorm room</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+              activeOpacity={0.7}
+              onPress={() => router.push('/screens/teacher-activity-builder')}
+            >
+              <View style={styles.actionButtonContent}>
+                <Ionicons name="extension-puzzle-outline" size={20} color={theme.primary} />
+                <Text style={[styles.actionButtonText, { color: theme.text }]}>Build activity</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={16} color={theme.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 };

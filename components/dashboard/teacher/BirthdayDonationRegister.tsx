@@ -26,12 +26,17 @@ interface BirthdayDonationRegisterProps {
 const DEFAULT_AMOUNT = 25;
 const PAYMENT_METHODS = ['cash', 'eft', 'card', 'other'] as const;
 const MAX_UPCOMING_BIRTHDAYS = 6;
+const UPCOMING_WINDOW_DAYS = 30;
+const PAST_WINDOW_DAYS = 30;
 type PaymentMethod = typeof PAYMENT_METHODS[number];
+type BirthdayWindowMode = 'upcoming' | 'recent' | 'all';
 
 interface UpcomingBirthday {
   student: TeacherStudentSummary;
-  nextDate: Date;
+  date: Date;
   daysUntil: number;
+  isPast: boolean;
+  key: string;
 }
 
 interface StudentRow {
@@ -50,6 +55,19 @@ interface StudentRow {
 
 const padDatePart = (value: number) => String(value).padStart(2, '0');
 const formatDateKey = (date: Date) => `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+const startOfWeekMonday = (date: Date) => {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = result.getDay();
+  const mondayOffset = (day + 6) % 7;
+  result.setDate(result.getDate() - mondayOffset);
+  return result;
+};
+const getCelebrationFriday = (date: Date) => {
+  const weekStart = startOfWeekMonday(date);
+  const friday = new Date(weekStart);
+  friday.setDate(weekStart.getDate() + 4);
+  return friday;
+};
 
 const parseDateParts = (value?: string | null): { month: number; day: number } | null => {
   if (!value) return null;
@@ -59,12 +77,19 @@ const parseDateParts = (value?: string | null): { month: number; day: number } |
   return { month, day };
 };
 
-const getUpcomingBirthdays = (students: TeacherStudentSummary[]): UpcomingBirthday[] => {
+const getBirthdayWindow = (
+  students: TeacherStudentSummary[],
+  mode: BirthdayWindowMode
+): UpcomingBirthday[] => {
   const today = new Date();
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const upcoming: UpcomingBirthday[] = [];
+  const includeUpcoming = mode === 'upcoming' || mode === 'all';
+  const includePast = mode === 'recent' || mode === 'all';
+
+  const entries: UpcomingBirthday[] = [];
   const dayMs = 1000 * 60 * 60 * 24;
+  const seen = new Set<string>();
 
   students.forEach((student) => {
     const parts = parseDateParts(student.dateOfBirth);
@@ -74,18 +99,43 @@ const getUpcomingBirthdays = (students: TeacherStudentSummary[]): UpcomingBirthd
     const nextDate = thisYearBirthday < startOfToday
       ? new Date(startOfToday.getFullYear() + 1, parts.month - 1, parts.day)
       : thisYearBirthday;
+    const prevDate = thisYearBirthday < startOfToday
+      ? thisYearBirthday
+      : new Date(startOfToday.getFullYear() - 1, parts.month - 1, parts.day);
 
-    const diffMs = nextDate.getTime() - startOfToday.getTime();
-    const daysUntil = Math.round(diffMs / dayMs);
-    upcoming.push({ student, nextDate, daysUntil });
+    if (includeUpcoming) {
+      const daysUntil = Math.round((nextDate.getTime() - startOfToday.getTime()) / dayMs);
+      if (daysUntil >= 0 && daysUntil <= UPCOMING_WINDOW_DAYS) {
+        const key = `${student.id}|${formatDateKey(nextDate)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          entries.push({ student, date: nextDate, daysUntil, isPast: false, key });
+        }
+      }
+    }
+
+    if (includePast) {
+      const daysSince = Math.round((startOfToday.getTime() - prevDate.getTime()) / dayMs);
+      if (daysSince >= 0 && daysSince <= PAST_WINDOW_DAYS) {
+        const key = `${student.id}|${formatDateKey(prevDate)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          entries.push({ student, date: prevDate, daysUntil: -daysSince, isPast: true, key });
+        }
+      }
+    }
   });
 
-  upcoming.sort((a, b) => {
+  entries.sort((a, b) => {
     if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil;
     return `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`);
   });
 
-  return upcoming.slice(0, MAX_UPCOMING_BIRTHDAYS);
+  if (mode === 'upcoming') {
+    return entries.slice(0, MAX_UPCOMING_BIRTHDAYS);
+  }
+
+  return entries.slice(0, MAX_UPCOMING_BIRTHDAYS);
 };
 
 export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> = ({ organizationId }) => {
@@ -97,7 +147,9 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   const isPreschool = orgType === 'preschool';
 
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedBirthdayId, setSelectedBirthdayId] = useState<string | null>(null);
+  const [selectedBirthdayKey, setSelectedBirthdayKey] = useState<string | null>(null);
+  const [birthdayWindowMode, setBirthdayWindowMode] = useState<BirthdayWindowMode>('upcoming');
+  const [useFridayCelebration, setUseFridayCelebration] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [donations, setDonations] = useState<BirthdayDonationEntry[]>([]);
   const [loadingDonations, setLoadingDonations] = useState(false);
@@ -187,28 +239,54 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
 
   const classStudents = isPreschool ? teacherStudents : (selectedClass?.students ?? []);
   const birthdaySourceStudents = isPreschool ? schoolStudents : classStudents;
-  const upcomingBirthdays = useMemo(() => getUpcomingBirthdays(birthdaySourceStudents), [birthdaySourceStudents]);
+  const upcomingBirthdays = useMemo(
+    () => getBirthdayWindow(birthdaySourceStudents, birthdayWindowMode),
+    [birthdaySourceStudents, birthdayWindowMode]
+  );
 
   useEffect(() => {
     if (upcomingBirthdays.length === 0) {
-      if (selectedBirthdayId !== null) {
-        setSelectedBirthdayId(null);
+    if (selectedBirthdayKey !== null) {
+        setSelectedBirthdayKey(null);
       }
       return;
     }
 
-    const exists = selectedBirthdayId && upcomingBirthdays.some((entry) => entry.student.id === selectedBirthdayId);
+    const exists = selectedBirthdayKey && upcomingBirthdays.some((entry) => entry.key === selectedBirthdayKey);
     if (!exists) {
-      setSelectedBirthdayId(upcomingBirthdays[0].student.id);
+      setSelectedBirthdayKey(upcomingBirthdays[0].key);
     }
-  }, [selectedBirthdayId, upcomingBirthdays]);
+  }, [selectedBirthdayKey, upcomingBirthdays]);
 
   const selectedBirthday = useMemo(() => (
-    upcomingBirthdays.find((entry) => entry.student.id === selectedBirthdayId) || upcomingBirthdays[0] || null
-  ), [selectedBirthdayId, upcomingBirthdays]);
+    upcomingBirthdays.find((entry) => entry.key === selectedBirthdayKey) || upcomingBirthdays[0] || null
+  ), [selectedBirthdayKey, upcomingBirthdays]);
 
-  const donationDate = selectedBirthday ? formatDateKey(selectedBirthday.nextDate) : null;
+  const celebrationDate = useMemo(() => (
+    selectedBirthday && isPreschool && useFridayCelebration
+      ? getCelebrationFriday(selectedBirthday.date)
+      : null
+  ), [selectedBirthday, isPreschool, useFridayCelebration]);
+
+  const donationDate = selectedBirthday
+    ? formatDateKey(celebrationDate ?? selectedBirthday.date)
+    : null;
   const classIdForRecord = !isPreschool && selectedClassId && selectedClassId !== 'unassigned' ? selectedClassId : undefined;
+  const emptyMessage = useMemo(() => {
+    if (birthdayWindowMode === 'recent') {
+      return isPreschool
+        ? t('dashboard.birthday_donations.no_birthdays_recent_school', { defaultValue: 'No recent birthdays for the school.' })
+        : t('dashboard.birthday_donations.no_birthdays_recent', { defaultValue: 'No recent birthdays for this class.' });
+    }
+    if (birthdayWindowMode === 'all') {
+      return isPreschool
+        ? t('dashboard.birthday_donations.no_birthdays_all_school', { defaultValue: 'No birthdays found for the selected range.' })
+        : t('dashboard.birthday_donations.no_birthdays_all', { defaultValue: 'No birthdays found for the selected range.' });
+    }
+    return isPreschool
+      ? t('dashboard.birthday_donations.no_birthdays_school', { defaultValue: 'No upcoming birthdays for the school.' })
+      : t('dashboard.birthday_donations.no_birthdays', { defaultValue: 'No upcoming birthdays for this class.' });
+  }, [birthdayWindowMode, isPreschool, t]);
 
   const loadDonations = useCallback(async () => {
     if (!organizationId || !donationDate || !selectedBirthday) return;
@@ -285,6 +363,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
         payerStudentId: student.id,
         birthdayStudentId: selectedBirthday.student.id,
         classId: classIdForRecord,
+        celebrationMode: isPreschool && useFridayCelebration,
       });
 
       const parentId = student.parentId || student.guardianId || null;
@@ -369,33 +448,62 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
 
           {upcomingBirthdays.length === 0 && (
             <Text style={styles.muted}>
-              {isPreschool
-                ? t('dashboard.birthday_donations.no_birthdays_school', { defaultValue: 'No upcoming birthdays for the school.' })
-                : t('dashboard.birthday_donations.no_birthdays', { defaultValue: 'No upcoming birthdays for this class.' })}
+              {emptyMessage}
             </Text>
           )}
 
           {upcomingBirthdays.length > 0 && (
             <View style={styles.birthdayPicker}>
               <Text style={styles.label}>{t('dashboard.birthday_donations.select_birthday', { defaultValue: 'Select birthday' })}</Text>
+              <View style={styles.windowRow}>
+                {(['upcoming', 'recent', 'all'] as const).map((mode) => {
+                  const selected = mode === birthdayWindowMode;
+                  const label = mode === 'upcoming'
+                    ? t('dashboard.birthday_donations.window_upcoming', { defaultValue: 'Upcoming' })
+                    : mode === 'recent'
+                      ? t('dashboard.birthday_donations.window_recent', { defaultValue: 'Recent' })
+                      : t('dashboard.birthday_donations.window_all', { defaultValue: 'All' });
+                  return (
+                    <TouchableOpacity
+                      key={mode}
+                      style={[styles.windowChip, selected && { backgroundColor: theme.primary }]}
+                      onPress={() => setBirthdayWindowMode(mode)}
+                    >
+                      <Text style={[styles.windowChipText, selected && { color: '#fff' }]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {isPreschool && (
+                  <TouchableOpacity
+                    style={[styles.windowChip, useFridayCelebration && { backgroundColor: theme.primary }]}
+                    onPress={() => setUseFridayCelebration((prev) => !prev)}
+                  >
+                    <Text style={[styles.windowChipText, useFridayCelebration && { color: '#fff' }]}>
+                      {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration' })}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <View style={styles.birthdayPickerList}>
                 {upcomingBirthdays.map((entry) => {
-                  const selected = entry.student.id === selectedBirthday?.student.id;
-                  const metaText = entry.daysUntil === 0
+                  const selected = entry.key === selectedBirthday?.key;
+                  const daysLabel = entry.daysUntil === 0
                     ? t('dashboard.birthday_donations.today', { defaultValue: 'Today' })
-                    : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: entry.daysUntil });
+                    : entry.isPast
+                      ? t('dashboard.birthday_donations.days_ago', { defaultValue: '{{count}} days ago', count: Math.abs(entry.daysUntil) })
+                      : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: entry.daysUntil });
 
                   return (
                     <TouchableOpacity
-                      key={entry.student.id}
+                      key={entry.key}
                       style={[styles.birthdayChip, selected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                      onPress={() => setSelectedBirthdayId(entry.student.id)}
+                      onPress={() => setSelectedBirthdayKey(entry.key)}
                     >
                       <Text style={[styles.birthdayChipName, selected && { color: '#fff' }]}>
                         {entry.student.firstName} {entry.student.lastName}
                       </Text>
                       <Text style={[styles.birthdayChipMeta, selected && { color: '#fff' }]}>
-                        {entry.nextDate.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })} • {metaText}
+                        {entry.date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })} • {daysLabel}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -411,11 +519,19 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                 {selectedBirthday.student.firstName} {selectedBirthday.student.lastName}
               </Text>
               <Text style={styles.muted}>
-                {selectedBirthday.nextDate.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                {selectedBirthday.date.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
                 {` • ${selectedBirthday.daysUntil === 0
                   ? t('dashboard.birthday_donations.today', { defaultValue: 'Today' })
-                  : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: selectedBirthday.daysUntil })}`}
+                  : selectedBirthday.isPast
+                    ? t('dashboard.birthday_donations.days_ago', { defaultValue: '{{count}} days ago', count: Math.abs(selectedBirthday.daysUntil) })
+                    : t('dashboard.birthday_donations.days_until', { defaultValue: '{{count}} days away', count: selectedBirthday.daysUntil })}`}
               </Text>
+              {celebrationDate && (
+                <Text style={styles.muted}>
+                  {t('dashboard.birthday_donations.celebration_label', { defaultValue: 'Celebration Friday' })}:{' '}
+                  {celebrationDate.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                </Text>
+              )}
             </View>
           )}
 
@@ -480,7 +596,10 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
               {error && <Text style={styles.errorText}>{error}</Text>}
 
               <View style={styles.listSection}>
-                <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.pending_title', { defaultValue: 'Not paid yet' })}</Text>
+                <Text style={styles.sectionTitle}>
+                  {t('dashboard.birthday_donations.pending_title', { defaultValue: 'Not paid yet' })}
+                  {` (${unpaidStudents.length})`}
+                </Text>
                 {loadingDonations ? (
                   <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
                 ) : unpaidStudents.length === 0 ? (
@@ -506,7 +625,10 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
               </View>
 
               <View style={styles.listSection}>
-                <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.paid_title', { defaultValue: 'Paid' })}</Text>
+                <Text style={styles.sectionTitle}>
+                  {t('dashboard.birthday_donations.paid_title', { defaultValue: 'Paid' })}
+                  {` (${paidStudents.length})`}
+                </Text>
                 {paidStudents.length === 0 ? (
                   <Text style={styles.muted}>{t('dashboard.birthday_donations.no_paid', { defaultValue: 'No payments recorded yet.' })}</Text>
                 ) : (
@@ -612,6 +734,25 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   birthdayPicker: {
     marginBottom: 12,
+  },
+  windowRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  windowChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  windowChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
   },
   birthdayPickerList: {
     gap: 8,
