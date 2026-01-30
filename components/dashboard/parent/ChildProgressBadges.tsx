@@ -19,12 +19,24 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+
+type AppStateModule = {
+  addEventListener?: (type: 'change', handler: (state: string) => void) => { remove: () => void };
+};
+
+const getAppState = (): AppStateModule | null => {
+  try {
+    const mod = require('react-native') as { AppState?: AppStateModule };
+    return mod?.AppState ?? null;
+  } catch {
+    return null;
+  }
+};
 
 interface Badge {
   id: string;
@@ -236,10 +248,11 @@ export function ChildProgressBadges({
 
   // AppState listener to refresh data when app becomes active
   useEffect(() => {
-    if (typeof AppState?.addEventListener !== 'function') {
+    const appState = getAppState();
+    if (!appState?.addEventListener) {
       return;
     }
-    const subscription = AppState.addEventListener('change', (nextState) => {
+    const subscription = appState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         loadProgress();
       }

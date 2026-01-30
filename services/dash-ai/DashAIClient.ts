@@ -120,7 +120,7 @@ export class DashAIClient {
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
           scope,
-          service_type: 'dash_conversation',
+          service_type: 'chat_message',
           payload: {
             prompt: promptText,
             context: params.context || undefined,
@@ -134,8 +134,17 @@ export class DashAIClient {
       });
       
       if (error) {
-        console.error('[DashAIClient] AI service error:', error);
-        throw error;
+        const errorDetails = this.parseEdgeFunctionError(error);
+        console.error('[DashAIClient] AI service error:', {
+          error,
+          status: errorDetails.status,
+          code: errorDetails.code,
+          message: errorDetails.message,
+        });
+        return {
+          content: this.getFriendlyErrorMessage(errorDetails),
+          error: errorDetails.message || 'AI service error',
+        };
       }
       
       // Handle response with potential tool use
@@ -164,6 +173,55 @@ export class DashAIClient {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  private parseEdgeFunctionError(error: unknown): {
+    status?: number;
+    code?: string;
+    message?: string;
+    details?: unknown;
+  } {
+    const err = error as { context?: { status?: number; body?: string | object } };
+    const status = err?.context?.status;
+    const body = err?.context?.body;
+    let parsedBody: any = null;
+
+    if (body && typeof body === 'string') {
+      try {
+        parsedBody = JSON.parse(body);
+      } catch {
+        parsedBody = { error: body };
+      }
+    } else if (body && typeof body === 'object') {
+      parsedBody = body;
+    }
+
+    return {
+      status,
+      code: parsedBody?.error,
+      message: parsedBody?.message || parsedBody?.error || 'AI service error',
+      details: parsedBody?.details || parsedBody,
+    };
+  }
+
+  private getFriendlyErrorMessage(error: {
+    status?: number;
+    code?: string;
+    message?: string;
+  }): string {
+    if (error.status === 429 || error.code === 'quota_exceeded') {
+      return 'You’ve reached your AI usage limit for today. Please try again later or upgrade your plan.';
+    }
+    if (error.status === 401) {
+      return 'Your session expired. Please sign in again to continue.';
+    }
+    if (error.status === 403) {
+      return 'Your account needs to be linked to a school to use Dash AI.';
+    }
+    if (error.code === 'streaming_not_supported') {
+      return 'Live streaming isn’t available yet. Please try again without voice streaming.';
+    }
+    return 'Dash is having trouble right now. Please try again in a moment.';
   }
   
   /**
@@ -232,7 +290,7 @@ export class DashAIClient {
         },
         body: JSON.stringify({
           scope: scope,
-          service_type: 'dash_conversation',
+          service_type: 'chat_message',
           payload: {
             prompt: params.promptText,
             context: params.context || undefined,
@@ -422,7 +480,7 @@ export class DashAIClient {
             scope: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
               ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
               : 'teacher'),
-            service_type: 'dash_conversation',
+            service_type: 'chat_message',
             payload: {
               prompt: params.promptText,
               context: params.context || undefined,

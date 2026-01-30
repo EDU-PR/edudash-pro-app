@@ -11,7 +11,7 @@
  * - DashTypingIndicator for loading states
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   View,
   Text,
@@ -44,6 +44,10 @@ import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
+import { useAuth } from '@/contexts/AuthContext';
+import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
+import { assertSupabase } from '@/lib/supabase';
+import { getOrganizationType } from '@/lib/tenant/compat';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -170,6 +174,239 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
+
+  const { profile, user } = useAuth();
+  const normalizedRole = String(profile?.role || '').toLowerCase();
+  const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
+  const orgType = getOrganizationType(profile);
+  const isPreschool = orgType === 'preschool';
+  const [lastSavedLessonId, setLastSavedLessonId] = useState<string | null>(null);
+  const latestAssistantMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.type === 'assistant' && messages[i]?.content) {
+        return messages[i];
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const saveLessonFromMessage = useCallback(async () => {
+    if (!latestAssistantMessage || !profile) return;
+    const schoolId = profile.preschool_id || profile.organization_id;
+    if (!schoolId || !profile.id) {
+      Alert.alert('Missing school', 'Please connect your school profile first.');
+      return;
+    }
+
+    const text = String(latestAssistantMessage.content || '').trim();
+    if (!text) return;
+    const titleLine = text.split('\n').find((line) => line.trim()) || 'Dash Lesson Draft';
+    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Dash Lesson Draft';
+    const description = text.slice(0, 180);
+
+    try {
+      const { data: category } = await assertSupabase()
+        .from('lesson_categories')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+      if (!category?.id) {
+        Alert.alert('Missing category', 'Please create a lesson category first.');
+        return;
+      }
+      const result = await LessonGeneratorService.saveGeneratedLesson({
+        lesson: {
+          title,
+          description,
+          content: JSON.stringify({
+            overview: text,
+            linked_interactive_activity_ids: [],
+          }),
+          activities: [],
+        },
+        teacherId: profile.id,
+        preschoolId: schoolId,
+        ageGroupId: isPreschool ? '3-5' : '7-9',
+        categoryId: category.id,
+        template: { duration: 30, complexity: 'moderate' },
+        isPublished: false,
+        subject: 'general',
+      });
+      if (!result?.success || !result.lessonId) {
+        Alert.alert('Save failed', result?.error || 'Failed to save lesson');
+        return;
+      }
+      setLastSavedLessonId(result.lessonId);
+      Alert.alert('Saved', 'Lesson draft saved. Assign it to a class now?', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Assign now', onPress: () => router.push(`/screens/assign-lesson?lessonId=${result.lessonId}` as any) },
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save lesson';
+      Alert.alert('Save failed', message);
+    }
+  }, [latestAssistantMessage, profile, isPreschool]);
+
+  const saveActivityFromMessage = useCallback(async () => {
+    if (!latestAssistantMessage || !user || !profile) return;
+    const schoolId = profile.preschool_id || profile.organization_id;
+    if (!schoolId) {
+      Alert.alert('Missing school', 'Please connect your school profile first.');
+      return;
+    }
+    const text = String(latestAssistantMessage.content || '').trim();
+    if (!text) return;
+
+    const titleLine = text.split('\n').find((line) => line.trim()) || 'Dash Activity Draft';
+    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Dash Activity Draft';
+    try {
+      const { data, error } = await assertSupabase()
+        .from('interactive_activities')
+        .insert({
+          preschool_id: schoolId,
+          teacher_id: user.id,
+          activity_type: 'quiz',
+          title,
+          instructions: text.slice(0, 1000),
+          content: {},
+          difficulty_level: 1,
+          age_group_min: 3,
+          age_group_max: 6,
+          stars_reward: 2,
+          subject: isPreschool ? 'life_skills' : 'general',
+          skills: JSON.stringify(['discussion', 'reflection']),
+          is_active: true,
+          is_template: false,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      if (lastSavedLessonId && data?.id) {
+        try {
+          const { data: lessonRow } = await assertSupabase()
+            .from('lessons')
+            .select('content')
+            .eq('id', lastSavedLessonId)
+            .maybeSingle();
+          const content = lessonRow?.content;
+          let updatedContent: unknown = content;
+          if (content && typeof content === 'string') {
+            try {
+              const parsed = JSON.parse(content);
+              const linked = Array.isArray(parsed?.linked_interactive_activity_ids)
+                ? parsed.linked_interactive_activity_ids
+                : [];
+              if (!linked.includes(data.id)) linked.push(data.id);
+              updatedContent = JSON.stringify({ ...parsed, linked_interactive_activity_ids: linked });
+            } catch {
+              updatedContent = JSON.stringify({
+                overview: content,
+                linked_interactive_activity_ids: [data.id],
+              });
+            }
+          } else if (content && typeof content === 'object') {
+            const linked = Array.isArray((content as any).linked_interactive_activity_ids)
+              ? (content as any).linked_interactive_activity_ids
+              : [];
+            if (!linked.includes(data.id)) linked.push(data.id);
+            updatedContent = { ...(content as any), linked_interactive_activity_ids: linked };
+          } else {
+            updatedContent = JSON.stringify({
+              overview: text,
+              linked_interactive_activity_ids: [data.id],
+            });
+          }
+          await assertSupabase()
+            .from('lessons')
+            .update({ content: updatedContent })
+            .eq('id', lastSavedLessonId);
+        } catch {}
+      }
+      Alert.alert('Saved', 'Interactive activity created. Edit details now?', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Edit now', onPress: () => router.push('/screens/teacher-activity-builder') },
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save activity';
+      Alert.alert('Save failed', message);
+    }
+  }, [latestAssistantMessage, profile?.preschool_id, user, isPreschool]);
+
+  const saveRoutineFromMessage = useCallback(async () => {
+    if (!latestAssistantMessage || !user || !profile) return;
+    const organizationId = profile.preschool_id || profile.organization_id;
+    if (!organizationId) {
+      Alert.alert('Missing school', 'Please connect your school profile first.');
+      return;
+    }
+    const text = String(latestAssistantMessage.content || '').trim();
+    if (!text) return;
+    const titleLine = text.split('\n').find((line) => line.trim()) || 'Daily Routine';
+    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Daily Routine';
+    try {
+      const { data: classes, error: classError } = await assertSupabase()
+        .from('classes')
+        .select('id')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .order('name')
+        .limit(1);
+      if (classError) throw classError;
+      const classId = classes?.[0]?.id;
+      if (!classId) {
+        Alert.alert('Missing class', 'Please create a class before saving routines.');
+        return;
+      }
+
+      const { error } = await assertSupabase()
+        .from('daily_activities')
+        .insert({
+          activity_name: title,
+          description: text.slice(0, 240),
+          notes: text.slice(0, 1200),
+          activity_date: new Date().toISOString().split('T')[0],
+          class_id: classId,
+          created_by: user.id,
+        });
+      if (error) throw error;
+      Alert.alert('Saved', 'Routine added to daily activities.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save routine';
+      Alert.alert('Save failed', message);
+    }
+  }, [latestAssistantMessage, profile, user]);
+
+  const saveThemeFromMessage = useCallback(async () => {
+    if (!latestAssistantMessage || !profile) return;
+    const organizationId = profile.preschool_id || profile.organization_id;
+    if (!organizationId) {
+      Alert.alert('Missing school', 'Please connect your school profile first.');
+      return;
+    }
+    const text = String(latestAssistantMessage.content || '').trim();
+    if (!text) return;
+    const titleLine = text.split('\n').find((line) => line.trim()) || 'Weekly Theme';
+    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Weekly Theme';
+
+    try {
+      const { error } = await assertSupabase()
+        .from('curriculum_themes')
+        .insert({
+          preschool_id: organizationId,
+          created_by: profile.id,
+          title,
+          description: text.slice(0, 400),
+          suggested_activities: { raw: text.slice(0, 2000) },
+          age_groups: isPreschool ? ['3-5'] : null,
+          is_published: false,
+          is_template: false,
+        });
+      if (error) throw error;
+      Alert.alert('Saved', 'Theme added to curriculum themes.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save theme';
+      Alert.alert('Save failed', message);
+    }
+  }, [latestAssistantMessage, profile, isPreschool]);
 
   const handleAgeBandChange = useCallback((band: string) => {
     if (!dashInstance?.updateUserContext) return;
@@ -458,6 +695,46 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           learnerContext={learnerContext}
           bottomInset={insets.bottom}
         />
+
+        {isStaff && latestAssistantMessage && (
+          <View style={[styles.staffActionsRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+            <TouchableOpacity
+              style={[styles.staffActionButton, { backgroundColor: theme.primary }]}
+              onPress={saveLessonFromMessage}
+            >
+              <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
+              <Text style={[styles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={saveRoutineFromMessage}
+            >
+              <Ionicons name="time-outline" size={16} color={theme.text} />
+              <Text style={[styles.staffActionText, { color: theme.text }]}>Save routine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={saveThemeFromMessage}
+            >
+              <Ionicons name="color-palette-outline" size={16} color={theme.text} />
+              <Text style={[styles.staffActionText, { color: theme.text }]}>Save theme</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={saveActivityFromMessage}
+            >
+              <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
+              <Text style={[styles.staffActionText, { color: theme.text }]}>Create activity</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              onPress={() => router.push('/screens/teacher-activity-builder')}
+            >
+              <Ionicons name="hammer-outline" size={16} color={theme.text} />
+              <Text style={[styles.staffActionText, { color: theme.text }]}>Edit activity</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Jump to end FAB */}
         {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (

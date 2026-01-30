@@ -27,7 +27,7 @@ const DEFAULT_AMOUNT = 25;
 const PAYMENT_METHODS = ['cash', 'eft', 'card', 'other'] as const;
 const MAX_UPCOMING_BIRTHDAYS = 6;
 const UPCOMING_WINDOW_DAYS = 30;
-const PAST_WINDOW_DAYS = 30;
+const PAST_WINDOW_DAYS = 90;
 type PaymentMethod = typeof PAYMENT_METHODS[number];
 type BirthdayWindowMode = 'upcoming' | 'recent' | 'all';
 
@@ -83,6 +83,9 @@ const getBirthdayWindow = (
 ): UpcomingBirthday[] => {
   const today = new Date();
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const entries: UpcomingBirthday[] = [];
+  const dayMs = 1000 * 60 * 60 * 24;
+  const seen = new Set<string>();
 
   if (mode === 'all') {
     students.forEach((student) => {
@@ -109,10 +112,6 @@ const getBirthdayWindow = (
 
   const includeUpcoming = mode === 'upcoming';
   const includePast = mode === 'recent';
-
-  const entries: UpcomingBirthday[] = [];
-  const dayMs = 1000 * 60 * 60 * 24;
-  const seen = new Set<string>();
 
   students.forEach((student) => {
     const parts = parseDateParts(student.dateOfBirth);
@@ -532,6 +531,11 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                   );
                 })}
               </View>
+              <Text style={styles.helperText}>
+                {t('dashboard.birthday_donations.late_hint', {
+                  defaultValue: 'Late payment? Switch to Recent or All to record past birthdays.',
+                })}
+              </Text>
             </View>
           )}
 
@@ -779,6 +783,11 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   birthdayPickerList: {
     gap: 8,
+  },
+  helperText: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    marginTop: 6,
   },
   birthdayChip: {
     paddingHorizontal: 12,
