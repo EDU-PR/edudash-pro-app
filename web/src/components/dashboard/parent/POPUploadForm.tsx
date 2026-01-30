@@ -108,12 +108,17 @@ export function POPUploadForm({
     // Get the selected child's student_code for the payment reference
     const childData = linkedChildren.find(c => c.id === selectedChild);
     const studentCode = childData?.student_code || selectedChild.slice(0, 8).toUpperCase();
+    const normalizedDescription = description.trim();
+    const fallbackDescription = feeId.startsWith('uniform:')
+      ? 'Uniform'
+      : (feeId ? 'School Fees' : '');
+    const finalDescription = normalizedDescription || fallbackDescription || undefined;
     
     const result = await upload({
       student_id: selectedChild,
       upload_type: 'proof_of_payment',
       title: `Payment - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`,
-      description,
+      description: finalDescription,
       file: selectedFile,
       payment_amount: amountValue,
       payment_method: paymentMethod,
