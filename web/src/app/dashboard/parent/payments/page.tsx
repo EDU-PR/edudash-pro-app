@@ -627,6 +627,9 @@ export default function PaymentsPage() {
     params.set('feeId', fee.id);
     params.set('feeAmount', fee.amount.toString());
     params.set('feeDescription', fee.description || getFeeTypeLabel(fee.fee_type));
+    if (fee.id) {
+      params.set('feeId', fee.id);
+    }
     params.set('feeDueDate', fee.due_date);
     const schoolId = selectedChild.organization_id || selectedChild.preschool_id;
     if (schoolId) {

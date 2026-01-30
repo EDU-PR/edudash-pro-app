@@ -18,6 +18,7 @@ interface POPUploadFormProps {
   defaultChildId?: string;
   defaultAmount?: number;
   defaultDescription?: string;
+  defaultFeeId?: string;
 }
 
 export function POPUploadForm({
@@ -27,6 +28,7 @@ export function POPUploadForm({
   defaultChildId,
   defaultAmount,
   defaultDescription,
+  defaultFeeId,
 }: POPUploadFormProps) {
   const { upload, uploading, error, success, reset } = useCreatePOPUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +45,7 @@ export function POPUploadForm({
   const [paymentMethod, setPaymentMethod] = useState('EFT');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(defaultDescription ?? '');
+  const [feeId] = useState(defaultFeeId ?? '');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -116,6 +119,7 @@ export function POPUploadForm({
       payment_method: paymentMethod,
       payment_date: paymentDate,
       payment_reference: studentCode, // Always use the child's unique code
+      fee_id: feeId || undefined,
     });
     
     if (result) {

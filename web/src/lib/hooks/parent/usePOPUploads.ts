@@ -54,12 +54,13 @@ export interface CreatePOPUploadData {
   title: string;
   description?: string;
   file: File;
-  
+
   // Payment specific
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
   payment_reference?: string;
+  fee_id?: string;
 }
 
 // Storage buckets - must match actual bucket names in Supabase Storage
@@ -212,6 +213,7 @@ export function useCreatePOPUpload() {
         payment_method: data.payment_method,
         payment_date: data.payment_date,
         payment_reference: data.payment_reference,
+        fee_id: data.fee_id,
       };
       
       const { data: newUpload, error: dbError } = await supabase
@@ -228,7 +230,11 @@ export function useCreatePOPUpload() {
         
       if (dbError) {
         console.error('Database insert failed:', dbError);
-        throw new Error(`Failed to save upload: ${dbError.message}`);
+        const msg = dbError.message || 'Failed to save upload';
+        if (msg.includes('A payment upload already exists')) {
+          throw new Error(msg.replace('this month', 'this month for this category'));
+        }
+        throw new Error(`Failed to save upload: ${msg}`);
       }
       
       setSuccess(true);

@@ -71,6 +71,7 @@ function PaymentFlowContent() {
   const feeId = searchParams.get('feeId') || '';
   const feeAmountParam = searchParams.get('feeAmount') || '0';
   const feeDescription = searchParams.get('feeDescription') || COPY.feeDescriptionFallback;
+  const feeId = searchParams.get('feeId') || '';
   const feeDueDate = searchParams.get('feeDueDate') || '';
   const preschoolId = searchParams.get('preschoolId') || '';
   const preschoolName = searchParams.get('preschoolName') || '';
@@ -255,6 +256,7 @@ function PaymentFlowContent() {
                       if (feeId) params.set('feeId', feeId);
                       if (amount > 0) params.set('feeAmount', amount.toFixed(2));
                       if (feeDescription) params.set('feeDescription', feeDescription);
+                      if (feeId) params.set('feeId', feeId);
                       router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
                     }}
                   >
