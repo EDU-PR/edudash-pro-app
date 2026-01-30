@@ -38,6 +38,7 @@ function POPUploadContent() {
   }, [searchParams]);
 
   const defaultDescription = useMemo(() => searchParams.get('feeDescription') || undefined, [searchParams]);
+  const defaultFeeId = useMemo(() => searchParams.get('feeId') || undefined, [searchParams]);
 
   useEffect(() => {
     (async () => {
@@ -149,6 +150,7 @@ function POPUploadContent() {
                 defaultChildId={defaultChildId}
                 defaultAmount={defaultAmount}
                 defaultDescription={defaultDescription}
+                defaultFeeId={defaultFeeId}
                 onSuccess={() => router.push('/dashboard/parent/payments/pop-history')}
                 onCancel={() => router.push('/dashboard/parent/payments')}
               />

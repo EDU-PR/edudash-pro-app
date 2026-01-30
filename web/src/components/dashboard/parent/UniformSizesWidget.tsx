@@ -411,6 +411,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
       tshirts: tshirtQty,
       shorts: shortsQty,
     }));
+    params.set('feeId', `uniform:${child.id}`);
     params.set('childName', childName);
 
     router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
