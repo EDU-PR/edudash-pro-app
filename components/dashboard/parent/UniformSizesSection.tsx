@@ -254,22 +254,6 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
             }
           };
 
-          const { data: feeStructures } = await supabase
-            .from('fee_structures')
-            .select('amount, fee_type, name, description, effective_from, created_at')
-            .eq('preschool_id', preschoolId)
-            .eq('is_active', true)
-            .order('effective_from', { ascending: false })
-            .order('created_at', { ascending: false });
-
-          const uniformFees = (feeStructures || []).filter((fee: UniformFeeRow) =>
-            isUniformFee(fee.fee_type, fee.name, fee.description)
-          );
-
-          uniformFees.forEach((fee) => {
-            applyFee(fee.amount, fee.fee_type, fee.name, fee.description);
-          });
-
           const { data: schoolFees } = await supabase
             .from('school_fee_structures')
             .select('amount_cents, fee_category, name, description, created_at')
@@ -280,11 +264,29 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
             isUniformFee(fee.fee_category, fee.name, fee.description)
           );
 
-          uniformSchoolFees.forEach((fee) => {
-            applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description);
-          });
+          if (uniformSchoolFees.length > 0) {
+            uniformSchoolFees.forEach((fee) => {
+              applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description);
+            });
+          } else {
+            const { data: feeStructures } = await supabase
+              .from('fee_structures')
+              .select('amount, fee_type, name, description, effective_from, created_at')
+              .eq('preschool_id', preschoolId)
+              .eq('is_active', true)
+              .order('effective_from', { ascending: false })
+              .order('created_at', { ascending: false });
 
-          if (pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
+            const uniformFees = (feeStructures || []).filter((fee: UniformFeeRow) =>
+              isUniformFee(fee.fee_type, fee.name, fee.description)
+            );
+
+            uniformFees.forEach((fee) => {
+              applyFee(fee.amount, fee.fee_type, fee.name, fee.description);
+            });
+          }
+
+          if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
           }
         }
@@ -307,11 +309,11 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     }));
   };
 
-  const canPayNow = (entry: UniformEntry) => {
+  const canPayNow = (entry: UniformEntry, hasPricing: boolean) => {
     const tshirtQty = parseInt(entry.tshirtQuantity, 10);
     const shortsQty = parseInt(entry.shortsQuantity, 10);
     const totalItems = (Number.isFinite(tshirtQty) ? tshirtQty : 0) + (Number.isFinite(shortsQty) ? shortsQty : 0);
-    return Boolean(entry.tshirtSize) && totalItems > 0;
+    return Boolean(entry.tshirtSize) && totalItems > 0 && hasPricing;
   };
 
   const setFullSetQuantity = (childId: string, value: string) => {
@@ -506,6 +508,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
         }),
         type: 'warning',
       });
+      return;
     } else if ((remainingTshirts > 0 && tshirtPrice <= 0) || (remainingShorts > 0 && shortsPrice <= 0)) {
       showAlert({
         title: t('dashboard.parent.uniform.alerts.pricing_incomplete.title', { defaultValue: 'Uniform pricing incomplete' }),
@@ -575,6 +578,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           if (!entry) return null;
           const preschoolId = child.preschoolId || '';
           const pricing = preschoolId ? uniformPricing[preschoolId] : undefined;
+          const hasPricing = Boolean(pricing && (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount));
           const tshirtQty = Number.isFinite(Number(entry.tshirtQuantity)) ? Number(entry.tshirtQuantity) : 0;
           const shortsQty = Number.isFinite(Number(entry.shortsQuantity)) ? Number(entry.shortsQuantity) : 0;
           const setPrice = pricing?.setAmount ?? pricing?.fallbackAmount ?? 0;
@@ -843,10 +847,10 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
               <TouchableOpacity
                 style={[
                   styles.payButton,
-                  { borderColor: theme.primary, opacity: canPayNow(entry) ? 1 : 0.5 },
+                  { borderColor: theme.primary, opacity: canPayNow(entry, hasPricing) ? 1 : 0.5 },
                 ]}
                 onPress={() => handlePayNow(child, entry)}
-                disabled={!canPayNow(entry)}
+                disabled={!canPayNow(entry, hasPricing)}
               >
                 <Text style={[styles.payButtonText, { color: theme.primary }]}>
                   {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay Now' })}

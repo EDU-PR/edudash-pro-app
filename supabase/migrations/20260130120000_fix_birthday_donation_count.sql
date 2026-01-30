@@ -1,35 +1,5 @@
 BEGIN;
 
-ALTER TABLE public.birthday_donations
-  ADD COLUMN IF NOT EXISTS payer_student_id uuid REFERENCES public.students(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS birthday_student_id uuid REFERENCES public.students(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS class_id uuid REFERENCES public.classes(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS idx_birthday_donations_birthday_student
-  ON public.birthday_donations(birthday_student_id);
-
-CREATE INDEX IF NOT EXISTS idx_birthday_donations_payer_student
-  ON public.birthday_donations(payer_student_id);
-
-CREATE INDEX IF NOT EXISTS idx_birthday_donations_class_id
-  ON public.birthday_donations(class_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_birthday_donations_unique_payer
-  ON public.birthday_donations(organization_id, donation_date, payer_student_id, birthday_student_id)
-  WHERE payer_student_id IS NOT NULL AND birthday_student_id IS NOT NULL;
-
-DROP FUNCTION IF EXISTS public.record_birthday_donation(
-  uuid,
-  date,
-  numeric,
-  text,
-  text,
-  uuid,
-  uuid,
-  uuid,
-  uuid
-);
-
 CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   org_id uuid,
   donation_day date,
@@ -37,9 +7,9 @@ CREATE OR REPLACE FUNCTION public.record_birthday_donation(
   donation_method text DEFAULT NULL,
   donation_note text DEFAULT NULL,
   recorded_by_user uuid DEFAULT NULL,
-  payer_student_id uuid DEFAULT NULL,
-  birthday_student_id uuid DEFAULT NULL,
-  class_id uuid DEFAULT NULL
+  p_payer_student_id uuid DEFAULT NULL,
+  p_birthday_student_id uuid DEFAULT NULL,
+  p_class_id uuid DEFAULT NULL
 )
 RETURNS public.birthday_donation_days
 LANGUAGE plpgsql
@@ -50,6 +20,7 @@ DECLARE
   birthday_count integer := 0;
   target_recorded_by uuid := COALESCE(recorded_by_user, auth.uid());
   day_row public.birthday_donation_days;
+  birthday_dob date;
 BEGIN
   IF org_id IS NULL THEN
     RAISE EXCEPTION 'Organization is required';
@@ -63,15 +34,15 @@ BEGIN
     RAISE EXCEPTION 'Donation amount must be greater than zero';
   END IF;
 
-  IF (payer_student_id IS NULL AND birthday_student_id IS NOT NULL)
-     OR (payer_student_id IS NOT NULL AND birthday_student_id IS NULL) THEN
+  IF (p_payer_student_id IS NULL AND p_birthday_student_id IS NOT NULL)
+     OR (p_payer_student_id IS NOT NULL AND p_birthday_student_id IS NULL) THEN
     RAISE EXCEPTION 'Payer student and birthday student must be provided together';
   END IF;
 
-  IF payer_student_id IS NOT NULL THEN
+  IF p_payer_student_id IS NOT NULL THEN
     PERFORM 1
     FROM public.students
-    WHERE id = payer_student_id
+    WHERE id = p_payer_student_id
       AND (organization_id = org_id OR preschool_id = org_id)
       AND COALESCE(is_active, true) IS TRUE;
     IF NOT FOUND THEN
@@ -79,21 +50,28 @@ BEGIN
     END IF;
   END IF;
 
-  IF birthday_student_id IS NOT NULL THEN
-    PERFORM 1
+  IF p_birthday_student_id IS NOT NULL THEN
+    SELECT date_of_birth
+    INTO birthday_dob
     FROM public.students
-    WHERE id = birthday_student_id
+    WHERE id = p_birthday_student_id
       AND (organization_id = org_id OR preschool_id = org_id)
       AND COALESCE(is_active, true) IS TRUE;
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Birthday student not found for organization';
+
+    IF birthday_dob IS NULL THEN
+      RAISE EXCEPTION 'Birthday date missing for selected student';
+    END IF;
+
+    IF EXTRACT(MONTH FROM birthday_dob) <> EXTRACT(MONTH FROM donation_day)
+      OR EXTRACT(DAY FROM birthday_dob) <> EXTRACT(DAY FROM donation_day) THEN
+      RAISE EXCEPTION 'Selected birthday does not match donation date';
     END IF;
   END IF;
 
-  IF class_id IS NOT NULL THEN
+  IF p_class_id IS NOT NULL THEN
     PERFORM 1
     FROM public.classes
-    WHERE id = class_id
+    WHERE id = p_class_id
       AND (organization_id = org_id OR preschool_id = org_id);
     IF NOT FOUND THEN
       RAISE EXCEPTION 'Class not found for organization';
@@ -108,22 +86,22 @@ BEGIN
     AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM donation_day)
     AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM donation_day);
 
+  IF birthday_count < 1 AND p_birthday_student_id IS NOT NULL THEN
+    birthday_count := 1;
+  END IF;
+
   IF birthday_count < 1 THEN
     RAISE EXCEPTION 'No birthdays found for this date';
   END IF;
 
-  IF birthday_count > 2 THEN
-    RAISE EXCEPTION 'Birthday count exceeds the daily limit of 2';
-  END IF;
-
-  IF payer_student_id IS NOT NULL AND birthday_student_id IS NOT NULL THEN
+  IF p_payer_student_id IS NOT NULL AND p_birthday_student_id IS NOT NULL THEN
     IF EXISTS (
       SELECT 1
       FROM public.birthday_donations
       WHERE organization_id = org_id
         AND donation_date = donation_day
-        AND public.birthday_donations.payer_student_id = payer_student_id
-        AND public.birthday_donations.birthday_student_id = birthday_student_id
+        AND public.birthday_donations.payer_student_id = p_payer_student_id
+        AND public.birthday_donations.birthday_student_id = p_birthday_student_id
     ) THEN
       SELECT * INTO day_row
       FROM public.birthday_donation_days
@@ -151,9 +129,9 @@ BEGIN
     donation_method,
     donation_note,
     target_recorded_by,
-    payer_student_id,
-    birthday_student_id,
-    class_id
+    p_payer_student_id,
+    p_birthday_student_id,
+    p_class_id
   );
 
   INSERT INTO public.birthday_donation_days (
@@ -168,7 +146,7 @@ BEGIN
     org_id,
     donation_day,
     birthday_count,
-    25,
+    birthday_count * 25,
     donation_amount,
     target_recorded_by,
     target_recorded_by
@@ -176,6 +154,7 @@ BEGIN
   ON CONFLICT (organization_id, donation_date)
   DO UPDATE SET
     birthday_count = EXCLUDED.birthday_count,
+    expected_amount = EXCLUDED.expected_amount,
     total_received = birthday_donation_days.total_received + EXCLUDED.total_received,
     updated_by = target_recorded_by,
     updated_at = now();
