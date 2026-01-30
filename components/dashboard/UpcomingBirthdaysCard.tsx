@@ -26,6 +26,8 @@ interface UpcomingBirthdaysCardProps {
   maxItems?: number;
   onViewAll?: () => void;
   compact?: boolean;
+  onStudentPress?: (studentId: string) => void;
+  studentTapBehavior?: 'profile' | 'info' | 'none';
 }
 
 export function UpcomingBirthdaysCard({
@@ -35,6 +37,8 @@ export function UpcomingBirthdaysCard({
   maxItems = 5,
   onViewAll,
   compact = false,
+  onStudentPress,
+  studentTapBehavior = 'profile',
 }: UpcomingBirthdaysCardProps) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -89,6 +93,7 @@ export function UpcomingBirthdaysCard({
 
   const renderBirthdayItem = (birthday: StudentBirthday, index: number) => {
     const isToday = birthday.daysUntil === 0;
+    const isTapDisabled = studentTapBehavior === 'none';
     
     return (
       <TouchableOpacity
@@ -98,7 +103,15 @@ export function UpcomingBirthdaysCard({
           isToday && styles.birthdayItemToday,
           index < allBirthdays.length - 1 && styles.birthdayItemBorder,
         ]}
-        onPress={() => router.push(`/screens/student-detail?id=${birthday.studentId}`)}
+        onPress={() => {
+          if (studentTapBehavior === 'none') return;
+          if (onStudentPress) {
+            onStudentPress(birthday.studentId);
+            return;
+          }
+          router.push(`/screens/student-detail?id=${birthday.studentId}`);
+        }}
+        disabled={isTapDisabled}
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>

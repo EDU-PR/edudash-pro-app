@@ -261,7 +261,7 @@ export function VideoCallInterface({
         InCallManager.start({ 
           media: 'video', // Video calls default to speaker
           auto: false,
-          ringback: '' // No ringback for video calls
+          ringback: isOwner ? '_DEFAULT_' : ''
         });
         InCallManager.setForceSpeakerphoneOn(true);
         InCallManager.setKeepScreenOn(true);
@@ -281,7 +281,7 @@ export function VideoCallInterface({
         }
       }
     };
-  }, [callState, isOpen]);
+  }, [callState, isOpen, isOwner]);
 
   // Handle app state changes (background/foreground) for video persistence
   // On Android with PiP enabled, video continues in PiP mode

@@ -259,6 +259,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    justifyContent: 'space-between',
   },
   quickAction: {
     flexDirection: 'row',
@@ -268,6 +269,9 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
     justifyContent: 'space-between',
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 56,
   },
   quickActionContent: {
     flexDirection: 'row',

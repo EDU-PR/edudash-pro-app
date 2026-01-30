@@ -31,7 +31,7 @@ export function POPUploadForm({
   const { upload, uploading, error, success, reset } = useCreatePOPUpload();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const initialChildId = linkedChildren.some((child) => child.id === defaultChildId)
+  const initialChildId = (defaultChildId && linkedChildren.some((child) => child.id === defaultChildId))
     ? defaultChildId
     : linkedChildren[0]?.id || '';
   const initialAmount = defaultAmount && defaultAmount > 0 ? defaultAmount.toFixed(2) : '';

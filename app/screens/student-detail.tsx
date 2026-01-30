@@ -139,20 +139,30 @@ export default function StudentDetailScreen() {
         return;
       }
 
+      const viewerProfileId = userProfile?.id || profile?.id || user.id;
+
       // Get student details with class info (simpler query - avoids nested FK issues)
-      const { data: studentData, error: studentError } = await assertSupabase()
+      let studentQuery = assertSupabase()
         .from('students')
         .select(`
           *,
           classes!students_class_id_fkey(id, name, grade_level, teacher_id)
         `)
         .eq('id', studentId)
-        .eq('preschool_id', schoolId)
-        .single();
+        .eq('preschool_id', schoolId);
+
+      // Parent safeguard: only allow viewing linked children
+      if (isParent && viewerProfileId) {
+        studentQuery = studentQuery.or(`parent_id.eq.${viewerProfileId},guardian_id.eq.${viewerProfileId}`);
+      }
+
+      const { data: studentData, error: studentError } = await studentQuery.single();
 
       if (studentError) {
         console.error('Error loading student:', studentError);
-        showAlert('Error', 'Student not found', 'error', [
+        showAlert('Access denied', isParent
+          ? 'You can only view your linked child profiles.'
+          : 'Student not found', 'error', [
           { text: 'OK', style: 'default', onPress: () => router.back() },
         ]);
         setLoading(false);

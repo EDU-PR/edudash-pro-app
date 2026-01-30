@@ -50,6 +50,9 @@ export const QUICK_ACTIONS: QuickAction[] = [
   
   // Education Content Generation - AVAILABLE TO ALL (with quota gating at API level)
   { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'free' },
+  { id: 'gen-ecd-theme', label: 'ECD Theme', icon: 'sparkles', color: '#a855f7', command: 'Brainstorm an ECD weekly theme with daily activities, routines, and parent tips', defaultTopic: 'All About Me', category: 'education', superAdminOnly: false, minTier: 'free' },
+  { id: 'gen-ecd-routine', label: 'Daily Routine', icon: 'time', color: '#38bdf8', command: 'Create a structured ECD daily routine with transitions and classroom management cues', defaultTopic: 'Half-day class schedule', category: 'education', superAdminOnly: false, minTier: 'free' },
+  { id: 'gen-ecd-workshop', label: 'Parent Workshop', icon: 'people', color: '#22c55e', command: 'Draft a parent workshop plan with objectives, agenda, activities, and take-home tips', defaultTopic: 'Supporting language development at home', category: 'education', superAdminOnly: false, minTier: 'free' },
   { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter' },
   { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium' },
   { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'free' },
@@ -215,7 +218,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 key={action.id}
                 style={[
                   styles.quickAction,
-                  { backgroundColor: theme.background },
+                  { backgroundColor: theme.surface },
                   locked && styles.quickActionLocked,
                 ]}
                 onPress={() => handleActionPress(action)}
@@ -250,7 +253,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 key={action.id}
                 style={[
                   styles.quickAction,
-                  { backgroundColor: theme.background },
+                  { backgroundColor: theme.surface },
                   locked && styles.quickActionLocked,
                 ]}
                 onPress={() => handleActionPress(action)}
@@ -285,7 +288,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 key={action.id}
                 style={[
                   styles.quickAction,
-                  { backgroundColor: theme.background },
+                  { backgroundColor: theme.surface },
                   locked && styles.quickActionLocked,
                 ]}
                 onPress={() => handleActionPress(action)}
@@ -320,7 +323,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                 key={action.id}
                 style={[
                   styles.quickAction,
-                  { backgroundColor: theme.background },
+                  { backgroundColor: theme.surface },
                   locked && styles.quickActionLocked,
                 ]}
                 onPress={() => handleActionPress(action)}

@@ -90,7 +90,7 @@ export default function ParentBirthdayChartPage() {
         };
       });
 
-      mapped.sort((a, b) => {
+      mapped.sort((a: WebStudentBirthday, b: WebStudentBirthday) => {
         const aDate = parseDateOnly(a.dateOfBirth);
         const bDate = parseDateOnly(b.dateOfBirth);
         if (!aDate || !bDate) return 0;

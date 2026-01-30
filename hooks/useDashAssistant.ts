@@ -397,7 +397,25 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const schoolId = profile?.organization_id || profile?.preschool_id;
         const children = await fetchParentChildren(user.id, { includeInactive: false, schoolId });
         const activeChild = children.find(child => child.id === activeChildId) || children[0];
-        if (!activeChild) return;
+        if (!activeChild) {
+          const parentName = profile?.full_name || profile?.first_name || null;
+          if (!cancelled) setLearnerContext({
+            learnerName: parentName,
+            grade: null,
+            ageYears: null,
+            ageBand: null,
+            schoolType,
+            role: 'parent',
+          });
+          dashInstance.updateUserContext({
+            age_group: null,
+            grade_levels: null,
+            organization_type: schoolType || null,
+            preferred_language: targetLocale,
+            user_role: 'parent',
+          }).catch(() => {});
+          return;
+        }
 
         const classData = Array.isArray(activeChild.classes) ? activeChild.classes[0] : activeChild.classes;
         const grade = activeChild.grade_level || activeChild.grade || classData?.grade_level || null;
@@ -475,6 +493,24 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         await setDefaultAgeBand(ageBand);
         return;
       }
+
+      const staffName = profile?.full_name || profile?.first_name || null;
+      if (!cancelled) setLearnerContext({
+        learnerName: staffName,
+        grade: null,
+        ageYears: null,
+        ageBand: null,
+        schoolType,
+        role,
+      });
+
+      dashInstance.updateUserContext({
+        age_group: null,
+        grade_levels: null,
+        organization_type: schoolType || null,
+        preferred_language: targetLocale,
+        user_role: role || null,
+      }).catch(() => {});
     };
 
     applyLearnerContext();
@@ -1112,7 +1148,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
 
       if (tutorAction && response?.content) {
-        const promptLeak = /return only json|tutor_payload|you are dash, an interactive tutor/i.test(response.content);
+        const promptLeak = /return only json|tutor_payload|you are dash, an interactive tutor|tutor mode override/i.test(response.content);
         if (promptLeak && !parseTutorPayload(response.content)) {
           response = {
             ...response,

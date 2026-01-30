@@ -124,15 +124,72 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       : extractFollowUps(message.content)
   );
 
+  const isTutorPromptLeak = (content: string) =>
+    /tutor_payload|return only json|you are dash, an interactive tutor|tutor mode override/i.test(content || '');
+
+  const parseTutorPayload = (content: string) => {
+    if (!content) return null;
+    const tagMatch = content.match(/<TUTOR_PAYLOAD>([\s\S]*?)<\/TUTOR_PAYLOAD>/i);
+    const jsonCandidate = tagMatch ? tagMatch[1] : null;
+    const fallbackMatch = !jsonCandidate ? content.match(/\{[\s\S]*\}/) : null;
+    const raw = (jsonCandidate || fallbackMatch?.[0] || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  const buildTutorDisplay = (payload: Record<string, unknown>) => {
+    const question = typeof payload.question === 'string' ? payload.question.trim() : '';
+    if (question) return question;
+
+    const lines: string[] = [];
+    if (typeof payload.is_correct === 'boolean') {
+      lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
+    }
+    if (typeof payload.feedback === 'string' && payload.feedback.trim()) {
+      lines.push(payload.feedback.trim());
+    }
+    if (typeof payload.correct_answer === 'string' && payload.correct_answer.trim()) {
+      lines.push(`Correct answer: ${payload.correct_answer.trim()}`);
+    }
+    if (typeof payload.explanation === 'string' && payload.explanation.trim()) {
+      lines.push(payload.explanation.trim());
+    }
+    if (typeof payload.follow_up_question === 'string' && payload.follow_up_question.trim()) {
+      lines.push(`Next question:\n${payload.follow_up_question.trim()}`);
+    }
+    return lines.filter(Boolean).join('\n\n') || null;
+  };
+
   const sanitizeAssistantContent = (content: string) => {
     return (content || '')
       .split(/\n+/)
       .filter(line => !/^\s*User:\s*/i.test(line))
       .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
+      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Topic:|Subject:|Grade:|Age band:|School type:)/i.test(line))
       .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
       .filter(line => !/^\s*Return ONLY JSON/i.test(line))
       .filter(line => !/TUTOR_PAYLOAD/i.test(line))
-      .join('\n');
+      .join('\n')
+      .trim();
+  };
+
+  const getAssistantDisplayContent = () => {
+    const raw = message.content || '';
+    const payload = parseTutorPayload(raw);
+    if (payload) {
+      const display = buildTutorDisplay(payload);
+      if (display) return display;
+    }
+    const metaQuestion = message.metadata?.tutor_question_text;
+    if (metaQuestion) return metaQuestion;
+    if (isTutorPromptLeak(raw)) {
+      return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
+    }
+    return sanitizeAssistantContent(raw);
   };
 
   return (
@@ -183,7 +240,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             selectable={true}
             selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
           >
-            {isUser ? message.content : sanitizeAssistantContent(message.content || '')}
+            {isUser ? message.content : getAssistantDisplayContent()}
           </Text>
           
           {isUser && isLastUserMessage && !isLoading && (

@@ -23,6 +23,7 @@ const recordSchema = z.object({
   payerStudentId: z.string().uuid().optional(),
   birthdayStudentId: z.string().uuid().optional(),
   classId: z.string().uuid().optional(),
+  celebrationMode: z.boolean().optional(),
 });
 
 const unrecordSchema = z.object({
@@ -191,6 +192,7 @@ serve(async (req) => {
       p_payer_student_id: payload.payerStudentId ?? null,
       p_birthday_student_id: payload.birthdayStudentId ?? null,
       p_class_id: payload.classId ?? null,
+      p_celebration_mode: payload.celebrationMode ?? false,
     };
 
     let dayRow: unknown = null;
@@ -220,6 +222,7 @@ serve(async (req) => {
           p_payer_student_id: payload.payerStudentId ?? null,
           p_birthday_student_id: payload.birthdayStudentId ?? null,
           p_class_id: payload.classId ?? null,
+          p_celebration_mode: payload.celebrationMode ?? false,
         })
         .maybeSingle();
       dayRow = fallback.data;

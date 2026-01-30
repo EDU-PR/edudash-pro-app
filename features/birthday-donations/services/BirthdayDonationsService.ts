@@ -55,6 +55,7 @@ const RecordInputSchema = z.object({
   payerStudentId: z.string().uuid().optional(),
   birthdayStudentId: z.string().uuid().optional(),
   classId: z.string().uuid().optional(),
+  celebrationMode: z.boolean().optional(),
 });
 
 const UnrecordInputSchema = z.object({
@@ -196,6 +197,7 @@ export class BirthdayDonationsService {
         payerStudentId: parsed.payerStudentId,
         birthdayStudentId: parsed.birthdayStudentId,
         classId: parsed.classId,
+        celebrationMode: parsed.celebrationMode ?? false,
       },
     });
 
@@ -221,6 +223,7 @@ export class BirthdayDonationsService {
               payerStudentId: parsed.payerStudentId,
               birthdayStudentId: parsed.birthdayStudentId,
               classId: parsed.classId,
+              celebrationMode: parsed.celebrationMode ?? false,
             }),
           });
           const json = await response.json().catch(() => null);

@@ -90,7 +90,7 @@ export default function DashStudioScreen() {
   const canUseStudio = ready ? can('agent.workflows') : false;
   const organizationId = extractOrganizationId(profile);
 
-  const [prompt, setPrompt] = useState('');
+  const [requestText, setRequestText] = useState('');
   const [advisorOutput, setAdvisorOutput] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
@@ -150,7 +150,7 @@ export default function DashStudioScreen() {
   }, [conversation?.messages, markProgressDone, stopTimers]);
 
   const handleGeneratePlan = useCallback(async () => {
-    if (!prompt.trim()) {
+    if (!requestText.trim()) {
       Alert.alert('Add a request', 'Describe what you want Dash to plan.');
       return;
     }
@@ -171,8 +171,8 @@ export default function DashStudioScreen() {
         setConversationId(activeConversationId);
       }
 
-      const fullPrompt = `${buildDashStudioPrompt(terminology.guardians, terminology.instructors)}\n\nRequest: ${prompt}`;
-      await sendMessage({ conversationId: activeConversationId, content: fullPrompt });
+    const fullPrompt = `${buildDashStudioPrompt(terminology.guardians, terminology.instructors)}\n\nRequest: ${requestText}`;
+    await sendMessage({ conversationId: activeConversationId, content: fullPrompt });
 
       progressTimerRef.current = setInterval(() => {
         setProgressSteps((prev) => {
@@ -189,7 +189,7 @@ export default function DashStudioScreen() {
 
       fallbackTimerRef.current = setTimeout(() => {
         if (!isPlanning) return;
-        setAdvisorOutput(buildFallbackPlan(prompt, terminology.guardians, terminology.instructors));
+        setAdvisorOutput(buildFallbackPlan(requestText, terminology.guardians, terminology.instructors));
         setStatusNote('Drafted by Dash (fallback)');
         setIsPlanning(false);
         markProgressDone();
@@ -198,10 +198,10 @@ export default function DashStudioScreen() {
       stopTimers();
       setIsPlanning(false);
       setStatusNote('Dash could not complete the plan. Showing a fallback.');
-      setAdvisorOutput(buildFallbackPlan(prompt, terminology.guardians, terminology.instructors));
+      setAdvisorOutput(buildFallbackPlan(requestText, terminology.guardians, terminology.instructors));
       markProgressDone();
     }
-  }, [prompt, canUseStudio, conversationId, startConversation, sendMessage, resetProgress, stopTimers, markProgressDone, isPlanning]);
+  }, [requestText, canUseStudio, conversationId, startConversation, sendMessage, resetProgress, stopTimers, markProgressDone, isPlanning]);
 
   const buildField = useCallback(
     (label: string, type: FieldType, required = false, options?: string[]): FormField => ({
@@ -215,7 +215,7 @@ export default function DashStudioScreen() {
   );
 
   const buildAutoForm = useCallback(() => {
-    const lower = prompt.toLowerCase();
+    const lower = requestText.toLowerCase();
     const guardianLabel = terminology.guardians;
     const instructorLabel = terminology.instructors;
     let title = 'New form';
@@ -255,7 +255,7 @@ export default function DashStudioScreen() {
     }
 
     return { title, description, audience, fields };
-  }, [prompt, terminology.guardians, terminology.instructors, buildField]);
+  }, [requestText, terminology.guardians, terminology.instructors, buildField]);
 
   const handleGenerateForm = useCallback(async () => {
     if (!canUseStudio) {
@@ -349,8 +349,8 @@ export default function DashStudioScreen() {
             style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
             placeholder="e.g. Plan a Grade‑R excursion for next month"
             placeholderTextColor={theme.textSecondary}
-            value={prompt}
-            onChangeText={setPrompt}
+            value={requestText}
+            onChangeText={setRequestText}
             multiline
           />
           <View style={styles.actionRow}>
@@ -430,7 +430,7 @@ export default function DashStudioScreen() {
           )}
           <TouchableOpacity
             style={[styles.secondaryButton, { borderColor: theme.border, marginTop: 12 }]}
-            onPress={() => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: prompt || undefined } })}
+            onPress={() => router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: requestText || undefined } })}
           >
             <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Open full Dash chat</Text>
           </TouchableOpacity>
@@ -442,7 +442,7 @@ export default function DashStudioScreen() {
             <TouchableOpacity
               key={template.id}
               style={[styles.templateRow, { borderColor: theme.border }]}
-              onPress={() => setPrompt(template.hint)}
+              onPress={() => setRequestText(template.hint)}
             >
               <View>
                 <Text style={[styles.templateTitle, { color: theme.text }]}>{template.label}</Text>
