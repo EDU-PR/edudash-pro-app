@@ -249,7 +249,14 @@ function PaymentFlowContent() {
                 <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                   <button
                     className="btn btnPrimary"
-                    onClick={() => router.push(`/dashboard/parent/payments/pop-upload?child=${childId}&feeId=${feeId}`)}
+                    onClick={() => {
+                      const params = new URLSearchParams();
+                      if (childId) params.set('child', childId);
+                      if (feeId) params.set('feeId', feeId);
+                      if (amount > 0) params.set('feeAmount', amount.toFixed(2));
+                      if (feeDescription) params.set('feeDescription', feeDescription);
+                      router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
+                    }}
                   >
                     <FileText size={16} />
                     {COPY.uploadProof}

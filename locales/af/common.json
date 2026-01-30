@@ -450,6 +450,7 @@
         "actions": {
           "save": "Stoor",
           "pay_now": "Betaal nou",
+          "upload_pop": "Laai POP op",
           "edit": "Wysig bestelling",
           "match_tshirt": "Pas by T-hemp aantal"
         },

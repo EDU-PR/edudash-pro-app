@@ -390,6 +390,25 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     router.push(`/dashboard/parent/payments/flow?${params.toString()}`);
   }, [router, uniformPricing]);
 
+  const handleUploadPOP = useCallback((child: ChildCard, entry: UniformEntry, totalAmount: number) => {
+    const childName = `${child.firstName} ${child.lastName}`.trim();
+    const tshirtQty = Number.isFinite(Number(entry.tshirtQuantity)) ? Number(entry.tshirtQuantity) : 0;
+    const shortsQty = Number.isFinite(Number(entry.shortsQuantity)) ? Number(entry.shortsQuantity) : 0;
+
+    const params = new URLSearchParams();
+    params.set('child', child.id);
+    if (totalAmount > 0) params.set('feeAmount', totalAmount.toFixed(2));
+    params.set('feeDescription', t('dashboard.parent.uniform.payment.description', {
+      defaultValue: 'Uniform order • Size {{size}} • T-shirts {{tshirts}} • Shorts {{shorts}}',
+      size: entry.tshirtSize,
+      tshirts: tshirtQty,
+      shorts: shortsQty,
+    }));
+    params.set('childName', childName);
+
+    router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
+  }, [router, t]);
+
   if (!childrenCards.length) {
     return (
       <div className="card">
@@ -499,6 +518,14 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                     disabled={!entry.tshirtSize || totalItems <= 0}
                   >
                     {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay now' })}
+                  </button>
+                  <button
+                    className="btn btnSecondary"
+                    type="button"
+                    onClick={() => handleUploadPOP(child, entry, totalAmount)}
+                    disabled={!entry.tshirtSize || totalItems <= 0}
+                  >
+                    {t('dashboard.parent.uniform.actions.upload_pop', { defaultValue: 'Upload POP' })}
                   </button>
                   <button
                     className="btn btnSecondary"

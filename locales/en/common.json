@@ -975,6 +975,7 @@
         "actions": {
           "save": "Save",
           "pay_now": "Pay now",
+          "upload_pop": "Upload POP",
           "edit": "Edit order",
           "match_tshirt": "Match to T-shirt qty"
         },

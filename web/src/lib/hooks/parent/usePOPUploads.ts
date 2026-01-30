@@ -156,11 +156,12 @@ export function useCreatePOPUpload() {
       // Get user's preschool_id
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('preschool_id')
+        .select('preschool_id, organization_id')
         .eq('auth_user_id', user.id)
         .single();
-        
-      if (profileError || !profile?.preschool_id) {
+
+      const preschoolId = profile?.preschool_id || profile?.organization_id;
+      if (profileError || !preschoolId) {
         throw new Error('User profile not found');
       }
       
@@ -199,7 +200,7 @@ export function useCreatePOPUpload() {
       const dbData = {
         student_id: data.student_id,
         uploaded_by: user.id,
-        preschool_id: profile.preschool_id,
+        preschool_id: preschoolId,
         upload_type: data.upload_type,
         title: data.title,
         description: data.description,

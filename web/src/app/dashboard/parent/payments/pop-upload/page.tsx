@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useParentDashboardData } from '@/lib/hooks/useParentDashboardData';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
@@ -11,6 +11,7 @@ import { Upload, Info, ArrowLeft, History } from 'lucide-react';
 
 export default function POPUploadPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -23,6 +24,20 @@ export default function POPUploadPage() {
     profile,
     childrenCards,
   } = useParentDashboardData();
+
+  const defaultChildId = useMemo(() => {
+    const childParam = searchParams.get('child') || searchParams.get('childId');
+    return childParam || undefined;
+  }, [searchParams]);
+
+  const defaultAmount = useMemo(() => {
+    const amountParam = searchParams.get('feeAmount');
+    if (!amountParam) return undefined;
+    const parsed = Number.parseFloat(amountParam);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  }, [searchParams]);
+
+  const defaultDescription = useMemo(() => searchParams.get('feeDescription') || undefined, [searchParams]);
 
   useEffect(() => {
     (async () => {
@@ -49,6 +64,7 @@ export default function POPUploadPage() {
     id: child.id,
     first_name: child.firstName,
     last_name: child.lastName,
+    student_code: child.studentCode || undefined,
   }));
 
   return (
@@ -130,6 +146,9 @@ export default function POPUploadPage() {
             <div className="card" style={{ padding: 24 }}>
               <POPUploadForm
                 linkedChildren={children}
+                defaultChildId={defaultChildId}
+                defaultAmount={defaultAmount}
+                defaultDescription={defaultDescription}
                 onSuccess={() => router.push('/dashboard/parent/payments/pop-history')}
                 onCancel={() => router.push('/dashboard/parent/payments')}
               />
