@@ -45,6 +45,7 @@ export default function PaymentFlowScreen() {
   const studentCode = params.studentCode as string | undefined;
   const preschoolId = params.preschoolId as string | undefined;
   const preschoolName = params.preschoolName as string | undefined;
+  const openUpload = params.openUpload as string | undefined;
 
   const {
     loading,
@@ -71,6 +72,12 @@ export default function PaymentFlowScreen() {
   });
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  useEffect(() => {
+    if (openUpload === '1') {
+      setShowUploadModal(true);
+    }
+  }, [openUpload, setShowUploadModal]);
 
   const handleUploadSuccess = () => {
     Alert.alert(

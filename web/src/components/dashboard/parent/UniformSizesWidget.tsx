@@ -776,9 +776,17 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                     className="btn btnSecondary"
                     type="button"
                     onClick={() => handlePayNow(child, entry)}
-                    disabled={!entry.tshirtSize || totalItems <= 0}
+                    disabled={!entry.tshirtSize || totalItems <= 0 || !hasPricing}
                   >
                     {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay now' })}
+                  </button>
+                  <button
+                    className="btn btnSecondary"
+                    type="button"
+                    onClick={() => handleUploadPOP(child, entry, totalAmount)}
+                    disabled={!entry.tshirtSize || totalItems <= 0 || !hasPricing}
+                  >
+                    {t('dashboard.parent.uniform.actions.upload_pop', { defaultValue: 'Upload POP' })}
                   </button>
                 </div>
                 {!hasPricing && (

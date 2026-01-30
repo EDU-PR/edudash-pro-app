@@ -553,6 +553,84 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     });
   };
 
+  const handleUploadPOP = (child: ChildRow, entry: UniformEntry) => {
+    const preschoolId = child.preschoolId || null;
+    if (!preschoolId) {
+      showAlert({
+        title: t('dashboard.parent.uniform.alerts.institution_missing.title', {
+          defaultValue: '{{institution}} not found',
+          institution: institutionLabel,
+        }),
+        message: t('dashboard.parent.uniform.alerts.institution_missing.message', {
+          defaultValue: 'We could not find the {{institution}} for this {{member}}.',
+          institution: institutionLabel.toLowerCase(),
+          member: memberLabelLower,
+        }),
+        type: 'error',
+      });
+      return;
+    }
+
+    if (!entry.tshirtSize) {
+      showAlert({
+        title: t('dashboard.parent.uniform.alerts.missing_size.title', { defaultValue: 'Missing size' }),
+        message: t('dashboard.parent.uniform.alerts.missing_size.message', { defaultValue: 'Please select a T-shirt size before uploading.' }),
+        type: 'warning',
+      });
+      return;
+    }
+
+    const tshirtQty = parseInt(entry.tshirtQuantity, 10);
+    const shortsQty = parseInt(entry.shortsQuantity, 10);
+    const resolvedTshirtQty = Number.isFinite(tshirtQty) ? tshirtQty : 0;
+    const resolvedShortsQty = Number.isFinite(shortsQty) ? shortsQty : 0;
+    const totalItems = resolvedTshirtQty + resolvedShortsQty;
+
+    if (!totalItems || totalItems <= 0) {
+      showAlert({
+        title: t('dashboard.parent.uniform.alerts.missing_quantities.title', { defaultValue: 'Missing quantities' }),
+        message: t('dashboard.parent.uniform.alerts.missing_quantities.message', { defaultValue: 'Enter the number of T-shirts and shorts before uploading.' }),
+        type: 'warning',
+      });
+      return;
+    }
+
+    const pricing = uniformPricing[preschoolId];
+    const setPrice = pricing?.setAmount ?? pricing?.fallbackAmount ?? 0;
+    const tshirtPrice = pricing?.tshirtAmount ?? 0;
+    const shortsPrice = pricing?.shortsAmount ?? 0;
+    const setQty = setPrice > 0 ? Math.min(resolvedTshirtQty, resolvedShortsQty) : 0;
+    const remainingTshirts = Math.max(resolvedTshirtQty - setQty, 0);
+    const remainingShorts = Math.max(resolvedShortsQty - setQty, 0);
+    const totalAmount = (setPrice * setQty) + (tshirtPrice * remainingTshirts) + (shortsPrice * remainingShorts);
+
+    const descriptionParts = [
+      t('dashboard.parent.uniform.payment.description', {
+        defaultValue: 'Uniform order • Size {{size}} • T-shirts {{tshirts}} • Shorts {{shorts}}',
+        size: entry.tshirtSize || '-',
+        tshirts: resolvedTshirtQty,
+        shorts: resolvedShortsQty,
+      }),
+    ].filter(Boolean);
+
+    const referenceCode = child.studentCode || `UNIFORM-${child.id.slice(0, 6).toUpperCase()}`;
+
+    router.push({
+      pathname: '/screens/payment-flow',
+      params: {
+        feeId: `uniform:${child.id}`,
+        feeDescription: descriptionParts.join(' • '),
+        feeAmount: totalAmount.toFixed(2),
+        childId: child.id,
+        childName: `${child.firstName} ${child.lastName}`.trim(),
+        studentCode: referenceCode,
+        preschoolId,
+        preschoolName: schoolName || '',
+        openUpload: '1',
+      },
+    });
+  };
+
   if (!children.length) {
     return (
       <>
@@ -866,6 +944,18 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
                   {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay Now' })}
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.uploadButton,
+                  { borderColor: theme.primary, opacity: canPayNow(entry, hasPricingConfigured) ? 1 : 0.5 },
+                ]}
+                onPress={() => handleUploadPOP(child, entry)}
+                disabled={!canPayNow(entry, hasPricingConfigured)}
+              >
+                <Text style={[styles.payButtonText, { color: theme.primary }]}>
+                  {t('dashboard.parent.uniform.actions.upload_pop', { defaultValue: 'Upload POP' })}
+                </Text>
+              </TouchableOpacity>
               {entry.status === 'saved' && (
                 <View style={styles.statusRow}>
                   <Ionicons name="checkmark-circle" size={16} color={theme.success} />
@@ -1067,6 +1157,13 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
   },
   payButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    cursor: 'pointer',
+  },
+  uploadButton: {
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 10,
