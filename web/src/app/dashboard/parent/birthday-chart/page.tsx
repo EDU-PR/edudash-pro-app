@@ -115,7 +115,16 @@ export default function ParentBirthdayChartPage() {
             <div className="muted">{t('birthdayChart.loading')}</div>
           </div>
         ) : (
-          <BirthdayChartWeb birthdays={birthdays} />
+          <BirthdayChartWeb
+            birthdays={birthdays}
+            onViewMemories={(birthday) => {
+              const eventDate = new Date(birthday.dateOfBirth || Date.now()).toISOString().slice(0, 10);
+              const params = new URLSearchParams();
+              params.set('birthdayStudentId', birthday.studentId);
+              params.set('eventDate', eventDate);
+              router.push(`/dashboard/parent/birthday-memories?${params.toString()}`);
+            }}
+          />
         )}
       </div>
     </ParentShell>

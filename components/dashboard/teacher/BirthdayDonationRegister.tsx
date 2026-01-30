@@ -18,6 +18,7 @@ import type {
 import { notifyBirthdayDonationPaid } from '@/lib/notify';
 import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
+import { router } from 'expo-router';
 
 interface BirthdayDonationRegisterProps {
   organizationId?: string | null;
@@ -330,6 +331,18 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
     }
   }, [organizationId, donationDate, selectedBirthday, classIdForRecord]);
 
+  const handleOpenMemories = useCallback(() => {
+    if (!organizationId || !selectedBirthday || !donationDate) return;
+    router.push({
+      pathname: '/screens/birthday-memories',
+      params: {
+        organizationId,
+        birthdayStudentId: selectedBirthday.student.id,
+        eventDate: donationDate,
+      },
+    } as any);
+  }, [organizationId, selectedBirthday, donationDate]);
+
   useEffect(() => {
     void loadDonations();
   }, [loadDonations]);
@@ -600,6 +613,17 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                 </Text>
               )}
 
+              <View style={styles.memoriesRow}>
+                <TouchableOpacity style={styles.memoriesButton} onPress={handleOpenMemories}>
+                  <Text style={styles.memoriesButtonText}>
+                    {t('dashboard.birthday_donations.open_memories', { defaultValue: 'Birthday memories' })}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.muted}>
+                  {t('dashboard.birthday_donations.memories_hint', { defaultValue: 'Upload and view photos/videos for this birthday.' })}
+                </Text>
+              </View>
+
               <View style={styles.formSection}>
                 <Text style={styles.label}>{t('dashboard.birthday_donations.method_label', { defaultValue: 'Payment method' })}</Text>
                 <View style={styles.methodRow}>
@@ -739,6 +763,22 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   muted: {
     fontSize: 12,
     color: theme.textSecondary,
+  },
+  memoriesRow: {
+    marginTop: 12,
+    gap: 6,
+  },
+  memoriesButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.primary,
+  },
+  memoriesButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   classRow: {
     flexDirection: 'row',

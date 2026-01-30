@@ -57,6 +57,7 @@ export default function BirthdayPlannerScreen() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { user, profile } = useAuth();
+  const organizationId = profile?.organization_id ?? profile?.preschool_id ?? null;
   const { studentId } = useLocalSearchParams<{ studentId?: string }>();
   
   // Get the child's ID - either from params or first child
@@ -257,6 +258,23 @@ export default function BirthdayPlannerScreen() {
             </Text>
           </View>
         </View>
+
+        <TouchableOpacity
+          style={styles.memoriesButton}
+          onPress={() => {
+            const eventDate = studentBirthday.birthDate.toISOString().slice(0, 10);
+            router.push({
+              pathname: '/screens/birthday-memories',
+              params: {
+                organizationId: organizationId || '',
+                birthdayStudentId: studentBirthday.studentId,
+                eventDate,
+              },
+            } as any);
+          }}
+        >
+          <Text style={styles.memoriesButtonText}>View birthday memories</Text>
+        </TouchableOpacity>
 
         {/* School Celebration Toggle */}
         <View style={styles.section}>
@@ -570,6 +588,18 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 14,
     fontWeight: '600',
     color: '#B45309',
+  },
+  memoriesButton: {
+    backgroundColor: theme.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  memoriesButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   
   // Sections

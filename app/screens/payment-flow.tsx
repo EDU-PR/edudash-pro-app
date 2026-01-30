@@ -7,7 +7,7 @@
  * 3. Prompts to upload proof of payment
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
