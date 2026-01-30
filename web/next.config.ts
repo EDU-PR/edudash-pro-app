@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   // Performance optimizations
@@ -7,6 +11,7 @@ const nextConfig: NextConfig = {
   // Turbopack configuration (Next.js 16+ default bundler)
   // Using empty config to acknowledge Turbopack while webpack config exists for fallback
   turbopack: {
+    root: configDir,
     resolveAlias: {
       // Add any module aliases here if needed
     },
