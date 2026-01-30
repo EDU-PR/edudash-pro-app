@@ -84,8 +84,31 @@ const getBirthdayWindow = (
   const today = new Date();
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const includeUpcoming = mode === 'upcoming' || mode === 'all';
-  const includePast = mode === 'recent' || mode === 'all';
+  if (mode === 'all') {
+    students.forEach((student) => {
+      const parts = parseDateParts(student.dateOfBirth);
+      if (!parts) return;
+
+      const thisYearBirthday = new Date(startOfToday.getFullYear(), parts.month - 1, parts.day);
+      const daysUntil = Math.round((thisYearBirthday.getTime() - startOfToday.getTime()) / dayMs);
+      const key = `${student.id}|${formatDateKey(thisYearBirthday)}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        entries.push({
+          student,
+          date: thisYearBirthday,
+          daysUntil,
+          isPast: thisYearBirthday < startOfToday,
+          key,
+        });
+      }
+    });
+
+    return entries;
+  }
+
+  const includeUpcoming = mode === 'upcoming';
+  const includePast = mode === 'recent';
 
   const entries: UpcomingBirthday[] = [];
   const dayMs = 1000 * 60 * 60 * 24;
