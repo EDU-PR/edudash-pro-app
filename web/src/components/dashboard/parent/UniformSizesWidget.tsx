@@ -219,29 +219,36 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
             }
           };
 
-          const { data: feeStructures } = await supabase
-            .from('fee_structures')
-            .select('amount, fee_type, name, description, effective_from, created_at')
-            .eq('preschool_id', preschoolId)
-            .eq('is_active', true)
-            .order('effective_from', { ascending: false })
-            .order('created_at', { ascending: false });
-
-          (feeStructures || [])
-            .filter((fee: UniformFeeRow) => isUniformFee(fee.fee_type, fee.name, fee.description))
-            .forEach((fee: UniformFeeRow) => applyFee(fee.amount, fee.fee_type, fee.name, fee.description));
-
           const { data: schoolFees } = await supabase
             .from('school_fee_structures')
             .select('amount_cents, fee_category, name, description, created_at')
             .eq('preschool_id', preschoolId)
             .eq('is_active', true);
 
-          (schoolFees || [])
+          const uniformSchoolFees = (schoolFees || [])
             .filter((fee: SchoolUniformFeeRow) => isUniformFee(fee.fee_category, fee.name, fee.description))
-            .forEach((fee: SchoolUniformFeeRow) =>
-              applyFee(fee.amount_cents / 100, fee.fee_category, fee.name, fee.description)
-            );
+            .map((fee: SchoolUniformFeeRow) => ({
+              amount: fee.amount_cents / 100,
+              feeType: fee.fee_category,
+              name: fee.name,
+              description: fee.description,
+            }));
+
+          if (uniformSchoolFees.length > 0) {
+            uniformSchoolFees.forEach((fee) => applyFee(fee.amount, fee.feeType, fee.name, fee.description));
+          } else {
+            const { data: feeStructures } = await supabase
+              .from('fee_structures')
+              .select('amount, fee_type, name, description, effective_from, created_at')
+              .eq('preschool_id', preschoolId)
+              .eq('is_active', true)
+              .order('effective_from', { ascending: false })
+              .order('created_at', { ascending: false });
+
+            (feeStructures || [])
+              .filter((fee: UniformFeeRow) => isUniformFee(fee.fee_type, fee.name, fee.description))
+              .forEach((fee: UniformFeeRow) => applyFee(fee.amount, fee.fee_type, fee.name, fee.description));
+          }
 
           if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
@@ -515,7 +522,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                     className="btn btnSecondary"
                     type="button"
                     onClick={() => handlePayNow(child, entry)}
-                    disabled={!entry.tshirtSize || totalItems <= 0}
+                    disabled={!entry.tshirtSize || totalItems <= 0 || !hasPricing}
                   >
                     {t('dashboard.parent.uniform.actions.pay_now', { defaultValue: 'Pay now' })}
                   </button>
@@ -523,7 +530,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                     className="btn btnSecondary"
                     type="button"
                     onClick={() => handleUploadPOP(child, entry, totalAmount)}
-                    disabled={!entry.tshirtSize || totalItems <= 0}
+                    disabled={!entry.tshirtSize || totalItems <= 0 || !hasPricing}
                   >
                     {t('dashboard.parent.uniform.actions.upload_pop', { defaultValue: 'Upload POP' })}
                   </button>
