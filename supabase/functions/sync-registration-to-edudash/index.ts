@@ -105,6 +105,26 @@ interface ProfileLinkRow {
   preschool_id: string | null;
 }
 
+interface ClassRow {
+  id: string;
+  age_min?: number | null;
+  age_max?: number | null;
+  age_group?: string | null;
+  grade_level?: string | null;
+  grade?: string | null;
+  active?: boolean | null;
+}
+
+interface FeeStructureRow {
+  id: string;
+  age_group?: string | null;
+  grade_level?: string | null;
+  amount_cents?: number | null;
+  fee_category?: string | null;
+  is_active?: boolean | null;
+  due_day_of_month?: number | null;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -117,6 +137,134 @@ function normalizeOrgCode(value: string | null | undefined): string {
   if (cleaned.length >= 3) return cleaned.slice(0, 3);
   if (cleaned.length > 0) return cleaned.padEnd(3, 'X');
   return 'STU';
+}
+
+function normalizeDateValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const datePart = raw.split('T')[0];
+  const isoMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return datePart;
+
+  const altMatch = datePart.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (altMatch) {
+    const day = Number(altMatch[1]);
+    const month = Number(altMatch[2]);
+    const year = Number(altMatch[3]);
+    if (!day || !month || !year) return null;
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
+function calculateAgeYears(dobIso: string, referenceDate = new Date()): number | null {
+  const [yearStr, monthStr, dayStr] = dobIso.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!year || !month || !day) return null;
+
+  const refYear = referenceDate.getUTCFullYear();
+  const refMonth = referenceDate.getUTCMonth() + 1;
+  const refDay = referenceDate.getUTCDate();
+
+  let age = refYear - year;
+  if (refMonth < month || (refMonth === month && refDay < day)) {
+    age -= 1;
+  }
+  return age;
+}
+
+function parseAgeRange(value?: string | null): { min: number; max: number } | null {
+  if (!value) return null;
+  const matches = value.match(/\d+(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) return null;
+  const numbers = matches.map((item) => Number(item)).filter((num) => Number.isFinite(num));
+  if (numbers.length === 0) return null;
+  if (numbers.length === 1) {
+    return { min: numbers[0], max: numbers[0] };
+  }
+  return { min: Math.min(numbers[0], numbers[1]), max: Math.max(numbers[0], numbers[1]) };
+}
+
+function normalizeGrade(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const cleaned = value.toString().trim().toUpperCase();
+  if (!cleaned) return null;
+  const withoutGrade = cleaned.replace(/GRADE\s+/g, '').trim();
+  return withoutGrade || cleaned;
+}
+
+function getNextMonthDueDate(day = 7): string {
+  const now = new Date();
+  const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const lastDay = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 0)).getUTCDate();
+  const dueDay = Math.min(day, lastDay);
+  const dueDate = new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), dueDay));
+  return dueDate.toISOString().split('T')[0];
+}
+
+function selectClassByAge(classes: ClassRow[], ageYears: number): ClassRow | null {
+  const candidates = classes.filter((cls) => {
+    const min = cls.age_min ?? null;
+    const max = cls.age_max ?? null;
+    if (typeof min === 'number' && typeof max === 'number') {
+      return ageYears >= min && ageYears <= max;
+    }
+    const range = parseAgeRange(cls.age_group);
+    if (range) {
+      return ageYears >= range.min && ageYears <= range.max;
+    }
+    return false;
+  });
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    const aMin = a.age_min ?? parseAgeRange(a.age_group)?.min ?? 0;
+    const aMax = a.age_max ?? parseAgeRange(a.age_group)?.max ?? 99;
+    const bMin = b.age_min ?? parseAgeRange(b.age_group)?.min ?? 0;
+    const bMax = b.age_max ?? parseAgeRange(b.age_group)?.max ?? 99;
+    const aRange = aMax - aMin;
+    const bRange = bMax - bMin;
+    if (aRange !== bRange) return aRange - bRange;
+    return aMin - bMin;
+  });
+  return candidates[0];
+}
+
+function selectClassByGrade(classes: ClassRow[], grade: string): ClassRow | null {
+  const normalized = normalizeGrade(grade);
+  if (!normalized) return null;
+  const match = classes.find((cls) => {
+    const clsGrade = normalizeGrade(cls.grade_level || cls.grade || '');
+    return clsGrade === normalized;
+  });
+  return match || null;
+}
+
+function selectFeeStructureByAge(fees: FeeStructureRow[], ageYears: number): FeeStructureRow | null {
+  const candidates = fees.filter((fee) => {
+    const range = parseAgeRange(fee.age_group);
+    if (!range) return false;
+    return ageYears >= range.min && ageYears <= range.max;
+  });
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    const aRange = parseAgeRange(a.age_group)?.max ?? 99;
+    const bRange = parseAgeRange(b.age_group)?.max ?? 99;
+    return aRange - bRange;
+  });
+  return candidates[0];
+}
+
+function selectFeeStructureByGrade(fees: FeeStructureRow[], grade: string): FeeStructureRow | null {
+  const normalized = normalizeGrade(grade);
+  if (!normalized) return null;
+  return fees.find((fee) => normalizeGrade(fee.grade_level) === normalized) || null;
 }
 
 async function getLastStudentSequence(
@@ -268,6 +416,13 @@ serve(async (req) => {
       );
     }
 
+    const normalizedDob = normalizeDateValue(
+      registration.student_date_of_birth ||
+      registration.student_dob ||
+      registration.child_date_of_birth
+    );
+    const normalizedGrade = normalizeGrade(registration.student_grade || registration.child_grade);
+
     let parentUserId: string | null = null;
     let parentAccountCreated = false;
     let generatedPassword: string | null = null;
@@ -383,15 +538,48 @@ serve(async (req) => {
       }
     }
 
+    let studentClassId: string | null = null;
+    let classResolved = false;
+    if (organizationId) {
+      const { data: classRows } = await supabase
+        .from('classes')
+        .select('id, age_min, age_max, age_group, grade_level, grade, active')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .eq('active', true);
+
+      const classes = (classRows || []) as ClassRow[];
+      const ageYears = normalizedDob ? calculateAgeYears(normalizedDob) : null;
+      let selectedClass: ClassRow | null = null;
+      if (normalizedGrade) {
+        selectedClass = selectClassByGrade(classes, normalizedGrade);
+      }
+      if (!selectedClass && ageYears !== null) {
+        selectedClass = selectClassByAge(classes, ageYears);
+      }
+      if (selectedClass?.id) {
+        studentClassId = selectedClass.id;
+        classResolved = true;
+      }
+    }
+
     if (studentId) {
-      // Update parent link and payment status from registration
+      // Update parent link, DOB, grade, class, and payment status from registration
       const studentUpdate: Record<string, unknown> = {
-        // Also update payment status from registration
         registration_fee_amount: registration.registration_fee_amount || null,
         registration_fee_paid: registration.registration_fee_paid || false,
         payment_verified: registration.payment_verified || false,
         payment_date: registration.payment_date || null,
       };
+
+      if (normalizedDob) {
+        studentUpdate.date_of_birth = normalizedDob;
+      }
+      if (normalizedGrade) {
+        studentUpdate.grade = normalizedGrade;
+      }
+      if (classResolved && studentClassId) {
+        studentUpdate.class_id = studentClassId;
+      }
       if (parentUserId) {
         studentUpdate.parent_id = parentUserId;
         studentUpdate.guardian_id = parentUserId;
@@ -432,11 +620,12 @@ serve(async (req) => {
           .insert({
             first_name: trimmedFirstName,
             last_name: trimmedLastName,
-            date_of_birth: registration.student_date_of_birth || registration.child_date_of_birth,
-            grade: registration.student_grade || registration.child_grade,
+            date_of_birth: normalizedDob,
+            grade: normalizedGrade,
             parent_id: parentUserId,
             guardian_id: parentUserId,
             preschool_id: organizationId,
+            class_id: studentClassId,
             student_id: studentIdCode,
             emergency_contact_name: registration.emergency_contact_name,
             emergency_contact_phone: registration.emergency_contact_phone,
@@ -489,6 +678,85 @@ serve(async (req) => {
           relationship_type: 'parent',
           is_primary: true,
         }, { onConflict: 'parent_id,student_id' });
+    }
+
+    // Step 3.5: Ensure correct tuition fee for next month based on age/grade
+    if (studentId && organizationId) {
+      try {
+        const { data: feeRows } = await supabase
+          .from('school_fee_structures')
+          .select('id, age_group, grade_level, amount_cents, fee_category, is_active, due_day_of_month')
+          .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+          .eq('is_active', true)
+          .eq('fee_category', 'tuition');
+
+        const feeStructures = (feeRows || []) as FeeStructureRow[];
+        const ageYears = normalizedDob ? calculateAgeYears(normalizedDob) : null;
+        let selectedFee: FeeStructureRow | null = null;
+        if (normalizedGrade) {
+          selectedFee = selectFeeStructureByGrade(feeStructures, normalizedGrade);
+        }
+        if (!selectedFee && ageYears !== null) {
+          selectedFee = selectFeeStructureByAge(feeStructures, ageYears);
+        }
+        if (!selectedFee && feeStructures.length > 0) {
+          selectedFee = feeStructures[0];
+        }
+
+        if (selectedFee?.id && selectedFee.amount_cents) {
+          const dueDay = selectedFee.due_day_of_month || 7;
+          const nextDueDate = getNextMonthDueDate(dueDay);
+          const amount = Number(selectedFee.amount_cents) / 100;
+          const [yearStr, monthStr] = nextDueDate.split('-');
+          const startOfMonth = `${yearStr}-${monthStr}-01`;
+          const nextMonthDate = new Date(Date.UTC(Number(yearStr), Number(monthStr), 1));
+          const endOfMonth = new Date(nextMonthDate);
+          const endMonthStr = endOfMonth.toISOString().split('T')[0];
+
+          const { data: existingFees } = await supabase
+            .from('student_fees')
+            .select('id, amount_paid, status, due_date, fee_structure_id')
+            .eq('student_id', studentId)
+            .gte('due_date', startOfMonth)
+            .lt('due_date', endMonthStr);
+
+          const existingFee = (existingFees || []).find((fee: any) => fee.fee_structure_id === selectedFee.id)
+            || (existingFees || [])[0];
+
+          if (existingFee?.id) {
+            const shouldUpdate = ['pending', 'overdue', 'partially_paid'].includes(String(existingFee.status || 'pending'));
+            if (shouldUpdate) {
+              const outstanding = Math.max(amount - Number(existingFee.amount_paid || 0), 0);
+              await supabase
+                .from('student_fees')
+                .update({
+                  fee_structure_id: selectedFee.id,
+                  amount,
+                  final_amount: amount,
+                  amount_outstanding: outstanding,
+                  due_date: nextDueDate,
+                })
+                .eq('id', existingFee.id);
+            }
+          } else {
+            await supabase
+              .from('student_fees')
+              .insert({
+                student_id: studentId,
+                fee_structure_id: selectedFee.id,
+                amount,
+                final_amount: amount,
+                due_date: nextDueDate,
+                status: 'pending',
+                amount_outstanding: amount,
+              });
+          }
+        } else {
+          console.warn('[sync-registration] No fee structure matched for student', studentId);
+        }
+      } catch (feeError) {
+        console.error('[sync-registration] Fee assignment error:', feeError);
+      }
     }
 
     // Step 4: Update registration with created IDs
