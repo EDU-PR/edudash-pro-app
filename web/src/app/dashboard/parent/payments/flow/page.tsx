@@ -68,7 +68,6 @@ function PaymentFlowContent() {
   const childId = searchParams.get('childId') || '';
   const childName = searchParams.get('childName') || '';
   const studentCode = searchParams.get('studentCode') || '';
-  const feeId = searchParams.get('feeId') || '';
   const feeAmountParam = searchParams.get('feeAmount') || '0';
   const feeDescription = searchParams.get('feeDescription') || COPY.feeDescriptionFallback;
   const feeId = searchParams.get('feeId') || '';
