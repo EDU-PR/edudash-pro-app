@@ -1,9 +1,9 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import enCommon from '../../../locales/en/common.json';
-import afCommon from '../../../locales/af/common.json';
-import zuCommon from '../../../locales/zu/common.json';
+import enCommon from '../locales/en/common.json';
+import afCommon from '../locales/af/common.json';
+import zuCommon from '../locales/zu/common.json';
 
 const STORAGE_KEY = '@edudash_language';
 
