@@ -60,6 +60,7 @@ export default function ParentPaymentsScreen() {
   const [selectedFeeAmount, setSelectedFeeAmount] = useState('');
   const [selectedFeeReference, setSelectedFeeReference] = useState('');
   const [selectedPaymentPurpose, setSelectedPaymentPurpose] = useState('');
+  const [selectedFeeId, setSelectedFeeId] = useState<string | undefined>(undefined);
   const [selectedFeeDueDate, setSelectedFeeDueDate] = useState<string | undefined>(undefined);
 
   // Refresh data when screen comes into focus (e.g., from notification tap)
@@ -75,7 +76,8 @@ export default function ParentPaymentsScreen() {
   const openUploadForFee = (fee: StudentFee) => {
     setSelectedFeeAmount(fee.amount.toString());
     setSelectedFeeReference('');
-    setSelectedPaymentPurpose('');
+    setSelectedPaymentPurpose(fee.description || 'School Fees');
+    setSelectedFeeId(fee.id);
     setSelectedFeeDueDate(fee.due_date);
     setShowUploadModal(true);
   };
@@ -85,6 +87,7 @@ export default function ParentPaymentsScreen() {
     setSelectedFeeAmount((selectedChild.registration_fee_amount || 0).toString());
     setSelectedFeeReference('');
     setSelectedPaymentPurpose('Registration Fee');
+    setSelectedFeeId(undefined);
     setSelectedFeeDueDate(undefined);
     setShowUploadModal(true);
   };
@@ -232,6 +235,7 @@ export default function ParentPaymentsScreen() {
                   setSelectedFeeAmount('');
                   setSelectedFeeReference('');
                   setSelectedPaymentPurpose('');
+                  setSelectedFeeId(undefined);
                   setShowUploadModal(true);
                 }}
                 theme={theme}
@@ -249,6 +253,7 @@ export default function ParentPaymentsScreen() {
           setSelectedFeeAmount('');
           setSelectedFeeReference('');
           setSelectedPaymentPurpose('');
+          setSelectedFeeId(undefined);
           setSelectedFeeDueDate(undefined);
         }}
         onSuccess={handleUploadSuccess}
@@ -256,6 +261,7 @@ export default function ParentPaymentsScreen() {
         selectedChild={selectedChild}
         userId={user?.id || ''}
         preschoolId={profile?.preschool_id}
+        feeId={selectedFeeId}
         initialAmount={selectedFeeAmount}
         initialReference={selectedFeeReference}
         paymentPurpose={selectedPaymentPurpose}

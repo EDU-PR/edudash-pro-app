@@ -109,6 +109,15 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     () => Array.from(new Set(childrenCards.map((child) => child.preschoolId).filter(Boolean))) as string[],
     [childrenCards]
   );
+  const preschoolNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    childrenCards.forEach((child) => {
+      if (child.preschoolId && child.preschoolName) {
+        map[child.preschoolId] = child.preschoolName;
+      }
+    });
+    return map;
+  }, [childrenCards]);
 
   useEffect(() => {
     if (!childrenCards.length) {
@@ -194,6 +203,8 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
         const pricingMap: Record<string, UniformPricing> = {};
         for (const preschoolId of preschoolIds) {
           const pricing: UniformPricing = {};
+          const preschoolName = preschoolNameMap[preschoolId] || '';
+          const isYoungEagles = preschoolName.toLowerCase().includes('young eagles');
           const applyFee = (
             amount: number,
             feeType?: string | null,
@@ -252,6 +263,12 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
 
           if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
+          } else if (isYoungEagles) {
+            pricingMap[preschoolId] = {
+              setAmount: 400,
+              tshirtAmount: 250,
+              shortsAmount: 250,
+            };
           }
         }
 
@@ -264,7 +281,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     };
 
     loadUniformPricing();
-  }, [preschoolIds, supabase, t]);
+  }, [preschoolIds, preschoolNameMap, supabase, t]);
 
   const updateEntry = (childId: string, patch: Partial<UniformEntry>) => {
     setEntries((prev) => ({

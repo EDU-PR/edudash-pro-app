@@ -225,6 +225,8 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
       try {
         const supabase = assertSupabase();
         const pricingMap: Record<string, UniformPricing> = {};
+        const schoolNameLower = schoolName?.toLowerCase() || '';
+        const isYoungEagles = schoolNameLower.includes('young eagles');
 
         for (const preschoolId of preschoolIds) {
           const pricing: UniformPricing = {};
@@ -288,6 +290,12 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
           if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
+          } else if (isYoungEagles) {
+            pricingMap[preschoolId] = {
+              setAmount: 400,
+              tshirtAmount: 250,
+              shortsAmount: 250,
+            };
           }
         }
 
@@ -533,6 +541,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     router.push({
       pathname: '/screens/payment-flow',
       params: {
+        feeId: `uniform:${child.id}`,
         feeDescription: descriptionParts.join(' • '),
         feeAmount: totalAmount.toFixed(2),
         childId: child.id,
@@ -769,11 +778,11 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
               </Text>
               <Text style={styles.pricingTotal}>
                 {t('dashboard.parent.uniform.total.label', { defaultValue: 'Total:' })}{' '}
-                {hasPricing
+                {hasPricingConfigured
                   ? formatCurrency(totalAmount)
                   : t('dashboard.parent.uniform.total.unavailable', { defaultValue: 'Pricing not configured' })}
               </Text>
-              {!hasPricing ? (
+              {!hasPricingConfigured ? (
                 <Text style={styles.pricingHint}>
                   {t('dashboard.parent.uniform.total.note', { defaultValue: 'Pricing is not set yet. We will still generate a payment reference.' })}
                 </Text>
