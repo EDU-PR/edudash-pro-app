@@ -17,11 +17,12 @@ export interface WebStudentBirthday {
 
 interface BirthdayChartWebProps {
   birthdays: WebStudentBirthday[];
+  onViewMemories?: (birthday: WebStudentBirthday) => void;
 }
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => index);
 
-export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
+export function BirthdayChartWeb({ birthdays, onViewMemories }: BirthdayChartWebProps) {
   const { t, i18n } = useTranslation('common');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const today = new Date();
@@ -178,9 +179,20 @@ export function BirthdayChartWeb({ birthdays }: BirthdayChartWebProps) {
                       {t('birthdayChart.turning', { age: b.ageTurning })}{b.className ? ` • ${b.className}` : ''}
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--primary)' }}>{
-                    parseDateOnly(b.dateOfBirth)?.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-                  }</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                    <div style={{ fontSize: 12, color: 'var(--primary)' }}>{
+                      parseDateOnly(b.dateOfBirth)?.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+                    }</div>
+                    {onViewMemories && (
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => onViewMemories(b)}
+                        style={{ padding: '4px 10px', fontSize: 11 }}
+                      >
+                        Memories
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
