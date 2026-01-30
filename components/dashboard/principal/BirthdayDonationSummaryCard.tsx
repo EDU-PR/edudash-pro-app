@@ -4,6 +4,8 @@ import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { BirthdayDonationsService } from '@/features/birthday-donations/services/BirthdayDonationsService';
 import type { BirthdayDonationDay, BirthdayDonationMonthSummary } from '@/features/birthday-donations/types/birthdayDonations.types';
+import { useAuth } from '@/contexts/AuthContext';
+import { getOrganizationType } from '@/lib/tenant/compat';
 
 interface BirthdayDonationSummaryCardProps {
   organizationId?: string | null;
@@ -16,8 +18,12 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
   const { theme } = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { profile } = useAuth();
+  const orgType = getOrganizationType(profile);
+  const isPreschool = orgType === 'preschool';
 
   const todayString = useMemo(() => formatDateKey(new Date()), []);
+  const isFriday = useMemo(() => new Date().getDay() === 5, []);
   const [daySummary, setDaySummary] = useState<BirthdayDonationDay | null>(null);
   const [monthSummary, setMonthSummary] = useState<BirthdayDonationMonthSummary>({
     totalExpected: 0,
@@ -87,6 +93,11 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
             <Text style={styles.label}>{t('dashboard.birthday_donations.today_label', { defaultValue: 'Today' })}</Text>
             <Text style={styles.value}>R{receivedToday.toFixed(2)} / R{expectedToday.toFixed(2)}</Text>
           </View>
+          {isPreschool && isFriday && (
+            <Text style={styles.badge}>
+              {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration day' })}
+            </Text>
+          )}
           <Text style={styles.muted}>{t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}: R{remainingToday.toFixed(2)}</Text>
 
           <View style={styles.divider} />
@@ -150,6 +161,18 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   muted: {
     fontSize: 12,
     color: theme.textSecondary,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.primary,
+    backgroundColor: theme.primary + '22',
   },
   divider: {
     height: 1,

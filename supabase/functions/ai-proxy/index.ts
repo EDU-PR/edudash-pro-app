@@ -51,7 +51,7 @@ const ConversationMessageSchema = z.object({
 
 const RequestSchema = z.object({
   scope: z.enum(['teacher', 'principal', 'parent', 'student', 'admin', 'guest']).optional(),
-  service_type: z.string().optional().default('dash_conversation'),
+  service_type: z.string().optional().default('chat_message'),
   payload: z
     .object({
       prompt: z.string().optional(),
@@ -68,6 +68,14 @@ const RequestSchema = z.object({
   prefer_openai: z.boolean().optional().default(false),
   metadata: z.record(z.unknown()).optional(),
 });
+
+function normalizeServiceType(serviceType?: string): string {
+  if (!serviceType) return 'chat_message';
+  if (serviceType === 'dash_conversation' || serviceType === 'dash_ai' || serviceType === 'homework_help') {
+    return 'chat_message';
+  }
+  return serviceType;
+}
 
 const WebSearchArgsSchema = z.object({
   query: z.string().min(2),
@@ -521,7 +529,7 @@ serve(async (req) => {
 
     const quota = await supabase.rpc('check_ai_usage_limit', {
       p_user_id: userData.user.id,
-      p_request_type: payload.service_type,
+      p_request_type: normalizeServiceType(payload.service_type),
     });
 
     const quotaData = quota.data as JsonRecord | null;
@@ -557,7 +565,7 @@ serve(async (req) => {
 
     await supabase.rpc('record_ai_usage', {
       p_user_id: userData.user.id,
-      p_feature_used: payload.service_type,
+      p_feature_used: normalizeServiceType(payload.service_type),
       p_model_used: providerResponse.model || (preferOpenAI ? 'openai' : 'anthropic'),
       p_tokens_used: (providerResponse.usage?.tokens_in || 0) + (providerResponse.usage?.tokens_out || 0),
       p_request_tokens: providerResponse.usage?.tokens_in || 0,

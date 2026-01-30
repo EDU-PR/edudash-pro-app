@@ -462,6 +462,27 @@ export const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
   },
+  staffActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+  },
+  staffActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  staffActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   voiceStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',

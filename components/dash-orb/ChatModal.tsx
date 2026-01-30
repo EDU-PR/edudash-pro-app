@@ -106,6 +106,72 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
   const Container: React.ElementType = KeyboardAvoidingView;
 
+  const isTutorPromptLeak = (content: string) =>
+    /tutor_payload|return only json|you are dash, an interactive tutor|tutor mode override/i.test(content || '');
+
+  const parseTutorPayload = (content: string) => {
+    if (!content) return null;
+    const tagMatch = content.match(/<TUTOR_PAYLOAD>([\s\S]*?)<\/TUTOR_PAYLOAD>/i);
+    const jsonCandidate = tagMatch ? tagMatch[1] : null;
+    const fallbackMatch = !jsonCandidate ? content.match(/\{[\s\S]*\}/) : null;
+    const raw = (jsonCandidate || fallbackMatch?.[0] || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  const buildTutorDisplay = (payload: Record<string, unknown>) => {
+    const question = typeof payload.question === 'string' ? payload.question.trim() : '';
+    if (question) return question;
+
+    const lines: string[] = [];
+    if (typeof payload.is_correct === 'boolean') {
+      lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
+    }
+    if (typeof payload.feedback === 'string' && payload.feedback.trim()) {
+      lines.push(payload.feedback.trim());
+    }
+    if (typeof payload.correct_answer === 'string' && payload.correct_answer.trim()) {
+      lines.push(`Correct answer: ${payload.correct_answer.trim()}`);
+    }
+    if (typeof payload.explanation === 'string' && payload.explanation.trim()) {
+      lines.push(payload.explanation.trim());
+    }
+    if (typeof payload.follow_up_question === 'string' && payload.follow_up_question.trim()) {
+      lines.push(`Next question:\n${payload.follow_up_question.trim()}`);
+    }
+    return lines.filter(Boolean).join('\n\n') || null;
+  };
+
+  const sanitizeAssistantContent = (content: string) => {
+    return (content || '')
+      .split(/\n+/)
+      .filter(line => !/^\s*User:\s*/i.test(line))
+      .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
+      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Topic:|Subject:|Grade:|Age band:|School type:)/i.test(line))
+      .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
+      .filter(line => !/^\s*Return ONLY JSON/i.test(line))
+      .filter(line => !/TUTOR_PAYLOAD/i.test(line))
+      .join('\n')
+      .trim();
+  };
+
+  const getAssistantDisplayContent = (content: string) => {
+    const payload = parseTutorPayload(content);
+    if (payload) {
+      const display = buildTutorDisplay(payload);
+      if (display) return display;
+    }
+    if (isTutorPromptLeak(content)) {
+      return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
+    }
+    const cleaned = sanitizeAssistantContent(content);
+    return cleaned || content;
+  };
+
   useEffect(() => {
     if (visible && !showQuickActions) {
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
@@ -235,6 +301,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               style={styles.messagesContainer}
               contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(140, styles.messagesContent?.paddingBottom || 0) }]}
               showsVerticalScrollIndicator={false}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               keyboardShouldPersistTaps="handled"
             >
               <QuickActions
@@ -252,6 +319,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               style={styles.messagesContainer}
               contentContainerStyle={[styles.messagesContent, { paddingBottom: Math.max(140, styles.messagesContent?.paddingBottom || 0) }]}
               showsVerticalScrollIndicator={false}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               keyboardShouldPersistTaps="handled"
             >
               {messages.length === 0 && (
@@ -263,6 +331,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               )}
               {messages.map((message) => {
                 const markdownStyles = getMarkdownStyles(theme);
+                const displayContent = message.role === 'assistant'
+                  ? getAssistantDisplayContent(message.content)
+                  : message.content;
                 return (
                 <View
                   key={message.id}
@@ -281,15 +352,15 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                     </View>
                   ) : message.role === 'user' ? (
                     <Text style={[styles.messageText, { color: '#fff' }]}>
-                      {message.content}
+                      {displayContent}
                     </Text>
                   ) : (
                     // Use Markdown for assistant messages on native
                     Markdown ? (
-                      <Markdown style={markdownStyles}>{message.content}</Markdown>
+                      <Markdown style={markdownStyles}>{displayContent}</Markdown>
                     ) : (
                       <Text style={[styles.messageText, { color: theme.text }]}>
-                        {message.content}
+                        {displayContent}
                       </Text>
                     )
                   )}
