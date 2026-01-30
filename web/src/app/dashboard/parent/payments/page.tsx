@@ -1060,7 +1060,14 @@ export default function PaymentsPage() {
                             </button>
                             <button
                               className="btn btnSecondary"
-                              onClick={() => router.push(`/dashboard/parent/payments/pop-upload?child=${selectedChildId ?? ''}&feeId=${fee.id}`)}
+                              onClick={() => {
+                                const params = new URLSearchParams();
+                                params.set('child', selectedChildId ?? '');
+                                params.set('feeId', fee.id);
+                                const desc = fee.description || getFeeTypeLabel(fee.fee_type);
+                                if (desc) params.set('feeDescription', desc);
+                                router.push(`/dashboard/parent/payments/pop-upload?${params.toString()}`);
+                              }}
                               disabled={isPendingVerification}
                             >
                               <Upload className="icon16" />
