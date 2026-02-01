@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  Linking,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -54,6 +56,7 @@ export default function SuperAdminUsersScreen() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [impersonating, setImpersonating] = useState(false);
+  const [creatingTempPassword, setCreatingTempPassword] = useState(false);
   
   const [filters, setFilters] = useState<UserFilters>({
     role: 'all',
@@ -484,6 +487,98 @@ target_user_id: (user as any).auth_user_id,
     );
   };
 
+  const copyToClipboard = async (value: string, label = 'Value') => {
+    try {
+      if (!Clipboard?.setStringAsync) {
+        throw new Error('Clipboard not available');
+      }
+      await Clipboard.setStringAsync(value);
+      Alert.alert('Copied', `${label} copied to clipboard.`);
+    } catch (error) {
+      console.error('Clipboard error:', error);
+      Alert.alert('Copy failed', 'Clipboard is not available on this platform.');
+    }
+  };
+
+  const shareToWhatsApp = async (message: string) => {
+    const encoded = encodeURIComponent(message);
+    const nativeUrl = `whatsapp://send?text=${encoded}`;
+    const webUrl = `https://wa.me/?text=${encoded}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(nativeUrl);
+      if (canOpen) {
+        await Linking.openURL(nativeUrl);
+        return;
+      }
+    } catch (error) {
+      console.warn('WhatsApp native share failed:', error);
+    }
+
+    try {
+      await Linking.openURL(webUrl);
+    } catch (error) {
+      console.error('WhatsApp web share failed:', error);
+      Alert.alert('Share failed', 'Unable to open WhatsApp. Please copy the password instead.');
+    }
+  };
+
+  const createTempPassword = async (user: UserRecord) => {
+    Alert.alert(
+      'Create Temporary Password',
+      `Generate a temporary password for ${user.email}?\n\nThe user will be forced to set a new password on next login.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Generate',
+          onPress: async () => {
+            setCreatingTempPassword(true);
+            try {
+              const { data, error } = await assertSupabase().functions.invoke(
+                'superadmin-set-temp-password',
+                { body: { target_user_id: user.id } }
+              );
+
+              if (error) {
+                throw error;
+              }
+
+              if (!data?.temp_password) {
+                throw new Error('Temporary password not returned');
+              }
+
+              track('superadmin_temp_password_created', {
+                user_id: user.id,
+                user_email: user.email,
+              });
+
+              const shareMessage =
+                `EduDash Pro temporary password\n` +
+                `User: ${user.email}\n` +
+                `Password: ${data.temp_password}\n\n` +
+                `Please sign in and change your password immediately.`;
+
+              Alert.alert(
+                'Temporary Password Created',
+                `Share this password securely with the user:\n\n${data.temp_password}`,
+                [
+                  { text: 'WhatsApp', onPress: () => shareToWhatsApp(shareMessage) },
+                  { text: 'Copy', onPress: () => copyToClipboard(data.temp_password, 'Temporary password') },
+                  { text: 'Done', style: 'default' },
+                ]
+              );
+            } catch (error) {
+              console.error('Failed to create temp password:', error);
+              Alert.alert('Error', 'Failed to create temporary password. Please try again.');
+            } finally {
+              setCreatingTempPassword(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const getRoleColor = (role: string): string => {
     switch (role) {
       case 'superadmin':
@@ -759,6 +854,19 @@ target_user_id: (user as any).auth_user_id,
                 >
                   <Ionicons name="key" size={20} color="#f59e0b" />
                   <Text style={[styles.modalActionText, { color: '#f59e0b' }]}>Reset Password</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalActionButton}
+                  onPress={() => createTempPassword(selectedUser)}
+                  disabled={creatingTempPassword}
+                >
+                  {creatingTempPassword ? (
+                    <ActivityIndicator size="small" color="#14b8a6" />
+                  ) : (
+                    <Ionicons name="keypad" size={20} color="#14b8a6" />
+                  )}
+                  <Text style={[styles.modalActionText, { color: '#14b8a6' }]}>Create Temp Password</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

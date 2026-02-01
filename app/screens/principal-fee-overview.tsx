@@ -60,6 +60,32 @@ interface FinancialSummary {
   };
 }
 
+interface PaymentSummary {
+  completedCount: number;
+  completedAmount: number;
+  pendingCount: number;
+  pendingAmount: number;
+  rejectedCount: number;
+  rejectedAmount: number;
+  missingEvidenceCount: number;
+}
+
+interface PopSummary {
+  pendingCount: number;
+  pendingAmount: number;
+  approvedCount: number;
+  approvedAmount: number;
+  rejectedCount: number;
+  rejectedAmount: number;
+  missingReferenceCount: number;
+}
+
+interface ExpenseSummary {
+  totalAmount: number;
+  transactionCount: number;
+  missingReceiptCount: number;
+}
+
 type FilterType = 'all' | 'outstanding' | 'paid' | 'overdue';
 type TimeFilter = 'month' | 'all';
 
@@ -71,6 +97,16 @@ export default function PrincipalFeeOverviewScreen() {
   
   const [students, setStudents] = useState<StudentWithFees[]>([]);
   const [summary, setSummary] = useState<FinancialSummary | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
+  const [popSummary, setPopSummary] = useState<PopSummary | null>(null);
+  const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
+  const [accountingSnapshot, setAccountingSnapshot] = useState<{
+    income: number;
+    pending: number;
+    expenses: number;
+    net: number;
+    completionRate: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,6 +337,167 @@ export default function PrincipalFeeOverviewScreen() {
           pending: totalOutstanding,
         },
       });
+
+      // Payments + POP summary (for accounting reconciliation)
+      const isMonth = timeFilter === 'month';
+      const periodStart = monthStart.toISOString();
+      const periodEnd = monthEnd.toISOString();
+
+      const applyPeriod = (query: any) => (
+        isMonth ? query.gte('created_at', periodStart).lt('created_at', periodEnd) : query
+      );
+
+      const paymentsQuery = applyPeriod(
+        supabase
+          .from('payments')
+          .select('amount, status, payment_reference, attachment_url, payment_method, created_at')
+          .eq('preschool_id', organizationId)
+      );
+
+      const popsQuery = applyPeriod(
+        supabase
+          .from('pop_uploads')
+          .select('payment_amount, status, payment_reference, file_path, created_at')
+          .eq('preschool_id', organizationId)
+          .eq('upload_type', 'proof_of_payment')
+      );
+
+      const pettyCashQuery = applyPeriod(
+        supabase
+          .from('petty_cash_transactions')
+          .select('id, amount, receipt_url, created_at, status, type')
+          .eq('school_id', organizationId)
+          .eq('type', 'expense')
+      );
+
+      const financialExpenseQuery = applyPeriod(
+        supabase
+          .from('financial_transactions')
+          .select('id, amount, receipt_image_path, type, status, created_at')
+          .eq('preschool_id', organizationId)
+          .in('type', ['expense', 'operational_expense', 'salary', 'purchase'])
+      );
+
+      const [paymentsRes, popsRes, pettyRes, finRes] = await Promise.all([
+        paymentsQuery,
+        popsQuery,
+        pettyCashQuery,
+        financialExpenseQuery,
+      ]);
+
+      if (paymentsRes.error) console.warn('[PrincipalFeeOverview] payments summary error:', paymentsRes.error);
+      if (popsRes.error) console.warn('[PrincipalFeeOverview] pop summary error:', popsRes.error);
+      if (pettyRes.error) console.warn('[PrincipalFeeOverview] petty cash summary error:', pettyRes.error);
+      if (finRes.error) console.warn('[PrincipalFeeOverview] financial expenses summary error:', finRes.error);
+
+      const paymentsData = paymentsRes.data || [];
+      const popsData = popsRes.data || [];
+      const pettyData = pettyRes.data || [];
+      const finData = finRes.data || [];
+
+      const nextPaymentSummary: PaymentSummary = paymentsData.reduce((acc, payment: any) => {
+        const status = String(payment.status || 'pending');
+        const amount = Number(payment.amount) || 0;
+        const hasEvidence = Boolean(payment.payment_reference) || Boolean(payment.attachment_url);
+
+        if (['completed', 'approved'].includes(status)) {
+          acc.completedCount += 1;
+          acc.completedAmount += amount;
+          if (!hasEvidence) acc.missingEvidenceCount += 1;
+        } else if (['pending', 'proof_submitted', 'under_review'].includes(status)) {
+          acc.pendingCount += 1;
+          acc.pendingAmount += amount;
+          if (!hasEvidence) acc.missingEvidenceCount += 1;
+        } else if (['failed', 'rejected', 'reversed', 'voided', 'cancelled'].includes(status)) {
+          acc.rejectedCount += 1;
+          acc.rejectedAmount += amount;
+        } else {
+          acc.pendingCount += 1;
+          acc.pendingAmount += amount;
+          if (!hasEvidence) acc.missingEvidenceCount += 1;
+        }
+
+        return acc;
+      }, {
+        completedCount: 0,
+        completedAmount: 0,
+        pendingCount: 0,
+        pendingAmount: 0,
+        rejectedCount: 0,
+        rejectedAmount: 0,
+        missingEvidenceCount: 0,
+      });
+
+      const nextPopSummary: PopSummary = popsData.reduce((acc, pop: any) => {
+        const status = String(pop.status || 'pending');
+        const amount = Number(pop.payment_amount) || 0;
+        if (status === 'approved') {
+          acc.approvedCount += 1;
+          acc.approvedAmount += amount;
+        } else if (status === 'rejected') {
+          acc.rejectedCount += 1;
+          acc.rejectedAmount += amount;
+        } else {
+          acc.pendingCount += 1;
+          acc.pendingAmount += amount;
+        }
+        if (!pop.payment_reference) acc.missingReferenceCount += 1;
+        return acc;
+      }, {
+        pendingCount: 0,
+        pendingAmount: 0,
+        approvedCount: 0,
+        approvedAmount: 0,
+        rejectedCount: 0,
+        rejectedAmount: 0,
+        missingReferenceCount: 0,
+      });
+
+      let receiptsMap = new Map<string, number>();
+      if (pettyData.length) {
+        try {
+          const { data: receipts } = await supabase
+            .from('petty_cash_receipts')
+            .select('transaction_id')
+            .in('transaction_id', pettyData.map((t: any) => t.id));
+          (receipts || []).forEach((r: any) => {
+            receiptsMap.set(r.transaction_id, (receiptsMap.get(r.transaction_id) || 0) + 1);
+          });
+        } catch (err) {
+          console.warn('[PrincipalFeeOverview] petty cash receipts lookup failed:', err);
+        }
+      }
+
+      const pettyExpensesTotal = pettyData.reduce((sum, t: any) => sum + Math.abs(Number(t.amount) || 0), 0);
+      const pettyMissingReceipts = pettyData.filter((t: any) => {
+        const receiptCount = receiptsMap.get(t.id) || 0;
+        return !t.receipt_url && receiptCount === 0;
+      }).length;
+
+      const finExpensesTotal = finData.reduce((sum, t: any) => sum + Math.abs(Number(t.amount) || 0), 0);
+      const finMissingReceipts = finData.filter((t: any) => !t.receipt_image_path).length;
+
+      const nextExpenseSummary: ExpenseSummary = {
+        totalAmount: pettyExpensesTotal + finExpensesTotal,
+        transactionCount: pettyData.length + finData.length,
+        missingReceiptCount: pettyMissingReceipts + finMissingReceipts,
+      };
+
+      setPaymentSummary(nextPaymentSummary);
+      setPopSummary(nextPopSummary);
+      setExpenseSummary(nextExpenseSummary);
+
+      const income = nextPaymentSummary.completedAmount;
+      const pending = nextPaymentSummary.pendingAmount;
+      const expenses = nextExpenseSummary.totalAmount;
+      const completionRate = income + pending > 0 ? (income / (income + pending)) * 100 : 0;
+      setAccountingSnapshot({
+        income,
+        pending,
+        expenses,
+        net: income - expenses,
+        completionRate,
+      });
     } catch (error) {
       console.error('[PrincipalFeeOverview] Error loading data:', error);
     }
@@ -361,6 +558,55 @@ export default function PrincipalFeeOverviewScreen() {
     
     return result;
   }, [students, filter, searchQuery, isFullyPaid]);
+
+  const insights = useMemo(() => {
+    const doList: string[] = [];
+    const avoidList: string[] = [];
+    const income = accountingSnapshot?.income ?? 0;
+    const pending = accountingSnapshot?.pending ?? 0;
+    const expenses = accountingSnapshot?.expenses ?? 0;
+    const net = accountingSnapshot?.net ?? 0;
+    const completionRate = accountingSnapshot?.completionRate ?? 0;
+    const missingPaymentEvidence = paymentSummary?.missingEvidenceCount ?? 0;
+    const missingExpenseReceipts = expenseSummary?.missingReceiptCount ?? 0;
+
+    if (pending > 0) {
+      doList.push('Follow up on unpaid fees and pending POPs weekly.');
+    }
+    if (completionRate < 70 && pending > 0) {
+      doList.push('Send payment reminders and offer short payment plans.');
+    }
+    if (missingPaymentEvidence > 0) {
+      doList.push('Collect POP or bank references for all completed payments.');
+      avoidList.push('Do not mark payments complete without verification.');
+    }
+    if (missingExpenseReceipts > 0) {
+      doList.push('Attach receipts for every expense entry.');
+    }
+    if (net < 0) {
+      doList.push('Prioritize essential spending and pause non-critical purchases.');
+      avoidList.push('Avoid new discretionary expenses until cash flow improves.');
+    } else if (net > 0 && income > 0) {
+      doList.push('Set aside a cash reserve (10–15%) for unexpected costs.');
+    }
+
+    const expenseRatio = income > 0 ? expenses / income : 0;
+    if (expenseRatio > 0.8) {
+      avoidList.push('Avoid increasing recurring expenses without matching income.');
+    }
+    if (completionRate > 0 && completionRate < 50) {
+      avoidList.push('Avoid committing to new costs based on unpaid fees.');
+    }
+
+    if (!doList.length) {
+      doList.push('Review income vs expenses every week and keep records updated.');
+    }
+    if (!avoidList.length) {
+      avoidList.push('Avoid delaying reconciliations or skipping receipt uploads.');
+    }
+
+    return { doList, avoidList };
+  }, [accountingSnapshot, expenseSummary, paymentSummary]);
 
   // Navigate to student fee management
   const handleStudentPress = (studentId: string) => {
@@ -513,6 +759,159 @@ export default function PrincipalFeeOverviewScreen() {
                 </View>
               </View>
             </View>
+
+            {/* Payments & POP Overview */}
+            {paymentSummary && popSummary && (
+              <View style={styles.panelCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Payments & POP</Text>
+                  <View style={styles.sectionActions}>
+                    <TouchableOpacity
+                      style={styles.expensesButton}
+                      onPress={() => router.push('/screens/pop-review')}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={16} color={theme.primary} />
+                      <Text style={styles.expensesButtonText}>Review POPs</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.expensesButton}
+                      onPress={() => router.push('/screens/financial-transactions')}
+                    >
+                      <Ionicons name="list-outline" size={16} color={theme.primary} />
+                      <Text style={styles.expensesButtonText}>Transactions</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.sectionHint}>
+                  {timeFilter === 'month' ? 'This month' : 'All time'} payments and proof-of-payment status.
+                </Text>
+                <View style={styles.subStatsRow}>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="cash-outline" size={18} color={theme.success} />
+                    <Text style={[styles.subStatValue, { color: theme.success }]}>
+                      {formatCurrency(paymentSummary.completedAmount)}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Payments Collected</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="time-outline" size={18} color={theme.warning} />
+                    <Text style={[styles.subStatValue, { color: theme.warning }]}>
+                      {formatCurrency(paymentSummary.pendingAmount)}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Payments Pending</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="alert-circle-outline" size={18} color={theme.error} />
+                    <Text style={[styles.subStatValue, { color: theme.error }]}>
+                      {paymentSummary.missingEvidenceCount}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Missing Bank Proof</Text>
+                  </View>
+                </View>
+                <View style={styles.subStatsRow}>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="document-text-outline" size={18} color={theme.warning} />
+                    <Text style={[styles.subStatValue, { color: theme.warning }]}>
+                      {popSummary.pendingCount}
+                    </Text>
+                    <Text style={styles.subStatLabel}>POP Pending</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="checkmark-done-outline" size={18} color={theme.success} />
+                    <Text style={[styles.subStatValue, { color: theme.success }]}>
+                      {popSummary.approvedCount}
+                    </Text>
+                    <Text style={styles.subStatLabel}>POP Approved</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="close-circle-outline" size={18} color={theme.error} />
+                    <Text style={[styles.subStatValue, { color: theme.error }]}>
+                      {popSummary.rejectedCount}
+                    </Text>
+                    <Text style={styles.subStatLabel}>POP Rejected</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Accounting Snapshot */}
+            {accountingSnapshot && expenseSummary && (
+              <View style={styles.panelCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Accounting Snapshot</Text>
+                  <View style={styles.sectionActions}>
+                    <TouchableOpacity
+                      style={styles.expensesButton}
+                      onPress={() => router.push('/screens/petty-cash')}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color={theme.primary} />
+                      <Text style={styles.expensesButtonText}>Record Expense</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Expenses include petty cash and approved expense transactions.
+                </Text>
+                <View style={styles.mainStatsRow}>
+                  <View style={[styles.mainStatCard, { borderLeftColor: theme.success }]}>
+                    <Text style={[styles.mainStatValue, { color: theme.success }]}>
+                      {formatCurrency(accountingSnapshot.income)}
+                    </Text>
+                    <Text style={styles.mainStatLabel}>Income</Text>
+                  </View>
+                  <View style={[styles.mainStatCard, { borderLeftColor: theme.error }]}>
+                    <Text style={[styles.mainStatValue, { color: theme.error }]}>
+                      {formatCurrency(accountingSnapshot.expenses)}
+                    </Text>
+                    <Text style={styles.mainStatLabel}>Expenses</Text>
+                  </View>
+                </View>
+                <View style={styles.subStatsRow}>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="wallet-outline" size={18} color={accountingSnapshot.net >= 0 ? theme.success : theme.error} />
+                    <Text style={[styles.subStatValue, { color: accountingSnapshot.net >= 0 ? theme.success : theme.error }]}>
+                      {formatCurrency(accountingSnapshot.net)}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Net Balance</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="trending-up-outline" size={18} color={theme.primary} />
+                    <Text style={styles.subStatValue}>
+                      {Math.round(accountingSnapshot.completionRate)}%
+                    </Text>
+                    <Text style={styles.subStatLabel}>Payment Rate</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="receipt-outline" size={18} color={theme.warning} />
+                    <Text style={[styles.subStatValue, { color: theme.warning }]}>
+                      {expenseSummary.missingReceiptCount}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Missing Receipts</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Insights */}
+            {insights && (
+              <View style={styles.panelCard}>
+                <Text style={styles.sectionTitle}>Insights</Text>
+                <View style={styles.insightColumns}>
+                  <View style={styles.insightColumn}>
+                    <Text style={[styles.insightHeading, { color: theme.success }]}>Do</Text>
+                    {insights.doList.map((item) => (
+                      <Text key={item} style={styles.insightItem}>• {item}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.insightColumn}>
+                    <Text style={[styles.insightHeading, { color: theme.error }]}>Avoid</Text>
+                    {insights.avoidList.map((item) => (
+                      <Text key={item} style={styles.insightItem}>• {item}</Text>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -684,6 +1083,33 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
+  panelCard: {
+    marginTop: 12,
+    backgroundColor: theme.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginBottom: 10,
+  },
   expensesButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -785,6 +1211,23 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 11,
     color: theme.textSecondary,
     marginTop: 2,
+  },
+  insightColumns: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  insightColumn: {
+    flex: 1,
+    gap: 6,
+  },
+  insightHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  insightItem: {
+    fontSize: 12,
+    color: theme.textSecondary,
   },
   breakdownSection: {
     backgroundColor: theme.card,

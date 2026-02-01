@@ -53,9 +53,11 @@ function DashChatPageInner() {
     return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
   }, [activeChild]);
   const normalizedUsage = String(profile?.usageType || '').toLowerCase();
-  const isPreschoolContext = normalizedUsage === 'preschool';
+  const inferredPreschool = getGradeNumber(activeChild?.grade) < 1 || (typeof childAgeYears === 'number' && childAgeYears < 6);
+  const isPreschoolContext = normalizedUsage === 'preschool' || inferredPreschool;
   const isEarlyLearner = isPreschoolContext || getGradeNumber(activeChild?.grade) < 4 || (typeof childAgeYears === 'number' && childAgeYears <= 6);
   const canUseExamBuilder = hasExamEligibleChild && !isPreschoolContext;
+  const effectiveUsageType = isPreschoolContext ? 'preschool' : (profile?.usageType || null);
 
   // Keyboard navigation - Escape to close overlays
   useEffect(() => {
@@ -250,8 +252,8 @@ function DashChatPageInner() {
                   learnerName: activeChild ? `${activeChild.firstName} ${activeChild.lastName}`.trim() : null,
                   grade: activeChild?.grade || null,
                   ageYears: childAgeYears,
-                  usageType: profile?.usageType || null,
-                  schoolType: profile?.usageType || null,
+                  usageType: effectiveUsageType,
+                  schoolType: effectiveUsageType,
                 }}
               />
             )}

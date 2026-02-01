@@ -1,3 +1,4 @@
+// @ts-nocheck - Deno Edge Function with URL imports
 // Supabase Edge Function: send-email
 // Sends emails via Resend with proper security and validation
 // Requires RESEND_API_KEY in Supabase secrets
@@ -25,6 +26,14 @@ serve(async (req) => {
   }
 
   try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error("[send-email] Missing Supabase env vars");
+      return new Response(
+        JSON.stringify({ success: false, error: "Supabase configuration missing" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const authHeader = req.headers.get("Authorization") || "";
     const isServiceRole = SUPABASE_SERVICE_ROLE_KEY && authHeader.includes(SUPABASE_SERVICE_ROLE_KEY);
 
@@ -32,15 +41,18 @@ serve(async (req) => {
     let userId: string | null = null;
     let isSystemEmail = false;
 
-    // Create admin client for logging
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Create admin client for logging (optional)
+    const adminClient = SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      : null;
+    let userClient: ReturnType<typeof createClient> | null = null;
 
     if (isServiceRole) {
       isSystemEmail = true;
       console.log("[send-email] Service role request - system email");
     } else {
       // Regular user authentication
-      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { Authorization: authHeader } },
       });
 
@@ -80,7 +92,16 @@ serve(async (req) => {
       }
     }
 
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error("[send-email] Invalid JSON:", parseError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid JSON payload" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     console.log("[send-email] Request:", { to: body.to, subject: body.subject });
 
     if (!body.to || !body.subject || !body.body) {
@@ -100,13 +121,19 @@ serve(async (req) => {
     let emailsUsed = 0;
 
     // Check rate limit (skip for system emails)
-    if (!isSystemEmail && orgId) {
+    const dbClient = adminClient ?? userClient;
+
+    if (!isSystemEmail && orgId && dbClient) {
       const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { count } = await adminClient
+      const { count, error: rateLimitError } = await dbClient
         .from("email_logs")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId)
         .gte("created_at", hourAgo);
+
+      if (rateLimitError) {
+        console.warn("[send-email] Rate limit check failed:", rateLimitError);
+      }
 
       emailsUsed = count || 0;
       if (emailsUsed >= RATE_LIMIT_PER_HOUR) {
@@ -171,18 +198,20 @@ serve(async (req) => {
     if (!resendResponse.ok) {
       console.error("[send-email] Resend error:", resendData);
 
-      try {
-        await adminClient.from("email_logs").insert({
-          organization_id: orgId,
-          user_id: userId,
-          recipient: Array.isArray(body.to) ? body.to.join(",") : body.to,
-          subject: body.subject,
-          status: "failed",
-          error_message: resendData.message || "Unknown error",
-          metadata: { resend_error: resendData },
-        });
-      } catch (logErr) {
-        console.log("[send-email] Could not log failed email:", logErr);
+      if (dbClient) {
+        try {
+          await dbClient.from("email_logs").insert({
+            organization_id: orgId,
+            user_id: userId,
+            recipient: Array.isArray(body.to) ? body.to.join(",") : body.to,
+            subject: body.subject,
+            status: "failed",
+            error_message: resendData.message || "Unknown error",
+            metadata: { resend_error: resendData },
+          });
+        } catch (logErr) {
+          console.log("[send-email] Could not log failed email:", logErr);
+        }
       }
 
       return new Response(
@@ -191,18 +220,20 @@ serve(async (req) => {
       );
     }
 
-    try {
-      await adminClient.from("email_logs").insert({
-        organization_id: orgId,
-        user_id: userId,
-        recipient: Array.isArray(body.to) ? body.to.join(",") : body.to,
-        subject: body.subject,
-        status: "sent",
-        message_id: resendData.id,
-        metadata: { resend_response: resendData },
-      });
-    } catch (logErr) {
-      console.log("[send-email] Could not log sent email:", logErr);
+    if (dbClient) {
+      try {
+        await dbClient.from("email_logs").insert({
+          organization_id: orgId,
+          user_id: userId,
+          recipient: Array.isArray(body.to) ? body.to.join(",") : body.to,
+          subject: body.subject,
+          status: "sent",
+          message_id: resendData.id,
+          metadata: { resend_response: resendData },
+        });
+      } catch (logErr) {
+        console.log("[send-email] Could not log sent email:", logErr);
+      }
     }
 
     return new Response(

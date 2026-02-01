@@ -65,6 +65,9 @@ interface SchoolSettings {
       showDetailedBreakdown: boolean;
       requireApprovalLimit: number;
     };
+    uniforms: {
+      enabled: boolean;
+    };
     pettyCash: {
       enabled: boolean;
       dailyLimit: number;
@@ -142,6 +145,9 @@ const DEFAULT_SETTINGS: SchoolSettings = {
       allowExport: true,
       showDetailedBreakdown: true,
       requireApprovalLimit: 1000,
+    },
+    uniforms: {
+      enabled: false,
     },
     pettyCash: {
       enabled: true,
@@ -369,6 +375,9 @@ export default function SchoolSettingsScreen() {
           })}
           {renderSettingRow(t('school_settings.label.financial_reports', { defaultValue: 'Financial Reports' }), settings.features.financialReports.enabled, () => {
             updateNestedSetting(['features', 'financialReports', 'enabled'], !settings.features.financialReports.enabled);
+          })}
+          {renderSettingRow(t('school_settings.label.uniform_orders', { defaultValue: 'Uniform Orders' }), settings.features.uniforms.enabled, () => {
+            updateNestedSetting(['features', 'uniforms', 'enabled'], !settings.features.uniforms.enabled);
           })}
           {renderSettingRow(t('school_settings.label.petty_cash_system', { defaultValue: 'Petty Cash System' }), settings.features.pettyCash.enabled, () => {
             updateNestedSetting(['features', 'pettyCash', 'enabled'], !settings.features.pettyCash.enabled);

@@ -32,10 +32,12 @@ import { DashOrbButton } from '@/components/dashboard/parent/DashOrbButton';
 import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck, Video } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
+import { createClient } from '@/lib/supabase/client';
 
 export default function ParentDashboard() {
   const router = useRouter();
   const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
   const COPY = useMemo(() => ({
     greetings: {
       morning: t('dashboard.good_morning', { defaultValue: 'Good morning' }),
@@ -84,6 +86,18 @@ export default function ParentDashboard() {
       computerLiteracy: {
         title: t('dashboard.parent.practice.computer.title', { defaultValue: 'Computer Literacy' }),
         description: t('dashboard.parent.practice.computer.description', { defaultValue: 'Basic skills practice: typing, mouse control, app navigation, online safety' }),
+      },
+      preschoolPlay: {
+        title: t('dashboard.parent.practice.preschool_play.title', { defaultValue: 'Play-Based Learning' }),
+        description: t('dashboard.parent.practice.preschool_play.description', { defaultValue: 'Fun, hands-on activities to build curiosity, creativity, and confidence' }),
+      },
+      preschoolLiteracy: {
+        title: t('dashboard.parent.practice.preschool_literacy.title', { defaultValue: 'Early Literacy' }),
+        description: t('dashboard.parent.practice.preschool_literacy.description', { defaultValue: 'Letter sounds, storytelling, and picture-based vocabulary games' }),
+      },
+      preschoolMath: {
+        title: t('dashboard.parent.practice.preschool_math.title', { defaultValue: 'Numbers & Shapes' }),
+        description: t('dashboard.parent.practice.preschool_math.description', { defaultValue: 'Counting, patterns, and shape recognition with everyday objects' }),
       },
     },
     earlyLearning: {
@@ -148,6 +162,8 @@ export default function ParentDashboard() {
   // Local state
   const [greeting, setGreeting] = useState('');
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const [uniformEnabled, setUniformEnabled] = useState(false);
+  const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
   const toggleSection = (sectionId: string) => {
     setOpenSection((prev) => (prev === sectionId ? null : sectionId));
   };
@@ -162,6 +178,62 @@ export default function ParentDashboard() {
     else if (hour < 18) setGreeting(COPY.greetings.afternoon);
     else setGreeting(COPY.greetings.evening);
   }, [COPY.greetings.morning, COPY.greetings.afternoon, COPY.greetings.evening]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUniformEnabled = async () => {
+      const preschoolIds = Array.from(
+        new Set(childrenCards.map((child) => child.preschoolId).filter(Boolean))
+      ) as string[];
+
+      if (!preschoolIds.length) {
+        if (!cancelled) {
+          setUniformEnabled(false);
+          setUniformSchoolIds([]);
+        }
+        return;
+      }
+
+      try {
+        const { data: preschoolSettings, error: preschoolError } = await supabase
+          .from('preschools')
+          .select('id, settings')
+          .in('id', preschoolIds);
+        if (preschoolError) throw preschoolError;
+
+        const { data: organizationSettings, error: organizationError } = await supabase
+          .from('organizations')
+          .select('id, settings')
+          .in('id', preschoolIds);
+        if (organizationError) throw organizationError;
+
+        const enabledIds = new Set<string>();
+        (preschoolSettings || []).forEach((row: any) => {
+          const enabled = row?.settings?.features?.uniforms?.enabled;
+          if (enabled) enabledIds.add(row.id);
+        });
+        (organizationSettings || []).forEach((row: any) => {
+          const enabled = row?.settings?.features?.uniforms?.enabled;
+          if (enabled) enabledIds.add(row.id);
+        });
+
+        if (!cancelled) {
+          setUniformSchoolIds(Array.from(enabledIds));
+          setUniformEnabled(enabledIds.size > 0);
+        }
+      } catch {
+        if (!cancelled) {
+          setUniformEnabled(false);
+          setUniformSchoolIds([]);
+        }
+      }
+    };
+
+    loadUniformEnabled();
+    return () => {
+      cancelled = true;
+    };
+  }, [childrenCards, supabase]);
 
   // Auth guard
   useEffect(() => {
@@ -226,9 +298,16 @@ export default function ParentDashboard() {
 
   const activeChildAge = activeChild ? getChildAge(activeChild.dateOfBirth) : 0;
   const activeChildGrade = activeChild ? getGradeNumber(activeChild.grade) : 0;
+  const isPreschoolChild = (child: typeof activeChild) => {
+    if (!child) return false;
+    const age = getChildAge(child.dateOfBirth);
+    const gradeNumber = getGradeNumber(child.grade);
+    return (age > 0 && age < 6) || gradeNumber === 0;
+  };
+  const activeChildIsPreschool = activeChild ? isPreschoolChild(activeChild) : false;
 
   // Check if ALL children are preschoolers (under 6 years)
-  const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => getChildAge(child.dateOfBirth) < 6);
+  const allChildrenArePreschoolers = childrenCards.length > 0 && childrenCards.every(child => isPreschoolChild(child));
   // Grade 4+ and school-age learners only
   const hasExamEligibleChild = activeChild ? isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth) : false;
   
@@ -384,24 +463,30 @@ export default function ParentDashboard() {
           )}
         </CollapsibleSection>
 
-        {/* Uniform Sizes (organization-linked parents only) */}
-        <CollapsibleSection
-          title={COPY.sections.uniformSizes}
-          icon={Shirt}
-          isOpen={openSection === 'uniforms'}
-          onToggle={() => toggleSection('uniforms')}
-        >
-          {hasOrganization && hasChildren ? (
-            <UniformSizesWidget childrenCards={childrenCards} />
-          ) : (
-            <SectionEmptyState
-              title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
-              description={t('dashboard.parent.empty.uniform_sizes.description', { defaultValue: 'Link a child to a school to see uniform sizes and sizing updates.' })}
-              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
-              onAction={() => router.push('/dashboard/parent/register-child')}
-            />
-          )}
-        </CollapsibleSection>
+        {/* Uniform Sizes (enabled by school) */}
+        {uniformEnabled && (
+          <CollapsibleSection
+            title={COPY.sections.uniformSizes}
+            icon={Shirt}
+            isOpen={openSection === 'uniforms'}
+            onToggle={() => toggleSection('uniforms')}
+          >
+            {hasOrganization && hasChildren ? (
+              <UniformSizesWidget
+                childrenCards={childrenCards.filter((child) =>
+                  child.preschoolId ? uniformSchoolIds.includes(child.preschoolId) : false
+                )}
+              />
+            ) : (
+              <SectionEmptyState
+                title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
+                description={t('dashboard.parent.empty.uniform_sizes.description', { defaultValue: 'Link a child to a school to see uniform sizes and sizing updates.' })}
+                actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+                onAction={() => router.push('/dashboard/parent/register-child')}
+              />
+            )}
+          </CollapsibleSection>
+        )}
 
         {/* Quick Actions Grid - Show if children exist with age */}
         <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
@@ -417,6 +502,8 @@ export default function ParentDashboard() {
             hasOrganization={hasOrganization}
             activeChildGrade={activeChildGrade}
             isExamEligible={hasExamEligibleChild}
+            isPreschool={activeChildIsPreschool}
+            childAgeYears={activeChildAge}
             unreadCount={unreadCount}
             homeworkCount={homeworkCount}
             userId={userId}
@@ -597,72 +684,150 @@ export default function ParentDashboard() {
         >
           {hasAnyChild && activeChild ? (
             <div className="grid2" style={{ marginTop: 16 }}>
-              <div 
-                className="card card-interactive" 
-                onClick={() => router.push('/dashboard/parent/robotics')}
-                style={{
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <Cpu className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
-                  {COPY.practiceCards.robotics.title}
-                </h3>
-                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  {COPY.practiceCards.robotics.description}
-                </p>
-              </div>
-              
-              <div 
-                className="card card-interactive" 
-                onClick={() => {
-                  handleAskFromActivity(
-                    t('dashboard.parent.practice.ai.prompt', { defaultValue: 'Help me create age-appropriate AI learning activities for my child' }),
-                    t('dashboard.parent.practice.ai.display', { defaultValue: 'AI Learning Activities' })
-                  );
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <Brain className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
-                  {COPY.practiceCards.aiActivities.title}
-                </h3>
-                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  {COPY.practiceCards.aiActivities.description}
-                </p>
-              </div>
-              
-              <div 
-                className="card card-interactive" 
-                onClick={() => {
-                  handleAskFromActivity(
-                    t('dashboard.parent.practice.computer.prompt', { defaultValue: 'Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices' }),
-                    t('dashboard.parent.practice.computer.display', { defaultValue: 'Computer Literacy Guide' })
-                  );
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <Laptop className="icon24" style={{ marginBottom: 8 }} />
-                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
-                  {COPY.practiceCards.computerLiteracy.title}
-                </h3>
-                <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
-                  {COPY.practiceCards.computerLiteracy.description}
-                </p>
-              </div>
+              {activeChildIsPreschool ? (
+                <>
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => {
+                      handleAskFromActivity(
+                        t('dashboard.parent.practice.preschool_play.prompt', { defaultValue: 'Share 3 play-based learning activities for a preschool child (simple, fun, and safe).' }),
+                        t('dashboard.parent.practice.preschool_play.display', { defaultValue: 'Play-Based Learning Ideas' })
+                      );
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #f97316 0%, #facc15 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Sparkles className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.preschoolPlay.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.preschoolPlay.description}
+                    </p>
+                  </div>
+
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => {
+                      handleAskFromActivity(
+                        t('dashboard.parent.practice.preschool_literacy.prompt', { defaultValue: 'Give early literacy activities for preschoolers using songs, rhymes, and picture books.' }),
+                        t('dashboard.parent.practice.preschool_literacy.display', { defaultValue: 'Early Literacy Activities' })
+                      );
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <BookOpen className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.preschoolLiteracy.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.preschoolLiteracy.description}
+                    </p>
+                  </div>
+
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => {
+                      handleAskFromActivity(
+                        t('dashboard.parent.practice.preschool_math.prompt', { defaultValue: 'Suggest simple counting and shapes activities for a preschool child using everyday items.' }),
+                        t('dashboard.parent.practice.preschool_math.display', { defaultValue: 'Numbers & Shapes Practice' })
+                      );
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Lightbulb className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.preschoolMath.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.preschoolMath.description}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => router.push('/dashboard/parent/robotics')}
+                    style={{
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Cpu className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.robotics.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.robotics.description}
+                    </p>
+                  </div>
+                  
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => {
+                      handleAskFromActivity(
+                        t('dashboard.parent.practice.ai.prompt', { defaultValue: 'Help me create age-appropriate AI learning activities for my child' }),
+                        t('dashboard.parent.practice.ai.display', { defaultValue: 'AI Learning Activities' })
+                      );
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Brain className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.aiActivities.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.aiActivities.description}
+                    </p>
+                  </div>
+                  
+                  <div 
+                    className="card card-interactive" 
+                    onClick={() => {
+                      handleAskFromActivity(
+                        t('dashboard.parent.practice.computer.prompt', { defaultValue: 'Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices' }),
+                        t('dashboard.parent.practice.computer.display', { defaultValue: 'Computer Literacy Guide' })
+                      );
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Laptop className="icon24" style={{ marginBottom: 8 }} />
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 600 }}>
+                      {COPY.practiceCards.computerLiteracy.title}
+                    </h3>
+                    <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>
+                      {COPY.practiceCards.computerLiteracy.description}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <SectionEmptyState

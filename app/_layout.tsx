@@ -394,12 +394,29 @@ function RootLayoutContent() {
           try {
             const { getCurrentLanguage } = await import('../lib/i18n');
             const { syncDashContext } = await import('../lib/agent/dashContextSync');
-            const { getAgenticCapabilities } = await import('../lib/utils/agentic-mode');
+            const { getAgenticCapabilitiesForContext } = await import('../lib/utils/agentic-mode');
             const { getCurrentProfile } = await import('../lib/sessionManager');
             const profile = await getCurrentProfile().catch(() => null);
             const role = profile?.role as string | undefined;
-            const caps = getAgenticCapabilities(role);
-            await syncDashContext({ language: getCurrentLanguage(), traits: { agentic: caps, role: role || null } });
+            const language = getCurrentLanguage();
+            const tier = (profile as any)?.plan_tier || (profile as any)?.subscription_tier || 'free';
+            const caps = role
+              ? await getAgenticCapabilitiesForContext({
+                  userId: profile?.id || session?.user?.id || '',
+                  profile: profile || undefined,
+                  role: role || '',
+                  tier,
+                  language
+                })
+              : {
+                  mode: 'assistant',
+                  canRunDiagnostics: false,
+                  canMakeCodeChanges: false,
+                  canAccessSystemLevel: false,
+                  canAutoExecuteHighRisk: false,
+                  autonomyLevel: 'limited'
+                };
+            await syncDashContext({ language, traits: { agentic: caps, role: role || null } });
           } catch (syncErr) {
             if (__DEV__) console.warn('[RootLayout] dash-context-sync skipped:', syncErr);
           }

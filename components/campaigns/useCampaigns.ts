@@ -81,7 +81,14 @@ export function useCampaigns() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCampaigns((data as Campaign[]) || []);
+      const now = new Date();
+      const filtered = ((data as Campaign[]) || []).filter((campaign) => {
+        const endDate = campaign.end_date ? new Date(campaign.end_date) : null;
+        const isPast = endDate ? endDate.getTime() < now.getTime() : false;
+        // Hide inactive campaigns that have already ended (treated as archived)
+        return !(campaign.active === false && isPast);
+      });
+      setCampaigns(filtered);
     } catch (error) {
       console.error('Error loading campaigns:', error);
     } finally {
@@ -208,8 +215,27 @@ export function useCampaigns() {
                 .delete()
                 .eq('id', campaign.id);
 
-              if (error) throw error;
-              loadCampaigns();
+              if (error) {
+                const archivePayload = {
+                  active: false,
+                  featured: false,
+                  end_date: new Date().toISOString(),
+                };
+                const { error: archiveError } = await supabase
+                  .from('marketing_campaigns')
+                  .update(archivePayload)
+                  .eq('id', campaign.id);
+
+                if (archiveError) {
+                  throw archiveError;
+                }
+
+                setCampaigns((prev) => prev.filter((item) => item.id !== campaign.id));
+                Alert.alert('Archived', 'Campaign archived because delete is restricted.');
+                return;
+              }
+
+              setCampaigns((prev) => prev.filter((item) => item.id !== campaign.id));
             } catch (error) {
               console.error('Error deleting campaign:', error);
               Alert.alert('Error', 'Failed to delete campaign');

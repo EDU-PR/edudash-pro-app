@@ -5,15 +5,20 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { 
   CampaignFormState, 
@@ -44,6 +49,10 @@ export function CampaignModal({
   onSave,
   onUpdateField,
 }: CampaignModalProps) {
+  const insets = useSafeAreaInsets();
+  const keyboardOffset = Platform.OS === 'ios' ? insets.top + 12 : 0;
+  const contentPaddingBottom = Math.max(insets.bottom + 24, 32);
+
   return (
     <Modal
       visible={visible}
@@ -51,26 +60,37 @@ export function CampaignModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={[styles.modalContainer, { backgroundColor: theme.background }]}>
-        <View style={[styles.modalHeader, { backgroundColor: theme.surface }]}>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color={theme.text} />
-          </TouchableOpacity>
-          <Text style={[styles.modalTitle, { color: theme.text }]}>
-            {isEditing ? 'Edit Campaign' : 'New Campaign'}
-          </Text>
-          <TouchableOpacity onPress={onSave} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator size="small" color={theme.primary} />
-            ) : (
-              <Text style={[styles.saveButton, { color: theme.primary }]}>
-                Save
+      <KeyboardAvoidingView
+        style={[styles.modalContainer, { backgroundColor: theme.background }]}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={keyboardOffset}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.modalInner}>
+            <View style={[styles.modalHeader, { backgroundColor: theme.surface }]}>
+              <TouchableOpacity onPress={onClose}>
+                <Ionicons name="close" size={24} color={theme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                {isEditing ? 'Edit Campaign' : 'New Campaign'}
               </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+              <TouchableOpacity onPress={onSave} disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : (
+                  <Text style={[styles.saveButton, { color: theme.primary }]}>
+                    Save
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
 
-        <ScrollView style={styles.modalContent}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={[styles.modalContent, { paddingBottom: contentPaddingBottom }]}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
           {/* Campaign Name */}
           <View style={styles.formGroup}>
             <Text style={[styles.formLabel, { color: theme.text }]}>
@@ -265,13 +285,18 @@ export function CampaignModal({
             </View>
           </View>
         </ScrollView>
-      </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   modalContainer: {
+    flex: 1,
+  },
+  modalInner: {
     flex: 1,
   },
   modalHeader: {
@@ -290,9 +315,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  modalContent: {
+  modalScroll: {
     flex: 1,
+  },
+  modalContent: {
     padding: 16,
+    paddingBottom: 32,
   },
   formGroup: {
     marginBottom: 20,

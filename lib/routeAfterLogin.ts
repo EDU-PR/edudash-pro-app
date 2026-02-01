@@ -6,6 +6,14 @@ import { fetchEnhancedUserProfile, type EnhancedUserProfile, type Role } from '@
 import type { User } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
+const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
+const debugLog = (...args: unknown[]) => {
+  if (debugEnabled) console.log(...args);
+};
+const debugWarn = (...args: unknown[]) => {
+  if (debugEnabled) console.warn(...args);
+};
+
 type AsyncStorageType = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
@@ -40,7 +48,7 @@ function isK12SchoolType(value: string | null | undefined): boolean {
 function isNavigationLocked(userId: string): boolean {
   const lockTime = navigationLocks.get(userId);
   // #region agent log
-  console.log('[DEBUG_AGENT] NavLock-CHECK', JSON.stringify({userId,hasLock:!!lockTime,lockAge:lockTime?Date.now()-lockTime:null,lockCount:navigationLocks.size,timestamp:Date.now()}));
+  debugLog('[DEBUG_AGENT] NavLock-CHECK', JSON.stringify({userId,hasLock:!!lockTime,lockAge:lockTime?Date.now()-lockTime:null,lockCount:navigationLocks.size,timestamp:Date.now()}));
   // #endregion
   if (!lockTime) return false;
   // Auto-expire old locks
@@ -71,7 +79,7 @@ function clearNavigationLock(userId: string): void {
 export function clearAllNavigationLocks(): void {
   const count = navigationLocks.size;
   // #region agent log
-  console.log('[DEBUG_AGENT] NavLock-CLEARALL', JSON.stringify({lockCount:count,locks:Array.from(navigationLocks.keys()),timestamp:Date.now()}));
+  debugLog('[DEBUG_AGENT] NavLock-CLEARALL', JSON.stringify({lockCount:count,locks:Array.from(navigationLocks.keys()),timestamp:Date.now()}));
   // #endregion
   navigationLocks.clear();
   if (count > 0) {
@@ -153,7 +161,7 @@ export async function detectRoleAndSchool(user?: User | null): Promise<{ role: s
 export async function routeAfterLogin(user?: User | null, profile?: EnhancedUserProfile | null): Promise<void> {
   const userId = user?.id;
   // #region agent log
-  console.log('[DEBUG_AGENT] RouteAfterLogin-ENTRY', JSON.stringify({userId,hasProfile:!!profile,role:profile?.role,lockCount:navigationLocks.size,timestamp:Date.now()}));
+  debugLog('[DEBUG_AGENT] RouteAfterLogin-ENTRY', JSON.stringify({userId,hasProfile:!!profile,role:profile?.role,lockCount:navigationLocks.size,timestamp:Date.now()}));
   // #endregion
   if (!userId) {
     console.error('No user ID provided for post-login routing');
@@ -165,7 +173,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
   const overallTimeout = setTimeout(() => {
     console.error('🚦 [ROUTE] routeAfterLogin overall timeout (15s) - forcing fallback navigation');
     // #region agent log
-    console.log('[DEBUG_AGENT] RouteAfterLogin-TIMEOUT', JSON.stringify({userId,timestamp:Date.now()}));
+    debugLog('[DEBUG_AGENT] RouteAfterLogin-TIMEOUT', JSON.stringify({userId,timestamp:Date.now()}));
     // #endregion
     clearNavigationLock(userId);
     router.replace('/profiles-gate');
@@ -196,7 +204,7 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
     let enhancedProfile = profile as any;
     const needsEnhanced = !enhancedProfile || typeof enhancedProfile.hasCapability !== 'function';
     if (needsEnhanced) {
-      console.log('[ROUTE DEBUG] Fetching enhanced profile for user:', userId);
+      debugLog('[ROUTE DEBUG] Fetching enhanced profile for user:', userId);
       
       // Add timeout protection to prevent infinite hanging
       const fetchPromise = fetchEnhancedUserProfile(userId);
@@ -206,10 +214,10 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       
       try {
         enhancedProfile = await Promise.race([fetchPromise, timeoutPromise]) as any;
-        console.log('[ROUTE DEBUG] fetchEnhancedUserProfile result:', enhancedProfile ? 'SUCCESS' : 'NULL');
+        debugLog('[ROUTE DEBUG] fetchEnhancedUserProfile result:', enhancedProfile ? 'SUCCESS' : 'NULL');
         if (enhancedProfile) {
-          console.log('[ROUTE DEBUG] Profile role:', enhancedProfile.role);
-          console.log('[ROUTE DEBUG] Profile org_id:', enhancedProfile.organization_id);
+          debugLog('[ROUTE DEBUG] Profile role:', enhancedProfile.role);
+          debugLog('[ROUTE DEBUG] Profile org_id:', enhancedProfile.organization_id);
         }
       } catch (fetchError) {
         console.error('[ROUTE DEBUG] Profile fetch failed:', fetchError);
@@ -366,13 +374,13 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
 function determineUserRoute(profile: EnhancedUserProfile): { path: string; params?: Record<string, string> } {
   let role = normalizeRole(profile.role);
   
-  console.log('[ROUTE DEBUG] ==> Determining route for user');
-  console.log('[ROUTE DEBUG] Original role:', profile.role, '-> normalized:', role);
-  console.log('[ROUTE DEBUG] Profile organization_id:', profile.organization_id);
-  console.log('[ROUTE DEBUG] Profile preschool_id:', (profile as any).preschool_id);
-  console.log('[ROUTE DEBUG] Profile seat_status:', profile.seat_status);
-  console.log('[ROUTE DEBUG] Profile capabilities:', profile.capabilities);
-  console.log('[ROUTE DEBUG] Profile hasCapability(access_mobile_app):', profile.hasCapability('access_mobile_app'));
+  debugLog('[ROUTE DEBUG] ==> Determining route for user');
+  debugLog('[ROUTE DEBUG] Original role:', profile.role, '-> normalized:', role);
+  debugLog('[ROUTE DEBUG] Profile organization_id:', profile.organization_id);
+  debugLog('[ROUTE DEBUG] Profile preschool_id:', (profile as any).preschool_id);
+  debugLog('[ROUTE DEBUG] Profile seat_status:', profile.seat_status);
+  debugLog('[ROUTE DEBUG] Profile capabilities:', profile.capabilities);
+  debugLog('[ROUTE DEBUG] Profile hasCapability(access_mobile_app):', profile.hasCapability('access_mobile_app'));
   
   // PRIORITY CHECK #0: Check membership status - pending members go to pending screen
   // This ensures users can't access dashboards until approved by the President
@@ -380,7 +388,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
                         || (profile as any)?.membership_status;
   const isPendingMember = membershipStatus === 'pending' || membershipStatus === 'pending_verification';
   
-  console.log('[ROUTE DEBUG] Membership status:', membershipStatus, 'isPending:', isPendingMember);
+  debugLog('[ROUTE DEBUG] Membership status:', membershipStatus, 'isPending:', isPendingMember);
   
   // Skip pending check for executive roles who should never be blocked
   const executiveTypes = ['youth_president', 'youth_deputy', 'youth_secretary', 'youth_treasurer', 
@@ -389,7 +397,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const isExecutive = memberType && executiveTypes.includes(memberType);
   
   if (isPendingMember && !isExecutive && role !== 'super_admin') {
-    console.log('[ROUTE DEBUG] User has pending membership - routing to membership-pending screen');
+    debugLog('[ROUTE DEBUG] User has pending membership - routing to membership-pending screen');
     return { path: '/screens/membership/membership-pending' };
   }
   
@@ -400,9 +408,9 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // Get member role for SOA routing decisions (memberType already declared above)
   const memberRole = (profile as any)?.organization_membership?.role;
   
-  console.log('[ROUTE DEBUG] Organization membership member_type:', memberType);
-  console.log('[ROUTE DEBUG] Organization membership role:', memberRole);
-  console.log('[ROUTE DEBUG] Full organization_membership object:', JSON.stringify((profile as any)?.organization_membership, null, 2));
+  debugLog('[ROUTE DEBUG] Organization membership member_type:', memberType);
+  debugLog('[ROUTE DEBUG] Organization membership role:', memberRole);
+  debugLog('[ROUTE DEBUG] Full organization_membership object:', JSON.stringify((profile as any)?.organization_membership, null, 2));
   
   // Define SOA-specific member types that ALWAYS use member_type routing
   // These are wing-specific roles that take priority over profile.role
@@ -430,7 +438,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const hasSoaSpecificRole = memberType && soaSpecificMemberTypes.includes(memberType);
   
   // #region agent log
-  console.log('[DEBUG_AGENT] RouteDecision-SOA_CHECK', JSON.stringify({
+  debugLog('[DEBUG_AGENT] RouteDecision-SOA_CHECK', JSON.stringify({
     memberType,
     hasSoaSpecificRole,
     hasOrganization,
@@ -441,9 +449,9 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // #endregion
   
   if (hasSoaSpecificRole && hasOrganization) {
-    console.log('[ROUTE DEBUG] SOA-specific member_type detected:', memberType, '- using member_type routing');
+    debugLog('[ROUTE DEBUG] SOA-specific member_type detected:', memberType, '- using member_type routing');
     // #region agent log
-    console.log('[DEBUG_AGENT] RouteDecision-SOA_ROUTING', JSON.stringify({
+    debugLog('[DEBUG_AGENT] RouteDecision-SOA_ROUTING', JSON.stringify({
       memberType,
       orgId: profile.organization_id,
       timestamp: Date.now()
@@ -453,51 +461,51 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     // CEO / National Admin / President / Executive leadership
     if (memberType === 'national_admin' || memberType === 'ceo' || memberType === 'president' ||
         memberType === 'deputy_president' || memberType === 'secretary_general' || memberType === 'treasurer') {
-      console.log('[ROUTE DEBUG] CEO/President detected via member_type - routing to CEO dashboard');
+      debugLog('[ROUTE DEBUG] CEO/President detected via member_type - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
     }
     
     // National coordinators and executives
     if (memberType === 'national_coordinator' || memberType === 'executive' || memberType === 'board_member') {
-      console.log('[ROUTE DEBUG] National coordinator/executive detected - routing to CEO dashboard');
+      debugLog('[ROUTE DEBUG] National coordinator/executive detected - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
     }
     
     // Youth Wing executives
     if (memberType === 'youth_president' || memberType === 'youth_deputy') {
-      console.log('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
+      debugLog('[ROUTE DEBUG] Youth wing executive detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     if (memberType === 'youth_secretary') {
-      console.log('[ROUTE DEBUG] Youth secretary detected - routing to youth secretary dashboard');
+      debugLog('[ROUTE DEBUG] Youth secretary detected - routing to youth secretary dashboard');
       return { path: '/screens/membership/youth-secretary-dashboard' };
     }
     if (memberType === 'youth_treasurer') {
-      console.log('[ROUTE DEBUG] Youth treasurer detected - routing to youth president dashboard');
+      debugLog('[ROUTE DEBUG] Youth treasurer detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     
     // Youth Wing coordinators/facilitators/mentors - route to youth president dashboard (they help manage)
     if (memberType === 'youth_coordinator' || memberType === 'youth_facilitator' || memberType === 'youth_mentor') {
-      console.log('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
+      debugLog('[ROUTE DEBUG] Youth wing staff detected - routing to youth president dashboard');
       return { path: '/screens/membership/youth-president-dashboard' };
     }
     
     // Regular Youth Wing members (youth_member) - route to learner dashboard
     if (memberType === 'youth_member') {
-      console.log('[ROUTE DEBUG] Youth member detected - routing to learner dashboard');
+      debugLog('[ROUTE DEBUG] Youth member detected - routing to learner dashboard');
       return { path: '/screens/learner-dashboard' };
     }
     
     // Women's Wing - all members route to women's dashboard
     if (memberType?.startsWith('women_')) {
-      console.log('[ROUTE DEBUG] Women wing member detected - routing to women dashboard');
+      debugLog('[ROUTE DEBUG] Women wing member detected - routing to women dashboard');
       return { path: '/screens/membership/women-dashboard' };
     }
     
     // Veterans League - all members route to veterans dashboard
     if (memberType?.startsWith('veterans_')) {
-      console.log('[ROUTE DEBUG] Veterans league member detected - routing to veterans dashboard');
+      debugLog('[ROUTE DEBUG] Veterans league member detected - routing to veterans dashboard');
       return { path: '/screens/membership/veterans-dashboard' };
     }
     
@@ -505,7 +513,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     if (memberType === 'regional_coordinator' || memberType === 'provincial_coordinator' ||
         memberType === 'regional_manager' || memberType === 'provincial_manager' ||
         memberType === 'branch_manager') {
-      console.log('[ROUTE DEBUG] Regional/Branch manager detected - routing to regional dashboard');
+      debugLog('[ROUTE DEBUG] Regional/Branch manager detected - routing to regional dashboard');
       return { path: '/screens/membership/dashboard' };
     }
   }
@@ -515,20 +523,20 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // Note: 'admin' is NOT included here - SOA admins should use member_type routing above
   const schoolAdminRoles = ['super_admin', 'principal_admin', 'principal', 'teacher'];
   if (role && schoolAdminRoles.includes(role)) {
-    console.log('[ROUTE DEBUG] School admin role detected:', role, '- using profile role routing');
+    debugLog('[ROUTE DEBUG] School admin role detected:', role, '- using profile role routing');
     // Fall through to role-based routing below
   } else if (memberType && hasOrganization) {
     // PRIORITY CHECK #3: Generic member types for non-school-admin users
     
     // Staff and admin (generic org admin - for SOA staff without specific wing role)
     if (memberType === 'staff' || memberType === 'admin') {
-      console.log('[ROUTE DEBUG] Staff/Admin member detected - routing to CEO dashboard');
+      debugLog('[ROUTE DEBUG] Staff/Admin member detected - routing to CEO dashboard');
       return { path: '/screens/membership/ceo-dashboard' };
     }
 
     // Regular main organization members (learner, facilitator, mentor, volunteer, etc.)
     if (['learner', 'facilitator', 'mentor', 'volunteer', 'member'].includes(memberType)) {
-      console.log('[ROUTE DEBUG] Regular organization member detected - routing to learner dashboard');
+      debugLog('[ROUTE DEBUG] Regular organization member detected - routing to learner dashboard');
       return { path: '/screens/learner-dashboard' };
     }
   }
@@ -541,9 +549,9 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   const isSkillsLike = ['skills', 'tertiary', 'org'].includes(String(orgKind).toLowerCase());
   
   if (process.env.EXPO_PUBLIC_ENABLE_CONSOLE === 'true') {
-    console.log('[ROUTE DEBUG] Has organization:', hasOrganization);
-    console.log('[ROUTE DEBUG] Is independent user:', isIndependentUser);
-    console.log('[ROUTE DEBUG] Organization kind:', orgKind);
+    debugLog('[ROUTE DEBUG] Has organization:', hasOrganization);
+    debugLog('[ROUTE DEBUG] Is independent user:', isIndependentUser);
+    debugLog('[ROUTE DEBUG] Organization kind:', orgKind);
   }
   
   // Safeguard: If role is null/undefined, route to sign-in/profile setup
@@ -555,16 +563,16 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // Check if user has active access - but be permissive for users with valid roles
   // This prevents users from getting stuck due to capability system issues
   if (!profile.hasCapability('access_mobile_app')) {
-    console.log('[ROUTE DEBUG] User lacks access_mobile_app capability, but has role:', role);
+    debugLog('[ROUTE DEBUG] User lacks access_mobile_app capability, but has role:', role);
     // For users with valid roles, allow dashboard access anyway
     // The capability system can be overly restrictive, especially for new users
-    console.log('[ROUTE DEBUG] Allowing dashboard access despite capability check');
+    debugLog('[ROUTE DEBUG] Allowing dashboard access despite capability check');
   }
 
   // For independent users (no organization), route to standalone dashboards
   // These users can still access basic features but may see upgrade prompts
   if (isIndependentUser) {
-    console.log('[ROUTE DEBUG] Independent user detected (no organization) - routing to standalone dashboard');
+    debugLog('[ROUTE DEBUG] Independent user detected (no organization) - routing to standalone dashboard');
     
     switch (role) {
       case 'super_admin':
@@ -595,7 +603,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   // Route based on role and tenant kind for organization members
   // Note: member_type routing is already handled above for SOA/skills-based orgs
   // #region agent log
-  console.log('[DEBUG_AGENT] RouteDecision-FALLBACK_TO_ROLE', JSON.stringify({
+  debugLog('[DEBUG_AGENT] RouteDecision-FALLBACK_TO_ROLE', JSON.stringify({
     role,
     memberType,
     hasOrganization,
@@ -611,18 +619,18 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
     case 'admin':
       // Regular organization admins (member_type routing already handled above)
       // WARNING: If we reach here, member_type routing failed - log for debugging
-      console.warn('[ROUTE DEBUG] Admin routing FALLBACK - member_type should have been used!', {
+      debugWarn('[ROUTE DEBUG] Admin routing FALLBACK - member_type should have been used!', {
         memberType,
         hasOrganization,
         orgId: profile.organization_id,
         organization_membership: (profile as any)?.organization_membership,
       });
-      console.log('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard');
+      debugLog('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard');
       return { path: '/screens/org-admin-dashboard' };
     
     case 'principal_admin':
-      console.log('[ROUTE DEBUG] Principal admin routing - organization_id:', profile.organization_id);
-      console.log('[ROUTE DEBUG] Principal seat_status:', profile.seat_status);
+      debugLog('[ROUTE DEBUG] Principal admin routing - organization_id:', profile.organization_id);
+      debugLog('[ROUTE DEBUG] Principal seat_status:', profile.seat_status);
       if (isSkillsLike) {
         return { path: '/screens/org-admin-dashboard' };
       }
@@ -638,7 +646,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       const resolvedParentSchoolType = parentSchoolType || (isCommunitySchoolParent ? 'community_school' : undefined);
       const normalizedParentSchoolType = resolvedParentSchoolType ? String(resolvedParentSchoolType).toLowerCase() : undefined;
       // #region agent log
-      console.log('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
+      debugLog('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
         parentSchoolType,
         resolvedParentSchoolType,
         normalizedParentSchoolType,
@@ -650,12 +658,12 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         timestamp: Date.now()
       }));
       // #endregion
-      console.log('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType, 'resolved:', normalizedParentSchoolType);
+      debugLog('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType, 'resolved:', normalizedParentSchoolType);
       
       // K-12 related school types route to K-12 parent dashboard
       const isK12Parent = isK12SchoolType(normalizedParentSchoolType);
       if (isK12Parent) {
-        console.log('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
+        debugLog('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
         return {
           path: '/(k12)/parent/dashboard',
           params: { schoolType: normalizedParentSchoolType || 'k12', mode: 'k12' },
@@ -670,25 +678,25 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       const isCommunitySchoolStudent = profile.organization_id === COMMUNITY_SCHOOL_ID;
       const resolvedStudentSchoolType = studentSchoolType || (isCommunitySchoolStudent ? 'community_school' : undefined);
       const normalizedStudentSchoolType = resolvedStudentSchoolType ? String(resolvedStudentSchoolType).toLowerCase() : undefined;
-      console.log('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType, 'resolved:', normalizedStudentSchoolType);
+      debugLog('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType, 'resolved:', normalizedStudentSchoolType);
       
       // Students with organization_id go to appropriate dashboard
       if (hasOrganization) {
         // K-12 related school types route to K-12 student dashboard
         const isK12Student = isK12SchoolType(normalizedStudentSchoolType);
         if (isK12Student) {
-          console.log('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
+          debugLog('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
           return {
             path: '/(k12)/student/dashboard',
             params: { schoolType: normalizedStudentSchoolType || 'k12', mode: 'k12' },
           };
         }
         // Default to learner dashboard for preschool/other types
-        console.log('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
+        debugLog('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
         return { path: '/screens/learner-dashboard' };
       }
       // Standalone students (no organization) go to student-dashboard
-      console.log('[ROUTE DEBUG] Standalone student (no organization) - routing to student-dashboard');
+      debugLog('[ROUTE DEBUG] Standalone student (no organization) - routing to student-dashboard');
       return { path: '/screens/student-dashboard' };
   }
 

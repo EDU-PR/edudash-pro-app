@@ -6,6 +6,7 @@
 export type { StudentDetail, Class, Transaction } from './types';
 export { formatAge, formatCurrency, calculateAge } from './types';
 export { ProfileCard } from './ProfileCard';
+export { StudentDetailsSection } from './StudentDetailsSection';
 export { ClassInfoSection } from './ClassInfoSection';
 export { AcademicPerformanceSection } from './AcademicPerformanceSection';
 export { ParentContactSection } from './ParentContactSection';

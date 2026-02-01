@@ -852,6 +852,17 @@ const canEditStudent = (_student: Student): boolean => {
               )}
               
               {/* Action Buttons */}
+              <TouchableOpacity
+                style={[styles.studentDetailButton, styles.studentDetailButtonPrimary]}
+                onPress={() => {
+                  setShowStudentModal(false);
+                  router.push(`/screens/student-detail?id=${selectedStudent.id}` as any);
+                }}
+              >
+                <Ionicons name="open-outline" size={20} color="white" />
+                <Text style={styles.studentDetailButtonTextWhite}>Open Full Profile</Text>
+              </TouchableOpacity>
+
               {canManageStudent() && (
                 <View style={styles.studentDetailActions}>
                   {selectedStudent.status === 'inactive' ? (

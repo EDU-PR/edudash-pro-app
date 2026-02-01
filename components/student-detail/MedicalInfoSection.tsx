@@ -55,11 +55,23 @@ export const MedicalInfoSection: React.FC<MedicalInfoSectionProps> = ({
             />
           </View>
           <View>
+            <Text style={styles.fieldLabel}>Medication</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={editedStudent.medication || ''}
+              onChangeText={(text) => onEditChange({ ...editedStudent, medication: text })}
+              placeholder="Enter medication..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              numberOfLines={2}
+            />
+          </View>
+          <View>
             <Text style={styles.fieldLabel}>Emergency Contact Name</Text>
             <TextInput
               style={styles.input}
-              value={editedStudent.emergency_contact || ''}
-              onChangeText={(text) => onEditChange({ ...editedStudent, emergency_contact: text })}
+              value={editedStudent.emergency_contact_name || ''}
+              onChangeText={(text) => onEditChange({ ...editedStudent, emergency_contact_name: text })}
               placeholder="Emergency contact name..."
               placeholderTextColor={theme.textSecondary}
             />
@@ -68,11 +80,21 @@ export const MedicalInfoSection: React.FC<MedicalInfoSectionProps> = ({
             <Text style={styles.fieldLabel}>Emergency Contact Phone</Text>
             <TextInput
               style={styles.input}
-              value={editedStudent.emergency_phone || ''}
-              onChangeText={(text) => onEditChange({ ...editedStudent, emergency_phone: text })}
+              value={editedStudent.emergency_contact_phone || ''}
+              onChangeText={(text) => onEditChange({ ...editedStudent, emergency_contact_phone: text })}
               placeholder="Emergency phone number..."
               placeholderTextColor={theme.textSecondary}
               keyboardType="phone-pad"
+            />
+          </View>
+          <View>
+            <Text style={styles.fieldLabel}>Emergency Contact Relationship</Text>
+            <TextInput
+              style={styles.input}
+              value={editedStudent.emergency_contact_relation || ''}
+              onChangeText={(text) => onEditChange({ ...editedStudent, emergency_contact_relation: text })}
+              placeholder="Relationship to student..."
+              placeholderTextColor={theme.textSecondary}
             />
           </View>
         </View>
@@ -90,16 +112,25 @@ export const MedicalInfoSection: React.FC<MedicalInfoSectionProps> = ({
               <Text style={styles.medicalValue}>{student.allergies}</Text>
             </View>
           )}
-          {student.emergency_contact && (
+          {student.medication && (
+            <View style={styles.medicalItem}>
+              <Text style={styles.medicalLabel}>Medication:</Text>
+              <Text style={styles.medicalValue}>{student.medication}</Text>
+            </View>
+          )}
+          {student.emergency_contact_name && (
             <View style={styles.medicalItem}>
               <Text style={styles.medicalLabel}>Emergency Contact:</Text>
-              <Text style={styles.medicalValue}>{student.emergency_contact}</Text>
-              {student.emergency_phone && (
-                <Text style={styles.medicalValue}>{student.emergency_phone}</Text>
+              <Text style={styles.medicalValue}>{student.emergency_contact_name}</Text>
+              {student.emergency_contact_phone && (
+                <Text style={styles.medicalValue}>{student.emergency_contact_phone}</Text>
+              )}
+              {student.emergency_contact_relation && (
+                <Text style={styles.medicalValue}>{student.emergency_contact_relation}</Text>
               )}
             </View>
           )}
-          {!student.medical_conditions && !student.allergies && !student.emergency_contact && (
+          {!student.medical_conditions && !student.allergies && !student.medication && !student.emergency_contact_name && (
             <Text style={styles.noMedicalInfo}>No medical or emergency information</Text>
           )}
         </View>

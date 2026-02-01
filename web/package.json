@@ -7,7 +7,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_DISABLE_TURBOPACK=1 next dev",
     "prebuild": "node scripts/bump-sw-version.mjs",
     "build": "next build",
     "postbuild": "node scripts/notify-deployment.mjs || true",

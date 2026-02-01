@@ -9,6 +9,7 @@ import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 export default function AuthCallback() {
   const handled = useRef(false);
   const [message, setMessage] = useState('Finalizing sign-in…');
+  const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
   const localParams = useLocalSearchParams<Record<string, string | string[]>>();
   const normalizedLocalParams = useMemo(() => {
     const normalized: Record<string, string> = {};
@@ -47,6 +48,20 @@ export default function AuthCallback() {
     return rawUrl || null;
   };
 
+  const sanitizeCallbackUrl = (rawUrl?: string | null) => {
+    if (!rawUrl) return rawUrl;
+    try {
+      const url = new URL(rawUrl.replace('edudashpro://', 'https://app.edudashpro.org.za/'));
+      const sensitiveKeys = ['access_token', 'refresh_token', 'token', 'token_hash', 'code'];
+      sensitiveKeys.forEach((key) => {
+        if (url.searchParams.has(key)) url.searchParams.set(key, '[redacted]');
+      });
+      return url.toString();
+    } catch {
+      return rawUrl.replace(/(access_token|refresh_token|token_hash|token|code)=([^&]+)/g, '$1=[redacted]');
+    }
+  };
+
   async function handleCallback(urlStr?: string | null) {
     if (handled.current) return;
     handled.current = true;
@@ -63,7 +78,9 @@ export default function AuthCallback() {
         }
       }
 
-      console.log('[AuthCallback] Processing URL:', urlStr);
+      if (debugEnabled) {
+        console.log('[AuthCallback] Processing URL:', sanitizeCallbackUrl(urlStr));
+      }
 
       const supabase = await assertSupabase();
       const recoveryHint = urlStr.includes('type=recovery') || urlStr.includes('flow=recovery');
@@ -171,7 +188,7 @@ export default function AuthCallback() {
           }
 
           setMessage('Sign-in successful! Redirecting...');
-          console.log('[AuthCallback] OAuth sign-in successful');
+          if (debugEnabled) console.log('[AuthCallback] OAuth sign-in successful');
           
           // Small delay for better UX
           setTimeout(() => {
@@ -186,7 +203,7 @@ export default function AuthCallback() {
       if (urlStr.includes('token_hash=') || urlStr.includes('token_hash%3D') || 
           urlStr.includes('token=') || urlStr.includes('token%3D') ||
           urlStr.includes('code=') || urlStr.includes('code%3D')) {
-        setMessage('Verifying magic link...');
+        setMessage('Verifying link...');
         
         let token_hash: string | null = null;
         let token: string | null = null;
@@ -212,21 +229,30 @@ export default function AuthCallback() {
           if (typeMatch) typeParam = decodeURIComponent(typeMatch[1]);
         }
 
-        console.log('[AuthCallback] Magic link params:', { 
-          token_hash: token_hash?.slice(0, 20) + '...', 
-          token: token?.slice(0, 20) + '...',
-          code: code ? 'present' : 'null',
-          type: typeParam 
-        });
+        if (debugEnabled) {
+          console.log('[AuthCallback] Magic link params:', {
+            token_hash: token_hash ? '[redacted]' : 'null',
+            token: token ? '[redacted]' : 'null',
+            code: code ? 'present' : 'null',
+            type: typeParam
+          });
+        }
 
         // Valid OTP types for Supabase
         type OtpType = 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email';
         const validTypes: OtpType[] = ['signup', 'invite', 'magiclink', 'recovery', 'email_change', 'email'];
-        const type: OtpType = validTypes.includes(typeParam as OtpType) ? (typeParam as OtpType) : 'magiclink';
+        const normalizedTypeParam = (typeParam || '').toLowerCase();
+        const fallbackType: OtpType =
+          normalizedTypeParam === 'recovery' || recoveryHint ? 'recovery' : 'magiclink';
+        const type: OtpType = validTypes.includes(normalizedTypeParam as OtpType)
+          ? (normalizedTypeParam as OtpType)
+          : fallbackType;
+
+        setMessage(type === 'recovery' ? 'Verifying password reset link...' : 'Verifying magic link...');
 
         // Handle PKCE flow with code parameter
         if (code) {
-          console.log('[AuthCallback] Processing PKCE code exchange...');
+          if (debugEnabled) console.log('[AuthCallback] Processing PKCE code exchange...');
           
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
@@ -235,22 +261,24 @@ export default function AuthCallback() {
             throw error;
           }
 
-          console.log('[AuthCallback] Code exchanged successfully, session:', data.session ? 'exists' : 'null');
+          if (debugEnabled) {
+            console.log('[AuthCallback] Code exchanged successfully, session:', data.session ? 'exists' : 'null');
+          }
 
           if (!data.session) {
             throw new Error('Authentication succeeded but no session was created. Please try again.');
           }
 
           setMessage('Sign-in successful! Redirecting...');
-          console.log('[AuthCallback] PKCE magic link successful, user:', data.session.user.email);
+          if (debugEnabled) console.log('[AuthCallback] PKCE magic link successful');
           
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
             if (type === 'recovery' && data.session) {
-              console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
+              if (debugEnabled) console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
               routeToResetPassword(data.session);
             } else if (type === 'email_change' && data.session) {
-              console.log('[AuthCallback] Email change detected - finalizing and signing out');
+              if (debugEnabled) console.log('[AuthCallback] Email change detected - finalizing and signing out');
               void handleEmailChange(data.session);
             } else {
               router.replace('/profiles-gate');
@@ -262,7 +290,7 @@ export default function AuthCallback() {
 
         // Handle token_hash (legacy flow)
         if (token_hash) {
-          console.log('[AuthCallback] Verifying OTP with type:', type);
+          if (debugEnabled) console.log('[AuthCallback] Verifying OTP with type:', type);
           
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
@@ -274,11 +302,13 @@ export default function AuthCallback() {
             throw error;
           }
 
-          console.log('[AuthCallback] OTP verified successfully, session:', data.session ? 'exists' : 'null');
+          if (debugEnabled) {
+            console.log('[AuthCallback] OTP verified successfully, session:', data.session ? 'exists' : 'null');
+          }
           
           // If verifyOtp returned a session, set it explicitly
           if (data.session) {
-            console.log('[AuthCallback] Setting session from verifyOtp response');
+            if (debugEnabled) console.log('[AuthCallback] Setting session from verifyOtp response');
             const { error: setSessionError } = await supabase.auth.setSession({
               access_token: data.session.access_token,
               refresh_token: data.session.refresh_token,
@@ -288,7 +318,7 @@ export default function AuthCallback() {
               console.error('[AuthCallback] Failed to set session:', setSessionError);
               throw setSessionError;
             }
-            console.log('[AuthCallback] Session set successfully');
+            if (debugEnabled) console.log('[AuthCallback] Session set successfully');
           }
           
           // Wait a moment for the auth state change to propagate
@@ -296,22 +326,24 @@ export default function AuthCallback() {
           
           // Double-check session is set
           const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-          console.log('[AuthCallback] Current session after verify:', sessionData.session ? 'exists' : 'null');
+          if (debugEnabled) {
+            console.log('[AuthCallback] Current session after verify:', sessionData.session ? 'exists' : 'null');
+          }
 
           if (!sessionData.session) {
             throw new Error('Authentication succeeded but no session was created. Please try again.');
           }
 
           setMessage('Sign-in successful! Redirecting...');
-          console.log('[AuthCallback] Magic link verification successful, user:', sessionData.session.user.email);
+          if (debugEnabled) console.log('[AuthCallback] Magic link verification successful');
           
           // Give AuthContext time to process the SIGNED_IN event
           setTimeout(() => {
             if (type === 'recovery' && sessionData.session) {
-              console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
+              if (debugEnabled) console.log('[AuthCallback] Recovery type detected - routing to native reset-password');
               routeToResetPassword(sessionData.session);
             } else if (type === 'email_change' && sessionData.session) {
-              console.log('[AuthCallback] Email change detected - finalizing and signing out');
+              if (debugEnabled) console.log('[AuthCallback] Email change detected - finalizing and signing out');
               void handleEmailChange(sessionData.session);
             } else {
               router.replace('/profiles-gate');
@@ -322,8 +354,8 @@ export default function AuthCallback() {
         }
 
         // Handle PKCE token parameter (if present but no code)
-        if (token && typeParam === 'magiclink') {
-          console.log('[AuthCallback] Processing PKCE token for magic link...');
+        if (token && type === 'magiclink') {
+          if (debugEnabled) console.log('[AuthCallback] Processing PKCE token for magic link...');
           // For PKCE tokens, we need to verify them differently
           // Try using verifyOtp with the token
           const { data, error } = await supabase.auth.verifyOtp({
@@ -339,7 +371,7 @@ export default function AuthCallback() {
           }
 
           if (data.session) {
-            console.log('[AuthCallback] PKCE token verified, session created');
+            if (debugEnabled) console.log('[AuthCallback] PKCE token verified, session created');
             setMessage('Sign-in successful! Redirecting...');
             
             setTimeout(() => {
@@ -365,12 +397,14 @@ export default function AuthCallback() {
           if (errorMatch) error = decodeURIComponent(errorMatch[1]);
         }
         
-        console.error('[AuthCallback] OAuth error:', error, error_description);
+      console.error('[AuthCallback] OAuth error:', error, error_description);
         throw new Error(error_description || error || 'Authentication failed');
       }
 
       // No recognized callback pattern
-      console.warn('[AuthCallback] Unrecognized callback pattern, URL:', urlStr);
+      if (debugEnabled) {
+        console.warn('[AuthCallback] Unrecognized callback pattern, URL:', sanitizeCallbackUrl(urlStr));
+      }
       setMessage('Could not process authentication. Redirecting to sign-in...');
       setTimeout(() => {
         router.replace('/(auth)/sign-in');

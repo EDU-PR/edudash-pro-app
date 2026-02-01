@@ -170,12 +170,14 @@ interface PushDevice {
 }
 
 // Environment variables
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const EXPO_ACCESS_TOKEN = Deno.env.get('EXPO_ACCESS_TOKEN');
 
 // Create Supabase client with service role for bypassing RLS
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+  : null;
 
 /**
  * Get notification template for different event types
@@ -946,6 +948,13 @@ async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
   return Array.from(uniqueTokens.values());
 }
 
+const normalizeRoleTarget = (role: string): string => {
+  const normalized = String(role || '').toLowerCase().trim();
+  if (normalized === 'superadmin') return 'super_admin';
+  if (normalized === 'principaladmin') return 'principal_admin';
+  return normalized;
+};
+
 /**
  * Get users to notify based on context
  */
@@ -959,23 +968,25 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
   // Role-based targeting within a preschool
   if (request.role_targets && request.role_targets.length > 0) {
     try {
-      const roles = request.role_targets;
+      const roles = Array.from(new Set(request.role_targets.map(normalizeRoleTarget).filter(Boolean)));
+      const superAdminRoles = ['super_admin', 'superadmin'];
+      const wantsSuperAdmin = roles.some((role) => superAdminRoles.includes(role));
 
-      if (roles.includes('superadmin')) {
+      if (wantsSuperAdmin) {
         const { data: superAdmins } = await supabase
           .from('profiles')
           .select('id, role')
-          .eq('role', 'superadmin')
+          .in('role', superAdminRoles)
           .eq('is_active', true);
         if (superAdmins) userIds.push(...superAdmins.map((r: { id: string }) => r.id));
       }
 
-      const filteredRoles = roles.filter((r: string) => r !== 'superadmin');
+      const filteredRoles = roles.filter((role) => !superAdminRoles.includes(role));
       if (filteredRoles.length > 0 && request.preschool_id) {
         const { data: schoolUsers } = await supabase
           .from('profiles')
           .select('id, role')
-          .eq('preschool_id', request.preschool_id)
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
           .in('role', filteredRoles)
           .eq('is_active', true);
         if (schoolUsers) userIds.push(...schoolUsers.map((r: { id: string }) => r.id));
@@ -1006,7 +1017,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         const { data: parents } = await supabase
           .from('profiles')
           .select('id')
-          .eq('preschool_id', request.preschool_id)
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
           .eq('role', 'parent')
           .eq('is_active', true);
         if (parents) {
@@ -1083,8 +1094,8 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         const { data: principals } = await supabase
           .from('profiles')
           .select('id')
-          .eq('preschool_id', request.preschool_id)
-          .in('role', ['principal', 'principal_admin'])
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+          .in('role', ['principal', 'principal_admin', 'super_admin'])
           .eq('is_active', true);
         if (principals) {
           userIds.push(...principals.map((p: { id: string }) => p.id));
@@ -1138,7 +1149,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
               .from('profiles')
               .select('id')
               .eq('email', invoice.bill_to_email)
-              .eq('preschool_id', invoice.preschool_id)
+              .or(`preschool_id.eq.${invoice.preschool_id},organization_id.eq.${invoice.preschool_id}`)
               .single();
             if (billToUser) {
               userIds.push(billToUser.id);
@@ -1149,8 +1160,8 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
             const { data: principals } = await supabase
               .from('profiles')
               .select('id')
-              .eq('preschool_id', invoice.preschool_id)
-              .in('role', ['principal', 'principal_admin'])
+              .or(`preschool_id.eq.${invoice.preschool_id},organization_id.eq.${invoice.preschool_id}`)
+              .in('role', ['principal', 'principal_admin', 'super_admin'])
               .eq('is_active', true);
             if (principals) {
               userIds.push(...principals.map((p: { id: string }) => p.id));
@@ -1255,7 +1266,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           const { data: users } = await supabase
             .from('profiles')
             .select('id')
-            .eq('preschool_id', request.preschool_id)
+            .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
             .in('role', targetRoles)
             .eq('is_active', true);
           
@@ -1272,7 +1283,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           .from('profiles')
           .select('id')
           .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
-          .in('role', ['principal', 'principal_admin', 'admin'])
+          .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
           .eq('is_active', true);
         if (principals) {
           userIds.push(...principals.map((p: { id: string }) => p.id));
@@ -1288,7 +1299,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
             .from('profiles')
             .select('id')
             .or(`preschool_id.eq.${upload.preschool_id},organization_id.eq.${upload.preschool_id}`)
-            .in('role', ['principal', 'principal_admin', 'admin'])
+            .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
             .eq('is_active', true);
           if (principals) {
             userIds.push(...principals.map((p: { id: string }) => p.id));
@@ -1305,7 +1316,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           .from('profiles')
           .select('id')
           .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
-          .in('role', ['principal', 'principal_admin', 'admin'])
+          .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
           .eq('is_active', true);
         if (principals) {
           userIds.push(...principals.map((p: { id: string }) => p.id));
@@ -2194,7 +2205,26 @@ async function getUserSignature(userId: string): Promise<string | null> {
  */
 async function dispatchNotification(request: Request): Promise<Response> {
   try {
-    const notificationRequest: NotificationRequest = await request.json();
+    if (!supabase) {
+      return new Response(
+        JSON.stringify({
+          error: 'Supabase client not configured',
+          details: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.'
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    let notificationRequest: NotificationRequest;
+    try {
+      notificationRequest = await request.json();
+    } catch (parseError) {
+      console.error('Invalid notification payload:', parseError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON payload' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     console.log('Processing notification request:', notificationRequest);
 
     // Handle test notifications
@@ -2547,7 +2577,7 @@ async function handleScheduledNotifications(_request: Request): Promise<Response
                   event_type: 'trial_ending',
                   preschool_id: sub.school_id,
                   plan_tier: sub.plan_id,
-                  role_targets: ['principal', 'principal_admin', 'superadmin'],
+                  role_targets: ['principal', 'principal_admin', 'super_admin'],
                   include_email: true,
                   custom_payload: { trial_end_date: sub.trial_end_date }
                 })
@@ -2627,6 +2657,16 @@ async function handleRequest(request: Request): Promise<Response> {
 
   if (request.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  if (!supabase) {
+    return new Response(
+      JSON.stringify({
+        error: 'Supabase client not configured',
+        details: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.'
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   if (url.pathname.includes('trigger')) {

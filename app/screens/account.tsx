@@ -173,8 +173,8 @@ export default function AccountScreen() {
       try {
         const { data: p } = await assertSupabase()
           .from("profiles")
-          .select("role,preschool_id,first_name,last_name,avatar_url,phone,address")
-          .eq("id", u.id)
+          .select("id,role,preschool_id,first_name,last_name,avatar_url,phone,address")
+          .or(`auth_user_id.eq.${u.id},id.eq.${u.id}`)
           .maybeSingle();
         r = r || (p as Record<string, unknown>)?.role as string || null;
         s = s || (p as Record<string, unknown>)?.preschool_id as string || null;
@@ -382,6 +382,17 @@ export default function AccountScreen() {
       const { data } = await assertSupabase().auth.getUser();
       if (!data.user?.id) { Alert.alert("Error", "User not found"); return; }
 
+      const { data: profileRow } = await assertSupabase()
+        .from("profiles")
+        .select("id")
+        .or(`auth_user_id.eq.${data.user.id},id.eq.${data.user.id}`)
+        .maybeSingle();
+
+      if (!profileRow?.id) {
+        Alert.alert("Error", "Profile not found");
+        return;
+      }
+
       const { error } = await assertSupabase()
         .from("profiles")
         .update({ 
@@ -390,7 +401,7 @@ export default function AccountScreen() {
           phone: editPhone.trim() || null,
           address: editAddress.trim() || null,
         })
-        .eq("id", data.user.id);
+        .eq("id", profileRow.id);
 
       if (error) Alert.alert("Warning", "Profile updated locally but failed to sync.");
 

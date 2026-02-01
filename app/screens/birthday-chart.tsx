@@ -38,20 +38,24 @@ export default function BirthdayChartScreen() {
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const isParentView = profile?.role === 'parent' || String(profile?.role) === 'guardian';
+  const targetYear = new Date().getFullYear();
+  const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 
   // Get organization ID from profile using tenant compatibility utility
   const organizationId = getActiveOrganizationId(profile);
   
   // Debug logging for organizationId
   useEffect(() => {
-    console.log('[BirthdayChart] Profile info:', {
-      organizationId,
-      hasProfile: !!profile,
-      profileOrgId: profile?.organization_id,
-      profilePreschoolId: (profile as any)?.preschool_id,
-      profileOrganizationId: (profile as any)?.organizationId,
-      profileKeys: profile ? Object.keys(profile).slice(0, 15) : [], // First 15 keys for debugging
-    });
+    if (debugEnabled) {
+      console.log('[BirthdayChart] Profile info:', {
+        organizationId,
+        hasProfile: !!profile,
+        profileOrgId: profile?.organization_id,
+        profilePreschoolId: (profile as any)?.preschool_id,
+        profileOrganizationId: (profile as any)?.organizationId,
+        profileKeys: profile ? Object.keys(profile).slice(0, 15) : [], // First 15 keys for debugging
+      });
+    }
   }, [profile, organizationId]);
 
   // Load all birthdays
@@ -64,19 +68,19 @@ export default function BirthdayChartScreen() {
     
     try {
       setError(null);
-      console.log('[BirthdayChart] Loading birthdays for org:', organizationId);
-      const data = await BirthdayPlannerService.getAllBirthdays(organizationId);
-      console.log('[BirthdayChart] Loaded birthdays:', data.length, 'students');
+      if (debugEnabled) console.log('[BirthdayChart] Loading birthdays for org:', organizationId);
+      const data = await BirthdayPlannerService.getAllBirthdays(organizationId, targetYear);
+      if (debugEnabled) console.log('[BirthdayChart] Loaded birthdays:', data.length, 'students');
       setBirthdays(data);
       
       if (data.length === 0) {
-        console.log('[BirthdayChart] No birthdays found - students may not have DOB set');
+        if (debugEnabled) console.log('[BirthdayChart] No birthdays found - students may not have DOB set');
       }
     } catch (error: any) {
       console.error('[BirthdayChart] Error loading birthdays:', error);
       setError(error.message || 'Failed to load birthdays');
     }
-  }, [organizationId]);
+  }, [organizationId, targetYear]);
 
   // Load classes for filtering
   const loadClasses = useCallback(async () => {
@@ -88,16 +92,24 @@ export default function BirthdayChartScreen() {
       
       const { data } = await supabase
         .from('classes')
-        .select('id, name')
-        .eq('preschool_id', organizationId)
+        .select('id, name, teacher_id')
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
         .eq('active', true)
         .order('name');
       
-      setClasses(data || []);
+      const classRows = (data || []) as { id: string; name: string; teacher_id?: string | null }[];
+      setClasses(classRows.map((row) => ({ id: row.id, name: row.name })));
+
+      if (!selectedClass && profile?.role === 'teacher') {
+        const teacherClass = classRows.find((row) => row.teacher_id && row.teacher_id === profile.id);
+        if (teacherClass) {
+          setSelectedClass(teacherClass.id);
+        }
+      }
     } catch (error) {
       console.error('[BirthdayChart] Error loading classes:', error);
     }
-  }, [organizationId]);
+  }, [organizationId, profile?.role, profile?.id, selectedClass]);
 
   // Initial load
   useEffect(() => {

@@ -57,7 +57,6 @@ interface ChildRow {
 
 interface UniformSizesSectionProps {
   children: ChildRow[];
-  schoolName?: string;
 }
 
 interface UniformFeeRow {
@@ -113,7 +112,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children, schoolName }) => {
+export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children }) => {
   const { theme } = useTheme();
   const { terminology } = useOrganizationTerminology();
   const { t } = useTranslation();
@@ -225,8 +224,6 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
       try {
         const supabase = assertSupabase();
         const pricingMap: Record<string, UniformPricing> = {};
-        const schoolNameLower = schoolName?.toLowerCase() || '';
-        const isYoungEagles = schoolNameLower.includes('young eagles');
 
         for (const preschoolId of preschoolIds) {
           const pricing: UniformPricing = {};
@@ -290,12 +287,6 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
           if (pricing.setAmount || pricing.tshirtAmount || pricing.shortsAmount || pricing.fallbackAmount) {
             pricingMap[preschoolId] = pricing;
-          } else if (isYoungEagles) {
-            pricingMap[preschoolId] = {
-              setAmount: 400,
-              tshirtAmount: 250,
-              shortsAmount: 250,
-            };
           }
         }
 

@@ -31,11 +31,13 @@ import { useTranslation } from 'react-i18next';
 import { logger } from '@/lib/logger';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { assertSupabase } from '@/lib/supabase';
 import Feedback from '@/lib/feedback';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { track } from '@/lib/analytics';
 import { useNotificationsWithFocus } from '@/hooks/useNotifications';
 import { useParentDashboard } from '@/hooks/useDashboardData';
+import { calculateAge } from '@/lib/date-utils';
 
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
@@ -64,6 +66,14 @@ const DEFAULT_COLLAPSED_SECTIONS = [
   'daily-activities',
 ];
 
+const getGradeNumber = (value?: string | null): number => {
+  if (!value) return 0;
+  const normalized = value.toLowerCase();
+  if (normalized.includes('grade r') || normalized.trim() === 'r') return 0;
+  const match = normalized.match(/\d{1,2}/);
+  return match ? Number(match[0]) : 0;
+};
+
 interface NewEnhancedParentDashboardProps {
   refreshTrigger?: number;
 }
@@ -78,6 +88,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
+  const [uniformEnabled, setUniformEnabled] = useState(false);
+  const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     () => new Set(DEFAULT_COLLAPSED_SECTIONS)
   );
@@ -92,7 +104,25 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const schoolTypeNormalized = String(schoolTypeRaw || 'preschool').toLowerCase();
   const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
   const isK12School = k12Types.has(schoolTypeNormalized);
-  const upgradeBannerTitle = isK12School
+  const activeChild = useMemo(
+    () => children.find((child) => child.id === activeChildId) || children[0],
+    [children, activeChildId]
+  );
+  const activeChildAgeYears = useMemo(() => {
+    const dob = activeChild?.dateOfBirth || activeChild?.date_of_birth || null;
+    const age = calculateAge(dob);
+    return typeof age === 'number' && !Number.isNaN(age) ? age : null;
+  }, [activeChild]);
+  const activeChildGradeNumber = useMemo(
+    () => getGradeNumber(activeChild?.grade || activeChild?.grade_level || null),
+    [activeChild]
+  );
+  const isEarlyLearner = useMemo(() => {
+    if (!activeChild) return false;
+    if (typeof activeChildAgeYears === 'number' && activeChildAgeYears <= 5) return true;
+    return activeChildGradeNumber < 1;
+  }, [activeChild, activeChildAgeYears, activeChildGradeNumber]);
+  const upgradeBannerTitle = isK12School && !isEarlyLearner
     ? t('dashboard.upgrade_value', { defaultValue: 'Save time with AI homework help' })
     : t('dashboard.upgrade_value_preschool', { defaultValue: 'Save time with Dash AI support' });
   
@@ -149,6 +179,65 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       }
     }
   }, [dashboardData?.children, activeChildId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUniformEnabled = async () => {
+      const preschoolIds = Array.from(new Set(
+        children
+          .map((child) => child.preschoolId || child.preschool_id)
+          .filter(Boolean)
+      )) as string[];
+
+      if (!preschoolIds.length) {
+        if (!cancelled) {
+          setUniformEnabled(false);
+          setUniformSchoolIds([]);
+        }
+        return;
+      }
+
+      try {
+        const supabase = assertSupabase();
+        const { data: preschoolSettings, error: preschoolError } = await supabase
+          .from('preschools')
+          .select('id, settings')
+          .in('id', preschoolIds);
+        if (preschoolError) throw preschoolError;
+
+        const { data: organizationSettings, error: organizationError } = await supabase
+          .from('organizations')
+          .select('id, settings')
+          .in('id', preschoolIds);
+        if (organizationError) throw organizationError;
+
+        const enabledIds = new Set<string>();
+        (preschoolSettings || []).forEach((row: any) => {
+          const enabled = row?.settings?.features?.uniforms?.enabled;
+          if (enabled) enabledIds.add(row.id);
+        });
+        (organizationSettings || []).forEach((row: any) => {
+          const enabled = row?.settings?.features?.uniforms?.enabled;
+          if (enabled) enabledIds.add(row.id);
+        });
+
+        if (!cancelled) {
+          setUniformSchoolIds(Array.from(enabledIds));
+          setUniformEnabled(enabledIds.size > 0);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setUniformEnabled(false);
+          setUniformSchoolIds([]);
+        }
+      }
+    };
+
+    loadUniformEnabled();
+    return () => {
+      cancelled = true;
+    };
+  }, [children]);
 
   const getGreeting = (): string => {
     const hour = new Date().getHours();
@@ -262,13 +351,13 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'messages', label: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles' },
       { id: 'check_attendance', label: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar' },
     ];
-    if (isK12School) {
+    if (isK12School && !isEarlyLearner) {
       base.push({ id: 'view_grades', label: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school' });
     } else {
       base.push({ id: 'learning_hub', label: t('parent.learning_hub', { defaultValue: 'Learning Hub' }), icon: 'rocket' });
     }
     return base;
-  }, [t, isK12School]);
+  }, [t, isK12School, isEarlyLearner]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -369,7 +458,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
     ];
 
-    if (!isK12School) {
+    const shouldShowLearningHub = !isK12School || isEarlyLearner;
+    if (shouldShowLearningHub) {
       actions.splice(3, 0, {
         id: 'learning_hub',
         title: t('parent.learning_hub', { defaultValue: 'Learning Hub' }),
@@ -378,15 +468,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       });
     }
 
-    return actions;
-  }, [t, theme, isK12School, isFeesDueSoon, feesDueSubtitle]);
+    return isEarlyLearner ? actions.filter((action) => action.id !== 'view_grades') : actions;
+  }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle]);
 
-  const k12LearningActions = useMemo<ParentQuickAction[]>(() => ([
-    { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
-    { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
-    { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
-    { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
-  ]), [t, tier]);
+  const k12LearningActions = useMemo<ParentQuickAction[]>(() => {
+    if (isEarlyLearner) return [];
+    return [
+      { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
+      { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
+      { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
+      { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
+    ];
+  }, [t, tier, isEarlyLearner]);
 
   const quickActions = useMemo<ParentQuickAction[]>(() => {
     if (isK12School) {
@@ -600,30 +693,24 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           </View>
         </CollapsibleSection>
 
-        {/* Uniform Sizes (organization-linked parents only) */}
-        <CollapsibleSection
-          title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
-          sectionId="uniform-sizes"
-          icon="shirt-outline"
-          defaultCollapsed={collapsedSections.has('uniform-sizes')}
-          onToggle={toggleSection}
-        >
-          {hasOrganization && children.length > 0 ? (
-            <UniformSizesSection children={children} schoolName={dashboardData?.schoolName} />
-          ) : (
-            <EmptyState
-              icon="shirt-outline"
-              title={t('dashboard.parent.empty.uniform_sizes.title', { defaultValue: 'Uniform sizes preview' })}
-              description={t('dashboard.parent.empty.uniform_sizes.description', {
-                defaultValue: 'Link a child to a school to see uniform sizes and updates.',
-              })}
-              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
-              onActionPress={() => router.push('/screens/register-child' as any)}
-              size="small"
-              secondary
+        {/* Uniform Sizes (enabled by school) */}
+        {hasOrganization && children.length > 0 && uniformEnabled && (
+          <CollapsibleSection
+            title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
+            sectionId="uniform-sizes"
+            icon="shirt-outline"
+            defaultCollapsed={collapsedSections.has('uniform-sizes')}
+            onToggle={toggleSection}
+          >
+            <UniformSizesSection
+              children={children.filter((child) =>
+                (child.preschoolId || child.preschool_id)
+                  ? uniformSchoolIds.includes(child.preschoolId || child.preschool_id)
+                  : false
+              )}
             />
-          )}
-        </CollapsibleSection>
+          </CollapsibleSection>
+        )}
 
         {/* Live Classes - Show if user has preschool_id */}
         <CollapsibleSection 
@@ -794,6 +881,12 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       <DashOrb
         position="bottom-right"
         size={56}
+        learnerContext={{
+          ageYears: activeChildAgeYears ?? undefined,
+          grade: activeChild?.grade || activeChild?.grade_level || null,
+          name: activeChild ? `${activeChild.firstName || ''} ${activeChild.lastName || ''}`.trim() : null,
+          schoolType: isEarlyLearner ? 'preschool' : (isK12School ? 'k12' : schoolTypeNormalized),
+        }}
         onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'parent_dashboard' })}
       />
     </View>

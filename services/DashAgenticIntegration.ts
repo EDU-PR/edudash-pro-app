@@ -11,6 +11,7 @@ import { DashCapabilityDiscovery } from './DashCapabilityDiscovery';
 import { DashAutonomyManager } from './DashAutonomyManager';
 import { DashTelemetry } from './DashTelemetry';
 import DashRealTimeAwareness from './DashRealTimeAwareness';
+import { SuperAdminAIControl, SuperAdminAIControlState } from './superadmin/SuperAdminAIControl';
 
 export interface AgenticContext {
   userId: string;
@@ -36,32 +37,26 @@ export interface AgenticCapabilities {
 
 export class DashAgenticIntegration {
   private static initialized = false;
-  
-  /**
-   * Get role-based agentic capabilities
-   * Superadmin: Full agentic mode with all capabilities
-   * Others: Assistant mode with limited autonomy
-   */
-  static getAgenticCapabilities(role: string): AgenticCapabilities {
-    // Only EduDash Pro platform super_admin gets full agentic mode
-    // Note: Database uses 'super_admin' but some code may use 'superadmin'
-    const isSuperadmin = role === 'super_admin' || role === 'superadmin';
-    
-    if (isSuperadmin) {
+  private static readonly SUPERADMIN_ROLES = new Set(['super_admin', 'superadmin']);
+
+  static getRoleBasedCapabilities(role?: string): AgenticCapabilities {
+    const normalizedRole = (role || '').toLowerCase();
+    const isSuperadmin = this.SUPERADMIN_ROLES.has(normalizedRole);
+
+    if (!isSuperadmin) {
       return {
-        mode: 'agent',
-        canRunDiagnostics: true,
-        canMakeCodeChanges: true,
-        canAccessSystemLevel: true,
-        canAutoExecuteHighRisk: true,
-        autonomyLevel: 'full'
+        mode: 'assistant',
+        canRunDiagnostics: false,
+        canMakeCodeChanges: false,
+        canAccessSystemLevel: false,
+        canAutoExecuteHighRisk: false,
+        autonomyLevel: 'limited'
       };
     }
-    
-    // Default for all other roles (teacher, principal, parent)
+
     return {
       mode: 'assistant',
-      canRunDiagnostics: false,
+      canRunDiagnostics: true,
       canMakeCodeChanges: false,
       canAccessSystemLevel: false,
       canAutoExecuteHighRisk: false,
@@ -70,10 +65,116 @@ export class DashAgenticIntegration {
   }
   
   /**
+   * Get role-based agentic capabilities
+   * Superadmin: Full agentic mode with all capabilities
+   * Others: Assistant mode with limited autonomy
+   */
+  static async getAgenticCapabilities(
+    context: AgenticContext,
+    control?: SuperAdminAIControlState
+  ): Promise<AgenticCapabilities> {
+    const role = (context.role || '').toLowerCase();
+    const isSuperadmin = this.SUPERADMIN_ROLES.has(role);
+
+    if (!isSuperadmin) {
+      return this.getRoleBasedCapabilities(role);
+    }
+
+    // Superadmin exists, but only the platform owner can enable full autonomy
+    const controlState = control ?? await SuperAdminAIControl.getControlState();
+    const isOwner = !!controlState.owner_user_id && controlState.owner_user_id === context.userId;
+    const autonomyEnabled = controlState.autonomy_enabled && isOwner;
+
+    if (!autonomyEnabled) {
+      return this.getRoleBasedCapabilities(role);
+    }
+
+    const autonomyLevel =
+      controlState.autonomy_mode === 'full'
+        ? 'full'
+        : controlState.autonomy_mode === 'copilot'
+          ? 'moderate'
+          : 'limited';
+
+    return {
+      mode: 'agent',
+      canRunDiagnostics: true,
+      canMakeCodeChanges: true,
+      canAccessSystemLevel: true,
+      canAutoExecuteHighRisk:
+        controlState.autonomy_mode === 'full' && controlState.auto_execute_high === true,
+      autonomyLevel
+    };
+  }
+
+  private static async syncAutonomySettings(
+    context: AgenticContext,
+    control?: SuperAdminAIControlState
+  ): Promise<SuperAdminAIControlState | null> {
+    const role = (context.role || '').toLowerCase();
+    const isSuperadmin = this.SUPERADMIN_ROLES.has(role);
+
+    const baseSettings = {
+      mode: 'assistant' as const,
+      autoExecuteLowRisk: true,
+      autoExecuteMediumRisk: false,
+      autoExecuteHighRisk: false,
+      requireConfirmForNavigation: false
+    };
+
+    if (!isSuperadmin) {
+      await this.applyAutonomySettingsIfChanged(baseSettings);
+      return null;
+    }
+
+    const controlState = control ?? await SuperAdminAIControl.getControlState();
+    const isOwner = !!controlState.owner_user_id && controlState.owner_user_id === context.userId;
+    const autonomyEnabled = controlState.autonomy_enabled && isOwner;
+
+    if (!autonomyEnabled) {
+      await this.applyAutonomySettingsIfChanged({
+        ...baseSettings,
+        requireConfirmForNavigation: controlState.require_confirm_navigation ?? false
+      });
+      return controlState;
+    }
+
+    const mode = controlState.autonomy_mode === 'assistant' ? 'assistant' : 'copilot';
+    const allowHighRisk = controlState.autonomy_mode === 'full';
+
+    await this.applyAutonomySettingsIfChanged({
+      mode,
+      autoExecuteLowRisk: controlState.auto_execute_low,
+      autoExecuteMediumRisk:
+        controlState.autonomy_mode !== 'assistant' && controlState.auto_execute_medium,
+      autoExecuteHighRisk: allowHighRisk && controlState.auto_execute_high,
+      requireConfirmForNavigation: controlState.require_confirm_navigation
+    });
+
+    return controlState;
+  }
+
+  private static async applyAutonomySettingsIfChanged(
+    nextSettings: Awaited<ReturnType<typeof DashAutonomyManager.getSettings>>
+  ): Promise<void> {
+    const current = await DashAutonomyManager.getSettings();
+    const changed =
+      current.mode !== nextSettings.mode ||
+      current.autoExecuteLowRisk !== nextSettings.autoExecuteLowRisk ||
+      current.autoExecuteMediumRisk !== nextSettings.autoExecuteMediumRisk ||
+      current.autoExecuteHighRisk !== nextSettings.autoExecuteHighRisk ||
+      current.requireConfirmForNavigation !== nextSettings.requireConfirmForNavigation;
+
+    if (changed) {
+      await DashAutonomyManager.updateSettings(nextSettings);
+    }
+  }
+  
+  /**
    * Check if agentic mode is enabled for user
    */
-  static isAgenticEnabled(context: AgenticContext): boolean {
-    const capabilities = this.getAgenticCapabilities(context.role);
+  static async isAgenticEnabled(context: AgenticContext): Promise<boolean> {
+    const capabilities = await this.getAgenticCapabilities(context);
     return capabilities.mode === 'agent';
   }
   
@@ -144,7 +245,11 @@ export class DashAgenticIntegration {
     prompt += '\n\n' + capabilitySummary;
     
     // Get role-based agentic capabilities
-    const capabilities = this.getAgenticCapabilities(context.role);
+    const normalizedRole = (context.role || '').toLowerCase();
+    const isSuperadmin = this.SUPERADMIN_ROLES.has(normalizedRole);
+    const controlState = isSuperadmin ? await SuperAdminAIControl.getControlState() : undefined;
+    const capabilities = await this.getAgenticCapabilities(context, controlState);
+    await this.syncAutonomySettings(context, controlState);
     
     // Add role-based autonomy guidelines
     const autonomySettings = await DashAutonomyManager.getSettings();
@@ -154,11 +259,11 @@ export class DashAgenticIntegration {
     prompt += `**Autonomy Level:** ${capabilities.autonomyLevel}\n`;
     prompt += `**Auto-execute Low Risk:** ${autonomySettings.autoExecuteLowRisk ? 'YES' : 'NO'}\n`;
     prompt += `**Auto-execute Medium Risk:** ${autonomySettings.autoExecuteMediumRisk ? 'YES' : 'NO'}\n`;
-    prompt += `**Auto-execute High Risk:** ${capabilities.canAutoExecuteHighRisk ? 'YES (SUPERADMIN ONLY)' : 'NO'}\n`;
+    prompt += `**Auto-execute High Risk:** ${capabilities.canAutoExecuteHighRisk ? 'YES (OWNER ONLY)' : 'NO'}\n`;
     
     // Add superadmin-specific capabilities
     if (capabilities.mode === 'agent') {
-      prompt += '\n\n## AGENTIC CAPABILITIES (SUPERADMIN)\n\n';
+      prompt += '\n\n## AGENTIC CAPABILITIES (PLATFORM OWNER)\n\n';
       prompt += '**System-Level Access:** You have full system-level access and can:\n';
       prompt += '- Run comprehensive app diagnostics\n';
       prompt += '- Execute database health checks\n';
@@ -172,7 +277,7 @@ export class DashAgenticIntegration {
       prompt += '- "inspect logs" - Review error logs and telemetry\n';
       prompt += '- "system status" - Overall system health report\n\n';
       prompt += '**IMPORTANT:** When user requests diagnostics or system-level operations:\n';
-      prompt += '1. Acknowledge their superadmin status\n';
+      prompt += '1. Acknowledge their platform owner status\n';
       prompt += '2. Execute comprehensive checks proactively\n';
       prompt += '3. Provide detailed technical analysis\n';
       prompt += '4. Suggest specific fixes with code examples if applicable\n';
@@ -220,16 +325,23 @@ export class DashAgenticIntegration {
   /**
    * Check if an action can be auto-executed
    */
-  static async checkActionExecution(action: {
+  static async checkActionExecution(
+    action: {
     type: string;
     description: string;
     parameters?: Record<string, any>;
-  }): Promise<{
+  },
+    context?: AgenticContext
+  ): Promise<{
     canAutoExecute: boolean;
     reason: string;
     riskLevel: 'low' | 'medium' | 'high';
     actionId?: string;
   }> {
+    if (context) {
+      await this.syncAutonomySettings(context);
+    }
+
     const { canAutoExecute, reason, riskLevel } = 
       await DashAutonomyManager.canAutoExecute(action);
     

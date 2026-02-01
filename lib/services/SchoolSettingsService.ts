@@ -46,6 +46,9 @@ export interface SchoolSettings {
       showDetailedBreakdown: boolean;
       requireApprovalLimit: number;
     };
+    uniforms: {
+      enabled: boolean;
+    };
     pettyCash: {
       enabled: boolean;
       dailyLimit: number;
@@ -126,6 +129,9 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
       allowExport: true,
       showDetailedBreakdown: true,
       requireApprovalLimit: 1000,
+    },
+    uniforms: {
+      enabled: false,
     },
     pettyCash: {
       enabled: true,

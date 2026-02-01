@@ -25,6 +25,8 @@ interface QuickActionsGridProps {
   hasOrganization: boolean;
   activeChildGrade?: number;
   isExamEligible?: boolean;
+  childAgeYears?: number;
+  isPreschool?: boolean;
   unreadCount?: number;
   homeworkCount?: number;
   userId?: string;
@@ -36,7 +38,19 @@ interface QuickActionsGridProps {
   } | null;
 }
 
-export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade = 0, isExamEligible = false, unreadCount = 0, homeworkCount = 0, userId, preschoolId, feesDue }: QuickActionsGridProps) {
+export function QuickActionsGrid({
+  usageType,
+  hasOrganization,
+  activeChildGrade = 0,
+  isExamEligible = false,
+  childAgeYears,
+  isPreschool = false,
+  unreadCount = 0,
+  homeworkCount = 0,
+  userId,
+  preschoolId,
+  feesDue,
+}: QuickActionsGridProps) {
   const router = useRouter();
   const { t } = useTranslation();
   const [showMessagesDropdown, setShowMessagesDropdown] = useState(false);
@@ -74,6 +88,12 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
     })();
 
     const feesGlow = Boolean(feesSubtitle);
+    const normalizedUsage = String(usageType || '').toLowerCase();
+    const isEarlyLearner = isPreschool
+      || normalizedUsage === 'preschool'
+      || activeChildGrade < 1
+      || (typeof childAgeYears === 'number' && childAgeYears > 0 && childAgeYears < 6);
+    const hiddenIds = new Set<string>(isEarlyLearner ? ['robotics_lab', 'ebooks', 'exam_prep', 'my_exams'] : []);
 
     // Organization-linked actions (common for all with organization)
     const organizationActions: QuickAction[] = hasOrganization ? [
@@ -117,11 +137,11 @@ export function QuickActionsGrid({ usageType, hasOrganization, activeChildGrade 
         { id: 'settings', icon: Settings, label: t('navigation.settings', { defaultValue: 'Settings' }), href: '/dashboard/parent/settings', color: '#6366f1' }
       );
 
-      return baseActions;
+      return baseActions.filter((action) => !hiddenIds.has(action.id));
     }
 
     // Organization-linked parents (k12, preschool, aftercare)
-    return organizationActions;
+    return organizationActions.filter((action) => !hiddenIds.has(action.id));
   };
 
   const actions = getQuickActions();
