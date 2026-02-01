@@ -105,6 +105,22 @@ interface ProfileLinkRow {
   preschool_id: string | null;
 }
 
+interface ParentCandidate {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  isPrimary: boolean;
+  source: 'guardian' | 'parent';
+}
+
+interface ParentAccountResult extends ParentCandidate {
+  userId: string | null;
+  accountCreated: boolean;
+  generatedPassword?: string | null;
+  profileLinked: boolean;
+}
+
 interface ClassRow {
   id: string;
   age_min?: number | null;
@@ -342,6 +358,160 @@ async function ensureParentProfileLinked(
   }
 }
 
+function buildParentCandidates(registration: RegistrationRequest): ParentCandidate[] {
+  const candidates: ParentCandidate[] = [];
+  const guardianEmail = registration.guardian_email?.trim().toLowerCase() || '';
+  const parentEmail = registration.parent_email?.trim().toLowerCase() || '';
+
+  if (guardianEmail) {
+    candidates.push({
+      email: guardianEmail,
+      firstName: registration.guardian_first_name || registration.parent_first_name || null,
+      lastName: registration.guardian_last_name || registration.parent_last_name || null,
+      phone: registration.guardian_phone || registration.parent_phone || null,
+      isPrimary: true,
+      source: 'guardian',
+    });
+  }
+
+  if (parentEmail) {
+    candidates.push({
+      email: parentEmail,
+      firstName: registration.parent_first_name || registration.guardian_first_name || null,
+      lastName: registration.parent_last_name || registration.guardian_last_name || null,
+      phone: registration.parent_phone || registration.guardian_phone || null,
+      isPrimary: !guardianEmail,
+      source: 'parent',
+    });
+  }
+
+  const uniqueMap = new Map<string, ParentCandidate>();
+  for (const candidate of candidates) {
+    const existing = uniqueMap.get(candidate.email);
+    if (!existing) {
+      uniqueMap.set(candidate.email, candidate);
+    } else {
+      uniqueMap.set(candidate.email, {
+        ...existing,
+        isPrimary: existing.isPrimary || candidate.isPrimary,
+        firstName: existing.firstName || candidate.firstName,
+        lastName: existing.lastName || candidate.lastName,
+        phone: existing.phone || candidate.phone,
+      });
+    }
+  }
+
+  return Array.from(uniqueMap.values());
+}
+
+async function resolveParentAccount(
+  supabase: ReturnType<typeof createClient>,
+  candidate: ParentCandidate,
+  organizationId: string
+): Promise<ParentAccountResult> {
+  let userId: string | null = null;
+  let accountCreated = false;
+  let generatedPassword: string | null = null;
+  let profileLinked = false;
+
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .ilike('email', candidate.email)
+    .maybeSingle();
+
+  if (existingProfile?.id) {
+    userId = existingProfile.id;
+  }
+
+  if (!userId) {
+    try {
+      const { data: existingAuth } = await supabase.auth.admin.getUserByEmail(candidate.email);
+      if (existingAuth?.user?.id) {
+        userId = existingAuth.user.id;
+      }
+    } catch (authLookupError) {
+      console.warn('[sync-registration] Parent auth lookup failed:', authLookupError);
+    }
+  }
+
+  if (!userId) {
+    generatedPassword = generateReadablePassword();
+    accountCreated = true;
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: candidate.email,
+      password: generatedPassword,
+      email_confirm: true,
+      user_metadata: {
+        first_name: candidate.firstName,
+        last_name: candidate.lastName,
+        phone: candidate.phone,
+        role: 'parent',
+      },
+    });
+
+    if (authError || !authData.user) {
+      const errorMessage = authError?.message || 'Unknown error';
+      if (errorMessage.toLowerCase().includes('already') || errorMessage.toLowerCase().includes('exists')) {
+        const { data: existingAuth } = await supabase.auth.admin.getUserByEmail(candidate.email);
+        if (existingAuth?.user?.id) {
+          userId = existingAuth.user.id;
+          accountCreated = false;
+        }
+      }
+
+      if (!userId) {
+        console.error('[sync-registration] Error creating parent account:', authError);
+        return {
+          ...candidate,
+          userId: null,
+          accountCreated: false,
+          generatedPassword: null,
+          profileLinked: false,
+        };
+      }
+    } else {
+      userId = authData.user.id;
+    }
+  }
+
+  if (userId && !existingProfile?.id) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: userId,
+        email: candidate.email,
+        first_name: candidate.firstName,
+        last_name: candidate.lastName,
+        phone: candidate.phone,
+        role: 'parent',
+        preschool_id: organizationId,
+        organization_id: organizationId,
+      });
+
+    if (profileError) {
+      console.error('[sync-registration] Error creating profile:', profileError);
+    }
+  }
+
+  if (userId) {
+    const linkResult = await ensureParentProfileLinked(supabase, userId, organizationId);
+    profileLinked = linkResult.linked;
+    if (!profileLinked) {
+      console.warn('[sync-registration] Parent profile not fully linked:', linkResult);
+    }
+  }
+
+  return {
+    ...candidate,
+    userId,
+    accountCreated,
+    generatedPassword,
+    profileLinked,
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -396,22 +566,19 @@ serve(async (req) => {
       );
     }
 
-    const parentEmail = registration.guardian_email?.toLowerCase() || registration.parent_email?.toLowerCase();
-    const parentFirstName = registration.guardian_first_name || registration.parent_first_name;
-    const parentLastName = registration.guardian_last_name || registration.parent_last_name;
-    const parentPhone = registration.guardian_phone || registration.parent_phone;
     const organizationId = registration.organization_id || registration.preschool_id;
-
-    if (!parentEmail) {
-      return new Response(
-        JSON.stringify({ error: 'Parent email is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     if (!organizationId) {
       return new Response(
         JSON.stringify({ error: 'Organization ID is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const parentCandidates = buildParentCandidates(registration);
+    if (parentCandidates.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Parent email is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -423,81 +590,30 @@ serve(async (req) => {
     );
     const normalizedGrade = normalizeGrade(registration.student_grade || registration.child_grade);
 
-    let parentUserId: string | null = null;
-    let parentAccountCreated = false;
-    let generatedPassword: string | null = null;
-
-    // Step 1: Check if parent account already exists
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id, email, organization_id, preschool_id')
-      .eq('email', parentEmail)
-      .maybeSingle();
-
-    if (existingProfile) {
-      console.log('[sync-registration] Parent profile already exists:', existingProfile.id);
-      parentUserId = existingProfile.id;
-    } else {
-      // Create parent account with generated password
-      generatedPassword = generateReadablePassword();
-      
-      console.log('[sync-registration] Creating parent account for:', parentEmail);
-      
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: parentEmail,
-        password: generatedPassword,
-        email_confirm: true, // Auto-confirm email so they can login immediately
-        user_metadata: {
-          first_name: parentFirstName,
-          last_name: parentLastName,
-          phone: parentPhone,
-          role: 'parent',
-        },
-      });
-
-      if (authError || !authData.user) {
-        console.error('[sync-registration] Error creating parent account:', authError);
-        return new Response(
-          JSON.stringify({ 
-            error: 'Failed to create parent account', 
-            details: authError?.message 
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      parentUserId = authData.user.id;
-      parentAccountCreated = true;
-      console.log('[sync-registration] Parent account created:', parentUserId);
-
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: parentUserId,
-          email: parentEmail,
-          first_name: parentFirstName,
-          last_name: parentLastName,
-          phone: parentPhone,
-          role: 'parent',
-          preschool_id: organizationId,
-          organization_id: organizationId,
-        });
-
-      if (profileError) {
-        console.error('[sync-registration] Error creating profile:', profileError);
-        // Continue - profile might be created by trigger
-      }
+    const parentAccounts: ParentAccountResult[] = [];
+    for (const candidate of parentCandidates) {
+      const result = await resolveParentAccount(supabase, candidate, organizationId);
+      parentAccounts.push(result);
     }
 
-    // Ensure parent profile is linked to the correct organization (even if it already existed)
-    let parentProfileLinked = false;
-    if (parentUserId) {
-      const linkResult = await ensureParentProfileLinked(supabase, parentUserId, organizationId);
-      parentProfileLinked = linkResult.linked;
-      if (!parentProfileLinked) {
-        console.warn('[sync-registration] Parent profile not fully linked:', linkResult);
-      }
+    const failedParents = parentAccounts.filter((parent) => !parent.userId);
+    if (failedParents.length > 0) {
+      console.warn('[sync-registration] Some parent accounts could not be resolved:', failedParents.map((p) => p.email));
+    }
+
+    const primaryParent = parentAccounts.find((parent) => parent.isPrimary && parent.userId)
+      || parentAccounts.find((parent) => parent.userId)
+      || null;
+    const parentUserId = primaryParent?.userId ?? null;
+    const parentProfileLinked = primaryParent?.profileLinked ?? false;
+    const parentAccountCreated = parentAccounts.some((parent) => parent.accountCreated);
+
+    if (!parentUserId) {
+      console.error('[sync-registration] No primary parent account could be resolved');
+      return new Response(
+        JSON.stringify({ error: 'Failed to create parent account' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Step 2: Create student record
@@ -668,16 +784,20 @@ serve(async (req) => {
       }
     }
 
-    // Step 3: Create guardian-student relationship
-    if (parentUserId && studentId) {
-      await supabase
-        .from('student_parent_relationships')
-        .upsert({
-          parent_id: parentUserId,
-          student_id: studentId,
-          relationship_type: 'parent',
-          is_primary: true,
-        }, { onConflict: 'parent_id,student_id' });
+    // Step 3: Create guardian-student relationship(s)
+    if (studentId) {
+      for (const parent of parentAccounts) {
+        if (!parent.userId) continue;
+        const isPrimary = parent.userId === parentUserId || parent.isPrimary;
+        await supabase
+          .from('student_parent_relationships')
+          .upsert({
+            parent_id: parent.userId,
+            student_id: studentId,
+            relationship_type: 'parent',
+            is_primary: isPrimary,
+          }, { onConflict: 'parent_id,student_id' });
+      }
     }
 
     // Step 3.5: Ensure correct tuition fee for next month based on age/grade
@@ -775,21 +895,23 @@ serve(async (req) => {
       .eq('id', registration_id);
 
     // Step 5: Send welcome email with login credentials (if new account)
-    if (parentAccountCreated && generatedPassword && resendApiKey) {
-      console.log('[sync-registration] Sending welcome email to:', parentEmail);
-      
-      // Get school name
+    const newParentAccounts = parentAccounts.filter(
+      (parent) => parent.accountCreated && parent.generatedPassword
+    );
+    if (newParentAccounts.length > 0 && resendApiKey) {
+      // Get school name once
       const { data: school } = await supabase
         .from('preschools')
         .select('name')
         .eq('id', organizationId)
         .single();
-      
+
       const schoolName = school?.name || 'Young Eagles';
-      const parentFullName = `${parentFirstName} ${parentLastName}`.trim();
       const childFullName = `${studentFirstName} ${studentLastName}`.trim();
-      
-      const emailHtml = `
+
+      for (const parent of newParentAccounts) {
+        const parentFullName = `${parent.firstName || ''} ${parent.lastName || ''}`.trim() || 'Parent';
+        const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -823,8 +945,8 @@ serve(async (req) => {
       
       <div class="credentials">
         <h3>🔐 Your Login Credentials</h3>
-        <p><strong>Email:</strong><br><span class="value">${parentEmail}</span></p>
-        <p><strong>Temporary Password:</strong><br><span class="value">${generatedPassword}</span></p>
+        <p><strong>Email:</strong><br><span class="value">${parent.email}</span></p>
+        <p><strong>Temporary Password:</strong><br><span class="value">${parent.generatedPassword}</span></p>
       </div>
       
       <div class="warning">
@@ -855,31 +977,33 @@ serve(async (req) => {
 </body>
 </html>
       `;
-      
-      try {
-        const emailResponse = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: [parentEmail],
-            subject: `✅ Registration Approved - Welcome to ${schoolName}!`,
-            html: emailHtml,
-          }),
-        });
 
-        if (!emailResponse.ok) {
-          const errorText = await emailResponse.text();
-          console.error('[sync-registration] Email send failed:', errorText);
-        } else {
-          console.log('[sync-registration] Welcome email sent successfully');
+        try {
+          console.log('[sync-registration] Sending welcome email to:', parent.email);
+          const emailResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: fromEmail,
+              to: [parent.email],
+              subject: `✅ Registration Approved - Welcome to ${schoolName}!`,
+              html: emailHtml,
+            }),
+          });
+
+          if (!emailResponse.ok) {
+            const errorText = await emailResponse.text();
+            console.error('[sync-registration] Email send failed:', errorText);
+          } else {
+            console.log('[sync-registration] Welcome email sent successfully');
+          }
+        } catch (emailError) {
+          console.error('[sync-registration] Error sending welcome email:', emailError);
+          // Don't fail the whole operation if email fails
         }
-      } catch (emailError) {
-        console.error('[sync-registration] Error sending welcome email:', emailError);
-        // Don't fail the whole operation if email fails
       }
     }
 
@@ -922,7 +1046,7 @@ serve(async (req) => {
           parent_profile_linked: parentProfileLinked,
           student_id: studentId,
           student_created: studentCreated,
-          email_sent: parentAccountCreated && !!resendApiKey,
+          email_sent: newParentAccounts.length > 0 && !!resendApiKey,
         },
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

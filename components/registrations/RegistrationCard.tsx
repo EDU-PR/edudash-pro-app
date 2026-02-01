@@ -9,7 +9,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Text,
   TouchableOpacity,
@@ -18,7 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Registration } from '@/hooks/useRegistrations';
+import { Registration, type ShowAlert } from '@/hooks/useRegistrations';
 import { styles } from './RegistrationCard.styles';
 
 interface RegistrationCardProps {
@@ -30,6 +29,9 @@ interface RegistrationCardProps {
   canApprove: (registration: Registration) => boolean;
   onSendReminder?: (registration: Registration) => void;
   isSendingReminder?: boolean;
+  onSendPopUploadLink?: (registration: Registration) => void;
+  isSendingPopLink?: boolean;
+  showAlert?: ShowAlert;
 }
 
 // Calculate age from DOB
@@ -90,6 +92,9 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   canApprove,
   onSendReminder,
   isSendingReminder,
+  onSendPopUploadLink,
+  isSendingPopLink,
+  showAlert,
 }) => {
   const { theme } = useTheme();
   const colors = theme;
@@ -106,6 +111,12 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   const hasPop = !!item.proof_of_payment_url;
   const canApproveItem = canApprove(item);
   const canVerifyPayment = item.status === 'pending' && hasFee;
+  const canSendPopLink =
+    item.status === 'pending' &&
+    item.source === 'edusite' &&
+    hasFee &&
+    !item.proof_of_payment_url &&
+    !!onSendPopUploadLink;
   const verifyLabel = item.payment_verified
     ? 'Unverify'
     : hasPop
@@ -262,6 +273,28 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
         </TouchableOpacity>
       )}
 
+      {/* Send POP Upload Link */}
+      {canSendPopLink && (
+        <TouchableOpacity
+          style={[
+            styles.popUploadButton,
+            { backgroundColor: '#2563EB20', borderColor: '#2563EB' },
+            isSendingPopLink && { opacity: 0.6 },
+          ]}
+          onPress={() => onSendPopUploadLink?.(item)}
+          disabled={isSendingPopLink || isProcessing}
+        >
+          {isSendingPopLink ? (
+            <ActivityIndicator size="small" color="#2563EB" />
+          ) : (
+            <Ionicons name="link-outline" size={16} color="#2563EB" />
+          )}
+          <Text style={{ color: '#2563EB', marginLeft: 8, fontWeight: '600', fontSize: 13 }}>
+            {isSendingPopLink ? 'Sending...' : 'Send POP Upload Link'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* POP Warning - only show if pending and needs payment */}
       {item.status === 'pending' && !canApproveItem && hasFee && (
         <View style={[styles.popWarning, { backgroundColor: '#F59E0B20' }]}>
@@ -289,11 +322,19 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
           onPress={() => {
             // Open POP in browser/external viewer
             if (!item.proof_of_payment_url) {
-              Alert.alert('Not Available', 'Proof of payment has not been uploaded yet.');
+              showAlert?.({
+                title: 'Not Available',
+                message: 'Proof of payment has not been uploaded yet.',
+                type: 'warning',
+              });
               return;
             }
             Linking.openURL(item.proof_of_payment_url).catch(() => {
-              Alert.alert('Error', 'Could not open proof of payment document');
+              showAlert?.({
+                title: 'Error',
+                message: 'Could not open proof of payment document',
+                type: 'error',
+              });
             });
           }}
         >

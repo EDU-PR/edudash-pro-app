@@ -242,6 +242,7 @@ export default function PrincipalFeeOverviewScreen() {
         
         const payableFees = studentFees.filter(f => !isPreEnrollment(f));
         const monthFees = payableFees.filter((f: any) => {
+          if (isInMonth(f?.paid_date)) return true;
           if (isInMonth(f?.due_date)) return true;
           return isInMonth(f?.created_at);
         });
@@ -343,8 +344,8 @@ export default function PrincipalFeeOverviewScreen() {
       const periodStart = monthStart.toISOString();
       const periodEnd = monthEnd.toISOString();
 
-      const applyPeriod = (query: any) => (
-        isMonth ? query.gte('created_at', periodStart).lt('created_at', periodEnd) : query
+      const applyPeriod = (query: any, column = 'created_at') => (
+        isMonth ? query.gte(column, periodStart).lt(column, periodEnd) : query
       );
 
       const paymentsQuery = applyPeriod(
@@ -357,10 +358,10 @@ export default function PrincipalFeeOverviewScreen() {
       const popsQuery = applyPeriod(
         supabase
           .from('pop_uploads')
-          .select('payment_amount, status, payment_reference, file_path, created_at')
+          .select('payment_amount, status, payment_reference, file_path, created_at, payment_date')
           .eq('preschool_id', organizationId)
           .eq('upload_type', 'proof_of_payment')
-      );
+      , 'payment_date');
 
       const pettyCashQuery = applyPeriod(
         supabase

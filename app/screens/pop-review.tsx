@@ -50,6 +50,7 @@ interface POPUpload {
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
+  payment_for_month?: string;
   payment_reference?: string;
   status: 'pending' | 'approved' | 'rejected' | 'needs_revision';
   reviewed_by?: string;
@@ -293,6 +294,14 @@ export default function POPReviewScreen() {
     });
   };
 
+  const formatMonth = (date?: string) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-ZA', {
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return '#10B981';
@@ -319,6 +328,7 @@ export default function POPReviewScreen() {
     const uploaderName = item.uploader 
       ? `${item.uploader.first_name} ${item.uploader.last_name}` 
       : 'Unknown';
+    const paymentForMonth = item.payment_for_month || item.payment_date;
 
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -361,6 +371,16 @@ export default function POPReviewScreen() {
               {formatAmount(item.payment_amount)}
             </Text>
           </View>
+
+          {paymentForMonth && (
+            <View style={styles.infoRow}>
+              <Ionicons name="calendar" size={16} color={theme.textSecondary} />
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Payment For:</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>
+                {formatMonth(paymentForMonth)}
+              </Text>
+            </View>
+          )}
           
           {item.payment_reference && (
             <View style={styles.infoRow}>

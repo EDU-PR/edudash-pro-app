@@ -22,6 +22,7 @@ export interface POPUpload {
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
+  payment_for_month?: string;
   payment_reference?: string;
   
   // Picture of Progress specific
@@ -78,6 +79,7 @@ export interface CreatePOPUploadData {
   payment_amount?: number;
   payment_method?: string;
   payment_date?: string;
+  payment_for_month?: string;
   payment_reference?: string;
   
   // Progress specific

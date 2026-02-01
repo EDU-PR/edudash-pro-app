@@ -13,6 +13,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
+import { useAlertModal } from '@/components/ui/AlertModal';
+
+export type ShowAlert = ReturnType<typeof useAlertModal>['showAlert'];
 
 // Types
 export interface Registration {
@@ -21,6 +24,10 @@ export interface Registration {
   organization_name?: string;
   edusite_id?: string;
   parent_id?: string; // For in-app registrations - the parent's profile ID
+  parent_email?: string;
+  parent_first_name?: string;
+  parent_last_name?: string;
+  parent_phone?: string;
   // Guardian info
   guardian_name: string;
   guardian_email: string;
@@ -153,6 +160,9 @@ export interface UseRegistrationsReturn {
   // Data
   registrations: Registration[];
   filteredRegistrations: Registration[];
+  // Alert modal
+  alertProps: ReturnType<typeof useAlertModal>['alertProps'];
+  showAlert: ReturnType<typeof useAlertModal>['showAlert'];
   // State
   loading: boolean;
   refreshing: boolean;
@@ -185,6 +195,9 @@ export interface UseRegistrationsReturn {
   // Payment reminders
   sendPaymentReminder: (registration: Registration) => void;
   sendingReminder: string | null;
+  // POP upload link
+  sendPopUploadLink: (registration: Registration) => void;
+  sendingPopLink: string | null;
 }
 
 export function useRegistrations(): UseRegistrationsReturn {
@@ -211,6 +224,7 @@ export function useRegistrations(): UseRegistrationsReturn {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [error, setError] = useState<string | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+  const [sendingPopLink, setSendingPopLink] = useState<string | null>(null);
   
   // Success modal state
   const [successModal, setSuccessModal] = useState<SuccessModalState>({
@@ -223,10 +237,128 @@ export function useRegistrations(): UseRegistrationsReturn {
     setSuccessModal({ visible: true, ...config });
   }, []);
 
+  const { showAlert, alertProps } = useAlertModal();
+
   const getStartMonthIso = (offset: number): string => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     return monthStart.toISOString().split('T')[0];
+  };
+
+  // Send POP upload link email (EduSite registrations only)
+  const sendPopUploadLink = (registration: Registration) => {
+    if (registration.source && registration.source !== 'edusite') {
+      showAlert({
+        title: 'POP Link Unavailable',
+        message: 'POP upload links are only available for website registrations.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const recipientEmails = [registration.guardian_email, registration.parent_email]
+      .map((email) => email?.trim().toLowerCase())
+      .filter((email): email is string => !!email);
+
+    const uniqueEmails = Array.from(new Set(recipientEmails));
+
+    if (uniqueEmails.length === 0) {
+      showAlert({
+        title: 'No Parent Email',
+        message: 'No parent email address is available for this registration.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    const studentName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+    const schoolName = registration.organization_name || 'your school';
+
+    showAlert({
+      title: 'Send POP Upload Link',
+      message: `Send a secure POP upload link to ${uniqueEmails.join(', ')}?`,
+      type: 'info',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Link',
+          onPress: async () => {
+            setSendingPopLink(registration.id);
+            try {
+              const supabase = assertSupabase();
+              const baseUrl =
+                process.env.EXPO_PUBLIC_WEBSITE_URL ||
+                process.env.EXPO_PUBLIC_WEB_URL ||
+                'https://www.edudashpro.org.za';
+              const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+
+              const results = await Promise.all(
+                uniqueEmails.map(async (recipient) => {
+                  const uploadLink =
+                    `${cleanBaseUrl}/registration/pop-upload?registration_id=${encodeURIComponent(registration.id)}` +
+                    `&email=${encodeURIComponent(recipient)}`;
+
+                  const emailBody = `
+<div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+  <h2 style="color: #1d4ed8; margin-bottom: 8px;">Upload Proof of Payment</h2>
+  <p>Dear Parent,</p>
+  <p>We are finalizing <strong>${studentName}</strong>'s registration at <strong>${schoolName}</strong>.</p>
+  <p>Please upload your proof of payment using the secure link below:</p>
+  <p style="margin: 20px 0;">
+    <a href="${uploadLink}" style="display: inline-block; background: #1d4ed8; color: #ffffff; padding: 12px 18px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+      Upload Proof of Payment
+    </a>
+  </p>
+  <p>If the button does not work, copy and paste this link into your browser:</p>
+  <p style="word-break: break-all; color: #475569;">${uploadLink}</p>
+  <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this link. It is intended only for the registered parent.</p>
+</div>
+                  `.trim();
+
+                  const { data, error } = await supabase.functions.invoke('send-email', {
+                    body: {
+                      to: recipient,
+                      subject: `Upload Proof of Payment - ${studentName}`,
+                      body: emailBody,
+                      confirmed: true,
+                      is_html: true,
+                    },
+                  });
+
+                  return { recipient, data, error };
+                })
+              );
+
+              const failures = results.filter((result) => result.error || result.data?.success === false);
+
+              if (failures.length > 0) {
+                console.error('POP link send failures:', failures.map((f) => f.error || f.data));
+                showAlert({
+                  title: 'Partial Success',
+                  message: 'POP upload link sent to some recipients, but at least one email failed.',
+                  type: 'warning',
+                });
+              } else {
+                showAlert({
+                  title: 'POP Upload Link Sent',
+                  message: `POP upload link sent to ${uniqueEmails.join(', ')}.`,
+                  type: 'success',
+                });
+              }
+            } catch (err: any) {
+              console.error('Error sending POP upload link:', err);
+              showAlert({
+                title: 'Send Failed',
+                message: err.message || 'Failed to send POP upload link',
+                type: 'error',
+              });
+            } finally {
+              setSendingPopLink(null);
+            }
+          },
+        },
+      ],
+    });
   };
 
   // Fetch registrations from both tables
@@ -474,14 +606,19 @@ export function useRegistrations(): UseRegistrationsReturn {
 
       if (syncError) throw syncError;
 
-      Alert.alert(
-        'Sync Complete',
-        data?.message || `Synced ${data?.count || 0} registrations from EduSitePro`,
-        [{ text: 'OK', onPress: fetchRegistrations }]
-      );
+      showAlert({
+        title: 'Sync Complete',
+        message: data?.message || `Synced ${data?.count || 0} registrations from EduSitePro`,
+        type: 'success',
+        buttons: [{ text: 'OK', onPress: fetchRegistrations }],
+      });
     } catch (err: any) {
       console.error('❌ [Registrations] Sync error:', err);
-      Alert.alert('Sync Failed', err.message || 'Failed to sync with EduSitePro');
+      showAlert({
+        title: 'Sync Failed',
+        message: err.message || 'Failed to sync with EduSitePro',
+        type: 'error',
+      });
     } finally {
       setSyncing(false);
     }
@@ -1075,10 +1212,11 @@ export function useRegistrations(): UseRegistrationsReturn {
       }
     };
     
-    Alert.alert(
-      'Approve Registration',
+    showAlert({
+      title: 'Approve Registration',
       message,
-      [
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Starts This Month',
@@ -1088,8 +1226,8 @@ export function useRegistrations(): UseRegistrationsReturn {
           text: 'Starts Next Month',
           onPress: () => approveWithStartDate(getStartMonthIso(1)),
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Reject registration
@@ -1106,7 +1244,11 @@ export function useRegistrations(): UseRegistrationsReturn {
           style: 'destructive',
           onPress: async (reason?: string) => {
             if (!reason?.trim()) {
-              Alert.alert('Error', 'Please provide a rejection reason');
+              showAlert({
+                title: 'Rejection Reason Required',
+                message: 'Please provide a rejection reason.',
+                type: 'warning',
+              });
               return;
             }
 
@@ -1159,11 +1301,19 @@ export function useRegistrations(): UseRegistrationsReturn {
                 if (error) throw error;
               }
 
-              Alert.alert('Rejected', 'Registration has been rejected.');
+              showAlert({
+                title: 'Rejected',
+                message: 'Registration has been rejected.',
+                type: 'success',
+              });
               fetchRegistrations();
             } catch (err: any) {
               console.error('Error rejecting registration:', err);
-              Alert.alert('Error', err.message || 'Failed to reject registration');
+              showAlert({
+                title: 'Error',
+                message: err.message || 'Failed to reject registration',
+                type: 'error',
+              });
             } finally {
               setProcessing(null);
             }
@@ -1187,13 +1337,15 @@ export function useRegistrations(): UseRegistrationsReturn {
         : `No proof of payment has been uploaded. Confirm that payment was received for ${registration.student_first_name}?`)
       : `Remove verification for payment for ${registration.student_first_name}?`;
     
-    Alert.alert(
+    showAlert({
       title,
       message,
-      [
+      type: verify ? 'warning' : 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: verify ? 'Verify' : 'Remove',
+          style: verify ? 'default' : 'destructive',
           onPress: async () => {
             setProcessing(registration.id);
             try {
@@ -1248,35 +1400,45 @@ export function useRegistrations(): UseRegistrationsReturn {
                 console.error('[VerifyPayment] Error updating students table:', studentError);
               } else if (!studentData || studentData.length === 0) {
                 console.warn('[VerifyPayment] No matching student found in students table');
-                Alert.alert(
-                  'Partial Success', 
-                  `Payment ${verify ? 'verified' : 'verification removed'} in registration records.\n\nNote: No matching student record found. The parent's dashboard may not reflect this change until the student is synced.`
-                );
+                showAlert({
+                  title: 'Partial Success',
+                  message: `Payment ${verify ? 'verified' : 'verification removed'} in registration records.\n\nNote: No matching student record found. The parent's dashboard may not reflect this change until the student is synced.`,
+                  type: 'warning',
+                });
                 fetchRegistrations();
                 return;
               } else {
                 console.log('[VerifyPayment] Successfully updated', studentData.length, 'student(s)');
               }
 
-              Alert.alert('Success', `Payment ${verify ? 'verified' : 'verification removed'}`);
+              showAlert({
+                title: 'Success',
+                message: `Payment ${verify ? 'verified' : 'verification removed'}`,
+                type: 'success',
+              });
               fetchRegistrations();
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to update payment status');
+              showAlert({
+                title: 'Error',
+                message: err.message || 'Failed to update payment status',
+                type: 'error',
+              });
             } finally {
               setProcessing(null);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Send payment reminder email
   const sendPaymentReminder = async (registration: Registration) => {
-    Alert.alert(
-      'Send Payment Reminder',
-      `Send a payment reminder email to ${registration.guardian_name} (${registration.guardian_email})?`,
-      [
+    showAlert({
+      title: 'Send Payment Reminder',
+      message: `Send a payment reminder email to ${registration.guardian_name} (${registration.guardian_email})?`,
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Send Reminder',
@@ -1476,20 +1638,25 @@ export function useRegistrations(): UseRegistrationsReturn {
                 // Non-fatal - logging failed but email was sent
               }
 
-              Alert.alert(
-                'Reminder Sent ✓',
-                `Payment reminder email has been sent to ${registration.guardian_email}`
-              );
+              showAlert({
+                title: 'Reminder Sent ✓',
+                message: `Payment reminder email has been sent to ${registration.guardian_email}`,
+                type: 'success',
+              });
             } catch (err: any) {
               console.error('Error sending payment reminder:', err);
-              Alert.alert('Error', err.message || 'Failed to send payment reminder');
+              showAlert({
+                title: 'Error',
+                message: err.message || 'Failed to send payment reminder',
+                type: 'error',
+              });
             } finally {
               setSendingReminder(null);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Stats
@@ -1501,6 +1668,9 @@ export function useRegistrations(): UseRegistrationsReturn {
     // Data
     registrations,
     filteredRegistrations,
+    // Alert modal
+    alertProps,
+    showAlert,
     // State
     loading,
     refreshing,
@@ -1508,6 +1678,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     processing,
     error,
     sendingReminder,
+    sendingPopLink,
     // Filters
     searchTerm,
     setSearchTerm,
@@ -1524,6 +1695,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     handleReject,
     handleVerifyPayment,
     sendPaymentReminder,
+    sendPopUploadLink,
     // Helpers
     canApprove,
     // Feature flags

@@ -9,15 +9,16 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
-import { formatPaymentDate } from '@/lib/utils/payment-utils';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
@@ -58,21 +59,31 @@ export function PaymentUploadModal({
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
   const [uploading, setUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [paymentForMonth, setPaymentForMonth] = useState<Date | null>(null);
+  const [showPaymentForPicker, setShowPaymentForPicker] = useState(false);
   const insets = useSafeAreaInsets();
 
   const styles = createStyles(theme, insets);
-  const paymentDateOverride = paymentForDate?.trim() || '';
-  const paymentDateValue = paymentDateOverride || new Date().toISOString().split('T')[0];
-  const paymentForLabel = paymentDateOverride
-    ? formatPaymentDate(paymentDateOverride)
+  const paymentDateValue = new Date().toISOString().split('T')[0];
+  const paymentForLabel = paymentForMonth
+    ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
     : null;
+  const isPaymentForLocked = Boolean(paymentForDate);
+
+  const resolveMonthStart = (dateValue?: string) => {
+    if (!dateValue) return null;
+    const parsed = new Date(dateValue);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+  };
 
   React.useEffect(() => {
     if (visible) {
       setPaymentReference(initialReference);
       setPaymentAmount(initialAmount);
+      setPaymentForMonth(resolveMonthStart(paymentForDate));
     }
-  }, [visible, initialReference, initialAmount]);
+  }, [visible, initialReference, initialAmount, paymentForDate]);
 
   const handleImagePicker = async () => {
     try {
@@ -126,6 +137,10 @@ export function PaymentUploadModal({
   const handleUpload = async () => {
     if (!selectedFile || !selectedChildId || !userId) {
       Alert.alert('Error', 'Please select a file first');
+      return;
+    }
+    if (!paymentForMonth) {
+      Alert.alert('Select Month', 'Please choose the month you are paying for.');
       return;
     }
 
@@ -225,6 +240,11 @@ export function PaymentUploadModal({
 
       const finalPreschoolId = selectedChild?.preschool_id || preschoolId;
       const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount) : 0;
+      const paymentForMonthValue = paymentForMonth
+        ? new Date(paymentForMonth.getFullYear(), paymentForMonth.getMonth(), 1)
+            .toISOString()
+            .split('T')[0]
+        : paymentDateValue;
 
       // Use student_code (which maps from student_id in database) for payment reference
       const studentCode = selectedChild?.student_code || `STU-${selectedChildId.slice(0, 8).toUpperCase()}`;
@@ -247,7 +267,8 @@ export function PaymentUploadModal({
           file_size: uploadResult.fileSize || selectedFile.size || 0,
           file_type: uploadResult.fileType || selectedFile.type || 'unknown',
           payment_amount: paymentAmountNum, // Required by CHECK constraint
-          payment_date: paymentDateValue, // Required by CHECK constraint (YYYY-MM-DD)
+          payment_date: paymentDateValue, // Actual payment date (YYYY-MM-DD)
+          payment_for_month: paymentForMonthValue, // Billing period month (YYYY-MM-DD)
           payment_reference: paymentReference || studentCode,
           status: 'pending',
         })
@@ -376,18 +397,28 @@ export function PaymentUploadModal({
             Always include this reference when making bank payments
           </Text>
 
-          {paymentForLabel && (
-            <>
-              <Text style={styles.modalLabel}>Payment For</Text>
-              <View style={styles.referenceContainer}>
-                <Ionicons name="calendar-outline" size={20} color={theme.primary} />
-                <Text style={styles.referenceText}>{paymentForLabel}</Text>
-              </View>
-              <Text style={styles.referenceHint}>
-                This proof of payment will be matched to this billing period
-              </Text>
-            </>
-          )}
+          <Text style={styles.modalLabel}>Payment For Month *</Text>
+          <TouchableOpacity
+            style={[
+              styles.datePickerButton,
+              isPaymentForLocked && styles.datePickerButtonDisabled,
+            ]}
+            onPress={() => {
+              if (!isPaymentForLocked) setShowPaymentForPicker(true);
+            }}
+            activeOpacity={isPaymentForLocked ? 1 : 0.7}
+          >
+            <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+            <Text style={styles.datePickerText}>
+              {paymentForLabel || 'Select month'}
+            </Text>
+            {!isPaymentForLocked && (
+              <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.referenceHint}>
+            This proof of payment will be matched to the selected billing month.
+          </Text>
 
           <Text style={styles.modalLabel}>Bank Transaction Reference (Optional)</Text>
           <View style={styles.inputContainer}>
@@ -415,11 +446,29 @@ export function PaymentUploadModal({
           </View>
         </ScrollView>
 
+        {showPaymentForPicker && (
+          <DateTimePicker
+            value={paymentForMonth || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS !== 'ios') setShowPaymentForPicker(false);
+              if (event.type === 'dismissed') return;
+              if (selectedDate) {
+                setPaymentForMonth(
+                  new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
+                );
+              }
+              if (Platform.OS === 'ios') setShowPaymentForPicker(false);
+            }}
+          />
+        )}
+
         <View style={styles.modalFooter}>
           <TouchableOpacity 
-            style={[styles.submitButton, (!selectedFile || uploading) && styles.submitButtonDisabled]}
+            style={[styles.submitButton, (!selectedFile || uploading || !paymentForMonth) && styles.submitButtonDisabled]}
             onPress={handleUpload}
-            disabled={!selectedFile || uploading}
+            disabled={!selectedFile || uploading || !paymentForMonth}
           >
             {uploading ? (
               <ActivityIndicator color="#fff" />
@@ -510,6 +559,25 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) => St
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: 8,
+  },
+  datePickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: theme.text,
+  },
+  datePickerButtonDisabled: {
+    opacity: 0.7,
   },
   currencyPrefix: { fontSize: 16, color: theme.textSecondary, marginRight: 4 },
   textInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: theme.text },
