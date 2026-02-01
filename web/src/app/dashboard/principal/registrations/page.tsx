@@ -33,6 +33,7 @@ interface Registration {
   guardian_email: string;
   guardian_phone: string;
   guardian_address: string;
+  parent_email?: string | null;
   // Student info
   student_first_name: string;
   student_last_name: string;
@@ -91,6 +92,7 @@ export default function PrincipalRegistrationsPage() {
   const [lastCheckedCount, setLastCheckedCount] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [sendingPopLinkId, setSendingPopLinkId] = useState<string | null>(null);
 
   // Initialize auth
   useEffect(() => {
@@ -300,6 +302,82 @@ export default function PrincipalRegistrationsPage() {
       alert('Sync failed. Please try again.');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSendPopUploadLink = async (registration: Registration) => {
+    const recipientEmails = [registration.guardian_email, registration.parent_email]
+      .map((email) => email?.trim().toLowerCase())
+      .filter((email): email is string => !!email);
+
+    const uniqueEmails = Array.from(new Set(recipientEmails));
+
+    if (uniqueEmails.length === 0) {
+      alert('No parent email found for this registration.');
+      return;
+    }
+
+    const studentName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+    const schoolName = registration.organization_name || 'your school';
+
+    if (!confirm(`Send POP upload link to ${uniqueEmails.join(', ')}?`)) {
+      return;
+    }
+
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    if (!baseUrl) {
+      alert('Unable to build the upload link. Please try again.');
+      return;
+    }
+
+    setSendingPopLinkId(registration.id);
+    try {
+      const results = await Promise.all(uniqueEmails.map(async (recipient) => {
+        const params = new URLSearchParams({
+          registration_id: registration.id,
+          email: recipient,
+        });
+        const uploadLink = `${baseUrl}/registration/pop-upload?${params.toString()}`;
+        const emailBody = `
+          <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+            <h2 style="color: #1d4ed8; margin-bottom: 8px;">Upload Proof of Payment</h2>
+            <p>Dear Parent,</p>
+            <p>We are finalizing <strong>${studentName}</strong>'s registration at <strong>${schoolName}</strong>.</p>
+            <p>Please upload your proof of payment using the secure link below:</p>
+            <p style="margin: 20px 0;">
+              <a href="${uploadLink}" style="display: inline-block; background: #1d4ed8; color: #ffffff; padding: 12px 18px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                Upload Proof of Payment
+              </a>
+            </p>
+            <p>If the button does not work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #475569;">${uploadLink}</p>
+            <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this link. It is intended only for the registered parent.</p>
+          </div>
+        `;
+
+        return supabase.functions.invoke('send-email', {
+          body: {
+            to: recipient,
+            subject: `Upload Proof of Payment - ${studentName}`,
+            body: emailBody,
+            confirmed: true,
+            is_html: true,
+          },
+        });
+      }));
+
+      const failures = results.filter((result) => result.error);
+      if (failures.length > 0) {
+        console.error('POP link send errors:', failures.map((f) => f.error));
+        alert('POP upload link sent to some recipients, but at least one email failed. Please try again.');
+      } else {
+        alert('✅ POP upload link sent successfully.');
+      }
+    } catch (error) {
+      console.error('Error sending POP upload link:', error);
+      alert('Failed to send POP upload link. Please try again.');
+    } finally {
+      setSendingPopLinkId(null);
     }
   };
 
@@ -597,6 +675,17 @@ export default function PrincipalRegistrationsPage() {
                             )}
                             {reg.status === 'pending' && (
                               <>
+                                {!reg.proof_of_payment_url && (
+                                  <button
+                                    onClick={() => handleSendPopUploadLink(reg)}
+                                    disabled={sendingPopLinkId === reg.id}
+                                    className="text-blue-400 hover:text-blue-300 text-xs font-medium disabled:opacity-50 transition-colors flex items-center gap-1"
+                                    title="Send proof of payment upload link"
+                                  >
+                                    <Mail size={14} />
+                                    {sendingPopLinkId === reg.id ? 'Sending...' : 'Send POP Link'}
+                                  </button>
+                                )}
                                 {reg.proof_of_payment_url && !reg.payment_verified && (
                                   <button
                                     onClick={() => handleVerifyPayment(reg, true)}
@@ -750,6 +839,20 @@ export default function PrincipalRegistrationsPage() {
                           </div>
                         )}
                         <div className="reg-card-actions">
+                          {!reg.proof_of_payment_url && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendPopUploadLink(reg);
+                              }}
+                              disabled={sendingPopLinkId === reg.id}
+                              className="reg-card-btn reg-card-btn-link"
+                              title="Send proof of payment upload link"
+                            >
+                              <Mail size={16} />
+                              {sendingPopLinkId === reg.id ? 'Sending...' : 'Send POP Link'}
+                            </button>
+                          )}
                           {reg.proof_of_payment_url && !reg.payment_verified && (
                             <button
                               onClick={(e) => {
@@ -1027,6 +1130,14 @@ export default function PrincipalRegistrationsPage() {
         }
         .reg-card-btn-unverify:active:not(:disabled) {
           background: rgba(107, 114, 128, 0.2);
+        }
+        .reg-card-btn-link {
+          background: rgba(59, 130, 246, 0.12);
+          border-color: rgba(59, 130, 246, 0.3);
+          color: #60a5fa;
+        }
+        .reg-card-btn-link:active:not(:disabled) {
+          background: rgba(59, 130, 246, 0.2);
         }
 
         /* Responsive */

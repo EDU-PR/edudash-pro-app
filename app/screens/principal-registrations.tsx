@@ -28,6 +28,7 @@ import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useRegistrations, Registration } from '@/hooks/useRegistrations';
 import { RegistrationCard, RegistrationHeader, RegistrationFilters } from '@/components/registrations';
 import { SuccessModal } from '@/components/ui/SuccessModal';
+import { AlertModal } from '@/components/ui/AlertModal';
 
 export default function PrincipalRegistrationsScreen() {
   const { theme } = useTheme();
@@ -41,6 +42,8 @@ export default function PrincipalRegistrationsScreen() {
   // All state and logic from hook
   const {
     filteredRegistrations,
+    alertProps,
+    showAlert,
     loading,
     refreshing,
     syncing,
@@ -60,6 +63,8 @@ export default function PrincipalRegistrationsScreen() {
     handleVerifyPayment,
     sendPaymentReminder,
     sendingReminder,
+    sendPopUploadLink,
+    sendingPopLink,
     canApprove,
     usesEdusiteSync,
     pendingCount,
@@ -78,6 +83,9 @@ export default function PrincipalRegistrationsScreen() {
       canApprove={canApprove}
       onSendReminder={sendPaymentReminder}
       isSendingReminder={sendingReminder === item.id}
+      onSendPopUploadLink={sendPopUploadLink}
+      isSendingPopLink={sendingPopLink === item.id}
+      showAlert={showAlert}
     />
   );
 
@@ -233,6 +241,8 @@ export default function PrincipalRegistrationsScreen() {
         buttonText={successModal.buttonText}
         onClose={() => setSuccessModal(prev => ({ ...prev, visible: false }))}
       />
+
+      <AlertModal {...alertProps} />
     </View>
   );
 }

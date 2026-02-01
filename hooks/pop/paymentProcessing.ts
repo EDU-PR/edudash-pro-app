@@ -28,7 +28,12 @@ export async function createPaymentRecord(
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
       submitted_at: data.created_at,
-      metadata: { pop_upload_id: uploadId, payment_date: data.payment_date, auto_created: true },
+      metadata: {
+        pop_upload_id: uploadId,
+        payment_date: data.payment_date,
+        payment_for_month: data.payment_for_month,
+        auto_created: true,
+      },
     };
     
     const { error } = await supabase.from('payments').insert(paymentRecord);
@@ -42,7 +47,8 @@ export async function createPaymentRecord(
 // Update invoice status to paid
 export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
   try {
-    const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
+    const periodDateValue = data.payment_for_month || data.payment_date;
+    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
@@ -70,7 +76,8 @@ export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
 // Update student fee status to paid
 export async function updateFeeStatus(data: POPUpload): Promise<void> {
   try {
-    const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
+    const periodDateValue = data.payment_for_month || data.payment_date;
+    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
@@ -105,9 +112,9 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
       
       const { error: updateError } = await supabase
         .from('student_fees')
-        .update({ 
-          status: 'paid', 
-          paid_date: new Date().toISOString().split('T')[0],
+        .update({
+          status: 'paid',
+          paid_date: (data.payment_date || new Date().toISOString()).split('T')[0],
           amount_paid: feeAmount,
           amount_outstanding: 0,
         })
@@ -146,7 +153,8 @@ export async function generateInvoice(
       .eq('id', data.student_id)
       .single();
     
-    const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
+    const periodDateValue = data.payment_for_month || data.payment_date;
+    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const invoiceMonth = monthNames[paymentDate.getMonth()];
     const invoiceYear = paymentDate.getFullYear();

@@ -126,6 +126,15 @@ export const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
   },
+  popUploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+    borderWidth: 1,
+  },
   popWarning: {
     flexDirection: 'row',
     alignItems: 'center',

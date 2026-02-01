@@ -30,6 +30,7 @@ interface Registration {
   guardian_email: string;
   guardian_phone: string;
   guardian_address: string;
+  parent_email?: string | null;
   student_first_name: string;
   student_last_name: string;
   student_dob: string;
@@ -63,6 +64,7 @@ export default function RegistrationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [popVerified, setPopVerified] = useState(false);
+  const [sendingPopLink, setSendingPopLink] = useState(false);
 
   useEffect(() => {
     fetchRegistration();
@@ -241,6 +243,84 @@ export default function RegistrationDetailPage() {
       alert(`Failed to ${action} payment. Please try again.`);
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handleSendPopUploadLink = async () => {
+    if (!registration) return;
+
+    const recipientEmails = [registration.guardian_email, registration.parent_email]
+      .map((email) => email?.trim().toLowerCase())
+      .filter((email): email is string => !!email);
+
+    const uniqueEmails = Array.from(new Set(recipientEmails));
+
+    if (uniqueEmails.length === 0) {
+      alert('No parent email found for this registration.');
+      return;
+    }
+
+    const studentName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+    const schoolName = registration.organization_name || 'your school';
+
+    if (!confirm(`Send POP upload link to ${uniqueEmails.join(', ')}?`)) {
+      return;
+    }
+
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    if (!baseUrl) {
+      alert('Unable to build the upload link. Please try again.');
+      return;
+    }
+
+    setSendingPopLink(true);
+    try {
+      const results = await Promise.all(uniqueEmails.map(async (recipient) => {
+        const params = new URLSearchParams({
+          registration_id: registration.id,
+          email: recipient,
+        });
+        const uploadLink = `${baseUrl}/registration/pop-upload?${params.toString()}`;
+        const emailBody = `
+          <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+            <h2 style="color: #1d4ed8; margin-bottom: 8px;">Upload Proof of Payment</h2>
+            <p>Dear Parent,</p>
+            <p>We are finalizing <strong>${studentName}</strong>'s registration at <strong>${schoolName}</strong>.</p>
+            <p>Please upload your proof of payment using the secure link below:</p>
+            <p style="margin: 20px 0;">
+              <a href="${uploadLink}" style="display: inline-block; background: #1d4ed8; color: #ffffff; padding: 12px 18px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                Upload Proof of Payment
+              </a>
+            </p>
+            <p>If the button does not work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #475569;">${uploadLink}</p>
+            <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this link. It is intended only for the registered parent.</p>
+          </div>
+        `;
+
+        return supabase.functions.invoke('send-email', {
+          body: {
+            to: recipient,
+            subject: `Upload Proof of Payment - ${studentName}`,
+            body: emailBody,
+            confirmed: true,
+            is_html: true,
+          },
+        });
+      }));
+
+      const failures = results.filter((result) => result.error);
+      if (failures.length > 0) {
+        console.error('POP link send errors:', failures.map((f) => f.error));
+        alert('POP upload link sent to some recipients, but at least one email failed.');
+      } else {
+        alert('✅ POP upload link sent successfully.');
+      }
+    } catch (error) {
+      console.error('Error sending POP upload link:', error);
+      alert('Failed to send POP upload link. Please try again.');
+    } finally {
+      setSendingPopLink(false);
     }
   };
 
@@ -997,6 +1077,20 @@ Type 'DELETE' to confirm this cannot be undone.`)) {
                   Cannot approve without payment verification
                 </span>
               </div>
+              <button
+                onClick={handleSendPopUploadLink}
+                disabled={sendingPopLink}
+                className="btn"
+                style={{
+                  marginTop: 16,
+                  background: '#2563eb',
+                  color: 'white',
+                  opacity: sendingPopLink ? 0.6 : 1,
+                }}
+              >
+                <Mail size={16} style={{ marginRight: 8 }} />
+                {sendingPopLink ? 'Sending...' : 'Send POP Upload Link'}
+              </button>
             </div>
           )}
         </div>

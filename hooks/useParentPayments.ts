@@ -200,8 +200,9 @@ export function useParentPayments() {
           // The approvePayment function in usePrincipalHub already updates this to 'paid'
           // Find matching POP just for display purposes (pop_status field)
           const matchingPOP = popUploadsData.find((pop: any) => {
-            if (!pop.payment_date) return false;
-            const popDate = new Date(pop.payment_date);
+            const periodDate = pop.payment_for_month || pop.payment_date;
+            if (!periodDate) return false;
+            const popDate = new Date(periodDate);
             const feeDate = new Date(f.due_date);
             const sameMonth = popDate.getMonth() === feeDate.getMonth() && popDate.getFullYear() === feeDate.getFullYear();
             const similarAmount = pop.payment_amount && Math.abs(pop.payment_amount - (f.final_amount || f.amount)) < 10;

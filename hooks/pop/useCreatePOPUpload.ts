@@ -109,8 +109,9 @@ export const useCreatePOPUpload = () => {
 // Validate payment-specific rules
 async function validatePaymentUpload(data: CreatePOPUploadData): Promise<void> {
   // Check if fee for this period is already paid
-  if (data.payment_date) {
-    const paymentDate = new Date(data.payment_date);
+  const periodDateValue = data.payment_for_month || data.payment_date;
+  if (periodDateValue) {
+    const paymentDate = new Date(periodDateValue);
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
@@ -184,6 +185,7 @@ function buildDatabaseRecord(
       payment_amount: data.payment_amount ?? 0,
       payment_method: data.payment_method,
       payment_date: data.payment_date || new Date().toISOString().split('T')[0],
+      payment_for_month: data.payment_for_month || data.payment_date || new Date().toISOString().split('T')[0],
       payment_reference: data.payment_reference,
     }),
     
