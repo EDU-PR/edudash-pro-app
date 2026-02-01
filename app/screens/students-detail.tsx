@@ -181,6 +181,7 @@ if (!preschoolId) {
         .from('students')
         .select(`
           id,
+          student_id,
           first_name,
           last_name,
           date_of_birth,
@@ -192,6 +193,7 @@ if (!preschoolId) {
           avatar_url,
           created_at,
           status,
+          grade_level,
           gender,
           medical_conditions,
           allergies,
@@ -231,12 +233,13 @@ if (!preschoolId) {
         // Get class name
         const className = dbStudent.classes?.name || null;
         
+        const gradeLevel = dbStudent.grade_level || className || 'Not Assigned';
         return {
           id: dbStudent.id,
-          studentId: `STU${new Date().getFullYear()}${String(index + 1).padStart(3, '0')}`,
+          studentId: dbStudent.student_id || dbStudent.id,
           firstName: dbStudent.first_name || 'Unknown',
           lastName: dbStudent.last_name || 'Student',
-          grade: className || 'Not Assigned',
+          grade: gradeLevel,
           dateOfBirth: dbStudent.date_of_birth || '',
           guardianName,
           guardianPhone,

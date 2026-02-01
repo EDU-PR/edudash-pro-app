@@ -143,8 +143,44 @@ export class StudentAvatarService {
       .or(parentFilters.join(','))
       .maybeSingle();
 
-    if (error || !data?.id) {
+    if (error) {
       return null;
+    }
+
+    if (!data?.id) {
+      // Fallback: allow junction-table linked parents to upload
+      const { data: relationship } = await assertSupabase()
+        .from('student_parent_relationships')
+        .select('student_id')
+        .eq('student_id', studentId)
+        .eq('parent_id', parentProfile.id)
+        .maybeSingle();
+
+      if (!relationship?.student_id) {
+        return null;
+      }
+
+      const { data: linkedStudent, error: linkedError } = await assertSupabase()
+        .from('students')
+        .select('id, organization_id, preschool_id, parent_id, guardian_id')
+        .eq('id', studentId)
+        .maybeSingle();
+
+      if (linkedError || !linkedStudent?.id) {
+        return null;
+      }
+
+      const orgId = parentProfile.organization_id || parentProfile.preschool_id;
+      if (orgId) {
+        if (linkedStudent.organization_id && linkedStudent.organization_id !== orgId) {
+          return null;
+        }
+        if (linkedStudent.preschool_id && linkedStudent.preschool_id !== orgId) {
+          return null;
+        }
+      }
+
+      return linkedStudent as StudentRow;
     }
 
     const orgId = parentProfile.organization_id || parentProfile.preschool_id;

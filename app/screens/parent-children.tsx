@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import StudentAvatarService from '@/services/StudentAvatarService';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 export default function ParentChildrenScreen() {
   const { theme } = useTheme();
@@ -52,17 +53,12 @@ export default function ParentChildrenScreen() {
           .maybeSingle();
         
         if (me?.id) {
-          const { data: studentsData } = await client
-            .from('students')
-            .select(`
-              id, first_name, last_name, class_id, is_active, 
-              preschool_id, date_of_birth, parent_id, guardian_id, avatar_url,
-              classes!students_class_id_fkey(id, name, grade_level)
-            `)
-            .or(`parent_id.eq.${me.id},guardian_id.eq.${me.id}`)
-            .eq('is_active', true);
-          
-          setChildren(studentsData || []);
+          const studentsData = await fetchParentChildren(me.id, { includeInactive: false });
+          const normalized = (studentsData || []).map((child: any) => ({
+            ...child,
+            classes: Array.isArray(child.classes) ? child.classes[0] ?? null : child.classes ?? null,
+          }));
+          setChildren(normalized);
         }
       }
     } catch (error) {

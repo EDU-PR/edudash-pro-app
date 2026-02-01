@@ -66,6 +66,42 @@ export async function fetchParentChildren(
   const { includeInactive = false, schoolId } = options || {};
 
   try {
+    // Resolve to internal profile id when caller provides auth user id.
+    let resolvedParentId = parentId;
+    let resolvedAuthUserId: string | null = null;
+
+    const { data: profileById } = await supabase
+      .from('profiles')
+      .select('id, auth_user_id')
+      .eq('id', parentId)
+      .maybeSingle();
+
+    if (profileById?.id) {
+      resolvedParentId = profileById.id;
+      resolvedAuthUserId = profileById.auth_user_id ?? null;
+    } else {
+      const { data: profileByAuth } = await supabase
+        .from('profiles')
+        .select('id, auth_user_id')
+        .eq('auth_user_id', parentId)
+        .maybeSingle();
+
+      if (profileByAuth?.id) {
+        resolvedParentId = profileByAuth.id;
+        resolvedAuthUserId = profileByAuth.auth_user_id ?? parentId;
+      }
+    }
+
+    const parentFilters = [
+      `parent_id.eq.${resolvedParentId}`,
+      `guardian_id.eq.${resolvedParentId}`,
+    ];
+
+    if (resolvedAuthUserId && resolvedAuthUserId !== resolvedParentId) {
+      parentFilters.push(`parent_id.eq.${resolvedAuthUserId}`);
+      parentFilters.push(`guardian_id.eq.${resolvedAuthUserId}`);
+    }
+
     // 1. Fetch children via direct parent_id/guardian_id link
     let directQuery = supabase
       .from('students')
@@ -76,7 +112,7 @@ export async function fetchParentChildren(
         age_group_ref_data:age_groups!students_age_group_ref_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
         classes!students_class_id_fkey(id, name, grade_level)
       `)
-      .or(`parent_id.eq.${parentId},guardian_id.eq.${parentId}`);
+      .or(parentFilters.join(','));
     
     if (!includeInactive) {
       directQuery = directQuery.eq('is_active', true);
@@ -95,7 +131,7 @@ export async function fetchParentChildren(
     const { data: relationships, error: relError } = await supabase
       .from('student_parent_relationships')
       .select('student_id')
-      .eq('parent_id', parentId);
+      .eq('parent_id', resolvedParentId);
 
     if (relError) {
       console.error('[fetchParentChildren] Relationships query error:', relError);

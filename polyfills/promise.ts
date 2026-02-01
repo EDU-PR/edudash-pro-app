@@ -8,6 +8,11 @@
  * (core-js causes infinite loops with Hermes because it replaces the entire Promise)
  */
 
+// RN TS config doesn't include DOM/Node globals; declare minimal aliases.
+declare const global: any;
+declare const window: any;
+declare const self: any;
+
 // Immediately-invoked setup - runs synchronously at import time
 (function setupPromisePolyfills() {
   'use strict';

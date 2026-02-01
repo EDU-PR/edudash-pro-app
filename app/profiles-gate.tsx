@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { signOutAndRedirect } from '@/lib/authActions';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { validateUserAccess, routeAfterLogin } from '@/lib/routeAfterLogin';
@@ -49,7 +50,7 @@ const ROLES = [
  * - Provides clear path forward for users with access issues
  */
 export default function ProfilesGateScreen() {
-  const { user, profile, refreshProfile, loading, profileLoading, signOut } = useAuth();
+  const { user, profile, refreshProfile, loading, profileLoading } = useAuth();
   const { isOnboardingComplete } = useOnboarding();
   const { theme, isDark } = useTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
@@ -263,9 +264,7 @@ export default function ProfilesGateScreen() {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
-      // Ensure we land on the auth screen immediately after sign-out
-      router.replace('/(auth)/sign-in');
+      await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
     } catch (error) {
       console.error('Sign out failed:', error);
     }

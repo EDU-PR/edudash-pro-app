@@ -61,6 +61,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const [userId, setUserId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const { childrenCards, activeChildId } = useChildrenData(userId || undefined);
@@ -91,6 +92,35 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
 
   // Show sidebar navigation for parent dashboard
   const showSidebar = true;
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setShowProfileMenu(false);
+    setMobileNavOpen(false);
+
+    try {
+      const timeoutMs = 2500;
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch {
+      // ignore sign-out errors; we'll force local cleanup next
+    }
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // ignore
+    }
+
+    router.replace('/sign-in');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/sign-in';
+    }
+    setSigningOut(false);
+  };
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -398,11 +428,9 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
                     </button>
 
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        setShowProfileMenu(false);
-                        await supabase.auth.signOut();
-                        router.push('/sign-in');
+                        handleSignOut();
                       }}
                       style={{
                         width: '100%',
@@ -459,10 +487,10 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
               <div className="sidenavFooter">
                 <button
                   className="navItem"
-                  onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+                  onClick={handleSignOut}
                 >
                   <LogOut className="navIcon" />
-                  <span>{t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
+                  <span>{signingOut ? t('common.loading', { defaultValue: 'Loading...' }) : t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
                 </button>
                 <div className="brandPill w-full text-center">{t('dashboard.parent.powered_by', { defaultValue: 'Powered by Young Eagles' })}</div>
               </div>
@@ -532,13 +560,10 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
               <button
                 className="navItem"
                 style={{ width: '100%' }}
-                onClick={async () => { 
-                  await supabase.auth.signOut(); 
-                  router.push('/sign-in'); 
-                }}
+                onClick={handleSignOut}
               >
                 <LogOut className="navIcon" />
-                <span>{t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
+                <span>{signingOut ? t('common.loading', { defaultValue: 'Loading...' }) : t('dashboard.parent.profile.sign_out', { defaultValue: 'Sign out' })}</span>
               </button>
               <div className="brandPill" style={{ marginTop: 'var(--space-2)', width: '100%', textAlign: 'center' }}>
                 {t('dashboard.parent.powered_by', { defaultValue: 'Powered by Young Eagles' })}
