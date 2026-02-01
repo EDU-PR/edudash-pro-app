@@ -143,6 +143,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         
         let finalTier: Tier = 'free';
         let source: TierSource = 'unknown';
+        let sourceDetail: string | undefined = undefined;
         let seatsData: Seats = null;
         
         // Get tier from profile (single source of truth)
@@ -151,6 +152,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           finalTier = tierStr as Tier;
           source = 'profile';
           console.log('[SubscriptionContext] ✅ Tier from profile:', finalTier);
+        }
+
+        const roleLower = String(profile?.role || '').toLowerCase();
+        const isSuperAdmin = roleLower === 'super_admin' || roleLower === 'superadmin';
+        if (isSuperAdmin) {
+          finalTier = 'enterprise';
+          source = 'profile';
+          sourceDetail = 'super_admin_override';
+          console.log('[SubscriptionContext] ✅ Super admin override to enterprise tier');
         }
 
         // If a parent subscription was cancelled and end date has passed, downgrade to free
@@ -283,7 +293,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           
           setTier(finalTier);
           setTierSource(source);
-          setTierSourceDetail(source);
+          setTierSourceDetail(sourceDetail ?? source);
           setSeats(seatsData);
           setReady(true);
         }

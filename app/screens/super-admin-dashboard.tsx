@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   RefreshControl,
   Alert,
   Switch,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -76,6 +78,12 @@ export default function SuperAdminDashboardScreen() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [aiControl, setAiControl] = useState<SuperAdminAIControlState | null>(null);
   const [aiControlLoading, setAiControlLoading] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordModalMessage, setPasswordModalMessage] = useState('');
+  const [passwordValue, setPasswordValue] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const passwordResolverRef = useRef<((ok: boolean) => void) | null>(null);
 
   // Quick actions configuration
   const quickActions: QuickAction[] = [
@@ -449,8 +457,70 @@ export default function SuperAdminDashboardScreen() {
     }
   }, [profile?.role, user?.id]);
 
+  const requestPassword = useCallback(async (actionLabel: string): Promise<boolean> => {
+    if (!user?.email) {
+      Alert.alert('Password Required', 'Please sign in again to verify your password.');
+      return false;
+    }
+
+    setPasswordValue('');
+    setPasswordError(null);
+    setPasswordModalMessage(`Enter your password to ${actionLabel}.`);
+    setPasswordModalVisible(true);
+
+    return new Promise((resolve) => {
+      passwordResolverRef.current = resolve;
+    });
+  }, [user?.email]);
+
+  const closePasswordModal = useCallback((confirmed: boolean) => {
+    setPasswordSubmitting(false);
+    setPasswordModalVisible(false);
+    setPasswordValue('');
+    setPasswordError(null);
+    if (passwordResolverRef.current) {
+      passwordResolverRef.current(confirmed);
+      passwordResolverRef.current = null;
+    }
+  }, []);
+
+  const handlePasswordConfirm = useCallback(async () => {
+    if (!user?.email) {
+      setPasswordError('Email not available. Please sign in again.');
+      return;
+    }
+
+    if (!passwordValue) {
+      setPasswordError('Enter your password to continue.');
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    try {
+      const { error } = await assertSupabase().auth.signInWithPassword({
+        email: user.email,
+        password: passwordValue,
+      });
+
+      if (error) {
+        setPasswordError('Incorrect password. Please try again.');
+        setPasswordSubmitting(false);
+        return;
+      }
+
+      closePasswordModal(true);
+    } catch (error) {
+      console.error('[SuperAdminDashboard] Password confirmation failed:', error);
+      setPasswordError('Unable to verify password. Please try again.');
+      setPasswordSubmitting(false);
+    }
+  }, [closePasswordModal, passwordValue, user?.email]);
+
   const claimOwnership = useCallback(async () => {
     if (!user?.id) return;
+    const confirmed = await requestPassword('claim ownership');
+    if (!confirmed) return;
+
     setAiControlLoading(true);
     try {
       const updated = await SuperAdminAIControl.claimOwnership(user.id);
@@ -474,6 +544,18 @@ export default function SuperAdminDashboardScreen() {
       return;
     }
 
+    const isEnablingAutonomy = patch.autonomy_enabled === true && !aiControl.autonomy_enabled;
+    const isUpgradingMode =
+      patch.autonomy_mode !== undefined &&
+      patch.autonomy_mode !== aiControl.autonomy_mode &&
+      ['copilot', 'full'].includes(patch.autonomy_mode);
+    const isEnablingHighRisk = patch.auto_execute_high === true && !aiControl.auto_execute_high;
+
+    if (isEnablingAutonomy || isUpgradingMode || isEnablingHighRisk) {
+      const confirmed = await requestPassword('activate Dash AI autonomy privileges');
+      if (!confirmed) return;
+    }
+
     setAiControlLoading(true);
     try {
       const updated = await SuperAdminAIControl.updateControlState(patch, user.id, { force: true });
@@ -484,7 +566,7 @@ export default function SuperAdminDashboardScreen() {
     } finally {
       setAiControlLoading(false);
     }
-  }, [aiControl, user?.id]);
+  }, [aiControl, requestPassword, user?.id]);
 
   const applyAutonomyPreset = useCallback(async (preset: 'lockdown' | 'assistant' | 'copilot' | 'full') => {
     if (!aiControl) return;
@@ -1102,6 +1184,62 @@ export default function SuperAdminDashboardScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={passwordModalVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => closePasswordModal(false)}
+      >
+        <View style={styles.passwordOverlay}>
+          <View style={[styles.passwordCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Text style={[styles.passwordTitle, { color: theme.text }]}>Confirm Password</Text>
+            <Text style={[styles.passwordMessage, { color: theme.textSecondary }]}>
+              {passwordModalMessage}
+            </Text>
+            <TextInput
+              value={passwordValue}
+              onChangeText={setPasswordValue}
+              placeholder="Enter your password"
+              placeholderTextColor={theme.textTertiary}
+              secureTextEntry
+              autoCapitalize="none"
+              style={[
+                styles.passwordInput,
+                {
+                  backgroundColor: theme.surfaceVariant,
+                  borderColor: passwordError ? theme.error : theme.border,
+                  color: theme.text,
+                },
+              ]}
+            />
+            {passwordError && (
+              <Text style={[styles.passwordError, { color: theme.error }]}>{passwordError}</Text>
+            )}
+            <View style={styles.passwordActions}>
+              <TouchableOpacity
+                style={[styles.passwordButton, { borderColor: theme.border }]}
+                onPress={() => closePasswordModal(false)}
+                disabled={passwordSubmitting}
+              >
+                <Text style={[styles.passwordButtonText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.passwordButton, { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                onPress={handlePasswordConfirm}
+                disabled={passwordSubmitting}
+              >
+                {passwordSubmitting ? (
+                  <ActivityIndicator size="small" color={theme.onPrimary} />
+                ) : (
+                  <Text style={[styles.passwordButtonText, { color: theme.onPrimary }]}>Confirm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       </View>
     </DesktopLayout>
@@ -1355,6 +1493,59 @@ const styles = StyleSheet.create({
   },
   aiPresetButtonText: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  passwordOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  passwordCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+  },
+  passwordTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  passwordMessage: {
+    fontSize: 13,
+    marginBottom: 14,
+    lineHeight: 18,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  passwordError: {
+    marginTop: 8,
+    fontSize: 12,
+  },
+  passwordActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 16,
+  },
+  passwordButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  passwordButtonText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   actionsGrid: {

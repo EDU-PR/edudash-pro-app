@@ -85,7 +85,7 @@ export function isMembershipUser(userProfile: any): boolean {
   
   // Check if user's role indicates membership (not parent, teacher, student, etc.)
   const isMembershipRole = userProfile.role && 
-    !['parent', 'teacher', 'student', 'learner', 'principal', 'super_admin'].includes(userProfile.role);
+    !['parent', 'teacher', 'student', 'learner', 'principal', 'super_admin', 'superadmin'].includes(userProfile.role);
   
   return !!(hasOrgMembership || hasMemberType || isMembershipRole);
 }
@@ -95,6 +95,9 @@ export function isMembershipUser(userProfile: any): boolean {
  * Note: Teachers and principals are excluded from ads
  */
 export function isAdsEligibleUser(userProfile: any): boolean {
+  if (!userProfile) return false;
+  const role = String(userProfile.role || '').toLowerCase();
+  if (role === 'super_admin' || role === 'superadmin') return false;
   return isParentRole(userProfile) || isLearnerRole(userProfile) || isMembershipUser(userProfile);
 }
 

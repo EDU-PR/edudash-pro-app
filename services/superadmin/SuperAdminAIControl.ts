@@ -67,9 +67,15 @@ export class SuperAdminAIControl {
   }
 
   static async claimOwnership(userId: string): Promise<SuperAdminAIControlState> {
-    return this.updateControlState({
+    const updated = await this.updateControlState({
       owner_user_id: userId,
     }, userId, { force: true });
+
+    if (!updated.owner_user_id || updated.owner_user_id !== userId) {
+      throw new Error('Ownership could not be claimed');
+    }
+
+    return updated;
   }
 
   static async updateControlState(
@@ -95,12 +101,12 @@ export class SuperAdminAIControl {
       throw error;
     }
 
-    const resolved = data ? (data as SuperAdminAIControlState) : DEFAULT_STATE;
-    if (options?.force || !this.cache) {
-      this.cache = { data: resolved, fetchedAt: Date.now() };
-    } else {
-      this.cache = { data: resolved, fetchedAt: Date.now() };
+    if (!data) {
+      throw new Error('AI control record missing');
     }
+
+    const resolved = data as SuperAdminAIControlState;
+    this.cache = { data: resolved, fetchedAt: Date.now() };
     return resolved;
   }
 
@@ -110,4 +116,3 @@ export class SuperAdminAIControl {
     return !!state.owner_user_id && state.owner_user_id === userId;
   }
 }
-
