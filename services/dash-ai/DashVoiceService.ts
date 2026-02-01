@@ -573,7 +573,6 @@ export class DashVoiceService {
         const speaking_rate = Math.round(((voiceSettings.rate ?? 1.0) - 1.0) * 100);
         const pitch = Math.round(((voiceSettings.pitch ?? 1.0) - 1.0) * 100);
 
-        const allowDeviceFallback = shortLang === 'en';
 
         // Try Edge Function (Azure/Google)
         try {
@@ -598,67 +597,17 @@ export class DashVoiceService {
           return;
         } catch (edgeError: any) {
           if (edgeError?.code !== 'DEVICE_FALLBACK') {
-            console.warn('[DashVoice] Edge TTS failed or unavailable, falling back to device TTS');
+            console.warn('[DashVoice] Edge TTS failed or unavailable');
           }
-          if (!allowDeviceFallback) {
-            callbacks?.onError?.(new Error('TTS unavailable for this language right now.'));
-            return;
-          }
-          // Fall through to device TTS below
+          callbacks?.onError?.(new Error('TTS unavailable right now.'));
+          return;
         }
       } catch (mapErr) {
-        console.warn('[DashVoice] Language normalization failed, using device TTS fallback');
-      }
-
-      // Determine device TTS locale (en-ZA, af-ZA, etc.)
-      let effectiveLang = (options?.language as any) || voiceSettings.language || 'en-ZA';
-      try {
-        const { getCurrentLanguage } = await import('@/lib/i18n');
-        const ui = options?.language ? options.language : getCurrentLanguage?.(); // prefer explicit override
-        const map = (l?: string) => {
-          const base = String(l || '').toLowerCase();
-          if (base.startsWith('af')) return 'af-ZA';
-          if (base.startsWith('zu')) return 'zu-ZA';
-          if (base.startsWith('xh')) return 'xh-ZA';
-          if (base.startsWith('nso') || base === 'st' || base.includes('sotho')) return 'nso-ZA';
-          if (base.startsWith('en')) return 'en-ZA';
-          return 'en-ZA';
-        };
-        effectiveLang = map(ui) || map(voiceSettings.language) || 'en-ZA';
-      } catch {
-        const base = String(voiceSettings.language || '').toLowerCase();
-        effectiveLang = base ? (base.startsWith('en') ? 'en-ZA' : base) : 'en-ZA';
-      }
-
-      if (!String(effectiveLang).toLowerCase().startsWith('en')) {
-        callbacks?.onError?.(new Error('TTS unavailable for this language right now.'));
+        console.warn('[DashVoice] Language normalization failed, TTS unavailable');
+        callbacks?.onError?.(new Error('TTS unavailable right now.'));
         return;
       }
-
-      // Device TTS fallback
-      return new Promise<void>((resolve, reject) => {
-        Speech.speak(normalizedText, {
-          language: effectiveLang,
-          pitch: voiceSettings.pitch,
-          rate: voiceSettings.rate,
-          voice: (voiceSettings as any).voice,
-          onStart: () => {
-            callbacks?.onStart?.();
-          },
-          onDone: () => {
-            callbacks?.onDone?.();
-            resolve();
-          },
-          onStopped: () => {
-            callbacks?.onStopped?.();
-            resolve();
-          },
-          onError: (error: any) => {
-            callbacks?.onError?.(error);
-            reject(error);
-          },
-        });
-      });
+      return;
     } catch (error) {
       console.error('[DashVoice] Failed to speak text:', error);
       callbacks?.onError?.(error);

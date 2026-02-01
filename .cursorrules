@@ -47,6 +47,7 @@ Multi-tenant educational platform built with React Native/Expo (mobile), Next.js
 - **Functional components only** with hooks
 - Use `React.memo()` for expensive components
 - Prefer named exports over default exports
+- Avoid `Alert.alert` for popups and confirmations; use `AlertModal`/`useAlertModal` instead
 - Component file structure:
   ```typescript
   // 1. Imports
@@ -556,4 +557,3 @@ if (!data?.length) {
 ---
 
 **Remember**: Security, type safety, and multi-tenant isolation are non-negotiable. Always validate permissions and data access.
-

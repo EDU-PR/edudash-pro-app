@@ -88,6 +88,7 @@ Generate warm, encouraging, and specific reports. Return ONLY a JSON object (no 
 
 Generate the report JSON now:`
 
+    const modelName = Deno.env.get('ANTHROPIC_MODEL') || 'claude-sonnet-4-20250514';
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -96,7 +97,7 @@ Generate the report JSON now:`
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: modelName,
         max_tokens: 2048,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -133,7 +134,7 @@ Generate the report JSON now:`
         week_start: weekStart,
         week_end: weekEnd,
         report_data: reportData,
-        ai_model: 'claude-3-5-sonnet-20241022',
+        ai_model: modelName,
         generation_duration_ms: duration,
         generated_at: new Date().toISOString(),
       })

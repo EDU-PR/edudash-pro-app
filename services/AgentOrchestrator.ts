@@ -216,7 +216,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
           action: 'agent_plan',
           messages,
           tools: toolSpecs,
-          model: 'claude-3-haiku', // Fast model for agent loops
+          model: 'claude-3-haiku-20240307', // Fast model for agent loops
           temperature: 0.3 // Lower temperature for more deterministic behavior
         }
       });
@@ -280,7 +280,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
             { role: 'system', content: 'You are Dash reflecting on task execution.' },
             { role: 'user', content: reflectionPrompt }
           ],
-          model: 'claude-3-haiku',
+          model: 'claude-3-haiku-20240307',
           maxTokens: 100
         }
       });

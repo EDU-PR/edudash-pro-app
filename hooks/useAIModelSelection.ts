@@ -37,7 +37,7 @@ export function useAIModelSelection(
   initialModel?: AIModelId
 ): AIModelSelectionState {
   const { tier: subscriptionTier, ready } = useSubscription()
-  const [selectedModel, setSelectedModelState] = useState<AIModelId>('claude-3-haiku')
+  const [selectedModel, setSelectedModelState] = useState<AIModelId>('claude-3-haiku-20240307')
   const [isLoading, setIsLoading] = useState(true)
 
   // Normalize tier for consistency

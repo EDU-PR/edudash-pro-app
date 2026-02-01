@@ -120,12 +120,12 @@ async function buildFallbackProfileFromSession(
     appMeta.subscription_tier ||
     safeProfile?.organization_membership?.plan_tier ||
     'free';
-  const organizationId =
+  let organizationId =
     userMeta.organization_id ||
     appMeta.organization_id ||
     safeProfile?.organization_id ||
     safeProfile?.organization_membership?.organization_id;
-  const organizationName =
+  let organizationName =
     userMeta.organization_name ||
     appMeta.organization_name ||
     safeProfile?.organization_name ||
@@ -146,6 +146,39 @@ async function buildFallbackProfileFromSession(
     safeProfile?.full_name ||
     `${firstName} ${lastName}`.trim() ||
     undefined;
+  // Best-effort: if org is missing, try to resolve from organization_members
+  if (!organizationId) {
+    try {
+      const { data: membership } = await assertSupabase()
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (membership?.organization_id) {
+        organizationId = membership.organization_id;
+        try {
+          const { data: preschool } = await assertSupabase()
+            .from('preschools')
+            .select('name')
+            .eq('id', organizationId)
+            .maybeSingle();
+          const { data: org } = await assertSupabase()
+            .from('organizations')
+            .select('name')
+            .eq('id', organizationId)
+            .maybeSingle();
+          organizationName = organizationName || preschool?.name || org?.name;
+        } catch {
+          // non-fatal
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
   const capabilities = await getUserCapabilities(role, planTier, seatStatus);
 
   const baseProfile = {
@@ -158,7 +191,7 @@ async function buildFallbackProfileFromSession(
     avatar_url: userMeta.avatar_url || userMeta.picture || safeProfile?.avatar_url,
     organization_id: organizationId,
     organization_name: organizationName,
-    preschool_id: userMeta.preschool_id || appMeta.preschool_id || (safeProfile as any)?.preschool_id,
+    preschool_id: userMeta.preschool_id || appMeta.preschool_id || (safeProfile as any)?.preschool_id || organizationId,
     seat_status: seatStatus,
     capabilities,
     created_at: safeProfile?.created_at || new Date().toISOString(),
@@ -518,7 +551,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   setSession(currentSession);
                   setUser(currentSession.user);
                   
-                  const enhancedProfile = await fetchEnhancedUserProfile(currentSession.user.id);
+                  const enhancedProfile = await fetchEnhancedUserProfile(currentSession.user.id, currentSession);
                   if (enhancedProfile && mounted) {
                     setProfile(enhancedProfile);
                     setPermissions(createPermissionChecker(enhancedProfile));
@@ -573,7 +606,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (mounted) {
               setProfileLoading(true);
             }
-            const profilePromise = fetchEnhancedUserProfile(s.user.id);
+            const profilePromise = fetchEnhancedUserProfile(s.user.id, s);
             try {
               const timeoutPromise = new Promise<null>((resolve) =>
                 setTimeout(() => resolve(null), QUICK_PROFILE_TIMEOUT_MS)
@@ -598,6 +631,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (mounted && enhancedProfile) {
               setProfile(enhancedProfile);
               setPermissions(createPermissionChecker(enhancedProfile));
+              if (__DEV__) {
+                console.log('[AuthContext][DEV] Resolved org after sign-in:', {
+                  organization_id: enhancedProfile.organization_id,
+                  organization_name: enhancedProfile.organization_name,
+                  preschool_id: (enhancedProfile as any)?.preschool_id,
+                  membership: enhancedProfile.organization_membership,
+                });
+              }
               
               track('edudash.auth.profile_loaded', {
                 user_id: s.user.id,

@@ -12,7 +12,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
   Share,
   ActionSheetIOS,
@@ -24,6 +23,7 @@ import type { DashConversation } from '@/services/dash-ai/types';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface DashConversationsHistoryProps {
   onConversationSelect?: (conversationId: string) => void;
@@ -33,6 +33,7 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
   onConversationSelect,
 }) => {
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [conversations, setConversations] = useState<DashConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,41 +129,27 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
       );
     } else {
       // Android alert
-      Alert.alert(
-        'Conversation Options',
-        `What would you like to do with "${conversation.title}"?`,
-        [
-          {
-            text: 'Resume',
-            onPress: () => handleConversationPress(conversation),
-          },
-          {
-            text: 'Export',
-            onPress: () => handleExportConversation(conversation),
-          },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => handleDeleteConversation(conversation),
-          },
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-        ]
-      );
+      showAlert({
+        title: 'Conversation Options',
+        message: `What would you like to do with "${conversation.title}"?`,
+        type: 'info',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Resume', onPress: () => handleConversationPress(conversation) },
+          { text: 'Export', onPress: () => handleExportConversation(conversation) },
+          { text: 'Delete', style: 'destructive', onPress: () => handleDeleteConversation(conversation) },
+        ],
+      });
     }
   };
 
   const handleDeleteConversation = (conversation: DashConversation) => {
-    Alert.alert(
-      'Delete Conversation',
-      `Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
+    showAlert({
+      title: 'Delete Conversation',
+      message: `Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -174,12 +161,16 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
               }
             } catch (error) {
               console.error('Failed to delete conversation:', error);
-              Alert.alert('Error', 'Failed to delete conversation');
+              showAlert({
+                title: 'Error',
+                message: 'Failed to delete conversation',
+                type: 'error',
+              });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleExportConversation = async (conversation: DashConversation) => {
@@ -194,7 +185,11 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
       }
     } catch (error) {
       console.error('Failed to export conversation:', error);
-      Alert.alert('Error', 'Failed to export conversation');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to export conversation',
+        type: 'error',
+      });
     }
   };
 
@@ -206,7 +201,11 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
       }
     } catch (error) {
       console.error('Failed to start new conversation:', error);
-      Alert.alert('Error', 'Failed to start new conversation');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to start new conversation',
+        type: 'error',
+      });
     }
   };
 
@@ -308,6 +307,7 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
         <Text style={[styles.loadingText, { color: theme.text }]}>
           Loading conversations...
         </Text>
+        <AlertModal {...alertProps} />
       </View>
     );
   }
@@ -319,23 +319,32 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
           <TouchableOpacity
             style={[styles.toolbarButton, { borderColor: theme.error }]}
             onPress={() => {
-              Alert.alert(
-                'Delete All Conversations',
-                'This will permanently delete all conversations. Continue?',
-                [
+              showAlert({
+                title: 'Delete All Conversations',
+                message: 'This will permanently delete all conversations. Continue?',
+                type: 'warning',
+                buttons: [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete All', style: 'destructive', onPress: async () => {
-                    try {
-                      if (!dashInstance) return;
-                      const all = await dashInstance.getAllConversations();
-                      for (const c of all) { await dashInstance.deleteConversation(c.id); }
-                      await loadConversations(dashInstance);
-                    } catch (e) {
-                      Alert.alert('Error', 'Failed to delete all conversations');
-                    }
-                  } }
-                ]
-              );
+                  {
+                    text: 'Delete All',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        if (!dashInstance) return;
+                        const all = await dashInstance.getAllConversations();
+                        for (const c of all) { await dashInstance.deleteConversation(c.id); }
+                        await loadConversations(dashInstance);
+                      } catch (e) {
+                        showAlert({
+                          title: 'Error',
+                          message: 'Failed to delete all conversations',
+                          type: 'error',
+                        });
+                      }
+                    },
+                  },
+                ],
+              });
             }}
           >
             <Ionicons name="trash" size={16} color={theme.error} />
@@ -353,7 +362,11 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
                   for (const c of all) { if (c.updated_at < cutoff) { await dashInstance.deleteConversation(c.id); } }
                   await loadConversations(dashInstance);
                 } catch (e) {
-                  Alert.alert('Error', 'Failed to delete old conversations');
+                  showAlert({
+                    title: 'Error',
+                    message: 'Failed to delete old conversations',
+                    type: 'error',
+                  });
                 }
               };
 
@@ -368,16 +381,17 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
                   }
                 );
               } else {
-                Alert.alert(
-                  'Delete Old Conversations',
-                  'Choose a cutoff:',
-                  [
+                showAlert({
+                  title: 'Delete Old Conversations',
+                  message: 'Choose a cutoff:',
+                  type: 'warning',
+                  buttons: [
+                    { text: 'Cancel', style: 'cancel' },
                     { text: '7 days', onPress: () => runDelete(7) },
                     { text: '30 days', onPress: () => runDelete(30) },
                     { text: '90 days', onPress: () => runDelete(90) },
-                    { text: 'Cancel', style: 'cancel' },
-                  ]
-                );
+                  ],
+                });
               }
             }}
           >
@@ -412,6 +426,7 @@ export const DashConversationsHistory: React.FC<DashConversationsHistoryProps> =
           <Ionicons name="add" size={24} color={theme.onPrimary} />
         </TouchableOpacity>
       )}
+      <AlertModal {...alertProps} />
     </View>
   );
 };

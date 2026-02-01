@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import type { AlertButton } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,8 +22,18 @@ import {
 /**
  * Hook for managing AI quota data and operations
  */
-export function useAIQuotaManagement() {
+interface UseAIQuotaManagementOptions {
+  showAlert?: (config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
+}
+
+export function useAIQuotaManagement(options: UseAIQuotaManagementOptions = {}) {
   const { profile } = useAuth();
+  const { showAlert } = options;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,13 +43,27 @@ export function useAIQuotaManagement() {
   const [filters, setFilters] = useState<QuotaFilters>(DEFAULT_FILTERS);
 
   const isAuthorized = isSuperAdmin(profile?.role);
+  const safeAlert = useCallback(
+    (config: { title: string; message?: string; type?: 'info' | 'warning' | 'success' | 'error'; buttons?: AlertButton[] }) => {
+      if (showAlert) {
+        showAlert(config);
+      } else {
+        console.warn('[AIQuotaManagement] Alert:', config.title, config.message || '');
+      }
+    },
+    [showAlert]
+  );
 
   /**
    * Fetch AI quotas from the database
    */
   const fetchAIQuotas = useCallback(async () => {
     if (!isAuthorized) {
-      Alert.alert('Access Denied', 'Super admin privileges required');
+      safeAlert({
+        title: 'Access Denied',
+        message: 'Super admin privileges required',
+        type: 'warning',
+      });
       return;
     }
 
@@ -111,11 +135,15 @@ export function useAIQuotaManagement() {
 
     } catch (error) {
       console.error('Failed to fetch AI quotas:', error);
-      Alert.alert('Error', 'Failed to load AI quota settings');
+      safeAlert({
+        title: 'Error',
+        message: 'Failed to load AI quota settings',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
     }
-  }, [isAuthorized]);
+  }, [isAuthorized, safeAlert]);
 
   /**
    * Refresh data with pull-to-refresh
@@ -174,15 +202,23 @@ export function useAIQuotaManagement() {
         console.error('Failed to log quota update:', logError);
       }
 
-      Alert.alert('Success', 'AI quota updated successfully');
+      safeAlert({
+        title: 'Success',
+        message: 'AI quota updated successfully',
+        type: 'success',
+      });
 
     } catch (error) {
       console.error('Failed to update AI quota:', error);
-      Alert.alert('Error', 'Failed to update AI quota');
+      safeAlert({
+        title: 'Error',
+        message: 'Failed to update AI quota',
+        type: 'error',
+      });
     } finally {
       setSaving(false);
     }
-  }, [profile?.id]);
+  }, [profile?.id, safeAlert]);
 
   /**
    * Suspend or reactivate school AI access
@@ -190,10 +226,11 @@ export function useAIQuotaManagement() {
   const suspendSchool = useCallback(async (school: AIQuotaSettings) => {
     const action = school.is_suspended ? 'reactivate' : 'suspend';
     
-    Alert.alert(
-      `${action.charAt(0).toUpperCase() + action.slice(1)} School`,
-      `Are you sure you want to ${action} AI access for ${school.school_name}?`,
-      [
+    safeAlert({
+      title: `${action.charAt(0).toUpperCase() + action.slice(1)} School`,
+      message: `Are you sure you want to ${action} AI access for ${school.school_name}?`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: action.charAt(0).toUpperCase() + action.slice(1),
@@ -235,26 +272,35 @@ export function useAIQuotaManagement() {
                 console.error('Failed to log AI access toggle:', logError);
               }
 
-              Alert.alert('Success', `AI access ${action}ed for ${school.school_name}`);
+              safeAlert({
+                title: 'Success',
+                message: `AI access ${action}ed for ${school.school_name}`,
+                type: 'success',
+              });
 
             } catch (error) {
               console.error(`Failed to ${action} AI access:`, error);
-              Alert.alert('Error', `Failed to ${action} AI access`);
+              safeAlert({
+                title: 'Error',
+                message: `Failed to ${action} AI access`,
+                type: 'error',
+              });
             }
           }
         }
-      ]
-    );
-  }, [profile?.id]);
+      ],
+    });
+  }, [profile?.id, safeAlert]);
 
   /**
    * Reset school usage to zero
    */
   const resetSchoolUsage = useCallback(async (school: AIQuotaSettings) => {
-    Alert.alert(
-      'Reset Usage',
-      `Are you sure you want to reset AI usage for ${school.school_name}? This will set their current usage to 0.`,
-      [
+    safeAlert({
+      title: 'Reset Usage',
+      message: `Are you sure you want to reset AI usage for ${school.school_name}? This will set their current usage to 0.`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
@@ -294,17 +340,25 @@ export function useAIQuotaManagement() {
                 console.error('Failed to log usage reset:', logError);
               }
 
-              Alert.alert('Success', 'AI usage reset successfully');
+              safeAlert({
+                title: 'Success',
+                message: 'AI usage reset successfully',
+                type: 'success',
+              });
 
             } catch (error) {
               console.error('Failed to reset AI usage:', error);
-              Alert.alert('Error', 'Failed to reset AI usage');
+              safeAlert({
+                title: 'Error',
+                message: 'Failed to reset AI usage',
+                type: 'error',
+              });
             }
           }
         }
-      ]
-    );
-  }, [profile?.id]);
+      ],
+    });
+  }, [profile?.id, safeAlert]);
 
   /**
    * Update global AI configuration
@@ -335,16 +389,24 @@ export function useAIQuotaManagement() {
         console.error('Failed to log global config update:', logError);
       }
 
-      Alert.alert('Success', 'Global AI configuration updated successfully');
+      safeAlert({
+        title: 'Success',
+        message: 'Global AI configuration updated successfully',
+        type: 'success',
+      });
       onComplete?.();
 
     } catch (error) {
       console.error('Failed to update global config:', error);
-      Alert.alert('Error', 'Failed to update global configuration');
+      safeAlert({
+        title: 'Error',
+        message: 'Failed to update global configuration',
+        type: 'error',
+      });
     } finally {
       setSaving(false);
     }
-  }, [globalConfig, profile?.id]);
+  }, [globalConfig, profile?.id, safeAlert]);
 
   // Initial fetch
   useEffect(() => {

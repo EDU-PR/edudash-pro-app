@@ -20,8 +20,6 @@ import {
   StyleSheet,
   Dimensions,
   RefreshControl,
-  Alert,
-  Platform,
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +36,7 @@ import { track } from '@/lib/analytics';
 import { useNotificationsWithFocus } from '@/hooks/useNotifications';
 import { useParentDashboard } from '@/hooks/useDashboardData';
 import { calculateAge } from '@/lib/date-utils';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Import shared components
 import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
@@ -85,6 +84,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const { t } = useTranslation();
   const { theme } = useTheme();
   const { tier, ready: subscriptionReady, refresh: refreshSubscription } = useSubscription();
+  const { showAlert, alertProps } = useAlertModal();
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
@@ -125,6 +125,16 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const upgradeBannerTitle = isK12School && !isEarlyLearner
     ? t('dashboard.upgrade_value', { defaultValue: 'Save time with AI homework help' })
     : t('dashboard.upgrade_value_preschool', { defaultValue: 'Save time with Dash AI support' });
+  const tierLower = String(tier || 'free').toLowerCase();
+  const isDashOrbUnlocked = [
+    'parent_plus',
+    'premium',
+    'pro',
+    'enterprise',
+    'school_premium',
+    'school_pro',
+    'school_enterprise',
+  ].includes(tierLower);
   
   // Onboarding hints state
   const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
@@ -337,10 +347,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/learning-hub');
         break;
       default:
-        Alert.alert(
-          t('common.coming_soon', { defaultValue: 'Coming Soon' }), 
-          t('dashboard.feature_coming_soon', { defaultValue: 'This feature is coming soon!' })
-        );
+        showAlert({
+          title: t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+          message: t('dashboard.feature_coming_soon', { defaultValue: 'This feature is coming soon!' }),
+          type: 'info',
+        });
     }
   };
 
@@ -881,6 +892,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       <DashOrb
         position="bottom-right"
         size={56}
+        locked={!isDashOrbUnlocked}
+        lockedTitle={t('dash_ai.orb_locked_title', { defaultValue: 'Dash Orb Locked' })}
+        lockedMessage={t('dash_ai.orb_locked_message', { defaultValue: 'Upgrade to Parent Plus to unlock the Dash Orb.' })}
+        lockedCtaLabel={t('common.upgrade', { defaultValue: 'Upgrade' })}
+        onUpgradePress={() => router.push('/screens/subscription-setup')}
         learnerContext={{
           ageYears: activeChildAgeYears ?? undefined,
           grade: activeChild?.grade || activeChild?.grade_level || null,
@@ -889,6 +905,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         }}
         onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'parent_dashboard' })}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 };

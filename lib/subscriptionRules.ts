@@ -104,15 +104,14 @@ export function getAIQuotaLimits(tier: Tier | LegacyTier) {
   
   switch (normalizedTier) {
     case 'free':
-      return { monthly: 50, rpm: 5, models: ['claude-3-haiku'] }
+      return { monthly: 50, rpm: 5, models: ['claude-3-haiku-20240307'] }
     case 'starter': 
-      return { monthly: 500, rpm: 15, models: ['claude-3-haiku', 'claude-3-sonnet'] }
+      return { monthly: 500, rpm: 15, models: ['claude-3-haiku-20240307', 'claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022'] }
     case 'premium':
-      return { monthly: 2500, rpm: 30, models: ['claude-3-haiku', 'claude-3-sonnet', 'claude-3-opus'] }
+      return { monthly: 2500, rpm: 30, models: ['claude-3-haiku-20240307', 'claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219'] }
     case 'enterprise':
-      return { monthly: -1, rpm: 60, models: ['claude-3-haiku', 'claude-3-sonnet', 'claude-3-opus'] } // -1 = unlimited
+      return { monthly: -1, rpm: 60, models: ['claude-3-haiku-20240307', 'claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-20250219', 'claude-sonnet-4-20250514', 'claude-sonnet-4-5-20250514'] } // -1 = unlimited
     default:
-      return { monthly: 50, rpm: 5, models: ['claude-3-haiku'] }
+      return { monthly: 50, rpm: 5, models: ['claude-3-haiku-20240307'] }
   }
 }
-

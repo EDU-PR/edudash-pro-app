@@ -7,13 +7,14 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Alert } from 'react-native';
+import { Linking } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
 import { useAlertModal } from '@/components/ui/AlertModal';
+import { convertToE164 } from '@/lib/utils/phoneUtils';
 
 export type ShowAlert = ReturnType<typeof useAlertModal>['showAlert'];
 
@@ -187,6 +188,12 @@ export interface UseRegistrationsReturn {
   // Modal
   successModal: SuccessModalState;
   setSuccessModal: React.Dispatch<React.SetStateAction<SuccessModalState>>;
+  rejectModalVisible: boolean;
+  rejectionReason: string;
+  setRejectionReason: (reason: string) => void;
+  confirmReject: () => Promise<void>;
+  cancelReject: () => void;
+  rejectingRegistration: Registration | null;
   // Actions
   fetchRegistrations: () => Promise<void>;
   onRefresh: () => void;
@@ -235,6 +242,9 @@ export function useRegistrations(): UseRegistrationsReturn {
   const [error, setError] = useState<string | null>(null);
   const [sendingReminder, setSendingReminder] = useState<string | null>(null);
   const [sendingPopLink, setSendingPopLink] = useState<string | null>(null);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectingRegistration, setRejectingRegistration] = useState<Registration | null>(null);
   
   // Success modal state
   const [successModal, setSuccessModal] = useState<SuccessModalState>({
@@ -255,6 +265,59 @@ export function useRegistrations(): UseRegistrationsReturn {
     return monthStart.toISOString().split('T')[0];
   };
 
+  const buildPopUploadLink = (registrationId: string, recipientEmail?: string) => {
+    const baseUrl =
+      process.env.EXPO_PUBLIC_WEBSITE_URL ||
+      process.env.EXPO_PUBLIC_WEB_URL ||
+      'https://www.edudashpro.org.za';
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+    const emailParam = recipientEmail ? `&email=${encodeURIComponent(recipientEmail)}` : '';
+    return `${cleanBaseUrl}/registration/pop-upload?registration_id=${encodeURIComponent(registrationId)}${emailParam}`;
+  };
+
+  const getWhatsAppTargets = (registration: Registration) => {
+    const targets: Array<{ label: string; e164: string; display: string }> = [];
+    const seen = new Set<string>();
+
+    const candidates = [
+      { label: 'Parent', phone: registration.parent_phone },
+      { label: 'Guardian', phone: registration.guardian_phone },
+    ].filter((entry) => !!entry.phone);
+
+    for (const candidate of candidates) {
+      const result = convertToE164(candidate.phone || '');
+      if (result.isValid && result.e164 && !seen.has(result.e164)) {
+        seen.add(result.e164);
+        targets.push({
+          label: candidate.label,
+          e164: result.e164,
+          display: result.formatted || result.e164,
+        });
+      }
+    }
+
+    return targets;
+  };
+
+  const openWhatsApp = async (phoneE164: string, message: string) => {
+    const digits = phoneE164.replace(/[^\d]/g, '');
+    const encodedMessage = encodeURIComponent(message);
+    const appUrl = `whatsapp://send?phone=${digits}&text=${encodedMessage}`;
+    const webUrl = `https://wa.me/${digits}?text=${encodedMessage}`;
+
+    try {
+      const canOpenApp = await Linking.canOpenURL('whatsapp://send');
+      await Linking.openURL(canOpenApp ? appUrl : webUrl);
+    } catch (err) {
+      console.error('Failed to open WhatsApp link:', err);
+      showAlert({
+        title: 'WhatsApp Not Available',
+        message: 'Unable to open WhatsApp on this device. Please try again or use email.',
+        type: 'error',
+      });
+    }
+  };
+
   // Send POP upload link email (EduSite registrations only)
   const sendPopUploadLink = (registration: Registration) => {
     if (registration.source && registration.source !== 'edusite') {
@@ -271,11 +334,12 @@ export function useRegistrations(): UseRegistrationsReturn {
       .filter((email): email is string => !!email);
 
     const uniqueEmails = Array.from(new Set(recipientEmails));
+    const whatsappTargets = getWhatsAppTargets(registration);
 
-    if (uniqueEmails.length === 0) {
+    if (uniqueEmails.length === 0 && whatsappTargets.length === 0) {
       showAlert({
-        title: 'No Parent Email',
-        message: 'No parent email address is available for this registration.',
+        title: 'No Parent Contact',
+        message: 'No parent email or WhatsApp number is available for this registration.',
         type: 'warning',
       });
       return;
@@ -283,32 +347,27 @@ export function useRegistrations(): UseRegistrationsReturn {
 
     const studentName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
     const schoolName = registration.organization_name || 'your school';
+    const defaultEmail = uniqueEmails[0];
 
-    showAlert({
-      title: 'Send POP Upload Link',
-      message: `Send a secure POP upload link to ${uniqueEmails.join(', ')}?`,
-      type: 'info',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send Link',
-          onPress: async () => {
-            setSendingPopLink(registration.id);
-            try {
-              const supabase = assertSupabase();
-              const baseUrl =
-                process.env.EXPO_PUBLIC_WEBSITE_URL ||
-                process.env.EXPO_PUBLIC_WEB_URL ||
-                'https://www.edudashpro.org.za';
-              const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+    const handleSendEmail = async () => {
+      if (uniqueEmails.length === 0) {
+        showAlert({
+          title: 'No Parent Email',
+          message: 'No parent email address is available for this registration.',
+          type: 'warning',
+        });
+        return;
+      }
 
-              const results = await Promise.all(
-                uniqueEmails.map(async (recipient) => {
-                  const uploadLink =
-                    `${cleanBaseUrl}/registration/pop-upload?registration_id=${encodeURIComponent(registration.id)}` +
-                    `&email=${encodeURIComponent(recipient)}`;
+      setSendingPopLink(registration.id);
+      try {
+        const supabase = assertSupabase();
 
-                  const emailBody = `
+        const results = await Promise.all(
+          uniqueEmails.map(async (recipient) => {
+            const uploadLink = buildPopUploadLink(registration.id, recipient);
+
+            const emailBody = `
 <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
   <h2 style="color: #1d4ed8; margin-bottom: 8px;">Upload Proof of Payment</h2>
   <p>Dear Parent,</p>
@@ -323,51 +382,112 @@ export function useRegistrations(): UseRegistrationsReturn {
   <p style="word-break: break-all; color: #475569;">${uploadLink}</p>
   <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Do not share this link. It is intended only for the registered parent.</p>
 </div>
-                  `.trim();
+            `.trim();
 
-                  const { data, error } = await supabase.functions.invoke('send-email', {
-                    body: {
-                      to: recipient,
-                      subject: `Upload Proof of Payment - ${studentName}`,
-                      body: emailBody,
-                      confirmed: true,
-                      is_html: true,
-                    },
-                  });
+            const { data, error } = await supabase.functions.invoke('send-email', {
+              body: {
+                to: recipient,
+                subject: `Upload Proof of Payment - ${studentName}`,
+                body: emailBody,
+                confirmed: true,
+                is_html: true,
+              },
+            });
 
-                  return { recipient, data, error };
-                })
-              );
+            return { recipient, data, error };
+          })
+        );
 
-              const failures = results.filter((result) => result.error || result.data?.success === false);
+        const failures = results.filter((result) => result.error || result.data?.success === false);
 
-              if (failures.length > 0) {
-                console.error('POP link send failures:', failures.map((f) => f.error || f.data));
-                showAlert({
-                  title: 'Partial Success',
-                  message: 'POP upload link sent to some recipients, but at least one email failed.',
-                  type: 'warning',
-                });
-              } else {
-                showAlert({
-                  title: 'POP Upload Link Sent',
-                  message: `POP upload link sent to ${uniqueEmails.join(', ')}.`,
-                  type: 'success',
-                });
-              }
-            } catch (err: any) {
-              console.error('Error sending POP upload link:', err);
-              showAlert({
-                title: 'Send Failed',
-                message: err.message || 'Failed to send POP upload link',
-                type: 'error',
-              });
-            } finally {
-              setSendingPopLink(null);
-            }
-          },
-        },
-      ],
+        if (failures.length > 0) {
+          console.error('POP link send failures:', failures.map((f) => f.error || f.data));
+          showAlert({
+            title: 'Partial Success',
+            message: 'POP upload link sent to some recipients, but at least one email failed.',
+            type: 'warning',
+          });
+        } else {
+          showAlert({
+            title: 'POP Upload Link Sent',
+            message: `POP upload link sent to ${uniqueEmails.join(', ')}.`,
+            type: 'success',
+          });
+        }
+      } catch (err: any) {
+        console.error('Error sending POP upload link:', err);
+        showAlert({
+          title: 'Send Failed',
+          message: err.message || 'Failed to send POP upload link',
+          type: 'error',
+        });
+      } finally {
+        setSendingPopLink(null);
+      }
+    };
+
+    const handleSendWhatsApp = async () => {
+      if (whatsappTargets.length === 0) {
+        showAlert({
+          title: 'No WhatsApp Number',
+          message: 'No valid parent phone number is available for WhatsApp.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const uploadLink = buildPopUploadLink(registration.id, defaultEmail);
+      const message = `Hello! This is ${schoolName}.\n\nPlease upload proof of payment for ${studentName} using the secure link below:\n${uploadLink}\n\nIf you have any questions, reply to this message.`;
+
+      const openForTarget = async (target: { label: string; e164: string }) => {
+        setSendingPopLink(registration.id);
+        await openWhatsApp(target.e164, message);
+        setSendingPopLink(null);
+      };
+
+      if (whatsappTargets.length === 1) {
+        await openForTarget(whatsappTargets[0]);
+        return;
+      }
+
+      showAlert({
+        title: 'Choose WhatsApp Recipient',
+        message: 'Select which number should receive the POP upload link.',
+        type: 'info',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          ...whatsappTargets.map((target) => ({
+            text: `${target.label} (${target.display})`,
+            onPress: () => {
+              void openForTarget(target);
+            },
+          })),
+        ],
+      });
+    };
+
+    const actionButtons = [{ text: 'Cancel', style: 'cancel' as const }];
+    if (uniqueEmails.length > 0) {
+      actionButtons.push({ text: 'Email', onPress: handleSendEmail });
+    }
+    if (whatsappTargets.length > 0) {
+      actionButtons.push({ text: 'WhatsApp', onPress: handleSendWhatsApp });
+    }
+
+    const contactSummary = [
+      uniqueEmails.length > 0 ? `Email: ${uniqueEmails.join(', ')}` : null,
+      whatsappTargets.length > 0
+        ? `WhatsApp: ${whatsappTargets.map((t) => `${t.label} ${t.display}`).join(', ')}`
+        : null,
+    ].filter(Boolean);
+
+    showAlert({
+      title: 'Send POP Upload Link',
+      message: contactSummary.length > 0
+        ? `Choose how to send the POP upload link.\n\n${contactSummary.join('\n')}`
+        : 'Choose how to send the POP upload link.',
+      type: 'info',
+      buttons: actionButtons,
     });
   };
 
@@ -1253,98 +1373,103 @@ export function useRegistrations(): UseRegistrationsReturn {
     });
   };
 
+  const rejectRegistration = async (registration: Registration, reason: string) => {
+    const isInApp = registration.source === 'in-app';
+    setProcessing(registration.id);
+    try {
+      const supabase = assertSupabase();
+
+      if (isInApp) {
+        // Update child_registration_requests table
+        const { error } = await supabase
+          .from('child_registration_requests')
+          .update({
+            status: 'rejected',
+            reviewed_by: user?.id,
+            reviewed_at: new Date().toISOString(),
+            rejection_reason: reason,
+          })
+          .eq('id', registration.id);
+
+        if (error) throw error;
+
+        // Send notification to parent
+        try {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'child_registration_rejected',
+              user_ids: registration.parent_id ? [registration.parent_id] : [],
+              parent_id: registration.parent_id,
+              registration_id: registration.id,
+              preschool_id: registration.organization_id,
+              child_name: `${registration.student_first_name} ${registration.student_last_name}`,
+              rejection_reason: reason,
+            },
+          });
+        } catch (notifErr) {
+          console.warn('Failed to send rejection notification:', notifErr);
+        }
+      } else {
+        // Original EduSite flow
+        const { error } = await supabase
+          .from('registration_requests')
+          .update({
+            status: 'rejected',
+            reviewed_by: user?.id,
+            reviewed_date: new Date().toISOString(),
+            rejection_reason: reason,
+          })
+          .eq('id', registration.id);
+
+        if (error) throw error;
+      }
+
+      showAlert({
+        title: 'Rejected',
+        message: 'Registration has been rejected.',
+        type: 'success',
+      });
+      fetchRegistrations();
+    } catch (err: any) {
+      console.error('Error rejecting registration:', err);
+      showAlert({
+        title: 'Error',
+        message: err.message || 'Failed to reject registration',
+        type: 'error',
+      });
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   // Reject registration
   const handleReject = (registration: Registration) => {
-    const isInApp = registration.source === 'in-app';
-    
-    Alert.prompt(
-      'Reject Registration',
-      `Enter reason for rejecting ${registration.student_first_name} ${registration.student_last_name}'s registration:`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async (reason?: string) => {
-            if (!reason?.trim()) {
-              showAlert({
-                title: 'Rejection Reason Required',
-                message: 'Please provide a rejection reason.',
-                type: 'warning',
-              });
-              return;
-            }
+    setRejectingRegistration(registration);
+    setRejectionReason('');
+    setRejectModalVisible(true);
+  };
 
-            setProcessing(registration.id);
-            try {
-              const supabase = assertSupabase();
-              
-              if (isInApp) {
-                // Update child_registration_requests table
-                const { error } = await supabase
-                  .from('child_registration_requests')
-                  .update({
-                    status: 'rejected',
-                    reviewed_by: user?.id,
-                    reviewed_at: new Date().toISOString(),
-                    rejection_reason: reason,
-                  })
-                  .eq('id', registration.id);
+  const cancelReject = () => {
+    setRejectModalVisible(false);
+    setRejectingRegistration(null);
+    setRejectionReason('');
+  };
 
-                if (error) throw error;
-
-                // Send notification to parent
-                try {
-                  await supabase.functions.invoke('notifications-dispatcher', {
-                    body: {
-                      event_type: 'child_registration_rejected',
-                      user_ids: registration.parent_id ? [registration.parent_id] : [],
-                      parent_id: registration.parent_id,
-                      registration_id: registration.id,
-                      preschool_id: registration.organization_id,
-                      child_name: `${registration.student_first_name} ${registration.student_last_name}`,
-                      rejection_reason: reason,
-                    },
-                  });
-                } catch (notifErr) {
-                  console.warn('Failed to send rejection notification:', notifErr);
-                }
-              } else {
-                // Original EduSite flow
-                const { error } = await supabase
-                  .from('registration_requests')
-                  .update({
-                    status: 'rejected',
-                    reviewed_by: user?.id,
-                    reviewed_date: new Date().toISOString(),
-                    rejection_reason: reason,
-                  })
-                  .eq('id', registration.id);
-
-                if (error) throw error;
-              }
-
-              showAlert({
-                title: 'Rejected',
-                message: 'Registration has been rejected.',
-                type: 'success',
-              });
-              fetchRegistrations();
-            } catch (err: any) {
-              console.error('Error rejecting registration:', err);
-              showAlert({
-                title: 'Error',
-                message: err.message || 'Failed to reject registration',
-                type: 'error',
-              });
-            } finally {
-              setProcessing(null);
-            }
-          },
-        },
-      ],
-      'plain-text'
-    );
+  const confirmReject = async () => {
+    if (!rejectingRegistration) return;
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      showAlert({
+        title: 'Rejection Reason Required',
+        message: 'Please provide a rejection reason.',
+        type: 'warning',
+      });
+      return;
+    }
+    setRejectModalVisible(false);
+    await rejectRegistration(rejectingRegistration, reason);
+    setRejectingRegistration(null);
+    setRejectionReason('');
   };
 
   // Verify payment
@@ -1710,6 +1835,12 @@ export function useRegistrations(): UseRegistrationsReturn {
     // Modal
     successModal,
     setSuccessModal,
+    rejectModalVisible,
+    rejectionReason,
+    setRejectionReason,
+    confirmReject,
+    cancelReject,
+    rejectingRegistration,
     // Actions
     fetchRegistrations,
     onRefresh,

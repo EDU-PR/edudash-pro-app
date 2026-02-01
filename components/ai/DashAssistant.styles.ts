@@ -88,6 +88,50 @@ export const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
   },
+  modelSelector: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  modelSelectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  modelSelectorTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  modelSelectorHint: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modelSelectorRow: {
+    gap: 10,
+  },
+  modelChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 120,
+  },
+  modelChipTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modelChipSub: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+  },
   iconButton: {
     width: screenWidth < 400 ? 32 : 36,
     height: screenWidth < 400 ? 32 : 36,
@@ -149,7 +193,7 @@ export const styles = StyleSheet.create({
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 10,
     alignItems: 'flex-start',
     paddingHorizontal: 0, // No horizontal padding for better layout
   },
@@ -182,10 +226,10 @@ export const styles = StyleSheet.create({
     }),
   },
   messageBubble: {
-    maxWidth: screenWidth < 400 ? screenWidth * 0.92 : screenWidth * 0.88,
-    padding: screenWidth < 400 ? 14 : 16,
+    maxWidth: screenWidth < 400 ? screenWidth * 0.86 : screenWidth * 0.82,
+    padding: screenWidth < 400 ? 12 : 14,
     minHeight: 48,
-    flex: 1,
+    flexShrink: 1,
   },
   // Modern bubble styles with smooth rounded corners
   userBubble: {
@@ -197,8 +241,8 @@ export const styles = StyleSheet.create({
     borderBottomLeftRadius: 6, // Subtle tail effect
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 14,
+    lineHeight: 21,
     flexWrap: 'wrap',
     letterSpacing: 0.3,
   },
@@ -267,6 +311,20 @@ export const styles = StyleSheet.create({
     marginTop: 8,
     gap: 6,
   },
+  imagePreviewRow: {
+    marginTop: 8,
+    gap: 8,
+  },
+  imagePreviewCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  imagePreview: {
+    width: screenWidth < 360 ? 180 : 210,
+    height: screenWidth < 360 ? 120 : 140,
+    resizeMode: 'cover',
+  },
   inlineAnswerContainer: {
     marginTop: 10,
     padding: 10,
@@ -324,22 +382,23 @@ export const styles = StyleSheet.create({
   },
   // Follow-up question chips within assistant messages
   followUpContainer: {
-    marginTop: 8,
-    gap: 6,
+    marginTop: 10,
+  },
+  followUpScroll: {
+    paddingRight: 12,
+    gap: 8,
   },
   followUpChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    paddingRight: 56, // space for FAB overlay
-    borderRadius: 18,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
     backgroundColor: 'rgba(0,0,0,0.03)',
     gap: 8,
-    width: '100%',
-    position: 'relative',
+    minHeight: 34,
     ...(Platform.OS === 'ios' ? {
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
@@ -349,30 +408,10 @@ export const styles = StyleSheet.create({
       elevation: 1,
     }),
   },
-  followUpFab: {
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...(Platform.OS === 'ios' ? {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 3,
-    } : {
-      elevation: 3,
-    }),
-  },
   followUpText: {
-    flex: 1,
-    flexShrink: 1,
-    flexWrap: 'wrap',
-    fontSize: 14,
-    lineHeight: 20,
+    maxWidth: screenWidth < 360 ? 180 : 220,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '600',
   },
   followUpSendIcon: {
@@ -525,27 +564,33 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: screenWidth < 360 ? 6 : 8,
   },
-  cameraButton: {
-    width: screenWidth < 360 ? 34 : 40,
-    height: screenWidth < 360 ? 34 : 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   inputWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     position: 'relative',
-    minHeight: 40,
+    minHeight: 36,
+  },
+  inputAccessoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 10,
+  },
+  inputIconButton: {
+    width: screenWidth < 360 ? 30 : 34,
+    height: screenWidth < 360 ? 30 : 34,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   textInput: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    maxHeight: 100,
-    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxHeight: 88,
+    fontSize: 15,
     borderWidth: 0, // No border, wrapper has border
   },
   sendButton: {
@@ -686,16 +731,6 @@ export const styles = StyleSheet.create({
   scrollToBottomBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-  },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    borderWidth: 1,
-    position: 'relative',
   },
   attachBadge: {
     position: 'absolute',

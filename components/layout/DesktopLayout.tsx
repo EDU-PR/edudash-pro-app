@@ -106,7 +106,22 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
 
   // Resolve tenant slug from enhanced profile (organization membership)
   const org: any = (permissions as any)?.enhancedProfile?.organization_membership || {};
-  const tenantSlug: string = org?.organization_slug || org?.tenant_slug || org?.slug || org?.organization_name || 'EduDash Pro';
+  const fallbackOrgName =
+    profile?.organization_name ||
+    (profile as any)?.preschool_name ||
+    (profile as any)?.school_name ||
+    '';
+  const rawTenantSlug =
+    org?.organization_slug ||
+    org?.tenant_slug ||
+    org?.slug ||
+    org?.organization_name ||
+    fallbackOrgName;
+  const normalizedTenantSlug = typeof rawTenantSlug === 'string' ? rawTenantSlug : '';
+  const tenantSlug: string =
+    normalizedTenantSlug && normalizedTenantSlug.trim().toLowerCase() !== 'unknown'
+      ? normalizedTenantSlug
+      : 'EduDash Pro';
 
   // Mobile layout styles (computed here for mobile header)
   const mobileStyles = React.useMemo(() => ({

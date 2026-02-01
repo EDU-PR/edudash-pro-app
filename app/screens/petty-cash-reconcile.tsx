@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { navigateBack } from '@/lib/navigation';
@@ -149,12 +150,14 @@ export default function PettyCashReconcileScreen() {
       currentMonth.setHours(0, 0, 0, 0);
 
       // Get approved transactions for current month
-      const { data: transactions } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .select('amount, type')
-        .eq('school_id', preschoolId)
-        .eq('status', 'approved')
-        .gte('created_at', currentMonth.toISOString());
+      const { data: transactions } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('amount, type')
+          .eq(column, preschoolId)
+          .eq('status', 'approved')
+          .gte('created_at', currentMonth.toISOString())
+      );
 
       const expenses = (transactions || [])
         .filter(t => t.type === 'expense')
@@ -169,12 +172,14 @@ export default function PettyCashReconcileScreen() {
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Get opening balance from petty cash account
-      const { data: account } = await assertSupabase()
-        .from('petty_cash_accounts')
-        .select('opening_balance')
-        .eq('school_id', preschoolId)
-        .eq('is_active', true)
-        .single();
+      const { data: account } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_accounts')
+          .select('opening_balance')
+          .eq(column, preschoolId)
+          .eq('is_active', true)
+          .single()
+      );
 
       const openingBalance = Number(account?.opening_balance || 0);
       const systemBalance = openingBalance + replenishments - expenses - adjustments;

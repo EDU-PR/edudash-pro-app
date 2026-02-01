@@ -6,13 +6,13 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Alert } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import { TeacherDocumentsService, TeacherDocument, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 import { useSeatLimits, useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
+import type { AlertButton } from '@/components/ui/AlertModal';
 import type { 
   Teacher, 
   Candidate, 
@@ -23,6 +23,12 @@ import type {
 
 interface UseTeacherManagementOptions {
   autoFetch?: boolean;
+  showAlert?: (config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
 }
 
 interface UseTeacherManagementReturn {
@@ -79,8 +85,18 @@ interface UseTeacherManagementReturn {
 export function useTeacherManagement(
   options: UseTeacherManagementOptions = {}
 ): UseTeacherManagementReturn {
-  const { autoFetch = true } = options;
+  const { autoFetch = true, showAlert } = options;
   const { user, profile } = useAuth();
+  const safeAlert = useCallback(
+    (config: { title: string; message?: string; type?: 'info' | 'warning' | 'success' | 'error'; buttons?: AlertButton[] }) => {
+      if (showAlert) {
+        showAlert(config);
+      } else {
+        console.warn('[TeacherManagement] Alert:', config.title, config.message || '');
+      }
+    },
+    [showAlert]
+  );
   
   // Core state
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -165,7 +181,11 @@ export function useTeacherManagement(
         
       if (teachersError) {
         console.error('Error fetching teachers:', teachersError);
-        Alert.alert('Error', 'Failed to load teachers. Please try again.');
+        safeAlert({
+          title: 'Error',
+          message: 'Failed to load teachers. Please try again.',
+          type: 'error',
+        });
         return;
       }
       
@@ -335,11 +355,15 @@ export function useTeacherManagement(
       setTeachers(transformedTeachers);
     } catch (_error) {
       console.error('Failed to fetch teachers:', _error);
-      Alert.alert('Error', 'Failed to load teacher data. Please check your connection.');
+      safeAlert({
+        title: 'Error',
+        message: 'Failed to load teacher data. Please check your connection.',
+        type: 'error',
+      });
     } finally {
       setLoading(false);
     }
-  }, [getPreschoolId]);
+  }, [getPreschoolId, safeAlert]);
 
   // Fetch available candidates for hiring
   const fetchAvailableCandidates = useCallback(async () => {
@@ -470,23 +494,32 @@ export function useTeacherManagement(
   // Seat management handlers
   const handleAssignSeat = useCallback((teacherUserId: string, teacherName: string) => {
     if (shouldDisableAssignment) {
-      Alert.alert(
-        'Seat Limit Reached',
-        `Cannot assign more teacher seats. You have reached the limit for your current plan.${seatUsageDisplay ? `\n\nCurrent usage: ${seatUsageDisplay.displayText}` : ''}`,
-        [
+      safeAlert({
+        title: 'Seat Limit Reached',
+        message: `Cannot assign more teacher seats. You have reached the limit for your current plan.${seatUsageDisplay ? `\n\nCurrent usage: ${seatUsageDisplay.displayText}` : ''}`,
+        type: 'warning',
+        buttons: [
           { text: 'OK', style: 'default' },
-          { text: 'Upgrade Plan', onPress: () => {
-            Alert.alert('Upgrade Plan', 'Plan upgrade feature coming soon!');
-          }}
-        ]
-      );
+          {
+            text: 'Upgrade Plan',
+            onPress: () => {
+              safeAlert({
+                title: 'Upgrade Plan',
+                message: 'Plan upgrade feature coming soon!',
+                type: 'info',
+              });
+            },
+          },
+        ],
+      });
       return;
     }
     
-    Alert.alert(
-      'Assign Teacher Seat',
-      `Assign a teacher seat to ${teacherName}?\n\nThis will allow them to use the teacher portal and access student information.`,
-      [
+    safeAlert({
+      title: 'Assign Teacher Seat',
+      message: `Assign a teacher seat to ${teacherName}?\n\nThis will allow them to use the teacher portal and access student information.`,
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Assign Seat',
@@ -496,18 +529,24 @@ export function useTeacherManagement(
               await fetchTeachers();
             } catch (_error) {
               console.error('Seat assignment failed:', _error);
+              safeAlert({
+                title: 'Assignment Failed',
+                message: _error instanceof Error ? _error.message : 'Unknown error occurred',
+                type: 'error',
+              });
             }
-          }
-        }
-      ]
-    );
-  }, [shouldDisableAssignment, seatUsageDisplay, assignSeat, fetchTeachers]);
+          },
+        },
+      ],
+    });
+  }, [shouldDisableAssignment, seatUsageDisplay, assignSeat, fetchTeachers, safeAlert]);
   
   const handleRevokeSeat = useCallback((teacherUserId: string, teacherName: string) => {
-    Alert.alert(
-      'Revoke Teacher Seat',
-      `Are you sure you want to revoke the teacher seat from ${teacherName}?\n\nThey will lose access to the teacher portal until a new seat is assigned.`,
-      [
+    safeAlert({
+      title: 'Revoke Teacher Seat',
+      message: `Are you sure you want to revoke the teacher seat from ${teacherName}?\n\nThey will lose access to the teacher portal until a new seat is assigned.`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Revoke Seat',
@@ -518,16 +557,24 @@ export function useTeacherManagement(
               await revokeSeat({ teacherUserId });
               console.log('[TeacherManagement] Seat revoked successfully');
               await fetchTeachers();
-              Alert.alert('Success', `Seat revoked from ${teacherName} successfully!`);
+              safeAlert({
+                title: 'Success',
+                message: `Seat revoked from ${teacherName} successfully!`,
+                type: 'success',
+              });
             } catch (_error) {
               console.error('[TeacherManagement] Seat revocation failed:', _error);
-              Alert.alert('Revocation Failed', _error instanceof Error ? _error.message : 'Unknown error occurred');
+              safeAlert({
+                title: 'Revocation Failed',
+                message: _error instanceof Error ? _error.message : 'Unknown error occurred',
+                type: 'error',
+              });
             }
-          }
-        }
-      ]
-    );
-  }, [revokeSeat, fetchTeachers]);
+          },
+        },
+      ],
+    });
+  }, [revokeSeat, fetchTeachers, safeAlert]);
 
   // Refresh selected teacher documents
   const refreshSelectedTeacherDocs = useCallback(async () => {
@@ -547,18 +594,19 @@ export function useTeacherManagement(
 
   // Show document attachment action sheet
   const showAttachDocActionSheet = useCallback(() => {
-    Alert.alert(
-      'Attach Document',
-      'Select which document to attach',
-      [
+    safeAlert({
+      title: 'Attach Document',
+      message: 'Select which document to attach',
+      type: 'info',
+      buttons: [
         { text: 'CV', onPress: () => pickAndUploadTeacherDoc('cv') },
         { text: 'Qualifications', onPress: () => pickAndUploadTeacherDoc('qualifications') },
         { text: 'ID Copy', onPress: () => pickAndUploadTeacherDoc('id_copy') },
         { text: 'Contracts', onPress: () => pickAndUploadTeacherDoc('contracts') },
         { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  }, [pickAndUploadTeacherDoc]);
+      ],
+    });
+  }, [pickAndUploadTeacherDoc, safeAlert]);
 
   // Auto-fetch on mount
   useEffect(() => {

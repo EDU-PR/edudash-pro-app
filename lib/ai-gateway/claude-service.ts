@@ -21,7 +21,7 @@ import {
 
 // Default Claude configuration
 const DEFAULT_CONFIG: Omit<ClaudeConfig, 'apiKey'> = {
-  model: 'claude-3-sonnet-20240229',
+  model: process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
   maxTokens: 4000,
   temperature: 0.7,
 };

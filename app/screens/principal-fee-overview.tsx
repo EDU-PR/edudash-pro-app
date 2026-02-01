@@ -26,6 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 interface StudentWithFees {
   id: string;
@@ -209,11 +210,17 @@ export default function PrincipalFeeOverviewScreen() {
         return 0;
       };
 
-      const isInMonth = (dateString?: string | null) => {
-        if (!dateString) return false;
-        const date = new Date(dateString);
+      const isInMonth = (date?: Date | null) => {
+        if (!date) return false;
         if (Number.isNaN(date.getTime())) return false;
         return date >= monthStart && date < monthEnd;
+      };
+
+      const getFeeMonthDate = (fee: any): Date | null => {
+        const candidate = fee?.due_date || fee?.created_at || fee?.paid_date;
+        if (!candidate) return null;
+        const date = new Date(candidate);
+        return Number.isNaN(date.getTime()) ? null : date;
       };
 
       const processedStudents: StudentWithFees[] = (studentsData || []).map((student: any) => {
@@ -241,11 +248,7 @@ export default function PrincipalFeeOverviewScreen() {
         };
         
         const payableFees = studentFees.filter(f => !isPreEnrollment(f));
-        const monthFees = payableFees.filter((f: any) => {
-          if (isInMonth(f?.paid_date)) return true;
-          if (isInMonth(f?.due_date)) return true;
-          return isInMonth(f?.created_at);
-        });
+        const monthFees = payableFees.filter((f: any) => isInMonth(getFeeMonthDate(f)));
         const baseFees = timeFilter === 'month' ? monthFees : payableFees;
         const dueFees = baseFees.filter(
           (f: any) => unpaidStatuses.has(String(f.status)) && String(f.status) !== 'pending_verification' && isDueNow(f)
@@ -363,13 +366,13 @@ export default function PrincipalFeeOverviewScreen() {
           .eq('upload_type', 'proof_of_payment')
       , 'payment_date');
 
-      const pettyCashQuery = applyPeriod(
-        supabase
+      const pettyRes = await withPettyCashTenant((column, client) => applyPeriod(
+        client
           .from('petty_cash_transactions')
           .select('id, amount, receipt_url, created_at, status, type')
-          .eq('school_id', organizationId)
+          .eq(column, organizationId)
           .eq('type', 'expense')
-      );
+      ));
 
       const financialExpenseQuery = applyPeriod(
         supabase
@@ -379,10 +382,9 @@ export default function PrincipalFeeOverviewScreen() {
           .in('type', ['expense', 'operational_expense', 'salary', 'purchase'])
       );
 
-      const [paymentsRes, popsRes, pettyRes, finRes] = await Promise.all([
+      const [paymentsRes, popsRes, finRes] = await Promise.all([
         paymentsQuery,
         popsQuery,
-        pettyCashQuery,
         financialExpenseQuery,
       ]);
 

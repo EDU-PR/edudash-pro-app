@@ -29,7 +29,7 @@ export default function SignIn() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, loading: authLoading } = useAuth();
+  const { session, user, loading: authLoading } = useAuth();
   const searchParams = useLocalSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,6 +43,14 @@ export default function SignIn() {
   const [refreshing, setRefreshing] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
   const { showAlert, alertProps } = useAlertModal();
+
+  // Clear local loading state once auth state updates
+  useEffect(() => {
+    if (loading && user) {
+      console.log('[SignIn] Auth user detected, clearing loading state');
+      setLoading(false);
+    }
+  }, [loading, user]);
 
   // Pull-to-refresh handler - clears any stale state
   const onRefresh = useCallback(async () => {
@@ -299,6 +307,19 @@ console.log('[SignIn] Component rendering, theme:', theme);
         
         // Check if this is an "email not confirmed" error
         const errorLower = res.error.toLowerCase();
+        if (errorLower.includes('timed out')) {
+          // If auth already succeeded in the background, skip error modal
+          try {
+            const supabase = assertSupabase();
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.user) {
+              setLoading(false);
+              return;
+            }
+          } catch {
+            // fall through to error modal
+          }
+        }
         if (errorLower.includes('email not confirmed') || errorLower.includes('email_not_confirmed')) {
           showAlert({
             title: t('auth.sign_in.email_not_verified', { defaultValue: 'Email Not Verified' }),

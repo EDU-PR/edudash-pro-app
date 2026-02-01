@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react';
 import { usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { isSignOutInProgress } from '@/lib/authActions';
 
 /**
  * Mobile web guard - currently no-op
@@ -26,8 +27,13 @@ export const useAuthGuard = () => {
   const pathname = usePathname();
   const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
+  const signingOut = isSignOutInProgress();
   
   useEffect(() => {
+    if (signingOut) {
+      hasNavigated.current = false;
+      return;
+    }
     // Don't redirect while loading
     if (loading) {
       hasNavigated.current = false;
@@ -63,6 +69,11 @@ export const useAuthGuard = () => {
     if (user && isAuthRoute && !hasNavigated.current) {
       // If profile is still loading, let AuthContext handle routing first
       if (profileLoading) {
+        return;
+      }
+      // Avoid redirecting with a stale profile from a different user
+      if (profile?.id && user?.id && profile.id !== user.id) {
+        console.log('[AuthGuard] Stale profile detected, waiting for refresh');
         return;
       }
       // Don't redirect if on reset-password (user might be changing password)
@@ -109,5 +120,5 @@ export const useAuthGuard = () => {
     return () => {
       hasNavigated.current = false;
     };
-  }, [pathname, user, loading, profile?.role, profileLoading]);
+  }, [pathname, user, loading, profile?.role, profile?.id, profileLoading, signingOut]);
 };

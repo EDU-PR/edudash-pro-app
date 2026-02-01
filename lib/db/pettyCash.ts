@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 // Temporary declaration to satisfy TypeScript in app context
 declare function withTenantContext<T>(schoolId: string, fn: (context: any, queryBuilder?: any) => Promise<T>): Promise<T>;
@@ -147,12 +148,14 @@ export interface PaginatedTransactions {
 export async function getAccountForSchool(schoolId: string): Promise<PettyCashAccount | null> {
   try {
     // Try to get existing account
-    const { data: existing, error } = await assertSupabase()
-      .from('petty_cash_accounts')
-      .select('*')
-      .eq('school_id', schoolId)
-      .eq('is_active', true)
-      .single();
+    const { data: existing, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_accounts')
+        .select('*')
+        .eq(column, schoolId)
+        .eq('is_active', true)
+        .single()
+    );
 
     if (existing) {
       track('petty_cash.account_retrieved', {
@@ -204,12 +207,14 @@ export async function getAccountForSchool(schoolId: string): Promise<PettyCashAc
 export async function getBalance(schoolId: string): Promise<number> {
   try {
     // Prefer direct computation to avoid dependency on RPC/view availability
-    const { data: account, error: accountError } = await assertSupabase()
-      .from('petty_cash_accounts')
-      .select('opening_balance')
-      .eq('school_id', schoolId)
-      .eq('is_active', true)
-      .maybeSingle();
+    const { data: account, error: accountError } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_accounts')
+        .select('opening_balance')
+        .eq(column, schoolId)
+        .eq('is_active', true)
+        .maybeSingle()
+    );
 
     if (accountError) {
       console.warn('Failed to fetch petty cash account:', accountError);
@@ -218,12 +223,14 @@ export async function getBalance(schoolId: string): Promise<number> {
 
     const openingBalance = Number(account?.opening_balance || 0);
 
-    const { data: txns, error: txnsError } = await assertSupabase()
-      .from('petty_cash_transactions')
-      .select('amount, type, status')
-      .eq('school_id', schoolId)
-      .eq('status', 'approved')
-      .limit(1000);
+    const { data: txns, error: txnsError } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .select('amount, type, status')
+        .eq(column, schoolId)
+        .eq('status', 'approved')
+        .limit(1000)
+    );
 
     if (txnsError) {
       console.warn('Failed to fetch transactions for balance calculation:', txnsError);
@@ -275,12 +282,14 @@ export async function getSummary(
     }
 
     // Fetch petty cash account info; compute balance directly if needed
-    const { data: accountData, error: accountError } = await assertSupabase()
-      .from('petty_cash_accounts')
-      .select('opening_balance, low_balance_threshold')
-      .eq('school_id', schoolId)
-      .eq('is_active', true)
-      .maybeSingle();
+    const { data: accountData, error: accountError } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_accounts')
+        .select('opening_balance, low_balance_threshold')
+        .eq(column, schoolId)
+        .eq('is_active', true)
+        .maybeSingle()
+    );
 
     if (accountError) {
       console.warn('Failed to fetch petty cash account for summary:', accountError);
@@ -294,19 +303,21 @@ export async function getSummary(
       
       // Attempt to compute summary via direct queries (limited scope)
       try {
-        let txQuery = assertSupabase()
-          .from('petty_cash_transactions')
-          .select('amount, type, status, created_at')
-          .eq('school_id', schoolId);
+        const { data: txns, error: txErr } = await withPettyCashTenant((column, client) => {
+          let txQuery = client
+            .from('petty_cash_transactions')
+            .select('amount, type, status, created_at')
+            .eq(column, schoolId);
 
-        if (validatedOptions.from) {
-          txQuery = txQuery.gte('created_at', validatedOptions.from.toISOString());
-        }
-        if (validatedOptions.to) {
-          txQuery = txQuery.lt('created_at', validatedOptions.to.toISOString());
-        }
+          if (validatedOptions.from) {
+            txQuery = txQuery.gte('created_at', validatedOptions.from.toISOString());
+          }
+          if (validatedOptions.to) {
+            txQuery = txQuery.lt('created_at', validatedOptions.to.toISOString());
+          }
 
-        const { data: txns, error: txErr } = await txQuery.limit(1000);
+          return txQuery.limit(1000);
+        });
         if (txErr) {
           console.warn('Error fetching transactions for summary fallback:', txErr);
           
@@ -341,12 +352,14 @@ export async function getSummary(
         const pending_count = list.filter(t => t.status === 'pending').length;
 
         // Compute overall signed total for balance across ALL time
-        const { data: allApproved, error: allApprovedError } = await assertSupabase()
-          .from('petty_cash_transactions')
-          .select('amount, type, status')
-          .eq('school_id', schoolId)
-          .eq('status', 'approved')
-          .limit(1000);
+        const { data: allApproved, error: allApprovedError } = await withPettyCashTenant((column, client) =>
+          client
+            .from('petty_cash_transactions')
+            .select('amount, type, status')
+            .eq(column, schoolId)
+            .eq('status', 'approved')
+            .limit(1000)
+        );
 
         if (allApprovedError) {
           console.warn('Failed to fetch all approved transactions:', allApprovedError);
@@ -396,12 +409,14 @@ export async function getSummary(
     };
 
     // Compute overall signed total for balance across ALL time
-    const { data: allApproved } = await assertSupabase()
-      .from('petty_cash_transactions')
-      .select('amount, type, status')
-      .eq('school_id', schoolId)
-      .eq('status', 'approved')
-      .limit(1000);
+    const { data: allApproved } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .select('amount, type, status')
+        .eq(column, schoolId)
+        .eq('status', 'approved')
+        .limit(1000)
+    );
     const totalSignedAll = (allApproved || []).reduce((sum, t: any) => {
       const amt = Number(t.amount || 0);
       if (t.type === 'expense') return sum - amt;
@@ -441,41 +456,41 @@ export async function listTransactions(
   try {
     const validatedFilters = TransactionFiltersSchema.parse({ limit: 20, ...filters });
 
-    let query = assertSupabase()
-      .from('petty_cash_transactions')
-      .select('*')
-      .eq('school_id', schoolId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await withPettyCashTenant((column, client) => {
+      let query = client
+        .from('petty_cash_transactions')
+        .select('*')
+        .eq(column, schoolId)
+        .order('created_at', { ascending: false });
 
-    // Apply filters
-    if (validatedFilters.status) {
-      query = query.eq('status', validatedFilters.status);
-    }
-    if (validatedFilters.type) {
-      query = query.eq('type', validatedFilters.type);
-    }
-    if (validatedFilters.category) {
-      query = query.eq('category', validatedFilters.category);
-    }
-    if (validatedFilters.from) {
-      query = query.gte('created_at', validatedFilters.from.toISOString());
-    }
-    if (validatedFilters.to) {
-      query = query.lte('created_at', validatedFilters.to.toISOString());
-    }
-    if (validatedFilters.search) {
-      query = query.or(`description.ilike.%${validatedFilters.search}%,reference_number.ilike.%${validatedFilters.search}%`);
-    }
+      // Apply filters
+      if (validatedFilters.status) {
+        query = query.eq('status', validatedFilters.status);
+      }
+      if (validatedFilters.type) {
+        query = query.eq('type', validatedFilters.type);
+      }
+      if (validatedFilters.category) {
+        query = query.eq('category', validatedFilters.category);
+      }
+      if (validatedFilters.from) {
+        query = query.gte('created_at', validatedFilters.from.toISOString());
+      }
+      if (validatedFilters.to) {
+        query = query.lte('created_at', validatedFilters.to.toISOString());
+      }
+      if (validatedFilters.search) {
+        query = query.or(`description.ilike.%${validatedFilters.search}%,reference_number.ilike.%${validatedFilters.search}%`);
+      }
 
-    // Handle cursor-based pagination
-    if (validatedFilters.cursor) {
-      query = query.lt('created_at', validatedFilters.cursor);
-    }
+      // Handle cursor-based pagination
+      if (validatedFilters.cursor) {
+        query = query.lt('created_at', validatedFilters.cursor);
+      }
 
-    // Limit with one extra to check for more results
-    query = query.limit(validatedFilters.limit + 1);
-
-    const { data, error } = await query;
+      // Limit with one extra to check for more results
+      return query.limit(validatedFilters.limit + 1);
+    });
 
     if (error) {
       console.error('Error listing transactions:', error);
@@ -543,7 +558,6 @@ export async function createTransaction(
     }
 
     const transactionData = {
-      school_id: schoolId,
       account_id: account.id,
       amount: validatedPayload.amount,
       type: validatedPayload.type,
@@ -556,11 +570,13 @@ export async function createTransaction(
       metadata: validatedPayload.metadata || {},
     };
 
-    const { data, error } = await assertSupabase()
-      .from('petty_cash_transactions')
-      .insert(transactionData)
-      .select('*')
-      .single();
+    const { data, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .insert({ ...transactionData, [column]: schoolId })
+        .select('*')
+        .single()
+    );
 
     if (error) {
       console.error('Error creating transaction:', error);
@@ -598,14 +614,16 @@ export async function approveTransaction(schoolId: string, transactionId: string
       approved_at: new Date().toISOString(),
     };
 
-    const { data, error } = await assertSupabase()
-      .from('petty_cash_transactions')
-      .update(updateData)
-      .eq('id', transactionId)
-      .eq('school_id', schoolId)
-      .eq('status', 'pending')
-      .select('*')
-      .single();
+    const { data, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .update(updateData)
+        .eq('id', transactionId)
+        .eq(column, schoolId)
+        .eq('status', 'pending')
+        .select('*')
+        .single()
+    );
 
     if (error) {
       console.error('Error approving transaction:', error);
@@ -644,14 +662,16 @@ export async function rejectTransaction(
       approved_at: new Date().toISOString(),
     };
 
-    const { data, error } = await assertSupabase()
-      .from('petty_cash_transactions')
-      .update(updateData)
-      .eq('id', transactionId)
-      .eq('school_id', schoolId)
-      .eq('status', 'pending')
-      .select('*')
-      .single();
+    const { data, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .update(updateData)
+        .eq('id', transactionId)
+        .eq(column, schoolId)
+        .eq('status', 'pending')
+        .select('*')
+        .single()
+    );
 
     if (error) {
       console.error('Error rejecting transaction:', error);
@@ -733,7 +753,6 @@ export async function attachReceiptRecord(
 
   return withTenantContext(schoolId, async (context) => {
     const receiptData = {
-      school_id: schoolId,
       transaction_id: transactionId,
       storage_path: storagePath,
       file_name: validatedFileMeta.fileName,
@@ -743,11 +762,13 @@ export async function attachReceiptRecord(
       created_by: context.userId,
     };
 
-    const { data, error } = await assertSupabase()
-      .from('petty_cash_receipts')
-      .insert(receiptData)
-      .select('*')
-      .single();
+    const { data, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_receipts')
+        .insert({ ...receiptData, [column]: schoolId })
+        .select('*')
+        .single()
+    );
 
     if (error) {
       console.error('Error attaching receipt record:', error);
@@ -811,12 +832,14 @@ export async function getReceipts(schoolId: string, transactionId: string): Prom
 export async function deleteReceipt(schoolId: string, receiptId: string): Promise<boolean> {
   return withTenantContext(schoolId, async (context) => {
     // Get receipt details first
-    const { data: receipt, error: fetchError } = await assertSupabase()
-      .from('petty_cash_receipts')
-      .select('storage_path, transaction_id')
-      .eq('id', receiptId)
-      .eq('school_id', schoolId)
-      .single();
+    const { data: receipt, error: fetchError } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_receipts')
+        .select('storage_path, transaction_id')
+        .eq('id', receiptId)
+        .eq(column, schoolId)
+        .single()
+    );
 
     if (fetchError || !receipt) {
       console.error('Error fetching receipt for deletion:', fetchError);
@@ -835,11 +858,13 @@ export async function deleteReceipt(schoolId: string, receiptId: string): Promis
     }
 
     // Delete database record
-    const { error: dbError } = await assertSupabase()
-      .from('petty_cash_receipts')
-      .delete()
-      .eq('id', receiptId)
-      .eq('school_id', schoolId);
+    const { error: dbError } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_receipts')
+        .delete()
+        .eq('id', receiptId)
+        .eq(column, schoolId)
+    );
 
     if (dbError) {
       console.error('Error deleting receipt record:', dbError);

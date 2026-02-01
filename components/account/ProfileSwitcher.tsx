@@ -13,7 +13,6 @@ import {
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +24,11 @@ import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { router } from 'expo-router';
 import { track } from '@/lib/analytics';
+import { assertSupabase } from '@/lib/supabase';
+import { fetchEnhancedUserProfile } from '@/lib/rbac';
+import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
+import { signOutAndRedirect } from '@/lib/authActions';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export interface StoredAccount {
   userId: string;
@@ -55,6 +59,7 @@ export function ProfileSwitcher({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user, refreshProfile } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +113,29 @@ export function ProfileSwitcher({
       return;
     }
 
+    if (!biometricAvailable) {
+      showAlert({
+        title: t('account.biometric_unavailable_title', { defaultValue: 'Biometrics Unavailable' }),
+        message: t('account.biometric_unavailable_message', {
+          defaultValue: 'This device does not have biometrics enabled. To switch accounts, please sign in manually.',
+        }),
+        type: 'warning',
+        buttons: [
+          { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+          {
+            text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
+            style: 'default',
+            onPress: () =>
+              signOutAndRedirect({
+                clearBiometrics: false,
+                redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
+              }),
+          },
+        ],
+      });
+      return;
+    }
+
     try {
       setSwitching(account.userId);
       
@@ -120,11 +148,23 @@ export function ProfileSwitcher({
       const result = await EnhancedBiometricAuth.authenticateWithBiometricForUser(account.userId);
 
       if (!result.success) {
-        Alert.alert(
-          t('account.switch_failed', { defaultValue: 'Switch Failed' }),
-          result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
-          [{ text: t('common.ok', { defaultValue: 'OK' }) }]
-        );
+        showAlert({
+          title: t('account.switch_failed', { defaultValue: 'Switch Failed' }),
+          message: result.error || t('account.biometric_failed', { defaultValue: 'Biometric authentication failed' }),
+          type: 'error',
+          buttons: [
+            { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+            {
+              text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
+              style: 'default',
+              onPress: () =>
+                signOutAndRedirect({
+                  clearBiometrics: false,
+                  redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
+                }),
+            },
+          ],
+        });
         return;
       }
 
@@ -140,53 +180,85 @@ export function ProfileSwitcher({
       // Refresh profile to update UI
       if (result.sessionRestored) {
         await refreshProfile();
-        
-        // Navigate to home to reload dashboard with new user
-        if (Platform.OS === 'web') {
-          // Force reload on web for clean state
-          (globalThis as any)?.location?.reload?.();
-        } else {
-          router.replace('/(tabs)');
+        clearAllNavigationLocks();
+
+        const { data } = await assertSupabase().auth.getUser();
+        const authUser = data?.user || ({ id: account.userId, email: account.email } as any);
+
+        if (!authUser?.id) {
+          router.replace('/(auth)/sign-in');
+          return;
+        }
+
+        let enhancedProfile = null;
+        try {
+          enhancedProfile = await fetchEnhancedUserProfile(authUser.id || account.userId, authUser ? { user: authUser as any } : undefined);
+        } catch (profileError) {
+          console.warn('[ProfileSwitcher] Failed to fetch enhanced profile:', profileError);
+        }
+
+        try {
+          await routeAfterLogin(authUser, enhancedProfile);
+        } catch (routeError) {
+          console.error('[ProfileSwitcher] routeAfterLogin failed:', routeError);
+          if (Platform.OS === 'web') {
+            (globalThis as any)?.location?.replace?.('/profiles-gate');
+          } else {
+            router.replace('/profiles-gate');
+          }
         }
       } else {
         // Session couldn't be restored - need to sign in again
-        Alert.alert(
-          t('account.session_expired', { defaultValue: 'Session Expired' }),
-          t('account.session_expired_message', { defaultValue: 'Please sign in again to continue.' }),
-          [{
-            text: t('common.ok', { defaultValue: 'OK' }),
-            onPress: () => router.replace('/(auth)/sign-in'),
-          }]
-        );
+        showAlert({
+          title: t('account.session_expired', { defaultValue: 'Session Expired' }),
+          message: t('account.session_expired_message', { defaultValue: 'Please sign in again to continue.' }),
+          type: 'warning',
+          buttons: [
+            {
+              text: t('common.ok', { defaultValue: 'OK' }),
+              style: 'default',
+              onPress: () =>
+                signOutAndRedirect({
+                  clearBiometrics: false,
+                  redirectTo: '/(auth)/sign-in?switch=1',
+                }),
+            },
+          ],
+        });
       }
     } catch (error) {
       console.error('Account switch error:', error);
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        t('account.switch_error', { defaultValue: 'Failed to switch account. Please try again.' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('account.switch_error', { defaultValue: 'Failed to switch account. Please try again.' }),
+        type: 'error',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
+      });
     } finally {
       setSwitching(null);
     }
-  }, [user?.id, onClose, onAccountSwitched, refreshProfile, t]);
+  }, [user?.id, onClose, onAccountSwitched, refreshProfile, t, biometricAvailable, showAlert]);
 
   // Remove an account from stored list
   const handleRemoveAccount = useCallback(async (account: StoredAccount) => {
     if (account.isActive) {
-      Alert.alert(
-        t('account.cannot_remove_active', { defaultValue: 'Cannot Remove' }),
-        t('account.cannot_remove_active_message', { defaultValue: 'You cannot remove the currently active account.' })
-      );
+      showAlert({
+        title: t('account.cannot_remove_active', { defaultValue: 'Cannot Remove' }),
+        message: t('account.cannot_remove_active_message', { defaultValue: 'You cannot remove the currently active account.' }),
+        type: 'warning',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }],
+      });
       return;
     }
 
-    Alert.alert(
-      t('account.remove_account', { defaultValue: 'Remove Account' }),
-      t('account.remove_account_confirm', { 
+    showAlert({
+      title: t('account.remove_account', { defaultValue: 'Remove Account' }),
+      message: t('account.remove_account_confirm', { 
         defaultValue: `Remove ${account.email} from quick switch? You can add it back by signing in again.`,
         email: account.email 
       }),
-      [
+      type: 'warning',
+      buttons: [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
           text: t('common.remove', { defaultValue: 'Remove' }),
@@ -201,14 +273,14 @@ export function ProfileSwitcher({
             }
           },
         },
-      ]
-    );
-  }, [t, loadAccounts]);
+      ],
+    });
+  }, [t, loadAccounts, showAlert]);
 
   // Add new account (sign out and go to sign in)
   const handleAddAccount = useCallback(() => {
     onClose();
-    router.push('/(auth)/sign-in?switch=1');
+    signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' });
   }, [onClose]);
 
   // Format last used date
@@ -367,6 +439,7 @@ export function ProfileSwitcher({
             </Text>
           )}
         </View>
+        <AlertModal {...alertProps} />
       </View>
     </Modal>
   );

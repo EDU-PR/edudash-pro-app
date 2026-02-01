@@ -334,7 +334,7 @@ export function createClaudeVoiceSession(): ClaudeVoiceSession {
       const response = await supabase.functions.invoke('ai-gateway', {
         body: {
           action: 'general_assistance',
-          model: 'claude-3-5-sonnet-20241022',
+          model: process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
           messages: [
             { role: 'system', content: opts.systemPrompt || 'You are Dash, a helpful AI assistant. Keep responses concise for voice conversations (2-3 sentences max).' },
             { role: 'user', content: message },

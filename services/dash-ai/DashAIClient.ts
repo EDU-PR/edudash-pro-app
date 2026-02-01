@@ -29,6 +29,7 @@ export interface AIServiceParams {
   userInput?: string;
   context?: string;
   attachments?: any[];
+  model?: string;
   stream?: boolean;
   onChunk?: (chunk: string) => void;
 }
@@ -104,7 +105,7 @@ export class DashAIClient {
         const promptText = messagesArr.length > 0
           ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
           : String(params.content || params.userInput || '');
-        return await this.callAIServiceStreaming({ promptText, context: params.context || undefined }, params.onChunk);
+        return await this.callAIServiceStreaming({ promptText, context: params.context || undefined, model: params.model }, params.onChunk);
       }
       
       // Non-streaming call to ai-proxy
@@ -124,11 +125,13 @@ export class DashAIClient {
           payload: {
             prompt: promptText,
             context: params.context || undefined,
+            model: params.model || undefined,
           },
           stream: false,
           enable_tools: ENABLE_TOOLS,
           metadata: {
-            role: scope
+            role: scope,
+            model: params.model || undefined,
           }
         },
       });
@@ -196,10 +199,15 @@ export class DashAIClient {
       parsedBody = body;
     }
 
+    const fallbackMessage =
+      (error as any)?.message ||
+      (error as any)?.context?.body ||
+      'AI service error';
+
     return {
       status,
       code: parsedBody?.error,
-      message: parsedBody?.message || parsedBody?.error || 'AI service error',
+      message: parsedBody?.message || parsedBody?.error || fallbackMessage,
       details: parsedBody?.details || parsedBody,
     };
   }
@@ -217,6 +225,9 @@ export class DashAIClient {
     }
     if (error.status === 403) {
       return 'Your account needs to be linked to a school to use Dash AI.';
+    }
+    if (error.code === 'provider_error' || error.status === 502) {
+      return 'Dash is temporarily unavailable. Please try again in a moment.';
     }
     if (error.code === 'streaming_not_supported') {
       return 'Live streaming isn’t available yet. Please try again without voice streaming.';
@@ -294,11 +305,13 @@ export class DashAIClient {
           payload: {
             prompt: params.promptText,
             context: params.context || undefined,
+            model: params.model || undefined,
           },
           stream: true,
           enable_tools: true,
           metadata: {
-            role: userRole // Use actual role, not default to teacher
+            role: userRole, // Use actual role, not default to teacher
+            model: params.model || undefined,
           }
         }),
       });
@@ -484,12 +497,14 @@ export class DashAIClient {
             payload: {
               prompt: params.promptText,
               context: params.context || undefined,
+              model: params.model || undefined,
             },
             enable_tools: true,
             metadata: {
               role: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
                 ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
-                : 'teacher')
+                : 'teacher'),
+              model: params.model || undefined,
             }
           };
           

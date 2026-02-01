@@ -22,6 +22,23 @@ type ProviderResponse = {
   tool_results?: ToolResult[];
 };
 
+const DEFAULT_OPENAI_ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o'];
+const DEFAULT_ANTHROPIC_ALLOWED_MODELS = [
+  'claude-sonnet-4-20250514',
+  'claude-sonnet-4-5-20250514',
+  'claude-opus-4-20250514',
+  'claude-3-7-sonnet-20250219',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-20241022',
+  'claude-3-sonnet-20240229',
+  'claude-3-opus-20240229',
+  'claude-3-haiku-20240307',
+];
+const DEFAULT_SUPERADMIN_ALLOWED_MODELS = [
+  'claude-sonnet-4-20250514',
+  'claude-sonnet-4-5-20250514',
+];
+
 const ImageSchema = z.object({
   data: z.string(),
   media_type: z.string(),
@@ -61,6 +78,7 @@ const RequestSchema = z.object({
       images: z.array(ImageSchema).optional(),
       image_context: z.record(z.unknown()).optional(),
       voice_data: z.record(z.unknown()).optional(),
+      model: z.string().optional(),
     })
     .default({}),
   stream: z.boolean().optional(),
@@ -91,15 +109,69 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function getEnv(name: string): string {
+function getEnv(name: string): string | null {
   const value = Deno.env.get(name);
-  if (!value) throw new Error(`Missing environment variable: ${name}`);
-  return value;
+  return value && value.length > 0 ? value : null;
 }
 
 function buildSystemPrompt(extraContext?: string): string {
   if (!extraContext) return DEFAULT_SYSTEM_PROMPT;
   return `${DEFAULT_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`;
+}
+
+function parseAllowedModels(envKey: string, defaults: string[]): string[] {
+  const raw = Deno.env.get(envKey);
+  if (!raw) return defaults;
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function pickAllowedModel(
+  requested: string | null | undefined,
+  allowed: string[],
+  fallback: string
+): { model: string; usedFallback: boolean; reason?: string } {
+  const candidate = (requested || fallback).trim();
+  if (allowed.includes(candidate)) {
+    return { model: candidate, usedFallback: false };
+  }
+  if (allowed.includes(fallback)) {
+    return { model: fallback, usedFallback: true, reason: `Requested model "${candidate}" not allowed` };
+  }
+  const safe = allowed[0] || fallback;
+  return { model: safe, usedFallback: true, reason: `No allowed models configured, using "${safe}"` };
+}
+
+function normalizeRequestedModel(raw?: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toLowerCase();
+  const sonnet4 = getEnv('ANTHROPIC_SONNET_4_MODEL') || 'claude-sonnet-4-20250514';
+  const sonnet45 = getEnv('ANTHROPIC_SONNET_4_5_MODEL') || 'claude-sonnet-4-5-20250514';
+  const aliases: Record<string, string> = {
+    'claude-3-haiku': 'claude-3-haiku-20240307',
+    'claude-3-haiku-latest': 'claude-3-haiku-20240307',
+    'claude-3-opus': 'claude-3-opus-20240229',
+    'claude-3-opus-latest': 'claude-3-opus-20240229',
+    'claude-3-sonnet': 'claude-3-sonnet-20240229',
+    'claude-3-sonnet-latest': 'claude-3-sonnet-20240229',
+    'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
+    'claude-3-5-haiku-latest': 'claude-3-5-haiku-20241022',
+    'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
+    'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-20241022',
+    'claude-3-7-sonnet': 'claude-3-7-sonnet-20250219',
+    'claude-3-7-sonnet-latest': 'claude-3-7-sonnet-20250219',
+    'claude-sonnet-4': sonnet4,
+    'claude-sonnet-4-latest': sonnet4,
+    'claude-sonnet-4.5': sonnet45,
+    'claude-sonnet-4-5': sonnet45,
+    'claude-sonnet-4-5-latest': sonnet45,
+  };
+
+  return aliases[key] || trimmed;
 }
 
 async function webSearchTool(args: z.infer<typeof WebSearchArgsSchema>): Promise<JsonRecord> {
@@ -212,9 +284,22 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
   return messages;
 }
 
-async function callOpenAI(messages: Array<JsonRecord>, enableTools: boolean): Promise<ProviderResponse> {
+async function callOpenAI(
+  messages: Array<JsonRecord>,
+  enableTools: boolean,
+  requestedModel?: string | null
+): Promise<ProviderResponse> {
   const apiKey = getEnv('OPENAI_API_KEY');
-  const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured.');
+  }
+  const allowed = parseAllowedModels('OPENAI_ALLOWED_MODELS', DEFAULT_OPENAI_ALLOWED_MODELS);
+  const fallbackModel = DEFAULT_OPENAI_ALLOWED_MODELS[0];
+  const selection = pickAllowedModel(requestedModel || Deno.env.get('OPENAI_MODEL'), allowed, fallbackModel);
+  if (selection.usedFallback) {
+    console.warn('[ai-proxy] OpenAI model fallback:', selection.reason);
+  }
+  const model = selection.model;
   const tools = buildOpenAITools(enableTools);
 
   const body: JsonRecord = {
@@ -338,37 +423,94 @@ async function callOpenAI(messages: Array<JsonRecord>, enableTools: boolean): Pr
   };
 }
 
-async function callAnthropic(messages: Array<JsonRecord>, enableTools: boolean): Promise<ProviderResponse> {
+async function callAnthropic(
+  messages: Array<JsonRecord>,
+  enableTools: boolean,
+  requestedModel?: string | null,
+  allowedOverride?: string[]
+): Promise<ProviderResponse> {
   const apiKey = getEnv('ANTHROPIC_API_KEY');
-  const model = Deno.env.get('ANTHROPIC_MODEL') || 'claude-3-5-sonnet-20241022';
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured.');
+  }
+  const allowed = allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
+  const fallbackModel = DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
+  const selection = pickAllowedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'), allowed, fallbackModel);
+  if (selection.usedFallback) {
+    console.warn('[ai-proxy] Anthropic model fallback:', selection.reason);
+  }
+  const preferredModel = selection.model;
   const tools = buildAnthropicTools(enableTools);
+  const systemPrompt = messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT;
 
-  const body: JsonRecord = {
-    model,
-    max_tokens: 1024,
-    temperature: 0.4,
-    messages: messages.filter((m) => m.role !== 'system'),
-    system: messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT,
+  const callAnthropicOnce = async (model: string) => {
+    const body: JsonRecord = {
+      model,
+      max_tokens: 1024,
+      temperature: 0.4,
+      messages: messages.filter((m) => m.role !== 'system'),
+      system: systemPrompt,
+    };
+
+    if (tools) body.tools = tools;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { ok: false, status: response.status, errText, data: null as JsonRecord | null };
+    }
+
+    const data = (await response.json()) as JsonRecord;
+    return { ok: true, status: response.status, errText: null as string | null, data };
   };
 
-  if (tools) body.tools = tools;
+  const isModelNotFound = (errText: string | null): boolean => {
+    if (!errText) return false;
+    try {
+      const parsed = JSON.parse(errText) as JsonRecord;
+      const errType = (parsed?.error as JsonRecord | undefined)?.type;
+      return errType === 'not_found_error';
+    } catch {
+      return false;
+    }
+  };
 
-  let response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
+  const callAnthropicWithFallbacks = async (models: string[]) => {
+    let lastError: { ok: false; status: number; errText: string | null; data: JsonRecord | null } | null = null;
+    for (const model of models) {
+      const res = await callAnthropicOnce(model);
+      if (res.ok) {
+        return { response: res, model };
+      }
+      if (isModelNotFound(res.errText)) {
+        console.warn(`[ai-proxy] Anthropic model not found: ${model}. Trying next...`);
+        lastError = res;
+        continue;
+      }
+      return { response: res, model };
+    }
+    return { response: lastError as any, model: models[0] };
+  };
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Anthropic error: ${response.status} ${errText}`);
+  const candidates = [preferredModel, ...allowed.filter((m) => m !== preferredModel)];
+  const initial = await callAnthropicWithFallbacks(candidates);
+  let response = initial.response;
+  let modelUsed = initial.model;
+
+  if (!response.ok || !response.data) {
+    throw new Error(`Anthropic error: ${response.status} ${response.errText || ''}`);
   }
 
-  const result = (await response.json()) as JsonRecord;
+  const result = response.data as JsonRecord;
   const contentBlocks = Array.isArray(result.content) ? result.content : [];
   const toolResults: ToolResult[] = [];
 
@@ -410,30 +552,16 @@ async function callAnthropic(messages: Array<JsonRecord>, enableTools: boolean):
     }
 
     if (toolResults.length > 0) {
-      const followUpBody: JsonRecord = {
-        model,
-        max_tokens: 1024,
-        temperature: 0.4,
-        messages: messages.filter((m) => m.role !== 'system'),
-        system: messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT,
-      };
+      const followUpCandidates = [modelUsed, ...allowed.filter((m) => m !== modelUsed)];
+      const followUpResult = await callAnthropicWithFallbacks(followUpCandidates);
+      const followUpResponse = followUpResult.response;
+      const followUpModel = followUpResult.model;
 
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(followUpBody),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Anthropic tool follow-up error: ${response.status} ${errText}`);
+      if (!followUpResponse.ok || !followUpResponse.data) {
+        throw new Error(`Anthropic tool follow-up error: ${followUpResponse.status} ${followUpResponse.errText || ''}`);
       }
 
-      const followUpResult = (await response.json()) as JsonRecord;
+      const followUpResult = followUpResponse.data as JsonRecord;
       const followUpBlocks = Array.isArray(followUpResult.content) ? followUpResult.content : [];
       let followUpText = '';
       for (const block of followUpBlocks) {
@@ -453,7 +581,7 @@ async function callAnthropic(messages: Array<JsonRecord>, enableTools: boolean):
             ? (followUpResult.usage as JsonRecord).output_tokens as number | undefined
             : undefined,
         },
-        model,
+        model: followUpModel,
         tool_results: toolResults,
       };
     }
@@ -469,7 +597,7 @@ async function callAnthropic(messages: Array<JsonRecord>, enableTools: boolean):
         ? (result.usage as JsonRecord).output_tokens as number | undefined
         : undefined,
     },
-    model,
+    model: modelUsed,
     tool_results: toolResults,
   };
 }
@@ -483,7 +611,18 @@ serve(async (req) => {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
     }
 
-    const body = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({
+        error: 'invalid_json',
+        message: 'Invalid JSON body',
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const parsed = RequestSchema.safeParse(body);
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: 'Invalid request payload' }), {
@@ -495,8 +634,17 @@ serve(async (req) => {
     const payload = parsed.data;
     const authHeader = req.headers.get('Authorization') || '';
 
-    const supabaseUrl = getEnv('SUPABASE_URL');
-    const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY');
+    const supabaseUrl = getEnv('SUPABASE_URL') || getEnv('EXPO_PUBLIC_SUPABASE_URL');
+    const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY') || getEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return new Response(JSON.stringify({
+        error: 'config_missing',
+        message: 'Supabase environment variables are missing (SUPABASE_URL / SUPABASE_ANON_KEY).',
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
@@ -532,15 +680,19 @@ serve(async (req) => {
       p_request_type: normalizeServiceType(payload.service_type),
     });
 
-    const quotaData = quota.data as JsonRecord | null;
-    if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
-      return new Response(JSON.stringify({
-        error: 'quota_exceeded',
-        details: quotaData,
-      }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (quota.error) {
+      console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
+    } else {
+      const quotaData = quota.data as JsonRecord | null;
+      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+        return new Response(JSON.stringify({
+          error: 'quota_exceeded',
+          details: quotaData,
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     if (payload.stream) {
@@ -556,28 +708,90 @@ serve(async (req) => {
     const systemPrompt = buildSystemPrompt(payload.payload.context);
     const messages = normalizeMessages(payload.payload, systemPrompt);
 
+    const normalizedRequestedModel = normalizeRequestedModel(
+      typeof payload.payload.model === 'string' ? payload.payload.model : null
+    );
     const preferOpenAI = payload.prefer_openai ?? false;
     const enableTools = payload.enable_tools ?? false;
+    const hasOpenAI = !!getEnv('OPENAI_API_KEY');
+    const hasAnthropic = !!getEnv('ANTHROPIC_API_KEY');
 
-    const providerResponse = preferOpenAI
-      ? await callOpenAI(messages, enableTools)
-      : await callAnthropic(messages, enableTools);
+    if (!hasOpenAI && !hasAnthropic) {
+      return new Response(JSON.stringify({
+        error: 'provider_not_configured',
+        message: 'No AI provider keys are configured (OPENAI_API_KEY / ANTHROPIC_API_KEY).',
+      }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    await supabase.rpc('record_ai_usage', {
-      p_user_id: userData.user.id,
-      p_feature_used: normalizeServiceType(payload.service_type),
-      p_model_used: providerResponse.model || (preferOpenAI ? 'openai' : 'anthropic'),
-      p_tokens_used: (providerResponse.usage?.tokens_in || 0) + (providerResponse.usage?.tokens_out || 0),
-      p_request_tokens: providerResponse.usage?.tokens_in || 0,
-      p_response_tokens: providerResponse.usage?.tokens_out || 0,
-      p_success: true,
-      p_metadata: {
-        scope: payload.scope,
-        organization_id: profile.organization_id || profile.preschool_id || null,
-        tool_results: providerResponse.tool_results || [],
-        request_metadata: payload.metadata || {},
-      },
-    });
+    const profileRole = String(profile.role || '').toLowerCase();
+    const isSuperAdmin = profileRole === 'superadmin' || profileRole === 'super_admin';
+    const superAdminAllowed = parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS);
+    const openaiAllowed = parseAllowedModels('OPENAI_ALLOWED_MODELS', DEFAULT_OPENAI_ALLOWED_MODELS);
+    const anthropicAllowed = parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
+    const requestedModel = normalizedRequestedModel;
+    const requestedIsOpenAI = requestedModel ? openaiAllowed.includes(requestedModel) : false;
+    const requestedIsAnthropic = requestedModel ? anthropicAllowed.includes(requestedModel) : false;
+    const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;
+
+    let providerResponse: ProviderResponse;
+    try {
+      if (isSuperAdmin && hasAnthropic) {
+        const superAdminModel = pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model;
+        providerResponse = await callAnthropic(messages, enableTools, superAdminModel, superAdminAllowed);
+      } else if (shouldPreferOpenAI) {
+        if (hasOpenAI) {
+          providerResponse = await callOpenAI(messages, enableTools, requestedModel);
+        } else if (hasAnthropic) {
+          providerResponse = await callAnthropic(messages, enableTools, requestedModel);
+        } else {
+          throw new Error('OPENAI_API_KEY missing and Anthropic not configured.');
+        }
+      } else {
+        if (hasAnthropic) {
+          providerResponse = await callAnthropic(messages, enableTools, requestedModel);
+        } else if (hasOpenAI) {
+          providerResponse = await callOpenAI(messages, enableTools, requestedModel);
+        } else {
+          throw new Error('ANTHROPIC_API_KEY missing and OpenAI not configured.');
+        }
+      }
+    } catch (providerError) {
+      const providerMessage = providerError instanceof Error ? providerError.message : String(providerError);
+      console.error('[ai-proxy] Provider error:', providerMessage);
+      return new Response(JSON.stringify({
+        error: 'provider_error',
+        message: providerMessage,
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    try {
+      const usageResult = await supabase.rpc('record_ai_usage', {
+        p_user_id: userData.user.id,
+        p_feature_used: normalizeServiceType(payload.service_type),
+        p_model_used: providerResponse.model || (preferOpenAI ? 'openai' : 'anthropic'),
+        p_tokens_used: (providerResponse.usage?.tokens_in || 0) + (providerResponse.usage?.tokens_out || 0),
+        p_request_tokens: providerResponse.usage?.tokens_in || 0,
+        p_response_tokens: providerResponse.usage?.tokens_out || 0,
+        p_success: true,
+        p_metadata: {
+          scope: payload.scope,
+          organization_id: profile.organization_id || profile.preschool_id || null,
+          tool_results: providerResponse.tool_results || [],
+          request_metadata: payload.metadata || {},
+        },
+      });
+      if (usageResult.error) {
+        console.warn('[ai-proxy] record_ai_usage returned error (non-fatal):', usageResult.error);
+      }
+    } catch (usageError) {
+      console.warn('[ai-proxy] record_ai_usage failed (non-fatal):', usageError);
+    }
 
     return new Response(JSON.stringify({
       success: true,

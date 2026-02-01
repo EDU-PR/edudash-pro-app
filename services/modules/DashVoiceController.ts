@@ -79,7 +79,6 @@ export class DashVoiceController {
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
       const shortCode = this.mapLanguageCode(language);
-      const allowDeviceFallback = shortCode === 'en';
       
       // Routing decision based on language support:
       // - en, af, zu: Use native device TTS (excellent support)
@@ -109,23 +108,8 @@ export class DashVoiceController {
         return;
       } catch (azureError) {
         console.error('[DashVoiceController] Azure TTS failed:', azureError);
-        
-        // Final fallback: try device TTS even for Azure languages
-        if (!useNativeTTS) {
-          if (!allowDeviceFallback) {
-            callbacks?.onError?.(azureError);
-            return;
-          }
-          try {
-            await this.speakWithDeviceTTS(normalizedText, voiceSettings, callbacks);
-            return;
-          } catch (finalError) {
-            console.error('[DashVoiceController] All TTS methods failed');
-            callbacks?.onError?.(finalError);
-          }
-        } else {
-          callbacks?.onError?.(azureError);
-        }
+        callbacks?.onError?.(azureError);
+        return;
       }
     } catch (error) {
       console.error('[DashVoiceController] Failed to speak:', error);

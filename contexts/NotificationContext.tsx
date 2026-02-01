@@ -284,8 +284,50 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
+  const lastUserIdRef = useRef<string | null>(null);
 
   const userId = user?.id;
+
+  useEffect(() => {
+    const lastUserId = lastUserIdRef.current;
+    if (lastUserId && lastUserId !== userId) {
+      // Cancel old subscriptions immediately
+      subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+      subscriptionsRef.current = [];
+
+      // Clear cached queries for the previous user to avoid cross-account bleed
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.messages(lastUserId) });
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.calls(lastUserId) });
+      queryClient.removeQueries({ queryKey: QUERY_KEYS.announcements(lastUserId) });
+      queryClient.removeQueries({ queryKey: ['parent', 'unread-count', lastUserId] });
+      queryClient.removeQueries({ queryKey: ['missed-calls-count', lastUserId] });
+      queryClient.removeQueries({ queryKey: ['unread-announcements-count', lastUserId] });
+
+      // Reset badge so stale counts don't persist after switch
+      if (Platform.OS !== 'web') {
+        BadgeCoordinator.setCategories({
+          messages: 0,
+          calls: 0,
+          announcements: 0,
+        }).catch(() => undefined);
+      }
+    }
+
+    if (!userId) {
+      // No active user: clear badges and subscriptions
+      subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
+      subscriptionsRef.current = [];
+      if (Platform.OS !== 'web') {
+        BadgeCoordinator.setCategories({
+          messages: 0,
+          calls: 0,
+          announcements: 0,
+        }).catch(() => undefined);
+      }
+    }
+
+    lastUserIdRef.current = userId ?? null;
+  }, [userId, queryClient]);
 
   // -------------------------------------------------------------------------
   // Clear old cached data on mount (cache busting for new system)

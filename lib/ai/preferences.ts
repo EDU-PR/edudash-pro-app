@@ -95,7 +95,7 @@ const storage = chooseStorage();
 
 const KEY_PREFIX = 'ai_preferred_model'
 
-export async function getPreferredModel(feature?: 'lesson_generation' | 'grading_assistance' | 'homework_help'): Promise<string | null> {
+export async function getPreferredModel(feature?: 'lesson_generation' | 'grading_assistance' | 'homework_help' | 'chat_message'): Promise<string | null> {
   try {
     const { data } = await assertSupabase().auth.getUser()
     const uid = data?.user?.id || 'anonymous'
@@ -110,7 +110,7 @@ export async function getPreferredModel(feature?: 'lesson_generation' | 'grading
   }
 }
 
-export async function setPreferredModel(modelId: string, feature?: 'lesson_generation' | 'grading_assistance' | 'homework_help'): Promise<void> {
+export async function setPreferredModel(modelId: string, feature?: 'lesson_generation' | 'grading_assistance' | 'homework_help' | 'chat_message'): Promise<void> {
   try {
     const { data } = await assertSupabase().auth.getUser()
     const uid = data?.user?.id || 'anonymous'
@@ -118,4 +118,3 @@ export async function setPreferredModel(modelId: string, feature?: 'lesson_gener
     await storage.setItem(key, modelId)
   } catch { /* noop */ }
 }
-

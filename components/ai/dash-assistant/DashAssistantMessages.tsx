@@ -18,6 +18,7 @@ export interface DashAssistantMessagesProps {
   styles: any;
   theme: any;
   isLoading: boolean;
+  keyboardVisible?: boolean;
   isNearBottom: boolean;
   setIsNearBottom: (v: boolean) => void;
   unreadCount: number;
@@ -48,6 +49,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onAgeBandChange,
   learnerContext,
   bottomInset = 0,
+  keyboardVisible = false,
 }) => {
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
@@ -100,7 +102,10 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
     {
       backgroundColor: theme.background,
       flexGrow: 1,
-      paddingBottom: Math.max(140, (styles.messagesContent?.paddingBottom || 0) + bottomInset),
+      paddingBottom: Math.max(
+        keyboardVisible ? 80 : 104,
+        (styles.messagesContent?.paddingBottom || 0) + bottomInset + 16
+      ),
     },
   ]) as ViewStyle;
 

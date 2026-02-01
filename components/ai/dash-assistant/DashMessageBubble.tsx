@@ -6,13 +6,53 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from '../DashAssistant.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
-import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
+import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
+
+const AttachmentImagePreview: React.FC<{
+  attachment: DashMessage['attachments'][number];
+  isUser: boolean;
+}> = ({ attachment, isUser }) => {
+  const { theme } = useTheme();
+  const [imageUrl, setImageUrl] = React.useState<string | null>(attachment.previewUri || null);
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    if (imageUrl || !attachment.bucket || !attachment.storagePath) return () => { mounted = false; };
+
+    (async () => {
+      try {
+        const signed = await createSignedUrl(attachment.bucket, attachment.storagePath, 3600);
+        if (mounted) setImageUrl(signed);
+      } catch {
+        if (mounted) setHasError(true);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [attachment.bucket, attachment.storagePath, imageUrl]);
+
+  if (hasError || !imageUrl) return null;
+
+  return (
+    <View
+      style={[
+        styles.imagePreviewCard,
+        { borderColor: isUser ? 'rgba(255,255,255,0.2)' : theme.border },
+      ]}
+    >
+      <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+    </View>
+  );
+};
 
 interface DashMessageBubbleProps {
   message: DashMessage;
@@ -278,6 +318,21 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </View>
         )}
         
+        {/* Image previews */}
+        {message.attachments && message.attachments.some((a) => a.kind === 'image') && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.imagePreviewRow}
+          >
+            {message.attachments
+              .filter((attachment) => attachment.kind === 'image')
+              .map((attachment, idx) => (
+                <AttachmentImagePreview key={`${attachment.id}-${idx}`} attachment={attachment} isUser={isUser} />
+              ))}
+          </ScrollView>
+        )}
+
         {/* Attachments display */}
         {message.attachments && message.attachments.length > 0 && (
           <View style={styles.messageAttachmentsContainer}>
@@ -361,21 +416,27 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
         {/* Follow-up question chips */}
         {!isUser && suggestions && suggestions.length > 0 && (
           <View style={styles.followUpContainer}>
-            {suggestions.map((q: string, idx: number) => (
-              <TouchableOpacity
-                key={idx}
-                style={[styles.followUpChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                onPress={() => onSendFollowUp(q)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={`Send: ${q}`}
-              >
-                <Text style={[styles.followUpText, { color: theme.text }]}>{q}</Text>
-                <View pointerEvents="none" style={[styles.followUpFab, { backgroundColor: theme.primary }]}> 
-                  <Ionicons name="send" size={16} color={theme.onPrimary || '#fff'} />
-                </View>
-              </TouchableOpacity>
-            ))}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.followUpScroll}
+            >
+              {suggestions.map((q: string, idx: number) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={[styles.followUpChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  onPress={() => onSendFollowUp(q)}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Send: ${q}`}
+                >
+                  <Text style={[styles.followUpText, { color: theme.text }]} numberOfLines={1}>
+                    {q}
+                  </Text>
+                  <Ionicons name="send" size={14} color={theme.primary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           </View>
         )}
         

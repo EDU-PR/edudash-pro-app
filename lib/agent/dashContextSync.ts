@@ -5,6 +5,10 @@ export type DashContextTraits = Record<string, unknown>
 export async function syncDashContext(params: { language?: string; traits?: DashContextTraits; sessionId?: string }) {
   try {
     const supabase = assertSupabase()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) {
+      return null
+    }
     const body = {
       detected_language: params.language || null,
       traits: params.traits || {},
