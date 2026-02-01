@@ -19,7 +19,7 @@ interface DocumentInfo {
 
 interface RegistrationRecord {
   id: string;
-  preschool_id: string | null;
+  organization_id: string | null;
   student_birth_certificate_url: string | null;
   student_clinic_card_url: string | null;
   guardian_id_document_url: string | null;
@@ -90,7 +90,7 @@ function ParentDocumentsContent() {
       if (registrationParam) {
         const { data, error: regError } = await supabase
           .from('registration_requests')
-          .select('id, preschool_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
+          .select('id, organization_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
           .eq('id', registrationParam)
           .maybeSingle();
         if (regError) throw regError;
@@ -98,13 +98,13 @@ function ParentDocumentsContent() {
       } else if (currentEmail) {
         let query = supabase
           .from('registration_requests')
-          .select('id, preschool_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
+          .select('id, organization_id, student_birth_certificate_url, student_clinic_card_url, guardian_id_document_url')
           .ilike('guardian_email', currentEmail)
           .order('created_at', { ascending: false })
           .limit(1);
 
         if (preschoolId) {
-          query = query.eq('preschool_id', preschoolId);
+          query = query.eq('organization_id', preschoolId);
         }
 
         const { data, error: regError } = await query.maybeSingle();
@@ -116,7 +116,7 @@ function ParentDocumentsContent() {
         // If no registration request exists, attempt to set a placeholder registration record
         record = {
           id: studentParam,
-          preschool_id: preschoolId || null,
+          organization_id: preschoolId || null,
           student_birth_certificate_url: null,
           student_clinic_card_url: null,
           guardian_id_document_url: null,
@@ -153,7 +153,7 @@ function ParentDocumentsContent() {
 
       const ext = file.name.split('.').pop() || 'pdf';
       const timestamp = Date.now();
-      const targetSchoolId = registration.preschool_id || preschoolId || 'unknown';
+      const targetSchoolId = registration.organization_id || preschoolId || 'unknown';
       const filePath = `documents/${targetSchoolId}/${userId}/${doc.type}_${timestamp}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
