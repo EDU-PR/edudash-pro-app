@@ -4,10 +4,21 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Alert, Share } from 'react-native';
+import { Alert, Share, Linking, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import type { SchoolBankDetails } from '@/types/payments';
+import { SA_BANKING_APPS, type BankApp } from '@/lib/payments/bankingApps';
+
+// Lazy load IntentLauncher - prevents crashes if the module isn't available in OTA builds
+let IntentLauncher: typeof import('expo-intent-launcher') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  IntentLauncher = require('expo-intent-launcher');
+} catch {
+  logger.debug('usePaymentFlow', 'expo-intent-launcher not available (needs rebuild)');
+}
 
 interface PaymentFlowParams {
   feeId?: string;
@@ -25,13 +36,13 @@ interface UsePaymentFlowReturn {
   bankDetails: SchoolBankDetails | null;
   showUploadModal: boolean;
   setShowUploadModal: (show: boolean) => void;
-  showBankSelector: boolean;
-  setShowBankSelector: (show: boolean) => void;
+  availableBankApps: BankApp[];
+  bankHint: string | null;
   copiedField: string | null;
   formattedAmount: string;
   paymentInitiated: boolean; // Track if user has clicked "Open Banking App"
   copyToClipboard: (text: string, field: string) => Promise<void>;
-  openBankingApp: () => void;
+  openBankingApp: (bank?: BankApp) => Promise<void>;
   sharePaymentDetails: () => Promise<void>;
 }
 
@@ -41,7 +52,8 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   const [loading, setLoading] = useState(true);
   const [bankDetails, setBankDetails] = useState<SchoolBankDetails | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [showBankSelector, setShowBankSelector] = useState(false);
+  const [availableBankApps, setAvailableBankApps] = useState<BankApp[]>([]);
+  const [bankHint, setBankHint] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paymentInitiated, setPaymentInitiated] = useState(false); // Track if banking app was opened
 
@@ -53,6 +65,37 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   useEffect(() => {
     fetchBankDetails();
   }, [preschoolId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveAvailableBanks = async () => {
+      const checks = await Promise.all(
+        SA_BANKING_APPS.map(async (bank) => {
+          for (const scheme of bank.schemes) {
+            try {
+              const canOpen = await Linking.canOpenURL(scheme);
+              if (canOpen) return true;
+            } catch (error) {
+              logger.warn('usePaymentFlow', `Scheme check failed for ${scheme}`, error);
+            }
+          }
+          return false;
+        })
+      );
+
+      const available = SA_BANKING_APPS.filter((_, index) => checks[index]);
+      if (!cancelled) {
+        setAvailableBankApps(available);
+      }
+    };
+
+    resolveAvailableBanks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchBankDetails = async () => {
     if (!preschoolId) {
@@ -156,15 +199,68 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
     } catch (error) {
       Alert.alert('Error', 'Failed to copy to clipboard');
     }
-  }, [setPaymentInitiated, setShowBankSelector]);
+  }, []);
 
-  const openBankingApp = useCallback(() => {
+  const tryOpenBankApp = useCallback(async (bank: BankApp): Promise<boolean> => {
+    if (Platform.OS === 'android' && IntentLauncher) {
+      for (const packageName of bank.packageIds) {
+        try {
+          await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+            packageName,
+            category: 'android.intent.category.LAUNCHER',
+          });
+          logger.debug('usePaymentFlow', `Opened ${bank.name} via IntentLauncher: ${packageName}`);
+          return true;
+        } catch (error) {
+          logger.warn('usePaymentFlow', `IntentLauncher failed for ${packageName}`, error);
+        }
+      }
+    }
+
+    for (const scheme of bank.schemes) {
+      try {
+        const canOpen = await Linking.canOpenURL(scheme);
+        if (canOpen) {
+          await Linking.openURL(scheme);
+          logger.debug('usePaymentFlow', `Opened ${bank.name} via scheme: ${scheme}`);
+          return true;
+        }
+      } catch (error) {
+        logger.warn('usePaymentFlow', `Scheme open failed for ${scheme}`, error);
+      }
+    }
+
+    return false;
+  }, []);
+
+  const openBankingApp = useCallback(async (bank?: BankApp) => {
     // Mark payment as initiated - enables Upload POP button
     setPaymentInitiated(true);
+    setBankHint(null);
 
-    // Open bank selection sheet to launch the chosen banking app
-    setShowBankSelector(true);
-  }, [setShowBankSelector]);
+    if (bank) {
+      const opened = await tryOpenBankApp(bank);
+      if (!opened) {
+        setBankHint(`Could not open ${bank.name}. Please open it manually.`);
+      }
+      return;
+    }
+
+    if (availableBankApps.length === 1) {
+      const opened = await tryOpenBankApp(availableBankApps[0]);
+      if (!opened) {
+        setBankHint('We could not open your banking app. Please open it manually.');
+      }
+      return;
+    }
+
+    if (availableBankApps.length > 1) {
+      setBankHint('Choose your bank below to open it.');
+      return;
+    }
+
+    setBankHint('No banking apps detected. Please open your banking app manually.');
+  }, [availableBankApps, tryOpenBankApp]);
 
   const sharePaymentDetails = useCallback(async () => {
     const paymentRef = studentCode || 'N/A';
@@ -197,8 +293,8 @@ Please use the reference number when making payment.`;
     bankDetails,
     showUploadModal,
     setShowUploadModal,
-    showBankSelector,
-    setShowBankSelector,
+    availableBankApps,
+    bankHint,
     copiedField,
     formattedAmount,
     paymentInitiated,

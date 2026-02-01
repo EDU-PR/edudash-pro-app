@@ -83,6 +83,16 @@ const getStatusIcon = (status: Registration['status']): string => {
   }
 };
 
+const hasValidPopUrl = (value?: string | null): boolean => {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  if (['pending', 'n/a', 'na', 'none', 'null', 'undefined'].includes(normalized)) {
+    return false;
+  }
+  return true;
+};
+
 export const RegistrationCard: React.FC<RegistrationCardProps> = ({
   item,
   isProcessing,
@@ -108,14 +118,14 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
 
   const feeAmount = item.registration_fee_amount ?? 0;
   const hasFee = feeAmount > 0;
-  const hasPop = !!item.proof_of_payment_url;
+  const hasPop = hasValidPopUrl(item.proof_of_payment_url);
   const canApproveItem = canApprove(item);
   const canVerifyPayment = item.status === 'pending' && hasFee;
   const canSendPopLink =
     item.status === 'pending' &&
     item.source === 'edusite' &&
     hasFee &&
-    !item.proof_of_payment_url &&
+    !hasPop &&
     !!onSendPopUploadLink;
   const verifyLabel = item.payment_verified
     ? 'Unverify'
@@ -306,7 +316,7 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
       )}
 
       {/* Payment verification reminder - show if POP uploaded but not verified */}
-      {item.status === 'pending' && item.proof_of_payment_url && !item.payment_verified && (
+      {item.status === 'pending' && hasPop && !item.payment_verified && (
         <View style={[styles.popWarning, { backgroundColor: '#3B82F620' }]}>
           <Ionicons name="information-circle" size={16} color="#3B82F6" />
           <Text style={[styles.popWarningText, { color: '#3B82F6' }]}>
@@ -316,7 +326,7 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
       )}
       
       {/* POP Preview Link */}
-      {item.proof_of_payment_url && item.status === 'pending' && (
+      {hasPop && item.status === 'pending' && (
         <TouchableOpacity 
           style={[styles.popLink, { backgroundColor: colors.primary + '15' }]}
           onPress={() => {

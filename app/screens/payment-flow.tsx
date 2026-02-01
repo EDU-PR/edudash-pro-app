@@ -24,7 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { PaymentUploadModal } from '@/components/payments';
 import { BankDetailRow } from '@/components/payments/BankDetailRow';
-import { BankSelectionSheet } from '@/components/payments/BankSelectionSheet';
+import { BankingAppsPanel } from '@/components/payments/BankingAppsPanel';
 import { usePaymentFlow } from '@/hooks/usePaymentFlow';
 import { createStyles } from '@/styles/payment-flow.styles';
 import type { PaymentChild } from '@/types/payments';
@@ -52,8 +52,8 @@ export default function PaymentFlowScreen() {
     bankDetails,
     showUploadModal,
     setShowUploadModal,
-    showBankSelector,
-    setShowBankSelector,
+    availableBankApps,
+    bankHint,
     copiedField,
     formattedAmount,
     paymentInitiated,
@@ -270,7 +270,7 @@ export default function PaymentFlowScreen() {
         <View style={styles.actions}>
           <TouchableOpacity 
             style={[styles.primaryButton, { backgroundColor: theme.primary }]}
-            onPress={openBankingApp}
+            onPress={() => openBankingApp()}
           >
             <Ionicons name="wallet-outline" size={20} color="#fff" />
             <Text style={styles.primaryButtonText}>Open Banking App</Text>
@@ -299,6 +299,23 @@ export default function PaymentFlowScreen() {
           </TouchableOpacity>
         </View>
 
+        {bankHint && (
+          <View style={[styles.bankHint, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <Ionicons name="information-circle" size={18} color={theme.primary} />
+            <Text style={[styles.bankHintText, { color: theme.textSecondary }]}>{bankHint}</Text>
+          </View>
+        )}
+
+        <BankingAppsPanel
+          banks={availableBankApps}
+          onSelect={(bank) => openBankingApp(bank)}
+          emptyMessage="No banking apps detected. Open your banking app manually and return to upload POP."
+        />
+
+        <Text style={styles.bankHelperText}>
+          Not seeing your bank? Open it manually and return here to upload proof of payment.
+        </Text>
+
         {/* Help Text */}
         <Text style={styles.helpText}>
           After making payment, upload your proof of payment (screenshot or PDF). 
@@ -322,11 +339,6 @@ export default function PaymentFlowScreen() {
         theme={theme}
       />
 
-      {/* Bank Selection Sheet */}
-      <BankSelectionSheet
-        visible={showBankSelector}
-        onClose={() => setShowBankSelector(false)}
-      />
     </SafeAreaView>
   );
 }

@@ -11,7 +11,6 @@ import {
   Modal,
   StatusBar,
   Platform,
-  Alert,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import EnhancedSignIn from '../components/auth/EnhancedSignIn';
@@ -20,6 +19,7 @@ import UserProfile from '../components/auth/UserProfile';
 import PasswordRecovery from '../components/auth/PasswordRecovery';
 import InvitationManager from '../components/auth/InvitationManager';
 import { EnhancedUser } from '../types/auth-enhanced';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 type DemoComponent = 'signin' | '2fa' | 'profile' | 'recovery' | 'invitations' | null;
 
@@ -45,6 +45,7 @@ const DEMO_USER: EnhancedUser = {
 
 export default function AuthDemo() {
   const { theme, isDark } = useTheme();
+  const alert = useAlert();
   const [activeComponent, setActiveComponent] = React.useState<DemoComponent>(null);
 
   const components = [
@@ -91,16 +92,16 @@ export default function AuthDemo() {
         return (
           <EnhancedSignIn
             onSuccess={(user, response) => {
-              Alert.alert('✅ Sign In Success!', `Welcome ${user.firstName}! This is a demo - in a real app you'd be redirected to the dashboard.`);
+              alert.showSuccess('✅ Sign In Success!', `Welcome ${user.firstName}! This is a demo - in a real app you'd be redirected to the dashboard.`);
             }}
             onError={(error) => {
-              Alert.alert('Demo Info', `Error: ${error}\n\nTip: Try admin@test.com / password or enable 2FA to see the MFA flow!`);
+              alert.show('Demo Info', `Error: ${error}\n\nTip: Try admin@test.com / password or enable 2FA to see the MFA flow!`);
             }}
             onForgotPassword={() => {
-              Alert.alert('Demo Tip', 'This would open the password recovery flow. Want to see it? Close this and tap the Password Recovery demo!');
+              alert.show('Demo Tip', 'This would open the password recovery flow. Want to see it? Close this and tap the Password Recovery demo!');
             }}
             onRegister={() => {
-              Alert.alert('Demo Info', 'This would open the registration flow (not shown in this demo).');
+              alert.show('Demo Info', 'This would open the registration flow (not shown in this demo).');
             }}
             showSocialLogin={true}
             enableMFA={true}
@@ -113,13 +114,13 @@ export default function AuthDemo() {
             user={DEMO_USER}
             mode="setup"
             onSetupComplete={(backupCodes) => {
-              Alert.alert('🎉 2FA Setup Complete!', `Your backup codes have been generated. In a real app, you'd save these securely:\n\n${backupCodes.slice(0, 3).join('\n')}...`);
+              alert.showSuccess('🎉 2FA Setup Complete!', `Your backup codes have been generated. In a real app, you'd save these securely:\n\n${backupCodes.slice(0, 3).join('\n')}...`);
             }}
             onVerificationComplete={() => {
-              Alert.alert('✅ Verification Success!', 'Two-factor authentication verified successfully!');
+              alert.showSuccess('✅ Verification Success!', 'Two-factor authentication verified successfully!');
             }}
             onError={(error) => {
-              Alert.alert('Demo Info', `Error: ${error}\n\nTip: Use 123456 as the verification code in this demo!`);
+              alert.show('Demo Info', `Error: ${error}\n\nTip: Use 123456 as the verification code in this demo!`);
             }}
           />
         );
@@ -129,16 +130,16 @@ export default function AuthDemo() {
           <UserProfile
             user={DEMO_USER}
             onProfileUpdate={(updatedUser) => {
-              Alert.alert('✅ Profile Updated!', 'Your profile changes have been saved successfully!');
+              alert.showSuccess('✅ Profile Updated!', 'Your profile changes have been saved successfully!');
             }}
             onPasswordChange={(current, newPassword) => {
-              Alert.alert('🔑 Password Changed!', 'Your password has been updated successfully!');
+              alert.showSuccess('🔑 Password Changed!', 'Your password has been updated successfully!');
             }}
             onSecuritySettingsUpdate={(settings) => {
-              Alert.alert('🔐 Security Updated!', 'Your security settings have been saved!');
+              alert.showSuccess('🔐 Security Updated!', 'Your security settings have been saved!');
             }}
             onError={(error) => {
-              Alert.alert('Demo Info', `Error: ${error}`);
+              alert.show('Demo Info', `Error: ${error}`);
             }}
             showBackButton={false}
           />
@@ -148,10 +149,10 @@ export default function AuthDemo() {
         return (
           <PasswordRecovery
             onRecoveryComplete={(email) => {
-              Alert.alert('🎉 Recovery Complete!', `Password reset successful for ${email}! In a real app, you'd be redirected to sign in.`);
+              alert.showSuccess('🎉 Recovery Complete!', `Password reset successful for ${email}! In a real app, you'd be redirected to sign in.`);
             }}
             onError={(error) => {
-              Alert.alert('Demo Info', `Error: ${error}\n\nTip: Use 123456 as verification codes in this demo!`);
+              alert.show('Demo Info', `Error: ${error}\n\nTip: Use 123456 as verification codes in this demo!`);
             }}
             onCancel={() => setActiveComponent(null)}
             initialEmail="demo@example.com"
@@ -164,10 +165,10 @@ export default function AuthDemo() {
             userRole="principal"
             organizationId="demo_org"
             onInvitationSent={(invitations) => {
-              Alert.alert('📤 Invitations Sent!', `Successfully sent ${invitations.length} invitations!`);
+              alert.showSuccess('📤 Invitations Sent!', `Successfully sent ${invitations.length} invitations!`);
             }}
             onError={(error) => {
-              Alert.alert('Demo Info', `Error: ${error}`);
+              alert.show('Demo Info', `Error: ${error}`);
             }}
           />
         );
