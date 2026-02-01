@@ -30,9 +30,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioPlayer = useAudioPlayer();
-  const [useDeviceFallback, setUseDeviceFallback] = useState(false);
   const stopRequestedRef = useRef(false);
-  const fallbackModeRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -106,36 +104,6 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   }, [audioPlayer]);
 
   /**
-   * Speak using device TTS as fallback
-   */
-  const speakWithDevice = useCallback((cleanText: string, language: SupportedLanguage): Promise<void> => {
-    return new Promise<void>((resolve) => {
-      const langCode = language.split('-')[0]; // en-ZA -> en
-      console.log('[VoiceTTS] Using device TTS fallback');
-      
-      Speech.speak(cleanText, {
-        language: langCode,
-        pitch: 1.0,
-        rate: 0.95,
-        onDone: () => {
-          console.log('[VoiceTTS] Device speech finished');
-          resolve();
-        },
-        onError: (error) => {
-          console.error('[VoiceTTS] Device speech error:', error);
-          setError('TTS playback failed');
-          resolve();
-        },
-      });
-    });
-  }, []);
-
-  const canUseDeviceFallback = (language: SupportedLanguage) => {
-    const baseLang = language.split('-')[0];
-    return baseLang === 'en';
-  };
-
-  /**
    * Speak using Azure TTS (primary method)
    */
   const speakWithAzure = useCallback(async (cleanText: string, language: SupportedLanguage): Promise<void> => {
@@ -144,12 +112,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        console.log('[VoiceTTS] No session, falling back to device TTS');
-        if (canUseDeviceFallback(language)) {
-          fallbackModeRef.current = true;
-          return speakWithDevice(cleanText, language);
-        }
-        throw new Error('TTS unavailable for this language');
+        console.log('[VoiceTTS] No session, Azure TTS unavailable');
+        throw new Error('TTS unavailable right now');
       }
 
       console.log('[VoiceTTS] Calling Azure TTS via Edge Function');
@@ -175,35 +139,25 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       );
 
       if (!response.ok) {
-        console.log('[VoiceTTS] Azure TTS failed');
-        if (canUseDeviceFallback(language)) {
-          console.log('[VoiceTTS] Falling back to device (English only)');
-          setUseDeviceFallback(true);
-          fallbackModeRef.current = true;
-          return speakWithDevice(cleanText, language);
-        }
-        throw new Error('TTS unavailable for this language');
+        const errText = await response.text().catch(() => '');
+        console.log('[VoiceTTS] Azure TTS failed', {
+          status: response.status,
+          body: errText,
+        });
+        throw new Error('TTS unavailable right now');
       }
 
       const data = await response.json();
       
       // Handle fallback instruction from server
       if (data.fallback === 'device') {
-        console.log('[VoiceTTS] Server instructed device fallback');
-        if (canUseDeviceFallback(language)) {
-          fallbackModeRef.current = true;
-          return speakWithDevice(cleanText, language);
-        }
-        throw new Error('TTS unavailable for this language');
+        console.log('[VoiceTTS] Server instructed device fallback (blocked)');
+        throw new Error('TTS unavailable right now');
       }
       
       if (!data.audio_url) {
         console.log('[VoiceTTS] No audio URL in response');
-        if (canUseDeviceFallback(language)) {
-          fallbackModeRef.current = true;
-          return speakWithDevice(cleanText, language);
-        }
-        throw new Error('TTS unavailable for this language');
+        throw new Error('TTS unavailable right now');
       }
 
       console.log('[VoiceTTS] Got audio URL from', data.provider, '- playing...');
@@ -250,13 +204,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           console.error('[VoiceTTS] Retry failed:', retryErr);
         }
       }
-      // Final fallback to device TTS (English only)
-      if (canUseDeviceFallback(language)) {
-        return speakWithDevice(cleanText, language);
-      }
       throw err instanceof Error ? err : new Error('TTS unavailable for this language');
     }
-  }, [speakWithDevice, audioPlayer]);
+  }, [audioPlayer]);
 
   const splitIntoChunks = (text: string, maxLength: number): string[] => {
     const sentences: string[] = [];
@@ -311,7 +261,6 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
   const speak = useCallback(async (text: string, language: SupportedLanguage = 'en-ZA') => {
     stopRequestedRef.current = false;
-    fallbackModeRef.current = useDeviceFallback;
     setIsSpeaking(true);
     setError(null);
     
@@ -332,7 +281,6 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }
       
       const effectiveLanguage: SupportedLanguage = language;
-      const allowDeviceFallback = canUseDeviceFallback(effectiveLanguage);
       
       // Clean text for TTS - remove markdown, emojis, and special characters for natural speech
       const cleanText = text
@@ -383,25 +331,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }
       
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
-      const chunks = splitIntoChunks(cleanText, 420);
+      const chunks = splitIntoChunks(cleanText, 1200);
       
       // Speak sequentially to avoid cutoff
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
-
-        const shouldUseDevice = fallbackModeRef.current || useDeviceFallback;
-
-        if (shouldUseDevice) {
-          // Previous Azure call failed, go straight to device (English only)
-          if (!allowDeviceFallback) {
-            console.warn('[VoiceTTS] Device fallback blocked for non-English language');
-            throw new Error('TTS unavailable for this language');
-          }
-          await speakWithDevice(chunk, effectiveLanguage);
-        } else {
-          // Try Azure, will fallback to device on error
-          await speakWithAzure(chunk, effectiveLanguage);
-        }
+        await speakWithAzure(chunk, effectiveLanguage);
       }
       
     } catch (err) {
@@ -411,7 +346,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     } finally {
       setIsSpeaking(false);
     }
-  }, [stopPlayback, useDeviceFallback, speakWithAzure, speakWithDevice]);
+  }, [stopPlayback, speakWithAzure]);
 
   return { speak, stop, isSpeaking, error };
 }

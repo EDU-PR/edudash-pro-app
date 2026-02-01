@@ -14,7 +14,6 @@ import {
   TextInput,
   RefreshControl,
   StyleSheet,
-  Alert,
   Share,
   Linking,
 } from 'react-native';
@@ -23,6 +22,7 @@ import { router } from 'expo-router';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import * as Clipboard from 'expo-clipboard';
 import { buildTeacherInviteLink, buildTeacherInviteMessage } from '@/lib/utils/teacherInviteLink';
+import { useAlertModal } from '@/components/ui/AlertModal';
 import type { AvailableTeacher, TeacherInvite } from '@/types/teacher-management';
 import type { ThemeColors } from '@/contexts/ThemeContext';
 
@@ -60,6 +60,7 @@ export function HiringView({
   inviterName,
 }: HiringViewProps) {
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const { showAlert } = useAlertModal();
 
   const openShareOptions = async (inviteToken: string, inviteEmail: string) => {
     const message = buildTeacherInviteMessage({
@@ -75,7 +76,11 @@ export function HiringView({
       const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
       const canOpen = await Linking.canOpenURL(url);
       if (!canOpen) {
-        Alert.alert('WhatsApp not available', 'Install WhatsApp to use this option.');
+        showAlert({
+          title: 'WhatsApp Not Available',
+          message: 'Install WhatsApp to use this option.',
+          type: 'warning',
+        });
         return;
       }
       await Linking.openURL(url);
@@ -95,28 +100,41 @@ export function HiringView({
 
     const copyLink = async () => {
       await Clipboard.setStringAsync(inviteLink);
-      Alert.alert('Copied', 'Invite link copied to clipboard.');
+      showAlert({
+        title: 'Copied',
+        message: 'Invite link copied to clipboard.',
+        type: 'success',
+      });
     };
 
     const shareGeneric = async () => {
       await Share.share({ message, url: inviteLink });
     };
 
-    Alert.alert('Invite ready', 'Choose how you want to send the invite.', [
-      { text: 'Share', onPress: shareGeneric },
-      { text: 'WhatsApp', onPress: openWhatsApp },
-      { text: 'SMS', onPress: openSms },
-      { text: 'Email', onPress: openEmail },
-      { text: 'Copy Link', onPress: copyLink },
-      { text: 'Close', style: 'cancel' },
-    ]);
+    showAlert({
+      title: 'Invite Ready',
+      message: `Choose how you want to send the invite.\n\nInvite token: ${inviteToken}\nLink: ${inviteLink}`,
+      type: 'info',
+      buttons: [
+        { text: 'Share', onPress: () => void shareGeneric() },
+        { text: 'WhatsApp', onPress: () => void openWhatsApp() },
+        { text: 'SMS', onPress: () => void openSms() },
+        { text: 'Email', onPress: () => void openEmail() },
+        { text: 'Copy Link', onPress: () => void copyLink() },
+        { text: 'Close', style: 'cancel' },
+      ],
+    });
   };
 
   const handleInvite = async (teacher: AvailableTeacher) => {
     try {
       if (!preschoolId) return;
       if (!teacher.email) {
-        Alert.alert('Missing email', 'This teacher profile has no email.');
+        showAlert({
+          title: 'Missing Email',
+          message: 'This teacher profile has no email.',
+          type: 'warning',
+        });
         return;
       }
       const invite = await TeacherInviteService.createInvite({
@@ -128,7 +146,11 @@ export function HiringView({
       await openShareOptions(invite.token, teacher.email);
     } catch (_e) {
       console.error('Invite error:', _e);
-      Alert.alert('Error', 'Failed to send invite.');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to send invite.',
+        type: 'error',
+      });
     }
   };
 
@@ -163,7 +185,11 @@ export function HiringView({
       await onLoadInvites();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Failed to revoke invite';
-      Alert.alert('Error', message);
+      showAlert({
+        title: 'Error',
+        message,
+        type: 'error',
+      });
     }
   };
 
@@ -216,6 +242,46 @@ export function HiringView({
           </TouchableOpacity>
         )}
       </View>
+      {item.status === 'pending' && (
+        <View style={styles.inviteActionsRow}>
+          <TouchableOpacity
+            style={[styles.inviteActionButton, { backgroundColor: '#4F46E5' + '15' }]}
+            onPress={() => openShareOptions(item.token, item.email)}
+          >
+            <Ionicons name="send" size={16} color="#4F46E5" />
+            <Text style={[styles.inviteActionText, { color: '#4F46E5' }]}>Share Invite</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.inviteActionButton, { backgroundColor: '#0EA5E9' + '15' }]}
+            onPress={async () => {
+              const link = buildTeacherInviteLink(item.token, item.email);
+              await Clipboard.setStringAsync(link);
+              showAlert({
+                title: 'Link Copied',
+                message: 'Invite link copied to clipboard.',
+                type: 'success',
+              });
+            }}
+          >
+            <Ionicons name="link-outline" size={16} color="#0EA5E9" />
+            <Text style={[styles.inviteActionText, { color: '#0EA5E9' }]}>Copy Link</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.inviteActionButton, { backgroundColor: '#10B981' + '15' }]}
+            onPress={async () => {
+              await Clipboard.setStringAsync(item.token);
+              showAlert({
+                title: 'Token Copied',
+                message: 'Invite token copied to clipboard.',
+                type: 'success',
+              });
+            }}
+          >
+            <Ionicons name="key-outline" size={16} color="#10B981" />
+            <Text style={[styles.inviteActionText, { color: '#10B981' }]}>Copy Token</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 
@@ -456,6 +522,24 @@ const createStyles = (theme?: ThemeColors) =>
       color: '#dc2626',
       fontWeight: '700',
       fontSize: 13,
+    },
+    inviteActionsRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 12,
+      flexWrap: 'wrap',
+    },
+    inviteActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+    },
+    inviteActionText: {
+      fontSize: 12,
+      fontWeight: '700',
     },
     emptyText: {
       fontSize: 14,

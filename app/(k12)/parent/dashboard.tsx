@@ -17,7 +17,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -41,6 +40,7 @@ import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { TierBadge } from '@/components/ui/TierBadge';
 import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 export default function K12ParentDashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -49,6 +49,7 @@ export default function K12ParentDashboardScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { tier } = useSubscription();
+  const { showAlert, alertProps } = useAlertModal();
   const dashCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const flags = getFeatureFlagsSync();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
@@ -156,6 +157,15 @@ export default function K12ParentDashboardScreen() {
   const tierLower = String(tier || 'free').toLowerCase();
   const isStarterTier = tierLower === 'parent_starter' || tierLower === 'starter';
   const showGreetingUpgrade = tierLower === 'free' || isStarterTier;
+  const isDashOrbUnlocked = [
+    'parent_plus',
+    'premium',
+    'pro',
+    'enterprise',
+    'school_premium',
+    'school_pro',
+    'school_enterprise',
+  ].includes(tierLower);
 
   const normalizeTierForCapabilities = (value?: string | null): Tier => {
     const raw = String(value || 'free').toLowerCase().replace(/-/g, '_');
@@ -419,11 +429,14 @@ export default function K12ParentDashboardScreen() {
                 onPress={() => {
                   if (isDisabled) {
                     if (!flags.exam_prep_enabled) {
-                      Alert.alert(
-                        t('dashboard.parent.k12.exam_prep.unavailable_title', { defaultValue: 'Exam Prep Unavailable' }),
-                        t('dashboard.parent.k12.exam_prep.unavailable_message', { defaultValue: 'Exam Prep is currently disabled in this build. Please try again later.' }),
-                        [{ text: t('common.ok', { defaultValue: 'OK' }), style: 'default' }]
-                      );
+                      showAlert({
+                        title: t('dashboard.parent.k12.exam_prep.unavailable_title', { defaultValue: 'Exam Prep Unavailable' }),
+                        message: t('dashboard.parent.k12.exam_prep.unavailable_message', { defaultValue: 'Exam Prep is currently disabled in this build. Please try again later.' }),
+                        type: 'warning',
+                        buttons: [
+                          { text: t('common.ok', { defaultValue: 'OK' }), style: 'cancel' },
+                        ],
+                      });
                       return;
                     }
 
@@ -432,14 +445,18 @@ export default function K12ParentDashboardScreen() {
                           defaultValue: requiredExamTier.charAt(0).toUpperCase() + requiredExamTier.slice(1),
                         })
                       : t('subscription.starter', { defaultValue: 'Starter' });
-                    Alert.alert(
-                      t('dashboard.parent.k12.exam_prep.locked_title', { defaultValue: 'Exam Prep Locked' }),
-                      t('dashboard.parent.k12.exam_prep.locked_message', { defaultValue: 'Exam Prep requires {{tier}} plan or higher.\\n\\nUpgrade your subscription to unlock this feature.', tier: tierLabel }),
-                      [
+                    showAlert({
+                      title: t('dashboard.parent.k12.exam_prep.locked_title', { defaultValue: 'Exam Prep Locked' }),
+                      message: t('dashboard.parent.k12.exam_prep.locked_message', {
+                        defaultValue: 'Exam Prep requires {{tier}} plan or higher.\\n\\nUpgrade your subscription to unlock this feature.',
+                        tier: tierLabel,
+                      }),
+                      type: 'warning',
+                      buttons: [
                         { text: t('common.not_now', { defaultValue: 'Not now' }), style: 'cancel' },
-                        { text: t('common.upgrade', { defaultValue: 'Upgrade' }), onPress: () => router.push('/screens/subscription-setup' as any) }
-                      ]
-                    );
+                        { text: t('common.upgrade', { defaultValue: 'Upgrade' }), onPress: () => router.push('/screens/subscription-setup' as any) },
+                      ],
+                    });
                     return;
                   }
                   handleQuickAction(action.route, action.id);
@@ -621,8 +638,14 @@ export default function K12ParentDashboardScreen() {
       <DashOrb 
         position="bottom-right"
         size={56}
+        locked={!isDashOrbUnlocked}
+        lockedTitle={t('dash_ai.orb_locked_title', { defaultValue: 'Dash Orb Locked' })}
+        lockedMessage={t('dash_ai.orb_locked_message', { defaultValue: 'Upgrade to Parent Plus to unlock the Dash Orb.' })}
+        lockedCtaLabel={t('common.upgrade', { defaultValue: 'Upgrade' })}
+        onUpgradePress={() => router.push('/screens/subscription-setup' as any)}
         onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'k12_parent_dashboard' })}
       />
+      <AlertModal {...alertProps} />
 
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer

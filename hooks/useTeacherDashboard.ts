@@ -5,7 +5,7 @@
  * Extracted from hooks/useDashboardData.ts per WARP.md standards.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
@@ -27,11 +27,24 @@ export const useTeacherDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]);
+  };
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     // Prevent data fetching during dashboard switches
     if (typeof window !== 'undefined' && (window as unknown as { dashboardSwitching?: boolean }).dashboardSwitching) {
       console.log('👨‍🏫 Skipping teacher dashboard data fetch during switch');
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+      retryTimerRef.current = setTimeout(() => {
+        fetchData(forceRefresh);
+      }, 300);
       return;
     }
     
@@ -72,16 +85,20 @@ export const useTeacherDashboard = () => {
       
       const supabase = assertSupabase();
       
-      const { data: authCheck } = await supabase.auth.getUser();
-      if (!authCheck.user) {
-        throw new Error('Authentication session invalid');
+      const authCheck = await withTimeout(
+        supabase.auth.getUser(),
+        2500,
+        { data: { user: null } } as any
+      );
+      if (!authCheck?.data?.user) {
+        console.warn('[TeacherDashboard] auth.getUser timed out or missing, proceeding with fallback');
       }
 
       // Fetch teacher profile from public.profiles (auth_user_id links to auth.users.id)
       const { data: teacherProfile, error: teacherError } = await supabase
         .from('profiles')
         .select('id, preschool_id, organization_id, first_name, last_name, role')
-        .eq('auth_user_id', user.id)
+        .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
         .maybeSingle();
 
       if (teacherError) {
@@ -106,7 +123,7 @@ export const useTeacherDashboard = () => {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
           .select('id, preschool_id, role, first_name, last_name, organization_id')
-          .eq('auth_user_id', user.id)
+          .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
           .maybeSingle();
         
         log('👨‍🏫 Profile fallback:', { 
@@ -411,6 +428,14 @@ export const useTeacherDashboard = () => {
       setLoading(false);
     }
   }, [user, authLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!authLoading && user?.id) {

@@ -6,7 +6,7 @@
  * Voice input enabled for paid tiers and a limited free daily budget.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert, Platform, PermissionsAndroid, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -29,11 +29,15 @@ import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
+import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getChatUIPrefs, getVoiceChatPrefs, normalizeLanguageCode } from '@/lib/ai/dashSettings';
 import { assertSupabase } from '@/lib/supabase';
 import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
 import { getCurrentLanguage } from '@/lib/i18n';
+import { useAIModelSelection } from '@/hooks/useAIModelSelection';
+import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
+import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
@@ -121,6 +125,11 @@ interface UseDashAssistantReturn {
   setIsNearBottom: (value: boolean) => void;
   unreadCount: number;
   setUnreadCount: (value: number | ((prev: number) => number)) => void;
+
+  // Model selection
+  availableModels: AIModelInfo[];
+  selectedModel: AIModelId;
+  setSelectedModel: (modelId: AIModelId) => void;
   
   // Voice input state
   isRecording: boolean;
@@ -237,6 +246,42 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
+  const [modelPrefLoaded, setModelPrefLoaded] = useState(false);
+  const { availableModels: tierModels, selectedModel, setSelectedModel, canSelectModel } = useAIModelSelection('chat_message');
+  const isSuperAdmin = ['superadmin', 'super_admin'].includes((profile?.role || '').toLowerCase());
+  const availableModels = useMemo(() => {
+    if (!isSuperAdmin) return tierModels;
+    const filtered = tierModels.filter(model => model.id.includes('sonnet-4'));
+    return filtered.length > 0 ? filtered : tierModels;
+  }, [tierModels, isSuperAdmin]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const stored = await getPreferredModel('chat_message');
+      if (!mounted) return;
+      if (stored && canSelectModel(stored as AIModelId)) {
+        setSelectedModel(stored as AIModelId);
+      }
+      setModelPrefLoaded(true);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [canSelectModel, setSelectedModel]);
+
+  useEffect(() => {
+    if (!modelPrefLoaded) return;
+    setPreferredModel(selectedModel, 'chat_message');
+  }, [modelPrefLoaded, selectedModel]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    if (availableModels.length === 0) return;
+    if (!availableModels.find(model => model.id === selectedModel)) {
+      setSelectedModel(availableModels[0].id);
+    }
+  }, [availableModels, isSuperAdmin, selectedModel, setSelectedModel]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
   const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
@@ -1131,7 +1176,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             });
             scrollToBottom({ animated: true, delay: 60 });
           },
-          tutorContextOverride ? { contextOverride: tutorContextOverride } : undefined
+          {
+            contextOverride: tutorContextOverride,
+            modelOverride: selectedModel,
+          }
         );
         
         setStreamingMessageId(null);
@@ -1143,7 +1191,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           undefined, 
           uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
           undefined,
-          tutorContextOverride ? { contextOverride: tutorContextOverride } : undefined
+          {
+            contextOverride: tutorContextOverride,
+            modelOverride: selectedModel,
+          }
         );
       }
 
@@ -1698,8 +1749,9 @@ You can also use text input to chat with Dash.`;
           setInputText(text);
         },
         onFinal: (text: string) => {
-          // Final transcript - update input text
-          setInputText(text);
+          // Final transcript - update input text with formatting
+          const formatted = formatTranscript(text, voiceLocale);
+          setInputText(formatted);
           setPartialTranscript('');
           setIsRecording(false);
           if (isFreeTier && voiceInputStartAtRef.current) {
@@ -1983,6 +2035,9 @@ You can also use text input to chat with Dash.`;
     setIsNearBottom,
     unreadCount,
     setUnreadCount,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
     
     // Voice input state
     isRecording,

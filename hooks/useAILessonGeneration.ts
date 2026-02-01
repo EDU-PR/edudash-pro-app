@@ -195,7 +195,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
         duration: Number(duration) || 45,
         objectives: (objectives || '').split(';').map(s => s.trim()).filter(Boolean),
         language: language || 'en',
-        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
       };
       setLastPayload(payload);
 

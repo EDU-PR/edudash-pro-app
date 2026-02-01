@@ -74,6 +74,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
+  const selectedModelInfo = useMemo(
+    () => availableModels.find(model => model.id === selectedModel) || availableModels[0],
+    [availableModels, selectedModel]
+  );
+  const estimatedRemaining = selectedModelInfo && remaining !== null
+    ? Math.max(Math.floor(remaining / Math.max(selectedModelInfo.relativeCost || 1, 1)), 0)
+    : null;
   
   // Keyboard listeners for reliable show/hide detection
   useEffect(() => {
@@ -154,6 +161,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setIsNearBottom,
     unreadCount,
     setUnreadCount,
+    availableModels,
+    selectedModel,
+    setSelectedModel,
     isRecording,
     partialTranscript,
     alertState,
@@ -571,14 +581,16 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     );
   }
 
-    const Container: React.ElementType = KeyboardAvoidingView;
+    const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
     const keyboardOffset = insets.top + (Platform.OS === 'ios' ? 6 : 0);
+    const containerProps = Platform.OS === 'ios'
+      ? { behavior: 'padding' as const, keyboardVerticalOffset: keyboardOffset }
+      : {};
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
       <Container 
         style={[styles.container, { backgroundColor: theme.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={keyboardOffset}
+        {...containerProps}
       >
         <StatusBar style={isDark ? 'light' : 'dark'} />
         
@@ -680,6 +692,42 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
         )}
 
+        {availableModels.length > 0 && (
+          <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+            <View style={styles.modelSelectorHeader}>
+              <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
+              {selectedModelInfo && (
+                <Text style={[styles.modelSelectorHint, { color: theme.textSecondary }]}>
+                  {selectedModelInfo.displayName} • {estimatedRemaining === null ? 'Unlimited' : `~${estimatedRemaining} chats left`}
+                </Text>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modelSelectorRow}>
+              {availableModels.map((model) => {
+                const isActive = model.id === selectedModel;
+                return (
+                  <TouchableOpacity
+                    key={model.id}
+                    style={[
+                      styles.modelChip,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
+                      isActive && { borderColor: theme.primary, backgroundColor: theme.primary + '22' },
+                    ]}
+                    onPress={() => setSelectedModel(model.id)}
+                  >
+                    <Text style={[styles.modelChipTitle, { color: isActive ? theme.primary : theme.text }]}>
+                      {model.displayName}
+                    </Text>
+                    <Text style={[styles.modelChipSub, { color: theme.textSecondary }]}>
+                      {model.relativeCost}x usage
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Messages */}
         <DashAssistantMessages
           flashListRef={flashListRef}
@@ -699,6 +747,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onAgeBandChange={handleAgeBandChange}
           learnerContext={learnerContext}
           bottomInset={insets.bottom}
+          keyboardVisible={keyboardVisible}
         />
 
         {isStaff && latestAssistantMessage && (

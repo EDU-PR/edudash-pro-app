@@ -53,6 +53,14 @@ interface CacheMetadata {
   hitCount: number;
 }
 
+const safeParse = <T,>(raw: string): T | null => {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
 class OfflineCacheService {
   private readonly version = '1.0.0';
   private readonly maxCacheSize = 10 * 1024 * 1024; // 10MB
@@ -119,7 +127,11 @@ class OfflineCacheService {
         return null;
       }
 
-      const cacheItem: CacheItem<T> = JSON.parse(cached);
+      const cacheItem = safeParse<CacheItem<T>>(cached);
+      if (!cacheItem) {
+        await this.remove(keyPrefix, identifier);
+        return null;
+      }
 
       // Check version compatibility
       if (cacheItem.version !== this.version) {
@@ -178,30 +190,36 @@ class OfflineCacheService {
   async clearUserCache(userId: string): Promise<void> {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const userKeys = [];
+      const userKeys: string[] = [];
+      const corruptedKeys: string[] = [];
 
       // Check each key to see if it belongs to this user
       for (const key of allKeys) {
         if (this.isCacheKey(key)) {
           const cached = await AsyncStorage.getItem(key);
           if (cached) {
-            const cacheItem: CacheItem<any> = JSON.parse(cached);
-            if (cacheItem.userId === userId) {
+            const cacheItem = safeParse<CacheItem<any>>(cached);
+            if (cacheItem?.userId === userId) {
               userKeys.push(key);
+            } else if (!cacheItem) {
+              console.debug(`[OfflineCache] Skipping corrupted cache entry during clearUserCache: ${key}`);
+              corruptedKeys.push(key);
             }
           }
         }
       }
 
       // Remove all user keys
-      if (userKeys.length > 0) {
-        await AsyncStorage.multiRemove(userKeys);
-        userKeys.forEach(key => this.cacheMetrics.delete(key));
+      const keysToRemove = Array.from(new Set([...userKeys, ...corruptedKeys]));
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+        keysToRemove.forEach(key => this.cacheMetrics.delete(key));
       }
 
       track('cache.user_cleared', {
         userId,
         keysCleared: userKeys.length,
+        corruptedKeysRemoved: corruptedKeys.length,
       });
     } catch (error) {
       console.error('Failed to clear user cache:', error);
@@ -214,31 +232,37 @@ class OfflineCacheService {
   async clearSchoolCache(schoolId: string, userId: string): Promise<void> {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const schoolKeys = [];
+      const schoolKeys: string[] = [];
+      const corruptedKeys: string[] = [];
 
       // Check each key to see if it belongs to this school
       for (const key of allKeys) {
         if (this.isCacheKey(key)) {
           const cached = await AsyncStorage.getItem(key);
           if (cached) {
-            const cacheItem: CacheItem<any> = JSON.parse(cached);
-            if (cacheItem.schoolId === schoolId) {
+            const cacheItem = safeParse<CacheItem<any>>(cached);
+            if (cacheItem?.schoolId === schoolId) {
               schoolKeys.push(key);
+            } else if (!cacheItem) {
+              console.debug(`[OfflineCache] Skipping corrupted cache entry during clearSchoolCache: ${key}`);
+              corruptedKeys.push(key);
             }
           }
         }
       }
 
       // Remove all school keys
-      if (schoolKeys.length > 0) {
-        await AsyncStorage.multiRemove(schoolKeys);
-        schoolKeys.forEach(key => this.cacheMetrics.delete(key));
+      const keysToRemove = Array.from(new Set([...schoolKeys, ...corruptedKeys]));
+      if (keysToRemove.length > 0) {
+        await AsyncStorage.multiRemove(keysToRemove);
+        keysToRemove.forEach(key => this.cacheMetrics.delete(key));
       }
 
       track('cache.school_cleared', {
         schoolId,
         userId,
         keysCleared: schoolKeys.length,
+        corruptedKeysRemoved: corruptedKeys.length,
       });
     } catch (error) {
       console.error('Failed to clear school cache:', error);

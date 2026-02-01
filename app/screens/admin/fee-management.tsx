@@ -17,7 +17,6 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   TextInput,
-  Alert,
   ActivityIndicator,
   StyleSheet,
   Modal,
@@ -34,6 +33,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface FeeStructure {
   id: string;
@@ -51,11 +51,10 @@ interface PromoCampaign {
   name: string;
   discount_type: 'percentage' | 'fixed_amount' | 'fixed_price';
   discount_value: number;
-  applies_to_registration: boolean;
   is_active: boolean;
   start_date: string;
   end_date: string;
-  max_uses?: number;
+  max_uses?: number | null;
   current_uses: number;
 }
 
@@ -81,6 +80,7 @@ const FREQUENCIES = [
 export default function FeeManagementScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const insets = useSafeAreaInsets();
   const organizationId = profile?.organization_id || profile?.preschool_id;
   const modalPaddingBottom = Platform.OS === 'android'
@@ -118,7 +118,6 @@ export default function FeeManagementScreen() {
     name: '',
     discount_type: 'percentage' as PromoCampaign['discount_type'],
     discount_value: '',
-    applies_to_registration: true,
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     max_uses: '',
@@ -142,28 +141,52 @@ export default function FeeManagementScreen() {
       if (feesError) throw feesError;
       setFees(feesData || []);
       
-      // Fetch promo campaigns (registration-related)
+      // Fetch promo campaigns from marketing_campaigns (source of truth)
       const { data: promosData, error: promosError } = await supabase
-        .from('promotional_campaigns')
-        .select('*')
-        .eq('applies_to_registration', true)
+        .from('marketing_campaigns')
+        .select('id, name, promo_code, discount_type, discount_value, max_redemptions, current_redemptions, start_date, end_date, active')
+        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false });
-      
-      if (promosError && promosError.code !== '42P01') {
+
+      if (promosError) {
         console.warn('Promos fetch error:', promosError);
       }
+
       const now = new Date();
-      const filteredPromos = (promosData || []).filter((promo: PromoCampaign) => {
+      const mappedPromos = (promosData || [])
+        .filter((promo: any) => promo.promo_code)
+        .map((promo: any) => {
+          const normalizedType =
+            promo.discount_type === 'waive_registration' || promo.discount_type === 'first_month_free'
+              ? 'fixed_price'
+              : promo.discount_type;
+
+          return {
+            id: promo.id,
+            code: promo.promo_code,
+            name: promo.name,
+            discount_type: normalizedType,
+            discount_value: promo.discount_value ?? 0,
+            max_uses: promo.max_redemptions ?? null,
+            current_uses: promo.current_redemptions ?? 0,
+            is_active: promo.active ?? true,
+            start_date: promo.start_date,
+            end_date: promo.end_date,
+          } as PromoCampaign;
+        });
+
+      const filteredPromos = mappedPromos.filter((promo) => {
         if (!promo.end_date) return true;
         const endDate = new Date(promo.end_date);
         const isPast = !Number.isNaN(endDate.getTime()) && endDate.getTime() < now.getTime();
         return !(promo.is_active === false && isPast);
       });
+
       setPromos(filteredPromos);
       
     } catch (err: any) {
       console.error('Fetch error:', err);
-      Alert.alert('Error', 'Failed to load fee data');
+      showAlert({ title: 'Error', message: 'Failed to load fee data', type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -182,7 +205,7 @@ export default function FeeManagementScreen() {
   // Save fee structure
   const handleSaveFee = async () => {
     if (!feeForm.name.trim() || !feeForm.amount) {
-      Alert.alert('Validation', 'Please fill in name and amount');
+      showAlert({ title: 'Validation', message: 'Please fill in name and amount', type: 'warning' });
       return;
     }
     
@@ -233,14 +256,18 @@ export default function FeeManagementScreen() {
         }
       }
 
-      Alert.alert('Success', action === 'updated' ? 'Fee updated successfully' : 'Fee created successfully');
+      showAlert({
+        title: 'Success',
+        message: action === 'updated' ? 'Fee updated successfully' : 'Fee created successfully',
+        type: 'success',
+      });
       
       setShowFeeModal(false);
       resetFeeForm();
       fetchData();
     } catch (err: any) {
       console.error('Save fee error:', err);
-      Alert.alert('Error', err.message || 'Failed to save fee');
+      showAlert({ title: 'Error', message: err.message || 'Failed to save fee', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -248,10 +275,11 @@ export default function FeeManagementScreen() {
 
   // Delete fee structure
   const handleDeleteFee = (fee: FeeStructure) => {
-    Alert.alert(
-      'Delete Fee',
-      `Are you sure you want to delete "${fee.name}"?`,
-      [
+    showAlert({
+      title: 'Delete Fee',
+      message: `Are you sure you want to delete "${fee.name}"?`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -262,60 +290,63 @@ export default function FeeManagementScreen() {
                 .from('fee_structures')
                 .delete()
                 .eq('id', fee.id);
-              
+
               if (error) throw error;
-              Alert.alert('Deleted', 'Fee structure removed');
+              showAlert({ title: 'Deleted', message: 'Fee structure removed', type: 'success' });
               fetchData();
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete');
+              showAlert({ title: 'Error', message: err.message || 'Failed to delete', type: 'error' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Delete promo campaign
   const handleDeletePromo = (promo: PromoCampaign) => {
-    Alert.alert(
-      'Delete Promo',
-      `Are you sure you want to delete "${promo.code}"?`,
-      [
+    showAlert({
+      title: 'Delete Promo',
+      message: `Are you sure you want to delete "${promo.code}"?`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await assertSupabase()
-                .from('promotional_campaigns')
+              const { data, error } = await assertSupabase()
+                .from('marketing_campaigns')
                 .delete()
-                .eq('id', promo.id);
+                .eq('id', promo.id)
+                .select('id')
+                .maybeSingle();
 
-              if (error) {
+              if (error || !data) {
                 const archivePayload = {
-                  is_active: false,
-                  end_date: new Date().toISOString().split('T')[0],
+                  active: false,
+                  end_date: new Date().toISOString(),
                 };
                 const { error: archiveError } = await assertSupabase()
-                  .from('promotional_campaigns')
+                  .from('marketing_campaigns')
                   .update(archivePayload)
                   .eq('id', promo.id);
                 if (archiveError) throw archiveError;
-                Alert.alert('Archived', 'Promo archived because delete is restricted.');
+                showAlert({ title: 'Archived', message: 'Promo archived because delete is restricted.', type: 'warning' });
                 fetchData();
                 return;
               }
 
-              Alert.alert('Deleted', 'Promo code removed');
+              showAlert({ title: 'Deleted', message: 'Promo code removed', type: 'success' });
               fetchData();
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete promo');
+              showAlert({ title: 'Error', message: err.message || 'Failed to delete promo', type: 'error' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Share promo campaign
@@ -344,20 +375,20 @@ export default function FeeManagementScreen() {
         await navigator.share({ title: promo.name, text: message });
       } else {
         await Clipboard.setStringAsync(message);
-        Alert.alert(
-          'Copied to Clipboard! 📋',
-          'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Copied to Clipboard! 📋',
+          message: 'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
+          type: 'success',
+        });
       }
     } catch (error) {
       try {
         await Clipboard.setStringAsync(message);
-        Alert.alert(
-          'Copied to Clipboard! 📋',
-          'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Copied to Clipboard! 📋',
+          message: 'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
+          type: 'success',
+        });
       } catch (clipError) {
         console.error('Share promo error:', clipError);
       }
@@ -367,43 +398,51 @@ export default function FeeManagementScreen() {
   // Save promo campaign
   const handleSavePromo = async () => {
     if (!promoForm.code.trim() || !promoForm.name.trim() || !promoForm.discount_value) {
-      Alert.alert('Validation', 'Please fill in code, name, and discount value');
+      showAlert({ title: 'Validation', message: 'Please fill in code, name, and discount value', type: 'warning' });
+      return;
+    }
+
+    if (!organizationId) {
+      showAlert({ title: 'Error', message: 'Organization not found. Please re-login.', type: 'error' });
       return;
     }
     
     setSaving(true);
     try {
       const supabase = assertSupabase();
+      const startDate = promoForm.start_date || new Date().toISOString().split('T')[0];
+      const endDate = promoForm.end_date || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
       const payload = {
-        code: promoForm.code.trim().toUpperCase(),
+        organization_id: organizationId,
         name: promoForm.name.trim(),
-        discount_type: promoForm.discount_type,
+        promo_code: promoForm.code.trim().toUpperCase(),
+        campaign_type: 'seasonal_promo',
+        discount_type: promoForm.discount_type === 'fixed_price' ? 'fixed_amount' : promoForm.discount_type,
         discount_value: parseFloat(promoForm.discount_value),
-        applies_to_registration: promoForm.applies_to_registration,
-        start_date: promoForm.start_date,
-        end_date: promoForm.end_date,
-        max_uses: promoForm.max_uses ? parseInt(promoForm.max_uses) : null,
-        is_active: promoForm.is_active,
-        user_type: 'parent',
-        promo_duration_months: 12,
-        product_type: 'registration',
+        start_date: startDate,
+        end_date: endDate,
+        max_redemptions: promoForm.max_uses ? parseInt(promoForm.max_uses) : null,
+        current_redemptions: editingPromo?.current_uses || 0,
+        active: promoForm.is_active,
+        featured: false,
       };
       
       if (editingPromo) {
         const { error } = await supabase
-          .from('promotional_campaigns')
+          .from('marketing_campaigns')
           .update(payload)
           .eq('id', editingPromo.id);
         
         if (error) throw error;
-        Alert.alert('Success', 'Promo updated successfully');
+        showAlert({ title: 'Success', message: 'Promo updated successfully', type: 'success' });
       } else {
         const { error } = await supabase
-          .from('promotional_campaigns')
-          .insert({ ...payload, created_by: user?.id || profile?.id });
+          .from('marketing_campaigns')
+          .insert(payload);
         
         if (error) throw error;
-        Alert.alert('Success', 'Promo created successfully');
+        showAlert({ title: 'Success', message: 'Promo created successfully', type: 'success' });
       }
       
       setShowPromoModal(false);
@@ -411,7 +450,7 @@ export default function FeeManagementScreen() {
       fetchData();
     } catch (err: any) {
       console.error('Save promo error:', err);
-      Alert.alert('Error', err.message || 'Failed to save promo');
+      showAlert({ title: 'Error', message: err.message || 'Failed to save promo', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -437,7 +476,6 @@ export default function FeeManagementScreen() {
       name: '',
       discount_type: 'percentage',
       discount_value: '',
-      applies_to_registration: true,
       start_date: new Date().toISOString().split('T')[0],
       end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       max_uses: '',
@@ -467,7 +505,6 @@ export default function FeeManagementScreen() {
       name: promo.name,
       discount_type: promo.discount_type === 'fixed_price' ? 'fixed_amount' : promo.discount_type,
       discount_value: promo.discount_value.toString(),
-      applies_to_registration: promo.applies_to_registration,
       start_date: promo.start_date?.split('T')[0] || '',
       end_date: promo.end_date?.split('T')[0] || '',
       max_uses: promo.max_uses?.toString() || '',
@@ -903,6 +940,7 @@ export default function FeeManagementScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

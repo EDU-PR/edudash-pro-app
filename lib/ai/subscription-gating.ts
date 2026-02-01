@@ -272,12 +272,12 @@ export async function getAvailableModelsForUser(
 ): Promise<AIModelId[]> {
   try {
     const context = await getUserSubscriptionContext(supabase, userId)
-    if (!context) return ['claude-3-haiku'] // fallback
+    if (!context) return ['claude-3-haiku-20240307'] // fallback
 
     return getModelsForTier(context.tier).map(m => m.id)
   } catch (error) {
     console.error('Error getting available models for user:', error)
-    return ['claude-3-haiku'] // fallback
+    return ['claude-3-haiku-20240307'] // fallback
   }
 }
 
@@ -290,12 +290,12 @@ export async function getDefaultModelForUser(
 ): Promise<AIModelId> {
   try {
     const context = await getUserSubscriptionContext(supabase, userId)
-    if (!context) return 'claude-3-haiku' // fallback
+    if (!context) return 'claude-3-haiku-20240307' // fallback
 
     return getDefaultModelForTier(context.tier)
   } catch (error) {
     console.error('Error getting default model for user:', error)
-    return 'claude-3-haiku' // fallback
+    return 'claude-3-haiku-20240307' // fallback
   }
 }
 

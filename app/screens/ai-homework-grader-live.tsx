@@ -65,7 +65,7 @@ export default function AIHomeworkGraderLive() {
         const limits = await getEffectiveLimits()
         setModels((limits.modelOptions || []) as ModelOption[])
         const stored = await getPreferredModel('grading_assistance')
-        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku')
+        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
       } catch {
         // Silent failure - models will use default
       }

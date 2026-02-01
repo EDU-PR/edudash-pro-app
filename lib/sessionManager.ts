@@ -723,10 +723,58 @@ export async function signInWithSession(
     if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
     await clearStoredData();
     
-    const { data, error } = await assertSupabase().auth.signInWithPassword({
+    const signInPromise = assertSupabase().auth.signInWithPassword({
       email,
       password,
-    });
+    }).catch((err) => ({
+      data: { session: null, user: null },
+      error: err,
+    }));
+
+    const SIGN_IN_TIMEOUT_MS = 8000;
+    const { data, error } = await withTimeout(
+      signInPromise,
+      SIGN_IN_TIMEOUT_MS,
+      { data: { session: null, user: null }, error: new Error('Sign-in timed out') as any }
+    );
+
+    if ((error as any)?.message === 'Sign-in timed out') {
+      console.warn('[SessionManager] Sign-in timed out - checking for late session...');
+      try {
+        const { data: sessionData } = await withTimeout(
+          assertSupabase().auth.getSession(),
+          3000,
+          { data: { session: null }, error: null } as any
+        );
+        if (sessionData?.session?.user) {
+          const session: UserSession = {
+            access_token: sessionData.session.access_token,
+            refresh_token: sessionData.session.refresh_token,
+            expires_at: sessionData.session.expires_at || Date.now() / 1000 + 3600,
+            user_id: sessionData.session.user.id,
+            email: sessionData.session.user.email,
+          };
+          const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
+            fetchUserProfile(sessionData.session.user.id),
+            4000
+          );
+          let profile = fetchedProfile;
+          if (!profile) {
+            if (timedOut) {
+              console.warn('[SessionManager] fetchUserProfile timed out after late session, using minimal fallback');
+            }
+            profile = await buildMinimalProfileFromUser(sessionData.session.user);
+          }
+          await storeSession(session);
+          await storeProfile(profile);
+          setupAutoRefresh(session);
+          return { session, profile };
+        }
+      } catch (lateErr) {
+        console.warn('[SessionManager] Late session check failed:', lateErr);
+      }
+      return { session: null, profile: null, error: 'Sign-in timed out. Please try again.' };
+    }
 
     if (error) {
       console.error('[SessionManager] Supabase auth error:', error.message);

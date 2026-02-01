@@ -40,7 +40,7 @@ export default function AIHomeworkHelperScreen() {
       const limits = await getEffectiveLimits()
       setModels(limits.modelOptions || [])
       const stored = await getPreferredModel('homework_help')
-      setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku')
+      setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
     } catch (error) {
       console.error('Error refreshing AI homework helper data:', error)
     }
@@ -55,7 +55,7 @@ export default function AIHomeworkHelperScreen() {
         const limits = await getEffectiveLimits()
         setModels(limits.modelOptions || [])
         const stored = await getPreferredModel('homework_help')
-        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku')
+        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
       } catch { /* noop */ void 0; }
     })()
   }, [])
@@ -257,4 +257,3 @@ const styles = StyleSheet.create({
   placeholder: { fontSize: 13 },
   fallbackChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
 })
-

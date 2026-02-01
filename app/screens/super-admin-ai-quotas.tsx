@@ -21,6 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Extracted components
 import {
@@ -36,6 +37,7 @@ import {
 
 export default function SuperAdminAIQuotasScreen() {
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showSchoolModal, setShowSchoolModal] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState<AIQuotaSettings | null>(null);
@@ -55,7 +57,7 @@ export default function SuperAdminAIQuotasScreen() {
     suspendSchool,
     resetSchoolUsage,
     updateGlobalConfig,
-  } = useAIQuotaManagement();
+  } = useAIQuotaManagement({ showAlert });
 
   // Handle school card press
   const handleSchoolPress = (school: AIQuotaSettings) => {
@@ -186,6 +188,7 @@ export default function SuperAdminAIQuotasScreen() {
         onResetUsage={resetSchoolUsage}
         onSuspend={suspendSchool}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 }

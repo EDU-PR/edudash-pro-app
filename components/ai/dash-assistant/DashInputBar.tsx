@@ -234,68 +234,72 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
       )}
       
       <View style={styles.inputRow}>
-        {/* Camera button (outside input) */}
-        <TouchableOpacity
-          style={styles.cameraButton}
-          onPress={async () => {
-            try {
-              await Haptics.selectionAsync();
-            } catch {}
-            onTakePhoto();
-          }}
-          disabled={isLoading || isUploading}
-          accessibilityLabel="Take photo"
-          accessibilityRole="button"
-        >
-          <Ionicons 
-            name="camera-outline" 
-            size={24} 
-            color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary} 
-          />
-        </TouchableOpacity>
-
-        {/* Attach files button (outside input for visibility) */}
-        <TouchableOpacity
-          style={styles.attachButton}
-          onPress={async () => {
-            try {
-              await Haptics.selectionAsync();
-            } catch {}
-            onAttachFile();
-          }}
-          disabled={isLoading || isUploading}
-          accessibilityLabel="Attach files"
-          accessibilityRole="button"
-        >
-          <Ionicons 
-            name="attach" 
-            size={22} 
-            color={selectedAttachments.length > 0 ? theme.primary : (isLoading || isUploading ? theme.textTertiary : theme.textSecondary)} 
-          />
-          {selectedAttachments.length > 0 && (
-            <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
-              <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
-                {selectedAttachments.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        
         {/* Input wrapper */}
         <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
+          <View style={styles.inputAccessoryLeft}>
+            {/* Attach files button (inside input like WhatsApp) */}
+            <TouchableOpacity
+              style={styles.inputIconButton}
+              onPress={async () => {
+                try {
+                  await Haptics.selectionAsync();
+                } catch {}
+                onAttachFile();
+              }}
+              disabled={isLoading || isUploading}
+              accessibilityLabel="Attach files"
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="attach"
+                size={20}
+                color={selectedAttachments.length > 0 ? theme.primary : (isLoading || isUploading ? theme.textTertiary : theme.textSecondary)}
+              />
+              {selectedAttachments.length > 0 && (
+                <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
+                  <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
+                    {selectedAttachments.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Camera button (hide while typing) */}
+            {inputText.trim().length === 0 && !isRecording && (
+              <TouchableOpacity
+                style={styles.inputIconButton}
+                onPress={async () => {
+                  try {
+                    await Haptics.selectionAsync();
+                  } catch {}
+                  onTakePhoto();
+                }}
+                disabled={isLoading || isUploading}
+                accessibilityLabel="Take photo"
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="camera-outline"
+                  size={20}
+                  color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+
           <TextInput
             ref={inputRef}
             style={[
               styles.textInput,
-              { 
+              {
                 color: theme.inputText,
               }
             ]}
             placeholder={
-              isRecording 
-                ? "🎤 Listening... tap stop when done" 
-                : selectedAttachments.length > 0 
-                  ? "Add a message (optional)..." 
+              isRecording
+                ? "🎤 Listening... tap stop when done"
+                : selectedAttachments.length > 0
+                  ? "Add a message (optional)..."
                   : (placeholder || "Ask Dash anything...")
             }
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}

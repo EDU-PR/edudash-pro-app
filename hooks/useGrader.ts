@@ -31,7 +31,7 @@ export function useGrader() {
         rubric: opts.rubric || [],
         gradeLevel: opts.gradeLevel || null,
         language: opts.language || 'en',
-        model: callOpts?.model || 'claude-3-sonnet',
+        model: callOpts?.model || 'claude-3-5-sonnet-20241022',
       };
 
       if (callOpts?.streaming) {

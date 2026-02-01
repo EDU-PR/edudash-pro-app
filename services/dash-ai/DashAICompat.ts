@@ -70,7 +70,7 @@ export interface IDashAIAssistant {
     conversationId?: string,
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null }
+    options?: { contextOverride?: string | null; modelOverride?: string | null }
   ): Promise<DashMessage>;
 
   // Tasks & Reminders
@@ -240,7 +240,7 @@ export class DashAIAssistant implements IDashAIAssistant {
     conversationId?: string, 
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null }
+    options?: { contextOverride?: string | null; modelOverride?: string | null }
   ): Promise<DashMessage> {
     // Delegate to DashAICore which now handles AI calls
     return this.core.sendMessage(content, conversationId, attachments, onStreamChunk, options);

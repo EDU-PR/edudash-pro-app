@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 export interface Organization {
   id: string;
@@ -94,6 +94,7 @@ export interface RegistrationFormErrors {
 
 export function useChildRegistration() {
   const { profile } = useAuth();
+  const alert = useAlert();
   
   // Form state
   const [firstName, setFirstName] = useState('');
@@ -201,13 +202,13 @@ export function useChildRegistration() {
         }
       } catch (error: any) {
         console.error('Failed to fetch organizations:', error);
-        Alert.alert('Error', error?.message || 'Failed to load organizations.');
+        alert.showError('Error', error?.message || 'Failed to load organizations.');
       } finally {
         setLoadingOrganizations(false);
       }
     };
     fetchOrganizations();
-  }, []);
+  }, [alert]);
 
   // Update fee when organization changes
   useEffect(() => {
@@ -255,19 +256,19 @@ export function useChildRegistration() {
     setErrors(newErrors);
     
     if (Object.keys(newErrors).length > 0) {
-      Alert.alert('Validation Error', 'Please fix the errors before submitting');
+      alert.showWarning('Validation Error', 'Please fix the errors before submitting');
       return false;
     }
     if (!profile?.id) {
-      Alert.alert('Profile missing', 'Please try again after reloading.');
+      alert.showError('Profile missing', 'Please try again after reloading.');
       return false;
     }
     return true;
-  }, [firstName, lastName, dob, gender, selectedOrganizationId, emergencyPhone, registrationFee, paymentMethod, proofOfPayment, profile?.id]);
+  }, [alert, firstName, lastName, dob, gender, organizations, selectedOrganizationId, emergencyPhone, registrationFee, paymentMethod, proofOfPayment, profile?.id]);
 
   const handleValidatePromo = useCallback(async () => {
     if (!promoCode.trim()) {
-      Alert.alert('Enter Code', 'Please enter a promo code to validate.');
+      alert.showWarning('Enter Code', 'Please enter a promo code to validate.');
       return;
     }
     
@@ -283,21 +284,21 @@ export function useChildRegistration() {
       
       if (error) throw error;
       if (!data) {
-        Alert.alert('Invalid Code', 'This promo code is not valid or has expired.');
+        alert.showError('Invalid Code', 'This promo code is not valid or has expired.');
         return;
       }
       
       const now = new Date();
       if (data.start_date && new Date(data.start_date) > now) {
-        Alert.alert('Not Yet Active', 'This promo code is not yet active.');
+        alert.showWarning('Not Yet Active', 'This promo code is not yet active.');
         return;
       }
       if (data.end_date && new Date(data.end_date) < now) {
-        Alert.alert('Expired', 'This promo code has expired.');
+        alert.showWarning('Expired', 'This promo code has expired.');
         return;
       }
       if (data.max_uses && data.current_uses >= data.max_uses) {
-        Alert.alert('Limit Reached', 'This promo code has reached its maximum uses.');
+        alert.showWarning('Limit Reached', 'This promo code has reached its maximum uses.');
         return;
       }
       
@@ -307,14 +308,14 @@ export function useChildRegistration() {
       
       setPromoDiscount(discountAmount);
       setPromoApplied({ code: data.code, name: data.name, discountValue: data.discount_value });
-      Alert.alert('Success!', `${data.name} applied! You save R${discountAmount.toFixed(2)}.`);
+      alert.showSuccess('Success!', `${data.name} applied! You save R${discountAmount.toFixed(2)}.`);
     } catch (err) {
       console.error('Promo validation error:', err);
-      Alert.alert('Error', 'Failed to validate promo code.');
+      alert.showError('Error', 'Failed to validate promo code.');
     } finally {
       setPromoValidating(false);
     }
-  }, [promoCode, registrationFee]);
+  }, [alert, promoCode, registrationFee]);
 
   const handleRemovePromo = useCallback(() => {
     setPromoCode('');
@@ -415,9 +416,7 @@ export function useChildRegistration() {
           });
         } catch { /* ignore */ }
         
-        Alert.alert('Submitted Successfully', 'Your registration request has been sent.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        alert.showSuccess('Submitted Successfully', 'Your registration request has been sent.', () => router.back());
         resetForm();
       } else if (response.error) {
         const error = response.error;
@@ -425,20 +424,20 @@ export function useChildRegistration() {
         const errorMessage = (error as any)?.message || String(error);
         
         if (errorCode === '23505' || errorMessage?.includes('duplicate')) {
-          Alert.alert('Duplicate Registration', `You have already submitted a registration for ${firstName} ${lastName} at this school.`);
+          alert.showError('Duplicate Registration', `You have already submitted a registration for ${firstName} ${lastName} at this school.`);
         } else if (errorCode === '42501' || errorMessage?.toLowerCase().includes('permission denied')) {
-          Alert.alert('Permission Denied', `You don't have permission to register at this school.`);
+          alert.showError('Permission Denied', `You don't have permission to register at this school.`);
         } else {
-          Alert.alert('Submission Failed', errorMessage || 'Unable to submit registration.');
+          alert.showError('Submission Failed', errorMessage || 'Unable to submit registration.');
         }
       }
     } catch (e: any) {
       console.error('[Child Registration] Error:', e);
-      Alert.alert('Submission failed', e?.message || 'Please try again');
+      alert.showError('Submission failed', e?.message || 'Please try again');
     } finally {
       setLoading(false);
     }
-  }, [validate, profile, firstName, lastName, dob, gender, dietary, medicalInfo, specialNeeds, emergencyName, emergencyPhone, emergencyRelation, notes, selectedOrganizationId, registrationFee, promoDiscount, finalAmount, promoApplied, paymentMethod, proofOfPayment, resetForm]);
+  }, [alert, validate, profile, firstName, lastName, dob, gender, dietary, medicalInfo, specialNeeds, emergencyName, emergencyPhone, emergencyRelation, notes, selectedOrganizationId, registrationFee, promoDiscount, finalAmount, promoApplied, paymentMethod, proofOfPayment, resetForm]);
 
   // Get the current selected organization and its age range
   const selectedOrganization = organizations.find(o => o.id === selectedOrganizationId) || null;

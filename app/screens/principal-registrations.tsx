@@ -14,9 +14,11 @@ import React from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -55,6 +57,12 @@ export default function PrincipalRegistrationsScreen() {
     setStatusFilter,
     successModal,
     setSuccessModal,
+    rejectModalVisible,
+    rejectionReason,
+    setRejectionReason,
+    confirmReject,
+    cancelReject,
+    rejectingRegistration,
     fetchRegistrations,
     onRefresh,
     handleSyncWithEduSite,
@@ -231,6 +239,45 @@ export default function PrincipalRegistrationsScreen() {
         />
       )}
 
+      <Modal
+        visible={rejectModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={cancelReject}
+      >
+        <View style={[styles.rejectionModalContainer, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+          <View style={[styles.rejectionModalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={cancelReject}>
+              <Text style={[styles.rejectionModalCancel, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={[styles.rejectionModalTitle, { color: colors.text }]}>Reject Registration</Text>
+            <TouchableOpacity onPress={confirmReject}>
+              <Text style={[styles.rejectionModalSubmit, { color: '#EF4444' }]}>Reject</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.rejectionModalContent}>
+            <Text style={[styles.rejectionModalLabel, { color: colors.textSecondary }]}>
+              {`Enter reason for rejecting ${rejectingRegistration?.student_first_name ?? 'this student'}'s registration:`}
+            </Text>
+            <TextInput
+              style={[styles.rejectionModalInput, {
+                backgroundColor: colors.surface,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
+              placeholder="Enter rejection reason..."
+              placeholderTextColor={colors.textSecondary}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Success Modal */}
       <SuccessModal
         visible={successModal.visible}
@@ -292,5 +339,41 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     paddingBottom: 100,
+  },
+  rejectionModalContainer: {
+    flex: 1,
+  },
+  rejectionModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  rejectionModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rejectionModalCancel: {
+    fontSize: 14,
+  },
+  rejectionModalSubmit: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rejectionModalContent: {
+    padding: 16,
+    gap: 12,
+  },
+  rejectionModalLabel: {
+    fontSize: 13,
+  },
+  rejectionModalInput: {
+    minHeight: 120,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
   },
 });

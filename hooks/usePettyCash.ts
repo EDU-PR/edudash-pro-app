@@ -10,6 +10,7 @@ import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 export interface PettyCashTransaction {
   id: string;
@@ -148,22 +149,26 @@ export function usePettyCash() {
           .rpc('ensure_petty_cash_account', { school_uuid: schoolId });
         if (ensuredId) setAccountId(String(ensuredId));
       } catch {
-        const { data: acct } = await assertSupabase()
-          .from('petty_cash_accounts')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('is_active', true)
-          .maybeSingle();
+        const { data: acct } = await withPettyCashTenant((column, client) =>
+          client
+            .from('petty_cash_accounts')
+            .select('id')
+            .eq(column, schoolId)
+            .eq('is_active', true)
+            .maybeSingle()
+        );
         if (acct?.id) setAccountId(String(acct.id));
       }
 
       // Load transactions
-      const { data: transactionsData, error: transError } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .select('*')
-        .eq('school_id', schoolId)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const { data: transactionsData, error: transError } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('*')
+          .eq(column, schoolId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+      );
 
       if (transError) {
         console.error('Error loading transactions:', transError);
@@ -193,21 +198,25 @@ export function usePettyCash() {
         .reduce((sum, tx) => sum + tx.amount, 0);
 
       // Get account balances
-      const { data: accountRow } = await assertSupabase()
-        .from('petty_cash_accounts')
-        .select('opening_balance, low_balance_threshold')
-        .eq('school_id', userProfile.preschool_id)
-        .eq('is_active', true)
-        .maybeSingle();
+      const { data: accountRow } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_accounts')
+          .select('opening_balance, low_balance_threshold')
+          .eq(column, schoolId)
+          .eq('is_active', true)
+          .maybeSingle()
+      );
 
       const openingBalance = Number(accountRow?.opening_balance ?? 0);
 
-      const { data: approvedAll } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .select('amount, type, status')
-        .eq('school_id', userProfile.preschool_id)
-        .eq('status', 'approved')
-        .limit(1000);
+      const { data: approvedAll } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('amount, type, status')
+          .eq(column, schoolId)
+          .eq('status', 'approved')
+          .limit(1000)
+      );
 
       const totalSignedAll = (approvedAll || []).reduce((sum, tx: any) => {
         const amt = Number(tx.amount || 0);
@@ -252,21 +261,23 @@ export function usePettyCash() {
     }
 
     try {
-      const { data: transactionData, error: transactionError } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .insert({
-          school_id: preschoolId,
-          account_id: accountId,
-          amount,
-          description: form.description.trim(),
-          category: form.category,
-          type: 'expense',
-          reference_number: form.receipt_number.trim() || null,
-          created_by: user?.id,
-          status: 'approved',
-        })
-        .select()
-        .single();
+      const { data: transactionData, error: transactionError } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            account_id: accountId,
+            amount,
+            description: form.description.trim(),
+            category: form.category,
+            type: 'expense',
+            reference_number: form.receipt_number.trim() || null,
+            created_by: user?.id,
+            status: 'approved',
+          })
+          .select()
+          .single()
+      );
 
       if (transactionError) {
         Alert.alert(t('common.error'), t('petty_cash.error_failed_add'));
@@ -303,18 +314,20 @@ export function usePettyCash() {
     }
 
     try {
-      const { error } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .insert({
-          school_id: preschoolId,
-          account_id: accountId,
-          amount: amountNum,
-          description: `Petty cash replenishment - ${new Date().toLocaleDateString()}`,
-          category: 'Replenishment',
-          type: 'replenishment',
-          created_by: user?.id,
-          status: 'approved',
-        });
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            account_id: accountId,
+            amount: amountNum,
+            description: `Petty cash replenishment - ${new Date().toLocaleDateString()}`,
+            category: 'Replenishment',
+            type: 'replenishment',
+            created_by: user?.id,
+            status: 'approved',
+          })
+      );
 
       if (error) {
         Alert.alert(t('common.error'), t('petty_cash.error_failed_record'));
@@ -348,19 +361,21 @@ export function usePettyCash() {
     }
 
     try {
-      const { error } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .insert({
-          school_id: preschoolId,
-          account_id: accountId,
-          amount,
-          description: form.description.trim(),
-          category: 'Withdrawal/Adjustment',
-          type: 'adjustment',
-          reference_number: form.receipt_number.trim() || null,
-          created_by: user?.id,
-          status: 'approved',
-        });
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            account_id: accountId,
+            amount,
+            description: form.description.trim(),
+            category: 'Withdrawal/Adjustment',
+            type: 'adjustment',
+            reference_number: form.receipt_number.trim() || null,
+            created_by: user?.id,
+            status: 'approved',
+          })
+      );
 
       if (error) {
         Alert.alert(t('common.error'), t('petty_cash.error_failed_withdrawal'));
@@ -429,18 +444,20 @@ export function usePettyCash() {
   const reverseTransaction = async (transaction: PettyCashTransaction) => {
     try {
       const oppositeType = transaction.type === 'expense' ? 'replenishment' : 'expense';
-      const { error } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .insert({
-          school_id: preschoolId,
-          account_id: accountId,
-          amount: transaction.amount,
-          description: `Reversal of ${transaction.type} (${transaction.id.substring(0, 8)}) - ${transaction.description}`,
-          category: 'Other',
-          type: oppositeType as any,
-          created_by: user?.id,
-          status: 'approved',
-        });
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            account_id: accountId,
+            amount: transaction.amount,
+            description: `Reversal of ${transaction.type} (${transaction.id.substring(0, 8)}) - ${transaction.description}`,
+            category: 'Other',
+            type: oppositeType as any,
+            created_by: user?.id,
+            status: 'approved',
+          })
+      );
       if (error) throw error;
       Alert.alert(t('common.success'), t('transaction.reversal_success', 'Transaction reversed successfully'));
       loadPettyCashData();

@@ -27,7 +27,10 @@ import {
 /**
  * Fetch complete user profile with organization membership and permissions
  */
-export async function fetchEnhancedUserProfile(userId: string): Promise<EnhancedUserProfile | null> {
+export async function fetchEnhancedUserProfile(
+  userId: string,
+  sessionOverride?: { user?: { id: string; email?: string }; access_token?: string; refresh_token?: string } | null
+): Promise<EnhancedUserProfile | null> {
   try {
     log('Attempting to fetch profile for authenticated user:', userId);
     
@@ -38,20 +41,34 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     
     const SESSION_CHECK_TIMEOUT = 6000;
     
+    // Use provided session override first (most reliable during auth transitions)
+    if (sessionOverride?.user?.id) {
+      sessionUserId = sessionOverride.user.id;
+      session = {
+        user: {
+          id: sessionOverride.user.id,
+          email: sessionOverride.user.email ?? undefined,
+        },
+        access_token: sessionOverride.access_token,
+      };
+    }
+
     // Try stored session first (fastest)
     log('[Profile] Checking stored session first...');
-    try {
-      storedSession = await getCurrentSession();
-      if (storedSession?.user_id) {
-        sessionUserId = storedSession.user_id;
-        log('[Profile] Stored session result: SUCCESS, user:', sessionUserId);
-        session = {
-          user: { id: storedSession.user_id, email: storedSession.email },
-          access_token: storedSession.access_token
-        };
+    if (!sessionUserId) {
+      try {
+        storedSession = await getCurrentSession();
+        if (storedSession?.user_id) {
+          sessionUserId = storedSession.user_id;
+          log('[Profile] Stored session result: SUCCESS, user:', sessionUserId);
+          session = {
+            user: { id: storedSession.user_id, email: storedSession.email },
+            access_token: storedSession.access_token
+          };
+        }
+      } catch (e) {
+        log('[Profile] getCurrentSession() failed:', e);
       }
-    } catch (e) {
-      log('[Profile] getCurrentSession() failed:', e);
     }
     
     // Try Supabase in-memory session next (fast, no network)
@@ -120,6 +137,22 @@ export async function fetchEnhancedUserProfile(userId: string): Promise<Enhanced
     
     // Keep a single client instance so any session sync applies to the RPC call.
     const supabase = assertSupabase();
+
+    // If caller provided session tokens, sync them into the Supabase client.
+    if (
+      sessionOverride?.access_token &&
+      sessionOverride?.refresh_token &&
+      sessionOverride?.user?.id === userId
+    ) {
+      try {
+        await supabase.auth.setSession({
+          access_token: sessionOverride.access_token,
+          refresh_token: sessionOverride.refresh_token,
+        });
+      } catch (sessionSyncError) {
+        debug('[Profile] Session override sync failed (non-fatal):', sessionSyncError);
+      }
+    }
 
     // If our custom session storage is populated but Supabase auth has no
     // in-memory session yet, explicitly set it so auth.uid() resolves.
@@ -492,6 +525,58 @@ async function resolveOrganization(
   }
 
   debug('[Profile] Resolved organization ID:', resolvedOrgId);
+
+  if (!resolvedOrgId) {
+    try {
+      const { data: latestMembership } = await assertSupabase()
+        .from('organization_members')
+        .select('organization_id, seat_status, invited_by, created_at, member_type')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestMembership?.organization_id) {
+        resolvedOrgId = latestMembership.organization_id;
+        if (!orgMember) {
+          orgMember = {
+            organization_id: latestMembership.organization_id,
+            seat_status: latestMembership.seat_status || 'active',
+            invited_by: latestMembership.invited_by,
+            created_at: latestMembership.created_at,
+            member_type: latestMembership.member_type,
+          } as OrganizationMember;
+        }
+        debug('[Profile] Resolved organization from organization_members:', resolvedOrgId);
+      }
+    } catch (e) {
+      debug('organization_members fallback lookup failed', e);
+    }
+  }
+
+  if (!resolvedOrgId && normalizeRole(profile.role) === 'teacher') {
+    try {
+      const email = profile.email || session?.user?.email;
+      const filters: string[] = [];
+      if (profile.id) filters.push(`user_id.eq.${profile.id}`);
+      if (session?.user?.id) filters.push(`auth_user_id.eq.${session.user.id}`);
+      if (email) filters.push(`email.eq.${email}`);
+
+      if (filters.length > 0) {
+        const { data: teacherRow } = await assertSupabase()
+          .from('teachers')
+          .select('preschool_id')
+          .or(filters.join(','))
+          .maybeSingle();
+        if (teacherRow?.preschool_id) {
+          resolvedOrgId = teacherRow.preschool_id;
+          debug('[Profile] Resolved organization from teachers table:', resolvedOrgId);
+        }
+      }
+    } catch (e) {
+      debug('teachers table fallback lookup failed', e);
+    }
+  }
 
   // Fetch organization member data
   const userRole = normalizeRole(profile.role);

@@ -462,7 +462,7 @@ export class DashAICore {
     conversationId?: string,
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null }
+    options?: { contextOverride?: string | null; modelOverride?: string | null }
   ): Promise<DashMessage> {
     let convId = conversationId || this.conversation.getCurrentConversationId();
     if (!convId) {
@@ -486,7 +486,8 @@ export class DashAICore {
       convId,
       attachments,
       onStreamChunk,
-      options?.contextOverride
+      options?.contextOverride,
+      options?.modelOverride
     );
 
     await this.conversation.addMessageToConversation(convId, assistantMessage);
@@ -499,7 +500,8 @@ export class DashAICore {
     conversationId: string,
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    contextOverride?: string | null
+    contextOverride?: string | null,
+    modelOverride?: string | null
   ): Promise<DashMessage> {
     try {
       const conversation = await this.conversation.getConversation(conversationId);
@@ -542,6 +544,7 @@ export class DashAICore {
         attachments,
         stream: shouldStream,
         onChunk: onStreamChunk,
+        model: modelOverride || undefined,
       });
 
       return {

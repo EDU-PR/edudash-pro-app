@@ -82,7 +82,16 @@ export default function AILessonGeneratorScreen() {
     if (d && /^\d+$/.test(d)) setDuration(d);
     if (o) setObjectives(o);
     if (lang && ['en', 'es', 'fr', 'pt', 'de', 'af', 'zu', 'st'].includes(lang)) setLanguage(lang as LanguageCode);
-    if (m && ['claude-3-haiku', 'claude-3-sonnet', 'claude-3-opus'].includes(m)) setSelectedModel(m as typeof selectedModel);
+    if (m && [
+      'claude-3-haiku-20240307',
+      'claude-3-5-haiku-20241022',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-7-sonnet-20250219',
+      'claude-sonnet-4-20250514',
+      'claude-sonnet-4-5-20250514',
+    ].includes(m)) {
+      setSelectedModel(m as typeof selectedModel);
+    }
   }, [searchParams, setSelectedModel]);
 
   const buildDashPrompt = useCallback(() => {

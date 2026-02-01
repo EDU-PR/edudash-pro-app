@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 // Modular components
 import { PettyCashSummaryCard } from '@/components/petty-cash/PettyCashSummary';
@@ -107,15 +108,20 @@ export default function PettyCashScreen() {
       if (error) throw error;
 
       try {
-        await assertSupabase()
-          .from('petty_cash_receipts')
-          .insert({
-            school_id: preschoolId,
-            transaction_id: transactionId,
-            storage_path: data.path,
-            file_name: fileName,
-            created_by: user?.id,
-          });
+        const { error: receiptError } = await withPettyCashTenant((column, client) =>
+          client
+            .from('petty_cash_receipts')
+            .insert({
+              [column]: preschoolId,
+              transaction_id: transactionId,
+              storage_path: data.path,
+              file_name: fileName,
+              created_by: user?.id,
+            })
+        );
+        if (receiptError) {
+          throw receiptError;
+        }
       } catch (e) {
         console.warn('Failed to record petty cash receipt row:', e);
       }

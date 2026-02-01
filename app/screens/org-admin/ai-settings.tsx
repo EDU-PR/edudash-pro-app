@@ -162,7 +162,17 @@ export default function OrgAISettingsScreen() {
             {t('ai_settings.model_desc', { defaultValue: 'Default AI model for content generation' })}
           </Text>
           
-          {['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'claude-3-sonnet', 'gemini-pro'].map((model) => (
+          {[
+            'gpt-4o',
+            'gpt-4o-mini',
+            'claude-sonnet-4-20250514',
+            'claude-sonnet-4-5-20250514',
+            'claude-3-7-sonnet-20250219',
+            'claude-3-5-sonnet-20241022',
+            'claude-3-5-haiku-20241022',
+            'claude-3-haiku-20240307',
+            'gemini-pro'
+          ].map((model) => (
             <TouchableOpacity
               key={model}
               style={[styles.modelItem, preferredModel === model && { backgroundColor: theme.primary + '20' }]}
@@ -200,7 +210,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   modelInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modelLabel: { color: theme.text, fontSize: 16, fontWeight: '500' },
 });
-
 
 
 

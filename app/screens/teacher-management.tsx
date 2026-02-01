@@ -21,6 +21,7 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  ActivityIndicator,
   Share,
   Linking,
 } from 'react-native';
@@ -32,7 +33,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import * as DocumentPicker from 'expo-document-picker';
 import { TeacherDocumentsService, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
-import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { assertSupabase } from '@/lib/supabase';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 // Extracted components
 import { TeacherCard } from '@/components/teacher/TeacherCard';
@@ -46,13 +48,6 @@ import { buildTeacherInviteLink, buildTeacherInviteMessage } from '@/lib/utils/t
 // Types and hook
 import type { Teacher, TeacherManagementView } from '@/types/teacher-management';
 import { useTeacherManagement } from '@/hooks/useTeacherManagement';
-
-type InviteShareState = {
-  token: string;
-  email: string;
-  link: string;
-  message: string;
-};
 
 export default function TeacherManagement() {
   const { user, profile } = useAuth();
@@ -100,20 +95,25 @@ export default function TeacherManagement() {
     handleRevokeSeat,
     refreshSelectedTeacherDocs,
     getPreschoolId,
-  } = useTeacherManagement();
+  } = useTeacherManagement({ showAlert });
 
   // Local state for document upload
   const [isUploading, setIsUploading] = useState(false);
-  const [inviteShare, setInviteShare] = useState<InviteShareState | null>(null);
-  const [showInviteShareModal, setShowInviteShareModal] = useState(false);
+  const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
+  const [showDirectAddModal, setShowDirectAddModal] = useState(false);
+  const [directTeacherName, setDirectTeacherName] = useState('');
+  const [directTeacherEmail, setDirectTeacherEmail] = useState('');
+  const [directTeacherPhone, setDirectTeacherPhone] = useState('');
+  const [directAddLoading, setDirectAddLoading] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   // Document picker and upload handler (needs DocumentPicker which is native only)
   const pickAndUploadTeacherDoc = useCallback(async (docType: TeacherDocType) => {
     try {
       if (!selectedTeacher?.id) {
         showAlert({
-          title: 'No teacher selected',
-          message: 'Please select a teacher before attaching documents.',
+          title: 'No Teacher Selected',
+          message: 'Select a teacher before attaching documents.',
           type: 'warning',
         });
         return;
@@ -121,7 +121,7 @@ export default function TeacherManagement() {
       const preschoolId = getPreschoolId();
       if (!preschoolId) {
         showAlert({
-          title: 'No school linked',
+          title: 'No School Linked',
           message: 'Cannot attach documents without a school context.',
           type: 'error',
         });
@@ -154,7 +154,7 @@ export default function TeacherManagement() {
       });
       if (!uploaded.success) {
         showAlert({
-          title: 'Upload failed',
+          title: 'Upload Failed',
           message: uploaded.error || 'Unknown error',
           type: 'error',
         });
@@ -164,7 +164,7 @@ export default function TeacherManagement() {
 
       await refreshSelectedTeacherDocs();
       showAlert({
-        title: 'Attached',
+        title: 'Document Attached',
         message: `${name} uploaded as ${docType.replace('_', ' ')}`,
         type: 'success',
       });
@@ -177,7 +177,7 @@ export default function TeacherManagement() {
     } finally {
       setIsUploading(false);
     }
-  }, [selectedTeacher, user, getPreschoolId, refreshSelectedTeacherDocs, showAlert]);
+  }, [selectedTeacher, user, getPreschoolId, refreshSelectedTeacherDocs]);
 
   const showAttachDocActionSheet = useCallback(() => {
     showAlert({
@@ -192,7 +192,7 @@ export default function TeacherManagement() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
-  }, [pickAndUploadTeacherDoc, showAlert]);
+  }, [pickAndUploadTeacherDoc]);
 
   // Load documents when profile view is active
   useEffect(() => {
@@ -202,40 +202,7 @@ export default function TeacherManagement() {
   }, [currentView, selectedTeacher?.id, refreshSelectedTeacherDocs]);
 
   const handleAddTeacher = () => {
-    showAlert({
-      title: 'Add New Teacher',
-      message: "Choose how you'd like to add a teacher to your school:",
-      type: 'info',
-      buttons: [
-        {
-          text: 'Post Job Opening',
-          onPress: () => {
-            showAlert({
-              title: 'Job Posting Created',
-              message: 'Your job posting has been created and will be published.',
-              type: 'success',
-              buttons: [{ text: 'Great!', style: 'default' }],
-            });
-          },
-        },
-        {
-          text: 'Invite by Email',
-          onPress: () => setShowInviteModal(true),
-        },
-        {
-          text: 'Add Directly',
-          onPress: () => {
-            showAlert({
-              title: 'Direct Teacher Addition',
-              message: 'Teacher added successfully!',
-              type: 'success',
-              buttons: [{ text: 'Done', style: 'default' }],
-            });
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
+    setShowAddTeacherModal(true);
   };
 
   const handleTeacherPress = (teacher: Teacher) => {
@@ -262,135 +229,244 @@ export default function TeacherManagement() {
         roleLabel: 'teacher',
       });
       const inviteLink = buildTeacherInviteLink(inviteToken, inviteEmail);
-      setInviteShare({
-        token: inviteToken,
-        email: inviteEmail,
-        link: inviteLink,
-        message,
-      });
-      setShowInviteShareModal(true);
-    },
-    [inviterName, schoolName]
-  );
 
-  const handleInviteTeacher = useCallback(
-    async (email: string) => {
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) return;
-      const existingInvite = invites.find(
-        (invite) => invite.email?.toLowerCase() === normalizedEmail
-      );
+      const openWhatsApp = async () => {
+        const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+        const canOpen = await Linking.canOpenURL(url);
+        if (!canOpen) {
+          showAlert({
+            title: 'WhatsApp Not Available',
+            message: 'Install WhatsApp to use this option.',
+            type: 'warning',
+          });
+          return;
+        }
+        await Linking.openURL(url);
+      };
 
-      if (existingInvite?.token) {
-        await handleShareInvite(existingInvite.token, normalizedEmail);
-        return;
-      }
+      const openSms = async () => {
+        const url = `sms:?body=${encodeURIComponent(message)}`;
+        await Linking.openURL(url);
+      };
 
-      const schoolId = getPreschoolId();
-      if (!schoolId) {
-        showAlert({
-          title: 'Error',
-          message: 'No school associated with this account.',
-          type: 'error',
-        });
-        return;
-      }
+      const openEmail = async () => {
+        const subject = encodeURIComponent(`EduDash Pro Teacher Invite from ${schoolName}`);
+        const body = encodeURIComponent(message);
+        const url = `mailto:${inviteEmail}?subject=${subject}&body=${body}`;
+        await Linking.openURL(url);
+      };
 
-      try {
-        const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
-        const invite = await TeacherInviteService.createInvite({
-          schoolId,
-          email: normalizedEmail,
-          invitedBy: user?.id || '',
-        });
-        await loadInvites();
-        await handleShareInvite(invite.token, normalizedEmail);
-      } catch (e: unknown) {
-        showAlert({
-          title: 'Error',
-          message: e instanceof Error ? e.message : 'Failed to create invite',
-          type: 'error',
-        });
-      }
-    },
-    [getPreschoolId, handleShareInvite, invites, loadInvites, showAlert, user?.id]
-  );
-
-  const handleCopyInviteLink = useCallback(
-    async (email: string) => {
-      const normalizedEmail = email.trim().toLowerCase();
-      if (!normalizedEmail) return;
-      const existingInvite = invites.find(
-        (invite) => invite.email?.toLowerCase() === normalizedEmail
-      );
-      const existingToken = existingInvite?.token;
-      if (existingToken) {
-        await Clipboard.setStringAsync(buildTeacherInviteLink(existingToken, normalizedEmail));
+      const copyLink = async () => {
+        await Clipboard.setStringAsync(inviteLink);
         showAlert({
           title: 'Copied',
           message: 'Invite link copied to clipboard.',
           type: 'success',
         });
+      };
+
+      const copyCode = async () => {
+        await Clipboard.setStringAsync(inviteToken);
+        showAlert({
+          title: 'Copied',
+          message: 'Invite code copied to clipboard.',
+          type: 'success',
+        });
+      };
+
+      const shareGeneric = async () => {
+        await Share.share({ message, url: inviteLink });
+      };
+
+      showAlert({
+        title: 'Invite Ready',
+        message: 'Choose how you want to send the invite.',
+        type: 'info',
+        buttons: [
+          { text: 'Share', onPress: () => void shareGeneric() },
+          { text: 'WhatsApp', onPress: () => void openWhatsApp() },
+          { text: 'SMS', onPress: () => void openSms() },
+          { text: 'Email', onPress: () => void openEmail() },
+          { text: 'Copy Link', onPress: () => void copyLink() },
+          { text: 'Copy Code', onPress: () => void copyCode() },
+          { text: 'Close', style: 'cancel' },
+        ],
+      });
+    },
+    [inviterName, schoolName, showAlert]
+  );
+
+  const resetDirectAddForm = () => {
+    setDirectTeacherName('');
+    setDirectTeacherEmail('');
+    setDirectTeacherPhone('');
+  };
+
+  const handleDirectAddTeacher = async () => {
+    const schoolId = getPreschoolId();
+    const name = directTeacherName.trim();
+    const email = directTeacherEmail.trim().toLowerCase();
+    const phone = directTeacherPhone.trim();
+
+    if (!name || !email) {
+      showAlert({
+        title: 'Missing Details',
+        message: 'Please provide a full name and email address.',
+        type: 'warning',
+      });
+      return;
+    }
+
+    if (!schoolId) {
+      showAlert({
+        title: 'No School Linked',
+        message: 'Unable to add a teacher without a school context.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setDirectAddLoading(true);
+    try {
+      const supabase = assertSupabase();
+      const { data: existingTeacher } = await supabase
+        .from('teachers')
+        .select('id, email')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (existingTeacher?.id) {
+        showAlert({
+          title: 'Teacher Exists',
+          message: 'A teacher record with this email already exists. Send an invite instead.',
+          type: 'warning',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Invite',
+              onPress: () => {
+                setDirectTeacherEmail(email);
+                setShowDirectAddModal(false);
+                setShowInviteModal(true);
+              },
+            },
+          ],
+        });
         return;
       }
-      await handleInviteTeacher(normalizedEmail);
-    },
-    [handleInviteTeacher, invites, showAlert]
-  );
 
-  const closeInviteShareModal = useCallback(() => {
-    setShowInviteShareModal(false);
-    setInviteShare(null);
-  }, []);
+      const { data: profileMatch } = await supabase
+        .from('profiles')
+        .select('id, auth_user_id, email, first_name, last_name, role')
+        .eq('email', email)
+        .maybeSingle();
 
-  const handleInviteShareAction = useCallback(
-    async (action: 'whatsapp' | 'sms' | 'email' | 'share' | 'copy-link' | 'copy-code') => {
-      if (!inviteShare) return;
-      try {
-        const { message, link, email, token } = inviteShare;
-        if (action === 'whatsapp') {
-          const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
-          const canOpen = await Linking.canOpenURL(url);
-          if (!canOpen) {
-            showAlert({
-              title: 'WhatsApp not available',
-              message: 'Install WhatsApp to use this option.',
-              type: 'warning',
-            });
-            return;
-          }
-          await Linking.openURL(url);
-        } else if (action === 'sms') {
-          const url = `sms:?body=${encodeURIComponent(message)}`;
-          await Linking.openURL(url);
-        } else if (action === 'email') {
-          const subject = encodeURIComponent(`EduDash Pro Teacher Invite from ${schoolName}`);
-          const body = encodeURIComponent(message);
-          const url = `mailto:${email}?subject=${subject}&body=${body}`;
-          await Linking.openURL(url);
-        } else if (action === 'share') {
-          await Share.share({ message, url: link });
-        } else if (action === 'copy-link') {
-          await Clipboard.setStringAsync(link);
-          showAlert({
-            title: 'Copied',
-            message: 'Invite link copied to clipboard.',
-            type: 'success',
-          });
-        } else if (action === 'copy-code') {
-          await Clipboard.setStringAsync(token);
-          showAlert({
-            title: 'Copied',
-            message: 'Invite code copied to clipboard.',
-            type: 'success',
-          });
-        }
-      } finally {
-        closeInviteShareModal();
+      const nameParts = name.split(' ').filter(Boolean);
+      const firstName = nameParts.shift() || '';
+      const lastName = nameParts.join(' ').trim();
+
+      const { error: insertError } = await supabase
+        .from('teachers')
+        .insert({
+          email,
+          full_name: name,
+          first_name: firstName || null,
+          last_name: lastName || null,
+          phone: phone || null,
+          preschool_id: schoolId,
+          role: 'teacher',
+          is_active: true,
+          user_id: profileMatch?.id || null,
+          auth_user_id: profileMatch?.auth_user_id || profileMatch?.id || null,
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        throw insertError;
       }
-    },
-    [closeInviteShareModal, inviteShare, schoolName, showAlert]
-  );
+
+      if (profileMatch?.id) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              role: 'teacher',
+              preschool_id: schoolId,
+              organization_id: schoolId,
+            })
+            .eq('id', profileMatch.id);
+
+          await supabase
+            .from('organization_members')
+            .upsert({
+              organization_id: schoolId,
+              user_id: profileMatch.id,
+              role: 'teacher',
+              seat_status: 'active',
+              invited_by: user?.id || null,
+            } as any, { onConflict: 'organization_id,user_id' } as any);
+        } catch (linkErr) {
+          console.warn('[TeacherManagement] Failed to link teacher profile:', linkErr);
+        }
+      }
+
+      try {
+        await supabase.rpc('refresh_teachers_dimension');
+      } catch (refreshError) {
+        console.warn('[TeacherManagement] refresh_teachers_dimension failed:', refreshError);
+      }
+
+      await fetchTeachers();
+      setShowDirectAddModal(false);
+      resetDirectAddForm();
+      if (!profileMatch?.id) {
+        showAlert({
+          title: 'Teacher Added',
+          message: `${name} was added. Send them an invite so they can sign in.`,
+          type: 'success',
+          buttons: [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Send Invite',
+              onPress: async () => {
+                try {
+                  const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
+                  const invite = await TeacherInviteService.createInvite({
+                    schoolId,
+                    email,
+                    invitedBy: user?.id || '',
+                  });
+                  await loadInvites();
+                  await handleShareInvite(invite.token, email);
+                } catch (inviteErr) {
+                  showAlert({
+                    title: 'Invite Failed',
+                    message: inviteErr instanceof Error ? inviteErr.message : 'Failed to create invite',
+                    type: 'error',
+                  });
+                }
+              },
+            },
+          ],
+        });
+      } else {
+        showAlert({
+          title: 'Teacher Added',
+          message: `${name} has been added to ${schoolName}.`,
+          type: 'success',
+        });
+      }
+    } catch (e: any) {
+      showAlert({
+        title: 'Add Failed',
+        message: e?.message || 'Failed to add teacher directly.',
+        type: 'error',
+      });
+    } finally {
+      setDirectAddLoading(false);
+    }
+  };
 
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = searchQuery === '' || 
@@ -435,29 +511,18 @@ export default function TeacherManagement() {
     );
   };
 
-  const renderTeacher = ({ item }: { item: Teacher }) => {
-    const inviteForTeacher = invites.find(
-      (invite) => invite.email?.toLowerCase() === item.email.toLowerCase()
-    );
-    const isAccountLinked = Boolean(item.authUserId || item.teacherUserId);
-    const inviteStatus = inviteForTeacher?.status || (!isAccountLinked ? 'needed' : undefined);
-
-    return (
-      <TeacherCard
-        teacher={item}
-        onPress={handleTeacherPress}
-        onAssignSeat={handleAssignSeat}
-        onRevokeSeat={handleRevokeSeat}
-        isAssigning={isAssigning}
-        isRevoking={isRevoking}
-        shouldDisableAssignment={shouldDisableAssignment}
-        theme={theme}
-        inviteStatus={inviteStatus}
-        onInvite={() => handleInviteTeacher(item.email)}
-        onCopyInviteLink={() => handleCopyInviteLink(item.email)}
-      />
-    );
-  };
+  const renderTeacher = ({ item }: { item: Teacher }) => (
+    <TeacherCard
+      teacher={item}
+      onPress={handleTeacherPress}
+      onAssignSeat={handleAssignSeat}
+      onRevokeSeat={handleRevokeSeat}
+      isAssigning={isAssigning}
+      isRevoking={isRevoking}
+      shouldDisableAssignment={shouldDisableAssignment}
+      theme={theme}
+    />
+  );
 
   // Stats for header
   const stats = {
@@ -524,6 +589,145 @@ export default function TeacherManagement() {
         <Ionicons name="add" size={28} color="white" />
       </TouchableOpacity>
 
+      {/* Add Teacher Action Sheet */}
+      <Modal
+        visible={showAddTeacherModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowAddTeacherModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowAddTeacherModal(false)} />
+          <View style={[styles.actionSheet, { backgroundColor: theme?.card || '#1f2937', borderColor: theme?.border || '#334155' }]}>
+            <Text style={[styles.actionSheetTitle, { color: theme?.text || '#fff' }]}>👨‍🏫 Add New Teacher</Text>
+            <Text style={[styles.actionSheetSubtitle, { color: theme?.textSecondary || '#9ca3af' }]}>
+              Choose how you&apos;d like to add a teacher to your school:
+            </Text>
+            <TouchableOpacity
+              style={styles.actionSheetOption}
+              onPress={() => {
+                setShowAddTeacherModal(false);
+                setShowDirectAddModal(true);
+              }}
+            >
+              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Add Directly</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionSheetOption}
+              onPress={() => {
+                setShowAddTeacherModal(false);
+                setShowInviteModal(true);
+              }}
+            >
+              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Invite by Email</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionSheetOption, styles.actionSheetOptionLast]}
+              onPress={() => {
+                setShowAddTeacherModal(false);
+                router.push('/screens/job-posting-create');
+              }}
+            >
+              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Post Job Opening</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionSheetCancel} onPress={() => setShowAddTeacherModal(false)}>
+              <Text style={[styles.actionSheetCancelText, { color: theme?.textSecondary || '#9ca3af' }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Direct Add Teacher Modal */}
+      <Modal
+        visible={showDirectAddModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDirectAddModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme?.card || 'white' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme?.text }]}>Add Teacher Directly</Text>
+              <TouchableOpacity onPress={() => {
+                setShowDirectAddModal(false);
+                resetDirectAddForm();
+              }}>
+                <Ionicons name="close" size={24} color={theme?.textSecondary || '#6b7280'} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSubtitle, { color: theme?.textSecondary }]}>
+              Add a teacher record to your school. They&apos;ll need an account to sign in.
+            </Text>
+            <TextInput
+              style={[styles.modalInput, {
+                backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                color: theme?.text,
+                borderColor: theme?.border || '#e5e7eb',
+              }]}
+              placeholder="Full name"
+              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+              value={directTeacherName}
+              onChangeText={setDirectTeacherName}
+            />
+            <TextInput
+              style={[styles.modalInput, {
+                backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                color: theme?.text,
+                borderColor: theme?.border || '#e5e7eb',
+              }]}
+              placeholder="teacher@example.com"
+              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={directTeacherEmail}
+              onChangeText={setDirectTeacherEmail}
+            />
+            <TextInput
+              style={[styles.modalInput, {
+                backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                color: theme?.text,
+                borderColor: theme?.border || '#e5e7eb',
+              }]}
+              placeholder="Phone (optional)"
+              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+              keyboardType="phone-pad"
+              value={directTeacherPhone}
+              onChangeText={setDirectTeacherPhone}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnSecondary]}
+                onPress={() => {
+                  setShowDirectAddModal(false);
+                  resetDirectAddForm();
+                }}
+                disabled={directAddLoading}
+              >
+                <Text style={[styles.btnSecondaryText, { color: theme?.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.btn,
+                  styles.btnPrimary,
+                  (!directTeacherName.trim() || !directTeacherEmail.trim()) && styles.btnDisabled,
+                ]}
+                onPress={handleDirectAddTeacher}
+                disabled={directAddLoading || !directTeacherName.trim() || !directTeacherEmail.trim()}
+              >
+                {directAddLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="person-add" size={16} color="white" />
+                    <Text style={styles.btnPrimaryText}>Add Teacher</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Invite Teacher Modal */}
       <Modal
         visible={showInviteModal}
@@ -536,101 +740,97 @@ export default function TeacherManagement() {
           setInviteEmail={setInviteEmail}
           onClose={() => setShowInviteModal(false)}
           onInvite={async () => {
-            await handleInviteTeacher(inviteEmail);
-            setShowInviteModal(false);
-            setInviteEmail('');
+            const email = inviteEmail.trim().toLowerCase();
+            try {
+              const schoolId = getPreschoolId();
+              if (!schoolId) {
+                showAlert({
+                  title: 'Error',
+                  message: 'No school associated.',
+                  type: 'error',
+                });
+                return;
+              }
+              if (!email || !email.includes('@')) {
+                showAlert({
+                  title: 'Invalid Email',
+                  message: 'Please enter a valid email address.',
+                  type: 'warning',
+                });
+                return;
+              }
+
+              setInviteLoading(true);
+              const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
+              const invite = await TeacherInviteService.createInvite({
+                schoolId,
+                email,
+                invitedBy: user?.id || '',
+              });
+
+              await loadInvites();
+              setShowInviteModal(false);
+              setInviteEmail('');
+
+              try {
+                const inviteLink = buildTeacherInviteLink(invite.token, email);
+                const message = buildTeacherInviteMessage({
+                  token: invite.token,
+                  email,
+                  schoolName,
+                  inviterName,
+                  roleLabel: 'teacher',
+                });
+
+                const emailBody = `
+<div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+  <h2 style="color: #4f46e5; margin-bottom: 8px;">You're invited to join ${schoolName}</h2>
+  <p>${inviterName} invited you to join EduDash Pro as a teacher.</p>
+  <p>Open in the app:</p>
+  <p style="margin: 16px 0;">
+    <a href="${inviteLink}" style="display: inline-block; background: #4f46e5; color: #ffffff; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+      Accept Teacher Invite
+    </a>
+  </p>
+  <p>Invite token: <strong>${invite.token}</strong><br/>Email: <strong>${email}</strong></p>
+  <p style="font-size: 12px; color: #64748b;">If the button doesn't open the app, install EduDash Pro and enter the token on "Accept Teacher Invite".</p>
+  <p style="font-size: 12px; color: #94a3b8; margin-top: 12px;">${message.replace(/\n/g, '<br/>')}</p>
+</div>
+                `.trim();
+
+                await assertSupabase().functions.invoke('send-email', {
+                  body: {
+                    to: email,
+                    subject: `EduDash Pro teacher invite from ${schoolName}`,
+                    body: emailBody,
+                    confirmed: true,
+                    is_html: true,
+                  },
+                });
+              } catch (emailError) {
+                console.warn('[TeacherManagement] Failed to send invite email:', emailError);
+                showAlert({
+                  title: 'Email Failed',
+                  message: 'Invite created, but email delivery failed. Please share the link manually.',
+                  type: 'warning',
+                });
+              }
+
+              await handleShareInvite(invite.token, email);
+            } catch (e: unknown) {
+              showAlert({
+                title: 'Error',
+                message: e instanceof Error ? e.message : 'Failed to create invite',
+                type: 'error',
+              });
+            } finally {
+              setInviteLoading(false);
+            }
           }}
+          inviteLoading={inviteLoading}
           styles={styles}
           theme={theme}
         />
-      </Modal>
-
-      {/* Invite Share Modal */}
-      <Modal
-        visible={showInviteShareModal}
-        animationType="fade"
-        transparent
-        onRequestClose={closeInviteShareModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.inviteShareCard, { backgroundColor: theme?.card || '#0f172a' }]}>
-            <View style={styles.inviteShareHeader}>
-              <View style={styles.inviteShareIcon}>
-                <Ionicons name="information-circle" size={32} color={theme?.primary || '#6366F1'} />
-              </View>
-              <View style={styles.inviteShareTitleBlock}>
-                <Text style={[styles.inviteShareTitle, { color: theme?.text }]}>Invite Ready</Text>
-                <Text style={[styles.inviteShareSubtitle, { color: theme?.textSecondary }]}>
-                  Choose how you want to send the invite.
-                </Text>
-              </View>
-              <TouchableOpacity onPress={closeInviteShareModal} style={styles.inviteShareClose}>
-                <Ionicons name="close" size={20} color={theme?.textSecondary || '#94a3b8'} />
-              </TouchableOpacity>
-            </View>
-
-            {inviteShare && (
-              <View style={styles.inviteShareDetails}>
-                <View style={styles.inviteShareRow}>
-                  <Text style={[styles.inviteShareLabel, { color: theme?.textSecondary }]}>Teacher</Text>
-                  <Text style={[styles.inviteShareValue, { color: theme?.text }]}>{inviteShare.email}</Text>
-                </View>
-                <View style={styles.inviteShareRow}>
-                  <Text style={[styles.inviteShareLabel, { color: theme?.textSecondary }]}>Invite code</Text>
-                  <Text style={[styles.inviteShareValue, { color: theme?.text }]}>{inviteShare.token}</Text>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.inviteShareActions}>
-              <TouchableOpacity
-                style={[styles.inviteShareAction, styles.inviteShareActionPrimary]}
-                onPress={() => handleInviteShareAction('whatsapp')}
-              >
-                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
-                <Text style={styles.inviteShareActionText}>WhatsApp</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.inviteShareAction}
-                onPress={() => handleInviteShareAction('sms')}
-              >
-                <Ionicons name="chatbubble-ellipses" size={20} color={theme?.text || '#e2e8f0'} />
-                <Text style={[styles.inviteShareActionText, { color: theme?.text }]}>SMS</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.inviteShareAction}
-                onPress={() => handleInviteShareAction('email')}
-              >
-                <Ionicons name="mail" size={20} color={theme?.text || '#e2e8f0'} />
-                <Text style={[styles.inviteShareActionText, { color: theme?.text }]}>Email</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.inviteShareAction}
-                onPress={() => handleInviteShareAction('share')}
-              >
-                <Ionicons name="share-social" size={20} color={theme?.text || '#e2e8f0'} />
-                <Text style={[styles.inviteShareActionText, { color: theme?.text }]}>Share</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inviteShareFooter}>
-              <TouchableOpacity
-                style={styles.inviteShareSecondary}
-                onPress={() => handleInviteShareAction('copy-link')}
-              >
-                <Ionicons name="link" size={16} color={theme?.text || '#e2e8f0'} />
-                <Text style={[styles.inviteShareSecondaryText, { color: theme?.text }]}>Copy link</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.inviteShareSecondary}
-                onPress={() => handleInviteShareAction('copy-code')}
-              >
-                <Ionicons name="key" size={16} color={theme?.text || '#e2e8f0'} />
-                <Text style={[styles.inviteShareSecondaryText, { color: theme?.text }]}>Copy code</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
       </Modal>
 
       {/* Content */}
@@ -767,13 +967,11 @@ export default function TeacherManagement() {
             isRevoking={isRevoking}
             theme={theme}
             onBack={() => setCurrentView('overview')}
-            onMessage={() =>
-              showAlert({
-                title: 'Messaging',
-                message: 'Teacher communications coming soon',
-                type: 'info',
-              })
-            }
+            onMessage={() => showAlert({
+              title: 'Messaging',
+              message: 'Teacher communications coming soon',
+              type: 'info',
+            })}
             onAssignSeat={handleAssignSeat}
             onRevokeSeat={handleRevokeSeat}
             onAttachDocument={showAttachDocActionSheet}
@@ -792,11 +990,12 @@ interface InviteModalProps {
   setInviteEmail: (email: string) => void;
   onClose: () => void;
   onInvite: () => void;
+  inviteLoading?: boolean;
   styles: ReturnType<typeof createStyles>;
   theme?: ThemeColors;
 }
 
-function InviteModal({ inviteEmail, setInviteEmail, onClose, onInvite, styles, theme }: InviteModalProps) {
+function InviteModal({ inviteEmail, setInviteEmail, onClose, onInvite, inviteLoading, styles, theme }: InviteModalProps) {
   return (
     <View style={styles.modalOverlay}>
       <View style={[styles.modalContent, { backgroundColor: theme?.card || 'white' }]}>
@@ -829,10 +1028,16 @@ function InviteModal({ inviteEmail, setInviteEmail, onClose, onInvite, styles, t
           <TouchableOpacity 
             style={[styles.btn, styles.btnPrimary, !inviteEmail.includes('@') && styles.btnDisabled]} 
             onPress={onInvite}
-            disabled={!inviteEmail.includes('@')}
+            disabled={!inviteEmail.includes('@') || inviteLoading}
           >
-            <Ionicons name="send" size={16} color="white" />
-            <Text style={styles.btnPrimaryText}>Send Invite</Text>
+            {inviteLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="send" size={16} color="white" />
+                <Text style={styles.btnPrimaryText}>Send Invite</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -1082,107 +1287,43 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  actionSheet: {
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    gap: 12,
+  },
+  actionSheetTitle: {
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  actionSheetSubtitle: {
+    fontSize: 14,
+    marginBottom: 6,
+  },
+  actionSheetOption: {
+    paddingVertical: 10,
+    alignItems: 'flex-end',
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  actionSheetOptionLast: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  actionSheetOptionText: {
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  actionSheetCancel: {
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  actionSheetCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   modalContent: {
     borderRadius: 20,
     padding: 24,
-  },
-  inviteShareCard: {
-    borderRadius: 22,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
-  },
-  inviteShareHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  inviteShareIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(99, 102, 241, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inviteShareTitleBlock: {
-    flex: 1,
-  },
-  inviteShareTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  inviteShareSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  inviteShareClose: {
-    padding: 6,
-  },
-  inviteShareDetails: {
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
-    borderRadius: 14,
-    padding: 12,
-    gap: 8,
-    marginBottom: 16,
-  },
-  inviteShareRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  inviteShareLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  inviteShareValue: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  inviteShareActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 14,
-  },
-  inviteShareAction: {
-    flexGrow: 1,
-    flexBasis: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(148, 163, 184, 0.12)',
-  },
-  inviteShareActionPrimary: {
-    backgroundColor: '#22c55e',
-  },
-  inviteShareActionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  inviteShareFooter: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  inviteShareSecondary: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.3)',
-  },
-  inviteShareSecondaryText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   modalHeader: {
     flexDirection: 'row',

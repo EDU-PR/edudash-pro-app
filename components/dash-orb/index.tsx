@@ -22,7 +22,9 @@ import {
   PanResponder,
   Dimensions,
   View,
+  Text,
   Platform,
+  Share,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,12 +37,22 @@ import { QuickAction } from './QuickActions';
 import { useVoiceTTS } from '../super-admin/voice-orb/useVoiceTTS';
 import { useVoiceRecorder } from '../super-admin/voice-orb/useVoiceRecorder';
 import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
+import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { useWakeWord } from '../../hooks/useWakeWord';
 import { CosmicOrb } from './CosmicOrb';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../lib/roleUtils';
 import { calculateAge } from '../../lib/date-utils';
+import * as Clipboard from 'expo-clipboard';
+import { toast } from '@/components/ui/ToastProvider';
+
+let AsyncStorage: any = null;
+try {
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+} catch {
+  AsyncStorage = null;
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -62,6 +74,13 @@ interface DashOrbProps {
     name?: string | null;
     schoolType?: string | null;
   };
+  /** Lock the orb and show upgrade prompt instead of chat */
+  locked?: boolean;
+  /** Optional title/message for locked prompt */
+  lockedTitle?: string;
+  lockedMessage?: string;
+  lockedCtaLabel?: string;
+  onUpgradePress?: () => void;
 }
 
 export default function DashOrb({
@@ -71,9 +90,14 @@ export default function DashOrb({
   autoOpen = false,
   hideButton = false,
   learnerContext,
+  locked = false,
+  lockedTitle,
+  lockedMessage,
+  lockedCtaLabel,
+  onUpgradePress,
 }: DashOrbProps) {
   // Get user profile for role-based AI endpoint selection
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const userRole = profile?.role?.toLowerCase() || '';
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
@@ -95,6 +119,13 @@ export default function DashOrb({
   const [quickActionAge, setQuickActionAge] = useState('auto');
   const [quickActionPrompt, setQuickActionPrompt] = useState('');
   const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
+  const streamingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [showUpgradeBubble, setShowUpgradeBubble] = useState(false);
+  const upgradeAnim = useRef(new Animated.Value(0)).current;
+  const upgradeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
     if (!lang) return null;
@@ -155,7 +186,7 @@ export default function DashOrb({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       handleWakeWordDetected();
     },
-    enabled: wakeWordEnabled && wakeWordAvailable,
+    enabled: wakeWordEnabled && wakeWordAvailable && !locked,
     useFallback: false, // Use Porcupine for "Hey Dash" wake word detection
   });
   
@@ -194,10 +225,147 @@ export default function DashOrb({
   }, [position, size]);
 
   useEffect(() => {
-    if (autoOpen) {
+    if (autoOpen && !locked) {
       setIsExpanded(true);
     }
-  }, [autoOpen]);
+  }, [autoOpen, locked]);
+
+  useEffect(() => {
+    return () => {
+      if (upgradeTimerRef.current) {
+        clearTimeout(upgradeTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!locked) {
+      setShowUpgradeBubble(false);
+      upgradeAnim.setValue(0);
+    }
+  }, [locked, upgradeAnim]);
+
+  const chatStorageKey = user?.id ? `@dash_orb_chat_${user.id}` : '@dash_orb_chat_guest';
+
+  useEffect(() => {
+    if (!AsyncStorage) return;
+    let isMounted = true;
+    const loadHistory = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(chatStorageKey);
+        if (!stored) {
+          return;
+        }
+        const parsed = JSON.parse(stored) as Array<Omit<ChatMessage, 'timestamp'> & { timestamp: string }>;
+        if (!Array.isArray(parsed)) return;
+        const hydrated = parsed.map((msg) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+          isLoading: false,
+          isStreaming: false,
+        })) as ChatMessage[];
+        if (isMounted) {
+          setMessages(hydrated);
+          setShowQuickActions(hydrated.length === 0);
+        }
+      } catch (err) {
+        console.warn('[DashOrb] Failed to load chat history:', err);
+      }
+    };
+    loadHistory();
+    return () => {
+      isMounted = false;
+    };
+  }, [chatStorageKey]);
+
+  useEffect(() => {
+    if (!AsyncStorage) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const serializable = messages
+          .filter((msg) => !msg.isLoading)
+          .map((msg) => ({
+            ...msg,
+            isLoading: false,
+            isStreaming: false,
+            toolCalls: undefined,
+            timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : new Date().toISOString(),
+          }));
+        await AsyncStorage.setItem(chatStorageKey, JSON.stringify(serializable));
+      } catch (err) {
+        console.warn('[DashOrb] Failed to save chat history:', err);
+      }
+    }, 400);
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [messages, chatStorageKey]);
+
+  useEffect(() => {
+    return () => {
+      if (streamingTimerRef.current) {
+        clearTimeout(streamingTimerRef.current);
+        streamingTimerRef.current = null;
+      }
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const streamResponseToMessage = async (messageId: string, fullText: string) => {
+    if (streamingTimerRef.current) {
+      clearTimeout(streamingTimerRef.current);
+      streamingTimerRef.current = null;
+    }
+
+    if (!fullText) {
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === messageId ? { ...msg, content: '', isLoading: false, isStreaming: false } : msg
+        )
+      );
+      return;
+    }
+
+    const total = fullText.length;
+    const step = 24;
+    const intervalMs = 18;
+    let index = 0;
+
+    return new Promise<void>((resolve) => {
+      const tick = () => {
+        index = Math.min(total, index + step);
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: fullText.slice(0, index),
+                  isLoading: false,
+                  isStreaming: index < total,
+                }
+              : msg
+          )
+        );
+        if (index >= total) {
+          streamingTimerRef.current = null;
+          resolve();
+          return;
+        }
+        streamingTimerRef.current = setTimeout(tick, intervalMs);
+      };
+      tick();
+    });
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -332,6 +500,26 @@ export default function DashOrb({
 
   const handleOrbPress = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (locked) {
+      if (upgradeTimerRef.current) {
+        clearTimeout(upgradeTimerRef.current);
+      }
+      setShowUpgradeBubble(true);
+      Animated.timing(upgradeAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      upgradeTimerRef.current = setTimeout(() => {
+        Animated.timing(upgradeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => setShowUpgradeBubble(false));
+      }, 3600);
+      return;
+    }
     
     // If speaking, interrupt and restart listening
     if (isSpeaking) {
@@ -359,6 +547,25 @@ export default function DashOrb({
   };
 
   const handleWakeWordDetected = async () => {
+    if (locked) {
+      if (upgradeTimerRef.current) {
+        clearTimeout(upgradeTimerRef.current);
+      }
+      setShowUpgradeBubble(true);
+      Animated.timing(upgradeAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      upgradeTimerRef.current = setTimeout(() => {
+        Animated.timing(upgradeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start(() => setShowUpgradeBubble(false));
+      }, 3600);
+      return;
+    }
     // Wake word detected - start listening for command
     setIsExpanded(true);
     setIsListeningForCommand(true);
@@ -401,7 +608,11 @@ export default function DashOrb({
                 setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
                 
                 // Process the voice command
-                await handleSend(transcriptResult.text);
+                const formatted = formatTranscript(
+                  transcriptResult.text,
+                  transcriptResult.language || normalized || undefined
+                );
+                await handleSend(formatted);
               }
             }
             setIsListeningForCommand(false);
@@ -439,9 +650,25 @@ export default function DashOrb({
     }
   };
 
+  const handleOrbAttach = () => {
+    toast.info('Attachments are available in the full Dash Tutor screen for now.');
+  };
+
+  const handleOrbCamera = () => {
+    toast.info('Camera upload is available in the full Dash Tutor screen for now.');
+  };
+
   const handleSend = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (isEditing && editingMessageId) {
+      const index = messages.findIndex((m) => m.id === editingMessageId);
+      const baseMessages = index >= 0 ? messages.slice(0, index) : messages;
+      setIsEditing(false);
+      setEditingMessageId(null);
+      await processCommand(trimmed, undefined, { baseMessages });
+      return;
+    }
     if (pendingTutorIntent) {
       const mergedPrompt = buildTutorPrompt(pendingTutorIntent.prompt, {
         topicHint: trimmed,
@@ -455,7 +682,15 @@ export default function DashOrb({
     await processCommand(trimmed);
   };
 
-  const processCommand = async (command: string, displayOverride?: string) => {
+  const processCommand = async (
+    command: string,
+    displayOverride?: string,
+    options?: {
+      baseMessages?: ChatMessage[];
+      historyOverride?: Array<{ role: string; content: string }>;
+      skipUserMessage?: boolean;
+    }
+  ) => {
     // Sanitize input
     const sanitized = sanitizeInput(command, 2000);
     
@@ -491,27 +726,30 @@ export default function DashOrb({
       content: displayOverride ? sanitizeInput(displayOverride, 2000) : sanitized,
       timestamp: new Date(),
     };
-    
-    setMessages(prev => [...prev, userMessage]);
     setInputText('');
     setIsProcessing(true);
     setShowQuickActions(false);
     
-    // Add thinking message
     const thinkingId = `thinking-${Date.now()}`;
-    setMessages(prev => [...prev, {
-      id: thinkingId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      isLoading: true,
-      toolCalls: detectToolsNeeded(command),
-    }]);
+    setMessages((prev) => {
+      const base = options?.baseMessages ?? prev;
+      const next = [...base];
+      if (!options?.skipUserMessage) {
+        next.push(userMessage);
+      }
+      next.push({
+        id: thinkingId,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+        isLoading: true,
+        toolCalls: detectToolsNeeded(command),
+      });
+      return next;
+    });
 
     try {
-      // Prepare history from previous messages
-      // We filter out system messages and map to the format expected by the API
-      const history = messages
+      const history = options?.historyOverride ?? (options?.baseMessages ?? messages)
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }));
 
@@ -519,11 +757,12 @@ export default function DashOrb({
       const result = await executeCommand(command, history);
       
       // Replace thinking message with result
-      setMessages(prev => prev.map(msg => 
-        msg.id === thinkingId 
-          ? { ...msg, content: result, isLoading: false, toolCalls: undefined }
-          : msg
-      ));
+      await streamResponseToMessage(thinkingId, result);
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === thinkingId ? { ...msg, toolCalls: undefined } : msg
+        )
+      );
       
       // Speak the response if voice is enabled
       if (voiceEnabled && Platform.OS !== 'web') {
@@ -676,7 +915,12 @@ export default function DashOrb({
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Request failed: ${response.status}`);
+        const rawError = errorData.error || errorData.message || `Request failed: ${response.status}`;
+        console.warn('[DashOrb] AI proxy error payload:', errorData);
+        if (typeof rawError === 'string' && rawError.toLowerCase().includes('ai_proxy_error')) {
+          throw new Error('AI service is temporarily unavailable. Please try again shortly.');
+        }
+        throw new Error(rawError);
       }
       
       const data = await response.json();
@@ -887,6 +1131,68 @@ export default function DashOrb({
           ]}
           {...panResponder.panHandlers}
         >
+          {locked && (
+            <Animated.View
+              pointerEvents={showUpgradeBubble ? 'auto' : 'none'}
+              style={[
+                styles.upgradeBubble,
+                position.includes('right')
+                  ? { right: size + 14 }
+                  : { left: size + 14 },
+                { top: size * 0.12 },
+                {
+                  opacity: upgradeAnim,
+                  transform: [
+                    {
+                      translateX: upgradeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: position.includes('right') ? [12, 0] : [-12, 0],
+                      }),
+                    },
+                    {
+                      scale: upgradeAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.96, 1],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.upgradeBubbleTitle}>
+                {lockedTitle || 'Dash Orb Locked'}
+              </Text>
+              <Text style={styles.upgradeBubbleText}>
+                {lockedMessage || 'Upgrade to Parent Plus to unlock the Dash Orb.'}
+              </Text>
+              <View style={styles.upgradeBubbleActions}>
+                <TouchableOpacity
+                  style={styles.upgradeButton}
+                  onPress={() => {
+                    if (upgradeTimerRef.current) {
+                      clearTimeout(upgradeTimerRef.current);
+                      upgradeTimerRef.current = null;
+                    }
+                    setShowUpgradeBubble(false);
+                    Animated.timing(upgradeAnim, {
+                      toValue: 0,
+                      duration: 160,
+                      useNativeDriver: true,
+                    }).start();
+                    if (onUpgradePress) {
+                      onUpgradePress();
+                    } else {
+                      router.push('/screens/subscription-setup');
+                    }
+                  }}
+                >
+                  <Text style={styles.upgradeButtonText}>
+                    {lockedCtaLabel || 'Upgrade'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          )}
           <TouchableOpacity
             onPress={handleOrbPress}
             activeOpacity={0.9}
@@ -910,6 +1216,20 @@ export default function DashOrb({
                 color="#ffffff" 
               />
             </View>
+            {locked && (
+              <View
+                style={[
+                  styles.lockBadge,
+                  {
+                    width: size * 0.32,
+                    height: size * 0.32,
+                    borderRadius: size * 0.16,
+                  },
+                ]}
+              >
+                <Ionicons name="lock-closed" size={size * 0.18} color="#ffffff" />
+              </View>
+            )}
           </TouchableOpacity>
         </Animated.View>
       )}
@@ -986,6 +1306,92 @@ export default function DashOrb({
           }
         }}
         onOpenSettings={() => router.push('/screens/dash-ai-settings' as any)}
+        onAttachFile={handleOrbAttach}
+        onTakePhoto={handleOrbCamera}
+        attachmentCount={0}
+        inlineReplyEnabled={isTutorRole}
+        onCopyMessage={async (message) => {
+          try {
+            const content = message.content || '';
+            if (Clipboard?.setStringAsync) {
+              await Clipboard.setStringAsync(content);
+            } else if (typeof navigator !== 'undefined' && (navigator as any).clipboard?.writeText) {
+              await (navigator as any).clipboard.writeText(content);
+            }
+            toast.success('Copied to clipboard');
+          } catch (err) {
+            console.warn('[DashOrb] Copy failed:', err);
+            toast.error('Copy failed');
+          }
+        }}
+        onShareMessage={async (message) => {
+          try {
+            await Share.share({ message: message.content || '' });
+          } catch (err) {
+            console.warn('[DashOrb] Share failed:', err);
+          }
+        }}
+        onEditMessage={(message) => {
+          if (isProcessing) return;
+          if (message.role !== 'user') return;
+          setInputText(message.content);
+          setIsEditing(true);
+          setEditingMessageId(message.id);
+          setShowQuickActions(false);
+        }}
+        onRegenerateMessage={(message) => {
+          if (isProcessing) return;
+          const targetIndex = messages.findIndex((m) => m.id === message.id);
+          if (targetIndex === -1) return;
+          let userIndex = -1;
+          for (let i = targetIndex; i >= 0; i -= 1) {
+            if (messages[i].role === 'user') {
+              userIndex = i;
+              break;
+            }
+          }
+          if (userIndex === -1) return;
+          const lastUserMessage = messages[userIndex];
+          const baseMessages = messages.slice(0, userIndex + 1);
+          const historyOverride = messages.slice(0, userIndex)
+            .filter((m) => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({ role: m.role, content: m.content }));
+          processCommand(lastUserMessage.content, undefined, {
+            baseMessages,
+            historyOverride,
+            skipUserMessage: true,
+          });
+        }}
+        onFeedback={(message, rating) => {
+          toast.success(rating === 'up' ? 'Thanks for the feedback!' : 'Feedback noted.');
+        }}
+        onNewChat={async () => {
+          setMessages([]);
+          setShowQuickActions(true);
+          setInputText('');
+          setIsEditing(false);
+          setEditingMessageId(null);
+          if (AsyncStorage) {
+            try { await AsyncStorage.removeItem(chatStorageKey); } catch {}
+          }
+        }}
+        onExportChat={async () => {
+          const transcript = messages
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => `${m.role === 'user' ? 'You' : 'Dash'}: ${m.content}`)
+            .join('\n\n');
+          try {
+            await Share.share({ message: transcript || 'No messages yet.' });
+          } catch (err) {
+            console.warn('[DashOrb] Export failed:', err);
+          }
+        }}
+        onOpenHistory={() => router.push('/screens/dash-conversations-history' as any)}
+        isEditing={isEditing}
+        onCancelEdit={() => {
+          setIsEditing(false);
+          setEditingMessageId(null);
+        }}
       />
     </>
   );

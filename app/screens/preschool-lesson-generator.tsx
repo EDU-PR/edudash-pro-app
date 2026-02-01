@@ -357,7 +357,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
         duration: Number(duration) || 30,
         objectives: [],
         language: language || 'en',
-        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+        model: selectedModel || process.env.EXPO_PUBLIC_ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
         isPreschool: true,
         ageGroup: selectedAgeGroup,
         includeHomework,

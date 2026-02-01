@@ -6,6 +6,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
 export interface UnifiedTransaction {
   id: string;
@@ -111,14 +112,16 @@ export class FinancialDataService {
       const totalOutstanding = outstandingPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
       // Get monthly expenses from petty cash
-      const { data: expenseTransactions, error: expenseError } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .select('amount')
-        .eq('school_id', preschoolId)
-        .eq('type', 'expense')
-        .in('status', ['approved', 'pending']) // Include pending for current spending
-        .gte('created_at', monthStart)
-        .lt('created_at', nextMonthStart);
+      const { data: expenseTransactions, error: expenseError } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('amount')
+          .eq(column, preschoolId)
+          .eq('type', 'expense')
+          .in('status', ['approved', 'pending']) // Include pending for current spending
+          .gte('created_at', monthStart)
+          .lt('created_at', nextMonthStart)
+      );
 
       if (expenseError) {
         console.error('Error fetching expenses:', expenseError);
@@ -204,14 +207,16 @@ let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.a
           .lt('created_at', nextMonthStart);
 
         // Get expenses for this month
-        const { data: monthlyExpenses } = await assertSupabase()
-          .from('petty_cash_transactions')
-          .select('amount')
-          .eq('school_id', preschoolId)
-          .eq('type', 'expense')
-          .eq('status', 'approved')
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
+        const { data: monthlyExpenses } = await withPettyCashTenant((column, client) =>
+          client
+            .from('petty_cash_transactions')
+            .select('amount')
+            .eq(column, preschoolId)
+            .eq('type', 'expense')
+            .eq('status', 'approved')
+            .gte('created_at', monthStart)
+            .lt('created_at', nextMonthStart)
+        );
 
         const revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
@@ -300,12 +305,14 @@ const { data: payments, error: paymentsError } = await assertSupabase()
       }
 
       // Get recent petty cash transactions
-const { data: pettyCash, error: pettyCashError } = await assertSupabase()
-        .from('petty_cash_transactions')
-        .select('id, amount, description, status, created_at, receipt_number, receipt_url, category, type')
-        .eq('school_id', preschoolId)
-        .order('created_at', { ascending: false })
-        .limit(Math.ceil(limit / 2));
+const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('id, amount, description, status, created_at, receipt_number, receipt_url, category, type')
+          .eq(column, preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(Math.ceil(limit / 2))
+      );
 
       if (!pettyCashError && pettyCash) {
 (pettyCash || []).forEach((transaction: any) => {
@@ -389,17 +396,19 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
         paymentsQuery = paymentsQuery.eq('preschool_id', preschoolId);
       }
 
-      let pettyCashQuery = assertSupabase()
-        .from('petty_cash_transactions')
-        .select('amount, created_at, category')
-        .eq('type', 'expense')
-        .in('status', expenseStatuses as unknown as string[])
-        .gte('created_at', rangeStartIso)
-        .lt('created_at', rangeEndIso);
-
-      if (preschoolId) {
-        pettyCashQuery = pettyCashQuery.eq('school_id', preschoolId);
-      }
+      const pettyCashResult = await withPettyCashTenant((column, client) => {
+        let query = client
+          .from('petty_cash_transactions')
+          .select('amount, created_at, category')
+          .eq('type', 'expense')
+          .in('status', expenseStatuses as unknown as string[])
+          .gte('created_at', rangeStartIso)
+          .lt('created_at', rangeEndIso);
+        if (preschoolId) {
+          query = query.eq(column, preschoolId);
+        }
+        return query;
+      });
 
       let financialExpenseQuery = assertSupabase()
         .from('financial_transactions')
@@ -418,9 +427,8 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
         financialExpenseQuery = financialExpenseQuery.eq('preschool_id', preschoolId);
       }
 
-      const [paymentsResult, pettyCashResult, financialExpenseResult] = await Promise.allSettled([
+      const [paymentsResult, financialExpenseResult] = await Promise.allSettled([
         paymentsQuery,
-        pettyCashQuery,
         financialExpenseQuery,
       ]);
 
@@ -446,9 +454,7 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
       const paymentsData: PaymentRow[] = paymentsResult.status === 'fulfilled'
         ? (paymentsResult.value.data as PaymentRow[] | null) || []
         : [];
-      const pettyCashData: PettyCashRow[] = pettyCashResult.status === 'fulfilled'
-        ? (pettyCashResult.value.data as PettyCashRow[] | null) || []
-        : [];
+      const pettyCashData: PettyCashRow[] = (pettyCashResult.data as PettyCashRow[] | null) || [];
       const financialExpenseData: FinancialExpenseRow[] = financialExpenseResult.status === 'fulfilled'
         ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || []
         : [];
@@ -593,18 +599,18 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
       }
 
       // Get petty cash transactions within date range
-      let pettyCashQuery = assertSupabase()
-        .from('petty_cash_transactions')
-        .select('id, amount, description, status, created_at, category, type, receipt_url, receipt_number, reference_number')
-        .gte('created_at', dateRange.from)
-        .lte('created_at', dateRange.to)
-        .order('created_at', { ascending: false });
-
-      if (preschoolId) {
-        pettyCashQuery = pettyCashQuery.eq('school_id', preschoolId);
-      }
-
-      const { data: pettyCash, error: pettyCashError } = await pettyCashQuery;
+      const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((column, client) => {
+        let query = client
+          .from('petty_cash_transactions')
+          .select('id, amount, description, status, created_at, category, type, receipt_url, receipt_number, reference_number')
+          .gte('created_at', dateRange.from)
+          .lte('created_at', dateRange.to)
+          .order('created_at', { ascending: false });
+        if (preschoolId) {
+          query = query.eq(column, preschoolId);
+        }
+        return query;
+      });
 
       console.log('[FinancialDataService] Petty cash query result:', {
         count: pettyCash?.length ?? 0,
@@ -620,13 +626,15 @@ const { data: pettyCash, error: pettyCashError } = await assertSupabase()
         try {
           const pettyCashIds = pettyCash.map((t: any) => t.id);
           if (pettyCashIds.length) {
-            let receiptsQuery = assertSupabase()
-              .from('petty_cash_receipts')
-              .select('transaction_id');
-            if (preschoolId) {
-              receiptsQuery = receiptsQuery.eq('school_id', preschoolId);
-            }
-            const { data: receipts } = await receiptsQuery.in('transaction_id', pettyCashIds);
+            const { data: receipts } = await withPettyCashTenant((column, client) => {
+              let query = client
+                .from('petty_cash_receipts')
+                .select('transaction_id');
+              if (preschoolId) {
+                query = query.eq(column, preschoolId);
+              }
+              return query.in('transaction_id', pettyCashIds);
+            });
             (receipts || []).forEach((r: any) => {
               receiptsMap.set(r.transaction_id, (receiptsMap.get(r.transaction_id) || 0) + 1);
             });

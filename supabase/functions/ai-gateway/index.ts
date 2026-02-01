@@ -25,6 +25,7 @@ serve(async (req) => {
       prompt: payload.prompt || payload.userInput || '',
       messages: payload.messages || undefined,
       context: payload.context || undefined,
+      model: payload.model || undefined,
     },
     enable_tools: payload.enable_tools ?? true,
     prefer_openai: payload.prefer_openai ?? true,

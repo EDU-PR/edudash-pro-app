@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,8 @@ import { styles, getMarkdownStyles } from './DashOrb.styles';
 import { QuickActions, QuickAction } from './QuickActions';
 import { CosmicOrb } from './CosmicOrb';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
+import type { DashAttachment } from '@/services/dash-ai/types';
+import { createSignedUrl } from '@/services/AttachmentService';
 
 // Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
@@ -39,6 +42,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   isLoading?: boolean;
+  isStreaming?: boolean;
+  attachments?: DashAttachment[];
   toolCalls?: Array<{
     name: string;
     status: 'pending' | 'running' | 'success' | 'error';
@@ -70,6 +75,20 @@ interface ChatModalProps {
   wakeWordEnabled?: boolean;
   onToggleWakeWord?: () => void;
   onOpenSettings?: () => void;
+  onAttachFile?: () => void;
+  onTakePhoto?: () => void;
+  attachmentCount?: number;
+  inlineReplyEnabled?: boolean;
+  onCopyMessage?: (message: ChatMessage) => void;
+  onRegenerateMessage?: (message: ChatMessage) => void;
+  onEditMessage?: (message: ChatMessage) => void;
+  onShareMessage?: (message: ChatMessage) => void;
+  onFeedback?: (message: ChatMessage, rating: 'up' | 'down') => void;
+  onNewChat?: () => void;
+  onExportChat?: () => void;
+  onOpenHistory?: () => void;
+  isEditing?: boolean;
+  onCancelEdit?: () => void;
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({
@@ -96,6 +115,20 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   wakeWordEnabled = false,
   onToggleWakeWord,
   onOpenSettings,
+  onAttachFile,
+  onTakePhoto,
+  attachmentCount = 0,
+  inlineReplyEnabled = false,
+  onCopyMessage,
+  onRegenerateMessage,
+  onEditMessage,
+  onShareMessage,
+  onFeedback,
+  onNewChat,
+  onExportChat,
+  onOpenHistory,
+  isEditing = false,
+  onCancelEdit,
 }) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -103,6 +136,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const [showWakeWordHelp, setShowWakeWordHelp] = React.useState(false);
+  const [inlineReplies, setInlineReplies] = React.useState<Record<string, string>>({});
+  const [imageViewerUri, setImageViewerUri] = React.useState<string | null>(null);
   const { tierStatus } = useRealtimeTier({ enabled: visible });
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
@@ -111,6 +146,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const headerSubtitle = roleCopy.subtitle
     ? `${roleCopy.subtitle} • ${statusLabel}`
     : statusLabel;
+  const showCamera = inputText.trim().length === 0 && !isListeningForCommand;
 
   const Container: React.ElementType = KeyboardAvoidingView;
 
@@ -180,6 +216,54 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     return cleaned || content;
   };
 
+  const isQuestionLike = (content: string) => {
+    const trimmed = (content || '').trim();
+    if (!trimmed) return false;
+    if (trimmed.endsWith('?')) return true;
+    return /\?\s*$/.test(trimmed) || trimmed.includes('?');
+  };
+
+  const AttachmentImagePreview: React.FC<{
+    attachment: DashAttachment;
+    isUser: boolean;
+  }> = ({ attachment, isUser }) => {
+    const [imageUrl, setImageUrl] = React.useState<string | null>(attachment.previewUri || null);
+    const [hasError, setHasError] = React.useState(false);
+
+    React.useEffect(() => {
+      let mounted = true;
+      if (imageUrl || !attachment.bucket || !attachment.storagePath) return () => { mounted = false; };
+
+      (async () => {
+        try {
+          const signed = await createSignedUrl(attachment.bucket, attachment.storagePath, 3600);
+          if (mounted) setImageUrl(signed);
+        } catch {
+          if (mounted) setHasError(true);
+        }
+      })();
+
+      return () => {
+        mounted = false;
+      };
+    }, [attachment.bucket, attachment.storagePath, imageUrl]);
+
+    if (hasError || !imageUrl) return null;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.imagePreviewCard,
+          { borderColor: isUser ? 'rgba(255,255,255,0.18)' : theme.border },
+        ]}
+        activeOpacity={0.9}
+        onPress={() => setImageViewerUri(imageUrl)}
+      >
+        <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+      </TouchableOpacity>
+    );
+  };
+
   useEffect(() => {
     if (visible && !showQuickActions) {
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
@@ -218,6 +302,39 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   </Text>
                 </View>
               </View>
+              {onOpenHistory && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onOpenHistory();
+                  }}
+                  style={[styles.closeButton, { marginRight: 6 }]}
+                >
+                  <Ionicons name="time-outline" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+              {onNewChat && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onNewChat();
+                  }}
+                  style={[styles.closeButton, { marginRight: 6 }]}
+                >
+                  <Ionicons name="add-outline" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+              {onExportChat && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    onExportChat();
+                  }}
+                  style={[styles.closeButton, { marginRight: 6 }]}
+                >
+                  <Ionicons name="share-social-outline" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
               {onBackToQuickActions && (
                 <TouchableOpacity
                   onPress={() => {
@@ -344,6 +461,16 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 const displayContent = message.role === 'assistant'
                   ? getAssistantDisplayContent(message.content)
                   : message.content;
+                const showInlineReply = inlineReplyEnabled && message.role === 'assistant' && isQuestionLike(displayContent);
+                const showQuickReplies = inlineReplyEnabled && message.role === 'assistant' && !message.isLoading;
+                const inlineValue = inlineReplies[message.id] ?? '';
+                const quickReplies = [
+                  { label: 'Hint', prompt: 'Give me a hint.' },
+                  { label: 'Explain', prompt: 'Explain it step by step.' },
+                  { label: 'Show steps', prompt: 'Show the steps.' },
+                  { label: 'Try another', prompt: 'Give me another question.' },
+                  { label: "I'm stuck", prompt: "I'm stuck. Please help me." },
+                ];
                 return (
                 <View
                   key={message.id}
@@ -374,12 +501,153 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                       </Text>
                     )
                   )}
+                  {message.attachments && message.attachments.some((a) => a.kind === 'image') && (
+                    <View style={styles.imagePreviewRow}>
+                      {message.attachments
+                        .filter((a) => a.kind === 'image')
+                        .map((attachment) => (
+                          <AttachmentImagePreview
+                            key={attachment.id}
+                            attachment={attachment}
+                            isUser={message.role === 'user'}
+                          />
+                        ))}
+                    </View>
+                  )}
+                  {!message.isLoading && !message.isStreaming && (
+                    <View style={styles.messageActionsRow}>
+                      {onCopyMessage && (
+                        <TouchableOpacity
+                          style={styles.messageAction}
+                          onPress={() => onCopyMessage(message)}
+                        >
+                          <Ionicons name="copy-outline" size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                      {message.role === 'assistant' && onRegenerateMessage && (
+                        <TouchableOpacity
+                          style={styles.messageAction}
+                          onPress={() => onRegenerateMessage(message)}
+                        >
+                          <Ionicons name="refresh-outline" size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                      {message.role === 'user' && onEditMessage && (
+                        <TouchableOpacity
+                          style={styles.messageAction}
+                          onPress={() => onEditMessage(message)}
+                        >
+                          <Ionicons name="create-outline" size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                      {message.role === 'assistant' && onFeedback && (
+                        <>
+                          <TouchableOpacity
+                            style={styles.messageAction}
+                            onPress={() => onFeedback(message, 'up')}
+                          >
+                            <Ionicons name="thumbs-up-outline" size={16} color={theme.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.messageAction}
+                            onPress={() => onFeedback(message, 'down')}
+                          >
+                            <Ionicons name="thumbs-down-outline" size={16} color={theme.textSecondary} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      {onShareMessage && (
+                        <TouchableOpacity
+                          style={styles.messageAction}
+                          onPress={() => onShareMessage(message)}
+                        >
+                          <Ionicons name="share-outline" size={16} color={theme.textSecondary} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  {message.isStreaming && (
+                    <View style={styles.typingIndicator}>
+                      <ActivityIndicator size="small" color={theme.primary} />
+                      <Text style={[styles.typingText, { color: theme.textSecondary }]}>Typing…</Text>
+                    </View>
+                  )}
+                  {showInlineReply && (
+                    <View style={[styles.inlineReplyContainer, { borderTopColor: theme.border }]}>
+                      <TextInput
+                        style={[styles.inlineReplyInput, { backgroundColor: theme.surface, color: theme.text }]}
+                        placeholder="Reply here..."
+                        placeholderTextColor={theme.textSecondary}
+                        value={inlineValue}
+                        onChangeText={(value) => {
+                          setInlineReplies(prev => ({ ...prev, [message.id]: value }));
+                        }}
+                        onSubmitEditing={() => {
+                          const trimmed = inlineValue.trim();
+                          if (!trimmed || isProcessing) return;
+                          onSend(trimmed);
+                          setInlineReplies(prev => ({ ...prev, [message.id]: '' }));
+                        }}
+                        returnKeyType="send"
+                      />
+                      <TouchableOpacity
+                        style={[
+                          styles.inlineReplySend,
+                          { backgroundColor: inlineValue.trim() ? theme.primary : theme.border },
+                        ]}
+                        onPress={() => {
+                          const trimmed = inlineValue.trim();
+                          if (!trimmed || isProcessing) return;
+                          onSend(trimmed);
+                          setInlineReplies(prev => ({ ...prev, [message.id]: '' }));
+                        }}
+                        disabled={!inlineValue.trim() || isProcessing}
+                      >
+                        <Ionicons name="send" size={16} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {showQuickReplies && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.quickReplyRow}
+                    >
+                      {quickReplies.map((chip) => (
+                        <TouchableOpacity
+                          key={`${message.id}-${chip.label}`}
+                          style={[styles.quickReplyChip, { backgroundColor: theme.surface }]}
+                          onPress={() => {
+                            if (isProcessing) return;
+                            onSend(chip.prompt);
+                          }}
+                        >
+                          <Text style={[styles.quickReplyText, { color: theme.textSecondary }]}>
+                            {chip.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
               );
               })}
             </ScrollView>
           )}
 
+          {isEditing && (
+            <View style={[styles.editingBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name="create-outline" size={14} color={theme.textSecondary} />
+              <Text style={[styles.editingText, { color: theme.textSecondary }]}>
+                Editing message
+              </Text>
+              {onCancelEdit && (
+                <TouchableOpacity onPress={onCancelEdit}>
+                  <Ionicons name="close" size={16} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           {/* Input */}
           <View style={[styles.inputContainer, { borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom) }]}>
             {/* Voice controls */}
@@ -427,18 +695,63 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 </View>
               )}
             </View>
-            
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.background, color: theme.text }]}
-              placeholder="Ask Dash anything..."
-              placeholderTextColor={theme.textSecondary}
-              value={inputText}
-              onChangeText={setInputText}
-              onSubmitEditing={() => inputText.trim() && onSend(inputText)}
-              returnKeyType="send"
-              multiline
-              maxLength={500}
-            />
+
+            <View style={[styles.inputWrapper, { backgroundColor: theme.background, borderColor: theme.border }]}>
+              <View style={styles.inputAccessoryLeft}>
+                {onAttachFile && (
+                  <TouchableOpacity
+                    style={styles.inputIconButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      onAttachFile();
+                    }}
+                    disabled={isProcessing}
+                    accessibilityLabel="Attach files"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name="attach"
+                      size={18}
+                      color={attachmentCount > 0 ? theme.primary : theme.textSecondary}
+                    />
+                    {attachmentCount > 0 && (
+                      <View style={[styles.attachBadgeSmall, { backgroundColor: theme.primary }]}>
+                        <Text style={[styles.attachBadgeSmallText, { color: theme.onPrimary }]}>
+                          {attachmentCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {onTakePhoto && showCamera && (
+                  <TouchableOpacity
+                    style={styles.inputIconButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      onTakePhoto();
+                    }}
+                    disabled={isProcessing}
+                    accessibilityLabel="Take photo"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="camera-outline" size={18} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <TextInput
+                style={[styles.inputText, { color: theme.text }]}
+                placeholder="Ask Dash anything..."
+                placeholderTextColor={theme.textSecondary}
+                value={inputText}
+                onChangeText={setInputText}
+                onSubmitEditing={() => inputText.trim() && onSend(inputText)}
+                returnKeyType="send"
+                multiline
+                maxLength={500}
+              />
+            </View>
             <TouchableOpacity
               style={[
                 styles.sendButton,
@@ -461,6 +774,21 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           </View>
         </View>
       </Container>
+      <Modal visible={!!imageViewerUri} transparent animationType="fade" onRequestClose={() => setImageViewerUri(null)}>
+        <View style={styles.imageViewerBackdrop}>
+          <SafeAreaView style={styles.imageViewerContent}>
+            <TouchableOpacity
+              style={styles.imageViewerClose}
+              onPress={() => setImageViewerUri(null)}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            {imageViewerUri && (
+              <Image source={{ uri: imageViewerUri }} style={styles.imageViewerImage} />
+            )}
+          </SafeAreaView>
+        </View>
+      </Modal>
     </Modal>
   );
 };

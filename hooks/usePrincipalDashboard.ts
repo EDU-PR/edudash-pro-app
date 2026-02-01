@@ -37,6 +37,7 @@ export const usePrincipalDashboard = () => {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
   const schoolIdRef = useRef<string | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     const startTime = Date.now();
@@ -44,6 +45,12 @@ export const usePrincipalDashboard = () => {
     // Prevent data fetching during dashboard switches
     if (typeof window !== 'undefined' && (window as unknown as { dashboardSwitching?: boolean }).dashboardSwitching) {
       console.log('🏫 Skipping principal dashboard data fetch during switch');
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+      retryTimerRef.current = setTimeout(() => {
+        fetchData(forceRefresh);
+      }, 300);
       return;
     }
     
@@ -374,6 +381,14 @@ export const usePrincipalDashboard = () => {
       setLoading(false);
     }
   }, [user, profile]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (user?.id) {
