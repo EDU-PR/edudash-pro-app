@@ -63,6 +63,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
         let t: Tier = 'free';
         let source: TierSource = 'unknown';
+        let sourceDetail: string | undefined = undefined;
+        let role: string | null = null;
         const metaTier = (user?.user_metadata as any)?.subscription_tier as string | undefined;
         const isTrial = (user?.user_metadata as any)?.isTrial === true;
 
@@ -92,11 +94,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             try {
               const { data: profileData } = await assertSupabase()
                 .from('profiles')
-                .select('preschool_id, organization_id')
+                .select('preschool_id, organization_id, role')
                 .eq('auth_user_id', user.id)
                 .maybeSingle();
               if (profileData?.preschool_id) schoolId = profileData.preschool_id;
               if (profileData?.organization_id) orgId = profileData.organization_id;
+              if (profileData?.role) role = profileData.role;
             } catch {/* ignore */}
 
             // Try profiles table for tenant info
@@ -104,11 +107,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               try {
                 const { data: profileData } = await assertSupabase()
                   .from('profiles')
-                  .select('preschool_id, organization_id')
+                  .select('preschool_id, organization_id, role')
                   .eq('auth_user_id', user.id)
                   .maybeSingle();
                 if (profileData?.preschool_id) schoolId = profileData.preschool_id;
                 if (profileData?.organization_id) orgId = profileData.organization_id;
+                if (profileData?.role) role = profileData.role;
               } catch {/* ignore */}
             }
           }
@@ -180,10 +184,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           }
         } catch {/* ignore */}
 
+        const roleLower = String(role || (user?.user_metadata as any)?.role || '').toLowerCase();
+        if (roleLower === 'super_admin' || roleLower === 'superadmin') {
+          t = 'enterprise';
+          source = 'user';
+          sourceDetail = 'super_admin_override';
+        }
+
         if (mounted) {
           setTier(t);
           setTierSource(source);
-          setTierSourceDetail(source);
+          setTierSourceDetail(sourceDetail ?? source);
           setSeats(seatsData);
           setReady(true);
         }
