@@ -119,15 +119,18 @@ serve(async (req) => {
   let resolvedEmail = targetEmail;
 
   if (!resolvedUserId && targetEmail) {
-    const { data: emailLookup, error: emailError } = await supabaseAdmin.auth.admin.getUserByEmail(
-      targetEmail
-    );
-    if (emailError || !emailLookup?.user) {
+    const { data: emailLookup, error: emailError } = await supabaseAdmin
+      .schema("auth")
+      .from("users")
+      .select("id, email")
+      .eq("email", targetEmail)
+      .maybeSingle();
+    if (emailError || !emailLookup?.id) {
       console.error("[superadmin-set-temp-password] User lookup failed:", emailError);
       return jsonResponse(404, { success: false, error: "User not found" });
     }
-    resolvedUserId = emailLookup.user.id;
-    resolvedEmail = emailLookup.user.email || targetEmail;
+    resolvedUserId = emailLookup.id;
+    resolvedEmail = emailLookup.email || targetEmail;
   }
 
   if (!resolvedUserId) {

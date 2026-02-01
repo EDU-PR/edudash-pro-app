@@ -8,3 +8,9 @@ declare module "std/http/server.ts" {
     }
   ): void;
 }
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
