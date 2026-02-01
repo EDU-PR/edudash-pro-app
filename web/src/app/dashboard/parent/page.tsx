@@ -537,8 +537,8 @@ export default function ParentDashboard() {
           </CollapsibleSection>
         )}
 
-        {/* Homework Card - Show if organization-linked */}
-        {userId && (
+        {/* Homework Card - Hide for preschool-only dashboards */}
+        {userId && !allChildrenArePreschoolers && (
           <CollapsibleSection
             title={COPY.sections.homework}
             icon={BookOpen}
@@ -608,24 +608,26 @@ export default function ParentDashboard() {
           )}
         </CollapsibleSection>
 
-        {/* Child Progress & Achievements */}
-        <CollapsibleSection
-          title={COPY.sections.progress}
-          icon={BarChart3}
-          isOpen={openSection === 'progress'}
-          onToggle={() => toggleSection('progress')}
-        >
-          {activeChildId ? (
-            <ChildProgressBadgesCard studentId={activeChildId} />
-          ) : (
-            <SectionEmptyState
-              title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
-              description={t('dashboard.parent.empty.progress.description', { defaultValue: 'Track milestones and achievements once a child is linked.' })}
-              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
-              onAction={() => router.push('/dashboard/parent/register-child')}
-            />
-          )}
-        </CollapsibleSection>
+        {/* Child Progress & Achievements - Hide for preschool-only dashboards */}
+        {!allChildrenArePreschoolers && (
+          <CollapsibleSection
+            title={COPY.sections.progress}
+            icon={BarChart3}
+            isOpen={openSection === 'progress'}
+            onToggle={() => toggleSection('progress')}
+          >
+            {activeChildId ? (
+              <ChildProgressBadgesCard studentId={activeChildId} />
+            ) : (
+              <SectionEmptyState
+                title={t('dashboard.parent.empty.progress.title', { defaultValue: 'Progress badges preview' })}
+                description={t('dashboard.parent.empty.progress.description', { defaultValue: 'Track milestones and achievements once a child is linked.' })}
+                actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+                onAction={() => router.push('/dashboard/parent/register-child')}
+              />
+            )}
+          </CollapsibleSection>
+        )}
 
         {/* Upcoming Birthdays */}
         <CollapsibleSection

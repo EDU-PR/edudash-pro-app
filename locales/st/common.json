@@ -255,7 +255,7 @@
     "noNotifications": "Ga go na dikitsišo",
     "newAssignment": "Kabo e mpsha: {{title}}",
     "gradePosted": "Kreiti e posetšwe go {{assignment}}",
-    "reminderDue": "Segopotšo: {{title}} e fela gosasa"
+    "reminderDue": "Segopotšo: {{assignment}} e fela gosasa"
   },
   "errors": {
     "generic": "Go bile le phošo. Ka kgopelo leka gape.",

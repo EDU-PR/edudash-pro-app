@@ -92,16 +92,39 @@ const UserContextTool: Tool = {
       }
       
       // Get user profile
-      const { data: profile, error: profileError } = await supabase
+      const { data: profileById, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       
       if (profileError) {
         return {
           success: false,
           error: `Failed to get user profile: ${profileError.message}`,
+        };
+      }
+
+      let profile = profileById;
+      if (!profile) {
+        const { data: profileByAuth, error: authProfileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('auth_user_id', userId)
+          .maybeSingle();
+        if (authProfileError) {
+          return {
+            success: false,
+            error: `Failed to get user profile: ${authProfileError.message}`,
+          };
+        }
+        profile = profileByAuth;
+      }
+
+      if (!profile) {
+        return {
+          success: false,
+          error: 'Failed to get user profile',
         };
       }
       
@@ -127,7 +150,7 @@ const UserContextTool: Tool = {
       // Get children for parent users
       if (params.include_children && profile.role === 'parent') {
         const schoolId = profile.organization_id || profile.preschool_id;
-        const children = await fetchParentChildren(userId, { includeInactive: false, schoolId });
+        const children = await fetchParentChildren(profile.id, { includeInactive: false, schoolId });
 
         userContext.children = (children || []).map((child: any) => {
           const classData = Array.isArray(child.classes) ? child.classes[0] : child.classes;
@@ -162,7 +185,7 @@ const UserContextTool: Tool = {
           const { data: homeworkStats } = await supabase
             .from('homework_submissions')
             .select('status', { count: 'exact' })
-            .eq(profile.role === 'parent' ? 'parent_id' : 'student_id', userId)
+            .eq(profile.role === 'parent' ? 'parent_id' : 'student_id', profile.role === 'parent' ? profile.id : userId)
             .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
           
           userContext.activity.recentHomework = homeworkStats?.length || 0;

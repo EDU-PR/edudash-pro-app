@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { signOutAndRedirect } from '@/lib/authActions';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
@@ -36,7 +37,7 @@ interface MembershipStatus {
 }
 
 export default function MembershipPendingScreen() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,8 +155,7 @@ export default function MembershipPendingScreen() {
           text: 'Sign Out', 
           style: 'destructive',
           onPress: async () => {
-            await signOut();
-            router.replace('/(auth)/sign-in');
+            await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
           }
         },
       ]

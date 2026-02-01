@@ -14,6 +14,7 @@ import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { signOutAndRedirect } from '@/lib/authActions';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 
@@ -41,7 +42,7 @@ interface SettingsItem {
 }
 
 export default function SuperAdminSettingsScreen() {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [autoBackup, setAutoBackup] = useState(true);
@@ -79,7 +80,7 @@ export default function SuperAdminSettingsScreen() {
                 console.error('Failed to log sign out:', logError);
               }
 
-              await signOut();
+              await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
             } catch (error) {
               console.error('Sign out error:', error);
               Alert.alert('Error', 'Failed to sign out');

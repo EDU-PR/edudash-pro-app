@@ -42,6 +42,11 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
 });
 
+const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
+const debugLog = (...args: unknown[]) => {
+  if (debugEnabled) console.log(...args);
+};
+
 function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
   if (!p) return null;
   

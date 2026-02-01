@@ -93,7 +93,11 @@ export function QuickActionsGrid({
       || normalizedUsage === 'preschool'
       || activeChildGrade < 1
       || (typeof childAgeYears === 'number' && childAgeYears > 0 && childAgeYears < 6);
-    const hiddenIds = new Set<string>(isEarlyLearner ? ['robotics_lab', 'ebooks', 'exam_prep', 'my_exams'] : []);
+    const hiddenIds = new Set<string>(
+      isEarlyLearner
+        ? ['robotics_lab', 'ebooks', 'exam_prep', 'my_exams', 'homework', 'progress']
+        : []
+    );
 
     // Organization-linked actions (common for all with organization)
     const organizationActions: QuickAction[] = hasOrganization ? [

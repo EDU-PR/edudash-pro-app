@@ -344,8 +344,26 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    await supabase.auth.signOut();
-    router.push('/sign-in');
+    try {
+      const timeoutMs = 2500;
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch {
+      // ignore
+    }
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // ignore
+    }
+
+    router.replace('/sign-in');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/sign-in';
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -368,8 +386,26 @@ export default function SettingsPage() {
         throw error ?? new Error('Failed to delete account');
       }
 
-      await supabase.auth.signOut();
-      router.push('/sign-in?accountDeleted=1');
+      try {
+        const timeoutMs = 2500;
+        await Promise.race([
+          supabase.auth.signOut(),
+          new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+        ]);
+      } catch {
+        // ignore
+      }
+
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // ignore
+      }
+
+      router.replace('/sign-in?accountDeleted=1');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/sign-in?accountDeleted=1';
+      }
     } catch (err) {
       console.error('[ParentSettings] delete account failed', err);
       setDeleteError(t('settings.parent.delete.error', { defaultValue: 'We could not delete your account right now. Please try again or contact support.' }));

@@ -4,6 +4,7 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getUniformItemType, isUniformFee } from '@/lib/utils/feeUtils';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
@@ -114,6 +115,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ children }) => {
   const { theme } = useTheme();
+  const { profile } = useAuth();
   const { terminology } = useOrganizationTerminology();
   const { t } = useTranslation();
   const router = useRouter();
@@ -124,6 +126,11 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
   const institutionLabel = terminology.institution;
   const nameLabel = `${memberLabel} ${t('common.name', { defaultValue: 'Name' })}`;
   const namePlaceholder = `${memberLabelLower} ${t('common.name', { defaultValue: 'name' }).toLowerCase()}`;
+  const schoolName =
+    profile?.organization_name ||
+    (profile as any)?.school_name ||
+    (profile as any)?.preschool_name ||
+    '';
   const [entries, setEntries] = useState<Record<string, UniformEntry>>({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
