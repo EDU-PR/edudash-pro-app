@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
     const merchantId = (Deno.env.get('PAYFAST_MERCHANT_ID') || '').trim();
     const passphraseRaw = Deno.env.get('PAYFAST_PASSPHRASE');
     const passphrase = passphraseRaw && passphraseRaw.trim() !== '' ? passphraseRaw.trim() : undefined;
+    const passphraseForSignature = isProduction ? passphrase : undefined;
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
@@ -207,7 +208,7 @@ Deno.serve(async (req) => {
       timestamp,
     } as Record<string, string | number | undefined>;
 
-    const signature = generatePayFastSignature(signatureParams, passphrase);
+    const signature = generatePayFastSignature(signatureParams, passphraseForSignature);
 
     const baseApiUrl = 'https://api.payfast.co.za';
     const testingSuffix = isProduction ? '' : '?testing=true';
