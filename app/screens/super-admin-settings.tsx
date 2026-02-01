@@ -89,7 +89,7 @@ export default function SuperAdminSettingsScreen() {
         }
       ]
     );
-  }, [profile, signOut]);
+  }, [profile]);
 
   const toggleMaintenanceMode = useCallback(async (value: boolean) => {
     Alert.alert(
