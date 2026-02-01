@@ -23,6 +23,8 @@ import { MessagesListHeader } from '@/components/messaging/MessageHeader';
 import { useParentThreads, MessageThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
+import { useAuth } from '@/contexts/AuthContext';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
 // Format timestamp for message threads
 const formatMessageTime = (timestamp: string): string => {
@@ -239,9 +241,8 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
 });
 
 // Dash AI Chat Item - Special entry for AI assistant
-const DashAIItem: React.FC<{ onPress: () => void }> = React.memo(({ onPress }) => {
+const DashAIItem: React.FC<{ onPress: () => void; title: string; subtitle: string; description: string }> = React.memo(({ onPress, title, subtitle, description }) => {
   const { theme } = useTheme();
-  const { t } = useTranslation();
   
   const styles = StyleSheet.create({
     container: {
@@ -342,17 +343,15 @@ const DashAIItem: React.FC<{ onPress: () => void }> = React.memo(({ onPress }) =
         
         <View style={styles.content}>
           <View style={styles.topRow}>
-            <Text style={styles.name}>Dash AI</Text>
+            <Text style={styles.name}>{title}</Text>
             <Ionicons name="sparkles" size={14} color="#8B5CF6" style={styles.sparkle} />
             <View style={styles.aiBadge}>
               <Text style={styles.aiBadgeText}>AI</Text>
             </View>
           </View>
-          <Text style={styles.subtitle}>
-            {t('parent.aiAssistantSubtitle', { defaultValue: '✨ AI Assistant for lesson planning & grading' })}
-          </Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
           <Text style={styles.description} numberOfLines={1}>
-            {t('parent.aiAssistantDesc', { defaultValue: "Hi! I'm Dash, your AI teaching assistant. I c..." })}
+            {description}
           </Text>
         </View>
       </View>
@@ -363,6 +362,8 @@ const DashAIItem: React.FC<{ onPress: () => void }> = React.memo(({ onPress }) =
 export default function ParentMessagesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { profile } = useAuth();
+  const dashCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -630,7 +631,12 @@ export default function ParentMessagesScreen() {
         />
         {/* Still show Dash AI even when no messages */}
         <View style={{ paddingTop: 8 }}>
-          <DashAIItem onPress={handleOpenDashAI} />
+          <DashAIItem
+            onPress={handleOpenDashAI}
+            title={dashCopy.navLabel}
+            subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
+            description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
+          />
         </View>
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
@@ -673,7 +679,12 @@ export default function ParentMessagesScreen() {
           />
         )}
         ListHeaderComponent={
-          <DashAIItem onPress={handleOpenDashAI} />
+          <DashAIItem
+            onPress={handleOpenDashAI}
+            title={dashCopy.navLabel}
+            subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
+            description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
+          />
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}

@@ -33,6 +33,7 @@ import {
   ThemeSettingsModal,
   AccountActions,
   OrganizationSwitcher,
+  ProfileSwitcher,
 } from '@/components/account';
 
 export default function AccountScreen() {
@@ -55,6 +56,7 @@ export default function AccountScreen() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -495,6 +497,7 @@ export default function AccountScreen() {
           styles={styles}
           onChangeEmail={() => router.push('/screens/change-email')}
           onChangePassword={() => router.push('/screens/change-password')}
+          onSwitchAccount={() => setShowProfileSwitcher(true)}
         />
       </ScrollView>
 
@@ -551,6 +554,15 @@ export default function AccountScreen() {
         onOrganizationSwitched={() => {
           setShowOrgSwitcher(false);
           load(); // Refresh account data
+        }}
+      />
+
+      <ProfileSwitcher
+        visible={showProfileSwitcher}
+        onClose={() => setShowProfileSwitcher(false)}
+        onAccountSwitched={() => {
+          setShowProfileSwitcher(false);
+          load();
         }}
       />
     </SafeAreaView>

@@ -147,7 +147,7 @@ export default function AIAutomationScreen() {
     <View style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: t('ai_automation.title', { defaultValue: 'AI Automation Tools' }),
+          title: t('ai_automation.title', { defaultValue: 'Dash AI Automation' }),
           headerBackTitle: t('common.back', { defaultValue: 'Back' }),
         }} 
       />
@@ -426,7 +426,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   noteText: { flex: 1, color: theme.textSecondary, fontSize: 12, lineHeight: 16 },
 });
-
 
 
 

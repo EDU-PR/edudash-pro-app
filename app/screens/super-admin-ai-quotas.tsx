@@ -78,7 +78,7 @@ export default function SuperAdminAIQuotasScreen() {
   if (!isAuthorized) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: 'AI Quota Management', headerShown: false }} />
+        <Stack.Screen options={{ title: 'Dash AI Quota Management', headerShown: false }} />
         <StatusBar style="light" />
         <SafeAreaView style={styles.deniedContainer}>
           <Text style={styles.deniedText}>Access Denied - Super Admin Only</Text>
@@ -89,7 +89,7 @@ export default function SuperAdminAIQuotasScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: 'AI Quota Management', headerShown: false }} />
+      <Stack.Screen options={{ title: 'Dash AI Quota Management', headerShown: false }} />
       <StatusBar style="light" />
       
       {/* Header */}
@@ -107,7 +107,7 @@ export default function SuperAdminAIQuotasScreen() {
           >
             <Ionicons name="arrow-back" size={24} color={theme.primary} />
           </TouchableOpacity>
-          <Text style={styles.title}>AI Quota Management</Text>
+          <Text style={styles.title}>Dash AI Quota Management</Text>
           <TouchableOpacity 
             onPress={() => setShowConfigModal(true)} 
             style={styles.configButton}

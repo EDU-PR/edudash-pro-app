@@ -48,6 +48,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
 import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -176,6 +177,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   } = useDashAssistant({ conversationId, initialMessage, onClose });
 
   const { profile, user } = useAuth();
+  const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
   const orgType = getOrganizationType(profile);
@@ -459,9 +461,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         onSendFollowUp={(text) => sendMessage(text)}
         onSendTutorAnswer={(text, sourceMessageId) => sendTutorAnswer(text, sourceMessageId)}
         extractFollowUps={extractFollowUps}
+        assistantLabel={roleCopy.assistantLabel}
       />
     );
-  }, [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps]);
+  }, [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
 
   // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
@@ -584,13 +587,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           <View style={styles.headerLeft}>
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>Dash</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>
+                  {roleCopy.title}
+                </Text>
                 {subReady && tier && (
                   <TierBadge tier={tier as any} size="sm" />
                 )}
               </View>
               <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                AI Teaching Assistant
+                {roleCopy.subtitle}
               </Text>
             </View>
           </View>
@@ -768,6 +773,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           isRecording={isRecording}
           isSpeaking={isSpeaking}
           partialTranscript={partialTranscript}
+          placeholder={roleCopy.inputPlaceholder}
           onSend={() => sendMessage()}
           onMicPress={handleInputMicPress}
           onTakePhoto={handleTakePhoto}

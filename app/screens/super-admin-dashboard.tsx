@@ -22,7 +22,6 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
 import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
-import DashOrb from '@/components/dash-orb';
 import { SuperAdminAIControl, SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
 
 interface DashboardStats {
@@ -81,18 +80,9 @@ export default function SuperAdminDashboardScreen() {
   // Quick actions configuration
   const quickActions: QuickAction[] = [
     {
-      id: 'dash-ai-chat',
-      title: 'Dash AI Assistant',
-      description: 'Chat with Dash - your AI-powered assistant',
-      icon: 'chatbubbles',
-      route: '/screens/dash-ai-chat',
-      color: '#8b5cf6',
-      badge: 0,
-    },
-    {
       id: 'ai-command-center',
-      title: 'AI Command Center',
-      description: 'Agentic AI operations & autonomous tasks',
+      title: 'Dash AI Command Center',
+      description: 'Admin controls for agentic AI operations',
       icon: 'flash',
       route: '/screens/super-admin-ai-command-center',
       color: '#00f5ff',
@@ -135,8 +125,8 @@ export default function SuperAdminDashboardScreen() {
     },
     {
       id: 'ai-quotas',
-      title: 'AI Quota Management',
-      description: 'Monitor and manage AI usage quotas',
+      title: 'Dash AI Quota Management',
+      description: 'Monitor and manage Dash AI usage quotas',
       icon: 'hardware-chip',
       route: '/screens/super-admin-ai-quotas',
       color: '#10b981',
@@ -659,7 +649,7 @@ export default function SuperAdminDashboardScreen() {
           onPress={() => router.push('/screens/super-admin-ai-command-center' as any)}
         >
           <Ionicons name="flash" size={16} color="#fff" />
-          <Text style={styles.aiButtonText}>AI Command</Text>
+          <Text style={styles.aiButtonText}>Dash AI Command</Text>
         </TouchableOpacity>
         
         {/* Health indicator */}
@@ -1113,12 +1103,6 @@ export default function SuperAdminDashboardScreen() {
         )}
       </ScrollView>
       
-      {/* Floating Dash AI Orb */}
-      <DashOrb 
-        position="bottom-right"
-        size={56}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'super_admin_dashboard' })}
-      />
       </View>
     </DesktopLayout>
   );

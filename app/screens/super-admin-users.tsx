@@ -22,10 +22,12 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
+import { getAvailableTiersForRole, getTierDisplayName, normalizeTierName } from '@/lib/tiers';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface UserRecord {
   id: string;
+  auth_user_id: string | null;
   email: string;
   name: string | null;
   role: 'principal' | 'teacher' | 'parent' | 'superadmin' | 'super_admin';
@@ -35,6 +37,7 @@ interface UserRecord {
   last_sign_in_at: string | null;
   is_active: boolean;
   avatar_url: string | null;
+  subscription_tier: string | null;
 }
 
 interface UserFilters {
@@ -57,6 +60,7 @@ export default function SuperAdminUsersScreen() {
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [impersonating, setImpersonating] = useState(false);
   const [creatingTempPassword, setCreatingTempPassword] = useState(false);
+  const [updatingTier, setUpdatingTier] = useState(false);
   
   const [filters, setFilters] = useState<UserFilters>({
     role: 'all',
@@ -84,11 +88,13 @@ export default function SuperAdminUsersScreen() {
           first_name,
           last_name,
           role,
+          auth_user_id,
           preschool_id,
           organization_id,
           is_active,
           created_at,
           last_login_at,
+          subscription_tier,
           avatar_url
         `)
         .order('created_at', { ascending: false })
@@ -118,6 +124,7 @@ export default function SuperAdminUsersScreen() {
       if (usersData) {
         const userRecords: UserRecord[] = usersData.map((user: any) => ({
           id: user.id,
+          auth_user_id: user.auth_user_id || null,
           email: user.email || '',
           name: [user.first_name, user.last_name].filter(Boolean).join(' ') || null,
           role: user.role || 'parent',
@@ -127,6 +134,7 @@ export default function SuperAdminUsersScreen() {
           last_sign_in_at: user.last_login_at,
           is_active: user.is_active !== false,
           avatar_url: user.avatar_url,
+          subscription_tier: user.subscription_tier || null,
         }));
 
         setUsers(userRecords);
@@ -185,6 +193,8 @@ export default function SuperAdminUsersScreen() {
     await fetchUsers();
     setRefreshing(false);
   }, [fetchUsers]);
+
+  const getAuthUserId = (user: UserRecord) => user.auth_user_id || user.id;
 
   const impersonateUser = async (user: UserRecord) => {
     if (!user || user.role === 'superadmin' || user.role === 'super_admin') {
@@ -285,7 +295,7 @@ export default function SuperAdminUsersScreen() {
                 // Suspend user using RPC function
                 const { data: suspendResult, error: suspendError } = await assertSupabase()
                   .rpc('superadmin_suspend_user', {
-target_user_id: (user as any).auth_user_id,
+                    target_user_id: getAuthUserId(user),
                     reason: 'Administrative suspension by super admin'
                   });
 
@@ -300,7 +310,7 @@ target_user_id: (user as any).auth_user_id,
                 // Reactivate user using RPC function
                 const { data: reactivateResult, error: reactivateError } = await assertSupabase()
                   .rpc('superadmin_reactivate_user', {
-target_user_id: (user as any).auth_user_id,
+                    target_user_id: getAuthUserId(user),
                     reason: 'Administrative reactivation by super admin'
                   });
 
@@ -351,7 +361,7 @@ target_user_id: (user as any).auth_user_id,
               // Update user role using RPC function
               const { data: updateResult, error: updateError } = await assertSupabase()
                 .rpc('superadmin_update_user_role', {
-target_user_id: (user as any).auth_user_id,
+                  target_user_id: getAuthUserId(user),
                   new_role: newRole,
                   reason: 'Administrative role change by super admin'
                 });
@@ -401,7 +411,7 @@ target_user_id: (user as any).auth_user_id,
               // Request user deletion using RPC function
               const { data: deleteResult, error: deleteError } = await assertSupabase()
                 .rpc('superadmin_request_user_deletion', {
-target_user_id: (user as any).auth_user_id,
+                  target_user_id: getAuthUserId(user),
                   deletion_reason: 'Administrative deletion request by super admin'
                 });
 
@@ -536,7 +546,7 @@ target_user_id: (user as any).auth_user_id,
             try {
               const { data, error } = await assertSupabase().functions.invoke(
                 'superadmin-set-temp-password',
-                { body: { target_user_id: user.id } }
+                { body: { target_user_id: getAuthUserId(user) } }
               );
 
               if (error) {
@@ -607,6 +617,74 @@ target_user_id: (user as any).auth_user_id,
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  const formatTierLabel = (tier?: string | null): string => {
+    if (!tier) return 'Free';
+    const normalized = normalizeTierName(tier);
+    return `${getTierDisplayName(normalized)} (${normalized.replace(/_/g, ' ')})`;
+  };
+
+  const updateUserTier = async (user: UserRecord, newTier: string) => {
+    Alert.alert(
+      'Update Subscription Tier',
+      `Set ${user.email}'s tier to ${formatTierLabel(newTier)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Update',
+          onPress: async () => {
+            setUpdatingTier(true);
+            try {
+              const { data, error } = await assertSupabase().functions.invoke(
+                'superadmin-set-user-tier',
+                { body: { target_user_id: getAuthUserId(user), subscription_tier: newTier } }
+              );
+
+              if (error) throw error;
+
+              if (!data?.success) {
+                throw new Error(data?.error || 'Failed to update subscription tier');
+              }
+
+              track('superadmin_user_tier_updated', {
+                user_id: user.id,
+                user_email: user.email,
+                new_tier: newTier,
+              });
+
+              Alert.alert('Success', `Subscription tier updated to ${formatTierLabel(newTier)}.`);
+              fetchUsers();
+            } catch (tierError) {
+              console.error('Failed to update user tier:', tierError);
+              Alert.alert('Error', 'Failed to update subscription tier');
+            } finally {
+              setUpdatingTier(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const openTierPicker = (user: UserRecord) => {
+    if (user.role === 'superadmin' || user.role === 'super_admin') {
+      Alert.alert('Not Allowed', 'Super admin tier is fixed to enterprise.');
+      return;
+    }
+
+    const tiers = getAvailableTiersForRole(user.role);
+    Alert.alert(
+      'Select Subscription Tier',
+      `Choose a tier for ${user.email}:`,
+      [
+        ...tiers.map((tier) => ({
+          text: formatTierLabel(tier),
+          onPress: () => updateUserTier(user, tier),
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
   if (!profile || !isSuperAdmin(profile.role)) {
@@ -826,6 +904,12 @@ target_user_id: (user as any).auth_user_id,
                     {formatLastSeen(selectedUser.last_sign_in_at)}
                   </Text>
                 </View>
+                <View style={styles.modalInfoItem}>
+                  <Text style={styles.modalInfoLabel}>Subscription Tier</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {formatTierLabel(selectedUser.subscription_tier)}
+                  </Text>
+                </View>
                 {selectedUser.school_name && (
                   <View style={styles.modalInfoItem}>
                     <Text style={styles.modalInfoLabel}>School</Text>
@@ -867,6 +951,19 @@ target_user_id: (user as any).auth_user_id,
                     <Ionicons name="keypad" size={20} color="#14b8a6" />
                   )}
                   <Text style={[styles.modalActionText, { color: '#14b8a6' }]}>Create Temp Password</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.modalActionButton}
+                  onPress={() => openTierPicker(selectedUser)}
+                  disabled={updatingTier}
+                >
+                  {updatingTier ? (
+                    <ActivityIndicator size="small" color="#3b82f6" />
+                  ) : (
+                    <Ionicons name="cash" size={20} color="#3b82f6" />
+                  )}
+                  <Text style={[styles.modalActionText, { color: '#3b82f6' }]}>Set Paid Tier</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

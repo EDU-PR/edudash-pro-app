@@ -21,6 +21,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
+import { getTierDisplayName, normalizeTierName, VALID_ORGANIZATION_TIERS } from '@/lib/tiers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,6 +51,7 @@ interface Organization {
   logo_url?: string;
   is_verified: boolean;
   metadata?: Record<string, any>;
+  subscription_plan_id?: string | null;
 }
 
 interface OrganizationStats {
@@ -112,6 +114,7 @@ export default function SuperAdminOrganizations() {
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
+  const [updatingSubscription, setUpdatingSubscription] = useState(false);
 
   // Check access
   useEffect(() => {
@@ -149,7 +152,10 @@ export default function SuperAdminOrganizations() {
             updated_at,
             metadata,
             principal_id,
-            logo_url
+            logo_url,
+            subscription_tier,
+            subscription_status,
+            subscription_plan_id
           `)
           .order('created_at', { ascending: false }),
         
@@ -169,7 +175,9 @@ export default function SuperAdminOrganizations() {
             created_at,
             updated_at,
             metadata,
-            logo_url
+            logo_url,
+            subscription_tier,
+            subscription_status
           `)
           .order('created_at', { ascending: false }),
         
@@ -190,7 +198,10 @@ export default function SuperAdminOrganizations() {
             created_at,
             updated_at,
             metadata,
-            logo_url
+            logo_url,
+            subscription_tier,
+            subscription_status,
+            plan_tier
           `)
           .order('created_at', { ascending: false })
           .limit(100),
@@ -229,6 +240,9 @@ export default function SuperAdminOrganizations() {
         is_verified: p.is_verified || false,
         logo_url: p.logo_url,
         metadata: p.metadata,
+        subscription_tier: p.subscription_tier || null,
+        subscription_status: p.subscription_status || null,
+        subscription_plan_id: p.subscription_plan_id || null,
       }));
 
       // Process K-12 schools - prefix ID to avoid duplicates
@@ -250,6 +264,8 @@ export default function SuperAdminOrganizations() {
         is_verified: false,
         logo_url: s.logo_url,
         metadata: s.metadata,
+        subscription_tier: s.subscription_tier || null,
+        subscription_status: s.subscription_status || null,
       }));
 
       // Process generic organizations - prefix ID to avoid duplicates
@@ -271,6 +287,8 @@ export default function SuperAdminOrganizations() {
         is_verified: false,
         logo_url: o.logo_url,
         metadata: o.metadata,
+        subscription_tier: o.subscription_tier || o.plan_tier || null,
+        subscription_status: o.subscription_status || null,
       }));
 
       // Combine all organizations
@@ -365,6 +383,95 @@ export default function SuperAdminOrganizations() {
     await fetchOrganizations();
     setRefreshing(false);
   }, [fetchOrganizations]);
+
+  const getEntityMeta = (org: Organization) => {
+    const idParts = org.id.split('_');
+    const sourceType = idParts[0];
+    const actualId = idParts.slice(1).join('_');
+    const entityType =
+      sourceType === 'preschool' ? 'preschool' : sourceType === 'school' ? 'school' : 'organization';
+    return { entityType, actualId };
+  };
+
+  const formatTierLabel = (tier?: string | null) => {
+    if (!tier) return 'Free';
+    const normalized = normalizeTierName(tier);
+    return `${getTierDisplayName(normalized)} (${normalized.replace(/_/g, ' ')})`;
+  };
+
+  const formatStatusLabel = (status?: string | null) => {
+    if (!status) return 'active';
+    return status.replace(/_/g, ' ');
+  };
+
+  const updateEntitySubscription = async (
+    org: Organization,
+    nextTier: string,
+    nextStatus: string
+  ) => {
+    const { entityType, actualId } = getEntityMeta(org);
+    setUpdatingSubscription(true);
+    try {
+      const { data, error } = await assertSupabase().rpc('superadmin_update_entity_subscription', {
+        p_entity_type: entityType,
+        p_entity_id: actualId,
+        p_subscription_tier: nextTier,
+        p_subscription_status: nextStatus,
+        p_subscription_plan_id: org.subscription_plan_id || null,
+      });
+
+      if (error) throw error;
+      if (!data) {
+        throw new Error('Update failed');
+      }
+
+      track('superadmin_subscription_updated', {
+        org_id: actualId,
+        org_type: entityType,
+        subscription_tier: nextTier,
+        subscription_status: nextStatus,
+      });
+
+      Alert.alert('Success', 'Subscription updated successfully');
+      await fetchOrganizations();
+    } catch (error: any) {
+      console.error('Failed to update subscription:', error);
+      Alert.alert('Error', error?.message || 'Failed to update subscription');
+    } finally {
+      setUpdatingSubscription(false);
+    }
+  };
+
+  const openTierPicker = (org: Organization) => {
+    const currentStatus = org.subscription_status || 'active';
+    Alert.alert(
+      'Select Subscription Tier',
+      `Choose a tier for ${org.name}:`,
+      [
+        ...VALID_ORGANIZATION_TIERS.map((tier) => ({
+          text: formatTierLabel(tier),
+          onPress: () => updateEntitySubscription(org, tier, currentStatus),
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const openStatusPicker = (org: Organization) => {
+    const currentTier = normalizeTierName(org.subscription_tier || 'free');
+    const statuses = ['active', 'pending', 'trialing', 'past_due', 'suspended', 'canceled'];
+    Alert.alert(
+      'Select Subscription Status',
+      `Set status for ${org.name}:`,
+      [
+        ...statuses.map((status) => ({
+          text: formatStatusLabel(status),
+          onPress: () => updateEntitySubscription(org, currentTier, status),
+        })),
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
 
   const handleOrgPress = (org: Organization) => {
     setSelectedOrg(org);
@@ -824,6 +931,40 @@ export default function SuperAdminOrganizations() {
                       ? new Date(selectedOrg.last_active_at).toLocaleDateString()
                       : '-'}
                   </Text>
+                </View>
+              </View>
+
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionTitle}>Subscription</Text>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Tier</Text>
+                  <Text style={styles.modalValue}>
+                    {formatTierLabel(selectedOrg.subscription_tier)}
+                  </Text>
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Status</Text>
+                  <Text style={styles.modalValue}>
+                    {formatStatusLabel(selectedOrg.subscription_status)}
+                  </Text>
+                </View>
+                <View style={styles.modalButtonRow}>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, { backgroundColor: theme.info }]}
+                    onPress={() => openTierPicker(selectedOrg)}
+                    disabled={updatingSubscription}
+                  >
+                    <Ionicons name="cash-outline" size={20} color="#fff" />
+                    <Text style={styles.modalActionText}>Change Tier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, { backgroundColor: theme.primary }]}
+                    onPress={() => openStatusPicker(selectedOrg)}
+                    disabled={updatingSubscription}
+                  >
+                    <Ionicons name="flag-outline" size={20} color="#fff" />
+                    <Text style={styles.modalActionText}>Change Status</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -1287,6 +1428,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 12,
     marginBottom: 40,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
   },
   modalActionBtn: {
     flex: 1,

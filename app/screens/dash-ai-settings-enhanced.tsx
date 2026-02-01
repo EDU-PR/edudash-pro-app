@@ -7,7 +7,9 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
 import {
   useAISettings,
@@ -24,6 +26,8 @@ import {
 
 export default function DashAISettingsEnhancedScreen() {
   const { theme } = useTheme();
+  const { profile } = useAuth();
+  const roleCopy = getDashAIRoleCopy(profile?.role);
   
   const {
     settings,
@@ -54,7 +58,7 @@ export default function DashAISettingsEnhancedScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <ScreenHeader title="Enhanced Dash AI Settings" subtitle="Advanced AI assistant configuration" />
+        <ScreenHeader title={roleCopy.settingsTitle} subtitle={roleCopy.settingsSubtitle} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading enhanced settings...</Text>
@@ -68,7 +72,7 @@ export default function DashAISettingsEnhancedScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScreenHeader title="Dash AI Settings" subtitle="Configure your AI assistant" />
+      <ScreenHeader title={roleCopy.settingsTitle} subtitle={roleCopy.settingsSubtitle} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Personality Settings */}

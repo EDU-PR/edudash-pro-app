@@ -23146,6 +23146,10 @@ export type Database = {
           principal_id: string | null
           province: string | null
           status: string | null
+          subscription_end_date: string | null
+          subscription_start_date: string | null
+          subscription_status: string | null
+          subscription_tier: string | null
           updated_at: string | null
         }
         Insert: {
@@ -23164,6 +23168,10 @@ export type Database = {
           principal_id?: string | null
           province?: string | null
           status?: string | null
+          subscription_end_date?: string | null
+          subscription_start_date?: string | null
+          subscription_status?: string | null
+          subscription_tier?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -23182,6 +23190,10 @@ export type Database = {
           principal_id?: string | null
           province?: string | null
           status?: string | null
+          subscription_end_date?: string | null
+          subscription_start_date?: string | null
+          subscription_status?: string | null
+          subscription_tier?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -33924,6 +33936,16 @@ export type Database = {
       superadmin_update_user_role: {
         Args: { new_role: string; reason?: string; target_user_id: string }
         Returns: Json
+      }
+      superadmin_update_entity_subscription: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_subscription_plan_id?: string | null
+          p_subscription_status?: string
+          p_subscription_tier: string
+        }
+        Returns: boolean
       }
       sync_organization_tier: { Args: { p_org_id: string }; Returns: Json }
       sync_user_contacts: {

@@ -15,10 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { styles, getMarkdownStyles } from './DashOrb.styles';
 import { QuickActions, QuickAction } from './QuickActions';
 import { CosmicOrb } from './CosmicOrb';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
 // Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
@@ -96,6 +98,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onOpenSettings,
 }) => {
   const { theme } = useTheme();
+  const { profile } = useAuth();
+  const roleCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const [showWakeWordHelp, setShowWakeWordHelp] = React.useState(false);
@@ -103,6 +107,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
+  const statusLabel = isSpeaking ? 'Speaking...' : isProcessing ? 'Thinking...' : 'Online';
+  const headerSubtitle = roleCopy.subtitle
+    ? `${roleCopy.subtitle} • ${statusLabel}`
+    : statusLabel;
 
   const Container: React.ElementType = KeyboardAvoidingView;
 
@@ -202,9 +210,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   <Ionicons name="sparkles" size={20} color="#fff" />
                 </LinearGradient>
                 <View style={styles.headerText}>
-                  <Text style={[styles.headerTitle, { color: theme.text }]}>Dash AI</Text>
+                  <Text style={[styles.headerTitle, { color: theme.text }]}>
+                    {roleCopy.title}
+                  </Text>
                   <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                    {isSpeaking ? '🔊 Speaking...' : isProcessing ? '💭 Thinking...' : '✨ Online'}
+                    {headerSubtitle}
                   </Text>
                 </View>
               </View>
