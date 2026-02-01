@@ -172,6 +172,7 @@ export default function FeesPage() {
     }
 
     const uniformSaveResult = await saveUniformPricing();
+    const uniformFlagResult = await updateUniformFeatureFlag(uniformPricing.enabled);
     setSaving(false);
 
     if (!uniformSaveResult) {
@@ -179,8 +180,60 @@ export default function FeesPage() {
       return;
     }
 
+    if (!uniformFlagResult) {
+      setMessage({ type: 'error', text: 'Fees saved, but uniform visibility could not be updated.' });
+      return;
+    }
+
     setMessage({ type: 'success', text: 'Fees updated successfully!' });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const updateUniformFeatureFlag = async (enabled: boolean): Promise<boolean> => {
+    if (!preschoolId) return false;
+
+    const tables: Array<'preschools' | 'organizations'> = ['preschools', 'organizations'];
+    try {
+      for (const table of tables) {
+        const { data: row, error } = await supabase
+          .from(table)
+          .select('id, settings')
+          .eq('id', preschoolId)
+          .maybeSingle();
+
+        if (error || !row) continue;
+
+        const settings = row.settings || {};
+        const features = settings.features || {};
+        const uniforms = features.uniforms || {};
+
+        if (uniforms.enabled === enabled) continue;
+
+        const nextSettings = {
+          ...settings,
+          features: {
+            ...features,
+            uniforms: {
+              ...uniforms,
+              enabled,
+            },
+          },
+        };
+
+        const { error: updateError } = await supabase
+          .from(table)
+          .update({ settings: nextSettings })
+          .eq('id', preschoolId);
+
+        if (updateError) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const saveUniformPricing = async (): Promise<boolean> => {

@@ -65,6 +65,7 @@
     "contexts/TerminologyContext.tsx"
   ],
   "include": [
+    "types/deno-std.d.ts",
     "types/**/*.d.ts",
     "components/ai/**/*",
     "components/ui/HolographicOrb.tsx",

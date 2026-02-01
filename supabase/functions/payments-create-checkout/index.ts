@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
 
     const signature = generatePayFastSignature(
       paymentData as unknown as Record<string, string | number | undefined>,
-      passphrase,
+      isProduction ? passphrase : undefined,
       PAYFAST_SIGNATURE_ORDER
     );
 

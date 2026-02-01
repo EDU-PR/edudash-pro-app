@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
     const isProduction = payfastMode === 'production';
     const passphraseRaw = Deno.env.get('PAYFAST_PASSPHRASE');
     const passphrase = passphraseRaw && passphraseRaw.trim() !== '' ? passphraseRaw.trim() : undefined;
+    const passphraseForSignature = isProduction ? passphrase : undefined;
     const merchantId = (Deno.env.get('PAYFAST_MERCHANT_ID') || '').trim();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -173,7 +174,7 @@ Deno.serve(async (req) => {
     }
     
     // Validate signature
-    if (!validateSignature(pfData, pfData.signature, passphrase)) {
+    if (!validateSignature(pfData, pfData.signature, passphraseForSignature)) {
       console.error('[payfast-webhook] Signature validation failed!');
       return new Response('Invalid signature', { status: 400 });
     }

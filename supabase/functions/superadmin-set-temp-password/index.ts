@@ -1,3 +1,4 @@
+/// <reference path="../../../types/deno-std.d.ts" />
 // Supabase Edge Function: superadmin-set-temp-password
 // Allows superadmins to set a temporary password for a user and force a reset on next login.
 
