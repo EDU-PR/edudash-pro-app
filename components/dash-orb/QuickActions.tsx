@@ -8,6 +8,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { TIER_HIERARCHY, type SubscriptionTier } from '@/lib/ai/models';
+import { normalizeRole } from '@/lib/rbac';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { styles } from './DashOrb.styles';
 
 export interface QuickAction {
@@ -89,6 +91,9 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   const { theme } = useTheme();
   const { profile } = useAuth();
   const { tierStatus } = useRealtimeTier();
+  const roleCopy = getDashAIRoleCopy(profile?.role);
+  const normalizedRole = normalizeRole(profile?.role || '');
+  const isTutorRole = normalizedRole === 'parent' || normalizedRole === 'student';
   
   // Check if user is super admin - use useMemo to ensure recalculation when profile changes
   const userRole = profile?.role || '';
@@ -120,6 +125,47 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     [tierStatus?.tier, tierStatus?.isActive]
   );
   const tierRank = TIER_HIERARCHY[normalizedTier];
+  const quickCtas = isTutorRole
+    ? [
+        {
+          label: 'Explain it',
+          prompt: 'Ask me one short diagnostic question first, then explain step-by-step in simple language.',
+          icon: 'bulb-outline',
+          color: theme.primary,
+        },
+        {
+          label: 'Help me solve',
+          prompt: 'Give me one practice question to diagnose my level. Wait for my answer before continuing.',
+          icon: 'pencil-outline',
+          color: theme.success || '#16a34a',
+        },
+        {
+          label: 'Test me',
+          prompt: 'Quiz me with 5 questions, starting easy and getting harder.',
+          icon: 'school-outline',
+          color: theme.warning || '#f59e0b',
+        },
+      ]
+    : [
+        {
+          label: 'Draft plan',
+          prompt: 'Draft a concise plan with steps, owners, and a timeline.',
+          icon: 'map-outline',
+          color: theme.primary,
+        },
+        {
+          label: 'Summarize',
+          prompt: 'Summarize the key points and list the next actions.',
+          icon: 'list-outline',
+          color: theme.success || '#16a34a',
+        },
+        {
+          label: 'Template',
+          prompt: 'Create a reusable checklist or template for this task.',
+          icon: 'document-text-outline',
+          color: theme.warning || '#f59e0b',
+        },
+      ];
 
   const handleActionPress = (action: QuickAction) => {
     if (isActionLocked(action, tierRank, isUserSuperAdmin)) {
@@ -142,34 +188,27 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             <Ionicons name="sparkles" size={20} color="#fff" />
           </View>
           <View style={styles.quickActionsHeroText}>
-            <Text style={[styles.quickActionsHeroTitle, { color: theme.text }]}>Your personal tutor</Text>
+            <Text style={[styles.quickActionsHeroTitle, { color: theme.text }]}>
+              {roleCopy.quickActionsTitle}
+            </Text>
             <Text style={[styles.quickActionsHeroSubtitle, { color: theme.textSecondary }]}>
-              Ask anything. I’ll diagnose, teach, and practice with you.
+              {roleCopy.quickActionsSubtitle}
             </Text>
           </View>
         </View>
         <View style={styles.quickActionsCtasRow}>
-          <TouchableOpacity
-            style={[styles.quickActionsCta, { backgroundColor: theme.primary }]}
-            onPress={() => onSendPrompt?.('Ask me one short diagnostic question first, then explain step-by-step in simple language.', 'Explain it')}
-          >
-            <Ionicons name="bulb-outline" size={16} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Explain it</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.quickActionsCta, { backgroundColor: theme.success || '#16a34a' }]}
-            onPress={() => onSendPrompt?.('Give me one practice question to diagnose my level. Wait for my answer before continuing.', 'Help me solve')}
-          >
-            <Ionicons name="pencil-outline" size={16} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Help me solve</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.quickActionsCta, { backgroundColor: theme.warning || '#f59e0b' }]}
-            onPress={() => onSendPrompt?.('Quiz me with 5 questions, starting easy and getting harder.', 'Test me')}
-          >
-            <Ionicons name="school-outline" size={16} color={theme.onPrimary || '#fff'} />
-            <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>Test me</Text>
-          </TouchableOpacity>
+          {quickCtas.map((cta) => (
+            <TouchableOpacity
+              key={cta.label}
+              style={[styles.quickActionsCta, { backgroundColor: cta.color }]}
+              onPress={() => onSendPrompt?.(cta.prompt, cta.label)}
+            >
+              <Ionicons name={cta.icon as any} size={16} color={theme.onPrimary || '#fff'} />
+              <Text style={[styles.quickActionsCtaText, { color: theme.onPrimary || '#fff' }]}>
+                {cta.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </LinearGradient>
 

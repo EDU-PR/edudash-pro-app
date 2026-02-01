@@ -43,6 +43,7 @@ interface DashInputBarProps {
   isSpeaking?: boolean;
   partialTranscript?: string;
   bottomInset?: number;
+  placeholder?: string;
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
@@ -64,6 +65,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   isSpeaking = false,
   partialTranscript = '',
   bottomInset = 0,
+  placeholder,
   onSend,
   onMicPress,
   onTakePhoto,
@@ -294,7 +296,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                 ? "🎤 Listening... tap stop when done" 
                 : selectedAttachments.length > 0 
                   ? "Add a message (optional)..." 
-                  : "Ask Dash anything..."
+                  : (placeholder || "Ask Dash anything...")
             }
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}

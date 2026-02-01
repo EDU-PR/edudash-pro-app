@@ -62,7 +62,7 @@ export default function OrgAISettingsScreen() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: t('ai_settings.title', { defaultValue: 'AI Settings' }) }} />
+        <Stack.Screen options={{ title: t('ai_settings.title', { defaultValue: 'Dash AI Settings' }) }} />
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
@@ -74,7 +74,7 @@ export default function OrgAISettingsScreen() {
     <View style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: t('ai_settings.title', { defaultValue: 'AI & Automation' }),
+          title: t('ai_settings.title', { defaultValue: 'Dash AI & Automation' }),
           headerRight: () => (
             <TouchableOpacity onPress={handleSave} style={{ marginRight: 16 }}>
               {updateSettings.isPending ? (
@@ -200,7 +200,6 @@ const createStyles = (theme: any) => StyleSheet.create({
   modelInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modelLabel: { color: theme.text, fontSize: 16, fontWeight: '500' },
 });
-
 
 
 

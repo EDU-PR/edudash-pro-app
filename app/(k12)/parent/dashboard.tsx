@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
+import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { calculateAge } from '@/lib/date-utils';
 import { styles } from '@/domains/k12/components/K12ParentDashboard.styles';
@@ -48,6 +49,7 @@ export default function K12ParentDashboardScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { tier } = useSubscription();
+  const dashCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const flags = getFeatureFlagsSync();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
   const notificationCount = useNotificationBadgeCount();
@@ -184,13 +186,13 @@ export default function K12ParentDashboardScreen() {
   ]), [t]);
 
   const aiQuickActions = useMemo(() => ([
-    { id: 'dash-ai', icon: 'sparkles', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), route: '/screens/dash-assistant', color: '#7C3AED' },
+    { id: 'dash-ai', icon: 'sparkles', label: t('dashboard.parent.nav.dash_ai', { defaultValue: dashCopy.navLabel }), route: '/screens/dash-assistant', color: '#7C3AED' },
     ...(canShowExamPrep ? [
       { id: 'exam-prep', icon: 'school', label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), route: '/screens/exam-prep', color: '#EC4899' },
     ] : []),
     { id: 'homework', icon: 'document-text', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), route: '/screens/homework', color: '#06B6D4' },
     { id: 'weekly-report', icon: 'stats-chart', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), route: '/screens/parent-weekly-report', color: '#F97316' },
-  ]), [t, canShowExamPrep]);
+  ]), [t, canShowExamPrep, dashCopy.navLabel]);
 
   const schoolTypeLabel = useMemo(() => {
     switch (schoolType) {
@@ -481,7 +483,7 @@ export default function K12ParentDashboardScreen() {
               </View>
               <View style={styles.dashAIText}>
                 <Text style={styles.dashAITitle}>
-                  {t('parent.ask_dash', { defaultValue: 'Ask Dash AI' })}
+                  {t('parent.ask_dash', { defaultValue: `Ask ${dashCopy.navLabel}` })}
                 </Text>
                 <Text style={styles.dashAISubtitle}>
                   {t('dashboard.parent.k12.dash_ai.subtitle', { defaultValue: 'Get instant homework help & study tips' })}

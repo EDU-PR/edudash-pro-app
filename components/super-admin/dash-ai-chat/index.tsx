@@ -485,7 +485,7 @@ export default function DashAIChat({
             <Ionicons name="sparkles" size={18} color="#fff" />
           </View>
           <View>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Dash AI</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Dash AI Ops</Text>
             <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               {isProcessing ? 'Thinking...' : isSpeaking ? 'Speaking...' : 'Online'}
             </Text>

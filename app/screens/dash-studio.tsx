@@ -313,15 +313,15 @@ export default function DashStudioScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ title: 'Dash Studio', headerShown: false }} />
+      <Stack.Screen options={{ title: 'Dash AI Studio', headerShown: false }} />
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={22} color={theme.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={[styles.title, { color: theme.text }]}>Dash Studio</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>AI workflows + forms for principals</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Dash AI Studio</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Workflows + forms for principals</Text>
         </View>
         <View style={styles.tierBadge}>
           <Text style={[styles.tierText, { color: theme.primary }]}>{tier?.toUpperCase() || 'FREE'}</Text>

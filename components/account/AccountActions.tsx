@@ -21,9 +21,10 @@ interface AccountActionsProps {
   };
   onChangeEmail?: () => void;
   onChangePassword?: () => void;
+  onSwitchAccount?: () => void;
 }
 
-export function AccountActions({ theme, styles, onChangeEmail, onChangePassword }: AccountActionsProps) {
+export function AccountActions({ theme, styles, onChangeEmail, onChangePassword, onSwitchAccount }: AccountActionsProps) {
   const { t } = useTranslation();
 
   return (
@@ -79,7 +80,13 @@ export function AccountActions({ theme, styles, onChangeEmail, onChangePassword 
       </Text>
       
       <TouchableOpacity
-        onPress={() => signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' })}
+        onPress={() => {
+          if (onSwitchAccount) {
+            onSwitchAccount();
+            return;
+          }
+          signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' });
+        }}
         style={[styles.signOutButton, { 
           backgroundColor: theme.surfaceVariant, 
           borderWidth: 2,

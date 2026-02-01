@@ -503,7 +503,7 @@ export default function SuperAdminAICommandCenter() {
         <ThemedStatusBar />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading AI Command Center...</Text>
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading Dash AI Command Center...</Text>
         </View>
       </SafeAreaView>
     );
@@ -519,7 +519,7 @@ export default function SuperAdminAICommandCenter() {
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <View style={styles.headerTitle}>
-          <Text style={[styles.title, { color: theme.text }]}>AI Command Center</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Dash AI Command Center</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Full Agentic AI • Unlimited</Text>
         </View>
         <TouchableOpacity 

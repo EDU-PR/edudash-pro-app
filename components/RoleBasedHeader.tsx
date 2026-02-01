@@ -17,6 +17,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import ProfileImageService from '@/services/ProfileImageService';
 import TierBadge from '@/components/ui/TierBadge';
 import { useRoleLabel } from '@/lib/hooks/useOrganizationTerminology';
+import { ProfileSwitcher } from '@/components/account';
 
 // Helper function to get the appropriate settings route based on user role
 function getSettingsRoute(role?: string | null): string {
@@ -67,6 +68,7 @@ export function RoleBasedHeader({
 }: RoleBasedHeaderProps) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
+  const [profileSwitcherVisible, setProfileSwitcherVisible] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const route = useRoute();
@@ -436,8 +438,7 @@ export function RoleBasedHeader({
                 onPress={() => {
                   // Close menu immediately
                   setMenuVisible(false);
-                  // Perform sign-out without delay
-                  signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' });
+                  setProfileSwitcherVisible(true);
                 }}
               >
                 <Ionicons name="swap-horizontal" size={18} color={theme.textSecondary} />
@@ -475,6 +476,11 @@ export function RoleBasedHeader({
           </View>
         </Modal>
       )}
+
+      <ProfileSwitcher
+        visible={profileSwitcherVisible}
+        onClose={() => setProfileSwitcherVisible(false)}
+      />
     </View>
   );
 }

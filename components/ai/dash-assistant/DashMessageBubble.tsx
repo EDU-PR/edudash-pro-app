@@ -27,6 +27,7 @@ interface DashMessageBubbleProps {
   onSendFollowUp: (text: string) => void;
   onSendTutorAnswer?: (text: string, sourceMessageId?: string) => void;
   extractFollowUps: (text: string) => string[];
+  assistantLabel?: string;
 }
 
 export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
@@ -42,6 +43,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   onSendFollowUp,
   onSendTutorAnswer,
   extractFollowUps,
+  assistantLabel,
 }) => {
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
@@ -222,7 +224,9 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               <View style={[styles.inlineAvatar, { backgroundColor: theme.primary }]}>
                 <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
               </View>
-              <Text style={[styles.messageRoleLabel, { color: theme.text }]}>Dash Tutor</Text>
+              <Text style={[styles.messageRoleLabel, { color: theme.text }]}>
+                {assistantLabel || 'Dash AI'}
+              </Text>
             </View>
             {phase && (
               <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg }]}>
