@@ -20,7 +20,6 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   KeyboardAvoidingView,
@@ -34,6 +33,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { toast } from '@/components/ui/ToastProvider';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Types matching database schema
 interface AIAgent {
@@ -124,6 +124,7 @@ const AGENT_COLORS: Record<string, string> = {
 export default function SuperAdminAICommandCenter() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [assistantVisible, setAssistantVisible] = useState(false);
@@ -287,17 +288,18 @@ export default function SuperAdminAICommandCenter() {
 
   // Run agent manually - creates execution record
   const runAgent = (agent: AIAgent) => {
-    Alert.alert(
-      `Run ${agent.name}?`,
-      'This will execute the agent immediately outside its normal schedule.',
-      [
+    showAlert({
+      title: `Run ${agent.name}?`,
+      message: 'This will execute the agent immediately outside its normal schedule.',
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Run Now',
           onPress: async () => {
             try {
               // Create execution record
-              const { data: executionId, error } = await assertSupabase()
+              const { error } = await assertSupabase()
                 .rpc('execute_superadmin_agent', { agent_id_param: agent.id });
               
               if (error) {
@@ -332,8 +334,8 @@ export default function SuperAdminAICommandCenter() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Handle insight action
@@ -783,9 +785,17 @@ export default function SuperAdminAICommandCenter() {
                     style={[styles.actionButton, { backgroundColor: theme.primary, marginTop: 8 }]}
                     onPress={() => {
                       if (integration.integration_type === 'github') {
-                        Alert.alert('GitHub', 'Configure GitHub integration in super admin settings');
+                        showAlert({
+                          title: 'GitHub',
+                          message: 'Configure GitHub integration in super admin settings',
+                          type: 'info',
+                        });
                       } else if (integration.integration_type === 'eas_expo') {
-                        Alert.alert('EAS/Expo', 'Configure EAS integration in super admin settings');
+                        showAlert({
+                          title: 'EAS/Expo',
+                          message: 'Configure EAS integration in super admin settings',
+                          type: 'info',
+                        });
                       }
                     }}
                   >
@@ -924,6 +934,8 @@ export default function SuperAdminAICommandCenter() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

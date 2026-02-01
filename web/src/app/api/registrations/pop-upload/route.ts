@@ -18,7 +18,7 @@ function isMissingColumnError(error: { code?: string } | null | undefined): bool
 }
 
 async function fetchRegistration(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   registrationId: string
 ) {
   const baseSelect = 'id, guardian_email, student_first_name, student_last_name, organization_id';

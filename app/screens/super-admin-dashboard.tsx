@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
   Switch,
   Modal,
   TextInput,
@@ -24,6 +23,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { assertSupabase } from '@/lib/supabase';
 import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { SuperAdminAIControl, SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
 
 interface DashboardStats {
@@ -70,6 +70,7 @@ interface QuickAction {
 export default function SuperAdminDashboardScreen() {
   const { user, profile, loading: authLoading, profileLoading } = useAuth();
   const { theme, isDark } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
@@ -429,18 +430,19 @@ export default function SuperAdminDashboardScreen() {
       }]);
       
       // Show user-friendly error
-      Alert.alert(
-        'Dashboard Error',
-        'Unable to load dashboard data. Please check your connection and try again.',
-        [
+      showAlert({
+        title: 'Dashboard Error',
+        message: 'Unable to load dashboard data. Please check your connection and try again.',
+        type: 'error',
+        buttons: [
           { text: 'Retry', onPress: () => fetchDashboardData() },
-          { text: 'Cancel', style: 'cancel' }
-        ]
-      );
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
     } finally {
       setLoading(false);
     }
-  }, [profile?.role]);
+  }, [profile?.role, showAlert]);
 
   const loadAIControl = useCallback(async (force = false) => {
     if (!isSuperAdmin(profile?.role) || !user?.id) return;
@@ -451,15 +453,23 @@ export default function SuperAdminDashboardScreen() {
       setAiControl(state);
     } catch (error) {
       console.error('[SuperAdminDashboard] Failed to load AI control state:', error);
-      Alert.alert('AI Control', 'Unable to load AI autonomy controls. Please try again.');
+      showAlert({
+        title: 'AI Control',
+        message: 'Unable to load AI autonomy controls. Please try again.',
+        type: 'error',
+      });
     } finally {
       setAiControlLoading(false);
     }
-  }, [profile?.role, user?.id]);
+  }, [profile?.role, showAlert, user?.id]);
 
   const requestPassword = useCallback(async (actionLabel: string): Promise<boolean> => {
     if (!user?.email) {
-      Alert.alert('Password Required', 'Please sign in again to verify your password.');
+      showAlert({
+        title: 'Password Required',
+        message: 'Please sign in again to verify your password.',
+        type: 'warning',
+      });
       return false;
     }
 
@@ -471,7 +481,7 @@ export default function SuperAdminDashboardScreen() {
     return new Promise((resolve) => {
       passwordResolverRef.current = resolve;
     });
-  }, [user?.email]);
+  }, [showAlert, user?.email]);
 
   const closePasswordModal = useCallback((confirmed: boolean) => {
     setPasswordSubmitting(false);
@@ -525,14 +535,22 @@ export default function SuperAdminDashboardScreen() {
     try {
       const updated = await SuperAdminAIControl.claimOwnership(user.id);
       setAiControl(updated);
-      Alert.alert('Ownership Claimed', 'You are now the platform owner for Dash AI autonomy.');
+      showAlert({
+        title: 'Ownership Claimed',
+        message: 'You are now the platform owner for Dash AI autonomy.',
+        type: 'success',
+      });
     } catch (error) {
       console.error('[SuperAdminDashboard] Failed to claim ownership:', error);
-      Alert.alert('Ownership Error', 'Unable to claim ownership. It may already be claimed.');
+      showAlert({
+        title: 'Ownership Error',
+        message: 'Unable to claim ownership. It may already be claimed.',
+        type: 'error',
+      });
     } finally {
       setAiControlLoading(false);
     }
-  }, [user?.id]);
+  }, [requestPassword, showAlert, user?.id]);
 
   const updateAIControl = useCallback(async (patch: Partial<SuperAdminAIControlState>) => {
     if (!user?.id) return;
@@ -540,7 +558,11 @@ export default function SuperAdminDashboardScreen() {
 
     const isOwner = aiControl.owner_user_id === user.id;
     if (!isOwner) {
-      Alert.alert('Owner Only', 'Only the platform owner can change Dash AI autonomy settings.');
+      showAlert({
+        title: 'Owner Only',
+        message: 'Only the platform owner can change Dash AI autonomy settings.',
+        type: 'warning',
+      });
       return;
     }
 
@@ -562,11 +584,15 @@ export default function SuperAdminDashboardScreen() {
       setAiControl(updated);
     } catch (error) {
       console.error('[SuperAdminDashboard] Failed to update AI control state:', error);
-      Alert.alert('Update Error', 'Unable to update AI autonomy settings. Please try again.');
+      showAlert({
+        title: 'Update Error',
+        message: 'Unable to update AI autonomy settings. Please try again.',
+        type: 'error',
+      });
     } finally {
       setAiControlLoading(false);
     }
-  }, [aiControl, requestPassword, user?.id]);
+  }, [aiControl, requestPassword, showAlert, user?.id]);
 
   const applyAutonomyPreset = useCallback(async (preset: 'lockdown' | 'assistant' | 'copilot' | 'full') => {
     if (!aiControl) return;
@@ -1240,6 +1266,8 @@ export default function SuperAdminDashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      <AlertModal {...alertProps} />
       
       </View>
     </DesktopLayout>
