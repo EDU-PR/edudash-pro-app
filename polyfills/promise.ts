@@ -90,7 +90,7 @@ declare const self: any;
         configurable: true,
         enumerable: false,
       });
-    } catch (e) {
+    } catch {
       // Fallback if defineProperty fails
       (PromiseConstructor as any).any = promiseAny;
     }
@@ -104,7 +104,7 @@ declare const self: any;
           configurable: true,
           enumerable: false,
         });
-      } catch (e) {
+      } catch {
         (Promise as any).any = promiseAny;
       }
     }
