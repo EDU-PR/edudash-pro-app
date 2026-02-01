@@ -259,12 +259,19 @@ IMPORTANT: Return ONLY the JSON array, no other text.`
             };
           }
 
-          // Get parent user ID (profiles.id = auth_user_id)
-          const { data: parentProfile } = await client
+          // Resolve parent profile id using auth_user_id (fallback to id for legacy rows)
+          const { data: parentByAuth } = await client
             .from('profiles')
-            .select('id')
-            .eq('id', authUser.user.id)
-            .single();
+            .select('id, auth_user_id')
+            .eq('auth_user_id', authUser.user.id)
+            .maybeSingle();
+          const parentProfile = parentByAuth
+            ? parentByAuth
+            : (await client
+                .from('profiles')
+                .select('id, auth_user_id')
+                .eq('id', authUser.user.id)
+                .maybeSingle()).data;
 
           if (!parentProfile) {
             return {

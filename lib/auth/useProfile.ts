@@ -57,6 +57,7 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
         .from('profiles')
         .select(`
           id,
+          auth_user_id,
           preschool_id,
           organization_id,
           role,
@@ -105,7 +106,7 @@ async function fetchUserProfile(): Promise<UserProfile | null> {
       const normalizedProfile = {
         ...profile,
         name: profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null,
-        auth_user_id: profile.id, // profiles.id = auth.users.id
+        auth_user_id: profile.auth_user_id || user.id,
         preschool: profile.preschool ? {
           ...profile.preschool,
           subscription_tier: tier  // Use resolved tier

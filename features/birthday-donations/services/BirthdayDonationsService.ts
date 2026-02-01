@@ -152,7 +152,7 @@ export class BirthdayDonationsService {
 
   static async getTodayBirthdays(organizationId: string, donationDate: string): Promise<BirthdayDonationBirthdays[]> {
     const supabase = assertSupabase();
-    const [year, month, day] = donationDate.split('-');
+    const [, month, day] = donationDate.split('-');
     const monthInt = Number(month);
     const dayInt = Number(day);
     if (!monthInt || !dayInt) return [];
