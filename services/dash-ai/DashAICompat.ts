@@ -151,11 +151,18 @@ export class DashAIAssistant implements IDashAIAssistant {
           let organizationId: string | undefined;
           let preschoolId: string | undefined;
           try {
-            const { data: profile } = await initConfig.supabaseClient
+            const { data: profileByAuth } = await initConfig.supabaseClient
               .from('profiles')
               .select('organization_id, preschool_id')
-              .eq('id', session.user_id)
-              .single();
+              .eq('auth_user_id', session.user_id)
+              .maybeSingle();
+            const profile = profileByAuth
+              ? profileByAuth
+              : (await initConfig.supabaseClient
+                  .from('profiles')
+                  .select('organization_id, preschool_id')
+                  .eq('id', session.user_id)
+                  .maybeSingle()).data;
             // Use organization_id (standardized) or fallback to preschool_id
             organizationId = profile?.organization_id || profile?.preschool_id;
             preschoolId = profile?.organization_id || profile?.preschool_id;
@@ -168,11 +175,18 @@ export class DashAIAssistant implements IDashAIAssistant {
           let ageGroup: AgeGroup | undefined;
           let dateOfBirth: string | undefined;
           try {
-            const { data: fullProfile } = await initConfig.supabaseClient
+            const { data: fullProfileByAuth } = await initConfig.supabaseClient
               .from('profiles')
               .select('role, date_of_birth, age_group')
-              .eq('id', session.user_id)
+              .eq('auth_user_id', session.user_id)
               .maybeSingle();
+            const fullProfile = fullProfileByAuth
+              ? fullProfileByAuth
+              : (await initConfig.supabaseClient
+                  .from('profiles')
+                  .select('role, date_of_birth, age_group')
+                  .eq('id', session.user_id)
+                  .maybeSingle()).data;
             if (fullProfile?.role) {
               userRole = fullProfile.role;
             }
