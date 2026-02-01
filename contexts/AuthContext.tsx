@@ -388,7 +388,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { session: storedSession, profile: storedProfile } = await initializeSession();
         
         // Debug session restoration
-        console.log('=== SESSION RESTORATION DEBUG ===');
+        debugLog('=== SESSION RESTORATION DEBUG ===');
         console.log('Stored session exists:', !!storedSession);
         console.log('Stored profile exists:', !!storedProfile);
         if (storedSession) {
@@ -542,7 +542,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: listener } = assertSupabase().auth.onAuthStateChange(async (event, s) => {
         if (!mounted) return;
         // #region agent log
-        console.log('[DEBUG_AGENT] AuthStateChange', JSON.stringify({event,userId:s?.user?.id,email:s?.user?.email,mounted,timestamp:Date.now()}));
+        debugLog('[DEBUG_AGENT] AuthStateChange', JSON.stringify({event,userId:s?.user?.id,email:s?.user?.email,mounted,timestamp:Date.now()}));
         // #endregion
         
         const nextUserId = s?.user?.id ?? null;
@@ -709,7 +709,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   recoverySentAt,
                 });
                 // #region agent log
-                console.log('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,globalRecoveryFlag,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
+                debugLog('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,globalRecoveryFlag,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
                 // #endregion
                 return; // Don't route - user is on reset-password screen
               }
@@ -717,16 +717,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // Route user after successful sign in
               try {
                 // #region agent log
-                console.log('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
+                debugLog('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
                 // #endregion
                 await routeAfterLogin(s.user, enhancedProfile);
                 // #region agent log
-                console.log('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
+                debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
                 // #endregion
               } catch (error) {
                 console.error('Post-login routing failed:', error);
                 // #region agent log
-                console.log('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
+                debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
                 // #endregion
               }
             }

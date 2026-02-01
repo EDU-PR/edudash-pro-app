@@ -15,14 +15,17 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   TextInput,
   Alert,
   ActivityIndicator,
   StyleSheet,
   Modal,
   RefreshControl,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Share,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import * as Clipboard from 'expo-clipboard';
 
 interface FeeStructure {
   id: string;
@@ -45,7 +49,7 @@ interface PromoCampaign {
   id: string;
   code: string;
   name: string;
-  discount_type: 'percentage' | 'fixed';
+  discount_type: 'percentage' | 'fixed_amount' | 'fixed_price';
   discount_value: number;
   applies_to_registration: boolean;
   is_active: boolean;
@@ -76,9 +80,10 @@ const FREQUENCIES = [
 
 export default function FeeManagementScreen() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  const modalPaddingBottom = Math.max(insets.bottom, 12);
   
   // Create styles early to use in all render paths
   const styles = createStyles(theme);
@@ -109,7 +114,7 @@ export default function FeeManagementScreen() {
   const [promoForm, setPromoForm] = useState({
     code: '',
     name: '',
-    discount_type: 'percentage' as 'percentage' | 'fixed',
+    discount_type: 'percentage' as PromoCampaign['discount_type'],
     discount_value: '',
     applies_to_registration: true,
     start_date: new Date().toISOString().split('T')[0],
@@ -145,7 +150,14 @@ export default function FeeManagementScreen() {
       if (promosError && promosError.code !== '42P01') {
         console.warn('Promos fetch error:', promosError);
       }
-      setPromos(promosData || []);
+      const now = new Date();
+      const filteredPromos = (promosData || []).filter((promo: PromoCampaign) => {
+        if (!promo.end_date) return true;
+        const endDate = new Date(promo.end_date);
+        const isPast = !Number.isNaN(endDate.getTime()) && endDate.getTime() < now.getTime();
+        return !(promo.is_active === false && isPast);
+      });
+      setPromos(filteredPromos);
       
     } catch (err: any) {
       console.error('Fetch error:', err);
@@ -261,6 +273,95 @@ export default function FeeManagementScreen() {
     );
   };
 
+  // Delete promo campaign
+  const handleDeletePromo = (promo: PromoCampaign) => {
+    Alert.alert(
+      'Delete Promo',
+      `Are you sure you want to delete "${promo.code}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await assertSupabase()
+                .from('promotional_campaigns')
+                .delete()
+                .eq('id', promo.id);
+
+              if (error) {
+                const archivePayload = {
+                  is_active: false,
+                  end_date: new Date().toISOString().split('T')[0],
+                };
+                const { error: archiveError } = await assertSupabase()
+                  .from('promotional_campaigns')
+                  .update(archivePayload)
+                  .eq('id', promo.id);
+                if (archiveError) throw archiveError;
+                Alert.alert('Archived', 'Promo archived because delete is restricted.');
+                fetchData();
+                return;
+              }
+
+              Alert.alert('Deleted', 'Promo code removed');
+              fetchData();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete promo');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Share promo campaign
+  const sharePromo = async (promo: PromoCampaign) => {
+    const discountText = promo.discount_type === 'percentage'
+      ? `${promo.discount_value}% off`
+      : `R${promo.discount_value} off`;
+    const startDate = promo.start_date
+      ? new Date(promo.start_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
+    const endDate = promo.end_date
+      ? new Date(promo.end_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
+    const dateText = startDate && endDate ? `Valid ${startDate} - ${endDate}` : endDate ? `Valid until ${endDate}` : '';
+
+    const message = `🎁 ${promo.name}\n` +
+      `Use code: ${promo.code}\n` +
+      `💰 ${discountText}\n` +
+      `${dateText ? `📅 ${dateText}\n` : ''}` +
+      `\nEnroll now via EduDash Pro!`;
+
+    try {
+      if (Platform.OS !== 'web') {
+        await Share.share({ message, title: promo.name });
+      } else if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ title: promo.name, text: message });
+      } else {
+        await Clipboard.setStringAsync(message);
+        Alert.alert(
+          'Copied to Clipboard! 📋',
+          'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      try {
+        await Clipboard.setStringAsync(message);
+        Alert.alert(
+          'Copied to Clipboard! 📋',
+          'Promo details copied. You can now paste and share via WhatsApp, email, or any other app.',
+          [{ text: 'OK' }]
+        );
+      } catch (clipError) {
+        console.error('Share promo error:', clipError);
+      }
+    }
+  };
+
   // Save promo campaign
   const handleSavePromo = async () => {
     if (!promoForm.code.trim() || !promoForm.name.trim() || !promoForm.discount_value) {
@@ -297,7 +398,7 @@ export default function FeeManagementScreen() {
       } else {
         const { error } = await supabase
           .from('promotional_campaigns')
-          .insert(payload);
+          .insert({ ...payload, created_by: user?.id || profile?.id });
         
         if (error) throw error;
         Alert.alert('Success', 'Promo created successfully');
@@ -362,7 +463,7 @@ export default function FeeManagementScreen() {
     setPromoForm({
       code: promo.code,
       name: promo.name,
-      discount_type: promo.discount_type,
+      discount_type: promo.discount_type === 'fixed_price' ? 'fixed_amount' : promo.discount_type,
       discount_value: promo.discount_value.toString(),
       applies_to_registration: promo.applies_to_registration,
       start_date: promo.start_date?.split('T')[0] || '',
@@ -514,6 +615,22 @@ export default function FeeManagementScreen() {
                     Used: {promo.current_uses}{promo.max_uses ? `/${promo.max_uses}` : ''}
                   </Text>
                 </View>
+                <View style={styles.promoActions}>
+                  <TouchableOpacity
+                    style={[styles.promoActionButton, { borderColor: theme.border }]}
+                    onPress={() => sharePromo(promo)}
+                  >
+                    <Ionicons name="share-social-outline" size={16} color={theme.primary} />
+                    <Text style={[styles.promoActionText, { color: theme.primary }]}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.promoActionButton, { borderColor: theme.error }]}
+                    onPress={() => handleDeletePromo(promo)}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={theme.error} />
+                    <Text style={[styles.promoActionText, { color: theme.error }]}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
               </TouchableOpacity>
             ))
           )}
@@ -528,23 +645,25 @@ export default function FeeManagementScreen() {
           <KeyboardAvoidingView
             style={styles.modalKeyboard}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 12 : 0}
           >
-            <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>
-                  {editingFee ? 'Edit Fee' : 'Add New Fee'}
-                </Text>
-                <TouchableOpacity onPress={() => setShowFeeModal(false)}>
-                  <Ionicons name="close" size={24} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-              
-              <ScrollView
-                style={styles.modalBody}
-                contentContainerStyle={styles.modalBodyContent}
-                keyboardShouldPersistTaps="handled"
-              >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View style={[styles.modalContent, { backgroundColor: theme.background, paddingBottom: modalPaddingBottom }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>
+                    {editingFee ? 'Edit Fee' : 'Add New Fee'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowFeeModal(false)}>
+                    <Ionicons name="close" size={24} color={theme.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView
+                  style={styles.modalBody}
+                  contentContainerStyle={[styles.modalBodyContent, { paddingBottom: modalPaddingBottom + 16 }]}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                >
               <Text style={[styles.label, { color: theme.text }]}>Fee Name *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -622,30 +741,31 @@ export default function FeeManagementScreen() {
                 />
                 <Text style={{ color: theme.text, marginLeft: 8 }}>Active</Text>
               </TouchableOpacity>
-              </ScrollView>
-              
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: theme.surface }]}
-                  onPress={() => setShowFeeModal(false)}
-                >
-                  <Text style={{ color: theme.text }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: theme.primary }]}
-                  onPress={handleSaveFee}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color={theme.onPrimary} size="small" />
-                  ) : (
-                    <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
-                      {editingFee ? 'Update' : 'Create'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                </ScrollView>
+                
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.surface }]}
+                    onPress={() => setShowFeeModal(false)}
+                  >
+                    <Text style={{ color: theme.text }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                    onPress={handleSaveFee}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color={theme.onPrimary} size="small" />
+                    ) : (
+                      <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
+                        {editingFee ? 'Update' : 'Create'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -656,23 +776,25 @@ export default function FeeManagementScreen() {
           <KeyboardAvoidingView
             style={styles.modalKeyboard}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 12 : 0}
           >
-            <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
-              <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: theme.text }]}>
-                  {editingPromo ? 'Edit Promo' : 'Add New Promo'}
-                </Text>
-                <TouchableOpacity onPress={() => setShowPromoModal(false)}>
-                  <Ionicons name="close" size={24} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-              
-              <ScrollView
-                style={styles.modalBody}
-                contentContainerStyle={styles.modalBodyContent}
-                keyboardShouldPersistTaps="handled"
-              >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View style={[styles.modalContent, { backgroundColor: theme.background, paddingBottom: modalPaddingBottom }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>
+                    {editingPromo ? 'Edit Promo' : 'Add New Promo'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowPromoModal(false)}>
+                    <Ionicons name="close" size={24} color={theme.text} />
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView
+                  style={styles.modalBody}
+                  contentContainerStyle={[styles.modalBodyContent, { paddingBottom: modalPaddingBottom + 16 }]}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                >
               <Text style={[styles.label, { color: theme.text }]}>Promo Code *</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
@@ -708,11 +830,11 @@ export default function FeeManagementScreen() {
                 <TouchableOpacity
                   style={[
                     styles.typeButton, { flex: 1 },
-                    { backgroundColor: promoForm.discount_type === 'fixed' ? theme.primary : theme.surface, borderColor: theme.border }
+                    { backgroundColor: promoForm.discount_type === 'fixed_amount' ? theme.primary : theme.surface, borderColor: theme.border }
                   ]}
-                  onPress={() => setPromoForm({ ...promoForm, discount_type: 'fixed' })}
+                  onPress={() => setPromoForm({ ...promoForm, discount_type: 'fixed_amount' })}
                 >
-                  <Text style={{ color: promoForm.discount_type === 'fixed' ? theme.onPrimary : theme.text }}>
+                  <Text style={{ color: promoForm.discount_type === 'fixed_amount' ? theme.onPrimary : theme.text }}>
                     R Fixed Amount
                   </Text>
                 </TouchableOpacity>
@@ -751,30 +873,31 @@ export default function FeeManagementScreen() {
                 />
                 <Text style={{ color: theme.text, marginLeft: 8 }}>Active</Text>
               </TouchableOpacity>
-              </ScrollView>
-              
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: theme.surface }]}
-                  onPress={() => setShowPromoModal(false)}
-                >
-                  <Text style={{ color: theme.text }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, { backgroundColor: '#10b981' }]}
-                  onPress={handleSavePromo}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={{ color: '#fff', fontWeight: '600' }}>
-                      {editingPromo ? 'Update' : 'Create'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                </ScrollView>
+                
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: theme.surface }]}
+                    onPress={() => setShowPromoModal(false)}
+                  >
+                    <Text style={{ color: theme.text }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#10b981' }]}
+                    onPress={handleSavePromo}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>
+                        {editingPromo ? 'Update' : 'Create'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -850,6 +973,17 @@ const createStyles = (theme: any) => StyleSheet.create({
   promoCode: { fontSize: 18, fontWeight: '800', letterSpacing: 1 },
   promoBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   promoStats: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  promoActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  promoActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  promoActionText: { fontSize: 12, fontWeight: '600' },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   errorText: { fontSize: 18, fontWeight: '600', marginTop: 16 },
   modalOverlay: {

@@ -27,6 +27,7 @@ function AuthCallbackContent() {
         const token = searchParams.get('token'); // PKCE token parameter
         const code = searchParams.get('code'); // PKCE code parameter
         const type = searchParams.get('type');
+        const flow = searchParams.get('flow');
         const access_token = searchParams.get('access_token');
         const refresh_token = searchParams.get('refresh_token');
         const error = searchParams.get('error');
@@ -49,7 +50,8 @@ function AuthCallbackContent() {
         if (token_hash) params.set('token_hash', token_hash);
         if (token) params.set('token', token); // PKCE token
         if (code) params.set('code', code); // PKCE code
-        if (type) params.set('type', type);
+        const resolvedType = type || (flow === 'recovery' ? 'recovery' : null);
+        if (resolvedType) params.set('type', resolvedType);
         if (access_token) params.set('access_token', access_token);
         if (refresh_token) params.set('refresh_token', refresh_token);
 
@@ -107,17 +109,17 @@ function AuthCallbackContent() {
             }
 
             // Redirect based on type
-            if (type === 'recovery') {
-              window.location.href = '/reset-password';
-            } else {
-              window.location.href = '/dashboard';
-            }
-          } else if (token_hash && type) {
-            // Magic link or email verification (legacy token_hash flow)
-            const { error: verifyError } = await supabase.auth.verifyOtp({
-              token_hash,
-              type: type as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
-            });
+          if (resolvedType === 'recovery') {
+            window.location.href = '/reset-password';
+          } else {
+            window.location.href = '/dashboard';
+          }
+        } else if (token_hash && resolvedType) {
+          // Magic link or email verification (legacy token_hash flow)
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash,
+            type: resolvedType as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
+          });
 
             if (verifyError) {
               setStatus('error');
@@ -126,12 +128,12 @@ function AuthCallbackContent() {
             }
 
             // Redirect based on type
-            if (type === 'recovery') {
-              window.location.href = '/reset-password';
-            } else {
-              window.location.href = '/dashboard';
-            }
-          } else if (token && type === 'magiclink') {
+          if (resolvedType === 'recovery') {
+            window.location.href = '/reset-password';
+          } else {
+            window.location.href = '/dashboard';
+          }
+        } else if (token && resolvedType === 'magiclink') {
             // PKCE token parameter (try verifyOtp)
             const { data, error: verifyError } = await supabase.auth.verifyOtp({
               token_hash: token,

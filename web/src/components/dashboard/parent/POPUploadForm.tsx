@@ -142,7 +142,6 @@ export function POPUploadForm({
       payment_method: paymentMethod,
       payment_date: isoDate,
       payment_reference: studentCode, // Always use the child's unique code
-      fee_id: feeId || undefined,
     });
     
     if (result) {

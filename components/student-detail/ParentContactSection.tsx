@@ -22,11 +22,14 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
   const styles = createStyles(theme);
   const { showAlert, alertProps } = useAlertModal();
 
-  const handleContactParent = (type: 'call' | 'email' | 'sms') => {
-    if (!student?.parent_phone && !student?.parent_email) {
+  const handleContact = (
+    type: 'call' | 'email' | 'sms',
+    contact: { phone?: string | null; email?: string | null; label: string }
+  ) => {
+    if (!contact.phone && !contact.email) {
       showAlert({
         title: 'No Contact',
-        message: 'No parent contact information available.',
+        message: `No ${contact.label.toLowerCase()} contact information available.`,
         type: 'warning',
       });
       return;
@@ -34,68 +37,96 @@ export const ParentContactSection: React.FC<ParentContactSectionProps> = ({
 
     switch (type) {
       case 'call':
-        if (student.parent_phone) {
-          Linking.openURL(`tel:${student.parent_phone}`);
+        if (contact.phone) {
+          Linking.openURL(`tel:${contact.phone}`);
         }
         break;
       case 'email':
-        if (student.parent_email) {
-          Linking.openURL(`mailto:${student.parent_email}`);
+        if (contact.email) {
+          Linking.openURL(`mailto:${contact.email}`);
         }
         break;
       case 'sms':
-        if (student.parent_phone) {
-          Linking.openURL(`sms:${student.parent_phone}`);
+        if (contact.phone) {
+          Linking.openURL(`sms:${contact.phone}`);
         }
         break;
     }
   };
 
+  const parentContact = {
+    label: 'Parent',
+    name: student.parent_name,
+    email: student.parent_email,
+    phone: student.parent_phone,
+  };
+
+  const guardianContact = {
+    label: 'Guardian',
+    name: student.guardian_name,
+    email: student.guardian_email,
+    phone: student.guardian_phone,
+  };
+
+  const showGuardian =
+    !!(guardianContact.name || guardianContact.email || guardianContact.phone) &&
+    student.guardian_id !== student.parent_id;
+
+  const renderContactCard = (contact: typeof parentContact) => (
+    <View style={styles.contactCard} key={contact.label}>
+      <Text style={styles.contactLabel}>{contact.label}</Text>
+      {contact.name ? (
+        <>
+          <Text style={styles.parentName}>{contact.name}</Text>
+          {contact.email && <Text style={styles.contactDetail}>{contact.email}</Text>}
+          {contact.phone && <Text style={styles.contactDetail}>{contact.phone}</Text>}
+        </>
+      ) : (
+        <Text style={styles.noContact}>{`No ${contact.label.toLowerCase()} contact information`}</Text>
+      )}
+
+      {(contact.phone || contact.email) && (
+        <View style={styles.contactActions}>
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => handleContact('call', contact)}
+          >
+            <Ionicons name="call" size={20} color="#10B981" />
+            <Text style={styles.contactButtonText}>Call</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => handleContact('sms', contact)}
+          >
+            <Ionicons name="chatbubble" size={20} color="#007AFF" />
+            <Text style={styles.contactButtonText}>SMS</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => handleContact('email', contact)}
+          >
+            <Ionicons name="mail" size={20} color="#8B5CF6" />
+            <Text style={styles.contactButtonText}>Email</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Parent/Guardian</Text>
-        {student.parent_name ? (
-          <View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.parentName}>{student.parent_name}</Text>
-              {student.parent_email && (
-                <Text style={styles.contactDetail}>{student.parent_email}</Text>
-              )}
-              {student.parent_phone && (
-                <Text style={styles.contactDetail}>{student.parent_phone}</Text>
-              )}
-            </View>
-            
-            <View style={styles.contactActions}>
-              <TouchableOpacity 
-                style={styles.contactButton}
-                onPress={() => handleContactParent('call')}
-              >
-                <Ionicons name="call" size={20} color="#10B981" />
-                <Text style={styles.contactButtonText}>Call</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.contactButton}
-                onPress={() => handleContactParent('sms')}
-              >
-                <Ionicons name="chatbubble" size={20} color="#007AFF" />
-                <Text style={styles.contactButtonText}>SMS</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.contactButton}
-                onPress={() => handleContactParent('email')}
-              >
-                <Ionicons name="mail" size={20} color="#8B5CF6" />
-                <Text style={styles.contactButtonText}>Email</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <Text style={styles.noContact}>No parent contact information</Text>
-        )}
+        <Text style={styles.sectionTitle}>Parent & Guardian Contacts</Text>
+        {renderContactCard(parentContact)}
+        {showGuardian && renderContactCard(guardianContact)}
+        {!parentContact.name &&
+          !parentContact.email &&
+          !parentContact.phone &&
+          !showGuardian && (
+            <Text style={styles.noContact}>No parent or guardian contact information</Text>
+          )}
       </View>
       <AlertModal {...alertProps} />
     </>
@@ -120,8 +151,17 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     color: theme.text,
     marginBottom: 16,
   },
-  contactInfo: {
-    marginBottom: 16,
+  contactCard: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  contactLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: theme.textSecondary,
+    marginBottom: 6,
   },
   parentName: {
     fontSize: 18,

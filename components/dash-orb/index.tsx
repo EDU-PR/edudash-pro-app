@@ -55,6 +55,13 @@ interface DashOrbProps {
   autoOpen?: boolean;
   /** Hide floating button (useful for full-screen mode) */
   hideButton?: boolean;
+  /** Optional learner context for parent tutoring */
+  learnerContext?: {
+    ageYears?: number | null;
+    grade?: string | null;
+    name?: string | null;
+    schoolType?: string | null;
+  };
 }
 
 export default function DashOrb({
@@ -63,12 +70,16 @@ export default function DashOrb({
   onCommandExecuted,
   autoOpen = false,
   hideButton = false,
+  learnerContext,
 }: DashOrbProps) {
   // Get user profile for role-based AI endpoint selection
   const { profile } = useAuth();
   const userRole = profile?.role?.toLowerCase() || '';
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
+  const learnerAgeYears = typeof learnerContext?.ageYears === 'number' ? learnerContext.ageYears : null;
+  const learnerGrade = learnerContext?.grade || null;
+  const learnerName = learnerContext?.name || null;
   
   const [isExpanded, setIsExpanded] = useState(!!autoOpen);
   const [inputText, setInputText] = useState('');
@@ -603,13 +614,17 @@ export default function DashOrb({
         : `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
       
       // Build request body based on endpoint
-      const ageYears = (profile?.date_of_birth && ['student', 'learner'].includes(normalizedRole))
-        ? calculateAge(profile.date_of_birth)
-        : null;
+      const isLearnerRole = ['student', 'learner'].includes(normalizedRole);
+      const ageYears = isLearnerRole
+        ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
+        : (normalizedRole === 'parent' ? learnerAgeYears : null);
 
       const ageContext = ageYears
-        ? `User age: ${ageYears}. Provide age-appropriate, child-safe guidance.`
-        : (['student', 'learner'].includes(normalizedRole) ? 'Provide age-appropriate, child-safe guidance.' : undefined);
+        ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.`
+        : (isLearnerRole ? 'Provide age-appropriate, child-safe guidance.' : undefined);
+      const gradeContext = learnerGrade ? `Learner grade: ${learnerGrade}.` : undefined;
+      const nameContext = learnerName ? `Learner name: ${learnerName}.` : undefined;
+      const schoolTypeContext = learnerContext?.schoolType ? `School type: ${learnerContext.schoolType}.` : undefined;
 
       const roleContext = isTutorRole
         ? 'Role: Parent/Student tutor. Use diagnose → teach → practice. Start with one diagnostic question and WAIT. Ask one question at a time. Avoid teacher/admin-only sections.'
@@ -633,6 +648,9 @@ export default function DashOrb({
               prompt: command,
               context: [
                 history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
+                nameContext,
+                gradeContext,
+                schoolTypeContext,
                 ageContext,
                 roleContext,
                 lessonContext,
@@ -746,7 +764,9 @@ export default function DashOrb({
   const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
 
   const buildTutorPrompt = (basePrompt: string, options?: { topicHint?: string | null; requireDetails?: boolean }) => {
-    const ageYears = profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null;
+    const ageYears = ['student', 'learner'].includes(normalizedRole)
+      ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
+      : learnerAgeYears;
     const autoAgeGroup = quickActionAge === 'auto' ? resolveAgeGroupFromYears(ageYears) : null;
     const effectiveAgeGroup = quickActionAge === 'auto' ? (autoAgeGroup || 'auto') : quickActionAge;
 
@@ -779,6 +799,7 @@ export default function DashOrb({
       basePrompt,
       roleDirective,
       learnerHint ? `Learner profile: ${learnerHint}.` : '',
+      learnerGrade ? `Learner grade: ${learnerGrade}.` : '',
       options?.topicHint ? `Topic: ${options.topicHint}.` : '',
       interactionRules,
       detailRule,

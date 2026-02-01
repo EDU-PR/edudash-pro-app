@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
-import { isExamEligibleChild } from '@/lib/utils/gradeUtils';
+import { getGradeNumber, isExamEligibleChild } from '@/lib/utils/gradeUtils';
+import { calculateAgeOnDate } from '@/lib/utils/dateUtils';
 import {
   MessageCircle,
   Users,
@@ -70,6 +71,13 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
   const hasExamEligibleChild = useMemo(() => {
     if (!activeChild) return false;
     return isExamEligibleChild(activeChild.grade, activeChild.dateOfBirth);
+  }, [activeChild]);
+  const isPreschoolChild = useMemo(() => {
+    if (!activeChild) return false;
+    const gradeNumber = getGradeNumber(activeChild.grade);
+    if (gradeNumber === 0) return true;
+    if (!activeChild.dateOfBirth) return false;
+    return calculateAgeOnDate(activeChild.dateOfBirth, new Date()) < 6;
   }, [activeChild]);
   
   // Get pending homework count
@@ -190,11 +198,11 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
         { href: '/dashboard/parent/attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: CheckCircle2 },
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
-        ...(hasExamEligibleChild
+        ...(hasExamEligibleChild && !isPreschoolChild
           ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
           : []),
         { href: '/dashboard/parent/payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: CreditCard },
-        { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
+        ...(!isPreschoolChild ? [{ href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles }] : []),
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     } else {
@@ -203,15 +211,15 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), icon: Sparkles },
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
-        ...(hasExamEligibleChild
+        ...(hasExamEligibleChild && !isPreschoolChild
           ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
           : []),
-        { href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles },
+        ...(!isPreschoolChild ? [{ href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles }] : []),
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     }
-  }, [hasOrganization, hasExamEligibleChild, homeworkCount, t, unreadCount]);
+  }, [hasOrganization, hasExamEligibleChild, homeworkCount, isPreschoolChild, t, unreadCount]);
 
   return (
     <div className="app">

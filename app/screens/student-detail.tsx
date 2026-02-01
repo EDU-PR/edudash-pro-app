@@ -37,6 +37,7 @@ import {
   Transaction,
   calculateAge,
   ProfileCard,
+  StudentDetailsSection,
   ClassInfoSection,
   AcademicPerformanceSection,
   ParentContactSection,
@@ -182,21 +183,27 @@ export default function StudentDetailScreen() {
         }
       }
 
-      // Fetch parent info separately if student has parent_id
-      let parentInfo: { name?: string; email?: string } = {};
-      if (studentData.parent_id) {
-        const { data: parentData } = await assertSupabase()
+      // Fetch parent/guardian info separately if student has parent_id or guardian_id
+      const contactIds = Array.from(new Set([studentData.parent_id, studentData.guardian_id].filter(Boolean)));
+      const contactMap: Record<string, { name?: string; email?: string; phone?: string }> = {};
+
+      if (contactIds.length > 0) {
+        const { data: contactProfiles } = await assertSupabase()
           .from('profiles')
-          .select('first_name, last_name, email')
-          .eq('id', studentData.parent_id)
-          .single();
-        if (parentData) {
-          parentInfo = {
-            name: `${parentData.first_name || ''} ${parentData.last_name || ''}`.trim(),
-            email: parentData.email,
+          .select('id, first_name, last_name, email, phone')
+          .in('id', contactIds);
+
+        (contactProfiles || []).forEach((profile) => {
+          contactMap[profile.id] = {
+            name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+            email: profile.email || undefined,
+            phone: profile.phone || undefined,
           };
-        }
+        });
       }
+
+      const parentInfo = studentData.parent_id ? contactMap[studentData.parent_id] || {} : {};
+      const guardianInfo = studentData.guardian_id ? contactMap[studentData.guardian_id] || {} : {};
 
       // Fetch age group info if student has age_group_id
       let ageGroupName: string | undefined;
@@ -260,11 +267,16 @@ export default function StudentDetailScreen() {
         ...studentData,
         age_months: ageInfo.months,
         age_years: ageInfo.years,
+        status: studentData.status || (studentData.is_active ? 'active' : 'inactive') || 'active',
         class_name: studentData.classes?.name,
         teacher_name: teacherName,
         parent_name: parentInfo.name,
         parent_email: parentInfo.email,
-        parent_phone: undefined,
+        parent_phone: parentInfo.phone,
+        guardian_name: guardianInfo.name,
+        guardian_email: guardianInfo.email,
+        guardian_phone: guardianInfo.phone,
+        profile_photo: studentData.avatar_url || studentData.profile_photo,
         age_group_name: ageGroupName,
         attendance_rate: attendanceRate,
         last_attendance: lastAttendance,
@@ -374,8 +386,10 @@ export default function StudentDetailScreen() {
         last_name: student?.last_name,
         medical_conditions: student?.medical_conditions,
         allergies: student?.allergies,
-        emergency_contact: student?.emergency_contact,
-        emergency_phone: student?.emergency_phone,
+        medication: student?.medication,
+        emergency_contact_name: student?.emergency_contact_name,
+        emergency_contact_phone: student?.emergency_contact_phone,
+        emergency_contact_relation: student?.emergency_contact_relation,
       });
     }
   };
@@ -394,8 +408,10 @@ export default function StudentDetailScreen() {
           last_name: editedStudent.last_name,
           medical_conditions: editedStudent.medical_conditions,
           allergies: editedStudent.allergies,
-          emergency_contact: editedStudent.emergency_contact,
-          emergency_phone: editedStudent.emergency_phone,
+          medication: editedStudent.medication,
+          emergency_contact_name: editedStudent.emergency_contact_name,
+          emergency_contact_phone: editedStudent.emergency_contact_phone,
+          emergency_contact_relation: editedStudent.emergency_contact_relation,
         })
         .eq('id', student.id);
 
@@ -634,6 +650,12 @@ export default function StudentDetailScreen() {
           editMode={editMode}
           editedStudent={editedStudent}
           onEditChange={setEditedStudent}
+        />
+
+        {/* Student Details */}
+        <StudentDetailsSection
+          student={student}
+          theme={theme}
         />
 
         {/* Class Information */}

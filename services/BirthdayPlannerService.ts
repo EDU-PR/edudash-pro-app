@@ -290,11 +290,16 @@ export class BirthdayPlannerService {
    * Get ALL birthdays for a school year (for birthday chart display)
    * Returns all students with birthdays, regardless of how far away
    */
-  static async getAllBirthdays(preschoolId: string): Promise<StudentBirthday[]> {
+  static async getAllBirthdays(preschoolId: string, year?: number): Promise<StudentBirthday[]> {
     try {
       const supabase = assertSupabase();
+      const targetYear = year ?? new Date().getFullYear();
+      const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
       
-      console.log('[BirthdayPlannerService.getAllBirthdays] Fetching for preschoolId:', preschoolId);
+      if (debugEnabled) {
+        console.log('[BirthdayPlannerService.getAllBirthdays] Fetching for preschoolId:', preschoolId);
+        console.log('[BirthdayPlannerService.getAllBirthdays] Target year:', targetYear);
+      }
       
       // First, count total students to help diagnose issues
       const { count: totalStudents } = await supabase
@@ -303,7 +308,9 @@ export class BirthdayPlannerService {
         .eq('preschool_id', preschoolId)
         .eq('is_active', true);
       
-      console.log('[BirthdayPlannerService.getAllBirthdays] Total active students:', totalStudents);
+      if (debugEnabled) {
+        console.log('[BirthdayPlannerService.getAllBirthdays] Total active students:', totalStudents);
+      }
       
       // Simplified query - fetch students with classes only, get parent info separately if needed
       // This matches how student-detail.tsx fetches data successfully
@@ -328,22 +335,27 @@ export class BirthdayPlannerService {
         throw error;
       }
       
-      console.log('[BirthdayPlannerService.getAllBirthdays] Students with DOB:', students?.length || 0);
-      console.log('[BirthdayPlannerService.getAllBirthdays] Students without DOB:', (totalStudents || 0) - (students?.length || 0));
+      if (debugEnabled) {
+        console.log('[BirthdayPlannerService.getAllBirthdays] Students with DOB:', students?.length || 0);
+        console.log('[BirthdayPlannerService.getAllBirthdays] Students without DOB:', (totalStudents || 0) - (students?.length || 0));
+      }
       
       // Debug: Log first few students to verify DOB format
-      if (students && students.length > 0) {
-        console.log('[BirthdayPlannerService.getAllBirthdays] Sample DOB:', students.slice(0, 3).map(s => ({
-          name: `${s.first_name} ${s.last_name}`,
-          dob: s.date_of_birth
-        })));
-      } else {
-        console.log('[BirthdayPlannerService.getAllBirthdays] No students with DOB found - check if date_of_birth is populated in student profiles');
+      if (debugEnabled) {
+        if (students && students.length > 0) {
+          console.log('[BirthdayPlannerService.getAllBirthdays] Sample DOB:', students.slice(0, 3).map(s => ({
+            name: `${s.first_name} ${s.last_name}`,
+            dob: s.date_of_birth
+          })));
+        } else {
+          console.log('[BirthdayPlannerService.getAllBirthdays] No students with DOB found - check if date_of_birth is populated in student profiles');
+        }
       }
 
       const birthdays: StudentBirthday[] = (students || [])
         .map((student: any) => {
-          const birthDate = getThisYearsBirthday(student.date_of_birth);
+          const dob = new Date(student.date_of_birth);
+          const birthDate = new Date(targetYear, dob.getMonth(), dob.getDate());
           const daysUntil = getDaysUntil(birthDate);
           
           const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;

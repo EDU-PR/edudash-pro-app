@@ -16,10 +16,25 @@ export interface StudentDetail {
   class_id: string | null;
   parent_id: string | null;
   guardian_id: string | null;
-  medical_conditions?: string;
-  allergies?: string;
-  emergency_contact?: string;
-  emergency_phone?: string;
+  gender?: string | null;
+  grade?: string | null;
+  grade_level?: string | null;
+  academic_year?: string | null;
+  student_id?: string | null;
+  id_number?: string | null;
+  home_address?: string | null;
+  home_phone?: string | null;
+  notes?: string | null;
+  payment_verified?: boolean | null;
+  payment_date?: string | null;
+  registration_fee_amount?: number | null;
+  registration_fee_paid?: boolean | null;
+  medical_conditions?: string | null;
+  allergies?: string | null;
+  medication?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relation?: string | null;
   profile_photo?: string;
   // Related data
   class_name?: string;
@@ -27,6 +42,9 @@ export interface StudentDetail {
   parent_name?: string;
   parent_email?: string;
   parent_phone?: string;
+  guardian_name?: string;
+  guardian_email?: string;
+  guardian_phone?: string;
   age_group_name?: string;
   // Calculated fields
   attendance_rate?: number;
@@ -72,8 +90,15 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
-export const calculateAge = (dateOfBirth: string): { months: number; years: number } => {
+export const calculateAge = (dateOfBirth?: string | null): { months: number; years: number } => {
+  if (!dateOfBirth) {
+    return { months: 0, years: 0 };
+  }
+
   const birth = new Date(dateOfBirth);
+  if (Number.isNaN(birth.getTime())) {
+    return { months: 0, years: 0 };
+  }
   const today = new Date();
   const totalMonths = (today.getFullYear() - birth.getFullYear()) * 12 + 
                      (today.getMonth() - birth.getMonth());

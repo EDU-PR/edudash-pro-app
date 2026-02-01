@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -22,6 +23,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import DashOrb from '@/components/dash-orb';
+import { SuperAdminAIControl, SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
 
 interface DashboardStats {
   total_users: number;
@@ -73,6 +75,8 @@ export default function SuperAdminDashboardScreen() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [recentAlerts, setRecentAlerts] = useState<RecentAlert[]>([]);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
+  const [aiControl, setAiControl] = useState<SuperAdminAIControlState | null>(null);
+  const [aiControlLoading, setAiControlLoading] = useState(false);
 
   // Quick actions configuration
   const quickActions: QuickAction[] = [
@@ -440,8 +444,106 @@ export default function SuperAdminDashboardScreen() {
     }
   }, [profile?.role]);
 
+  const loadAIControl = useCallback(async (force = false) => {
+    if (!isSuperAdmin(profile?.role) || !user?.id) return;
+
+    setAiControlLoading(true);
+    try {
+      const state = await SuperAdminAIControl.getControlState({ force });
+      setAiControl(state);
+    } catch (error) {
+      console.error('[SuperAdminDashboard] Failed to load AI control state:', error);
+      Alert.alert('AI Control', 'Unable to load AI autonomy controls. Please try again.');
+    } finally {
+      setAiControlLoading(false);
+    }
+  }, [profile?.role, user?.id]);
+
+  const claimOwnership = useCallback(async () => {
+    if (!user?.id) return;
+    setAiControlLoading(true);
+    try {
+      const updated = await SuperAdminAIControl.claimOwnership(user.id);
+      setAiControl(updated);
+      Alert.alert('Ownership Claimed', 'You are now the platform owner for Dash AI autonomy.');
+    } catch (error) {
+      console.error('[SuperAdminDashboard] Failed to claim ownership:', error);
+      Alert.alert('Ownership Error', 'Unable to claim ownership. It may already be claimed.');
+    } finally {
+      setAiControlLoading(false);
+    }
+  }, [user?.id]);
+
+  const updateAIControl = useCallback(async (patch: Partial<SuperAdminAIControlState>) => {
+    if (!user?.id) return;
+    if (!aiControl) return;
+
+    const isOwner = aiControl.owner_user_id === user.id;
+    if (!isOwner) {
+      Alert.alert('Owner Only', 'Only the platform owner can change Dash AI autonomy settings.');
+      return;
+    }
+
+    setAiControlLoading(true);
+    try {
+      const updated = await SuperAdminAIControl.updateControlState(patch, user.id, { force: true });
+      setAiControl(updated);
+    } catch (error) {
+      console.error('[SuperAdminDashboard] Failed to update AI control state:', error);
+      Alert.alert('Update Error', 'Unable to update AI autonomy settings. Please try again.');
+    } finally {
+      setAiControlLoading(false);
+    }
+  }, [aiControl, user?.id]);
+
+  const applyAutonomyPreset = useCallback(async (preset: 'lockdown' | 'assistant' | 'copilot' | 'full') => {
+    if (!aiControl) return;
+
+    switch (preset) {
+      case 'lockdown':
+        await updateAIControl({
+          autonomy_enabled: false,
+          autonomy_mode: 'assistant',
+          auto_execute_low: true,
+          auto_execute_medium: false,
+          auto_execute_high: false,
+        });
+        break;
+      case 'assistant':
+        await updateAIControl({
+          autonomy_enabled: true,
+          autonomy_mode: 'assistant',
+          auto_execute_low: true,
+          auto_execute_medium: false,
+          auto_execute_high: false,
+        });
+        break;
+      case 'copilot':
+        await updateAIControl({
+          autonomy_enabled: true,
+          autonomy_mode: 'copilot',
+          auto_execute_low: true,
+          auto_execute_medium: true,
+          auto_execute_high: false,
+        });
+        break;
+      case 'full':
+        await updateAIControl({
+          autonomy_enabled: true,
+          autonomy_mode: 'full',
+          auto_execute_low: true,
+          auto_execute_medium: true,
+          auto_execute_high: true,
+        });
+        break;
+      default:
+        break;
+    }
+  }, [aiControl, updateAIControl]);
+
   useEffect(() => {
     fetchDashboardData();
+    loadAIControl(true);
     
     // Track dashboard opening
     if (user?.id) {
@@ -450,13 +552,13 @@ export default function SuperAdminDashboardScreen() {
         platform: Platform.OS,
       });
     }
-  }, [fetchDashboardData, user?.id]);
+  }, [fetchDashboardData, loadAIControl, user?.id]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDashboardData();
+    await Promise.all([fetchDashboardData(), loadAIControl(true)]);
     setRefreshing(false);
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, loadAIControl]);
 
   const handleQuickAction = (action: QuickAction) => {
     track('edudash.superadmin.quick_action', {
@@ -488,6 +590,18 @@ export default function SuperAdminDashboardScreen() {
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hr ago`;
     return `${Math.floor(diffMins / 1440)} day ago`;
   };
+
+  const isOwner = !!aiControl?.owner_user_id && aiControl?.owner_user_id === user?.id;
+  const isOwnerUnclaimed = aiControl ? !aiControl.owner_user_id : false;
+  const canEditAIControl = isOwner && !aiControlLoading;
+  const highRiskAvailable = aiControl?.autonomy_mode === 'full';
+  const ownerStatusText = !aiControl
+    ? 'Owner status unavailable.'
+    : isOwner
+      ? 'You control Dash AI autonomy.'
+      : isOwnerUnclaimed
+        ? 'Ownership is unclaimed.'
+        : 'Owned by another account.';
 
   // Show loading state while checking authentication
   if (authLoading || profileLoading) {
@@ -570,6 +684,232 @@ export default function SuperAdminDashboardScreen() {
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
+        {/* Dash AI Owner Controls */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Dash AI Owner Controls</Text>
+          <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+            One-owner autonomy controls for when you're away
+          </Text>
+          <View style={[styles.aiControlCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.aiControlHeader}>
+              <View style={styles.aiControlOwnerInfo}>
+                <Text style={[styles.aiControlTitle, { color: theme.text }]}>Platform Owner</Text>
+                <Text style={[styles.aiControlSubtext, { color: theme.textSecondary }]}>
+                  {ownerStatusText}
+                </Text>
+              </View>
+              {aiControlLoading ? (
+                <ActivityIndicator size="small" color={theme.primary} />
+              ) : !aiControl ? (
+                <View style={[
+                  styles.aiOwnerBadge,
+                  { backgroundColor: theme.warningLight, borderColor: theme.warning }
+                ]}>
+                  <Text style={[styles.aiOwnerBadgeText, { color: theme.warning }]}>
+                    OFFLINE
+                  </Text>
+                </View>
+              ) : isOwnerUnclaimed ? (
+                <TouchableOpacity
+                  style={[styles.aiOwnerButton, { backgroundColor: theme.primary }]}
+                  onPress={claimOwnership}
+                >
+                  <Text style={[styles.aiOwnerButtonText, { color: theme.onPrimary }]}>Claim</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[
+                  styles.aiOwnerBadge,
+                  {
+                    backgroundColor: isOwner ? theme.successLight : theme.warningLight,
+                    borderColor: isOwner ? theme.success : theme.warning,
+                  }
+                ]}>
+                  <Text style={[
+                    styles.aiOwnerBadgeText,
+                    { color: isOwner ? theme.success : theme.warning }
+                  ]}>
+                    {isOwner ? 'OWNER' : 'READ ONLY'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {!aiControl && !aiControlLoading && (
+              <Text style={[styles.aiControlSubtext, { color: theme.textSecondary }]}>
+                Unable to load autonomy settings. Pull to refresh.
+              </Text>
+            )}
+
+            {aiControl && (
+              <>
+                <View style={[styles.aiControlDivider, { backgroundColor: theme.divider }]} />
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Autonomy Enabled</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Allow Dash AI to run tasks when you're unavailable
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!aiControl.autonomy_enabled}
+                    onValueChange={(value) => updateAIControl({ autonomy_enabled: value })}
+                    disabled={!canEditAIControl}
+                  />
+                </View>
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Autonomy Mode</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Choose how proactive Dash should be
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.aiModeRow}>
+                  {(['assistant', 'copilot', 'full'] as const).map((mode) => {
+                    const isActive = aiControl.autonomy_mode === mode;
+                    return (
+                      <TouchableOpacity
+                        key={mode}
+                        style={[
+                          styles.aiModeButton,
+                          {
+                            backgroundColor: isActive ? theme.primary : theme.surfaceVariant,
+                            borderColor: isActive ? theme.primary : theme.border,
+                            opacity: canEditAIControl ? 1 : 0.6,
+                          }
+                        ]}
+                        onPress={() =>
+                          updateAIControl({
+                            autonomy_mode: mode,
+                            ...(mode !== 'full' ? { auto_execute_high: false } : {})
+                          })
+                        }
+                        disabled={!canEditAIControl}
+                      >
+                        <Text style={[
+                          styles.aiModeButtonText,
+                          { color: isActive ? theme.onPrimary : theme.text }
+                        ]}>
+                          {mode === 'assistant' ? 'Assistant' : mode === 'copilot' ? 'Copilot' : 'Full'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <View style={[styles.aiControlDivider, { backgroundColor: theme.divider }]} />
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Auto-execute Low Risk</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Routine actions (safe to run automatically)
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!aiControl.auto_execute_low}
+                    onValueChange={(value) => updateAIControl({ auto_execute_low: value })}
+                    disabled={!canEditAIControl}
+                  />
+                </View>
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Auto-execute Medium Risk</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Requires more caution; enable for copilot/full
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!aiControl.auto_execute_medium}
+                    onValueChange={(value) => updateAIControl({ auto_execute_medium: value })}
+                    disabled={!canEditAIControl || aiControl.autonomy_mode === 'assistant'}
+                  />
+                </View>
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Auto-execute High Risk</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Only available in Full mode
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!aiControl.auto_execute_high && highRiskAvailable}
+                    onValueChange={(value) => updateAIControl({ auto_execute_high: value })}
+                    disabled={!canEditAIControl || !highRiskAvailable}
+                  />
+                </View>
+
+                <View style={styles.aiControlRow}>
+                  <View style={styles.aiControlInfo}>
+                    <Text style={[styles.aiControlLabel, { color: theme.text }]}>Confirm Navigation</Text>
+                    <Text style={[styles.aiControlHint, { color: theme.textSecondary }]}>
+                      Require approval before app navigation
+                    </Text>
+                  </View>
+                  <Switch
+                    value={!!aiControl.require_confirm_navigation}
+                    onValueChange={(value) => updateAIControl({ require_confirm_navigation: value })}
+                    disabled={!canEditAIControl}
+                  />
+                </View>
+
+                {!aiControl.autonomy_enabled && (
+                  <Text style={[styles.aiControlNote, { color: theme.textSecondary }]}>
+                    Autonomy is disabled. Dash will request approval for actions.
+                  </Text>
+                )}
+
+                <View style={styles.aiPresetRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.aiPresetButton,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant, opacity: canEditAIControl ? 1 : 0.6 }
+                    ]}
+                    onPress={() => applyAutonomyPreset('lockdown')}
+                    disabled={!canEditAIControl}
+                  >
+                    <Text style={[styles.aiPresetButtonText, { color: theme.text }]}>Lockdown</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.aiPresetButton,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant, opacity: canEditAIControl ? 1 : 0.6 }
+                    ]}
+                    onPress={() => applyAutonomyPreset('assistant')}
+                    disabled={!canEditAIControl}
+                  >
+                    <Text style={[styles.aiPresetButtonText, { color: theme.text }]}>Assistant</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.aiPresetButton,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant, opacity: canEditAIControl ? 1 : 0.6 }
+                    ]}
+                    onPress={() => applyAutonomyPreset('copilot')}
+                    disabled={!canEditAIControl}
+                  >
+                    <Text style={[styles.aiPresetButtonText, { color: theme.text }]}>Copilot</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.aiPresetButton,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant, opacity: canEditAIControl ? 1 : 0.6 }
+                    ]}
+                    onPress={() => applyAutonomyPreset('full')}
+                    disabled={!canEditAIControl}
+                  >
+                    <Text style={[styles.aiPresetButtonText, { color: theme.text }]}>Full</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+
         {/* Global Platform Overview */}
         {dashboardStats && (
           <View style={styles.section}>
@@ -929,6 +1269,109 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     fontStyle: 'italic',
     lineHeight: 18,
+  },
+  aiControlCard: {
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+  },
+  aiControlHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  aiControlOwnerInfo: {
+    flex: 1,
+  },
+  aiControlTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  aiControlSubtext: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  aiOwnerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  aiOwnerButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  aiOwnerBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  aiOwnerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  aiControlDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  aiControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  aiControlInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  aiControlLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  aiControlHint: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  aiModeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  aiModeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  aiModeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  aiControlNote: {
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  aiPresetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  aiPresetButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  aiPresetButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   actionsGrid: {
     flexDirection: 'row',

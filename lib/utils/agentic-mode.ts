@@ -3,7 +3,7 @@
  * Determines AI assistant capabilities based on user role
  */
 
-import { DashAgenticIntegration, AgenticCapabilities } from '@/services/DashAgenticIntegration';
+import { DashAgenticIntegration, AgenticCapabilities, AgenticContext } from '@/services/DashAgenticIntegration';
 
 /**
  * Check if user has agentic mode enabled
@@ -12,7 +12,7 @@ import { DashAgenticIntegration, AgenticCapabilities } from '@/services/DashAgen
 export function isAgenticModeEnabled(role?: string): boolean {
   if (!role) return false;
   
-  const capabilities = DashAgenticIntegration.getAgenticCapabilities(role);
+  const capabilities = DashAgenticIntegration.getRoleBasedCapabilities(role);
   return capabilities.mode === 'agent';
 }
 
@@ -31,7 +31,16 @@ export function getAgenticCapabilities(role?: string): AgenticCapabilities {
     };
   }
   
-  return DashAgenticIntegration.getAgenticCapabilities(role);
+  return DashAgenticIntegration.getRoleBasedCapabilities(role);
+}
+
+/**
+ * Get agentic capabilities for a fully qualified context (owner-aware).
+ */
+export async function getAgenticCapabilitiesForContext(
+  context: AgenticContext
+): Promise<AgenticCapabilities> {
+  return DashAgenticIntegration.getAgenticCapabilities(context);
 }
 
 /**

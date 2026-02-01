@@ -87,13 +87,14 @@ const getBirthdayWindow = (
   const entries: UpcomingBirthday[] = [];
   const dayMs = 1000 * 60 * 60 * 24;
   const seen = new Set<string>();
+  const currentYear = startOfToday.getFullYear();
 
   if (mode === 'all') {
     students.forEach((student) => {
       const parts = parseDateParts(student.dateOfBirth);
       if (!parts) return;
 
-      const thisYearBirthday = new Date(startOfToday.getFullYear(), parts.month - 1, parts.day);
+      const thisYearBirthday = new Date(currentYear, parts.month - 1, parts.day);
       const daysUntil = Math.round((thisYearBirthday.getTime() - startOfToday.getTime()) / dayMs);
       const key = `${student.id}|${formatDateKey(thisYearBirthday)}`;
       if (!seen.has(key)) {
@@ -118,32 +119,30 @@ const getBirthdayWindow = (
     const parts = parseDateParts(student.dateOfBirth);
     if (!parts) return;
 
-    const thisYearBirthday = new Date(startOfToday.getFullYear(), parts.month - 1, parts.day);
-    const nextDate = thisYearBirthday < startOfToday
-      ? new Date(startOfToday.getFullYear() + 1, parts.month - 1, parts.day)
-      : thisYearBirthday;
-    const prevDate = thisYearBirthday < startOfToday
-      ? thisYearBirthday
-      : new Date(startOfToday.getFullYear() - 1, parts.month - 1, parts.day);
+    const thisYearBirthday = new Date(currentYear, parts.month - 1, parts.day);
 
     if (includeUpcoming) {
-      const daysUntil = Math.round((nextDate.getTime() - startOfToday.getTime()) / dayMs);
-      if (daysUntil >= 0 && daysUntil <= UPCOMING_WINDOW_DAYS) {
-        const key = `${student.id}|${formatDateKey(nextDate)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          entries.push({ student, date: nextDate, daysUntil, isPast: false, key });
+      if (thisYearBirthday >= startOfToday) {
+        const daysUntil = Math.round((thisYearBirthday.getTime() - startOfToday.getTime()) / dayMs);
+        if (daysUntil >= 0 && daysUntil <= UPCOMING_WINDOW_DAYS) {
+          const key = `${student.id}|${formatDateKey(thisYearBirthday)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            entries.push({ student, date: thisYearBirthday, daysUntil, isPast: false, key });
+          }
         }
       }
     }
 
     if (includePast) {
-      const daysSince = Math.round((startOfToday.getTime() - prevDate.getTime()) / dayMs);
-      if (daysSince >= 0 && daysSince <= PAST_WINDOW_DAYS) {
-        const key = `${student.id}|${formatDateKey(prevDate)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          entries.push({ student, date: prevDate, daysUntil: -daysSince, isPast: true, key });
+      if (thisYearBirthday < startOfToday) {
+        const daysSince = Math.round((startOfToday.getTime() - thisYearBirthday.getTime()) / dayMs);
+        if (daysSince >= 0 && daysSince <= PAST_WINDOW_DAYS) {
+          const key = `${student.id}|${formatDateKey(thisYearBirthday)}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            entries.push({ student, date: thisYearBirthday, daysUntil: -daysSince, isPast: true, key });
+          }
         }
       }
     }
@@ -158,7 +157,7 @@ const getBirthdayWindow = (
     return entries.slice(0, MAX_UPCOMING_BIRTHDAYS);
   }
 
-  return entries.slice(0, MAX_UPCOMING_BIRTHDAYS);
+  return entries;
 };
 
 export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> = ({ organizationId }) => {
@@ -168,6 +167,8 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   const styles = useMemo(() => createStyles(theme), [theme]);
   const orgType = useMemo(() => getOrganizationType(profile), [profile]);
   const isPreschool = orgType === 'preschool';
+  const isTeacherRole = profile?.role === 'teacher';
+  const useSchoolWide = isPreschool && !isTeacherRole;
 
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedBirthdayKey, setSelectedBirthdayKey] = useState<string | null>(null);
@@ -222,19 +223,19 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   }, [organizationId]);
 
   useEffect(() => {
-    if (isPreschool) {
+    if (useSchoolWide) {
       void loadSchoolStudents();
     }
-  }, [isPreschool, loadSchoolStudents]);
+  }, [useSchoolWide, loadSchoolStudents]);
 
-  const activeStudents = isPreschool ? schoolStudents : teacherStudents;
-  const activeStudentsLoading = isPreschool ? loadingSchoolStudents : teacherStudentsLoading;
+  const activeStudents = useSchoolWide ? schoolStudents : teacherStudents;
+  const activeStudentsLoading = useSchoolWide ? loadingSchoolStudents : teacherStudentsLoading;
   const teacherStudentIds = useMemo(() => new Set(teacherStudents.map((student) => student.id)), [teacherStudents]);
 
   const classGroups = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; students: TeacherStudentSummary[] }>();
 
-    if (isPreschool) {
+    if (useSchoolWide) {
       return Array.from(groups.values());
     }
 
@@ -247,7 +248,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
     });
 
     return Array.from(groups.values());
-  }, [activeStudents, isPreschool, t]);
+  }, [activeStudents, useSchoolWide, t]);
 
   useEffect(() => {
     if (!isPreschool && !selectedClassId && classGroups.length > 0) {
@@ -261,7 +262,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   );
 
   const classStudents = isPreschool ? teacherStudents : (selectedClass?.students ?? []);
-  const birthdaySourceStudents = isPreschool ? schoolStudents : classStudents;
+  const birthdaySourceStudents = useSchoolWide ? schoolStudents : classStudents;
   const upcomingBirthdays = useMemo(
     () => getBirthdayWindow(birthdaySourceStudents, birthdayWindowMode),
     [birthdaySourceStudents, birthdayWindowMode]
@@ -294,22 +295,26 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   const donationDate = selectedBirthday
     ? formatDateKey(celebrationDate ?? selectedBirthday.date)
     : null;
-  const classIdForRecord = !isPreschool && selectedClassId && selectedClassId !== 'unassigned' ? selectedClassId : undefined;
+  const classIdForRecord = !useSchoolWide
+    ? (selectedClassId && selectedClassId !== 'unassigned'
+      ? selectedClassId
+      : selectedBirthday?.student.classId ?? undefined)
+    : undefined;
   const emptyMessage = useMemo(() => {
     if (birthdayWindowMode === 'recent') {
-      return isPreschool
+      return isPreschool && useSchoolWide
         ? t('dashboard.birthday_donations.no_birthdays_recent_school', { defaultValue: 'No recent birthdays for the school.' })
         : t('dashboard.birthday_donations.no_birthdays_recent', { defaultValue: 'No recent birthdays for this class.' });
     }
     if (birthdayWindowMode === 'all') {
-      return isPreschool
+      return isPreschool && useSchoolWide
         ? t('dashboard.birthday_donations.no_birthdays_all_school', { defaultValue: 'No birthdays found for the selected range.' })
         : t('dashboard.birthday_donations.no_birthdays_all', { defaultValue: 'No birthdays found for the selected range.' });
     }
-    return isPreschool
+    return isPreschool && useSchoolWide
       ? t('dashboard.birthday_donations.no_birthdays_school', { defaultValue: 'No upcoming birthdays for the school.' })
       : t('dashboard.birthday_donations.no_birthdays', { defaultValue: 'No upcoming birthdays for this class.' });
-  }, [birthdayWindowMode, isPreschool, t]);
+  }, [birthdayWindowMode, isPreschool, useSchoolWide, t]);
 
   const loadDonations = useCallback(async () => {
     if (!organizationId || !donationDate || !selectedBirthday) return;
@@ -348,10 +353,10 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   }, [loadDonations]);
 
   const visibleDonations = useMemo(() => (
-    isPreschool
+    isPreschool && !useSchoolWide
       ? donations.filter((entry) => !entry.payerStudentId || teacherStudentIds.has(entry.payerStudentId))
       : donations
-  ), [donations, isPreschool, teacherStudentIds]);
+  ), [donations, isPreschool, useSchoolWide, teacherStudentIds]);
 
   const paidStudentIds = useMemo(() => new Set(
     visibleDonations
@@ -381,8 +386,8 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
     birthdaySourceStudents.filter((student) => student.id !== selectedBirthday?.student.id).length
   ), [birthdaySourceStudents, selectedBirthday]);
   const classExpectedAmount = payerStudents.length * DEFAULT_AMOUNT;
-  const expectedAmount = isPreschool ? schoolPayerCount * DEFAULT_AMOUNT : classExpectedAmount;
-  const totalReceived = (isPreschool ? donations : visibleDonations).reduce((sum, entry) => sum + entry.amount, 0);
+  const expectedAmount = isPreschool && useSchoolWide ? schoolPayerCount * DEFAULT_AMOUNT : classExpectedAmount;
+  const totalReceived = (useSchoolWide ? donations : visibleDonations).reduce((sum, entry) => sum + entry.amount, 0);
   const classReceived = visibleDonations.reduce((sum, entry) => sum + entry.amount, 0);
   const remainingAmount = Math.max(expectedAmount - totalReceived, 0);
 
@@ -448,7 +453,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
     <View style={styles.card}>
       <Text style={styles.title}>{t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}</Text>
       <Text style={styles.subtitle}>
-        {isPreschool
+        {isPreschool && useSchoolWide
           ? t('dashboard.birthday_donations.subtitle_school', { defaultValue: 'Mark R25 birthday contributions for the whole school.' })
           : t('dashboard.birthday_donations.subtitle', { defaultValue: 'Mark R25 birthday contributions for your class.' })}
       </Text>
@@ -580,7 +585,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
               <View style={styles.summaryGrid}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>
-                    {isPreschool
+                    {isPreschool && useSchoolWide
                       ? t('dashboard.birthday_donations.expected_school', { defaultValue: 'School target' })
                       : t('dashboard.birthday_donations.expected_amount', { defaultValue: 'Expected' })}
                   </Text>
@@ -588,7 +593,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>
-                    {isPreschool
+                    {isPreschool && useSchoolWide
                       ? t('dashboard.birthday_donations.received_school', { defaultValue: 'School received' })
                       : t('dashboard.birthday_donations.total_received', { defaultValue: 'Received' })}
                   </Text>
@@ -596,14 +601,14 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>
-                    {isPreschool
+                    {isPreschool && useSchoolWide
                       ? t('dashboard.birthday_donations.remaining_school', { defaultValue: 'School remaining' })
                       : t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}
                   </Text>
                   <Text style={styles.summaryValue}>R{remainingAmount.toFixed(2)}</Text>
                 </View>
               </View>
-              {isPreschool && (
+              {isPreschool && !useSchoolWide && (
                 <Text style={styles.muted}>
                   {t('dashboard.birthday_donations.class_progress', {
                     defaultValue: 'Your class: R{{received}} of R{{expected}}',

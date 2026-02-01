@@ -60,7 +60,6 @@ export interface CreatePOPUploadData {
   payment_method?: string;
   payment_date?: string;
   payment_reference?: string;
-  fee_id?: string;
 }
 
 // Storage buckets - must match actual bucket names in Supabase Storage
@@ -213,7 +212,6 @@ export function useCreatePOPUpload() {
         payment_method: data.payment_method,
         payment_date: data.payment_date,
         payment_reference: data.payment_reference,
-        fee_id: data.fee_id,
       };
       
       const { data: newUpload, error: dbError } = await supabase
