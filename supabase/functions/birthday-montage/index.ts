@@ -18,7 +18,7 @@ const corsHeaders: Record<string, string> = {
 };
 
 const RequestSchema = z.object({
-  action: z.enum(['queue', 'status']),
+  action: z.enum(['queue', 'status', 'approve', 'get_view_url']),
   payload: z.record(z.unknown()).optional(),
 });
 
@@ -43,6 +43,31 @@ async function fetchProfile(supabase: ReturnType<typeof createClient>, authUserI
   return data as ProfileRow;
 }
 
+async function isParentOfStudent(
+  supabase: ReturnType<typeof createClient>,
+  parentProfileId: string,
+  studentId: string
+): Promise<boolean> {
+  const { data: student, error } = await supabase
+    .from('students')
+    .select('id, parent_id, guardian_id')
+    .eq('id', studentId)
+    .maybeSingle();
+
+  if (error || !student) return false;
+
+  if (student.parent_id === parentProfileId || student.guardian_id === parentProfileId) return true;
+
+  const { data: rel } = await supabase
+    .from('student_parent_relationships')
+    .select('student_id, parent_id')
+    .eq('student_id', studentId)
+    .eq('parent_id', parentProfileId)
+    .maybeSingle();
+
+  return !!rel;
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') {
@@ -65,10 +90,13 @@ serve(async (req) => {
 
     const supabaseUrl = getEnv('SUPABASE_URL');
     const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY');
+    const supabaseServiceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
+    const montageBucket = Deno.env.get('BIRTHDAY_MONTAGE_BUCKET') || 'birthday-memories';
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
+    const admin = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData?.user) {
@@ -105,7 +133,7 @@ serve(async (req) => {
 
       const { data, error } = await supabase
         .from('birthday_memory_montage_jobs')
-        .select('id, status, output_path, error_message, created_at, updated_at')
+        .select('id, status, output_path, error_message, approved_at, approved_by, sent_at, sent_by, created_at, updated_at')
         .eq('event_id', eventId)
         .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
@@ -131,7 +159,7 @@ serve(async (req) => {
 
       const { data: existing } = await supabase
         .from('birthday_memory_montage_jobs')
-        .select('id, status, created_at')
+        .select('id, status, created_at, approved_at, approved_by, sent_at, sent_by')
         .eq('event_id', eventId)
         .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
@@ -153,12 +181,161 @@ serve(async (req) => {
           status: 'queued',
           requested_by: profile.id,
         })
-        .select('id, status, created_at')
+        .select('id, status, created_at, approved_at, approved_by, sent_at, sent_by')
         .single();
 
       if (error) throw error;
 
       return new Response(JSON.stringify({ success: true, data: created }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'approve') {
+      const eventId = String(payload.event_id || '');
+      if (!eventId) {
+        return new Response(JSON.stringify({ error: 'event_id required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const allowedRoles = ['teacher', 'principal', 'admin', 'super_admin', 'principal_admin'];
+      if (!allowedRoles.includes(profile.role || '')) {
+        return new Response(JSON.stringify({ error: 'Insufficient permissions' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: job, error: jobError } = await supabase
+        .from('birthday_memory_montage_jobs')
+        .select('id, status, output_path')
+        .eq('event_id', eventId)
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (jobError || !job) {
+        return new Response(JSON.stringify({ error: 'Montage job not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (job.status !== 'ready' || !job.output_path) {
+        return new Response(JSON.stringify({ error: 'Montage not ready' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: updated, error } = await supabase
+        .from('birthday_memory_montage_jobs')
+        .update({
+          approved_at: new Date().toISOString(),
+          approved_by: profile.id,
+          sent_at: new Date().toISOString(),
+          sent_by: profile.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', job.id)
+        .select('id, status, output_path, approved_at, approved_by, sent_at, sent_by, created_at, updated_at')
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, data: updated }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'get_view_url') {
+      const eventId = String(payload.event_id || '');
+      if (!eventId) {
+        return new Response(JSON.stringify({ error: 'event_id required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: job, error: jobError } = await supabase
+        .from('birthday_memory_montage_jobs')
+        .select('id, status, output_path, sent_at, event_id')
+        .eq('event_id', eventId)
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (jobError || !job) {
+        return new Response(JSON.stringify({ error: 'Montage job not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (job.status !== 'ready' || !job.output_path) {
+        return new Response(JSON.stringify({ error: 'Montage not ready' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const isParentRole = ['parent', 'guardian', 'sponsor'].includes(profile.role || '');
+      if (isParentRole) {
+        if (!job.sent_at) {
+          return new Response(JSON.stringify({ error: 'Montage not approved' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const { data: event } = await supabase
+          .from('birthday_memory_events')
+          .select('birthday_student_id')
+          .eq('id', job.event_id)
+          .maybeSingle();
+
+        if (!event?.birthday_student_id) {
+          return new Response(JSON.stringify({ error: 'Event not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const canView = await isParentOfStudent(supabase, profile.id, event.birthday_student_id);
+        if (!canView) {
+          return new Response(JSON.stringify({ error: 'Not allowed' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      const outputPath = String(job.output_path || '');
+      if (outputPath.startsWith('http')) {
+        return new Response(JSON.stringify({ success: true, url: outputPath }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: signed, error: signError } = await admin.storage
+        .from(montageBucket)
+        .createSignedUrl(outputPath, 60 * 60);
+
+      if (signError || !signed?.signedUrl) {
+        return new Response(JSON.stringify({ error: 'Failed to sign URL' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true, url: signed.signedUrl }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
