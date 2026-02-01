@@ -22,6 +22,8 @@ export interface QuickAction {
   category: 'devops' | 'platform' | 'users' | 'analytics' | 'ai' | 'education';
   /** If true, only super_admin can see this action */
   superAdminOnly?: boolean;
+  /** Allowed roles for this action (normalized roles from RBAC) */
+  allowedRoles?: Array<'parent' | 'student' | 'teacher' | 'principal_admin' | 'super_admin'>;
   /** Minimum subscription tier required for this action */
   minTier?: SubscriptionTier;
 }
@@ -30,35 +32,35 @@ export interface QuickAction {
 // Actions marked with superAdminOnly: true will only show for super_admin users
 export const QUICK_ACTIONS: QuickAction[] = [
   // DevOps - SUPER ADMIN ONLY
-  { id: 'build-android', label: 'Build Android', icon: 'logo-android', color: '#3ddc84', command: 'Trigger an Android preview build', category: 'devops', superAdminOnly: true },
-  { id: 'build-ios', label: 'Build iOS', icon: 'logo-apple', color: '#ffffff', command: 'Trigger an iOS preview build', category: 'devops', superAdminOnly: true },
-  { id: 'build-status', label: 'Build Status', icon: 'construct', color: '#06b6d4', command: 'Show current EAS build status', category: 'devops', superAdminOnly: true },
-  { id: 'view-commits', label: 'Git Commits', icon: 'git-commit', color: '#f59e0b', command: 'Show recent GitHub commits on main branch', category: 'devops', superAdminOnly: true },
-  { id: 'view-prs', label: 'Pull Requests', icon: 'git-pull-request', color: '#ec4899', command: 'List open pull requests', category: 'devops', superAdminOnly: true },
+  { id: 'build-android', label: 'Build Android', icon: 'logo-android', color: '#3ddc84', command: 'Trigger an Android preview build', category: 'devops', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'build-ios', label: 'Build iOS', icon: 'logo-apple', color: '#ffffff', command: 'Trigger an iOS preview build', category: 'devops', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'build-status', label: 'Build Status', icon: 'construct', color: '#06b6d4', command: 'Show current EAS build status', category: 'devops', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'view-commits', label: 'Git Commits', icon: 'git-commit', color: '#f59e0b', command: 'Show recent GitHub commits on main branch', category: 'devops', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'view-prs', label: 'Pull Requests', icon: 'git-pull-request', color: '#ec4899', command: 'List open pull requests', category: 'devops', superAdminOnly: true, allowedRoles: ['super_admin'] },
   
   // Platform Analytics - SUPER ADMIN ONLY
-  { id: 'platform-stats', label: 'Platform Stats', icon: 'stats-chart', color: '#8b5cf6', command: 'Show platform statistics for this month', category: 'analytics', superAdminOnly: true },
-  { id: 'ai-usage', label: 'AI Usage', icon: 'sparkles', color: '#f59e0b', command: 'Show AI usage statistics for this week grouped by school', category: 'analytics', superAdminOnly: true },
-  { id: 'revenue-report', label: 'Revenue Report', icon: 'cash', color: '#10b981', command: 'Generate revenue report for this month', category: 'analytics', superAdminOnly: true },
+  { id: 'platform-stats', label: 'Platform Stats', icon: 'stats-chart', color: '#8b5cf6', command: 'Show platform statistics for this month', category: 'analytics', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'ai-usage', label: 'AI Usage', icon: 'sparkles', color: '#f59e0b', command: 'Show AI usage statistics for this week grouped by school', category: 'analytics', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'revenue-report', label: 'Revenue Report', icon: 'cash', color: '#10b981', command: 'Generate revenue report for this month', category: 'analytics', superAdminOnly: true, allowedRoles: ['super_admin'] },
   
   // User & School Management - SUPER ADMIN ONLY
-  { id: 'list-schools', label: 'All Schools', icon: 'school', color: '#3b82f6', command: 'List all active schools with their metrics', category: 'platform', superAdminOnly: true },
-  { id: 'list-users', label: 'Recent Users', icon: 'people', color: '#6366f1', command: 'List the 20 most recently created users', category: 'users', superAdminOnly: true },
-  { id: 'principals', label: 'Principals', icon: 'person', color: '#14b8a6', command: 'List all principals with their schools', category: 'users', superAdminOnly: true },
+  { id: 'list-schools', label: 'All Schools', icon: 'school', color: '#3b82f6', command: 'List all active schools with their metrics', category: 'platform', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'list-users', label: 'Recent Users', icon: 'people', color: '#6366f1', command: 'List the 20 most recently created users', category: 'users', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'principals', label: 'Principals', icon: 'person', color: '#14b8a6', command: 'List all principals with their schools', category: 'users', superAdminOnly: true, allowedRoles: ['super_admin'] },
   
   // System - SUPER ADMIN ONLY
-  { id: 'feature-flags', label: 'Feature Flags', icon: 'flag', color: '#ef4444', command: 'Show current feature flag status', category: 'platform', superAdminOnly: true },
-  { id: 'health-check', label: 'System Health', icon: 'pulse', color: '#22c55e', command: 'Run a system health check on all services', category: 'platform', superAdminOnly: true },
+  { id: 'feature-flags', label: 'Feature Flags', icon: 'flag', color: '#ef4444', command: 'Show current feature flag status', category: 'platform', superAdminOnly: true, allowedRoles: ['super_admin'] },
+  { id: 'health-check', label: 'System Health', icon: 'pulse', color: '#22c55e', command: 'Run a system health check on all services', category: 'platform', superAdminOnly: true, allowedRoles: ['super_admin'] },
   
   // Education Content Generation - AVAILABLE TO ALL (with quota gating at API level)
-  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'free' },
-  { id: 'gen-ecd-theme', label: 'ECD Theme', icon: 'sparkles', color: '#a855f7', command: 'Brainstorm an ECD weekly theme with daily activities, routines, and parent tips', defaultTopic: 'All About Me', category: 'education', superAdminOnly: false, minTier: 'free' },
-  { id: 'gen-ecd-routine', label: 'Daily Routine', icon: 'time', color: '#38bdf8', command: 'Create a structured ECD daily routine with transitions and classroom management cues', defaultTopic: 'Half-day class schedule', category: 'education', superAdminOnly: false, minTier: 'free' },
-  { id: 'gen-ecd-workshop', label: 'Parent Workshop', icon: 'people', color: '#22c55e', command: 'Draft a parent workshop plan with objectives, agenda, activities, and take-home tips', defaultTopic: 'Supporting language development at home', category: 'education', superAdminOnly: false, minTier: 'free' },
-  { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter' },
-  { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium' },
-  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'free' },
-  { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false, minTier: 'premium' },
+  { id: 'gen-lesson', label: 'Lesson Plan', icon: 'book', color: '#8b5cf6', command: 'Create a CAPS-aligned lesson plan', defaultTopic: 'Mathematics: counting', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-ecd-theme', label: 'ECD Theme', icon: 'sparkles', color: '#a855f7', command: 'Brainstorm an ECD weekly theme with daily activities, routines, and parent tips', defaultTopic: 'All About Me', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-ecd-routine', label: 'Daily Routine', icon: 'time', color: '#38bdf8', command: 'Create a structured ECD daily routine with transitions and classroom management cues', defaultTopic: 'Half-day class schedule', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-ecd-workshop', label: 'Parent Workshop', icon: 'people', color: '#22c55e', command: 'Draft a parent workshop plan with objectives, agenda, activities, and take-home tips', defaultTopic: 'Supporting language development at home', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-stem', label: 'STEM Activity', icon: 'flask', color: '#ec4899', command: 'Design a hands-on STEM activity', defaultTopic: 'basic robotics with recycled materials', category: 'education', superAdminOnly: false, minTier: 'starter', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium', allowedRoles: ['principal_admin', 'super_admin'] },
+  { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'parent', 'student', 'super_admin'] },
+  { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false, minTier: 'premium', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
 ];
 
 interface QuickActionsProps {
@@ -106,11 +108,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
     return result;
   }, [userRole, profile]);
   
-  // Filter actions based on user role - recalculates when isUserSuperAdmin changes
+  // Filter actions based on user role - recalculates when role/super admin changes
   const { analyticsActions, platformActions, devopsActions, educationActions } = React.useMemo(() => {
-    const visibleActions = QUICK_ACTIONS.filter(action => 
-      !action.superAdminOnly || isUserSuperAdmin
-    );
+    const isRoleAllowed = (action: QuickAction) => {
+      if (action.superAdminOnly && !isUserSuperAdmin) return false;
+      if (isUserSuperAdmin) return true;
+      if (!action.allowedRoles || action.allowedRoles.length === 0) return true;
+      return normalizedRole ? action.allowedRoles.includes(normalizedRole) : false;
+    };
+
+    const visibleActions = QUICK_ACTIONS.filter(isRoleAllowed);
     
     return {
       analyticsActions: visibleActions.filter(a => a.category === 'analytics'),
@@ -118,7 +125,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       devopsActions: visibleActions.filter(a => a.category === 'devops'),
       educationActions: visibleActions.filter(a => a.category === 'education'),
     };
-  }, [isUserSuperAdmin]);
+  }, [isUserSuperAdmin, normalizedRole]);
 
   const normalizedTier = React.useMemo(
     () => normalizeTier(tierStatus?.isActive ? tierStatus?.tier : 'free'),

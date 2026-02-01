@@ -8,7 +8,7 @@ import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { BirthdayMemoriesService } from '@/features/birthday-memories/services/BirthdayMemoriesService';
 import type { BirthdayMemoryEvent, BirthdayMemoryMedia } from '@/features/birthday-memories/types/birthdayMemories.types';
-import { BirthdayMontageService } from '@/features/birthday-memories/services/BirthdayMontageService';
+import { BirthdayMontageService, type MontageJob } from '@/features/birthday-memories/services/BirthdayMontageService';
 
 export default function BirthdayMemoriesScreen() {
   const params = useLocalSearchParams();
@@ -26,9 +26,14 @@ export default function BirthdayMemoriesScreen() {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [montageJob, setMontageJob] = useState<MontageJob | null>(null);
+  const [montageLoading, setMontageLoading] = useState(false);
+  const [montageSending, setMontageSending] = useState(false);
 
   const canUpload = ['teacher', 'principal', 'admin', 'super_admin', 'principal_admin'].includes(String(profile?.role || ''));
   const isParent = ['parent', 'guardian', 'sponsor'].includes(String(profile?.role || ''));
+  const montageReady = !!montageJob && montageJob.status === 'ready' && !!montageJob.output_path;
+  const montageSent = !!montageJob?.sent_at;
 
   const loadEvent = useCallback(async () => {
     if (!birthdayStudentId || !eventDate) return;
@@ -43,6 +48,14 @@ export default function BirthdayMemoriesScreen() {
     if (!event?.id) return;
     const items = await BirthdayMemoriesService.listMedia(event.id);
     setMedia(items);
+  }, [event?.id]);
+
+  const loadMontageStatus = useCallback(async () => {
+    if (!event?.id) return;
+    setMontageLoading(true);
+    const job = await BirthdayMontageService.status(event.id);
+    setMontageJob(job);
+    setMontageLoading(false);
   }, [event?.id]);
 
   useEffect(() => {
@@ -66,6 +79,10 @@ export default function BirthdayMemoriesScreen() {
   useEffect(() => {
     void loadMedia();
   }, [loadMedia]);
+
+  useEffect(() => {
+    void loadMontageStatus();
+  }, [loadMontageStatus]);
 
   const handlePick = useCallback(async () => {
     if (!event?.id || !organizationId) return;
@@ -134,10 +151,35 @@ export default function BirthdayMemoriesScreen() {
       Alert.alert('Unable to queue montage');
       return;
     }
+    setMontageJob(job);
+    await loadMontageStatus();
     Alert.alert(
       'Montage queued',
-      'We are preparing the highlight video. Parents will be notified when it is ready.'
+      'We are preparing the highlight video. You can preview it once it is ready.'
     );
+  }, [event?.id, loadMontageStatus]);
+
+  const handlePreviewMontage = useCallback(async () => {
+    if (!event?.id) return;
+    const url = await BirthdayMontageService.getViewUrl(event.id);
+    if (!url) {
+      Alert.alert('Preview unavailable', 'The highlight video is not ready yet.');
+      return;
+    }
+    await WebBrowser.openBrowserAsync(url);
+  }, [event?.id]);
+
+  const handleSendMontage = useCallback(async () => {
+    if (!event?.id) return;
+    setMontageSending(true);
+    const updated = await BirthdayMontageService.approveAndSend(event.id);
+    setMontageSending(false);
+    if (!updated) {
+      Alert.alert('Unable to send', 'Please try again.');
+      return;
+    }
+    setMontageJob(updated);
+    Alert.alert('Sent', 'Highlight video approved and sent to parents.');
   }, [event?.id]);
 
   return (
@@ -165,6 +207,56 @@ export default function BirthdayMemoriesScreen() {
             <TouchableOpacity style={styles.secondaryButtonWide} onPress={handleGenerateMontage}>
               <Text style={styles.secondaryButtonWideText}>Generate highlight video (optional)</Text>
             </TouchableOpacity>
+          )}
+
+          {(canUpload || isParent) && (
+            <View style={styles.montageCard}>
+              <Text style={styles.montageTitle}>Highlight video</Text>
+              {montageLoading ? (
+                <Text style={styles.muted}>Checking montage status...</Text>
+              ) : montageJob ? (
+                <Text style={styles.montageStatus}>
+                  {montageJob.status === 'ready'
+                    ? (montageSent ? 'Ready • Sent to parents' : 'Ready • Awaiting approval')
+                    : montageJob.status === 'failed'
+                      ? 'Failed • Please retry'
+                      : 'Processing'}
+                </Text>
+              ) : (
+                <Text style={styles.muted}>No highlight video queued yet.</Text>
+              )}
+
+              {canUpload && montageReady && (
+                <View style={styles.montageActionsRow}>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={handlePreviewMontage}>
+                    <Text style={styles.secondaryButtonText}>Preview</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primaryButton, montageSent && styles.primaryButtonDisabled]}
+                    onPress={handleSendMontage}
+                    disabled={montageSending || montageSent}
+                  >
+                    {montageSending ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>
+                        {montageSent ? 'Sent' : 'Send to parents'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {isParent && montageReady && montageSent && (
+                <TouchableOpacity style={styles.primaryButton} onPress={handlePreviewMontage}>
+                  <Text style={styles.primaryButtonText}>View highlight video</Text>
+                </TouchableOpacity>
+              )}
+
+              {isParent && montageReady && !montageSent && (
+                <Text style={styles.muted}>Awaiting school approval before sharing.</Text>
+              )}
+            </View>
           )}
 
           <FlatList
@@ -336,11 +428,36 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
+  montageCard: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    backgroundColor: theme.surface,
+    gap: 8,
+  },
+  montageTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  montageStatus: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  montageActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   primaryButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: theme.primary,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: '#fff',

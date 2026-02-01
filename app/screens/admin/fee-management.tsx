@@ -83,7 +83,9 @@ export default function FeeManagementScreen() {
   const { profile, user } = useAuth();
   const insets = useSafeAreaInsets();
   const organizationId = profile?.organization_id || profile?.preschool_id;
-  const modalPaddingBottom = Math.max(insets.bottom, 12);
+  const modalPaddingBottom = Platform.OS === 'android'
+    ? Math.max(insets.bottom, 32)
+    : Math.max(insets.bottom, 12);
   
   // Create styles early to use in all render paths
   const styles = createStyles(theme);
@@ -743,7 +745,7 @@ export default function FeeManagementScreen() {
               </TouchableOpacity>
                 </ScrollView>
                 
-                <View style={styles.modalFooter}>
+                <View style={[styles.modalFooter, { paddingBottom: modalPaddingBottom + 8 }]}>
                   <TouchableOpacity
                     style={[styles.modalButton, { backgroundColor: theme.surface }]}
                     onPress={() => setShowFeeModal(false)}
@@ -875,7 +877,7 @@ export default function FeeManagementScreen() {
               </TouchableOpacity>
                 </ScrollView>
                 
-                <View style={styles.modalFooter}>
+                <View style={[styles.modalFooter, { paddingBottom: modalPaddingBottom + 8 }]}>
                   <TouchableOpacity
                     style={[styles.modalButton, { backgroundColor: theme.surface }]}
                     onPress={() => setShowPromoModal(false)}
