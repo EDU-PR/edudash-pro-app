@@ -120,6 +120,16 @@ const isDuplicateStudentIdError = (error: PostgrestErrorLike | null): boolean =>
   return (error.message || error.details || '').includes('students_student_id_key');
 };
 
+const hasValidPopUrl = (value?: string | null): boolean => {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  if (['pending', 'n/a', 'na', 'none', 'null', 'undefined'].includes(normalized)) {
+    return false;
+  }
+  return true;
+};
+
 type SupabaseClient = ReturnType<typeof assertSupabase>;
 
 const getLastStudentSequence = async (
@@ -628,6 +638,7 @@ export function useRegistrations(): UseRegistrationsReturn {
   // Updated: Allow approval if POP is uploaded (verification is recommended but not required)
   const canApprove = (item: Registration): boolean => {
     const hasFee = (item.registration_fee_amount || 0) > 0;
+    const hasPop = hasValidPopUrl(item.proof_of_payment_url);
     // Already approved items shouldn't show approve button
     if (item.status !== 'pending') {
       return false;
@@ -637,7 +648,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     if (item.source === 'aftercare') {
       // If there's a fee, need proof of payment
       if (hasFee) {
-        return !!item.payment_verified || !!item.proof_of_payment_url;
+        return !!item.payment_verified || hasPop;
       }
       return true;
     }
@@ -651,7 +662,7 @@ export function useRegistrations(): UseRegistrationsReturn {
     // In-app registrations with registration fee need POP uploaded
     // Verification is recommended but not required for approval.
     if (hasFee) {
-      return !!item.payment_verified || !!item.proof_of_payment_url;
+      return !!item.payment_verified || hasPop;
     }
     
     // In-app registrations without fee can be approved directly
@@ -661,7 +672,7 @@ export function useRegistrations(): UseRegistrationsReturn {
   // Approve registration
   const handleApprove = (registration: Registration) => {
     const isInApp = registration.source === 'in-app';
-    const hasUnverifiedPayment = registration.proof_of_payment_url && !registration.payment_verified;
+    const hasUnverifiedPayment = hasValidPopUrl(registration.proof_of_payment_url) && !registration.payment_verified;
     
     // Build the confirmation message
     let message = `Approve registration for ${registration.student_first_name} ${registration.student_last_name}?`;
@@ -914,14 +925,26 @@ export function useRegistrations(): UseRegistrationsReturn {
 
           if (regFetchError) throw regFetchError;
 
-          // Check if parent already exists by email
+          // Check if parent already exists by email (guardian or secondary parent)
           let parentId: string | null = null;
           let parentLinked: boolean | null = null;
-          const { data: existingParent } = await supabase
-            .from('profiles')
-            .select('id, organization_id, preschool_id')
-            .eq('email', regData.guardian_email)
-            .maybeSingle();
+          const candidateEmails = [regData.guardian_email, regData.parent_email]
+            .map((email) => email?.trim().toLowerCase())
+            .filter((email): email is string => !!email);
+          const uniqueEmails = Array.from(new Set(candidateEmails));
+          let existingParent: { id: string; organization_id?: string | null; preschool_id?: string | null } | null = null;
+
+          for (const email of uniqueEmails) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, organization_id, preschool_id')
+              .ilike('email', email)
+              .maybeSingle();
+            if (data?.id) {
+              existingParent = data as { id: string; organization_id?: string | null; preschool_id?: string | null };
+              break;
+            }
+          }
 
           if (existingParent) {
             parentId = existingParent.id;
@@ -1327,7 +1350,7 @@ export function useRegistrations(): UseRegistrationsReturn {
   // Verify payment
   const handleVerifyPayment = async (registration: Registration, verify: boolean) => {
     const isInApp = registration.source === 'in-app';
-    const hasPop = !!registration.proof_of_payment_url;
+    const hasPop = hasValidPopUrl(registration.proof_of_payment_url);
     const title = verify
       ? (hasPop ? 'Verify Payment' : 'Confirm Payment (No POP)')
       : 'Remove Payment Verification';

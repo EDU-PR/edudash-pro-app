@@ -605,6 +605,9 @@ serve(async (req) => {
       || parentAccounts.find((parent) => parent.userId)
       || null;
     const parentUserId = primaryParent?.userId ?? null;
+    const secondaryParentId = parentAccounts.find(
+      (parent) => parent.userId && parent.userId !== parentUserId
+    )?.userId ?? null;
     const parentProfileLinked = primaryParent?.profileLinked ?? false;
     const parentAccountCreated = parentAccounts.some((parent) => parent.accountCreated);
 
@@ -698,7 +701,7 @@ serve(async (req) => {
       }
       if (parentUserId) {
         studentUpdate.parent_id = parentUserId;
-        studentUpdate.guardian_id = parentUserId;
+        studentUpdate.guardian_id = secondaryParentId || parentUserId;
       }
 
       await supabase
@@ -739,7 +742,7 @@ serve(async (req) => {
             date_of_birth: normalizedDob,
             grade: normalizedGrade,
             parent_id: parentUserId,
-            guardian_id: parentUserId,
+            guardian_id: secondaryParentId || parentUserId,
             preschool_id: organizationId,
             class_id: studentClassId,
             student_id: studentIdCode,

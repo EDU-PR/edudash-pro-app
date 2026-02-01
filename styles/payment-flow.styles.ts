@@ -204,6 +204,27 @@ export const createStyles = (theme: ThemeColors) => StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
+  bankHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  bankHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  bankHelperText: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    marginTop: -6,
+    marginBottom: 16,
+  },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
