@@ -269,7 +269,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     };
 
     loadUniformPricing();
-  }, [preschoolIds, preschoolNameMap, supabase, t]);
+  }, [preschoolIds, supabase, t]);
 
   const updateEntry = (childId: string, patch: Partial<UniformEntry>) => {
     setEntries((prev) => ({
