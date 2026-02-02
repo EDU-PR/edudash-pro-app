@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import {
   LayoutDashboard,
   BookOpen,
@@ -139,7 +140,10 @@ export function TertiaryShell({
             <div className="sidenavFooter">
               <button
                 className="navItem"
-                onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+                onClick={async () => {
+                  await signOutEverywhere({ timeoutMs: 2500 });
+                  router.push('/sign-in');
+                }}
               >
                 <LogOut className="navIcon" />
                 <span>Sign out</span>
@@ -229,9 +233,9 @@ export function TertiaryShell({
               <button
                 className="navItem"
                 style={{ width: '100%' }}
-                onClick={async () => { 
-                  await supabase.auth.signOut(); 
-                  router.push('/sign-in'); 
+                onClick={async () => {
+                  await signOutEverywhere({ timeoutMs: 2500 });
+                  router.push('/sign-in');
                 }}
               >
                 <LogOut className="navIcon" />

@@ -167,6 +167,7 @@ export function useTeacherManagement(
           user_id,
           auth_user_id,
           email,
+          phone,
           full_name,
           preschool_id,
           is_active,
@@ -285,31 +286,23 @@ export function useTeacherManagement(
         }
 
         const authUserId = (dbTeacher.auth_user_id as string) || null;
-
-        if (!teacherUserId) {
-          console.error('[fetchTeachers] Skipping teacher due to missing user_id:', {
-            teacherEmail: dbTeacher.email,
-            teacherId: dbTeacher.id,
-            authUserId
-          });
-          return null;
-        }
+        const resolvedTeacherUserId = teacherUserId || authUserId || '';
 
         const emailKey = String(dbTeacher.email || '').toLowerCase();
         const overview = overviewByEmail.get(emailKey);
 
         return {
           id: dbTeacher.id as string,
-          teacherUserId,
+          teacherUserId: resolvedTeacherUserId,
           authUserId,
           employeeId: `EMP${(dbTeacher.id as string).slice(0, 3)}`,
           firstName,
           lastName,
           email: (dbTeacher.email as string) || 'No email',
-          phone: 'No phone',
+          phone: (dbTeacher.phone as string) || 'No phone',
           address: 'Address not available',
           idNumber: 'ID not available',
-          status: 'active' as const,
+          status: resolvedTeacherUserId ? 'active' as const : 'pending' as const,
           contractType: 'permanent' as const,
           classes: parseClasses(overview?.classes_text),
           subjects: ['General Education'],
@@ -493,6 +486,14 @@ export function useTeacherManagement(
 
   // Seat management handlers
   const handleAssignSeat = useCallback((teacherUserId: string, teacherName: string) => {
+    if (!teacherUserId) {
+      safeAlert({
+        title: 'Invite Needed',
+        message: `${teacherName} does not have an account yet. Send them an invite before assigning a seat.`,
+        type: 'warning',
+      });
+      return;
+    }
     if (shouldDisableAssignment) {
       safeAlert({
         title: 'Seat Limit Reached',
@@ -542,6 +543,14 @@ export function useTeacherManagement(
   }, [shouldDisableAssignment, seatUsageDisplay, assignSeat, fetchTeachers, safeAlert]);
   
   const handleRevokeSeat = useCallback((teacherUserId: string, teacherName: string) => {
+    if (!teacherUserId) {
+      safeAlert({
+        title: 'No Account',
+        message: `${teacherName} does not have an active account to revoke.`,
+        type: 'warning',
+      });
+      return;
+    }
     safeAlert({
       title: 'Revoke Teacher Seat',
       message: `Are you sure you want to revoke the teacher seat from ${teacherName}?\n\nThey will lose access to the teacher portal until a new seat is assigned.`,

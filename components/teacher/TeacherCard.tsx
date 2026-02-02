@@ -40,7 +40,9 @@ export function TeacherCard({
   onInvite,
   onCopyInviteLink,
 }: TeacherCardProps) {
-  const teacherHasSeat = useTeacherHasSeat(teacher.teacherUserId);
+  const seatLookupId = teacher.teacherUserId || '__missing__';
+  const teacherHasSeat = useTeacherHasSeat(seatLookupId);
+  const hasSeatUser = Boolean(teacher.teacherUserId);
   const fullName = `${teacher.firstName} ${teacher.lastName}`;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   const isInvitePending = inviteStatus && inviteStatus !== 'accepted' && inviteStatus !== 'active';
@@ -103,13 +105,18 @@ export function TeacherCard({
             Students: {teacher.studentCount || 0}
           </Text>
           <View style={styles.seatStatusContainer}>
-            <Ionicons 
-              name={teacherHasSeat ? 'checkmark-circle' : 'ellipse-outline'} 
-              size={14} 
-              color={teacherHasSeat ? '#059669' : '#6b7280'} 
+            <Ionicons
+              name={!hasSeatUser ? 'time-outline' : teacherHasSeat ? 'checkmark-circle' : 'ellipse-outline'}
+              size={14}
+              color={!hasSeatUser ? '#f59e0b' : teacherHasSeat ? '#059669' : '#6b7280'}
             />
-            <Text style={[styles.seatStatusText, { color: teacherHasSeat ? '#059669' : '#6b7280' }]}>
-              {teacherHasSeat ? 'Has teacher seat' : 'No teacher seat'}
+            <Text
+              style={[
+                styles.seatStatusText,
+                { color: !hasSeatUser ? '#f59e0b' : teacherHasSeat ? '#059669' : '#6b7280' },
+              ]}
+            >
+              {!hasSeatUser ? 'Invite pending' : teacherHasSeat ? 'Has teacher seat' : 'No teacher seat'}
             </Text>
           </View>
           {showInviteStatus && (
@@ -145,7 +152,7 @@ export function TeacherCard({
                 });
                 onRevokeSeat(teacher.teacherUserId, fullName);
               }}
-              disabled={isRevoking}
+              disabled={isRevoking || !hasSeatUser}
             >
               <Ionicons name="remove-circle" size={16} color="#fca5a5" />
               <Text style={styles.seatActionText}>Revoke Seat</Text>
@@ -155,7 +162,7 @@ export function TeacherCard({
               style={[
                 styles.seatActionButton,
                 styles.assignButton,
-                shouldDisableAssignment && styles.disabledButton
+                (shouldDisableAssignment || !hasSeatUser) && styles.disabledButton
               ]}
               onPress={(e) => {
                 e.stopPropagation();
@@ -166,14 +173,14 @@ export function TeacherCard({
                 });
                 onAssignSeat(teacher.teacherUserId, fullName);
               }}
-              disabled={isAssigning || shouldDisableAssignment}
+              disabled={isAssigning || shouldDisableAssignment || !hasSeatUser}
             >
               <Ionicons
                 name="add-circle"
                 size={16}
-                color={shouldDisableAssignment ? '#9ca3af' : '#34d399'}
+                color={shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#34d399'}
               />
-              <Text style={styles.seatActionText}>Assign Seat</Text>
+              <Text style={styles.seatActionText}>{!hasSeatUser ? 'Invite Needed' : 'Assign Seat'}</Text>
             </TouchableOpacity>
           )}
 

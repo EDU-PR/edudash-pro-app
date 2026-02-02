@@ -8,7 +8,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -31,6 +30,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useUpdatePOPStatus } from '@/hooks/usePOPUploads';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -81,6 +81,7 @@ export default function POPReviewScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const updatePOPStatus = useUpdatePOPStatus();
+  const { showAlert, alertProps } = useAlertModal();
   
   // State
   const [uploads, setUploads] = useState<POPUpload[]>([]);
@@ -191,10 +192,11 @@ export default function POPReviewScreen() {
   };
 
   const handleApprove = async (upload: POPUpload) => {
-    Alert.alert(
-      'Approve Payment',
-      `Are you sure you want to approve this payment proof from ${upload.uploader?.first_name || 'the parent'}?`,
-      [
+    showAlert({
+      title: 'Approve Payment',
+      message: `Are you sure you want to approve this payment proof from ${upload.uploader?.first_name || 'the parent'}?`,
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Approve',
@@ -217,14 +219,18 @@ export default function POPReviewScreen() {
               // Refresh the list
               fetchUploads();
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to approve payment');
+              showAlert({
+                title: 'Error',
+                message: err?.message || 'Failed to approve payment',
+                type: 'error',
+              });
             } finally {
               setProcessing(null);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleReject = (upload: POPUpload) => {
@@ -237,7 +243,11 @@ export default function POPReviewScreen() {
     if (!selectedUpload) return;
     
     if (!rejectReason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for rejection');
+      showAlert({
+        title: 'Reason Required',
+        message: 'Please provide a reason for rejection',
+        type: 'warning',
+      });
       return;
     }
 
@@ -260,7 +270,11 @@ export default function POPReviewScreen() {
       // Refresh the list
       fetchUploads();
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to reject payment');
+      showAlert({
+        title: 'Error',
+        message: err?.message || 'Failed to reject payment',
+        type: 'error',
+      });
     } finally {
       setProcessing(null);
       setSelectedUpload(null);
@@ -273,10 +287,18 @@ export default function POPReviewScreen() {
       if (url) {
         Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Could not retrieve document URL');
+        showAlert({
+          title: 'Error',
+          message: 'Could not retrieve document URL',
+          type: 'error',
+        });
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to open document');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to open document',
+        type: 'error',
+      });
     }
   };
 
@@ -606,6 +628,8 @@ export default function POPReviewScreen() {
         buttonText="Done"
         onClose={() => setShowSuccessModal(false)}
       />
+
+      <AlertModal {...alertProps} />
     </>
   );
 }

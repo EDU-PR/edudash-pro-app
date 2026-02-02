@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import type { NavItem } from './types';
 
 interface TeacherSideNavProps {
@@ -77,7 +78,10 @@ export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverE
         <div className="sidenavFooter">
           <button
             className="navItem"
-            onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+            onClick={async () => {
+              await signOutEverywhere({ timeoutMs: 2500 });
+              router.push('/sign-in');
+            }}
             style={{
               justifyContent: isExpanded ? 'flex-start' : 'center',
               padding: isExpanded ? undefined : '12px',
