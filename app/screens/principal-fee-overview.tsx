@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -706,7 +706,8 @@ export default function PrincipalFeeOverviewScreen() {
   // Format currency
   const formatCurrency = (amount: number) => `R ${amount.toFixed(2)}`;
 
-  const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
+  const { width } = useWindowDimensions();
+  const styles = useMemo(() => createStyles(theme, isDark, insets, width), [theme, isDark, insets, width]);
 
   if (loading) {
     return (
@@ -1190,7 +1191,9 @@ export default function PrincipalFeeOverviewScreen() {
   );
 }
 
-const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.create({
+const createStyles = (theme: any, isDark: boolean, insets: any, width: number) => {
+  const isCompact = width < 380;
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -1219,21 +1222,22 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     marginBottom: 20,
   },
   summaryHeader: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginBottom: 12,
-    gap: 12,
+    gap: 10,
   },
   summaryTitleBlock: {
-    flex: 1,
+    width: '100%',
   },
   summaryActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+    width: '100%',
   },
   sectionSubtitle: {
     fontSize: 12,
@@ -1328,10 +1332,10 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 18,
     fontWeight: '700',
     color: theme.text,
-    marginBottom: 12,
+    marginBottom: 6,
   },
   mainStatsRow: {
-    flexDirection: 'row',
+    flexDirection: isCompact ? 'column' : 'row',
     gap: 12,
     marginBottom: 12,
   },
@@ -1354,7 +1358,7 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     marginTop: 4,
   },
   subStatsRow: {
-    flexDirection: 'row',
+    flexDirection: isCompact ? 'column' : 'row',
     gap: 12,
     marginBottom: 12,
   },
@@ -1583,4 +1587,5 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     marginTop: 4,
     textAlign: 'center',
   },
-});
+  });
+};

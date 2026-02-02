@@ -1071,7 +1071,7 @@ export default function RegistrationDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
           headerShown: false, // We handle our own header with safe area

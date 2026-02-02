@@ -36,6 +36,11 @@ export default function AuthCallback() {
   };
 
   const resolveCallbackUrl = (rawUrl?: string | null) => {
+    if (Platform.OS === 'web') {
+      if (rawUrl) return rawUrl;
+      if (typeof window !== 'undefined') return window.location.href;
+      return null;
+    }
     if (rawUrl) {
       const parsed = parseDeepLinkUrl(rawUrl);
       if (Object.keys(parsed.params).length > 0 || Object.keys(normalizedLocalParams).length > 0) {

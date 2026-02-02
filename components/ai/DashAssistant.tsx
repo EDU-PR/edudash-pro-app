@@ -64,9 +64,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
+  const safeModels = Array.isArray(availableModels) ? availableModels : [];
   const selectedModelInfo = useMemo(
-    () => availableModels.find(model => model.id === selectedModel) || availableModels[0],
-    [availableModels, selectedModel]
+    () => safeModels.find(model => model.id === selectedModel) || safeModels[0],
+    [safeModels, selectedModel]
   );
   const estimatedRemaining = selectedModelInfo && remaining !== null
     ? Math.max(Math.floor(remaining / Math.max(selectedModelInfo.relativeCost || 1, 1)), 0)
@@ -686,7 +687,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
         )}
 
-        {availableModels.length > 0 && (
+        {safeModels.length > 0 && (
           <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <View style={styles.modelSelectorHeader}>
               <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
@@ -697,7 +698,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               )}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modelSelectorRow}>
-              {availableModels.map((model) => {
+              {safeModels.map((model) => {
                 const isActive = model.id === selectedModel;
                 return (
                   <TouchableOpacity
