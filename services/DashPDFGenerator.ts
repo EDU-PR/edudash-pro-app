@@ -15,6 +15,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
+import Constants from 'expo-constants';
 import { assertSupabase } from '@/lib/supabase';
 import { getCurrentSession, getCurrentProfile } from '@/lib/sessionManager';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
@@ -1463,33 +1464,60 @@ class DashPDFGeneratorImpl {
       const profile = await getCurrentProfile();
       const organizationId = (profile as any)?.preschool_id || (profile as any)?.organization_id;
 
-      // Read file as blob
+      const storagePath = organizationId 
+        ? `${organizationId}/${session.user_id}/${filename}`
+        : `${session.user_id}/${filename}`;
+
       const fileInfo = await FileSystem.getInfoAsync(localUri);
       if (!fileInfo.exists) {
         throw new Error('File not found');
       }
 
-      const fileData = await FileSystem.readAsStringAsync(localUri, {
-        encoding: 'base64',
-      });
+      if (Platform.OS === 'web') {
+        const fileData = await FileSystem.readAsStringAsync(localUri, {
+          encoding: 'base64',
+        });
+        const blob = this.base64ToBlob(fileData, 'application/pdf');
+        const supabase = assertSupabase();
+        const { error } = await supabase.storage
+          .from('generated-pdfs')
+          .upload(storagePath, blob, {
+            contentType: 'application/pdf',
+            upsert: false,
+          });
 
-      const blob = this.base64ToBlob(fileData, 'application/pdf');
+        if (error) {
+          throw error;
+        }
+      } else {
+        const expoConfig = Constants.expoConfig?.extra || {};
+        const supabaseUrl =
+          expoConfig.EXPO_PUBLIC_SUPABASE_URL ||
+          process.env.EXPO_PUBLIC_SUPABASE_URL ||
+          process.env.NEXT_PUBLIC_SUPABASE_URL ||
+          '';
+        if (!supabaseUrl) {
+          throw new Error('Supabase URL not configured');
+        }
 
-      // Upload to Supabase Storage
-      const supabase = assertSupabase();
-      const storagePath = organizationId 
-        ? `${organizationId}/${session.user_id}/${filename}`
-        : `${session.user_id}/${filename}`;
-
-      const { error } = await supabase.storage
-        .from('generated-pdfs')
-        .upload(storagePath, blob, {
-          contentType: 'application/pdf',
-          upsert: false,
+        const encodedPath = storagePath
+          .split('/')
+          .map((segment) => encodeURIComponent(segment))
+          .join('/');
+        const uploadUrl = `${supabaseUrl}/storage/v1/object/generated-pdfs/${encodedPath}`;
+        const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
+          httpMethod: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/pdf',
+            'x-upsert': 'false',
+          },
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
         });
 
-      if (error) {
-        throw error;
+        if (uploadResult.status < 200 || uploadResult.status >= 300) {
+          throw new Error(`Storage upload failed (${uploadResult.status})`);
+        }
       }
 
       // TODO: Optionally store metadata in pdf_documents table

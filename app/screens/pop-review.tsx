@@ -17,6 +17,7 @@ import { useUpdatePOPStatus } from '@/hooks/usePOPUploads';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+import { ReceiptService } from '@/lib/services/ReceiptService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -58,6 +59,15 @@ interface POPUpload {
   };
 }
 
+interface ReceiptDraft {
+  upload: POPUpload;
+  description: string;
+  amount: string;
+  paidDate: string;
+  paymentMethod: string;
+  paymentReference: string;
+}
+
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
 export default function POPReviewScreen() {
@@ -87,6 +97,10 @@ export default function POPReviewScreen() {
   const [rejectReason, setRejectReason] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptDraft, setReceiptDraft] = useState<ReceiptDraft | null>(null);
+  const [receiptGenerating, setReceiptGenerating] = useState(false);
+  const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
 
   const organizationId = profile?.preschool_id || profile?.organization_id;
 
@@ -148,6 +162,223 @@ export default function POPReviewScreen() {
     fetchUploads();
   }, [fetchUploads]);
 
+  const openReceiptModal = (upload: POPUpload) => {
+    const paidDateValue = (upload.payment_date || upload.payment_for_month || upload.created_at || new Date().toISOString())
+      .toString()
+      .split('T')[0];
+    setReceiptDraft({
+      upload,
+      description: upload.description || upload.title || 'Payment receipt',
+      amount: String(upload.payment_amount ?? ''),
+      paidDate: paidDateValue,
+      paymentMethod: upload.payment_method || 'bank_transfer',
+      paymentReference: upload.payment_reference || `POP-${upload.id.slice(0, 8)}`,
+    });
+    setReceiptResult(null);
+    setShowReceiptModal(true);
+  };
+
+  const fetchParentProfile = async (upload: POPUpload) => {
+    const fallbackName = `${upload.uploader?.first_name || ''} ${upload.uploader?.last_name || ''}`.trim();
+    const fallback = {
+      id: upload.uploaded_by,
+      name: fallbackName || 'Parent',
+      email: upload.uploader?.email,
+    };
+    if (!upload.uploaded_by) return fallback;
+    if (fallback.email) return fallback;
+    const supabase = assertSupabase();
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .eq('id', upload.uploaded_by)
+      .maybeSingle();
+    if (!data) return fallback;
+    return {
+      id: data.id,
+      name: `${data.first_name || ''} ${data.last_name || ''}`.trim() || fallback.name,
+      email: data.email || fallback.email,
+    };
+  };
+
+  const fetchStudentClassName = async (studentId: string) => {
+    const supabase = assertSupabase();
+    const { data } = await supabase
+      .from('students')
+      .select('class_name')
+      .eq('id', studentId)
+      .maybeSingle();
+    return (data as any)?.class_name || null;
+  };
+
+  const attachReceiptToPayment = async (
+    upload: POPUpload,
+    receiptUrl: string | null,
+    receiptStoragePath?: string | null
+  ) => {
+    const supabase = assertSupabase();
+    const nowIso = new Date().toISOString();
+    const paymentReference = upload.payment_reference || `POP-${upload.id.slice(0, 8)}`;
+
+    let payment = null as any;
+    try {
+      const { data } = await supabase
+        .from('payments')
+        .select('id, metadata, attachment_url')
+        .eq('metadata->>pop_upload_id', upload.id)
+        .maybeSingle();
+      payment = data;
+    } catch {
+      payment = null;
+    }
+
+    if (!payment && paymentReference) {
+      const { data } = await supabase
+        .from('payments')
+        .select('id, metadata, attachment_url')
+        .eq('payment_reference', paymentReference)
+        .maybeSingle();
+      payment = data;
+    }
+
+    if (payment?.id) {
+      const nextMetadata = {
+        ...(payment.metadata || {}),
+        receipt_storage_path: receiptStoragePath,
+        receipt_url: receiptUrl,
+      };
+      const updates: Record<string, any> = {
+        metadata: nextMetadata,
+        updated_at: nowIso,
+      };
+      if (receiptUrl && !payment.attachment_url) {
+        updates.attachment_url = receiptUrl;
+      }
+      await supabase
+        .from('payments')
+        .update(updates)
+        .eq('id', payment.id);
+    }
+  };
+
+  const sendReceiptNotification = async (
+    parent: { id?: string | null; name?: string | null; email?: string | null },
+    studentName: string,
+    receiptUrl: string | null,
+    receiptNumber: string,
+    amount: number
+  ) => {
+    if (!parent?.email && !parent?.id) return;
+    const supabase = assertSupabase();
+    const subject = `Payment receipt for ${studentName}`;
+    const text = receiptUrl
+      ? `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}. Download: ${receiptUrl}`
+      : `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}.`;
+    const html = `
+      <p>Your payment of <strong>R ${amount.toFixed(2)}</strong> for <strong>${studentName}</strong> has been marked as paid.</p>
+      <p>Receipt #: <strong>${receiptNumber}</strong></p>
+      ${receiptUrl ? `<p><a href="${receiptUrl}">Download your receipt</a></p>` : ''}
+    `;
+
+    await supabase.functions.invoke('notifications-dispatcher', {
+      body: {
+        event_type: 'payment_receipt',
+        user_ids: parent?.id ? [parent.id] : undefined,
+        recipient_email: parent?.email || undefined,
+        include_email: true,
+        template_override: {
+          title: 'Payment Receipt Ready',
+          body: `Receipt issued for ${studentName}.`,
+          data: {
+            type: 'receipt',
+            student_name: studentName,
+            receipt_url: receiptUrl,
+          },
+        },
+        email_template_override: {
+          subject,
+          text,
+          html,
+        },
+      },
+    });
+  };
+
+  const handleGenerateReceipt = async (sendToParent: boolean) => {
+    if (!receiptDraft || !profile?.id || !organizationId) return;
+    setReceiptGenerating(true);
+    try {
+      const amountValue = parseFloat(receiptDraft.amount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        throw new Error('Enter a valid payment amount');
+      }
+      const paidDate = receiptDraft.paidDate || new Date().toISOString().split('T')[0];
+      const parentProfile = await fetchParentProfile(receiptDraft.upload);
+      const className = await fetchStudentClassName(receiptDraft.upload.student_id);
+      const issuerName =
+        (profile as any)?.full_name ||
+        `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+        'School Administrator';
+      const studentName = `${receiptDraft.upload.student?.first_name || ''} ${receiptDraft.upload.student?.last_name || ''}`.trim() || 'Student';
+      const receiptNumber = `REC-${new Date().getFullYear()}-${receiptDraft.upload.id.slice(0, 6).toUpperCase()}`;
+
+      const result = await ReceiptService.generateFeeReceipt({
+        schoolId: organizationId,
+        fee: {
+          id: receiptDraft.upload.id,
+          description: receiptDraft.description,
+          amount: amountValue,
+          dueDate: null,
+          paidDate,
+          paymentReference: receiptDraft.paymentReference,
+          paymentMethod: receiptDraft.paymentMethod,
+        },
+        student: {
+          id: receiptDraft.upload.student_id,
+          firstName: receiptDraft.upload.student?.first_name || '',
+          lastName: receiptDraft.upload.student?.last_name || '',
+          className,
+        },
+        parent: {
+          id: parentProfile.id || null,
+          name: parentProfile.name || null,
+          email: parentProfile.email || null,
+        },
+        issuer: {
+          id: profile.id,
+          name: issuerName,
+        },
+      });
+
+      setReceiptResult(result);
+      await attachReceiptToPayment(receiptDraft.upload, result.receiptUrl ?? null, result.storagePath);
+
+      if (sendToParent) {
+        await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amountValue);
+        showAlert({
+          title: 'Receipt Sent',
+          message: `Receipt sent to ${parentProfile.email || 'the parent'}.`,
+          type: 'success',
+        });
+        setShowReceiptModal(false);
+      } else {
+        showAlert({
+          title: 'Receipt Ready',
+          message: 'Receipt generated. You can send it to the parent when ready.',
+          type: 'success',
+        });
+      }
+    } catch (err: any) {
+      showAlert({
+        title: 'Receipt Error',
+        message: err?.message || 'Failed to generate receipt',
+        type: 'error',
+      });
+    } finally {
+      setReceiptGenerating(false);
+    }
+  };
+
   // Filter uploads
   useEffect(() => {
     let filtered = uploads;
@@ -196,12 +427,7 @@ export default function POPReviewScreen() {
                 status: 'approved',
                 reviewNotes: 'Payment verified and approved',
               });
-              
-              setSuccessMessage({
-                title: 'Payment Approved! ✅',
-                message: `The payment from ${upload.uploader?.first_name || 'the parent'} has been approved. They will be notified.`,
-              });
-              setShowSuccessModal(true);
+              openReceiptModal(upload);
               
               // Refresh the list
               fetchUploads();
@@ -607,6 +833,118 @@ export default function POPReviewScreen() {
         </View>
       </Modal>
 
+      {/* Receipt Modal */}
+      <Modal
+        visible={showReceiptModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReceiptModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Payment Receipt</Text>
+            <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>
+              Review the receipt details, then generate and send to the parent.
+            </Text>
+
+            <TextInput
+              style={[styles.receiptInput, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+              placeholder="Description"
+              placeholderTextColor={theme.textSecondary}
+              value={receiptDraft?.description || ''}
+              onChangeText={(value) =>
+                setReceiptDraft((prev) => (prev ? { ...prev, description: value } : prev))
+              }
+            />
+
+            <View style={styles.receiptRow}>
+              <TextInput
+                style={[styles.receiptInputSmall, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                placeholder="Amount"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={receiptDraft?.amount || ''}
+                onChangeText={(value) =>
+                  setReceiptDraft((prev) => (prev ? { ...prev, amount: value } : prev))
+                }
+              />
+              <TextInput
+                style={[styles.receiptInputSmall, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                placeholder="Paid Date (YYYY-MM-DD)"
+                placeholderTextColor={theme.textSecondary}
+                value={receiptDraft?.paidDate || ''}
+                onChangeText={(value) =>
+                  setReceiptDraft((prev) => (prev ? { ...prev, paidDate: value } : prev))
+                }
+              />
+            </View>
+
+            <View style={styles.receiptRow}>
+              <TextInput
+                style={[styles.receiptInputSmall, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                placeholder="Payment Method"
+                placeholderTextColor={theme.textSecondary}
+                value={receiptDraft?.paymentMethod || ''}
+                onChangeText={(value) =>
+                  setReceiptDraft((prev) => (prev ? { ...prev, paymentMethod: value } : prev))
+                }
+              />
+              <TextInput
+                style={[styles.receiptInputSmall, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                placeholder="Reference"
+                placeholderTextColor={theme.textSecondary}
+                value={receiptDraft?.paymentReference || ''}
+                onChangeText={(value) =>
+                  setReceiptDraft((prev) => (prev ? { ...prev, paymentReference: value } : prev))
+                }
+              />
+            </View>
+
+            {receiptResult?.receiptUrl ? (
+              <TouchableOpacity
+                style={[styles.receiptViewButton, { borderColor: theme.border }]}
+                onPress={() => Linking.openURL(receiptResult.receiptUrl!)}
+              >
+                <Ionicons name="open-outline" size={18} color={theme.primary} />
+                <Text style={[styles.receiptViewText, { color: theme.primary }]}>View Receipt</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton, { borderColor: theme.border }]}
+                onPress={() => setShowReceiptModal(false)}
+                disabled={receiptGenerating}
+              >
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.primary }]}
+                onPress={() => handleGenerateReceipt(false)}
+                disabled={receiptGenerating}
+              >
+                {receiptGenerating ? (
+                  <EduDashSpinner size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Generate</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: theme.success }]}
+                onPress={() => handleGenerateReceipt(true)}
+                disabled={receiptGenerating}
+              >
+                {receiptGenerating ? (
+                  <EduDashSpinner size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Success Modal */}
       <SuccessModal
         visible={showSuccessModal}
@@ -847,6 +1185,40 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
       fontSize: 14,
       minHeight: 80,
       textAlignVertical: 'top',
+    },
+    receiptInput: {
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 14,
+      marginBottom: 12,
+    },
+    receiptInputSmall: {
+      flex: 1,
+      borderWidth: 1,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 14,
+    },
+    receiptRow: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 12,
+    },
+    receiptViewButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingVertical: 10,
+      gap: 6,
+      marginTop: 4,
+      marginBottom: 12,
+    },
+    receiptViewText: {
+      fontSize: 14,
+      fontWeight: '600',
     },
     modalActions: {
       flexDirection: 'row',
