@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +10,7 @@ import { TeacherReputationService } from '@/lib/services/TeacherReputationServic
 import { ApplicationWithDetails, ApplicationStatus } from '@/types/hiring';
 import type { TeacherReference, TeacherRatingSummary } from '@/types/teacher-reputation';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ApplicationReviewScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId: string }>();
   const { user } = useAuth();
@@ -213,7 +205,7 @@ export default function ApplicationReviewScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading application...</Text>
         </View>
       </SafeAreaView>
@@ -378,7 +370,7 @@ export default function ApplicationReviewScreen() {
                   disabled={updating}
                 >
                   {updating ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <EduDashSpinner color="#FFFFFF" size="small" />
                   ) : (
                     <Text style={styles.actionButtonText}>{action.label}</Text>
                   )}

@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
-  Share,
-  Alert,
-  Image,
-  ActivityIndicator,
-  Animated,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Share, Alert, Image, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useOrganization } from '@/hooks/useOrganization';
@@ -21,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 // QR Code - optional dependency
 import QRCode from 'react-native-qrcode-svg';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ProgramCodeShareModalProps {
   visible: boolean;
   onClose: () => void;
@@ -316,7 +305,7 @@ export function ProgramCodeShareModal({
                     </View>
                   </View>
                 ) : (
-                  <ActivityIndicator size="large" color={theme.primary} />
+                  <EduDashSpinner size="large" color={theme.primary} />
                 )}
               </View>
               {qrCodeValue && (

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAgeGroup } from '@/lib/hooks/useAgeGroup';
@@ -8,6 +8,7 @@ import { DashboardRegistry } from './registry/DashboardRegistry';
 import { DASHBOARD_CARDS } from './cards';
 import type { OrganizationType } from '@/lib/types/organization';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface DashboardRouterProps {
   /** Hub type to render (learner, guardian, instructor, admin, financial) */
   hubType: 'learner' | 'guardian' | 'instructor' | 'admin' | 'financial';
@@ -67,7 +68,7 @@ export function DashboardRouter({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+        <EduDashSpinner size="large" />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );

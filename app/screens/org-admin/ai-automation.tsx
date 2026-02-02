@@ -9,7 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useMutation } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AutomationTool {
   id: string;
   title: string;
@@ -266,7 +267,7 @@ export default function AIAutomationScreen() {
               disabled={isGenerating || !inputText.trim()}
             >
               {isGenerating ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Ionicons name="sparkles" size={20} color="#fff" />

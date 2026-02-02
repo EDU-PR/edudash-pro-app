@@ -5,27 +5,13 @@
  */
 
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  Modal,
-  Image,
-  StyleSheet,
-  Dimensions,
-  TouchableOpacity,
-  Text,
-  StatusBar,
-  Platform,
-  Share,
-  Alert,
-  ActivityIndicator,
-  Animated,
-  PanResponder,
-} from 'react-native';
+import { View, Modal, Image, StyleSheet, Dimensions, TouchableOpacity, Text, StatusBar, Platform, Share, Alert, Animated, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 100;
 
@@ -204,7 +190,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSave} style={styles.headerButton} disabled={saving}>
                 {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Ionicons name="download-outline" size={24} color="#fff" />
                 )}
@@ -233,7 +219,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           >
             {loading && (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#fff" />
+                <EduDashSpinner size="large" color="#fff" />
               </View>
             )}
             <Image

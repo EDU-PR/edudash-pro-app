@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth, useLogin, useRegister, useLogout } from '../../lib/auth/useAuth';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * Login Form Component
  * Handles user authentication with email and password
@@ -95,7 +85,7 @@ export const LoginForm: React.FC<{
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
             )}
@@ -258,7 +248,7 @@ export const RegisterForm: React.FC<{
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <Text style={styles.buttonText}>{t('auth_comp.create_account_button')}</Text>
             )}
@@ -373,7 +363,7 @@ export const UserProfile: React.FC = () => {
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#fff" />
+            <EduDashSpinner color="#fff" />
           ) : (
             <Text style={styles.logoutButtonText}>Logout</Text>
           )}
@@ -399,7 +389,7 @@ export const AuthGuard: React.FC<{
   if (!initialized || loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <EduDashSpinner size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );

@@ -3,19 +3,7 @@
  * Quick registration using organization/region invite code
  */
 import React, { useState, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  TextInput,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Animated,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +18,7 @@ import { useEffect } from 'react';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import { MembershipNotificationService } from '@/services/membership/MembershipNotificationService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Organization info returned from code lookup
@@ -660,7 +649,7 @@ export default function JoinByCodeScreen() {
                 disabled={isVerifying || inviteCode.length < 5}
               >
                 {isVerifying ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <>
                     <Ionicons name="search-outline" size={20} color="#fff" />
@@ -922,7 +911,7 @@ export default function JoinByCodeScreen() {
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <>
                 <Ionicons name="person-add" size={20} color="#fff" />

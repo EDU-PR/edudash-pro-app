@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +9,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { PasswordStrengthIndicator } from '@/components/auth/PasswordStrengthIndicator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ChangePasswordScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -211,7 +202,7 @@ export default function ChangePasswordScreen() {
               </Text>
               <View style={styles.readonlyInput}>
                 {initializing ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                 ) : (
                   <Text style={styles.readonlyValue}>{currentEmail || '—'}</Text>
                 )}
@@ -304,7 +295,7 @@ export default function ChangePasswordScreen() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator size="small" color={theme.onPrimary} />
+                <EduDashSpinner size="small" color={theme.onPrimary} />
               ) : (
                 <Text style={styles.buttonText}>
                   {t('account.change_password_cta', { defaultValue: 'Update Password' })}

@@ -1,15 +1,7 @@
 // Principal Meetings Screen - Refactored for WARP.md compliance
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +16,7 @@ import {
   type MeetingStatus,
 } from '@/components/principal/meetings';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const getDefaultFormData = (): MeetingFormData => {
   const now = new Date();
   const startTime = new Date(now);
@@ -148,7 +141,7 @@ export default function PrincipalMeetingsScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading meetings...</Text>
         </View>
       </SafeAreaView>

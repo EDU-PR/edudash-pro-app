@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,7 @@ import type { LearnerQuickAction } from '@/components/learner/QuickActions';
 import DashOrb from '@/components/dash-orb';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function StudentDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
   const { theme, isDark } = useTheme();
@@ -116,7 +117,7 @@ export default function StudentDashboard() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: t('student.dashboard_title', { defaultValue: 'Student Dashboard' }) }} />
         <View style={styles.empty}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
       </SafeAreaView>

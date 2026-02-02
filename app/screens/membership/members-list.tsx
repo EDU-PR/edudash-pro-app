@@ -4,16 +4,7 @@
  * Filterable by status, searchable, with detail navigation
  */
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +15,7 @@ import { OrganizationMember, STATUS_COLORS, MEMBER_TYPE_LABELS } from '@/compone
 import { useYouthMembers } from '@/hooks/membership/useYouthMembers';
 import { styles } from '@/components/membership/styles/members-list.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterType = 'all' | 'active' | 'pending' | 'suspended';
 
 const FILTERS: { key: FilterType; label: string; icon: string }[] = [
@@ -125,7 +117,7 @@ export default function YouthMembersListScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading youth members...</Text>
         </View>
       </SafeAreaView>

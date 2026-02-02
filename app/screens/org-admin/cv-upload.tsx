@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +19,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { normalizeRole } from '@/lib/rbac';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function CVUploadScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -280,7 +281,7 @@ export default function CVUploadScreen() {
         {uploading && (
           <Card padding={20} margin={0} elevation="small" style={styles.section}>
             <View style={styles.progressContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={styles.progressText}>
                 {t('cv_upload.uploading', { defaultValue: 'Uploading and processing...' })} {Math.round(uploadProgress)}%
               </Text>

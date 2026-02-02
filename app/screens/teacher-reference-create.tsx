@@ -1,14 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  Switch,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Switch, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
 import { CreateTeacherReferenceSchema } from '@/types/teacher-reputation';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherReferenceCreateScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -138,7 +130,7 @@ export default function TeacherReferenceCreateScreen() {
         </View>
 
         <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={saving}>
-          {saving ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={styles.submitText}>Submit Reference</Text>}
+          {saving ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={styles.submitText}>Submit Reference</Text>}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

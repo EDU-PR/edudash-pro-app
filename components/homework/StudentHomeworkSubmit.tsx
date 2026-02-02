@@ -6,18 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -25,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { assertSupabase } from '../../lib/supabase';
 import { ensureImageLibraryPermission } from '../../lib/utils/mediaLibrary';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ====================================================================
 // TYPES
 // ====================================================================
@@ -406,7 +396,7 @@ export function StudentHomeworkSubmit({
         ]}
       >
         {submitting ? (
-          <ActivityIndicator color="#fff" />
+          <EduDashSpinner color="#fff" />
         ) : (
           <>
             <Ionicons name="paper-plane" size={24} color="#fff" />

@@ -7,12 +7,13 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useVoiceUsageLimits } from '@/lib/voice/useVoiceUsageLimits';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface VoiceUsageQuotaCardProps {
   onUpgradePress?: () => void;
 }
@@ -25,7 +26,7 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
   if (loading) {
     return (
       <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <ActivityIndicator size="small" color={colors.primary} />
+        <EduDashSpinner size="small" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
           Loading usage information...
         </Text>

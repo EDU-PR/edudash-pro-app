@@ -2,19 +2,7 @@
 // Comprehensive sign-in with MFA, social login, and recovery options
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Dimensions, Platform, KeyboardAvoidingView } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -26,6 +14,7 @@ import { BiometricAuthService } from '../../services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '../../services/EnhancedBiometricAuth';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
 interface EnhancedSignInProps {
@@ -546,7 +535,7 @@ export const EnhancedSignIn: React.FC<EnhancedSignInProps> = ({
               onPress={handleBiometricLogin}
             >
               {isLoading ? (
-                <ActivityIndicator color="#0b1220" size="small" />
+                <EduDashSpinner color="#0b1220" size="small" />
               ) : (
                 <>
                   <Ionicons 
@@ -769,7 +758,7 @@ export const EnhancedSignIn: React.FC<EnhancedSignInProps> = ({
             disabled={isLoading || isLocked}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color={theme.onPrimary} />
+              <EduDashSpinner size="small" color={theme.onPrimary} />
             ) : (
               <Text style={[styles.signInButtonText, { color: theme.onPrimary }]}>
                 {mode === "password" ? 

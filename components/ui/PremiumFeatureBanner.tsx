@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAds } from '@/contexts/AdsContext';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface PremiumFeatureBannerProps {
   /**
    * Title of the feature that requires premium
@@ -237,7 +238,7 @@ export default function PremiumFeatureBanner({
               accessibilityLabel="Watch an ad to try this feature for free"
             >
               {isLoadingAd ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <>
                   <Ionicons name="play-circle" size={20} color={theme.primary} />

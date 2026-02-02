@@ -1,5 +1,5 @@
 import React, { memo, useState, useEffect } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 // Using refactored modular dashboard (317 lines vs 1,518 lines original)
 import PrincipalDashboardV2 from './PrincipalDashboardV2';
 import { K12AdminDashboard } from './K12AdminDashboard';
@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // EduDash Pro schools use K-12 dashboard (not preschool)
 const K12_SCHOOL_IDS = [
   '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
@@ -87,7 +88,7 @@ const PrincipalDashboardWrapperComponent: React.FC<PrincipalDashboardWrapperProp
   if (loading) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading dashboard...
         </Text>

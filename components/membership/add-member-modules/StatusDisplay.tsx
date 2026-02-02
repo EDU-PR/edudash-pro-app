@@ -2,11 +2,12 @@
  * Status display components for Add Member screen
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './styles';
 import { RetryStatus } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ============================================================================
 // Error Display Component
 // ============================================================================
@@ -55,7 +56,7 @@ export function RetryStatusDisplay({
 
   return (
     <View style={[styles.retryContainer, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]}>
-      <ActivityIndicator size="small" color="#3B82F6" />
+      <EduDashSpinner size="small" color="#3B82F6" />
       <Text style={[styles.retryText, { color: '#1E40AF' }]}>
         {retryStatus.retry > 0 
           ? `Retrying... (Attempt ${retryStatus.retry + 1}/${retryStatus.maxRetries})`

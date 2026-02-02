@@ -2,23 +2,11 @@
 // Comprehensive 2FA setup and verification with multiple methods
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  Share,
-  Clipboard,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Dimensions, Platform, Share, Clipboard } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { EnhancedUser } from '../../types/auth-enhanced';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
 interface TwoFactorAuthProps {
@@ -534,7 +522,7 @@ export const TwoFactorAuth: React.FC<TwoFactorAuthProps> = ({
           disabled={verificationState.isVerifying || isCooldown}
         >
           {verificationState.isVerifying ? (
-            <ActivityIndicator color={theme.onPrimary} />
+            <EduDashSpinner color={theme.onPrimary} />
           ) : (
             <Text style={[styles.verifyButtonText, { color: theme.onPrimary }]}>
               {mode === 'setup' ? 'Verify & Enable 2FA' : 'Verify'}
@@ -654,7 +642,7 @@ export const TwoFactorAuth: React.FC<TwoFactorAuthProps> = ({
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator color={theme.onPrimary} />
+              <EduDashSpinner color={theme.onPrimary} />
             ) : (
               <Text style={[styles.continueButtonText, { color: theme.onPrimary }]}>
                 Continue

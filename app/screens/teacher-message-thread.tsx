@@ -12,20 +12,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-  KeyboardAvoidingView,
-  ActivityIndicator,
-  ScrollView,
-  ImageBackground,
-  Keyboard,
-  Vibration,
-  TextInput,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, KeyboardAvoidingView, ScrollView, ImageBackground, Keyboard, Vibration, TextInput } from 'react-native';
 import { toast } from '@/components/ui/ToastProvider';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +33,7 @@ import {
 import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
 let useAuth: () => { user: any; profile: any };
@@ -444,7 +432,7 @@ export default function TeacherMessageThreadScreen() {
           <Text style={styles.headerTitle}>{displayName}</Text>
         </View>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </View>
     );

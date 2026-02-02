@@ -6,19 +6,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
-  Share,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, TextInput, Share, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -53,6 +41,7 @@ import { SuccessModal } from '@/components/ui/SuccessModal';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Preschool-specific constants
 const AGE_GROUPS = [
   { id: 'toddlers', label: 'Toddlers (1-2 years)', ageRange: '1-2', description: 'Early exploration and sensory play' },
@@ -748,7 +737,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
           disabled={pending}
         >
           {pending ? (
-            <ActivityIndicator color="#FFF" />
+            <EduDashSpinner color="#FFF" />
           ) : (
             <>
               <Ionicons name="sparkles" size={20} color="#FFF" />
@@ -763,7 +752,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
         {pending && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: '#FF6B6B', marginTop: 16 }]}>
             <View style={styles.progressHeader}>
-              <ActivityIndicator color="#FF6B6B" />
+              <EduDashSpinner color="#FF6B6B" />
               <Text style={[styles.progressTitle, { color: '#FF6B6B' }]}>Generating...</Text>
             </View>
             <Text style={{ color: palette.textSec, fontSize: 13 }}>{progressMessage}</Text>
@@ -865,7 +854,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#FFF" size="small" />
+                  <EduDashSpinner color="#FFF" size="small" />
                 ) : (
                   <>
                     <Ionicons name="save-outline" size={16} color="#FFF" />

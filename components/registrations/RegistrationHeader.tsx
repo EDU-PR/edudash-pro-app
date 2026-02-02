@@ -6,18 +6,13 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RegistrationHeaderProps {
   pendingCount: number;
   approvedCount: number;
@@ -64,7 +59,7 @@ export const RegistrationHeader: React.FC<RegistrationHeaderProps> = ({
             disabled={syncing}
           >
             {syncing ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons name="sync" size={18} color="#fff" />

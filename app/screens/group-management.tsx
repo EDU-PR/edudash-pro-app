@@ -6,18 +6,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Modal,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +18,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const GROUP_TYPES = [
   { value: 'teacher_team', label: 'Teacher Team', icon: 'people-outline', color: '#6366F1' },
   { value: 'grade_group', label: 'Grade Group', icon: 'school-outline', color: '#10B981' },
@@ -188,7 +178,7 @@ export default function GroupManagementScreen() {
           />
         ) : isLoading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
             <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
           </View>
         ) : error ? (
@@ -257,7 +247,7 @@ export default function GroupManagementScreen() {
                 disabled={createGroupMutation.isPending}
               >
                 {createGroupMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <Text style={styles.modalButtonText}>Create</Text>
                 )}

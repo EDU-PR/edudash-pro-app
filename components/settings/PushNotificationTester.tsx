@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-  TextInput,
-  ActivityIndicator,
-  Platform,
-  Clipboard,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, TextInput, Platform, Clipboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
@@ -20,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface NotificationStatus {
   hasPermission: boolean;
   canSetBadge: boolean;
@@ -469,7 +459,7 @@ export const PushNotificationTester: React.FC = () => {
   if (notificationStatus.isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
         <Text style={styles.loadingText}>Loading notification status...</Text>
       </View>
     );
@@ -619,7 +609,7 @@ export const PushNotificationTester: React.FC = () => {
             disabled={isSendingTest}
           >
             {isSendingTest ? (
-              <ActivityIndicator size="small" color={theme.onPrimary} />
+              <EduDashSpinner size="small" color={theme.onPrimary} />
             ) : (
               <Text style={styles.buttonText}>🚀 Send Test Notification</Text>
             )}

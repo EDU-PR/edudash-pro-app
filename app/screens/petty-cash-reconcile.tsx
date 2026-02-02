@@ -10,17 +10,7 @@
  */
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +21,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { navigateBack } from '@/lib/navigation';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface CashCount {
   denomination: number;
   count: number;
@@ -308,7 +299,7 @@ export default function PettyCashReconcileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme?.primary || '#007AFF'} />
+          <EduDashSpinner size="large" color={theme?.primary || '#007AFF'} />
           <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
       </SafeAreaView>
@@ -321,7 +312,7 @@ export default function PettyCashReconcileScreen() {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme?.primary || '#007AFF'} />
+            <EduDashSpinner size="large" color={theme?.primary || '#007AFF'} />
             <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
           </View>
         </SafeAreaView>

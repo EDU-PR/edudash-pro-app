@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { assertSupabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -38,7 +38,8 @@ export default function TeacherMessagesScreen() {
   const [sending, setSending] = useState(false)
 
   // Prefill support for Dash
-  const params = useLocalSearchParams<{ prefillSubject?: string; prefillMessage?: string }>()
+  const params = useLocalSearchParams<{ prefillSubject?: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
+prefillMessage?: string }>()
   React.useEffect(() => {
     const s = (params?.prefillSubject || '').trim()
     const m = (params?.prefillMessage || '').trim()
@@ -119,7 +120,7 @@ export default function TeacherMessagesScreen() {
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
             <Text style={[styles.cardTitle, { color: palette.text }]}>Class</Text>
             {classesQuery.isLoading ? (
-              <ActivityIndicator color={palette.primary} />
+              <EduDashSpinner color={palette.primary} />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {classes.map(c => (
@@ -160,7 +161,7 @@ export default function TeacherMessagesScreen() {
               ]}
             >
               {sending ? (
-                <ActivityIndicator color={theme.onPrimary} />
+                <EduDashSpinner color={theme.onPrimary} />
               ) : (
                 <Text style={[styles.primaryBtnText, { color: theme.onPrimary }]}>Send</Text>
               )}

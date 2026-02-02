@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 function getEmailChangeRedirectUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/landing?flow=email-change`;
@@ -177,7 +168,7 @@ export default function ChangeEmailScreen() {
               </Text>
               <View style={styles.readonlyInput}>
                 {initializing ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                 ) : (
                   <Text style={styles.readonlyValue}>{currentEmail || '—'}</Text>
                 )}
@@ -209,7 +200,7 @@ export default function ChangeEmailScreen() {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator size="small" color={theme.onPrimary} />
+                <EduDashSpinner size="small" color={theme.onPrimary} />
               ) : (
                 <Text style={styles.buttonText}>
                   {t('account.change_email_cta', { defaultValue: 'Send Confirmation Link' })}

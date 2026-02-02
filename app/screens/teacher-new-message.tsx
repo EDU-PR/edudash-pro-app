@@ -1,15 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +10,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useTeacherStudents } from '@/hooks/useTeacherStudents';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ParentProfile {
   id: string;
   first_name: string | null;
@@ -279,7 +270,7 @@ export default function TeacherNewMessageScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {loading || loadingParents ? (
           <View style={styles.empty}>
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
             <Text style={styles.emptyText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
           </View>
         ) : null}

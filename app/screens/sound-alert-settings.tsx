@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Switch,
-  TouchableOpacity,
-  Alert,
-  Platform,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, Platform, Modal, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -28,6 +16,7 @@ import SoundAlertService, {
 } from '@/lib/SoundAlertService';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AlertTypeConfig {
   type: AlertType;
   title: string;
@@ -377,7 +366,7 @@ export default function SoundAlertSettingsScreen() {
                 disabled={testingAlert === alertConfig.type}
               >
                 {testingAlert === alertConfig.type ? (
-                  <ActivityIndicator size="small" color={alertConfig.color} />
+                  <EduDashSpinner size="small" color={alertConfig.color} />
                 ) : (
                   <Ionicons name="play" size={16} color={alertConfig.color} />
                 )}
@@ -646,7 +635,7 @@ export default function SoundAlertSettingsScreen() {
         <Stack.Screen options={{ title: 'Sound Alerts', headerShown: false }} />
         <ThemedStatusBar />
         <SafeAreaView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading sound settings...
           </Text>

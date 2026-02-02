@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -7,6 +7,7 @@ import * as Application from 'expo-application';
 import * as Updates from 'expo-updates';
 import type { ViewStyle, TextStyle } from 'react-native';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface UpdatesSectionProps {
   isDownloading: boolean;
   isUpdateDownloaded: boolean;
@@ -113,7 +114,7 @@ export function UpdatesSection({
             </View>
           </View>
           {isDownloading ? (
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
           ) : (
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           )}

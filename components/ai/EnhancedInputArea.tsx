@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text, Keyboard, Animated, Platform, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { View, TextInput, StyleSheet, TouchableOpacity, Text, Keyboard, Animated, Platform, Image, ScrollView } from 'react-native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,7 @@ import { pickDocuments } from '@/services/AttachmentService';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage } from '@/lib/ai/simple-image-upload';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface EnhancedInputAreaProps {
   placeholder?: string;
   sending?: boolean;
@@ -181,7 +182,7 @@ export function EnhancedInputArea({ placeholder = 'Message Dash...', sending = f
               />
               {att.status === 'uploading' && (
                 <View style={styles.uploadingOverlay}>
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 </View>
               )}
               {att.status === 'failed' && (

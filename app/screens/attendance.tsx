@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Platform } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { assertSupabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -18,7 +18,8 @@ import { format } from 'date-fns'
 // Alert modal state interface
 interface AlertState {
   visible: boolean;
-  title: string;
+  import EduDashSpinner from '@/components/ui/EduDashSpinner';
+title: string;
   message: string;
   type: 'info' | 'warning' | 'success' | 'error';
   buttons: AlertButton[];
@@ -345,7 +346,7 @@ export default function AttendanceScreen() {
           
           {schoolLoading ? (
             <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
-              <ActivityIndicator color={palette.primary} />
+              <EduDashSpinner color={palette.primary} />
               <Text style={{ color: palette.textSecondary, textAlign: 'center', marginTop: 8 }}>Loading school information...</Text>
             </View>
           ) : !schoolId ? (
@@ -390,7 +391,7 @@ export default function AttendanceScreen() {
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
             <Text style={styles.cardTitle}>Class</Text>
             {classesQuery.isLoading ? (
-              <ActivityIndicator color={palette.primary} />
+              <EduDashSpinner color={palette.primary} />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {classes.map(c => (
@@ -422,7 +423,7 @@ export default function AttendanceScreen() {
               <Text style={styles.hint}>Tap a student to cycle: Present → Late → Absent</Text>
 
               {studentsQuery.isLoading ? (
-                <ActivityIndicator color={palette.primary} />
+                <EduDashSpinner color={palette.primary} />
               ) : (
                 <View style={{ gap: 8 }}>
                   {students.length === 0 ? (
@@ -449,7 +450,7 @@ export default function AttendanceScreen() {
 
           <View style={{ gap: 12 }}>
             <TouchableOpacity onPress={onSubmit} disabled={!classId || submitting || !schoolId} style={[styles.submitBtn, (!classId || submitting || !schoolId) && styles.dim]}>
-              {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitText}>Submit Attendance</Text>}
+              {submitting ? <EduDashSpinner color="#000" /> : <Text style={styles.submitText}>Submit Attendance</Text>}
             </TouchableOpacity>
             
             <TouchableOpacity 

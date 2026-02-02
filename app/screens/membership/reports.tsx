@@ -3,7 +3,7 @@
  * Analytics and reports for Youth President dashboard
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { DashboardWallpaperBackground } from '@/components/membership/dashboard'
 import { useYouthReports, MONTHLY_DATA, formatCurrency, formatNumber } from '@/hooks/membership/useYouthReports';
 import { styles } from '@/components/membership/styles/reports.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type PeriodType = 'week' | 'month' | 'quarter' | 'year';
 const PERIODS: { key: PeriodType; label: string }[] = [
   { key: 'week', label: 'Week' }, { key: 'month', label: 'Month' }, { key: 'quarter', label: 'Quarter' }, { key: 'year', label: 'Year' },
@@ -25,7 +26,7 @@ export default function YouthReportsScreen() {
   const maxMembers = Math.max(...MONTHLY_DATA.map(d => d.members));
 
   if (isLoading) {
-    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color="#10B981" /><Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading reports...</Text></View></SafeAreaView>;
+    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}><View style={styles.loadingContainer}><EduDashSpinner size="large" color="#10B981" /><Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading reports...</Text></View></SafeAreaView>;
   }
 
   return (

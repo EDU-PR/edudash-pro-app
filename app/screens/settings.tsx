@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-} from "react-native";
+import { View, Text, ScrollView, RefreshControl, Alert, TouchableOpacity } from "react-native";
 import { Stack, router } from 'expo-router';
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { BiometricBackupManager } from "@/lib/BiometricBackupManager";
@@ -39,6 +31,7 @@ import {
 // App Preferences Section - FAB & Tutorial settings
 import { AppPreferencesSection } from '@/components/settings/AppPreferencesSection';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 let Clipboard: any = null;
 try {
   Clipboard = require('expo-clipboard');
@@ -362,7 +355,7 @@ export default function SettingsScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('settings.loading.settings', { defaultValue: 'Loading settings...' })}</Text>
           </View>
         </View>

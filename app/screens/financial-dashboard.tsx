@@ -9,16 +9,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,6 +27,7 @@ import { ExportService } from '@/lib/services/finance/ExportService';
 import type { FinanceOverviewData, FinancialMetrics, TransactionRecord } from '@/services/FinancialDataService';
 import type { ExportFormat } from '@/lib/services/finance/ExportService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type IconName = keyof typeof Ionicons.glyphMap;
 type TransactionStatus = TransactionRecord['status'];
 
@@ -211,7 +203,7 @@ export default function FinanceDashboard() {
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.light.tint} />
+        <EduDashSpinner size="large" color={Colors.light.tint} />
         <Text style={styles.loadingText}>{t('finance_dashboard.loading', { defaultValue: 'Loading financial dashboard...' })}</Text>
       </SafeAreaView>
     );

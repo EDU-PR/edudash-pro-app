@@ -1,16 +1,10 @@
 import React, { useRef } from 'react';
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { styles } from './DashAIChat.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ChatInputProps {
   inputText: string;
   setInputText: (text: string) => void;
@@ -83,7 +77,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           disabled={!inputText.trim() || isProcessing}
         >
           {isProcessing ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <EduDashSpinner size="small" color="#fff" />
           ) : (
             <Ionicons name="arrow-up" size={20} color="#fff" />
           )}

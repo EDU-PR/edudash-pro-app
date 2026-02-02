@@ -9,18 +9,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Switch,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Switch, Alert, RefreshControl } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 import type { BirthdayCelebrationPreferences } from '@/services/BirthdayPlannerService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Theme options for birthday celebrations
 const BIRTHDAY_THEMES = [
   { id: 'princess', label: '👸 Princess', color: '#EC4899' },
@@ -180,7 +170,7 @@ export default function BirthdayPlannerScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Birthday Planner' }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading birthday info...</Text>
       </View>
     );
@@ -467,7 +457,7 @@ export default function BirthdayPlannerScreen() {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" />

@@ -4,17 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -30,6 +20,7 @@ import OrganizationAnnouncementService, {
   type AnnouncementType,
 } from '@/lib/services/organizationAnnouncementService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -390,7 +381,7 @@ export default function BroadcastScreen() {
               disabled={sending}
             >
               {sending ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Ionicons name="send" size={20} color="#fff" />
@@ -406,7 +397,7 @@ export default function BroadcastScreen() {
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Announcements</Text>
           
           {loading ? (
-            <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
+            <EduDashSpinner size="large" color={theme.primary} style={styles.loader} />
           ) : recentAnnouncements.length === 0 ? (
             <Card margin={0}>
               <View style={styles.emptyState}>

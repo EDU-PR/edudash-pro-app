@@ -4,19 +4,7 @@
  * to edit member details
  */
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert, Modal } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +14,7 @@ import { useMemberDetail } from '@/hooks/membership/useMemberDetail';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Authorized member types that can edit member details
 const EDIT_AUTHORIZED_TYPES = [
   'ceo', 'president', 'deputy_president', 'secretary_general', 'treasurer', 'national_admin',
@@ -179,7 +168,7 @@ export default function EditMemberScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading member details...</Text>
         </View>
       </SafeAreaView>
@@ -245,7 +234,7 @@ export default function EditMemberScreen() {
           disabled={saving || !hasChanges}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <EduDashSpinner size="small" color="#fff" />
           ) : (
             <Text style={styles.saveButtonText}>Save</Text>
           )}

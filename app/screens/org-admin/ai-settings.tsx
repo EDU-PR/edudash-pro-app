@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '@/components/ui/Card';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/useOrgSettings';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function OrgAISettingsScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -64,7 +65,7 @@ export default function OrgAISettingsScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('ai_settings.title', { defaultValue: 'Dash AI Settings' }) }} />
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </View>
     );
@@ -78,7 +79,7 @@ export default function OrgAISettingsScreen() {
           headerRight: () => (
             <TouchableOpacity onPress={handleSave} style={{ marginRight: 16 }}>
               {updateSettings.isPending ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>
                   {t('common.save', { defaultValue: 'Save' })}

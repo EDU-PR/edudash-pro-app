@@ -9,12 +9,13 @@
  * this route renders the actual reset password UI.
  */
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import ResetPasswordScreen from './(auth)/reset-password';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ResetPasswordRoute() {
   const params = useLocalSearchParams();
   const [checking, setChecking] = useState(true);
@@ -141,7 +142,7 @@ export default function ResetPasswordRoute() {
   if (checking) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
         <Text style={styles.text}>Verifying reset link...</Text>
       </View>
     );

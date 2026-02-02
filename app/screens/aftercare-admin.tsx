@@ -6,20 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  Linking,
-  Image,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert, Modal, ScrollView, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AfterCareRegistration {
   id: string;
   preschool_id: string;
@@ -336,7 +324,7 @@ export default function AfterCareAdminScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading registrations...</Text>
       </View>
     );
@@ -544,7 +532,7 @@ export default function AfterCareAdminScreen() {
                           disabled={processing === selectedRegistration.id}
                         >
                           {processing === selectedRegistration.id ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <EduDashSpinner size="small" color="#fff" />
                           ) : (
                             <>
                               <Ionicons name="checkmark-done" size={20} color="#fff" />
@@ -571,7 +559,7 @@ export default function AfterCareAdminScreen() {
                           disabled={processing === selectedRegistration.id}
                         >
                           {processing === selectedRegistration.id ? (
-                            <ActivityIndicator size="small" color="#fff" />
+                            <EduDashSpinner size="small" color="#fff" />
                           ) : (
                             <>
                               <Ionicons name="cash-outline" size={20} color="#fff" />
@@ -603,7 +591,7 @@ export default function AfterCareAdminScreen() {
                       disabled={processing === selectedRegistration.id}
                     >
                       {processing === selectedRegistration.id ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <EduDashSpinner size="small" color="#fff" />
                       ) : (
                         <>
                           <Ionicons name="school" size={20} color="#fff" />
@@ -695,7 +683,7 @@ export default function AfterCareAdminScreen() {
                       disabled={processing === selectedRegistration.id}
                     >
                       {processing === selectedRegistration.id ? (
-                        <ActivityIndicator size="small" color="#667eea" />
+                        <EduDashSpinner size="small" color="#667eea" />
                       ) : (
                         <>
                           <Ionicons name="mail-outline" size={20} color="#667eea" />

@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/ToastProvider';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import { QuotaBar } from '@/components/ai-lesson-generator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type LanguageCode = 'en' | 'es' | 'fr' | 'pt' | 'de' | 'af' | 'zu' | 'st';
 
 export default function AILessonGeneratorScreen() {
@@ -217,10 +218,10 @@ export default function AILessonGeneratorScreen() {
         {/* Buttons */}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <TouchableOpacity onPress={handleGenerate} style={[styles.btn, { backgroundColor: isQuotaExhausted ? '#9CA3AF' : theme.primary, flex: 1 }]} disabled={pending}>
-            {pending ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>{isQuotaExhausted ? 'Upgrade' : 'Generate'}</Text>}
+            {pending ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>{isQuotaExhausted ? 'Upgrade' : 'Generate'}</Text>}
           </TouchableOpacity>
           <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: (generated?.content || generated?.description) ? theme.accent : palette.outline, flex: 1 }]} disabled={saving || !(generated?.content || generated?.description)}>
-            {saving ? <ActivityIndicator color={theme.onAccent} /> : <Text style={[styles.btnText, { color: (generated?.content || generated?.description) ? theme.onAccent : palette.textSec }]}>Save</Text>}
+            {saving ? <EduDashSpinner color={theme.onAccent} /> : <Text style={[styles.btnText, { color: (generated?.content || generated?.description) ? theme.onAccent : palette.textSec }]}>Save</Text>}
           </TouchableOpacity>
         </View>
 
@@ -228,7 +229,7 @@ export default function AILessonGeneratorScreen() {
         {pending && (
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: theme.primary, marginTop: 16 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}><ActivityIndicator color={theme.primary} /><Text style={{ color: theme.primary, marginLeft: 8, fontWeight: '600' }}>Generating...</Text></View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}><EduDashSpinner color={theme.primary} /><Text style={{ color: theme.primary, marginLeft: 8, fontWeight: '600' }}>Generating...</Text></View>
               <TouchableOpacity style={{ backgroundColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }} onPress={onCancel}><Text style={{ color: '#FFF', fontSize: 12 }}>Cancel</Text></TouchableOpacity>
             </View>
             <Text style={{ color: palette.textSec, fontSize: 13 }}>{progressMessage}</Text>
@@ -270,7 +271,7 @@ export default function AILessonGeneratorScreen() {
               })()}
             </View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-              <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: theme.primary, flex: 1 }]} disabled={saving}>{saving ? <ActivityIndicator color={theme.onPrimary} size="small" /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>Save</Text>}</TouchableOpacity>
+              <TouchableOpacity onPress={onSave} style={[styles.btn, { backgroundColor: theme.primary, flex: 1 }]} disabled={saving}>{saving ? <EduDashSpinner color={theme.onPrimary} size="small" /> : <Text style={[styles.btnText, { color: theme.onPrimary }]}>Save</Text>}</TouchableOpacity>
               <TouchableOpacity onPress={() => { setGenerated(null); toast.info('Cleared'); }} style={[styles.btn, { backgroundColor: palette.outline, paddingHorizontal: 12 }]}><Ionicons name="refresh-outline" size={16} color={palette.text} /></TouchableOpacity>
             </View>
           </View>

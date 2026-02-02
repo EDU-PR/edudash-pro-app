@@ -1,15 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface WhatsAppSetupData {
   whatsapp_number: string;
   notifications_enabled: boolean;
@@ -310,7 +301,7 @@ export default function WhatsAppSetupScreen() {
                 disabled={loading || !formData.whatsapp_number}
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <EduDashSpinner size="small" color="#ffffff" />
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
@@ -355,7 +346,7 @@ export default function WhatsAppSetupScreen() {
                 disabled={loading || formData.verification_code.length !== 6}
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <EduDashSpinner size="small" color="#ffffff" />
                 ) : (
                   <>
                     <Ionicons name="checkmark-done" size={20} color="#ffffff" />

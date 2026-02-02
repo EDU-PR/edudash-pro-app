@@ -1,17 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  TextInput,
-  Modal,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, TextInput, Modal, Linking } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +13,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { getAvailableTiersForRole, getTierDisplayName, normalizeTierName } from '@/lib/tiers';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface UserRecord {
   id: string;
   auth_user_id: string | null;
@@ -774,7 +763,7 @@ export default function SuperAdminUsersScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading users...</Text>
           </View>
         ) : (
@@ -925,7 +914,7 @@ export default function SuperAdminUsersScreen() {
                   disabled={impersonating}
                 >
                   {impersonating ? (
-                    <ActivityIndicator size="small" color="#00f5ff" />
+                    <EduDashSpinner size="small" color="#00f5ff" />
                   ) : (
                     <Ionicons name="person-circle" size={20} color="#00f5ff" />
                   )}
@@ -946,7 +935,7 @@ export default function SuperAdminUsersScreen() {
                   disabled={creatingTempPassword}
                 >
                   {creatingTempPassword ? (
-                    <ActivityIndicator size="small" color="#14b8a6" />
+                    <EduDashSpinner size="small" color="#14b8a6" />
                   ) : (
                     <Ionicons name="keypad" size={20} color="#14b8a6" />
                   )}
@@ -959,7 +948,7 @@ export default function SuperAdminUsersScreen() {
                   disabled={updatingTier}
                 >
                   {updatingTier ? (
-                    <ActivityIndicator size="small" color="#3b82f6" />
+                    <EduDashSpinner size="small" color="#3b82f6" />
                   ) : (
                     <Ionicons name="cash" size={20} color="#3b82f6" />
                   )}

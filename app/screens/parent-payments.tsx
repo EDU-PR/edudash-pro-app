@@ -1,14 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +22,7 @@ import {
   PendingDocumentsCard,
 } from '@/components/payments';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ParentPaymentsScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -128,7 +120,7 @@ export default function ParentPaymentsScreen() {
       <View style={styles.container}>
         <ScreenHeader title="Fees & Payments" subtitle={selectedChild?.preschool_name} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading payment information...</Text>
         </View>
       </View>

@@ -4,16 +4,7 @@
  * Refactored to comply with WARP.md (< 500 lines)
  */
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +34,7 @@ import { BoardAppointmentModal } from '@/components/governance/BoardAppointmentM
 import { useBoardPositions, positionsToLegacyFormat } from '@/hooks/membership/useBoardPositions';
 import { useOrganizationDocuments } from '@/hooks/membership/useOrganizationDocuments';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function GovernanceScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -217,7 +209,7 @@ export default function GovernanceScreen() {
               {/* Board Members */}
               {boardLoading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={theme.primary} />
+                  <EduDashSpinner size="large" color={theme.primary} />
                   <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                     Loading board positions...
                   </Text>

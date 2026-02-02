@@ -6,17 +6,7 @@
  * Updates the user's active organization and navigates to the appropriate dashboard.
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  Image,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -25,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const ACTIVE_ORG_KEY = '@active_organization';
 
 export interface UserOrganization {
@@ -291,7 +282,7 @@ export function OrganizationSwitcher({
 
         <View style={styles.orgAction}>
           {isSwitching ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : item.isActive ? (
             <View style={[styles.activeBadge, { backgroundColor: theme.primary }]}>
               <Ionicons name="checkmark" size={14} color="#fff" />
@@ -350,7 +341,7 @@ export function OrganizationSwitcher({
           {/* Content */}
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                 Loading organizations...
               </Text>

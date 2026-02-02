@@ -12,21 +12,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface CacheStats {
   totalSize: number;
   entryCount: number;
@@ -175,7 +168,7 @@ export const CacheManagement: React.FC<CacheManagementProps> = ({
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.light.tint} />
+            <EduDashSpinner size="large" color={Colors.light.tint} />
             <Text style={styles.loadingText}>{t('cache.loading_stats')}</Text>
           </View>
         ) : (
@@ -301,7 +294,7 @@ export const CacheManagement: React.FC<CacheManagementProps> = ({
             {/* Loading Indicator */}
             {clearing && (
               <View style={styles.clearingOverlay}>
-                <ActivityIndicator size="large" color={Colors.light.tint} />
+                <EduDashSpinner size="large" color={Colors.light.tint} />
                 <Text style={styles.clearingText}>{t('cache.clearing')}</Text>
               </View>
             )}

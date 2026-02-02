@@ -3,7 +3,7 @@
  * Displays and manages youth programs for the Youth President dashboard
  */
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { DashboardWallpaperBackground } from '@/components/membership/dashboard'
 import { useYouthPrograms, YouthProgram, STATUS_CONFIG, CATEGORY_ICONS } from '@/hooks/membership/useYouthPrograms';
 import { styles } from '@/components/membership/styles/programs.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterType = 'all' | 'active' | 'draft' | 'completed';
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'active', label: 'Active' }, { key: 'draft', label: 'Draft' }, { key: 'completed', label: 'Completed' },
@@ -97,7 +98,7 @@ export default function YouthProgramsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
+          <EduDashSpinner size="large" color="#10B981" />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading programs...</Text>
         </View>
       </SafeAreaView>

@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  StatusBar,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -22,6 +13,7 @@ import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const ROLES = [
   {
     value: 'parent' as Role,
@@ -292,7 +284,7 @@ export default function ProfilesGateScreen() {
               We are fetching your profile, permissions, and organization access.
             </Text>
             <View style={styles.pendingSpinnerRow}>
-              <ActivityIndicator size="small" color={theme.primary} />
+              <EduDashSpinner size="small" color={theme.primary} />
               <Text style={styles.pendingSpinnerText}>Almost there...</Text>
             </View>
             <Text style={styles.pendingHint}>
@@ -377,7 +369,7 @@ export default function ProfilesGateScreen() {
 
         {isRecoveringProfile && (
           <View style={styles.recoveringContainer}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={styles.recoveringText}>Restoring your profile...</Text>
           </View>
         )}
@@ -439,7 +431,7 @@ export default function ProfilesGateScreen() {
           accessibilityLabel="Continue with selected role"
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" />
+            <EduDashSpinner color="#ffffff" />
           ) : (
             <Text style={styles.continueButtonText}>Continue</Text>
           )}

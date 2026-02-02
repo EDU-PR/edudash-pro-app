@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, ScrollView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Platform, Image } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -10,6 +10,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { Ionicons } from '@expo/vector-icons';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // EduDash Pro Community School ID
 const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
 const EARLY_BIRD_LIMIT = 20; // First 20 registrations get 50% off
@@ -819,7 +820,7 @@ export default function ParentAftercareRegistrationScreen() {
                 disabled={uploadingProof}
               >
                 {uploadingProof ? (
-                  <ActivityIndicator color={theme.primary} />
+                  <EduDashSpinner color={theme.primary} />
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Ionicons name="cloud-upload" size={24} color={theme.primary} />
@@ -848,7 +849,7 @@ export default function ParentAftercareRegistrationScreen() {
 
           <TouchableOpacity style={styles.btn} onPress={onSubmit} disabled={loading || registrationsClosed}>
             {loading ? (
-              <ActivityIndicator color={theme.onPrimary} />
+              <EduDashSpinner color={theme.onPrimary} />
             ) : (
               <Text style={styles.btnText}>Submit Registration</Text>
             )}

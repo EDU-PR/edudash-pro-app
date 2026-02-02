@@ -2,20 +2,14 @@
 // Displays the AI-generated year plan overview
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GeneratedYearPlan } from './types';
 import { TermCard } from './TermCard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface GeneratedPlanViewProps {
   plan: GeneratedYearPlan;
   expandedTerm: number | null;
@@ -101,7 +95,7 @@ export function GeneratedPlanView({
           disabled={isSaving}
         >
           {isSaving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <EduDashSpinner size="small" color="#fff" />
           ) : (
             <>
               <Ionicons name="save-outline" size={20} color="#fff" />

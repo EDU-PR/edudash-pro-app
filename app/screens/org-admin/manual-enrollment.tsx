@@ -1,16 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -21,6 +10,7 @@ import { useOrgPrograms } from '@/hooks/useOrgPrograms';
 import { useQuery } from '@tanstack/react-query';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ManualEnrollmentScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -382,7 +372,7 @@ export default function ManualEnrollmentScreen() {
                     disabled={saving || !email || !firstName || !lastName}
                   >
                     {saving ? (
-                      <ActivityIndicator color="#fff" />
+                      <EduDashSpinner color="#fff" />
                     ) : (
                       <>
                         <Ionicons name="checkmark-circle" size={20} color="#fff" />

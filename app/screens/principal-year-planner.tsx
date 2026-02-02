@@ -2,15 +2,7 @@
 // Principal Year Planner Screen - Refactored for WARP.md compliance (≤500 lines)
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -29,6 +21,7 @@ import {
   type TermFormData,
 } from '@/components/principal/year-planner';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalYearPlannerScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -81,7 +74,7 @@ export default function PrincipalYearPlannerScreen() {
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         ) : Object.keys(groupedTerms).length === 0 ? (
           <View style={styles.empty}>

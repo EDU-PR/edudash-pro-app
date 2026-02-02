@@ -1,10 +1,11 @@
 import React from 'react';
-import { Modal, View, TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { Modal, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ReportPreviewModalProps {
   visible: boolean;
   onClose: () => void;
@@ -76,7 +77,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({ visible,
           bounces={true}
           renderLoading={() => (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             </View>
           )}
         />

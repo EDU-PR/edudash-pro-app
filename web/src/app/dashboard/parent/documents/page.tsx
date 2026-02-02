@@ -151,64 +151,62 @@ function ParentDocumentsContent() {
       setSaving(doc.type);
       setError(null);
 
-      const ext = file.name.split('.').pop() || 'pdf';
-      const timestamp = Date.now();
-      const targetSchoolId = registration.organization_id || preschoolId || 'unknown';
-      const filePath = `documents/${targetSchoolId}/${userId}/${doc.type}_${timestamp}.${ext}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Please sign in again to upload documents.');
+      }
 
-      const { error: uploadError } = await supabase.storage
-        .from('registration-documents')
-        .upload(filePath, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: true,
-        });
+      const registrationIdForUpload = registrationParam
+        || (registration?.id && registration.id !== studentParam ? registration.id : '');
 
-      if (uploadError) throw uploadError;
+      if (!registrationIdForUpload && !studentParam) {
+        throw new Error('No registration record found for this upload.');
+      }
 
-      const { data: urlData } = supabase.storage
-        .from('registration-documents')
-        .getPublicUrl(filePath);
+      const formData = new FormData();
+      formData.append('document_type', doc.type);
+      formData.append('file', file);
 
-      const publicUrl = urlData.publicUrl;
-
-      if (registrationParam) {
-        const { error: updateError } = await supabase
-          .from('registration_requests')
-          .update({
-            [doc.dbColumn]: publicUrl,
-            documents_uploaded: true,
-          })
-          .eq('id', registrationParam);
-
-        if (updateError) throw updateError;
-      } else if (registration?.id && registration.id !== studentParam) {
-        await supabase
-          .from('registration_requests')
-          .update({
-            [doc.dbColumn]: publicUrl,
-            documents_uploaded: true,
-          })
-          .eq('id', registration.id);
+      if (registrationIdForUpload) {
+        formData.append('registration_id', registrationIdForUpload);
       }
 
       if (studentParam) {
-        const studentColumnMap: Record<DocumentInfo['dbColumn'], string> = {
-          student_birth_certificate_url: 'birth_certificate_url',
-          student_clinic_card_url: 'clinic_card_url',
-          guardian_id_document_url: 'guardian_id_url',
-        };
-
-        await supabase
-          .from('students')
-          .update({ [studentColumnMap[doc.dbColumn]]: publicUrl })
-          .eq('id', studentParam);
+        formData.append('student_id', studentParam);
       }
 
-      setRegistration((prev) =>
-        prev
-          ? { ...prev, [doc.dbColumn]: publicUrl }
-          : prev
-      );
+      if (session.user.email) {
+        formData.append('email', session.user.email);
+      }
+
+      const organizationIdForUpload = registration.organization_id || preschoolId || '';
+      if (organizationIdForUpload) {
+        formData.append('organization_id', organizationIdForUpload);
+      }
+
+      const response = await fetch('/api/registrations/documents', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to upload document');
+      }
+
+      const publicUrl = payload?.document_url;
+
+      if (publicUrl) {
+        setRegistration((prev) =>
+          prev
+            ? { ...prev, [doc.dbColumn]: publicUrl }
+            : prev
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload document');
     } finally {

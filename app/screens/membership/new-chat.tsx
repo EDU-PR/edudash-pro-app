@@ -3,16 +3,7 @@
  * Create new message threads - regional, wing, or direct
  */
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +19,7 @@ import {
   SOAThreadType,
 } from '@/components/soa-messaging/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Chat type options
 const CHAT_TYPE_OPTIONS: {
   type: SOAThreadType;
@@ -348,7 +340,7 @@ export default function NewChatScreen() {
             activeOpacity={0.8}
           >
             {creating ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <EduDashSpinner color="#FFFFFF" />
             ) : (
               <>
                 <Ionicons name="add-circle" size={20} color="#FFFFFF" />

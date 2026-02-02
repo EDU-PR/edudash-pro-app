@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,7 @@ import { ParentJoinService, type GuardianRequestWithStudent } from '@/lib/servic
 import { format } from 'date-fns';
 import { enZA } from 'date-fns/locale';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export function PendingLinkRequests() {
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -71,7 +72,7 @@ export function PendingLinkRequests() {
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
       </View>
     );
   }
@@ -142,7 +143,7 @@ export function PendingLinkRequests() {
             disabled={cancellingId === request.id}
           >
             {cancellingId === request.id ? (
-              <ActivityIndicator size="small" color={theme.error} />
+              <EduDashSpinner size="small" color={theme.error} />
             ) : (
               <>
                 <Ionicons name="close-circle-outline" size={16} color={theme.error} />

@@ -1,22 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  TextInput,
-  Alert,
-  FlatList,
-  RefreshControl,
-  ActivityIndicator
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Alert, FlatList, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 // DateTimePicker removed for better cross-platform compatibility
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Types for meeting room system
 interface Meeting {
   id: string;
@@ -612,7 +601,7 @@ const MeetingRoomSystem: React.FC<MeetingRoomSystemProps> = ({ onClose, schoolId
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="white" />
+                  <EduDashSpinner color="white" />
                 ) : (
                   <>
                     <Ionicons name="calendar" size={20} color="white" />

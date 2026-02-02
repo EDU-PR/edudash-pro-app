@@ -2,11 +2,12 @@
  * CTA section for upgrade screen
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { SubscriptionPlan } from './types';
 import { getPlanColor } from './utils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface UpgradeCTAProps {
   selectedPlan: string | null;
   plans: SubscriptionPlan[];
@@ -39,7 +40,7 @@ export function UpgradeCTA({ selectedPlan, plans, upgrading, annual, onUpgrade }
         disabled={upgrading}
       >
         {upgrading ? (
-          <ActivityIndicator color="#000" size="small" />
+          <EduDashSpinner color="#000" size="small" />
         ) : (
           <>
             <Text style={styles.upgradeButtonText}>

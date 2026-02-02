@@ -5,10 +5,11 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface LessonAssignmentModalProps {
   visible: boolean;
   onClose: () => void;
@@ -233,7 +234,7 @@ export function LessonAssignmentModal({
               disabled={assigning || (targetType === 'class' && !selectedClassId) || (targetType === 'student' && selectedStudentIds.size === 0)}
             >
               {assigning ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <Text style={{ color: '#fff', fontWeight: '600' }}>Assign</Text>
               )}

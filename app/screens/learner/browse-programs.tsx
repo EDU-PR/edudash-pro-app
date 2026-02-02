@@ -3,17 +3,7 @@
  * Allows learners to discover and enroll in available programs/courses
  */
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AvailableProgram {
   id: string;
   title: string;
@@ -316,7 +307,7 @@ export default function BrowseProgramsScreen() {
             disabled={isFull || enrollMutation.isPending}
           >
             {enrollMutation.isPending && selectedProgram?.id === item.id ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons 
@@ -403,7 +394,7 @@ export default function BrowseProgramsScreen() {
         {/* Programs List */}
         {isLoading ? (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         ) : error ? (
           <View style={styles.centered}>
@@ -515,7 +506,7 @@ export default function BrowseProgramsScreen() {
                 disabled={enrollMutation.isPending || !programCode.trim()}
               >
                 {enrollMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Text style={[styles.modalButtonText, { color: '#fff' }]}>Enroll</Text>
                 )}

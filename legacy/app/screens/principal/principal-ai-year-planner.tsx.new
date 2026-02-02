@@ -9,13 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -31,6 +25,7 @@ import {
 } from '@/components/principal/ai-planner';
 import { useAIYearPlanner } from '@/hooks/principal/useAIYearPlanner';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalAIYearPlannerScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -91,7 +86,7 @@ export default function PrincipalAIYearPlannerScreen() {
       {/* Loading State */}
       {isGenerating && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Generating your year plan...</Text>
           <Text style={styles.loadingSubtext}>This may take a moment</Text>
         </View>

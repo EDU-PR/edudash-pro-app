@@ -1,12 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -17,6 +10,7 @@ import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { navigateTo } from '@/lib/navigation/router-utils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type PaymentStatus = 'processing' | 'success' | 'cancelled' | 'failed';
 
 interface PaymentReturn {
@@ -249,7 +243,7 @@ Thanks!`);
 
             {/* Loading indicator for processing */}
             {paymentStatus === 'processing' && (
-              <ActivityIndicator 
+              <EduDashSpinner 
                 size="large" 
                 color={theme.primary} 
                 style={styles.loader}

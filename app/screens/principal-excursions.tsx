@@ -7,15 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -32,6 +24,7 @@ import {
 import type { Excursion } from '@/components/principal/excursions';
 import { useExcursions } from '@/hooks/principal/useExcursions';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalExcursionsScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -117,7 +110,7 @@ export default function PrincipalExcursionsScreen() {
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         ) : displayedExcursions.length === 0 ? (
           <View style={styles.empty}>

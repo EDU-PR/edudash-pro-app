@@ -8,18 +8,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, RefreshControl, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -30,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useTeacherLessons, TeacherLesson } from '@/hooks/useTeacherLessons';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterStatus = 'all' | 'active' | 'draft' | 'mine';
 
 export default function TeacherLessonsScreen() {
@@ -384,7 +374,7 @@ export default function TeacherLessonsScreen() {
       {/* Lessons List */}
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading lessons...</Text>
         </View>
       ) : (

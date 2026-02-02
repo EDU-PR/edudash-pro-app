@@ -12,18 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Image,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,6 +23,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { uploadMultipleImages } from '@/lib/ai/simple-image-upload';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
   id: string;
   first_name: string;
@@ -346,7 +336,7 @@ export default function TeacherPostActivityScreen() {
     return (
       <DesktopLayout role="teacher">
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading...
           </Text>
@@ -575,7 +565,7 @@ export default function TeacherPostActivityScreen() {
           disabled={posting}
         >
           {posting ? (
-            <ActivityIndicator color="#FFF" />
+            <EduDashSpinner color="#FFF" />
           ) : (
             <>
               <Ionicons name="send" size={20} color="#FFF" />

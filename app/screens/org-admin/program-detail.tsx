@@ -4,16 +4,7 @@
  * Shows program details and allows management by executives/admins
  */
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -26,6 +17,7 @@ import { Card } from '@/components/ui/Card';
 import { ProgramCodeShareModal } from '@/components/org-admin/ProgramCodeShareModal';
 import { EnrollmentInviteModal } from '@/components/org-admin/EnrollmentInviteModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ProgramDetail {
   id: string;
   title: string;
@@ -219,7 +211,7 @@ export default function ProgramDetailScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'Program Details' }} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </SafeAreaView>
     );
@@ -308,7 +300,7 @@ export default function ProgramDetailScreen() {
                   disabled={generateCodeMutation.isPending}
                 >
                   {generateCodeMutation.isPending ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <EduDashSpinner size="small" color="#fff" />
                   ) : (
                     <>
                       <Ionicons name="key-outline" size={16} color="#fff" />
@@ -404,7 +396,7 @@ export default function ProgramDetailScreen() {
           </View>
 
           {loadingEnrollments ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : activeEnrollments.length === 0 ? (
             <View style={styles.emptyEnrollments}>
               <Ionicons name="people-outline" size={40} color={theme.textSecondary} />

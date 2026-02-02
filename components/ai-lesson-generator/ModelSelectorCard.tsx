@@ -4,18 +4,13 @@
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { ModelSelectorCardProps } from './types';
 import type { AIModelInfo } from '@/lib/ai/models';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * Get tier badge color based on tier name
  */
@@ -152,7 +147,7 @@ export function ModelSelectorCard({
           <Text style={styles.title}>AI Model</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#6366F1" />
+          <EduDashSpinner size="small" color="#6366F1" />
           <Text style={styles.loadingText}>Loading models...</Text>
         </View>
       </View>

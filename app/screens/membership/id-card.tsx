@@ -5,19 +5,7 @@
  * Refactored to use modular components following WARP.md standards
  */
 import React, { useState, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Animated, 
-  ScrollView,
-  Alert,
-  Share,
-  ActivityIndicator,
-  Modal,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert, Share, Modal, Image } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +24,7 @@ import { useIDCard } from '@/hooks/membership';
 import { MemberPhotoService } from '@/services/MemberPhotoService';
 import { useQueryClient } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function MemberIDCardScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -276,7 +265,7 @@ export default function MemberIDCardScreen() {
           <View style={styles.headerButton} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading your ID card...
           </Text>
@@ -355,7 +344,7 @@ export default function MemberIDCardScreen() {
               disabled={uploadingPhoto}
             >
               {uploadingPhoto ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="camera-outline" size={18} color="#fff" />
@@ -441,7 +430,7 @@ export default function MemberIDCardScreen() {
           disabled={isGeneratingPDF}
         >
           {isGeneratingPDF ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : (
             <>
               <Ionicons name="download-outline" size={22} color={theme.primary} />
@@ -456,7 +445,7 @@ export default function MemberIDCardScreen() {
           disabled={isGeneratingPDF}
         >
           {isGeneratingPDF ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <EduDashSpinner size="small" color="#fff" />
           ) : (
             <>
               <Ionicons name="print-outline" size={22} color="#fff" />
@@ -511,7 +500,7 @@ export default function MemberIDCardScreen() {
                 disabled={uploadingPhoto}
               >
                 {uploadingPhoto ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />

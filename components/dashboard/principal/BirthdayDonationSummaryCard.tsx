@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { BirthdayDonationsService } from '@/features/birthday-donations/services/BirthdayDonationsService';
@@ -7,6 +7,7 @@ import type { BirthdayDonationDay, BirthdayDonationMonthSummary } from '@/featur
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrganizationType } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BirthdayDonationSummaryCardProps {
   organizationId?: string | null;
 }
@@ -84,7 +85,7 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
       <Text style={styles.subtitle}>{t('dashboard.birthday_donations.principal_subtitle', { defaultValue: 'Track daily and monthly birthday pack contributions.' })}</Text>
       {loading ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={theme.primary} />
+          <EduDashSpinner color={theme.primary} />
           <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
         </View>
       ) : (

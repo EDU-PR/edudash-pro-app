@@ -3,16 +3,7 @@
 // Refactored for WARP.md compliance (≤400 lines per component)
 
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  KeyboardAvoidingView, 
-  Platform,
-  ActivityIndicator
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { 
   EnhancedUserRole,
@@ -27,6 +18,7 @@ import {
   SecuritySetupStep 
 } from './RegistrationSteps';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface EnhancedRegistrationFormProps {
   role: EnhancedUserRole;
   invitationToken?: string;
@@ -222,7 +214,7 @@ export const EnhancedRegistrationForm: React.FC<EnhancedRegistrationFormProps> =
               disabled={loading || (currentStep === 'security_setup' && !formState.acceptTerms)}
             >
               {loading ? (
-                <ActivityIndicator size="small" color={theme.colors.onPrimary} />
+                <EduDashSpinner size="small" color={theme.colors.onPrimary} />
               ) : (
                 <Text style={[
                   styles.navButtonText,

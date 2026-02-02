@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import { useOrgPrograms } from '@/hooks/useOrgPrograms';
 import { EnrollmentInviteModal } from '@/components/org-admin/EnrollmentInviteModal';
 import { ProgramCodeShareModal } from '@/components/org-admin/ProgramCodeShareModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ProgramsScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -60,7 +61,7 @@ export default function ProgramsScreen() {
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading programs...
             </Text>

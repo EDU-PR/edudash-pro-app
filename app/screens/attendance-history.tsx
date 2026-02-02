@@ -7,16 +7,7 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -34,6 +25,7 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { track } from '@/lib/analytics';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AttendanceRecord {
   id: string;
   attendance_date: string;
@@ -520,7 +512,7 @@ export default function AttendanceHistoryScreen() {
             disabled={isPrinting}
           >
             {isPrinting ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <EduDashSpinner size="small" color="#FFF" />
             ) : (
               <>
                 <Ionicons name="print-outline" size={18} color="#FFF" />
@@ -686,7 +678,7 @@ export default function AttendanceHistoryScreen() {
         }} />
         <ThemedStatusBar />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={palette.primary} />
+          <EduDashSpinner size="large" color={palette.primary} />
           <Text style={[styles.loadingText, { color: palette.textSecondary }]}>
             Loading attendance history...
           </Text>

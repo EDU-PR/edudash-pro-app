@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +12,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import { useCallSafe } from '@/components/calls/CallProvider';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerMessagesScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
@@ -104,7 +105,7 @@ export default function LearnerMessagesScreen() {
       >
         {isLoading && (
           <View style={styles.empty}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         )}
 

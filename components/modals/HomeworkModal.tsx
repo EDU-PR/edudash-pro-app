@@ -6,17 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-} from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -24,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useHomeworkGenerator, HomeworkResult } from '@/hooks/useHomeworkGenerator';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface HomeworkModalProps {
   visible: boolean;
   onClose: () => void;
@@ -222,7 +213,7 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
               style={styles.submitGradient}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.submitText}>{t('ai.homework.getHelp')}</Text>
               )}

@@ -12,15 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -32,6 +24,7 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 // import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
 import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface WeeklyReport {
   id: string;
   student_id: string;
@@ -179,7 +172,7 @@ export default function ParentWeeklyReportScreen() {
     return (
       <DesktopLayout role="parent">
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading reports...
           </Text>
@@ -299,7 +292,7 @@ export default function ParentWeeklyReportScreen() {
         {/* Report Content */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading report...
             </Text>

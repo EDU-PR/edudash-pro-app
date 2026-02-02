@@ -3,18 +3,7 @@
  * Invite Secretary, Treasurer, Deputy President, and other office bearers
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  TextInput, 
-  Alert, 
-  ScrollView, 
-  Share, 
-  Linking,
-  ActivityIndicator,
-  Modal,
-} from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView, Share, Linking, Modal } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +21,7 @@ import {
   generateInviteCode 
 } from '@/components/membership/styles/youth-executive-invite.constants';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
@@ -342,7 +332,7 @@ export default function YouthExecutiveInviteScreen() {
           {/* History */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Invite History</Text>
-            {initialLoading ? <ActivityIndicator size="small" color={theme.primary} /> : invites.length === 0 ? (
+            {initialLoading ? <EduDashSpinner size="small" color={theme.primary} /> : invites.length === 0 ? (
               <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
                 <Ionicons name="people-outline" size={48} color={theme.textSecondary} />
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No executive invites yet. Start building your team!</Text>
@@ -381,7 +371,7 @@ export default function YouthExecutiveInviteScreen() {
                   <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.createButton, { backgroundColor: theme.primary }]} onPress={onCreateInvite} disabled={loading}>
-                  {loading ? <ActivityIndicator size="small" color="#FFFFFF" /> : <><Ionicons name="send" size={18} color="#FFFFFF" /><Text style={styles.createButtonText}>Create Invite</Text></>}
+                  {loading ? <EduDashSpinner size="small" color="#FFFFFF" /> : <><Ionicons name="send" size={18} color="#FFFFFF" /><Text style={styles.createButtonText}>Create Invite</Text></>}
                 </TouchableOpacity>
               </View>
             </View>

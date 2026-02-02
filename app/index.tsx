@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Default theme fallback (used before ThemeProvider mounts)
 const defaultTheme = {
   background: '#ffffff',
@@ -137,7 +138,7 @@ export default function Index() {
   if (isNative) {
     return (
       <View style={[styles.nativeLoading, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
       </View>
     );
   }

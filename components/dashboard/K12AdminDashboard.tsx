@@ -13,14 +13,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +40,7 @@ import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 import { BirthdayDonationSummaryCard } from './principal/BirthdayDonationSummaryCard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export function K12AdminDashboard() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
@@ -248,7 +242,7 @@ export function K12AdminDashboard() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );

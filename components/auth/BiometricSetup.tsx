@@ -5,15 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Modal,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -21,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BiometricSetupProps {
   visible: boolean;
   onClose: () => void;
@@ -309,7 +302,7 @@ export function BiometricSetup({ visible, onClose, onSetupComplete }: BiometricS
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color={theme.onPrimary} size="small" />
+                <EduDashSpinner color={theme.onPrimary} size="small" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color={theme.onPrimary} />

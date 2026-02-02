@@ -3,19 +3,11 @@
  * Allows president/admin to appoint members to board positions
  */
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppointableMember } from '@/hooks/membership/useBoardPositions';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BoardAppointmentModalProps {
   visible: boolean;
   theme: any;
@@ -148,7 +140,7 @@ export function BoardAppointmentModal({
           {/* Member List */}
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                 Loading members...
               </Text>
@@ -188,7 +180,7 @@ export function BoardAppointmentModal({
               disabled={!selectedMemberId || appointing}
             >
               {appointing ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.appointButtonText}>Appoint</Text>
               )}

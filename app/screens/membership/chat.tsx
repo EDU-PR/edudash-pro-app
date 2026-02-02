@@ -4,16 +4,7 @@
  * Reuses existing messaging components (MessageBubble, MessageComposer)
  */
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +29,7 @@ import {
 } from '@/components/soa-messaging/types';
 import type { Message } from '@/components/messaging/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SOAChatScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -258,7 +250,7 @@ export default function SOAChatScreen() {
       >
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading messages...</Text>
           </View>
         ) : error ? (

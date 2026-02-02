@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, FlatList, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, FlatList, Modal } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
@@ -10,6 +10,7 @@ import { BirthdayMemoriesService } from '@/features/birthday-memories/services/B
 import type { BirthdayMemoryEvent, BirthdayMemoryMedia } from '@/features/birthday-memories/types/birthdayMemories.types';
 import { BirthdayMontageService, type MontageJob } from '@/features/birthday-memories/services/BirthdayMontageService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function BirthdayMemoriesScreen() {
   const params = useLocalSearchParams();
   const { theme } = useTheme();
@@ -187,7 +188,7 @@ export default function BirthdayMemoriesScreen() {
       <Stack.Screen options={{ title: 'Birthday Memories' }} />
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={theme.primary} />
+          <EduDashSpinner color={theme.primary} />
           <Text style={styles.muted}>Loading memories...</Text>
         </View>
       ) : (
@@ -237,7 +238,7 @@ export default function BirthdayMemoriesScreen() {
                     disabled={montageSending || montageSent}
                   >
                     {montageSending ? (
-                      <ActivityIndicator color="#fff" size="small" />
+                      <EduDashSpinner color="#fff" size="small" />
                     ) : (
                       <Text style={styles.primaryButtonText}>
                         {montageSent ? 'Sent' : 'Send to parents'}

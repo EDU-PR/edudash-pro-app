@@ -52,6 +52,8 @@ import { OrganizationBrandingProvider } from '../contexts/OrganizationBrandingCo
 import { AppTutorial } from '../components/onboarding/AppTutorial';
 import { FloatingCallOverlay } from '../components/calls/FloatingCallOverlay';
 import { PlayStoreUpdateChecker } from '../components/updates/PlayStoreUpdateChecker';
+import { LoadingOverlayProvider, useLoadingOverlay } from '../contexts/LoadingOverlayContext';
+import GlobalLoadingOverlay from '../components/ui/GlobalLoadingOverlay';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -71,8 +73,9 @@ patchNativeEventEmitterModules();
 // Inner component with access to AuthContext
 function LayoutContent() {
   const pathname = usePathname();
-  const { loading: authLoading, user } = useAuth();
+  const { loading: authLoading, profileLoading, user } = useAuth();
   const { isDark } = useTheme();
+  const loadingOverlay = useLoadingOverlay();
   const [showFAB, setShowFAB] = useState(false);
   const [statusBarKey, setStatusBarKey] = useState(0);
   const pushRegistrationRef = useRef<{ userId: string; attempted: boolean } | null>(null);
@@ -125,6 +128,8 @@ function LayoutContent() {
       pathname.includes('sign-up') ||
       pathname.includes('signup') ||
       pathname.includes('register'));
+
+  const shouldShowOverlay = (!isAuthRoute && (authLoading || profileLoading)) || loadingOverlay.visible;
   
   // Show FAB after auth loads and brief delay - ONLY if user is logged in
   useEffect(() => {
@@ -197,6 +202,11 @@ function LayoutContent() {
       
       {/* Floating Call Overlay - persists across all screens and when backgrounded */}
       <FloatingCallOverlay />
+
+      <GlobalLoadingOverlay
+        visible={shouldShowOverlay}
+        message={loadingOverlay.message || (authLoading || profileLoading ? 'Loading your dashboard...' : undefined)}
+      />
       
       {/* Call Interfaces are rendered by CallProvider - no duplicates needed here */}
     </View>
@@ -230,11 +240,13 @@ export default function RootLayout() {
                           <DashboardPreferencesProvider>
                           <TermsProvider>
                             <ToastProvider>
-                              <AlertProvider>
-                                <GestureHandlerRootView style={{ flex: 1 }}>
-                                  <RootLayoutContent />
-                                </GestureHandlerRootView>
-                              </AlertProvider>
+                              <LoadingOverlayProvider>
+                                <AlertProvider>
+                                  <GestureHandlerRootView style={{ flex: 1 }}>
+                                    <RootLayoutContent />
+                                  </GestureHandlerRootView>
+                                </AlertProvider>
+                              </LoadingOverlayProvider>
                             </ToastProvider>
                           </TermsProvider>
                         </DashboardPreferencesProvider>

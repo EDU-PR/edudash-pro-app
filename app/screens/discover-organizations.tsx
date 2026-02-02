@@ -7,18 +7,7 @@
  * @module app/screens/discover-organizations
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  Image,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Image } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -29,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { logger } from '@/lib/logger';
 import { Database } from '@/lib/database.types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type Organization = Database['public']['Tables']['organizations']['Row'];
 
 interface PublicOrganization {
@@ -389,7 +379,7 @@ export default function DiscoverOrganizationsScreen() {
                 disabled={joinMutation.isPending}
               >
                 {joinMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Text style={styles.submitButtonText}>Send Request</Text>
                 )}

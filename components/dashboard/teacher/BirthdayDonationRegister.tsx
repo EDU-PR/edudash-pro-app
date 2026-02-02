@@ -1,12 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +13,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { router } from 'expo-router';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BirthdayDonationRegisterProps {
   organizationId?: string | null;
 }
@@ -460,7 +454,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
 
       {activeStudentsLoading ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={theme.primary} />
+          <EduDashSpinner color={theme.primary} />
           <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
         </View>
       ) : (

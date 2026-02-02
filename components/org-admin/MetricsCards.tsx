@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useOrgAdminMetrics } from '@/hooks/useOrgAdminMetrics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface MetricsCardsProps {
   theme: any;
 }
@@ -12,7 +13,7 @@ export function MetricsCards({ theme }: MetricsCardsProps) {
   if (isLoading) {
     return (
       <View style={createStyles(theme).loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={[createStyles(theme).loadingText, { color: theme.textSecondary }]}>
           Loading metrics...
         </Text>

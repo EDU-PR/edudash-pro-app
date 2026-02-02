@@ -12,18 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { 
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Platform,
-  Dimensions,
-  KeyboardAvoidingView,
-  Keyboard,
-  Alert,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform, Dimensions, KeyboardAvoidingView, Keyboard, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './DashAssistant.styles';
@@ -50,6 +39,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: screenWidth } = Dimensions.get('window');
 
 interface DashAssistantProps {
@@ -577,7 +567,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>
           Initializing Dash...
         </Text>

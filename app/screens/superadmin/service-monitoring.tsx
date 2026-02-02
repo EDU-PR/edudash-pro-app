@@ -5,19 +5,13 @@
 //       https://tanstack.com/query/v5/docs/framework/react/overview
 
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  RefreshControl,
-  StyleSheet,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, ScrollView, RefreshControl, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useServiceHealthSummary } from "@/hooks/superadmin/useServiceHealthData";
 import { ServiceStatusGrid } from "@/components/superadmin/ServiceStatusGrid";
 import type { ServiceHealth } from "@/hooks/superadmin/useServiceHealthData";
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ServiceMonitoringScreen() {
   const { data: services, summary, isLoading, refetch, isRefetching } = useServiceHealthSummary();
   const [selectedService, setSelectedService] = useState<ServiceHealth | null>(null);
@@ -31,7 +25,7 @@ export default function ServiceMonitoringScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
+          <EduDashSpinner size="large" color="#3b82f6" />
           <Text style={styles.loadingText}>Loading service status...</Text>
         </View>
       </SafeAreaView>

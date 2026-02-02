@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, router } from 'expo-router';
@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createOrganization } from '@/services/OrganizationService';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Organization Onboarding with Authentication
 // For new organizations (skills/tertiary/other organizations)
 // Creates both user account and organization, then routes to Org Admin Dashboard
@@ -355,7 +356,7 @@ export default function OrgOnboardingScreen() {
               onPress={handleCreateAccount}
             >
               {creatingAccount ? (
-                <ActivityIndicator color="#000" />
+                <EduDashSpinner color="#000" />
               ) : (
                 <Text style={styles.buttonText}>Create Account</Text>
               )}
@@ -423,7 +424,7 @@ export default function OrgOnboardingScreen() {
             />
 
             <TouchableOpacity disabled={!canCreate || creating} style={[styles.button, (!canCreate || creating) && styles.buttonDisabled]} onPress={handleCreateOrg}>
-              {creating ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Create organization</Text>}
+              {creating ? <EduDashSpinner color="#000" /> : <Text style={styles.buttonText}>Create organization</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setStep('type_selection')} style={styles.linkBtn}>

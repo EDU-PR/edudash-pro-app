@@ -4,17 +4,14 @@
  * WARP.md compliant: <500 lines, separate styles, React Query
  */
 import React, { useState } from 'react';
-import {
-  View, Text, FlatList, TouchableOpacity, TextInput,
-  Modal, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
-  SafeAreaView,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAnnouncements, useCreateAnnouncement, ANNOUNCEMENT_TYPES, AUDIENCE_OPTIONS, Announcement } from '@/hooks/membership/useAnnouncements';
 import { styles } from '@/components/membership/styles/announcements.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'pinned', label: 'Pinned' },
@@ -94,7 +91,7 @@ export default function AnnouncementsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EduDashSpinner size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading announcements...</Text>
         </View>
       </SafeAreaView>
@@ -213,7 +210,7 @@ export default function AnnouncementsScreen() {
                   <Text style={[styles.pinToggleText, { color: formData.isPinned ? colors.primary : colors.text }]}>Pin this announcement</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.submitButton} onPress={handleCreate} disabled={createMutation.isPending}>
-                  {createMutation.isPending ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
+                  {createMutation.isPending ? <EduDashSpinner color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
                   <Text style={styles.submitButtonText}>{createMutation.isPending ? 'Posting...' : 'Post Announcement'}</Text>
                 </TouchableOpacity>
               </ScrollView>

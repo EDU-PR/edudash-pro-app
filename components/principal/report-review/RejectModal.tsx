@@ -1,8 +1,9 @@
 // Modal for rejecting a report with reason
 
 import React from 'react';
-import { View, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Modal, StyleSheet } from 'react-native';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RejectModalProps {
   visible: boolean;
   rejectionReason: string;
@@ -75,7 +76,7 @@ export function RejectModal({
               disabled={isRejecting}
             >
               {isRejecting ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <EduDashSpinner color="#FFFFFF" />
               ) : (
                 <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Confirm</Text>
               )}

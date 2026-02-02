@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { format } from 'date-fns';
 import { enZA } from 'date-fns/locale';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RegistrationRequest {
   id: string;
   child_first_name: string;
@@ -246,7 +247,7 @@ export const PendingRegistrationRequests: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
         </View>
       </View>
     );
@@ -320,7 +321,7 @@ export const PendingRegistrationRequests: React.FC = () => {
                   disabled={withdrawMutation.isPending}
                 >
                   {withdrawMutation.isPending ? (
-                    <ActivityIndicator size="small" color={theme.error} />
+                    <EduDashSpinner size="small" color={theme.error} />
                   ) : (
                     <>
                       <Ionicons name="close" size={16} color={theme.error} />

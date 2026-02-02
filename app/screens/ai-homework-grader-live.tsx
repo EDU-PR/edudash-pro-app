@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'
 import { IconSymbol } from '@/components/ui/IconSymbol'
 import { getFeatureFlagsSync } from '@/lib/featureFlags'
@@ -113,7 +113,8 @@ export default function AIHomeworkGraderLive() {
           streaming: true,
           onDelta: (chunk) => {
             bufferRef.current += chunk;
-            setJsonBuffer(bufferRef.current);
+            import EduDashSpinner from '@/components/ui/EduDashSpinner';
+setJsonBuffer(bufferRef.current);
           },
           onFinal: (summary) => {
             if (summary && summary.feedback) {
@@ -217,7 +218,7 @@ export default function AIHomeworkGraderLive() {
           >
             {(isStreaming || pending) ? (
               <View style={styles.inlineRow}>
-                <ActivityIndicator color="#FFF" />
+                <EduDashSpinner color="#FFF" />
                 <Text style={styles.primaryButtonText}> Streaming…</Text>
               </View>
             ) : (

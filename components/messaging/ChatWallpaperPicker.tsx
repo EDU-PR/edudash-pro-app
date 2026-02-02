@@ -4,23 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Platform,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface WallpaperSelection {
   type: 'preset' | 'url';
   value: string;
@@ -300,7 +291,7 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
                 disabled={uploading}
               >
                 {uploading ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
+                  <EduDashSpinner size="small" color={theme.onPrimary} />
                 ) : (
                   <>
                     <Ionicons name="image-outline" size={20} color={theme.onPrimary} />

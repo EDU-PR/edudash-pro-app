@@ -4,7 +4,7 @@
  * WARP.md compliant: <500 lines, separate styles, React Query
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePendingApprovals, useApprovalStats, useProcessApproval, APPROVAL_TYPE_CONFIG, ApprovalRequest } from '@/hooks/membership/usePendingApprovals';
 import { styles } from '@/components/membership/styles/pending-approvals.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const TABS = [
   { id: 'pending', label: 'Pending' },
   { id: 'history', label: 'History' },
@@ -188,7 +189,7 @@ export default function PendingApprovalsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
         <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EduDashSpinner size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading requests...</Text>
         </View>
       </SafeAreaView>

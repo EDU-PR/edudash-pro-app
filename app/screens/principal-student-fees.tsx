@@ -10,18 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +23,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
   id: string;
   first_name: string;
@@ -1052,7 +1042,7 @@ export default function StudentFeeManagementScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Fee Management' }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading...</Text>
       </SafeAreaView>
     );
@@ -1418,7 +1408,7 @@ export default function StudentFeeManagementScreen() {
                   disabled={saving}
                 >
                   {saving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <EduDashSpinner size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={styles.submitButtonText}>
                       Waive {waiveType === 'full' ? 'Full Amount' : 'Partial Amount'}
@@ -1484,7 +1474,7 @@ export default function StudentFeeManagementScreen() {
                   disabled={saving}
                 >
                   {saving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <EduDashSpinner size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={styles.submitButtonText}>Update Fee Amount</Text>
                   )}
@@ -1547,7 +1537,7 @@ export default function StudentFeeManagementScreen() {
               disabled={!newClassId || newClassId === student?.class_id || saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.submitButtonText}>Change Class</Text>
               )}

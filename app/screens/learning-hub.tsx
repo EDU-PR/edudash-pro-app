@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Modal,
-  Alert,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +12,7 @@ import { ChildSwitcher } from '@/components/dashboard/parent';
 import { getLearningHubUsage, incrementLearningHubUsage, type LearningHubUsage } from '@/lib/learningHubUsage';
 import { incrementUsage } from '@/lib/ai/usage';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type TierKey = 'free' | 'starter' | 'plus';
 
 type ActivityStep = {
@@ -380,7 +372,7 @@ export default function LearningHubScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading Learning Hub...</Text>
         </View>
       </SafeAreaView>
@@ -579,7 +571,7 @@ export default function LearningHubScreen() {
                 </TouchableOpacity>
               </>
             ) : (
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             )}
           </View>
         </View>

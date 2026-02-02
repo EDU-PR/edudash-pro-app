@@ -6,21 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Dimensions, FlatList, Image, Linking, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +18,7 @@ import { SuccessModal } from '@/components/ui/SuccessModal';
 import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Types
@@ -422,7 +409,7 @@ export default function POPReviewScreen() {
               disabled={isProcessing}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color={theme.error} />
+                <EduDashSpinner size="small" color={theme.error} />
               ) : (
                 <>
                   <Ionicons name="close" size={18} color={theme.error} />
@@ -437,7 +424,7 @@ export default function POPReviewScreen() {
               disabled={isProcessing}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark" size={18} color="#fff" />
@@ -546,7 +533,7 @@ export default function POPReviewScreen() {
         {/* Content */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading payment uploads...
             </Text>

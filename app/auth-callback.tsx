@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View, StyleSheet, Platform } from 'react-native';
+import { Text, View, StyleSheet, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function AuthCallback() {
   const handled = useRef(false);
   const [message, setMessage] = useState('Finalizing sign-in…');
@@ -444,7 +445,7 @@ export default function AuthCallback() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#00f5ff" />
+      <EduDashSpinner size="large" color="#00f5ff" />
       <Text style={styles.text}>{message}</Text>
     </View>
   );

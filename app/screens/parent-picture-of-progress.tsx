@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Image,
-  Platform,
-  Animated,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Image, Platform, Animated } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -25,6 +13,7 @@ import ProfileImageService from '@/services/ProfileImageService';
 import { PictureOfProgressAI, ImageAnalysisResult } from '@/services/PictureOfProgressAI';
 import { useCelebration } from '@/hooks/useCelebration';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Subject options (common subjects for early childhood)
 const SUBJECTS = [
   { value: 'mathematics', label: 'Mathematics' },
@@ -781,7 +770,7 @@ export default function PictureOfProgressScreen() {
           disabled={createUpload.isPending || validateForm().length > 0}
         >
           {createUpload.isPending ? (
-            <ActivityIndicator size="small" color={theme.onPrimary} />
+            <EduDashSpinner size="small" color={theme.onPrimary} />
           ) : (
             <Text style={styles.submitButtonText}>{t('pop.uploadProgressPicture')}</Text>
           )}

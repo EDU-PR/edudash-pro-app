@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { Stack, router } from 'expo-router'
@@ -29,7 +29,8 @@ export default function CreateLessonScreen() {
     queryFn: async () => {
       const { data, error } = await assertSupabase().from('lesson_categories').select('id,name')
       if (error) throw error
-      return (data || []) as { id: string; name: string }[]
+      return (data || []) as { id: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
+name: string }[]
     },
     staleTime: 60_000,
   })
@@ -115,7 +116,7 @@ export default function CreateLessonScreen() {
               <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
                 <Text style={styles.cardTitle}>{t('lessons_create.section_category', { defaultValue: 'Category' })}</Text>
                 {categoriesQuery.isLoading ? (
-                  <ActivityIndicator color={palette.primary} />
+                  <EduDashSpinner color={palette.primary} />
                 ) : (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {categories.map(c => (
@@ -143,7 +144,7 @@ export default function CreateLessonScreen() {
               </View>
 
               <TouchableOpacity onPress={onSave} disabled={saving} style={[styles.primaryBtn, saving && { opacity: 0.6 }]}>
-                {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.primaryBtnText}>{t('lessons_create.save', { defaultValue: 'Save Lesson' })}</Text>}
+                {saving ? <EduDashSpinner color="#000" /> : <Text style={styles.primaryBtnText}>{t('lessons_create.save', { defaultValue: 'Save Lesson' })}</Text>}
               </TouchableOpacity>
             </>
           )}

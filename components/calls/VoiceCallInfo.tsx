@@ -5,10 +5,11 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { CallState } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface VoiceCallInfoProps {
   userName: string;
   callState: CallState;
@@ -32,7 +33,7 @@ export function VoiceCallInfo({
       <Text style={styles.callerName}>{userName}</Text>
       <View style={styles.statusContainer}>
         {(callState === 'connecting' || callState === 'ringing') && (
-          <ActivityIndicator size="small" color="#10b981" style={{ marginRight: 8 }} />
+          <EduDashSpinner size="small" color="#10b981" style={{ marginRight: 8 }} />
         )}
         <Text style={[
           styles.callStatus,

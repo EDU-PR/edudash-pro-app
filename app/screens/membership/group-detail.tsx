@@ -3,19 +3,7 @@
  * View and manage a specific group - add/remove members, edit details
  */
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  FlatList,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, FlatList, RefreshControl } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +16,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Authorized member types that can manage groups
 const GROUP_MANAGER_TYPES = [
   'ceo', 'president', 'deputy_president', 'secretary_general', 'treasurer', 'national_admin',
@@ -333,7 +322,7 @@ export default function GroupDetailScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ title: groupName }} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </SafeAreaView>
     );
@@ -508,7 +497,7 @@ export default function GroupDetailScreen() {
 
             {availableLoading ? (
               <View style={styles.centered}>
-                <ActivityIndicator size="large" color={theme.primary} />
+                <EduDashSpinner size="large" color={theme.primary} />
               </View>
             ) : filteredAvailableMembers.length === 0 ? (
               <View style={styles.centered}>
@@ -602,7 +591,7 @@ export default function GroupDetailScreen() {
               disabled={updateGroupMutation.isPending || !editName.trim()}
             >
               {updateGroupMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Text style={styles.saveButtonText}>Save Changes</Text>
               )}

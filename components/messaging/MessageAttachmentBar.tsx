@@ -9,18 +9,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  Pressable,
-  ActivityIndicator,
-  Platform,
-  Alert,
-  Animated,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Alert, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +24,7 @@ import {
   requestRecordingPermissionsAsync,
 } from 'expo-audio';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface MessageAttachment {
   id: string;
   uri: string;
@@ -541,7 +531,7 @@ export function MessageAttachmentBar({
           disabled={disabled || isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color={theme.textSecondary} />
+            <EduDashSpinner size="small" color={theme.textSecondary} />
           ) : (
             <Ionicons name="add-circle-outline" size={28} color={theme.textSecondary} />
           )}

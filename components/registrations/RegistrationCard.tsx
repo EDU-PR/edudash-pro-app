@@ -7,19 +7,14 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Linking,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Linking, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Registration, type ShowAlert } from '@/hooks/useRegistrations';
 import { styles } from './RegistrationCard.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RegistrationCardProps {
   item: Registration;
   isProcessing: boolean;
@@ -273,7 +268,7 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
           disabled={isSendingReminder || isProcessing}
         >
           {isSendingReminder ? (
-            <ActivityIndicator size="small" color="#F59E0B" />
+            <EduDashSpinner size="small" color="#F59E0B" />
           ) : (
             <Ionicons name="mail-outline" size={16} color="#F59E0B" />
           )}
@@ -295,7 +290,7 @@ export const RegistrationCard: React.FC<RegistrationCardProps> = ({
           disabled={isSendingPopLink || isProcessing}
         >
           {isSendingPopLink ? (
-            <ActivityIndicator size="small" color="#2563EB" />
+            <EduDashSpinner size="small" color="#2563EB" />
           ) : (
             <Ionicons name="link-outline" size={16} color="#2563EB" />
           )}

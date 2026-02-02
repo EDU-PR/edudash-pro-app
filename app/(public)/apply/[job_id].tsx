@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +9,7 @@ import HiringHubService from '@/lib/services/HiringHubService';
 import { JobPosting } from '@/types/hiring';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -224,7 +216,7 @@ console.error('Error submitting application:', error);
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
-<ActivityIndicator size="large" color={theme.primary} />
+<EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>{t('apply.loadingPosting')}</Text>
         </View>
       </SafeAreaView>
@@ -422,7 +414,7 @@ placeholder={t('apply.placeholder.coverLetterLong')}
           disabled={submitting}
         >
           {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <EduDashSpinner color="#FFFFFF" />
           ) : (
             <>
               <Ionicons name="paper-plane" size={20} color="#FFFFFF" />

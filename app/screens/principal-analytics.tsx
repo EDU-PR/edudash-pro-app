@@ -6,17 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  Alert,
-  Linking,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +20,7 @@ import {
   type AnalyticsData 
 } from '@/hooks/usePrincipalAnalytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Period options for analytics
 const PERIODS = ['week', 'month', 'quarter', 'year'] as const;
 
@@ -52,7 +43,7 @@ export default function PrincipalAnalyticsScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading analytics...</Text>
         </View>
       </View>

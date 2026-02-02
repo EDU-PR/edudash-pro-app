@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Platform, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Platform, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -9,6 +9,7 @@ import { getAdUnitId } from '@/lib/ads/config';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import { track } from '@/lib/analytics';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AdBannerProps {
   placement?: string;
   style?: any;
@@ -115,7 +116,7 @@ export default function AdBanner({
     <View style={[styles.container, style]}>
       {!adLoaded && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading...</Text>
         </View>
       )}

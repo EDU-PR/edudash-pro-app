@@ -1,18 +1,12 @@
 import React, { useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 import { assertSupabase } from '@/lib/supabase';
 import { routeAfterLogin } from '@/lib/routeAfterLogin';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function OnboardingCompleteScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
@@ -75,7 +69,7 @@ export default function OnboardingCompleteScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4F46E5" />
+          <EduDashSpinner size="large" color="#4F46E5" />
           <Text style={styles.loadingText}>Setting up your account...</Text>
         </View>
       </SafeAreaView>

@@ -3,19 +3,7 @@
  * Generate and share invite codes for recruiting members to a region
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
-  Alert, 
-  ScrollView, 
-  Switch, 
-  Share, 
-  Linking,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Switch, Share, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
@@ -272,7 +261,7 @@ export default function RegionalInviteCodeScreen() {
       <DashboardWallpaperBackground>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.text, { marginTop: 12 }]}>Loading...</Text>
           </View>
         </SafeAreaView>
@@ -452,7 +441,7 @@ export default function RegionalInviteCodeScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Ionicons name="add-circle" size={20} color="#fff" />

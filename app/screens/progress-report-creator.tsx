@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,7 @@ import { useProgressReportForm } from '@/hooks/useProgressReportForm';
 import { useProgressReportActions } from '@/hooks/useProgressReportActions';
 import { Ionicons } from '@expo/vector-icons';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * Progress Report Creator Screen (Refactored)
  * 
@@ -77,7 +78,7 @@ export default function ProgressReportCreator() {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={{ color: theme.textSecondary, marginTop: 16 }}>
             {!profile ? 'Loading profile...' : 'Loading student...'}
           </Text>

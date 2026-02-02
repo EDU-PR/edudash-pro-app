@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -10,6 +10,7 @@ import { CourseVideoPlayer } from '@/components/learner/CourseVideoPlayer';
 import { assertSupabase } from '@/lib/supabase';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function CoursePlayerScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
@@ -101,7 +102,7 @@ export default function CoursePlayerScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('course.loading', { defaultValue: 'Loading...' }) }} />
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </View>
     );

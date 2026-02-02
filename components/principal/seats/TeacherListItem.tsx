@@ -1,10 +1,11 @@
 // Teacher list item component - displays individual teacher with seat status
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Teacher } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface TeacherListItemProps {
   teacher: Teacher;
   isPending: boolean;
@@ -45,7 +46,7 @@ export function TeacherListItem({
         onPress={onAction}
       >
         {isPending ? (
-          <ActivityIndicator color="#000" size="small" />
+          <EduDashSpinner color="#000" size="small" />
         ) : (
           <Text style={hasSeat ? styles.btnDangerText : styles.btnPrimaryText}>
             {hasSeat ? 'Revoke' : 'Assign Seat'}

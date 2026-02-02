@@ -4,7 +4,7 @@ import { track, identifyUser } from '@/lib/analytics';
 import { identifyUserForFlags } from '@/lib/featureFlags';
 import { reportError } from '@/lib/monitoring';
 import { storage as supabaseStorage } from '@/lib/storage';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 
 // ============================================================================
 // GLOBAL PASSWORD RECOVERY FLAG
@@ -731,7 +731,7 @@ export async function signInWithSession(
       error: err,
     }));
 
-    const SIGN_IN_TIMEOUT_MS = 8000;
+    const SIGN_IN_TIMEOUT_MS = 10000;
     const { data, error } = await withTimeout(
       signInPromise,
       SIGN_IN_TIMEOUT_MS,
@@ -741,21 +741,17 @@ export async function signInWithSession(
     if ((error as any)?.message === 'Sign-in timed out') {
       console.warn('[SessionManager] Sign-in timed out - checking for late session...');
       try {
-        const { data: sessionData } = await withTimeout(
-          assertSupabase().auth.getSession(),
-          3000,
-          { data: { session: null }, error: null } as any
-        );
-        if (sessionData?.session?.user) {
+        const lateSession = await waitForSessionOrAuth(6000);
+        if (lateSession?.user) {
           const session: UserSession = {
-            access_token: sessionData.session.access_token,
-            refresh_token: sessionData.session.refresh_token,
-            expires_at: sessionData.session.expires_at || Date.now() / 1000 + 3600,
-            user_id: sessionData.session.user.id,
-            email: sessionData.session.user.email,
+            access_token: lateSession.access_token,
+            refresh_token: lateSession.refresh_token,
+            expires_at: lateSession.expires_at || Date.now() / 1000 + 3600,
+            user_id: lateSession.user.id,
+            email: lateSession.user.email,
           };
           const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-            fetchUserProfile(sessionData.session.user.id),
+            fetchUserProfile(lateSession.user.id),
             4000
           );
           let profile = fetchedProfile;
@@ -763,7 +759,7 @@ export async function signInWithSession(
             if (timedOut) {
               console.warn('[SessionManager] fetchUserProfile timed out after late session, using minimal fallback');
             }
-            profile = await buildMinimalProfileFromUser(sessionData.session.user);
+            profile = await buildMinimalProfileFromUser(lateSession.user);
           }
           await storeSession(session);
           await storeProfile(profile);
@@ -994,6 +990,50 @@ async function withTimeoutMarker<T>(
     result: timedOut ? null : (result as T),
     timedOut,
   };
+}
+
+/**
+ * Wait for a session to appear (or a SIGNED_IN auth event) within a timeout window.
+ * Useful for cases where auth state changes before signInWithPassword resolves.
+ */
+async function waitForSessionOrAuth(timeoutMs: number): Promise<Session | null> {
+  try {
+    const { data } = await assertSupabase().auth.getSession();
+    if (data?.session?.user) {
+      return data.session;
+    }
+  } catch {
+    // Non-fatal; fall through to auth listener.
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let listener: { subscription?: { unsubscribe: () => void } } | null = null;
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      try { listener?.subscription?.unsubscribe(); } catch { /* non-fatal */ }
+    };
+
+    const client = assertSupabase();
+    const { data: listenerData } = client.auth.onAuthStateChange((event, session) => {
+      if (!settled && event === 'SIGNED_IN' && session?.user) {
+        settled = true;
+        cleanup();
+        resolve(session);
+      }
+    });
+    listener = listenerData;
+
+    timeoutId = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve(null);
+      }
+    }, timeoutMs);
+  });
 }
 
 /**

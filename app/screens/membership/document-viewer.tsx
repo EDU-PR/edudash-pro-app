@@ -3,17 +3,7 @@
  * View, read, and share organizational documents and policies
  */
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Share,
-  Platform,
-  Linking,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Share, Platform, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +14,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Sharing from 'expo-sharing';
 import { documentViewerStyles as styles } from '@/components/membership/styles/document-viewer.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface DocumentData {
   id: string;
   name: string;
@@ -203,7 +194,7 @@ export default function DocumentViewerScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading document...</Text>
         </View>
       </SafeAreaView>
@@ -354,7 +345,7 @@ export default function DocumentViewerScreen() {
               disabled={downloading}
             >
               {downloading ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <Ionicons name="download-outline" size={22} color={theme.primary} />
               )}

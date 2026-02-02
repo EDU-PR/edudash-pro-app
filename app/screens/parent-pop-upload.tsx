@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ParentPoPUploadScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -53,7 +54,7 @@ export default function ParentPoPUploadScreen() {
         <Text style={styles.label}>Amount</Text>
         <TextInput value={amount} onChangeText={setAmount} style={styles.input} keyboardType="decimal-pad" placeholder="e.g. 500.00" placeholderTextColor={theme.textSecondary} />
         <TouchableOpacity style={styles.btn} onPress={onSubmit} disabled={loading}>
-          {loading ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={styles.btnText}>Submit</Text>}
+          {loading ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={styles.btnText}>Submit</Text>}
         </TouchableOpacity>
       </SafeAreaView>
     </View>

@@ -3,16 +3,7 @@
  * Thread list for Soil of Africa messaging
  */
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +20,7 @@ import {
   SOAThreadListItem,
 } from '@/components/soa-messaging/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Filter tabs for thread types
 const FILTER_TABS: { key: SOAThreadType | 'all'; label: string; icon: string }[] = [
   { key: 'all', label: 'All', icon: 'chatbubbles' },
@@ -283,7 +275,7 @@ export default function SOAMessagesScreen() {
 
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
       ) : error ? (

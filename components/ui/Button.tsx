@@ -6,10 +6,11 @@
  */
 
 import React from 'react';
-import { Pressable, StyleSheet, ViewStyle, ActivityIndicator, View } from 'react-native';
+import { Pressable, StyleSheet, ViewStyle, View } from 'react-native';
 import { Text } from './Text';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface ButtonProps {
   children: React.ReactNode;
   onPress?: () => void;
@@ -125,7 +126,7 @@ export function Button({
       <>
         <View style={styles.content}>
         {loading && (
-          <ActivityIndicator 
+          <EduDashSpinner 
             size="small" 
             color={getTextColor()} 
             style={styles.loader}

@@ -3,17 +3,7 @@
  * Allows Youth President and executives to create events
  */
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -24,6 +14,7 @@ import { DashboardWallpaperBackground } from '@/components/membership/dashboard'
 import { useQueryClient } from '@tanstack/react-query';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const EVENT_TYPES = [
   { value: 'meeting', label: 'Meeting', icon: 'people' },
   { value: 'workshop', label: 'Workshop', icon: 'construct' },
@@ -322,7 +313,7 @@ export default function CreateEventScreen() {
               disabled={saving || !title.trim()}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color="#fff" />

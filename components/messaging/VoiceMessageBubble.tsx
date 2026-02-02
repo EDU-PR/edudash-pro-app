@@ -6,16 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  Vibration,
-  View,
-} from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { assertSupabase } from '@/lib/supabase';
@@ -26,6 +17,7 @@ import { assertSupabase } from '@/lib/supabase';
 
 import type { MessageReaction } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface VoiceMessageBubbleProps {
   /** URL or storage path to the audio file */
   audioUrl: string;
@@ -472,7 +464,7 @@ export default function VoiceMessageBubble({
           style
         ]}
       >
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading audio...
         </Text>
@@ -528,7 +520,7 @@ export default function VoiceMessageBubble({
           disabled={!isLoaded}
         >
           {!isLoaded ? (
-            <ActivityIndicator size="small" color={theme.text} />
+            <EduDashSpinner size="small" color={theme.text} />
           ) : (
             <Ionicons
               name={isPlaying ? 'pause' : 'play'}

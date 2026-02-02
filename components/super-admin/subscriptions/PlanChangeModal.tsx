@@ -1,17 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  Modal,
-  ActivityIndicator,
-  Platform,
-  Vibration,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Platform, Vibration } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { adminUpdateSubscriptionPlan, listActivePlans, type SubscriptionPlan } from '@/lib/subscriptions/rpc-subscriptions';
@@ -21,6 +9,7 @@ import { Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { validateTierAssignment, ORGANIZATION_MIN_MONTHLY_PRICE, isValidOrganizationTier } from '@/lib/tiers';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Subscription {
   id: string;
   plan_id: string;
@@ -555,7 +544,7 @@ R{currentPrice}/{subscription.billing_frequency === 'annual' ? t('time.year', { 
           
           {plansLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={[styles.loadingText, { color: theme.textSecondary }]}>{t('pricing.loading', { defaultValue: 'Loading pricing plans...' })}</Text>
             </View>
           ) : (
@@ -709,7 +698,7 @@ R{currentPrice}/{subscription.billing_frequency === 'annual' ? t('time.year', { 
           >
             {loading ? (
               <View style={styles.buttonContent}>
-                <ActivityIndicator size="small" color={theme.onPrimary} style={{ marginRight: 8 }} />
+                <EduDashSpinner size="small" color={theme.onPrimary} style={{ marginRight: 8 }} />
                 <Text style={[styles.confirmButtonText, { color: theme.onPrimary }]}>{t('common.processing', { defaultValue: 'Processing...' })}</Text>
               </View>
             ) : (

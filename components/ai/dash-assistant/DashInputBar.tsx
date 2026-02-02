@@ -6,16 +6,7 @@
  */
 
 import React from 'react';
-import { 
-  View, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
-  Text,
-  ActivityIndicator,
-  Platform,
-  Dimensions
-} from 'react-native';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { styles } from '../DashAssistant.styles';
@@ -24,6 +15,7 @@ import type { DashAttachment } from '@/services/dash-ai/types';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface LearnerContext {
   ageBand?: string | null;
   schoolType?: string | null;
@@ -119,7 +111,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                 {/* Progress indicator */}
                 {attachment.status === 'uploading' && (
                   <View style={styles.attachmentProgressContainer}>
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                   </View>
                 )}
                 
@@ -365,7 +357,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             activeOpacity={0.7}
           >
             {(isLoading || isUploading) ? (
-              <ActivityIndicator size="small" color={theme.onPrimary} />
+              <EduDashSpinner size="small" color={theme.onPrimary} />
             ) : (
               <Ionicons name="send" size={20} color={theme.onPrimary} />
             )}

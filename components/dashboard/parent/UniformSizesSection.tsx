@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const SIZE_OPTIONS = [
   '2-3',
   '3-4',
@@ -652,7 +653,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
 
         {loading && (
           <View style={styles.inlineRow}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={styles.mutedText}>{t('dashboard.parent.uniform.loading', { defaultValue: 'Loading existing submissions...' })}</Text>
           </View>
         )}

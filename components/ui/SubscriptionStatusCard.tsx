@@ -11,15 +11,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,6 +24,7 @@ import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { cancelSubscription } from '@/lib/payments';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface PaymentHistoryItem {
   id: string;
   amount: number;
@@ -389,7 +382,7 @@ export const SubscriptionStatusCard: React.FC<SubscriptionStatusCardProps> = ({
           </View>
           
           {loadingHistory ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : paymentHistory.length > 0 ? (
             <View style={styles.historyList}>
               {(showAllPayments ? paymentHistory : paymentHistory.slice(0, 3)).map((payment) => (

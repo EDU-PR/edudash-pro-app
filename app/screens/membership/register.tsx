@@ -5,17 +5,7 @@
  * Refactored to use modular step components following WARP.md standards
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Text,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +27,7 @@ import {
   type Organization,
 } from '@/components/membership/registration';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Default organization ID (Soil Of Africa) - used as fallback if no org selected
 const DEFAULT_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 
@@ -775,7 +766,7 @@ export default function MemberRegistrationScreen() {
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <>
                 <Text style={styles.nextText}>

@@ -4,12 +4,13 @@
  * Now fetches real data from database based on selected organization
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOrganizationRegions } from '@/hooks/membership';
 import type { RegionConfig } from './constants';
 import type { RegistrationData } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RegionStepProps {
   data: RegistrationData;
   onSelectRegion: (region: RegionConfig) => void;
@@ -34,7 +35,7 @@ export function RegionStep({ data, onSelectRegion, theme, organizationId, organi
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading regions...
         </Text>

@@ -6,17 +6,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +21,7 @@ import LessonsService from '@/services/LessonsService';
 import { Lesson } from '@/types/lessons';
 import { getTeacherRoute } from '@/lib/constants/teacherRoutes';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for markdown rendering
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -346,7 +337,7 @@ export default function MyLessonsScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: palette.bg }]}>
         <ScreenHeader title="My Lessons" showBackButton />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: palette.textSec }]}>Loading your lessons...</Text>
         </View>
       </SafeAreaView>

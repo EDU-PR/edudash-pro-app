@@ -6,17 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  TextInput,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +20,7 @@ import {
 } from '@/lib/services/EducationalPDFService';
 import type { Assignment } from '@/lib/models/Assignment';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ====================================================================
 // TYPES
 // ====================================================================
@@ -534,7 +525,7 @@ export default function WorksheetGenerator({
       >
         {isGenerating ? (
           <View style={styles.generatingContent}>
-            <ActivityIndicator size="small" color="white" />
+            <EduDashSpinner size="small" color="white" />
             <Text style={styles.generateButtonText}>Creating PDF...</Text>
           </View>
         ) : (

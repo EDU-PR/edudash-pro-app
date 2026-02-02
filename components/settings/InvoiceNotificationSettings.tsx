@@ -4,17 +4,7 @@
 // ================================================
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  Switch,
-  TouchableOpacity,
-  Image,
-  Alert,
-  ScrollView,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, Switch, TouchableOpacity, Image, Alert, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
@@ -42,6 +32,7 @@ import {
   NOTIFICATION_CHANNEL_LABELS,
 } from '@/lib/types/profile';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface InvoiceNotificationSettingsProps {
   onClose?: () => void;
 }
@@ -189,7 +180,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading notification settings...</Text>
       </View>
     );
@@ -392,7 +383,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
                       disabled={uploadSignatureMutation.isPending}
                     >
                       {uploadSignatureMutation.isPending ? (
-                        <ActivityIndicator size="small" color={theme.surface} />
+                        <EduDashSpinner size="small" color={theme.surface} />
                       ) : (
                         <>
                           <Ionicons name="camera" size={16} color={theme.surface} />
@@ -407,7 +398,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
                       disabled={deleteSignatureMutation.isPending}
                     >
                       {deleteSignatureMutation.isPending ? (
-                        <ActivityIndicator size="small" color={theme.surface} />
+                        <EduDashSpinner size="small" color={theme.surface} />
                       ) : (
                         <>
                           <Ionicons name="trash" size={16} color={theme.surface} />
@@ -424,7 +415,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
                   disabled={uploadSignatureMutation.isPending || !storageStatus?.available}
                 >
                   {uploadSignatureMutation.isPending ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                   ) : (
                     <>
                       <Ionicons name="add-circle-outline" size={24} color={theme.primary} />
@@ -527,7 +518,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
                   disabled={testingNotification?.event === event}
                 >
                   {testingNotification?.event === event ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                   ) : (
                     <>
                       <Ionicons name="mail-outline" size={16} color={theme.primary} />

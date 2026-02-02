@@ -10,21 +10,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ActivityCommentsProps {
   activityId: string;
   theme: any;
@@ -282,7 +274,7 @@ export function ActivityComments({ activityId, theme, isTeacher = false }: Activ
       </View>
 
       {loading && comments.length === 0 ? (
-        <ActivityIndicator size="small" color={theme.primary} style={styles.loader} />
+        <EduDashSpinner size="small" color={theme.primary} style={styles.loader} />
       ) : comments.length === 0 ? (
         <Text style={[styles.emptyText, { color: theme.textTertiary }]}>
           No comments yet. Be the first to comment!
@@ -329,7 +321,7 @@ export function ActivityComments({ activityId, theme, isTeacher = false }: Activ
           disabled={!newComment.trim() || posting}
         >
           {posting ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <EduDashSpinner size="small" color="#FFF" />
           ) : (
             <Ionicons name="send" size={20} color="#FFF" />
           )}

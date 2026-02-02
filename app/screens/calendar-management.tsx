@@ -6,19 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Modal,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, RefreshControl, Modal, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -30,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const EVENT_TYPES = [
   { value: 'holiday', label: 'Holiday', icon: 'sunny-outline', color: '#EF4444' },
   { value: 'parent_meeting', label: 'Parent Meeting', icon: 'people-outline', color: '#8B5CF6' },
@@ -375,7 +364,7 @@ export default function CalendarManagementScreen() {
         {/* Events List */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading events...</Text>
           </View>
         ) : (
@@ -718,7 +707,7 @@ export default function CalendarManagementScreen() {
                   disabled={submitting}
                 >
                   {submitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <EduDashSpinner size="small" color="#fff" />
                   ) : (
                     <Text style={styles.submitButtonText}>
                       {editingEvent ? 'Update' : 'Create'}

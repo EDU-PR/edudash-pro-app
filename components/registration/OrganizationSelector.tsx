@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { createRegistrationStyles } from './child-registration.styles';
 import type { Organization, RegistrationFormErrors } from '@/hooks/useChildRegistration';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface OrganizationSelectorProps {
   organizations: Organization[];
   loadingOrganizations: boolean;
@@ -54,7 +55,7 @@ export function OrganizationSelector({
       
       {loadingOrganizations ? (
         <View style={[styles.organizationContainer, { paddingVertical: 20 }]}>
-          <ActivityIndicator color={theme.primary} />
+          <EduDashSpinner color={theme.primary} />
           <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>
             Loading organizations...
           </Text>

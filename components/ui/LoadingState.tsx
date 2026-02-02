@@ -5,10 +5,11 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text } from './Text';
 import EduDashProLoader, { EduDashProInlineLoader } from './EduDashProLoader';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface LoadingStateProps {
   message?: string;
   size?: 'small' | 'large';
@@ -46,7 +47,7 @@ export function LoadingState({
   // Fallback to simple loader
   return (
     <View style={[styles.container, style]} testID={testID} {...props}>
-      <ActivityIndicator size={size} color={color} />
+      <EduDashSpinner size={size} color={color} />
       {message && (
         <Text variant="body" color="secondary" style={styles.message}>
           {message}

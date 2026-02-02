@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
@@ -14,6 +14,7 @@ import * as Print from 'expo-print';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useThemedStyles } from '@/hooks/useThemedStyles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface PDFViewerProps {
   uri?: string;
   filename?: string;
@@ -453,7 +454,7 @@ export function PDFViewer({
 
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading PDF...</Text>
           </View>
         )}

@@ -1,15 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  Dimensions,
-  Platform,
-  ActivityIndicator
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Type definitions
 interface SchoolTypeOption {
   id: 'preschool' | 'k12_school' | 'hybrid';
@@ -300,7 +291,7 @@ export default function SchoolTypeSelectionScreen() {
             disabled={!selectedType || continuing}
           >
             {continuing ? (
-              <ActivityIndicator color="#000" size="small" />
+              <EduDashSpinner color="#000" size="small" />
             ) : (
               <Text style={styles.continueButtonText}>Continue with {
                 selectedType ? SCHOOL_TYPES.find(t => t.id === selectedType)?.name : 'Selected Type'

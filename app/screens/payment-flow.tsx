@@ -8,14 +8,7 @@
  */
 
 import React, { useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -29,6 +22,7 @@ import { usePaymentFlow } from '@/hooks/usePaymentFlow';
 import { createStyles } from '@/styles/payment-flow.styles';
 import type { PaymentChild } from '@/types/payments';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PaymentFlowScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -102,7 +96,7 @@ export default function PaymentFlowScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScreenHeader title="Make Payment" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading payment details...</Text>
         </View>
       </SafeAreaView>

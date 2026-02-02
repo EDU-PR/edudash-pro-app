@@ -4,19 +4,13 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import type { GeneratedContentCardProps } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * Parsed section component for structured display
  */
@@ -156,7 +150,7 @@ export function GeneratedContentCard({
                 activeOpacity={0.8}
               >
                 {isSaving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <EduDashSpinner size="small" color="#FFFFFF" />
                 ) : (
                   <Ionicons name="save" size={18} color="#FFFFFF" />
                 )}

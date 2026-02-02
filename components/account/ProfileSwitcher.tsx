@@ -5,16 +5,7 @@
  * Uses EnhancedBiometricAuth for multi-account storage and session restoration.
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +21,7 @@ import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin'
 import { signOutAndRedirect } from '@/lib/authActions';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface StoredAccount {
   userId: string;
   email: string;
@@ -345,7 +337,7 @@ export function ProfileSwitcher({
 
         {/* Status indicator */}
         {isSwitching ? (
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
         ) : item.isActive ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.primary} />
         ) : (
@@ -394,7 +386,7 @@ export function ProfileSwitcher({
           {/* Account list */}
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             </View>
           ) : accounts.length === 0 ? (
             renderEmptyState()

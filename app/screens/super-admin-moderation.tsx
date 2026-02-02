@@ -1,16 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +10,7 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ModerationItem {
   id: string;
   type: 'lesson' | 'homework' | 'message' | 'comment' | 'announcement';
@@ -366,7 +356,7 @@ export default function SuperAdminModerationScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#00f5ff" />
+            <EduDashSpinner size="large" color="#00f5ff" />
             <Text style={styles.loadingText}>Loading moderation queue...</Text>
           </View>
         ) : (
@@ -569,7 +559,7 @@ export default function SuperAdminModerationScreen() {
                   disabled={processing}
                 >
                   {processing ? (
-                    <ActivityIndicator size="small" color="#16a34a" />
+                    <EduDashSpinner size="small" color="#16a34a" />
                   ) : (
                     <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
                   )}
@@ -582,7 +572,7 @@ export default function SuperAdminModerationScreen() {
                   disabled={processing}
                 >
                   {processing ? (
-                    <ActivityIndicator size="small" color="#dc2626" />
+                    <EduDashSpinner size="small" color="#dc2626" />
                   ) : (
                     <Ionicons name="close-circle" size={20} color="#dc2626" />
                   )}

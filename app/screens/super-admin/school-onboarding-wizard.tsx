@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Switch,
-  Platform,
-  KeyboardAvoidingView
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, KeyboardAvoidingView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +9,7 @@ import { listActivePlans } from '@/lib/subscriptions/rpc-subscriptions';
 import { track } from '@/lib/analytics';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Form data interfaces
 interface SchoolData {
   name: string;
@@ -715,7 +704,7 @@ export default function SuperAdminSchoolOnboardingWizard() {
               disabled={creating}
             >
               {creating ? (
-                <ActivityIndicator color="#000" size="small" />
+                <EduDashSpinner color="#000" size="small" />
               ) : (
                 <Text style={styles.nextButtonText}>
                   {currentStep === totalSteps ? 'Create School' : 'Continue'}

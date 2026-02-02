@@ -1,15 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StudentRow {
   id: string;
   first_name: string | null;
@@ -423,7 +414,7 @@ export default function PrincipalNewMessageScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {loading && (
           <View style={styles.empty}>
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
             <Text style={styles.emptyText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
           </View>
         )}

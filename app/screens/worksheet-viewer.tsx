@@ -5,23 +5,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Share,
-  Dimensions
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Share, Dimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import * as Sharing from 'expo-sharing';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
 interface WorksheetData {
@@ -335,7 +326,7 @@ export default function WorksheetViewer() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.text }]}>
             Loading worksheet...
           </Text>
@@ -399,7 +390,7 @@ export default function WorksheetViewer() {
             disabled={generating}
           >
             {generating ? (
-              <ActivityIndicator size="small" color={theme.onPrimary} />
+              <EduDashSpinner size="small" color={theme.onPrimary} />
             ) : (
               <>
                 <Ionicons name="document-text" size={16} color={theme.onPrimary} />

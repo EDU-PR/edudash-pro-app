@@ -1,18 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Linking,
-  ActivityIndicator,
-} from 'react-native'
+import { Modal, View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'
 import { useWhatsAppConnection, WhatsAppConnectionStatus } from '../../hooks/useWhatsAppConnection'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -21,7 +8,7 @@ import { track } from '../../lib/analytics'
 import { useAuth } from '../../contexts/AuthContext'
 import { queryClient } from '../../lib/query/queryClient'
 import { convertToE164, formatAsUserTypes, validatePhoneNumber, EXAMPLE_PHONE_NUMBERS } from '../../lib/utils/phoneUtils'
-import { Vibration } from 'react-native'
+import { Vibration } from 'react-native';
 import Feedback from '../../lib/feedback'
 
 interface WhatsAppOptInModalProps {
@@ -108,7 +95,8 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
   // Use the new phone validation utility
   const validatePhone = (phone: string) => {
     return validatePhoneNumber(phone).isValid;
-  }
+  import EduDashSpinner from '@/components/ui/EduDashSpinner';
+}
 
   // Handle phone number input with auto-formatting
   const handlePhoneChange = (text: string) => {
@@ -645,7 +633,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
             disabled={isOptingIn}
           >
             {isOptingIn ? (
-              <ActivityIndicator color={theme.onPrimary} size="small" />
+              <EduDashSpinner color={theme.onPrimary} size="small" />
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Ionicons name="checkmark-circle" size={16} color={theme.onPrimary} />
@@ -793,7 +781,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         >
           {isOptingIn ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <EduDashSpinner size="small" color="#FFFFFF" />
               <Text style={[styles.buttonText, styles.loadingText]}>
                 {t('whatsapp:connecting')}
               </Text>
@@ -838,7 +826,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
       >
         {isSendingTest ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={styles.loadingText}>
               {t('whatsapp:sendingTest')}
             </Text>
@@ -931,7 +919,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
       >
         {isSendingTest ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={styles.loadingText}>
               {t('whatsapp:sendingTest')}
             </Text>
@@ -955,7 +943,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
         >
           {isDisconnecting || isOptingOut ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <EduDashSpinner size="small" color="#FFFFFF" />
               <Text style={[styles.buttonText, styles.loadingText]}>
                 Disconnecting...
               </Text>
@@ -1012,7 +1000,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
                 marginBottom: 16,
                 borderRadius: 8
               }}>
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
                 <Text style={{
                   marginLeft: 8,
                   color: theme.textSecondary,

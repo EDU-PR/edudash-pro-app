@@ -7,17 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
@@ -26,6 +16,7 @@ import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherSignUpScreen() {
   const { theme } = useTheme();
   const flags = getFeatureFlagsSync();
@@ -363,7 +354,7 @@ export default function TeacherSignUpScreen() {
               placeholderTextColor={theme.muted}
               autoCapitalize="characters"
             />
-            {validatingCode && <ActivityIndicator size="small" color={theme.primary} />}
+            {validatingCode && <EduDashSpinner size="small" color={theme.primary} />}
             {schoolInfo && <Ionicons name="checkmark-circle" size={20} color="#22c55e" />}
           </View>
           {schoolInfo && (
@@ -415,7 +406,7 @@ export default function TeacherSignUpScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#ffffff" />
+            <EduDashSpinner color="#ffffff" />
           ) : (
             <>
               <Text style={styles.submitButtonText}>Create Account</Text>

@@ -5,12 +5,13 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLessonApproval } from '@/hooks/useLessonApproval';
 import { useAuth } from '@/contexts/AuthContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface LessonApprovalQueueProps {
   preschoolId: string;
   onApprove?: (approvalId: string) => void;
@@ -42,7 +43,7 @@ export function LessonApprovalQueue({ preschoolId, onApprove, onReject }: Lesson
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
       </View>
     );
   }

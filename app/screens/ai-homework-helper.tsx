@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl } from 'react-native'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 // import { assertSupabase } from '@/lib/supabase'
@@ -24,7 +24,8 @@ export default function AIHomeworkHelperScreen() {
   const { loading, generate, result } = useHomeworkGenerator()
   const [pending, setPending] = useState(false)
   const [answer, setAnswer] = useState('')
-  const [usage, setUsage] = useState<{ lesson_generation: number; grading_assistance: number; homework_help: number }>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
+  const [usage, setUsage] = useState<{ lesson_generation: number; import EduDashSpinner from '@/components/ui/EduDashSpinner';
+grading_assistance: number; homework_help: number }>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
   const [models, setModels] = useState<Array<{ id: string; name: string; provider: 'claude' | 'openai' | 'custom'; relativeCost: number }>>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
 
@@ -184,7 +185,7 @@ export default function AIHomeworkHelperScreen() {
           />
 
           <TouchableOpacity onPress={onAskAI} disabled={loading || pending || !aiHelperEnabled} style={[styles.button, { backgroundColor: theme.primary }, (loading || pending || !aiHelperEnabled) && styles.buttonDisabled]}>
-            {(loading || pending) ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Ask AI</Text>}
+            {(loading || pending) ? <EduDashSpinner color="#fff" /> : <Text style={styles.buttonText}>Ask AI</Text>}
           </TouchableOpacity>
         </View>
 
