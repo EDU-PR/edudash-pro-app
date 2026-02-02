@@ -536,6 +536,7 @@ export default function ParentDashboard() {
         {userId && (
           <CollapsibleSection 
             title={COPY.sections.recentActivity}
+            description={COPY.sectionDescriptions.recentActivity}
             icon={Activity} 
             isOpen={openSection === 'activity'}
             onToggle={() => toggleSection('activity')}
@@ -561,6 +562,7 @@ export default function ParentDashboard() {
         {userId && !allChildrenArePreschoolers && (
           <CollapsibleSection
             title={COPY.sections.homework}
+            description={COPY.sectionDescriptions.homework}
             icon={BookOpen}
             isOpen={openSection === 'homework'}
             onToggle={() => toggleSection('homework')}
@@ -581,6 +583,7 @@ export default function ParentDashboard() {
         {/* Live Lessons Section - Show if organization-linked with active child */}
         <CollapsibleSection
           title={COPY.sections.liveClasses}
+          description={COPY.sectionDescriptions.liveClasses}
           icon={Video}
           isOpen={openSection === 'live-classes'}
           onToggle={() => toggleSection('live-classes')}
@@ -612,6 +615,7 @@ export default function ParentDashboard() {
         {/* Teacher Notes */}
         <CollapsibleSection
           title={COPY.sections.teacherNotes}
+          description={COPY.sectionDescriptions.teacherNotes}
           icon={MessageCircle}
           isOpen={openSection === 'teacher-notes'}
           onToggle={() => toggleSection('teacher-notes')}
@@ -632,6 +636,7 @@ export default function ParentDashboard() {
         {!allChildrenArePreschoolers && (
           <CollapsibleSection
             title={COPY.sections.progress}
+            description={COPY.sectionDescriptions.progress}
             icon={BarChart3}
             isOpen={openSection === 'progress'}
             onToggle={() => toggleSection('progress')}
@@ -652,6 +657,7 @@ export default function ParentDashboard() {
         {/* Upcoming Birthdays */}
         <CollapsibleSection
           title={COPY.sections.birthdays}
+          description={COPY.sectionDescriptions.birthdays}
           icon={Sparkles}
           isOpen={openSection === 'birthdays'}
           onToggle={() => toggleSection('birthdays')}
@@ -674,6 +680,7 @@ export default function ParentDashboard() {
         {/* Birthday Chart */}
         <CollapsibleSection
           title={COPY.sections.birthdayChart}
+          description={COPY.sectionDescriptions.birthdayChart}
           icon={Cake}
           isOpen={openSection === 'birthday-chart'}
           onToggle={() => toggleSection('birthday-chart')}
@@ -693,6 +700,7 @@ export default function ParentDashboard() {
         {/* Daily Activity Feed */}
         <CollapsibleSection
           title={COPY.sections.dailyActivity}
+          description={COPY.sectionDescriptions.dailyActivity}
           icon={Activity}
           isOpen={openSection === 'daily-activity'}
           onToggle={() => toggleSection('daily-activity')}
@@ -719,6 +727,7 @@ export default function ParentDashboard() {
         {/* Practice at Home Hub - STEM Activities */}
         <CollapsibleSection 
           title={COPY.sections.practiceAtHome}
+          description={COPY.sectionDescriptions.practiceAtHome}
           icon={Sparkles} 
           isOpen={openSection === 'practice'}
           onToggle={() => toggleSection('practice')}
