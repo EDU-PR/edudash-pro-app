@@ -18,13 +18,14 @@ interface TeacherCardProps {
   onPress: (teacher: Teacher) => void;
   onAssignSeat: (teacherUserId: string, teacherName: string) => void;
   onRevokeSeat: (teacherUserId: string, teacherName: string) => void;
+  onInvite?: (teacher: Teacher) => void;
+  onCopyInviteLink?: (teacher: Teacher) => void;
+  inviteStatus?: string | null;
+  inviteToken?: string | null;
   isAssigning: boolean;
   isRevoking: boolean;
   shouldDisableAssignment: boolean;
   theme?: ThemeColors;
-  inviteStatus?: string;
-  onInvite?: () => void;
-  onCopyInviteLink?: () => void;
 }
 
 export function TeacherCard({
@@ -32,34 +33,26 @@ export function TeacherCard({
   onPress,
   onAssignSeat,
   onRevokeSeat,
+  onInvite,
+  onCopyInviteLink,
+  inviteStatus,
+  inviteToken,
   isAssigning,
   isRevoking,
   shouldDisableAssignment,
   theme,
-  inviteStatus,
-  onInvite,
-  onCopyInviteLink,
 }: TeacherCardProps) {
   const seatLookupId = teacher.teacherUserId || '__missing__';
   const teacherHasSeat = useTeacherHasSeat(seatLookupId);
   const hasSeatUser = Boolean(teacher.teacherUserId);
+  const normalizedInviteStatus = (inviteStatus || '').toLowerCase();
+  const hasInvite = Boolean(normalizedInviteStatus);
+  const invitePending = normalizedInviteStatus === 'pending';
+  const inviteAccepted = normalizedInviteStatus === 'accepted';
+  const inviteRevoked = normalizedInviteStatus === 'revoked';
+  const inviteExpired = normalizedInviteStatus === 'expired';
   const fullName = `${teacher.firstName} ${teacher.lastName}`;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
-  const isInvitePending = inviteStatus && inviteStatus !== 'accepted' && inviteStatus !== 'active';
-  const inviteLabel = inviteStatus === 'pending'
-    ? 'Invite pending'
-    : inviteStatus === 'accepted'
-      ? 'Invite accepted'
-      : inviteStatus === 'revoked'
-        ? 'Invite revoked'
-        : inviteStatus === 'expired'
-          ? 'Invite expired'
-          : inviteStatus === 'needed'
-            ? 'Invite needed'
-            : inviteStatus || '';
-  const inviteActionLabel = inviteStatus === 'pending' ? 'Resend Invite' : 'Send Invite';
-  const showInviteActions = Boolean(onInvite) && !teacher.authUserId;
-  const showInviteStatus = Boolean(inviteLabel);
 
   // Debug logging for teacher card
   useEffect(() => {
@@ -75,14 +68,6 @@ export function TeacherCard({
       }
     });
   }, [teacher, teacherHasSeat, fullName]);
-
-  const getInviteStatusColor = () => {
-    if (inviteStatus === 'accepted' || inviteStatus === 'active') return '#16a34a';
-    if (inviteStatus === 'pending') return '#f59e0b';
-    if (inviteStatus === 'revoked' || inviteStatus === 'expired') return '#ef4444';
-    if (inviteStatus === 'needed') return '#f97316';
-    return '#6b7280';
-  };
 
   return (
     <TouchableOpacity
@@ -106,31 +91,52 @@ export function TeacherCard({
           </Text>
           <View style={styles.seatStatusContainer}>
             <Ionicons
-              name={!hasSeatUser ? 'time-outline' : teacherHasSeat ? 'checkmark-circle' : 'ellipse-outline'}
+              name={
+                !hasSeatUser
+                  ? invitePending
+                    ? 'paper-plane'
+                    : 'time-outline'
+                  : teacherHasSeat
+                    ? 'checkmark-circle'
+                    : 'ellipse-outline'
+              }
               size={14}
-              color={!hasSeatUser ? '#f59e0b' : teacherHasSeat ? '#059669' : '#6b7280'}
+              color={
+                !hasSeatUser
+                  ? invitePending
+                    ? '#6366f1'
+                    : '#f59e0b'
+                  : teacherHasSeat
+                    ? '#059669'
+                    : '#6b7280'
+              }
             />
             <Text
               style={[
                 styles.seatStatusText,
-                { color: !hasSeatUser ? '#f59e0b' : teacherHasSeat ? '#059669' : '#6b7280' },
+                {
+                  color:
+                    !hasSeatUser
+                      ? invitePending
+                        ? '#6366f1'
+                        : '#f59e0b'
+                      : teacherHasSeat
+                        ? '#059669'
+                        : '#6b7280',
+                },
               ]}
             >
-              {!hasSeatUser ? 'Invite pending' : teacherHasSeat ? 'Has teacher seat' : 'No teacher seat'}
+              {!hasSeatUser
+                ? invitePending
+                  ? 'Invite sent'
+                  : inviteAccepted
+                    ? 'Invite accepted'
+                    : 'Invite needed'
+                : teacherHasSeat
+                  ? 'Has teacher seat'
+                  : 'No teacher seat'}
             </Text>
           </View>
-          {showInviteStatus && (
-            <View style={styles.inviteStatusContainer}>
-              <Ionicons
-                name={inviteStatus === 'accepted' ? 'checkmark-circle' : 'time'}
-                size={14}
-                color={getInviteStatusColor()}
-              />
-              <Text style={[styles.inviteStatusText, { color: getInviteStatusColor() }]}>
-                {inviteLabel}
-              </Text>
-            </View>
-          )}
         </View>
       </View>
 
@@ -138,9 +144,65 @@ export function TeacherCard({
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(teacher.status) }]}> 
           <Text style={styles.statusText}>{teacher.status}</Text>
         </View>
+        {!hasSeatUser && (
+          <View
+            style={[
+              styles.inviteBadge,
+              invitePending && styles.inviteBadgePending,
+              inviteAccepted && styles.inviteBadgeAccepted,
+              inviteRevoked && styles.inviteBadgeRevoked,
+              inviteExpired && styles.inviteBadgeExpired,
+            ]}
+          >
+            <Text style={styles.inviteBadgeText}>
+              {invitePending
+                ? 'Invite pending'
+                : inviteAccepted
+                  ? 'Invite accepted'
+                  : inviteRevoked
+                    ? 'Invite revoked'
+                    : inviteExpired
+                      ? 'Invite expired'
+                      : hasInvite
+                        ? `Invite ${normalizedInviteStatus}`
+                        : 'Invite needed'}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.seatActionButtons}>
-          {teacherHasSeat ? (
+          {!hasSeatUser ? (
+            <>
+              <TouchableOpacity
+                style={[styles.seatActionButton, styles.inviteButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onInvite?.(teacher);
+                }}
+                disabled={!onInvite}
+              >
+                <Ionicons name="paper-plane" size={16} color="#fff" />
+                <Text style={styles.seatActionText}>
+                  {invitePending ? 'Resend Invite' : 'Send Invite'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.seatActionButton,
+                  styles.copyInviteButton,
+                  (!inviteToken && !onCopyInviteLink) && styles.disabledButton,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onCopyInviteLink?.(teacher);
+                }}
+                disabled={!onCopyInviteLink}
+              >
+                <Ionicons name="link-outline" size={16} color="#fff" />
+                <Text style={styles.seatActionText}>Copy Link</Text>
+              </TouchableOpacity>
+            </>
+          ) : teacherHasSeat ? (
             <TouchableOpacity
               style={[styles.seatActionButton, styles.revokeButton]}
               onPress={(e) => {
@@ -180,37 +242,8 @@ export function TeacherCard({
                 size={16}
                 color={shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#34d399'}
               />
-              <Text style={styles.seatActionText}>{!hasSeatUser ? 'Invite Needed' : 'Assign Seat'}</Text>
+              <Text style={styles.seatActionText}>Assign Seat</Text>
             </TouchableOpacity>
-          )}
-
-          {showInviteActions && (
-            <>
-              <TouchableOpacity
-                style={[
-                  styles.seatActionButton,
-                  styles.inviteButton,
-                  isInvitePending && styles.invitePendingButton,
-                ]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onInvite?.();
-                }}
-              >
-                <Ionicons name="paper-plane" size={16} color="#fff" />
-                <Text style={styles.seatActionText}>{inviteActionLabel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.seatActionButton, styles.copyInviteButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onCopyInviteLink?.();
-                }}
-              >
-                <Ionicons name="link" size={16} color="#e2e8f0" />
-                <Text style={styles.seatActionText}>Copy Link</Text>
-              </TouchableOpacity>
-            </>
           )}
 
           <TouchableOpacity
@@ -292,16 +325,6 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
-  inviteStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  inviteStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
   teacherActionsColumn: {
     gap: 8,
   },
@@ -318,12 +341,37 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
+  inviteBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#334155',
+    marginTop: 4,
+  },
+  inviteBadgePending: {
+    backgroundColor: '#1d4ed8',
+  },
+  inviteBadgeAccepted: {
+    backgroundColor: '#059669',
+  },
+  inviteBadgeRevoked: {
+    backgroundColor: '#9f1239',
+  },
+  inviteBadgeExpired: {
+    backgroundColor: '#7c2d12',
+  },
+  inviteBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
   seatActionButtons: {
     flexDirection: 'row',
     gap: 8,
     marginLeft: 'auto',
     flexWrap: 'wrap',
-    justifyContent: 'flex-end',
   },
   seatActionButton: {
     flexDirection: 'row',
@@ -349,18 +397,6 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     borderColor: '#e5e7eb',
     opacity: 0.6,
   },
-  inviteButton: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
-  },
-  invitePendingButton: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#f59e0b',
-  },
-  copyInviteButton: {
-    backgroundColor: '#334155',
-    borderColor: '#475569',
-  },
   seatActionText: {
     fontSize: 11,
     fontWeight: '600',
@@ -369,6 +405,14 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
   messageQuickAction: {
     backgroundColor: '#3b82f6',
     borderColor: '#3b82f6',
+  },
+  inviteButton: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  copyInviteButton: {
+    backgroundColor: '#0ea5e9',
+    borderColor: '#0ea5e9',
   },
 });
 
