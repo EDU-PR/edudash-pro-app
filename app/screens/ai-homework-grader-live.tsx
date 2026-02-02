@@ -12,6 +12,7 @@ import { router } from 'expo-router'
 import { useGradingModels } from '@/hooks/useAIModelSelection'
 import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
+import EduDashSpinner from '@/components/ui/EduDashSpinner'
 
 /** AI model option with optional notes for display */
 interface ModelOption {
@@ -113,8 +114,7 @@ export default function AIHomeworkGraderLive() {
           streaming: true,
           onDelta: (chunk) => {
             bufferRef.current += chunk;
-            import EduDashSpinner from '@/components/ui/EduDashSpinner';
-setJsonBuffer(bufferRef.current);
+            setJsonBuffer(bufferRef.current);
           },
           onFinal: (summary) => {
             if (summary && summary.feedback) {

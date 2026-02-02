@@ -12,10 +12,10 @@ import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { router } from 'expo-router';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService'
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 interface StudentProgress {
   id: string;
-  import EduDashSpinner from '@/components/ui/EduDashSpinner';
 name: string;
   recentGrades: number[];
   averageGrade: number;
