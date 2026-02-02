@@ -126,6 +126,7 @@ export default function DashOrb({
   const [showUpgradeBubble, setShowUpgradeBubble] = useState(false);
   const upgradeAnim = useRef(new Animated.Value(0)).current;
   const upgradeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
     if (!lang) return null;
@@ -377,11 +378,21 @@ export default function DashOrb({
         pulseLoopRef.current?.stop();
         glowLoopRef.current?.stop();
         setIsDragging(true);
+
+        if (showUpgradeBubble) {
+          if (upgradeTimerRef.current) {
+            clearTimeout(upgradeTimerRef.current);
+            upgradeTimerRef.current = null;
+          }
+          upgradeAnim.stopAnimation();
+          upgradeAnim.setValue(1);
+        }
         
-        pan.setOffset({
+        dragStartRef.current = {
           x: (pan.x as any)._value,
           y: (pan.y as any)._value,
-        });
+        };
+        pan.setOffset({ ...dragStartRef.current });
         pan.setValue({ x: 0, y: 0 });
         
         // Haptic feedback on grab
@@ -393,13 +404,44 @@ export default function DashOrb({
           useNativeDriver: false,
         }).start();
       },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
+      onPanResponderMove: (_, gestureState) => {
+        const edgePadding = 16;
+        const topLimit = 80;
+        const bottomLimit = 120;
+        const horizontalLimit = SCREEN_WIDTH * 0.42;
+        const minX = position.includes('left') ? edgePadding : Math.max(edgePadding, horizontalLimit);
+        const maxX = position.includes('left')
+          ? Math.min(SCREEN_WIDTH * 0.58 - size, SCREEN_WIDTH - size - edgePadding)
+          : SCREEN_WIDTH - size - edgePadding;
+        const minY = topLimit;
+        const maxY = SCREEN_HEIGHT - size - bottomLimit;
+
+        const rawX = dragStartRef.current.x + gestureState.dx;
+        const rawY = dragStartRef.current.y + gestureState.dy;
+        const clampedX = Math.max(minX, Math.min(maxX, rawX));
+        const clampedY = Math.max(minY, Math.min(maxY, rawY));
+
+        pan.setValue({
+          x: clampedX - dragStartRef.current.x,
+          y: clampedY - dragStartRef.current.y,
+        });
+      },
       onPanResponderRelease: () => {
         pan.flattenOffset();
         setIsDragging(false);
+
+        if (locked && showUpgradeBubble) {
+          if (upgradeTimerRef.current) {
+            clearTimeout(upgradeTimerRef.current);
+          }
+          upgradeTimerRef.current = setTimeout(() => {
+            Animated.timing(upgradeAnim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }).start(() => setShowUpgradeBubble(false));
+          }, 2600);
+        }
         
         // Snap to nearest edge logic could go here
         

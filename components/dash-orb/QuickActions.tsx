@@ -23,7 +23,7 @@ export interface QuickAction {
   /** If true, only super_admin can see this action */
   superAdminOnly?: boolean;
   /** Allowed roles for this action (normalized roles from RBAC) */
-  allowedRoles?: Array<'parent' | 'student' | 'teacher' | 'principal_admin' | 'super_admin'>;
+  allowedRoles?: Array<'parent' | 'student' | 'teacher' | 'principal' | 'principal_admin' | 'super_admin'>;
   /** Minimum subscription tier required for this action */
   minTier?: SubscriptionTier;
 }
@@ -274,7 +274,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
                 </View>
                 {locked && (
-                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                  <View style={[styles.quickActionLockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
                     <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
                     <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
                   </View>
@@ -309,7 +309,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
                 </View>
                 {locked && (
-                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                  <View style={[styles.quickActionLockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
                     <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
                     <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
                   </View>
@@ -344,7 +344,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
                 </View>
                 {locked && (
-                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                  <View style={[styles.quickActionLockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
                     <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
                     <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
                   </View>
@@ -379,7 +379,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
                   <Text style={[styles.quickActionText, { color: theme.text }]}>{action.label}</Text>
                 </View>
                 {locked && (
-                  <View style={[styles.lockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                  <View style={[styles.quickActionLockBadge, { borderColor: theme.border, backgroundColor: theme.surface }]}>
                     <Ionicons name="lock-closed" size={12} color={theme.textSecondary} />
                     <Text style={[styles.lockBadgeText, { color: theme.textSecondary }]}>{lockLabel}</Text>
                   </View>

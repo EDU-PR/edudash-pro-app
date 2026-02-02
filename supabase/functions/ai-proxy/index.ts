@@ -114,6 +114,25 @@ function getEnv(name: string): string | null {
   return value && value.length > 0 ? value : null;
 }
 
+function getAnthropicApiKey(): string | null {
+  return (
+    getEnv('ANTHROPIC_API_KEY') ||
+    getEnv('SERVER_ANTHROPIC_API_KEY') ||
+    getEnv('ANTHROPIC_API_KEY_2') ||
+    getEnv('ANTHROPIC_API_KEY_SECONDARY')
+  );
+}
+
+function getOpenAIApiKey(): string | null {
+  return (
+    getEnv('OPENAI_API_KEY') ||
+    getEnv('SERVER_OPENAI_API_KEY') ||
+    getEnv('OPENAI_API_KEY_2')
+  );
+}
+
+const RETRYABLE_PROVIDER_STATUSES = new Set([429, 503, 529]);
+
 function buildSystemPrompt(extraContext?: string): string {
   if (!extraContext) return DEFAULT_SYSTEM_PROMPT;
   return `${DEFAULT_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`;
@@ -289,7 +308,7 @@ async function callOpenAI(
   enableTools: boolean,
   requestedModel?: string | null
 ): Promise<ProviderResponse> {
-  const apiKey = getEnv('OPENAI_API_KEY');
+  const apiKey = getOpenAIApiKey();
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY is not configured.');
   }
@@ -324,7 +343,23 @@ async function callOpenAI(
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`OpenAI error: ${response.status} ${errText}`);
+    if (RETRYABLE_PROVIDER_STATUSES.has(response.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const retryText = await response.text();
+        throw new Error(`OpenAI error: ${response.status} ${retryText}`);
+      }
+    } else {
+      throw new Error(`OpenAI error: ${response.status} ${errText}`);
+    }
   }
 
   const result = (await response.json()) as JsonRecord;
@@ -429,7 +464,7 @@ async function callAnthropic(
   requestedModel?: string | null,
   allowedOverride?: string[]
 ): Promise<ProviderResponse> {
-  const apiKey = getEnv('ANTHROPIC_API_KEY');
+  const apiKey = getAnthropicApiKey();
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY is not configured.');
   }
@@ -487,12 +522,21 @@ async function callAnthropic(
   const callAnthropicWithFallbacks = async (models: string[]) => {
     let lastError: { ok: false; status: number; errText: string | null; data: JsonRecord | null } | null = null;
     for (const model of models) {
-      const res = await callAnthropicOnce(model);
+      let res = await callAnthropicOnce(model);
+      if (!res.ok && RETRYABLE_PROVIDER_STATUSES.has(res.status)) {
+        // Brief retry for transient errors
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        res = await callAnthropicOnce(model);
+      }
       if (res.ok) {
         return { response: res, model };
       }
       if (isModelNotFound(res.errText)) {
         console.warn(`[ai-proxy] Anthropic model not found: ${model}. Trying next...`);
+        lastError = res;
+        continue;
+      }
+      if (RETRYABLE_PROVIDER_STATUSES.has(res.status)) {
         lastError = res;
         continue;
       }
@@ -561,8 +605,8 @@ async function callAnthropic(
         throw new Error(`Anthropic tool follow-up error: ${followUpResponse.status} ${followUpResponse.errText || ''}`);
       }
 
-      const followUpResult = followUpResponse.data as JsonRecord;
-      const followUpBlocks = Array.isArray(followUpResult.content) ? followUpResult.content : [];
+      const followUpData = followUpResponse.data as JsonRecord;
+      const followUpBlocks = Array.isArray(followUpData.content) ? followUpData.content : [];
       let followUpText = '';
       for (const block of followUpBlocks) {
         const entry = block as JsonRecord;
@@ -574,11 +618,11 @@ async function callAnthropic(
       return {
         content: followUpText,
         usage: {
-          tokens_in: typeof followUpResult.usage === 'object' && followUpResult.usage
-            ? (followUpResult.usage as JsonRecord).input_tokens as number | undefined
+          tokens_in: typeof followUpData.usage === 'object' && followUpData.usage
+            ? (followUpData.usage as JsonRecord).input_tokens as number | undefined
             : undefined,
-          tokens_out: typeof followUpResult.usage === 'object' && followUpResult.usage
-            ? (followUpResult.usage as JsonRecord).output_tokens as number | undefined
+          tokens_out: typeof followUpData.usage === 'object' && followUpData.usage
+            ? (followUpData.usage as JsonRecord).output_tokens as number | undefined
             : undefined,
         },
         model: followUpModel,
@@ -713,8 +757,8 @@ serve(async (req) => {
     );
     const preferOpenAI = payload.prefer_openai ?? false;
     const enableTools = payload.enable_tools ?? false;
-    const hasOpenAI = !!getEnv('OPENAI_API_KEY');
-    const hasAnthropic = !!getEnv('ANTHROPIC_API_KEY');
+    const hasOpenAI = !!getOpenAIApiKey();
+    const hasAnthropic = !!getAnthropicApiKey();
 
     if (!hasOpenAI && !hasAnthropic) {
       return new Response(JSON.stringify({
@@ -737,37 +781,61 @@ serve(async (req) => {
     const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;
 
     let providerResponse: ProviderResponse;
-    try {
-      if (isSuperAdmin && hasAnthropic) {
-        const superAdminModel = pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model;
-        providerResponse = await callAnthropic(messages, enableTools, superAdminModel, superAdminAllowed);
-      } else if (shouldPreferOpenAI) {
-        if (hasOpenAI) {
-          providerResponse = await callOpenAI(messages, enableTools, requestedModel);
-        } else if (hasAnthropic) {
-          providerResponse = await callAnthropic(messages, enableTools, requestedModel);
-        } else {
-          throw new Error('OPENAI_API_KEY missing and Anthropic not configured.');
-        }
-      } else {
-        if (hasAnthropic) {
-          providerResponse = await callAnthropic(messages, enableTools, requestedModel);
-        } else if (hasOpenAI) {
-          providerResponse = await callOpenAI(messages, enableTools, requestedModel);
-        } else {
-          throw new Error('ANTHROPIC_API_KEY missing and OpenAI not configured.');
-        }
+    const primaryProvider: 'anthropic' | 'openai' = isSuperAdmin
+      ? 'anthropic'
+      : shouldPreferOpenAI
+        ? 'openai'
+        : 'anthropic';
+
+    const callProvider = async (provider: 'anthropic' | 'openai'): Promise<ProviderResponse> => {
+      if (provider === 'anthropic') {
+        if (!hasAnthropic) throw new Error('ANTHROPIC_API_KEY missing and Anthropic not configured.');
+        const model = isSuperAdmin
+          ? pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model
+          : requestedModel;
+        const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
+        return await callAnthropic(messages, enableTools, model, allowedOverride);
       }
+      if (!hasOpenAI) throw new Error('OPENAI_API_KEY missing and OpenAI not configured.');
+      return await callOpenAI(messages, enableTools, requestedModel);
+    };
+
+    try {
+      providerResponse = await callProvider(primaryProvider);
     } catch (providerError) {
       const providerMessage = providerError instanceof Error ? providerError.message : String(providerError);
-      console.error('[ai-proxy] Provider error:', providerMessage);
-      return new Response(JSON.stringify({
-        error: 'provider_error',
-        message: providerMessage,
-      }), {
-        status: 502,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // For non-superadmin, try alternate provider if available
+      if (!isSuperAdmin && hasOpenAI && hasAnthropic) {
+        const fallbackProvider = primaryProvider === 'anthropic' ? 'openai' : 'anthropic';
+        console.warn('[ai-proxy] Primary provider failed, attempting fallback:', {
+          primaryProvider,
+          fallbackProvider,
+          error: providerMessage,
+        });
+        try {
+          providerResponse = await callProvider(fallbackProvider);
+        } catch (fallbackError) {
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error('[ai-proxy] Provider error:', providerMessage, 'Fallback error:', fallbackMessage);
+          return new Response(JSON.stringify({
+            error: 'provider_error',
+            message: providerMessage,
+            fallback: fallbackMessage,
+          }), {
+            status: 502,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } else {
+        console.error('[ai-proxy] Provider error:', providerMessage);
+        return new Response(JSON.stringify({
+          error: 'provider_error',
+          message: providerMessage,
+        }), {
+          status: 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     try {

@@ -226,6 +226,9 @@ export class DashAIClient {
     if (error.status === 403) {
       return 'Your account needs to be linked to a school to use Dash AI.';
     }
+    if (error.status === 503 || error.code === 'provider_not_configured') {
+      return 'Dash AI is temporarily unavailable. Please try again in a moment.';
+    }
     if (error.code === 'provider_error' || error.status === 502) {
       return 'Dash is temporarily unavailable. Please try again in a moment.';
     }

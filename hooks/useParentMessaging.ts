@@ -2,11 +2,13 @@ import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
 import { usePathname } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Get Supabase URL from environment
 const SUPABASE_URL = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -407,6 +409,29 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
   const { user } = useAuth();
   const pathname = usePathname();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const hapticsEnabledRef = useRef(true);
+  const soundEnabledRef = useRef(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPrefs = async () => {
+      try {
+        const [hapticsPref, soundPref] = await Promise.all([
+          AsyncStorage.getItem('pref_haptics_enabled'),
+          AsyncStorage.getItem('pref_sound_enabled'),
+        ]);
+        if (!mounted) return;
+        hapticsEnabledRef.current = hapticsPref !== 'false';
+        soundEnabledRef.current = soundPref !== 'false';
+      } catch {
+        // Keep defaults if storage unavailable
+      }
+    };
+    loadPrefs();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Handle app state changes - refetch messages when returning to foreground
   useEffect(() => {
@@ -485,15 +510,31 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
                         sender_id: payload.new.sender_id,
                         sender_name: senderName,
                       },
-                      sound: 'default',
+                      sound: soundEnabledRef.current ? 'default' : undefined,
                     },
                     trigger: null, // Show immediately
                   });
+                  if (hapticsEnabledRef.current) {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  }
                   logger.debug('ParentMessagesRealtime', '✅ Banner notification shown for new message');
                 }
               }
             } catch (notifError) {
               logger.warn('ParentMessagesRealtime', 'Failed to show banner notification:', notifError);
+            }
+          }
+
+          // If user is active, mark as delivered even if they haven't opened the thread
+          if (payload.new.sender_id !== user?.id && AppState.currentState === 'active') {
+            try {
+              await assertSupabase().rpc('mark_messages_delivered', {
+                thread_id: threadId,
+                user_id: user?.id,
+              });
+              logger.debug('ParentMessagesRealtime', '✅ Marked messages as delivered (background thread)');
+            } catch (deliverError) {
+              logger.warn('ParentMessagesRealtime', 'Failed to mark messages as delivered:', deliverError);
             }
           }
           

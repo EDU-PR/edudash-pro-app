@@ -64,15 +64,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
-  const safeModels = Array.isArray(availableModels) ? availableModels : [];
-  const selectedModelInfo = useMemo(
-    () => safeModels.find(model => model.id === selectedModel) || safeModels[0],
-    [safeModels, selectedModel]
-  );
-  const estimatedRemaining = selectedModelInfo && remaining !== null
-    ? Math.max(Math.floor(remaining / Math.max(selectedModelInfo.relativeCost || 1, 1)), 0)
-    : null;
-  
   // Keyboard listeners for reliable show/hide detection
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -176,6 +167,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
+
+  const safeModels = Array.isArray(availableModels) ? availableModels : [];
+  const selectedModelInfo = useMemo(
+    () => safeModels.find(model => model.id === selectedModel) || safeModels[0],
+    [safeModels, selectedModel]
+  );
+  const estimatedRemaining = selectedModelInfo && remaining !== null
+    ? Math.max(Math.floor(remaining / Math.max(selectedModelInfo.relativeCost || 1, 1)), 0)
+    : null;
 
   const { profile, user } = useAuth();
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +50,29 @@ export function useParentDashboardData() {
   const [usage, setUsage] = useState<UsageStats>({ ai_help: 0, ai_lessons: 0, tutoring_sessions: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    const prevUserId = lastUserIdRef.current;
+    if (prevUserId !== nextUserId) {
+      setChildren([]);
+      setChildrenCards([]);
+      setActiveChildId(null);
+      setUrgentMetrics({
+        feesDue: null,
+        unreadMessages: 0,
+        pendingHomework: 0,
+        todayAttendance: 'unknown',
+        upcomingEvents: 0,
+      });
+      setUsage({ ai_help: 0, ai_lessons: 0, tutoring_sessions: 0 });
+      setError(null);
+      setLoading(true);
+      AsyncStorage.removeItem('@edudash_active_child_id').catch(() => {});
+    }
+    lastUserIdRef.current = nextUserId;
+  }, [user?.id]);
 
   const loadUrgentMetrics = useCallback(async (studentId: string) => {
     try {

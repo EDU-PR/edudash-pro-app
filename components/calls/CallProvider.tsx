@@ -76,29 +76,6 @@ export function useCall(): CallContextType {
   return context;
 }
 
-/**
- * Disabled context value - provides no-op functions when calls are disabled.
- * This ensures useCall() never returns null, preventing crashes.
- */
-const DISABLED_CONTEXT: CallContextType = {
-  startVoiceCall: () => console.warn('[CallProvider] Calls are disabled'),
-  startVideoCall: () => console.warn('[CallProvider] Calls are disabled'),
-  answerCall: () => {},
-  rejectCall: async () => {},
-  endCall: async () => {},
-  incomingCall: null,
-  outgoingCall: null,
-  isCallActive: false,
-  isInActiveCall: false,
-  isCallInterfaceOpen: false,
-  callState: 'idle',
-  returnToCall: () => {},
-  // Presence - always return offline when calls are disabled
-  isUserOnline: () => false,
-  getLastSeenText: () => 'Offline',
-  refreshPresence: async () => {},
-};
-
 interface CallProviderProps {
   children: ReactNode;
 }
@@ -116,39 +93,31 @@ export function CallProvider({ children }: CallProviderProps) {
   const callsEnabled = isCallsEnabled();
   
   // Track presence for online/offline detection.
-  // The hook itself is always called (to satisfy React's rules-of-hooks),
-  // but we only use the presence data when the calls feature is enabled.
+  // Presence is used by messaging and should not be disabled when calls are off.
   const presence = usePresence(currentUserId);
-  const isUserOnline = callsEnabled ? presence.isUserOnline : () => false;
-  const getLastSeenText = callsEnabled ? presence.getLastSeenText : () => '';
-  const refreshPresence = callsEnabled ? presence.refreshPresence : async () => {};
+  const isUserOnline = presence.isUserOnline;
+  const getLastSeenText = presence.getLastSeenText;
+  const refreshPresence = presence.refreshPresence;
 
   // Setup push notifications and get current user
   // NOTE: CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
   useEffect(() => {
-    if (!callsEnabled) return;
-
-    // Initialize push notifications for incoming calls
-    const setupPushNotifications = async () => {
-      console.log('[CallProvider] Setting up push notifications for incoming calls');
-      // Push notifications will handle incoming calls via WhatsAppStyleIncomingCall UI
-    };
-    
-    setupPushNotifications();
-    
     // Setup Notifee foreground event listener for call notification actions
     // This handles End Call / Mute button presses when app is in foreground
-    const unsubscribeForegroundEvents = setupForegroundEventListener();
+    const unsubscribeForegroundEvents = callsEnabled
+      ? setupForegroundEventListener()
+      : () => {};
 
     const getUser = async () => {
       const { data: { user } } = await getSupabase().auth.getUser();
       if (user) {
         setCurrentUserId(user.id);
-        // CRITICAL: Save push token to profile for incoming call notifications
-        // This enables background call notifications when app is closed
-        setupIncomingCallNotifications(user.id).catch((err) => {
-          console.warn('[CallProvider] Failed to setup push notifications:', err);
-        });
+        // Only setup incoming call push notifications when calls are enabled
+        if (callsEnabled) {
+          setupIncomingCallNotifications(user.id).catch((err) => {
+            console.warn('[CallProvider] Failed to setup push notifications:', err);
+          });
+        }
       }
     };
     getUser();
@@ -156,8 +125,7 @@ export function CallProvider({ children }: CallProviderProps) {
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
       (_event, session) => {
         setCurrentUserId(session?.user?.id || null);
-        // Also setup push notifications on auth state change
-        if (session?.user?.id) {
+        if (callsEnabled && session?.user?.id) {
           setupIncomingCallNotifications(session.user.id).catch((err) => {
             console.warn('[CallProvider] Failed to setup push notifications on auth change:', err);
           });
@@ -918,33 +886,25 @@ export function CallProvider({ children }: CallProviderProps) {
     refreshPresence,
   };
 
-  // If calls are disabled, provide disabled context with no-op functions
-  // This ensures useCall() always works and returns safe defaults
-  if (!callsEnabled) {
-    return (
-      <CallContext.Provider value={DISABLED_CONTEXT}>
-        {children}
-      </CallContext.Provider>
-    );
-  }
-
   return (
     <CallContext.Provider value={contextValue}>
       {children}
       
       {/* WhatsApp-Style Incoming call overlay */}
-      <WhatsAppStyleIncomingCall
-        isVisible={!!incomingCall && !answeringCall}
-        callerName={incomingCall?.caller_name || 'Unknown'}
-        callerPhoto={null} // TODO: Fetch caller photo from profile
-        callType={incomingCall?.call_type || 'voice'}
-        onAnswer={answerCall}
-        onReject={rejectCall}
-        isConnecting={callState === 'connecting' || callState === 'connected'}
-      />
+      {callsEnabled && (
+        <WhatsAppStyleIncomingCall
+          isVisible={!!incomingCall && !answeringCall}
+          callerName={incomingCall?.caller_name || 'Unknown'}
+          callerPhoto={null} // TODO: Fetch caller photo from profile
+          callType={incomingCall?.call_type || 'voice'}
+          onAnswer={answerCall}
+          onReject={rejectCall}
+          isConnecting={callState === 'connecting' || callState === 'connected'}
+        />
+      )}
 
       {/* Voice call interface for outgoing calls */}
-      {outgoingCall && outgoingCall.callType === 'voice' && (
+      {callsEnabled && outgoingCall && outgoingCall.callType === 'voice' && (
         <VoiceCallInterface
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={endCall}
@@ -957,7 +917,7 @@ export function CallProvider({ children }: CallProviderProps) {
       )}
 
       {/* WhatsApp-Style Video call interface for outgoing calls */}
-      {outgoingCall && outgoingCall.callType === 'video' && (
+      {callsEnabled && outgoingCall && outgoingCall.callType === 'video' && (
         <WhatsAppStyleVideoCall
           isOpen={isCallInterfaceOpen && !answeringCall}
           onClose={endCall}
@@ -970,7 +930,7 @@ export function CallProvider({ children }: CallProviderProps) {
       )}
 
       {/* Voice call interface for answering calls */}
-      {answeringCall && answeringCall.call_type === 'voice' && answeringCall.meeting_url && (
+      {callsEnabled && answeringCall && answeringCall.call_type === 'voice' && answeringCall.meeting_url && (
         <VoiceCallInterface
           isOpen={isCallInterfaceOpen}
           onClose={endCall}
@@ -983,7 +943,7 @@ export function CallProvider({ children }: CallProviderProps) {
         />
       )}
       
-      {answeringCall && !answeringCall.meeting_url && (
+      {callsEnabled && answeringCall && !answeringCall.meeting_url && (
         (() => {
           console.error('[CallProvider] ❌ Answering call but NO meeting_url!', answeringCall);
           return null;
@@ -991,7 +951,7 @@ export function CallProvider({ children }: CallProviderProps) {
       )}
 
       {/* WhatsApp-Style Video call interface for answering calls */}
-      {answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
+      {callsEnabled && answeringCall && answeringCall.meeting_url && answeringCall.call_type === 'video' && (
         <WhatsAppStyleVideoCall
           isOpen={isCallInterfaceOpen}
           onClose={endCall}

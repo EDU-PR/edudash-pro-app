@@ -12,10 +12,11 @@ const isMissingColumnError = (error: any, column: PettyCashTenantColumn): boolea
   return message.includes(column) && message.includes('does not exist');
 };
 
-type SupabaseResult<T> = { data: T | null; error: any };
+type SupabaseResult<T = any> = { data: T | null; error: any };
+type Awaitable<T> = T | PromiseLike<T>;
 
 export async function withPettyCashTenant<T>(
-  buildQuery: (column: PettyCashTenantColumn, client: ReturnType<typeof assertSupabase>) => Promise<SupabaseResult<T>>
+  buildQuery: (column: PettyCashTenantColumn, client: ReturnType<typeof assertSupabase>) => Awaitable<SupabaseResult<T>>
 ): Promise<SupabaseResult<T> & { column: PettyCashTenantColumn }> {
   const client = assertSupabase();
   const primary = await buildQuery(PRIMARY_TENANT_COLUMN, client);

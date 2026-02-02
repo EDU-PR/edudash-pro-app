@@ -27,9 +27,19 @@ export const useAuthGuard = () => {
   const pathname = usePathname();
   const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
+  const lastAttemptAt = useRef(0);
+  const lastUserId = useRef<string | null>(null);
   const signingOut = isSignOutInProgress();
   
   useEffect(() => {
+    // Reset navigation attempt when the authenticated user changes
+    const currentUserId = user?.id ?? null;
+    if (currentUserId !== lastUserId.current) {
+      hasNavigated.current = false;
+      lastAttemptAt.current = 0;
+      lastUserId.current = currentUserId;
+    }
+
     if (signingOut) {
       hasNavigated.current = false;
       return;
@@ -66,7 +76,7 @@ export const useAuthGuard = () => {
     }
     
     // Authenticated: redirect from auth routes to dashboard
-    if (user && isAuthRoute && !hasNavigated.current) {
+    if (user && isAuthRoute) {
       // If profile is still loading, let AuthContext handle routing first
       if (profileLoading) {
         return;
@@ -80,9 +90,16 @@ export const useAuthGuard = () => {
       if (pathname.includes('reset-password')) {
         return;
       }
+
+      // Allow a retry if we're still on the auth route after a previous attempt
+      const now = Date.now();
+      if (hasNavigated.current && now - lastAttemptAt.current < 1500) {
+        return;
+      }
       
       console.log('[AuthGuard] User authenticated, redirecting from auth route:', pathname);
       hasNavigated.current = true;
+      lastAttemptAt.current = now;
       
       // Route based on role + school type
       const role = profile?.role || (user.user_metadata as any)?.role;

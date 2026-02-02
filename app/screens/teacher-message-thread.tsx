@@ -89,8 +89,14 @@ try {
 // ==================== SUB-COMPONENTS ====================
 
 // Online Status Indicator
-const OnlineIndicator: React.FC<{ isOnline?: boolean }> = ({ isOnline = false }) => (
-  <View style={[onlineStyles.dot, isOnline && onlineStyles.online]} />
+const OnlineIndicator: React.FC<{ status?: 'online' | 'away' | 'offline' }> = ({ status = 'offline' }) => (
+  <View
+    style={[
+      onlineStyles.dot,
+      status === 'online' && onlineStyles.online,
+      status === 'away' && onlineStyles.away,
+    ]}
+  />
 );
 
 const onlineStyles = StyleSheet.create({
@@ -107,6 +113,9 @@ const onlineStyles = StyleSheet.create({
   },
   online: {
     backgroundColor: '#22c55e',
+  },
+  away: {
+    backgroundColor: '#f59e0b',
   },
 });
 
@@ -132,6 +141,8 @@ export default function TeacherMessageThreadScreen() {
   const callContext = useCallSafe();
   const isOnline = parentId && callContext ? callContext.isUserOnline(parentId) : false;
   const lastSeenText = parentId && callContext ? callContext.getLastSeenText(parentId) : 'Offline';
+  const isAway = !isOnline && lastSeenText === 'Away';
+  const onlineStatus: 'online' | 'away' | 'offline' = isOnline ? 'online' : isAway ? 'away' : 'offline';
   
   // Typing indicator hook
   const { isOtherTyping, typingText, setTyping, clearTyping } = useTypingIndicator({
@@ -214,12 +225,13 @@ export default function TeacherMessageThreadScreen() {
     try {
       await sendMessage({ threadId, content, senderId: user.id });
       refetch();
+      clearTyping();
     } catch {
       toast.error('Failed to send message');
     } finally {
       setSending(false);
     }
-  }, [threadId, user?.id, sendMessage, refetch]);
+  }, [threadId, user?.id, sendMessage, refetch, clearTyping]);
   
   const handleVoiceRecording = useCallback(async (uri: string, dur: number) => {
     if (!threadId || !user?.id) return;
@@ -471,12 +483,14 @@ export default function TeacherMessageThreadScreen() {
           <LinearGradient colors={['#3b82f6', '#6366f1']} style={styles.avatar}>
             <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
           </LinearGradient>
-          <OnlineIndicator isOnline={isOnline} />
+          <OnlineIndicator status={onlineStatus} />
         </View>
         
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-          <Text style={styles.headerSubtitle}>{lastSeenText}</Text>
+          <Text style={styles.headerSubtitle}>
+            {isOtherTyping ? typingText : lastSeenText}
+          </Text>
         </View>
         
         <View style={styles.headerActions}>

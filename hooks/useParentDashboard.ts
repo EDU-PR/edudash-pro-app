@@ -28,6 +28,20 @@ export const useParentDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
   const childIdsRef = useRef<string[]>([]);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    const prevUserId = lastUserIdRef.current;
+    if (prevUserId !== nextUserId) {
+      setData(null);
+      setError(null);
+      setLoading(true);
+      setIsLoadingFromCache(false);
+      childIdsRef.current = [];
+    }
+    lastUserIdRef.current = nextUserId;
+  }, [user?.id]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     try {

@@ -466,7 +466,9 @@ export function useRegistrations(): UseRegistrationsReturn {
       });
     };
 
-    const actionButtons = [{ text: 'Cancel', style: 'cancel' as const }];
+    const actionButtons: { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }[] = [
+      { text: 'Cancel', style: 'cancel' },
+    ];
     if (uniqueEmails.length > 0) {
       actionButtons.push({ text: 'Email', onPress: handleSendEmail });
     }
