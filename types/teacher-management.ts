@@ -108,11 +108,11 @@ export interface AvailableTeacher {
 export interface TeacherInvite {
   id: string;
   email: string;
-  status: string;
-  created_at: string;
   token?: string;
-  invited_by?: string;
-  expires_at?: string | null;
+  status?: string;
+  created_at: string;
+  invited_by?: string | null;
+  expires_at?: string;
   accepted_by?: string | null;
   accepted_at?: string | null;
 }

@@ -221,6 +221,18 @@ export default function TeacherManagement() {
     return full || profile?.email || 'A principal';
   }, [profile?.first_name, profile?.last_name, profile?.email]);
 
+  const inviteByEmail = useMemo(() => {
+    const map = new Map<string, (typeof invites)[number]>();
+    invites.forEach((invite) => {
+      const email = invite.email?.toLowerCase();
+      if (!email) return;
+      if (!map.has(email)) {
+        map.set(email, invite);
+      }
+    });
+    return map;
+  }, [invites]);
+
   const handleShareInvite = useCallback(
     async (inviteToken: string, inviteEmail: string) => {
       const message = buildTeacherInviteMessage({
@@ -296,6 +308,107 @@ export default function TeacherManagement() {
       });
     },
     [inviterName, schoolName, showAlert]
+  );
+
+  const handleInviteTeacher = useCallback(
+    async (teacher: Teacher) => {
+      const email = teacher.email.trim().toLowerCase();
+      if (!email) {
+        showAlert({
+          title: 'Missing Email',
+          message: 'Add an email address before sending an invite.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const schoolId = getPreschoolId();
+      if (!schoolId) {
+        showAlert({
+          title: 'No School Found',
+          message: 'Please make sure you are linked to a school before sending invites.',
+          type: 'error',
+        });
+        return;
+      }
+
+      const existingInvite = inviteByEmail.get(email);
+      if (existingInvite?.status === 'pending' && existingInvite.token) {
+        await handleShareInvite(existingInvite.token, email);
+        return;
+      }
+
+      try {
+        const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
+        const invite = await TeacherInviteService.createInvite({
+          schoolId,
+          email,
+          invitedBy: user?.id || '',
+        });
+        await loadInvites();
+        await handleShareInvite(invite.token, email);
+      } catch (err) {
+        showAlert({
+          title: 'Invite Failed',
+          message: err instanceof Error ? err.message : 'Failed to create invite',
+          type: 'error',
+        });
+      }
+    },
+    [getPreschoolId, handleShareInvite, inviteByEmail, loadInvites, showAlert, user?.id]
+  );
+
+  const handleCopyInviteLink = useCallback(
+    async (teacher: Teacher) => {
+      const email = teacher.email.trim().toLowerCase();
+      if (!email) {
+        showAlert({
+          title: 'Missing Email',
+          message: 'Add an email address before sharing an invite.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const schoolId = getPreschoolId();
+      if (!schoolId) {
+        showAlert({
+          title: 'No School Found',
+          message: 'Please make sure you are linked to a school before sending invites.',
+          type: 'error',
+        });
+        return;
+      }
+
+      try {
+        let token = inviteByEmail.get(email)?.token;
+        if (!token) {
+          const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
+          const invite = await TeacherInviteService.createInvite({
+            schoolId,
+            email,
+            invitedBy: user?.id || '',
+          });
+          token = invite.token;
+          await loadInvites();
+        }
+
+        const link = buildTeacherInviteLink(token, email);
+        await Clipboard.setStringAsync(link);
+        showAlert({
+          title: 'Invite Link Copied',
+          message: 'Share the link with the teacher to complete setup.',
+          type: 'success',
+        });
+      } catch (err) {
+        showAlert({
+          title: 'Copy Failed',
+          message: err instanceof Error ? err.message : 'Unable to copy invite link.',
+          type: 'error',
+        });
+      }
+    },
+    [getPreschoolId, inviteByEmail, loadInvites, showAlert, user?.id]
   );
 
   const resetDirectAddForm = () => {
@@ -519,6 +632,10 @@ export default function TeacherManagement() {
       onPress={handleTeacherPress}
       onAssignSeat={handleAssignSeat}
       onRevokeSeat={handleRevokeSeat}
+      onInvite={handleInviteTeacher}
+      onCopyInviteLink={handleCopyInviteLink}
+      inviteStatus={inviteByEmail.get(item.email.toLowerCase())?.status || null}
+      inviteToken={inviteByEmail.get(item.email.toLowerCase())?.token || null}
       isAssigning={isAssigning}
       isRevoking={isRevoking}
       shouldDisableAssignment={shouldDisableAssignment}
