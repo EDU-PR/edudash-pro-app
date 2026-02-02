@@ -16,13 +16,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { BirthdayChart } from '@/components/dashboard/BirthdayChart';
 import { BirthdayPlannerService, type StudentBirthday } from '@/services/BirthdayPlannerService';
 import { getActiveOrganizationId } from '@/lib/tenant/compat';
+import { fetchParentChildren } from '@/lib/parent-children';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function BirthdayChartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   
   const [birthdays, setBirthdays] = useState<StudentBirthday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,30 @@ export default function BirthdayChartScreen() {
   const isParentView = profile?.role === 'parent' || String(profile?.role) === 'guardian';
   const targetYear = new Date().getFullYear();
   const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
+
+  const calculateAge = useCallback((dateOfBirth: string, onDate: Date = new Date()): number => {
+    const dob = new Date(dateOfBirth);
+    let age = onDate.getFullYear() - dob.getFullYear();
+    const monthDiff = onDate.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && onDate.getDate() < dob.getDate())) {
+      age--;
+    }
+    return Math.max(age, 0);
+  }, []);
+
+  const getThisYearsBirthday = useCallback((dateOfBirth: string): Date => {
+    const dob = new Date(dateOfBirth);
+    const today = new Date();
+    return new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+  }, []);
+
+  const getDaysUntil = useCallback((date: Date): number => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    return Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }, []);
 
   // Get organization ID from profile using tenant compatibility utility
   const organizationId = getActiveOrganizationId(profile);
@@ -53,7 +78,7 @@ export default function BirthdayChartScreen() {
 
   // Load all birthdays
   const loadBirthdays = useCallback(async () => {
-    if (!organizationId) {
+    if (!organizationId && !isParentView) {
       console.log('[BirthdayChart] No organization ID, skipping birthday load');
       setError('Unable to determine school. Please try again.');
       return;
@@ -61,8 +86,50 @@ export default function BirthdayChartScreen() {
     
     try {
       setError(null);
+      if (isParentView) {
+        const parentId = profile?.id || user?.id || null;
+        if (!parentId) {
+          setError('Unable to determine parent account. Please try again.');
+          return;
+        }
+        if (debugEnabled) console.log('[BirthdayChart] Loading birthdays for parent:', parentId);
+        const children = await fetchParentChildren(parentId);
+        const parentBirthdays: StudentBirthday[] = (children || [])
+          .filter((child) => !!child.date_of_birth)
+          .map((child) => {
+            const birthDate = getThisYearsBirthday(child.date_of_birth as string);
+            const daysUntil = getDaysUntil(birthDate);
+            const classesValue = Array.isArray(child.classes) ? child.classes[0] : child.classes;
+            return {
+              id: `birthday-${child.id}`,
+              studentId: child.id,
+              firstName: child.first_name,
+              lastName: child.last_name,
+              dateOfBirth: child.date_of_birth as string,
+              birthDate,
+              age: calculateAge(child.date_of_birth as string, birthDate),
+              daysUntil,
+              classId: child.class_id ?? undefined,
+              className: classesValue?.name ?? undefined,
+              parentId: child.parent_id ?? undefined,
+              parentName: undefined,
+              photoUrl: child.avatar_url ?? undefined,
+            };
+          });
+        parentBirthdays.sort((a, b) => {
+          const aDate = new Date(a.dateOfBirth);
+          const bDate = new Date(b.dateOfBirth);
+          const monthDiff = aDate.getMonth() - bDate.getMonth();
+          if (monthDiff !== 0) return monthDiff;
+          return aDate.getDate() - bDate.getDate();
+        });
+        setBirthdays(parentBirthdays);
+        if (debugEnabled) console.log('[BirthdayChart] Loaded parent birthdays:', parentBirthdays.length);
+        return;
+      }
+
       if (debugEnabled) console.log('[BirthdayChart] Loading birthdays for org:', organizationId);
-      const data = await BirthdayPlannerService.getAllBirthdays(organizationId, targetYear);
+      const data = await BirthdayPlannerService.getAllBirthdays(organizationId as string, targetYear);
       if (debugEnabled) console.log('[BirthdayChart] Loaded birthdays:', data.length, 'students');
       setBirthdays(data);
       
@@ -73,7 +140,7 @@ export default function BirthdayChartScreen() {
       console.error('[BirthdayChart] Error loading birthdays:', error);
       setError(error.message || 'Failed to load birthdays');
     }
-  }, [organizationId, targetYear]);
+  }, [organizationId, targetYear, isParentView, profile?.id, user?.id, debugEnabled, calculateAge, getThisYearsBirthday, getDaysUntil]);
 
   // Load classes for filtering
   const loadClasses = useCallback(async () => {
