@@ -9,7 +9,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type { ProofOfPayment, ApprovalActionParams } from './types';
-import { inferPaymentCategory } from '@/lib/utils/feeUtils';
+import { createPaymentRecord as createPopPaymentRecord, updateFeeStatus as updatePopFeeStatus, updateInvoiceStatus as updatePopInvoiceStatus } from '@/hooks/pop/paymentProcessing';
 import { ApprovalNotificationService } from './ApprovalNotificationService';
 import { logger } from '../../lib/logger';
 
@@ -288,9 +288,11 @@ export class POPWorkflowService {
         return false;
       }
 
+      const isUniform = `${data.description || ''} ${data.title || ''}`.toLowerCase().includes('uniform');
+
       // Create payment record for financial tracking
       try {
-        await this.createPaymentRecord(data, approvedBy, popId);
+        await createPopPaymentRecord(data as any, approvedBy, popId);
         logger.info('✅ Payment record created for POP approval');
       } catch (paymentError) {
         logger.error('Failed to create payment record:', paymentError);
@@ -298,21 +300,25 @@ export class POPWorkflowService {
       }
 
       // Update student fee status
-      try {
-        await this.updateFeeStatus(data);
-        logger.info('✅ Student fee status updated');
-      } catch (feeError) {
-        logger.error('Failed to update fee status:', feeError);
-        // Continue - don't fail the approval if fee update fails
+      if (!isUniform) {
+        try {
+          await updatePopFeeStatus(data as any);
+          logger.info('✅ Student fee status updated');
+        } catch (feeError) {
+          logger.error('Failed to update fee status:', feeError);
+          // Continue - don't fail the approval if fee update fails
+        }
       }
 
       // Update invoice status if applicable
-      try {
-        await this.updateInvoiceStatus(data);
-        logger.info('✅ Invoice status updated');
-      } catch (invoiceError) {
-        logger.error('Failed to update invoice status:', invoiceError);
-        // Continue - don't fail the approval
+      if (!isUniform) {
+        try {
+          await updatePopInvoiceStatus(data as any);
+          logger.info('✅ Invoice status updated');
+        } catch (invoiceError) {
+          logger.error('Failed to update invoice status:', invoiceError);
+          // Continue - don't fail the approval
+        }
       }
 
       // Log the action
@@ -358,128 +364,6 @@ export class POPWorkflowService {
     } catch (error) {
       console.error('Error in approvePOP:', error);
       return false;
-    }
-  }
-
-  /**
-   * Create payment record for financial tracking when POP is approved
-   */
-  private static async createPaymentRecord(
-    data: any,
-    reviewerId: string,
-    uploadId: string
-  ): Promise<void> {
-    const paymentPurpose = data.title || data.description || 'School fees payment';
-    const paymentRecord = {
-      student_id: data.student_id,
-      parent_id: data.uploaded_by,
-      preschool_id: data.preschool_id,
-      amount: data.payment_amount || 0,
-      amount_cents: Math.round((data.payment_amount || 0) * 100),
-      currency: 'ZAR',
-      payment_method: data.payment_method || 'bank_transfer',
-      payment_reference: data.payment_reference || `POP-${uploadId.slice(0, 8)}`,
-      status: 'completed',
-      description: paymentPurpose,
-      attachment_url: data.file_path,
-      reviewed_by: reviewerId,
-      reviewed_at: new Date().toISOString(),
-      submitted_at: data.created_at,
-      metadata: {
-        pop_upload_id: uploadId,
-        payment_date: data.payment_date,
-        payment_purpose: paymentPurpose,
-        fee_category: inferPaymentCategory(paymentPurpose),
-        auto_created: true,
-      },
-    };
-    
-    const { error } = await supabase.from('payments').insert(paymentRecord);
-    if (error) {
-      logger.error('Failed to create payment record:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Update invoice status to paid when POP is approved
-   */
-  private static async updateInvoiceStatus(data: any): Promise<void> {
-    const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
-    const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
-    const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
-    
-    const { data: invoices } = await supabase
-      .from('student_invoices')
-      .select('id')
-      .eq('student_id', data.student_id)
-      .eq('status', 'pending')
-      .gte('due_date', monthStart)
-      .lte('due_date', monthEnd)
-      .limit(1);
-    
-    if (invoices?.length) {
-      await supabase
-        .from('student_invoices')
-        .update({ status: 'paid', paid_at: new Date().toISOString() })
-        .eq('id', invoices[0].id);
-      logger.info('✅ Invoice marked as paid');
-    }
-  }
-
-  /**
-   * Update student fee status to paid when POP is approved
-   */
-  private static async updateFeeStatus(data: any): Promise<void> {
-    const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
-    const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
-    const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
-    
-    // First try to find a fee matching the payment month
-    let { data: fees } = await supabase
-      .from('student_fees')
-      .select('id, due_date, amount, final_amount')
-      .eq('student_id', data.student_id)
-      .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
-      .gte('due_date', monthStart)
-      .lte('due_date', monthEnd)
-      .limit(1);
-    
-    // If no fee found for the payment month, get the oldest pending fee
-    if (!fees?.length) {
-      logger.info('[updateFeeStatus] No fee found for payment month, looking for oldest pending fee');
-      const { data: oldestFees } = await supabase
-        .from('student_fees')
-        .select('id, due_date, amount, final_amount')
-        .eq('student_id', data.student_id)
-        .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
-        .order('due_date', { ascending: true })
-        .limit(1);
-      fees = oldestFees;
-    }
-    
-    if (fees?.length) {
-      const feeId = fees[0].id;
-      const feeAmount = fees[0].final_amount || fees[0].amount || 0;
-      const paymentAmount = data.payment_amount || 0;
-      
-      // Determine if fully paid or partially paid
-      const newStatus = paymentAmount >= feeAmount ? 'paid' : 'partially_paid';
-      
-      const { error } = await supabase
-        .from('student_fees')
-        .update({ 
-          status: newStatus, 
-          paid_at: new Date().toISOString(),
-          paid_amount: paymentAmount,
-        })
-        .eq('id', feeId);
-      
-      if (error) {
-        logger.error('Failed to update fee status:', error);
-      } else {
-        logger.info(`✅ Fee ${feeId} marked as ${newStatus}`);
-      }
     }
   }
 

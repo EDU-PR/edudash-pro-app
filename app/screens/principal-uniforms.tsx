@@ -110,6 +110,12 @@ const formatName = (first?: string | null, last?: string | null) =>
 const resolveParentProfile = (student?: StudentRow | null, override?: ParentProfile | null) =>
   override || student?.parent || student?.guardian || null;
 
+const isUniformLabel = (value?: string | null) => (value || '').toLowerCase().includes('uniform');
+const isUniformPaymentRecord = (payment: any) =>
+  isUniformLabel(payment?.description) ||
+  isUniformLabel(payment?.metadata?.payment_purpose) ||
+  String(payment?.metadata?.payment_context || '').toLowerCase() === 'uniform' ||
+  String(payment?.metadata?.fee_type || '').toLowerCase() === 'uniform';
 
 export default function PrincipalUniformsScreen() {
   const { profile } = useAuth();
@@ -161,23 +167,23 @@ export default function PrincipalUniformsScreen() {
         const [{ data: popData }, { data: paymentsData }] = await Promise.all([
           supabase
             .from('pop_uploads')
-            .select('student_id, status, description')
+            .select('student_id, status, description, title')
             .eq('preschool_id', schoolId)
             .eq('upload_type', 'proof_of_payment')
-            .ilike('description', '%uniform%')
             .in('student_id', studentIds),
           supabase
             .from('payments')
-            .select('student_id, status, description')
+            .select('student_id, status, description, metadata')
             .eq('preschool_id', schoolId)
-            .ilike('description', '%uniform%')
             .in('student_id', studentIds),
         ]);
 
         const nextMap = new Map<string, 'paid' | 'pending' | 'unpaid'>();
         studentIds.forEach((id) => nextMap.set(id, 'unpaid'));
 
-        (popData || []).forEach((pop: any) => {
+        (popData || [])
+          .filter((pop: any) => isUniformLabel(pop?.description) || isUniformLabel(pop?.title))
+          .forEach((pop: any) => {
           const current = nextMap.get(pop.student_id) || 'unpaid';
           if (pop.status === 'approved') {
             nextMap.set(pop.student_id, 'paid');
@@ -188,7 +194,7 @@ export default function PrincipalUniformsScreen() {
           }
         });
 
-        (paymentsData || []).forEach((payment: any) => {
+        (paymentsData || []).filter(isUniformPaymentRecord).forEach((payment: any) => {
           if (!payment.student_id) return;
           if (['completed', 'approved'].includes(String(payment.status))) {
             nextMap.set(payment.student_id, 'paid');
