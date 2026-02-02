@@ -3,17 +3,7 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -27,6 +17,7 @@ import {
 } from './types';
 import { getTypeColor, getPriorityColor, getTypeIcon, getAudienceLabel, capitalize } from './utils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AnnouncementModalProps {
   visible: boolean;
   isEditing: boolean;
@@ -65,7 +56,7 @@ export function AnnouncementModal({
           </Text>
           <TouchableOpacity onPress={onSave} disabled={saving}>
             {saving ? (
-              <ActivityIndicator size="small" color={theme.primary} />
+              <EduDashSpinner size="small" color={theme.primary} />
             ) : (
               <Text style={styles.saveButtonText}>Save</Text>
             )}

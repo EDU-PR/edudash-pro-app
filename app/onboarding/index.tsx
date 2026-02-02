@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useOnboarding } from '@/contexts/OnboardingContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function OnboardingIndex() {
   const router = useRouter();
   const { state, isOnboardingComplete } = useOnboarding();
@@ -26,7 +27,7 @@ export default function OnboardingIndex() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#4F46E5" />
+      <EduDashSpinner size="large" color="#4F46E5" />
     </View>
   );
 }

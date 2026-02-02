@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ActivityIndicator, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function InviteEntry() {
   const params = useLocalSearchParams<{ code?: string }>();
   const isWeb = Platform.OS === 'web';
@@ -105,7 +106,7 @@ export default function InviteEntry() {
 
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, backgroundColor: '#0a0a0f' }}>
-        <ActivityIndicator color="#00f5ff" />
+        <EduDashSpinner color="#00f5ff" />
         <Text style={{ color: '#ffffff', textAlign: 'center' }}>{t('invite.opening_app', { defaultValue: 'Opening the app...' })}</Text>
         <TouchableOpacity onPress={() => tryOpenApp(targetHint)} style={{ backgroundColor: '#00f5ff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }}>
           <Text style={{ color: '#000', fontWeight: '800' }}>{t('invite.open_app_cta', { defaultValue: 'Open EduDash Pro App' })}</Text>
@@ -120,7 +121,7 @@ export default function InviteEntry() {
   // Native: loader; navigation occurs in effect
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f' }}>
-      <ActivityIndicator color="#00f5ff" />
+      <EduDashSpinner color="#00f5ff" />
     </View>
   );
 }

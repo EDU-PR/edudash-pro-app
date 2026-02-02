@@ -1,18 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  TextInput,
-  Modal,
-  FlatList,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, TextInput, Modal, FlatList, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -23,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { getTierDisplayName, normalizeTierName, VALID_ORGANIZATION_TIERS } from '@/lib/tiers';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Organization types
@@ -1064,7 +1052,7 @@ export default function SuperAdminOrganizations() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <ThemedStatusBar />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading organizations...</Text>
         </View>
       </SafeAreaView>

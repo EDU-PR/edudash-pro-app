@@ -10,18 +10,7 @@
  * if the parent didn't have them during initial registration.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Image,
-  Linking,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +24,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Document types
 type DocumentType = 'birth_certificate' | 'clinic_card' | 'guardian_id';
 
@@ -487,7 +477,7 @@ export default function ParentDocumentUploadScreen() {
           <View style={styles.docActions}>
             {isUploading ? (
               <View style={styles.uploadingContainer}>
-                <ActivityIndicator color={theme.primary} size="small" />
+                <EduDashSpinner color={theme.primary} size="small" />
                 <Text style={[styles.uploadProgressText, { color: theme.textSecondary }]}>
                   {uploadProgress}%
                 </Text>
@@ -584,7 +574,7 @@ export default function ParentDocumentUploadScreen() {
         {/* Loading */}
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading documents...
             </Text>

@@ -10,18 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Linking,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -33,6 +22,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 import DashOrb from '@/components/super-admin/DashOrb';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Integration {
   id: string;
   name: string;
@@ -383,7 +373,7 @@ export default function SuperAdminDevOpsScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#00f5ff" />
+            <EduDashSpinner size="large" color="#00f5ff" />
             <Text style={styles.loadingText}>Loading DevOps data...</Text>
           </View>
         ) : (

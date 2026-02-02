@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  KeyboardAvoidingView
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +8,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface VerificationStatus {
   success: boolean;
   message: string;
@@ -273,7 +263,7 @@ export default function EmailVerificationScreen() {
                   disabled={verifying || !verificationToken}
                 >
                   {verifying ? (
-                    <ActivityIndicator color="#000" size="small" />
+                    <EduDashSpinner color="#000" size="small" />
                   ) : (
                     <Text style={styles.verifyButtonText}>Verify Email</Text>
                   )}
@@ -288,7 +278,7 @@ export default function EmailVerificationScreen() {
                     disabled={resending || !email}
                   >
                     {resending ? (
-                      <ActivityIndicator color="#00f5ff" size="small" />
+                      <EduDashSpinner color="#00f5ff" size="small" />
                     ) : (
                       <Text style={styles.resendButtonText}>Resend Verification</Text>
                     )}

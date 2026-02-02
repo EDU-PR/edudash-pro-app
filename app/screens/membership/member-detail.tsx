@@ -5,15 +5,7 @@
  * Refactored to use modular components following WARP.md standards
  */
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +21,7 @@ import {
   MOCK_ACTIVITY_LOG,
 } from '@/components/membership/member-detail';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function MemberDetailScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -58,7 +51,7 @@ export default function MemberDetailScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading member details...</Text>
         </View>
       </SafeAreaView>

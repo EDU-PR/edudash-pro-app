@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Modal, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,7 @@ import { ParentJoinService } from '@/lib/services/parentJoinService';
 import { format } from 'date-fns';
 import { enZA } from 'date-fns/locale';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RequestWithDetails {
   id: string;
   parent_auth_id: string;
@@ -145,7 +146,7 @@ export function PendingParentLinkRequests() {
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
       </View>
     );
   }
@@ -195,7 +196,7 @@ export function PendingParentLinkRequests() {
             disabled={isProcessing}
           >
             {isProcessing ? (
-              <ActivityIndicator size="small" color={theme.error} />
+              <EduDashSpinner size="small" color={theme.error} />
             ) : (
               <>
                 <Ionicons name="close-circle" size={18} color={theme.error} />
@@ -210,7 +211,7 @@ export function PendingParentLinkRequests() {
             disabled={isProcessing}
           >
             {isProcessing ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={18} color="#fff" />

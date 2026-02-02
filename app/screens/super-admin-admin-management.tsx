@@ -1,17 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Modal, TextInput, Switch } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -22,6 +10,7 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AdminUser {
   id: string;
   email: string;
@@ -409,7 +398,7 @@ export default function SuperAdminAdminManagementScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <EduDashSpinner size="large" color="#3b82f6" />
             <Text style={styles.loadingText}>Loading admin users...</Text>
           </View>
         ) : (

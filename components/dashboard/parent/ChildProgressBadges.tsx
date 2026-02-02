@@ -12,19 +12,13 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type AppStateModule = {
   addEventListener?: (type: 'change', handler: (state: string) => void) => { remove: () => void };
 };
@@ -368,7 +362,7 @@ export function ChildProgressBadges({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
       </View>
     );
   }

@@ -3,20 +3,12 @@
  * Handles document upload logic and state
  */
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Modal,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface DocumentUploadModalProps {
   visible: boolean;
   theme: any;
@@ -222,7 +214,7 @@ export function DocumentUploadModal({
               disabled={uploading}
             >
               {uploading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.uploadButtonText}>Upload</Text>
               )}

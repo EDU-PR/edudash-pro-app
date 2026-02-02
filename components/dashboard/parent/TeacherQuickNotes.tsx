@@ -12,20 +12,14 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { formatRelativeTime } from '@/lib/utils/dateUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface TeacherNote {
   id: string;
   student_id: string;
@@ -271,7 +265,7 @@ export function TeacherQuickNotes({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
       </View>
     );
   }

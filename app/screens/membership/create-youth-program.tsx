@@ -3,16 +3,7 @@
  * Allows Youth President and delegated office bearers to create programs
  */
 import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -22,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { useQueryClient } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const PROGRAM_CATEGORIES = [
   'Leadership',
   'Education',
@@ -277,7 +269,7 @@ export default function CreateYouthProgramScreen() {
               disabled={saving || !title.trim()}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color="#fff" />

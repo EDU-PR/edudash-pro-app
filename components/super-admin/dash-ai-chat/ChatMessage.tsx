@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import { View, Text, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { styles, getMarkdownStyles } from './DashAIChat.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for markdown
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -268,7 +269,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
       >
         {message.isStreaming ? (
           <View style={styles.streamingContainer}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={[styles.streamingText, { color: theme.textSecondary }]}>
               Thinking...
             </Text>

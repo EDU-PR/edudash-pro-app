@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SignUpAlias() {
   const params = useLocalSearchParams<{ 
     planTier?: string; 
@@ -31,7 +32,7 @@ export default function SignUpAlias() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f' }}>
-      <ActivityIndicator color="#00f5ff" />
+      <EduDashSpinner color="#00f5ff" />
     </View>
   );
 }

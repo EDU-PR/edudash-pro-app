@@ -1,15 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  Alert,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -21,6 +11,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import StudentAvatarService from '@/services/StudentAvatarService';
 import { fetchParentChildren } from '@/lib/parent-children';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ParentChildrenScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -381,7 +372,7 @@ export default function ParentChildrenScreen() {
                           disabled={uploadingChildId === child.id}
                         >
                           {uploadingChildId === child.id ? (
-                            <ActivityIndicator size="small" color={theme.onPrimary} />
+                            <EduDashSpinner size="small" color={theme.onPrimary} />
                           ) : (
                             <Ionicons name="camera" size={14} color={theme.onPrimary} />
                           )}

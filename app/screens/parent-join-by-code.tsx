@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ParentJoinByCodeScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
@@ -137,7 +138,7 @@ export default function ParentJoinByCodeScreen() {
       {/* Current School Status */}
       {loadingSchool ? (
         <View style={styles.statusCard}>
-          <ActivityIndicator color={theme?.primary || '#00f5ff'} />
+          <EduDashSpinner color={theme?.primary || '#00f5ff'} />
           <Text style={styles.statusText}>Checking school status...</Text>
         </View>
       ) : currentSchool ? (
@@ -174,7 +175,7 @@ export default function ParentJoinByCodeScreen() {
       />
 
       <TouchableOpacity style={styles.button} onPress={onValidate} disabled={validating}>
-        {validating ? <ActivityIndicator color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Validate Code</Text>}
+        {validating ? <EduDashSpinner color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Validate Code</Text>}
       </TouchableOpacity>
 
       {validated && (
@@ -202,7 +203,7 @@ export default function ParentJoinByCodeScreen() {
           )}
 
           <TouchableOpacity style={[styles.button, styles.joinBtn]} onPress={onJoin} disabled={redeeming}>
-            {redeeming ? <ActivityIndicator color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>✓ Join {validated.school_name || 'School'}</Text>}
+            {redeeming ? <EduDashSpinner color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>✓ Join {validated.school_name || 'School'}</Text>}
           </TouchableOpacity>
         </View>
       )}

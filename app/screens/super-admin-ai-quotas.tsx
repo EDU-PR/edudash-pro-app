@@ -7,15 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -35,6 +27,7 @@ import {
   AIQuotaSettings,
 } from '@/components/super-admin/ai-quotas';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SuperAdminAIQuotasScreen() {
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
@@ -141,7 +134,7 @@ export default function SuperAdminAIQuotasScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading AI quotas...</Text>
           </View>
         ) : (

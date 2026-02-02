@@ -6,13 +6,14 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { reloadApp } from '@/lib/utils/reloadApp';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface SuperAdminLoadingHandlerProps {
   children: React.ReactNode;
   timeout?: number; // ms - how long to wait before showing retry options
@@ -118,7 +119,7 @@ export const SuperAdminLoadingHandler: React.FC<SuperAdminLoadingHandlerProps> =
   if (!showRetryOptions) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
         <Text style={styles.loadingText}>Loading admin profile...</Text>
       </View>
     );
@@ -130,7 +131,7 @@ export const SuperAdminLoadingHandler: React.FC<SuperAdminLoadingHandlerProps> =
       <View style={styles.loadingContainer}>
         {isRefreshing ? (
           <>
-            <ActivityIndicator size="large" color="#00f5ff" />
+            <EduDashSpinner size="large" color="#00f5ff" />
             <Text style={styles.loadingText}>Retrying...</Text>
           </>
         ) : (

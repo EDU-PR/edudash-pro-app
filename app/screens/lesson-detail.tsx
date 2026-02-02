@@ -6,16 +6,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -23,6 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Lesson, LessonProgress } from '@/types/lessons';
 import LessonsService from '@/services/LessonsService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for markdown rendering
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -243,7 +235,7 @@ export default function LessonDetailScreen() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.text }]}>Loading lesson...</Text>
         </View>
       </View>

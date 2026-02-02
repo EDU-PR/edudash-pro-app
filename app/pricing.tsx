@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { createCheckout } from '@/lib/payments';
 import { EARLY_BIRD_DISCOUNT, TIER_PRICING } from '@/lib/tiers';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type UserType = 'parents' | 'schools';
 
 export default function PricingScreen() {
@@ -291,7 +292,7 @@ export default function PricingScreen() {
   if (loading) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: '#0a0a0f', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
       </SafeAreaView>
     );
   }
@@ -567,7 +568,7 @@ function PlanCard({
       >
         {isProcessing ? (
           <View style={styles.ctaLoadingContainer}>
-            <ActivityIndicator size="small" color={popular ? '#000' : '#fff'} />
+            <EduDashSpinner size="small" color={popular ? '#000' : '#fff'} />
             <Text style={[styles.ctaText, popular && styles.ctaTextPopular, { marginLeft: 8 }]}>
               Processing...
             </Text>

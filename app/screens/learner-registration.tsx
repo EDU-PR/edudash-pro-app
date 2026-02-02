@@ -1,22 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerRegistrationScreen() {
   const { theme } = useTheme();
   const params = useLocalSearchParams();
@@ -435,7 +425,7 @@ export default function LearnerRegistrationScreen() {
                 disabled={loading || !programCode.trim()}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <>
                     <Text style={styles.buttonText}>Continue</Text>
@@ -535,7 +525,7 @@ export default function LearnerRegistrationScreen() {
                 />
                 {checkingEmail && (
                   <View style={styles.emailCheckIndicator}>
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                   </View>
                 )}
               </View>
@@ -630,7 +620,7 @@ export default function LearnerRegistrationScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Text style={styles.buttonText}>

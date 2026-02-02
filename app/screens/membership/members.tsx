@@ -4,18 +4,7 @@
  * Connected to Supabase organization_members table
  */
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  TextInput,
-  RefreshControl,
-  Image,
-  Dimensions,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Image, Dimensions } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +19,7 @@ import {
   MEMBERSHIP_TIER_LABELS 
 } from '@/components/membership/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type FilterType = 'all' | 'active' | 'pending' | 'expired';
@@ -255,7 +245,7 @@ export default function MembersListScreen() {
       {/* Loading State */}
       {loading && members.length === 0 && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading members...</Text>
         </View>
       )}

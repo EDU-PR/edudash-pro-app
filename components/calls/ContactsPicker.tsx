@@ -3,16 +3,7 @@
  * Modal bottom sheet for selecting users to call
  */
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, TextInput, FlatList, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Contact {
   id: string;
   first_name: string;
@@ -236,7 +228,7 @@ export function ContactsPicker({ visible, onClose, onSelectContact }: ContactsPi
           {/* Contacts List */}
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             </View>
           ) : filteredContacts.length === 0 ? (
             <View style={styles.emptyContainer}>

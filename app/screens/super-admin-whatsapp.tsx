@@ -1,18 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  Switch,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Modal, TextInput, Switch, Linking } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -23,6 +10,7 @@ import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface WhatsAppConnection {
   id: string;
   school_id: string;
@@ -301,7 +289,7 @@ export default function SuperAdminWhatsAppScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#25d366" />
+            <EduDashSpinner size="large" color="#25d366" />
             <Text style={styles.loadingText}>Loading WhatsApp data...</Text>
           </View>
         ) : !isConfigured ? (

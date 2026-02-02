@@ -6,20 +6,12 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, Alert, StyleSheet, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { VideoCallInterface } from './VideoCallInterface';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
 
@@ -243,7 +235,7 @@ export function JoinLiveLesson({
           disabled={isJoining}
         >
           {isJoining ? (
-            <ActivityIndicator color="white" size="small" />
+            <EduDashSpinner color="white" size="small" />
           ) : (
             <>
               <Ionicons name="videocam" size={20} color="white" />
@@ -258,7 +250,7 @@ export function JoinLiveLesson({
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <EduDashSpinner size="large" color="#3b82f6" />
         <Text style={styles.loadingText}>Loading live lessons...</Text>
       </View>
     );

@@ -6,16 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +18,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 // import { useThemedStyles } from '@/hooks/useThemedStyles'; // TODO: Use for theme-aware styles
 import { Colors } from '@/constants/Colors';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface SchoolSettings {
   // Basic School Info
   schoolName: string;
@@ -527,7 +519,7 @@ export default function SchoolSettingsScreen() {
           <Text style={[styles.bottomBtnText, { color: theme.text }]}>{t('navigation.close', { defaultValue: 'Close' })}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={saveSettings} disabled={saving} style={[styles.bottomBtn, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-          {saving ? <ActivityIndicator size="small" color={theme.onPrimary} /> : <Ionicons name="checkmark" size={18} color={theme.onPrimary} />}
+          {saving ? <EduDashSpinner size="small" color={theme.onPrimary} /> : <Ionicons name="checkmark" size={18} color={theme.onPrimary} />}
           <Text style={[styles.bottomBtnText, { color: theme.onPrimary }]}>{t('school_settings.save_changes', { defaultValue: 'Save changes' })}</Text>
         </TouchableOpacity>
       </View>

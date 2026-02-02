@@ -1,20 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface EnrollmentInviteModalProps {
   visible: boolean;
   onClose: () => void;
@@ -234,7 +225,7 @@ export function EnrollmentInviteModal({
                 disabled={sending || !emails.trim() || !selectedProgramId}
               >
                 {sending ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <Text style={styles.sendText}>Send Invites</Text>
                 )}

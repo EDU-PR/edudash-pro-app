@@ -10,16 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  TouchableOpacity,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StudentWithFees {
   id: string;
   first_name: string;
@@ -720,7 +712,7 @@ export default function PrincipalFeeOverviewScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ title: 'Financial Overview' }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading financial data...</Text>
       </SafeAreaView>
     );

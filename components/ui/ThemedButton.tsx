@@ -5,16 +5,10 @@
  */
 
 import React from 'react';
-import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
-  ActivityIndicator,
-} from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ThemedButtonProps {
   title: string;
   onPress: () => void;
@@ -112,7 +106,7 @@ export function ThemedButton({
       activeOpacity={0.7}
     >
       {loading ? (
-        <ActivityIndicator
+        <EduDashSpinner
           size={size === 'small' ? 'small' : 'small'}
           color={variant === 'ghost' ? theme.text : theme.onPrimary}
         />

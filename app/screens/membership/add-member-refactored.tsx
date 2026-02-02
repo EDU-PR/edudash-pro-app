@@ -10,17 +10,7 @@
  * - Separated styles (./add-member/styles.ts)
  */
 import React, { useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  ScrollView, 
-  TouchableOpacity, 
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Switch,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,6 +40,7 @@ import {
   RegistrationResult,
 } from '@/components/membership/add-member-modules';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function AddMemberScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -583,7 +574,7 @@ export default function AddMemberScreen() {
           >
             {isSubmitting || retryStatus ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
                 <Text style={styles.submitText}>
                   {retryStatus ? `Creating... (${retryStatus.retry + 1}/${retryStatus.maxRetries})` : 'Creating Member...'}
                 </Text>

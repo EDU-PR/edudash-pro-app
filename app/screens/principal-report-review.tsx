@@ -2,14 +2,7 @@
 // Principal Report Review Screen - Refactored for WARP.md compliance (≤500 lines)
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -24,6 +17,7 @@ import {
   PRINCIPAL_ROLES,
 } from '@/components/principal/report-review';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalReportReviewScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -88,7 +82,7 @@ export default function PrincipalReportReviewScreen() {
       {/* List */}
       {review.isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       ) : (
         <FlashList

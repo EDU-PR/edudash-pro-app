@@ -2,10 +2,11 @@
 // Handles school/organization selection for parent registration
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { RegistrationFormState, PublicOrganization, COMMUNITY_SCHOOL_ID } from '../../../hooks/useEnhancedRegistration';
 import { registrationStepStyles as styles } from './styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StepTheme {
   colors: {
     background: string;
@@ -87,7 +88,7 @@ export const OrganizationSelectionStep: React.FC<OrganizationSelectionStepProps>
 
       {loadingOrganizations ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <EduDashSpinner size="large" color={theme.colors.primary} />
           <Text style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
             Loading schools...
           </Text>

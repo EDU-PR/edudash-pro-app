@@ -2,11 +2,12 @@
  * Budget Request Form Component - Extracted for reuse and file size compliance
  */
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CATEGORIES } from '@/hooks/membership/useBudgetRequests';
 import { styles } from './budget-requests.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BudgetRequestFormProps {
   visible: boolean;
   onClose: () => void;
@@ -48,7 +49,7 @@ export function BudgetRequestForm({ visible, onClose, onSubmit, isSubmitting, fo
           </ScrollView>
 
           <TouchableOpacity style={[styles.submitButton, { opacity: isSubmitting ? 0.7 : 1 }]} onPress={onSubmit} disabled={isSubmitting}>
-            {isSubmitting ? <ActivityIndicator color="#fff" /> : <><Ionicons name="send" size={20} color="#fff" /><Text style={styles.submitButtonText}>Submit Request</Text></>}
+            {isSubmitting ? <EduDashSpinner color="#fff" /> : <><Ionicons name="send" size={20} color="#fff" /><Text style={styles.submitButtonText}>Submit Request</Text></>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

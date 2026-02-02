@@ -11,22 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ScrollView,
-  KeyboardAvoidingView,
-  TextInput,
-  Modal,
-  ActivityIndicator,
-  Share,
-  Linking,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ScrollView, KeyboardAvoidingView, TextInput, Modal, Share, Linking, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,6 +36,7 @@ import { buildTeacherInviteLink, buildTeacherInviteMessage } from '@/lib/utils/t
 import type { Teacher, TeacherManagementView } from '@/types/teacher-management';
 import { useTeacherManagement } from '@/hooks/useTeacherManagement';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherManagement() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
@@ -108,6 +94,13 @@ export default function TeacherManagement() {
   const [directTeacherPhone, setDirectTeacherPhone] = useState('');
   const [directAddLoading, setDirectAddLoading] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteShare, setInviteShare] = useState<{
+    token: string;
+    email: string;
+    link: string;
+    message: string;
+  } | null>(null);
+  const [showInviteShareModal, setShowInviteShareModal] = useState(false);
 
   // Document picker and upload handler (needs DocumentPicker which is native only)
   const pickAndUploadTeacherDoc = useCallback(async (docType: TeacherDocType) => {
@@ -243,69 +236,13 @@ export default function TeacherManagement() {
         roleLabel: 'teacher',
       });
       const inviteLink = buildTeacherInviteLink(inviteToken, inviteEmail);
-
-      const openWhatsApp = async () => {
-        const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
-        const canOpen = await Linking.canOpenURL(url);
-        if (!canOpen) {
-          showAlert({
-            title: 'WhatsApp Not Available',
-            message: 'Install WhatsApp to use this option.',
-            type: 'warning',
-          });
-          return;
-        }
-        await Linking.openURL(url);
-      };
-
-      const openSms = async () => {
-        const url = `sms:?body=${encodeURIComponent(message)}`;
-        await Linking.openURL(url);
-      };
-
-      const openEmail = async () => {
-        const subject = encodeURIComponent(`EduDash Pro Teacher Invite from ${schoolName}`);
-        const body = encodeURIComponent(message);
-        const url = `mailto:${inviteEmail}?subject=${subject}&body=${body}`;
-        await Linking.openURL(url);
-      };
-
-      const copyLink = async () => {
-        await Clipboard.setStringAsync(inviteLink);
-        showAlert({
-          title: 'Copied',
-          message: 'Invite link copied to clipboard.',
-          type: 'success',
-        });
-      };
-
-      const copyCode = async () => {
-        await Clipboard.setStringAsync(inviteToken);
-        showAlert({
-          title: 'Copied',
-          message: 'Invite code copied to clipboard.',
-          type: 'success',
-        });
-      };
-
-      const shareGeneric = async () => {
-        await Share.share({ message, url: inviteLink });
-      };
-
-      showAlert({
-        title: 'Invite Ready',
-        message: 'Choose how you want to send the invite.',
-        type: 'info',
-        buttons: [
-          { text: 'Share', onPress: () => void shareGeneric() },
-          { text: 'WhatsApp', onPress: () => void openWhatsApp() },
-          { text: 'SMS', onPress: () => void openSms() },
-          { text: 'Email', onPress: () => void openEmail() },
-          { text: 'Copy Link', onPress: () => void copyLink() },
-          { text: 'Copy Code', onPress: () => void copyCode() },
-          { text: 'Close', style: 'cancel' },
-        ],
+      setInviteShare({
+        token: inviteToken,
+        email: inviteEmail,
+        link: inviteLink,
+        message,
       });
+      setShowInviteShareModal(true);
     },
     [inviterName, schoolName, showAlert]
   );
@@ -409,6 +346,74 @@ export default function TeacherManagement() {
       }
     },
     [getPreschoolId, inviteByEmail, loadInvites, showAlert, user?.id]
+  );
+
+  const closeInviteShareModal = useCallback(() => {
+    setShowInviteShareModal(false);
+  }, []);
+
+  const handleInviteShareAction = useCallback(
+    async (action: 'share' | 'whatsapp' | 'sms' | 'email' | 'copyLink' | 'copyCode') => {
+      if (!inviteShare) return;
+      const { message, link, token, email } = inviteShare;
+
+      try {
+        if (action === 'share') {
+          await Share.share({ message, url: link });
+          return;
+        }
+        if (action === 'whatsapp') {
+          const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+          const canOpen = await Linking.canOpenURL(url);
+          if (!canOpen) {
+            showAlert({
+              title: 'WhatsApp Not Available',
+              message: 'Install WhatsApp to use this option.',
+              type: 'warning',
+            });
+            return;
+          }
+          await Linking.openURL(url);
+          return;
+        }
+        if (action === 'sms') {
+          const url = `sms:?body=${encodeURIComponent(message)}`;
+          await Linking.openURL(url);
+          return;
+        }
+        if (action === 'email') {
+          const subject = encodeURIComponent(`EduDash Pro Teacher Invite from ${schoolName}`);
+          const body = encodeURIComponent(message);
+          const url = `mailto:${email}?subject=${subject}&body=${body}`;
+          await Linking.openURL(url);
+          return;
+        }
+        if (action === 'copyLink') {
+          await Clipboard.setStringAsync(link);
+          showAlert({
+            title: 'Copied',
+            message: 'Invite link copied to clipboard.',
+            type: 'success',
+          });
+          return;
+        }
+        if (action === 'copyCode') {
+          await Clipboard.setStringAsync(token);
+          showAlert({
+            title: 'Copied',
+            message: 'Invite code copied to clipboard.',
+            type: 'success',
+          });
+        }
+      } catch (err) {
+        showAlert({
+          title: 'Share Failed',
+          message: err instanceof Error ? err.message : 'Unable to complete action.',
+          type: 'error',
+        });
+      }
+    },
+    [inviteShare, schoolName, showAlert]
   );
 
   const resetDirectAddForm = () => {
@@ -844,7 +849,7 @@ export default function TeacherManagement() {
                     disabled={directAddLoading || !directTeacherName.trim() || !directTeacherEmail.trim()}
                   >
                     {directAddLoading ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <EduDashSpinner size="small" color="#fff" />
                     ) : (
                       <>
                         <Ionicons name="person-add" size={16} color="white" />
@@ -962,6 +967,69 @@ export default function TeacherManagement() {
           styles={styles}
           theme={theme}
         />
+      </Modal>
+
+      {/* Invite Share Modal */}
+      <Modal
+        visible={showInviteShareModal}
+        animationType="fade"
+        transparent
+        onRequestClose={closeInviteShareModal}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeInviteShareModal} />
+          <View style={[styles.inviteShareCard, { backgroundColor: theme?.card || '#0f172a', borderColor: theme?.border || '#1f2937' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme?.text }]}>Invite Ready</Text>
+              <TouchableOpacity onPress={closeInviteShareModal}>
+                <Ionicons name="close" size={22} color={theme?.textSecondary || '#9ca3af'} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.modalSubtitle, { color: theme?.textSecondary }]}>
+              Share this invite with the teacher to finish setup.
+            </Text>
+            <View style={styles.inviteMetaRow}>
+              <View style={styles.inviteMetaPill}>
+                <Text style={styles.inviteMetaLabel}>Email</Text>
+                <Text style={styles.inviteMetaValue}>{inviteShare?.email || '-'}</Text>
+              </View>
+              <View style={styles.inviteMetaPill}>
+                <Text style={styles.inviteMetaLabel}>Code</Text>
+                <Text style={styles.inviteMetaValue}>{inviteShare?.token?.slice(0, 6)}…</Text>
+              </View>
+            </View>
+
+            <View style={styles.inviteActionGrid}>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.invitePrimary]} onPress={() => handleInviteShareAction('whatsapp')}>
+                <Ionicons name="logo-whatsapp" size={18} color="#fff" />
+                <Text style={styles.inviteActionText}>WhatsApp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.inviteSecondary]} onPress={() => handleInviteShareAction('sms')}>
+                <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+                <Text style={styles.inviteActionText}>SMS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.inviteSecondary]} onPress={() => handleInviteShareAction('email')}>
+                <Ionicons name="mail" size={18} color="#fff" />
+                <Text style={styles.inviteActionText}>Email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.inviteSecondary]} onPress={() => handleInviteShareAction('share')}>
+                <Ionicons name="share-social" size={18} color="#fff" />
+                <Text style={styles.inviteActionText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inviteActionGrid}>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.inviteNeutral]} onPress={() => handleInviteShareAction('copyLink')}>
+                <Ionicons name="link" size={18} color="#111827" />
+                <Text style={[styles.inviteActionText, styles.inviteNeutralText]}>Copy Link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.inviteActionButton, styles.inviteNeutral]} onPress={() => handleInviteShareAction('copyCode')}>
+                <Ionicons name="key" size={18} color="#111827" />
+                <Text style={[styles.inviteActionText, styles.inviteNeutralText]}>Copy Code</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Content */}
@@ -1162,7 +1230,7 @@ function InviteModal({ inviteEmail, setInviteEmail, onClose, onInvite, inviteLoa
             disabled={!inviteEmail.includes('@') || inviteLoading}
           >
             {inviteLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons name="send" size={16} color="white" />
@@ -1484,6 +1552,67 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     padding: 14,
     marginBottom: 20,
     fontSize: 16,
+  },
+  inviteShareCard: {
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    gap: 12,
+  },
+  inviteMetaRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  inviteMetaPill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#111827',
+  },
+  inviteMetaLabel: {
+    fontSize: 10,
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  inviteMetaValue: {
+    fontSize: 13,
+    color: '#f8fafc',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  inviteActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  inviteActionButton: {
+    flex: 1,
+    minWidth: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  inviteActionText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  invitePrimary: {
+    backgroundColor: '#22c55e',
+  },
+  inviteSecondary: {
+    backgroundColor: '#6366f1',
+  },
+  inviteNeutral: {
+    backgroundColor: '#e2e8f0',
+  },
+  inviteNeutralText: {
+    color: '#111827',
   },
   modalButtons: {
     flexDirection: 'row',

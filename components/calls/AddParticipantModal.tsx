@@ -6,24 +6,14 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Image,
-  Platform,
-} from 'react-native';
+import { View, Text, Modal, StyleSheet, TextInput, TouchableOpacity, FlatList, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const getSupabase = () => assertSupabase();
 
 interface OrgUser {
@@ -290,7 +280,7 @@ export function AddParticipantModal({
 
         {/* Invite button / Status */}
         {isInviting ? (
-          <ActivityIndicator size="small" color="#6366f1" />
+          <EduDashSpinner size="small" color="#6366f1" />
         ) : isInvited ? (
           <View style={styles.invitedBadge}>
             <Ionicons name="checkmark" size={16} color="#22c55e" />
@@ -355,7 +345,7 @@ export function AddParticipantModal({
           {/* User list */}
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366f1" />
+              <EduDashSpinner size="large" color="#6366f1" />
               <Text style={styles.loadingText}>Loading contacts...</Text>
             </View>
           ) : filteredUsers.length === 0 ? (

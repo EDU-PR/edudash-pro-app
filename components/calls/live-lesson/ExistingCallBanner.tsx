@@ -4,9 +4,10 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ExistingCallBannerProps {
   title: string;
   className: string;
@@ -48,7 +49,7 @@ export function ExistingCallBanner({
           disabled={isRejoining}
         >
           {isRejoining ? (
-            <ActivityIndicator size="small" color="#ffffff" />
+            <EduDashSpinner size="small" color="#ffffff" />
           ) : (
             <>
               <Ionicons name="enter" size={16} color="#ffffff" />

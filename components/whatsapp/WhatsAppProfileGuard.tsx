@@ -1,23 +1,12 @@
 import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { track } from '../../lib/analytics';
 import { convertToE164, formatAsUserTypes, validatePhoneNumber, EXAMPLE_PHONE_NUMBERS } from '../../lib/utils/phoneUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ProfileRequirement {
   key: string;
   label: string;
@@ -492,7 +481,7 @@ export const WhatsAppProfileGuard: React.FC<WhatsAppProfileGuardProps> = ({
         >
           {isUpdating ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <EduDashSpinner size="small" color="#FFFFFF" />
               <Text style={[styles.buttonText, styles.loadingText]}>
                 Updating...
               </Text>

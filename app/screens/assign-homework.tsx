@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { IconSymbol } from '@/components/ui/IconSymbol'
 import { useQuery } from '@tanstack/react-query'
@@ -42,7 +42,8 @@ export default function AssignHomeworkScreen() {
         .eq('active', true)
         .order('name')
       if (error) throw error
-      return (data || []) as { id: string; name: string; grade_level?: string }[]
+      return (data || []) as { id: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
+name: string; grade_level?: string }[]
     },
     enabled: !!schoolId,
     staleTime: 60_000,
@@ -177,7 +178,7 @@ export default function AssignHomeworkScreen() {
             <View>
               {classesQuery.isLoading ? (
                 <View style={styles.center}>
-                  <ActivityIndicator size="small" color={palette.primary} />
+                  <EduDashSpinner size="small" color={palette.primary} />
                 </View>
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -193,7 +194,7 @@ export default function AssignHomeworkScreen() {
             <View style={styles.minH220}>
               {studentsQuery.isLoading ? (
                 <View style={styles.center}>
-                  <ActivityIndicator size="small" color={palette.primary} />
+                  <EduDashSpinner size="small" color={palette.primary} />
                 </View>
               ) : (
                 (students.length === 0 ? (

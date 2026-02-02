@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { View, ActivityIndicator, ScrollView, StyleSheet, useColorScheme } from 'react-native';
+import { View, ScrollView, StyleSheet, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LiveLessonHero } from './live-lesson/LiveLessonHero';
@@ -12,6 +12,7 @@ import { ExistingCallBanner } from './live-lesson/ExistingCallBanner';
 import { StartLessonModal } from './live-lesson/StartLessonModal';
 import { useStartLessonLogic } from './live-lesson/useStartLessonLogic';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StartLiveLessonProps {
   preschoolId: string;
   teacherId: string;
@@ -70,7 +71,7 @@ export function StartLiveLesson({
   if (logic.loading) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <EduDashSpinner size="large" color={colors.accent} />
       </View>
     );
   }

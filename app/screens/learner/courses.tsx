@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useLearnerCourses } from '@/hooks/useLearnerCourses';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerCoursesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -25,7 +26,7 @@ export default function LearnerCoursesScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {isLoading && (
           <View style={styles.loading}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         )}
 

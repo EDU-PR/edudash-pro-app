@@ -3,7 +3,7 @@
  * Handles deep links for executive/office position invites
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const POSITION_LABELS: Record<string, string> = {
   deputy_president: 'Deputy President',
   secretary: 'Secretary',
@@ -170,7 +171,7 @@ export default function ExecutiveInviteScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <EduDashSpinner size="large" color="#8B5CF6" />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Validating executive invite...
           </Text>
@@ -255,7 +256,7 @@ export default function ExecutiveInviteScreen() {
           disabled={accepting}
         >
           {accepting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <EduDashSpinner size="small" color="#FFFFFF" />
           ) : (
             <>
               <Ionicons name="checkmark-done" size={24} color="#FFFFFF" />

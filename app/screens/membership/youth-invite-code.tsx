@@ -3,21 +3,7 @@
  * Generate and share invite codes for recruiting youth members
  */
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  TextInput, 
-  Alert, 
-  ScrollView, 
-  Switch, 
-  Share, 
-  Linking,
-  ActivityIndicator,
-  Modal,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Switch, Share, Linking, Modal, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +17,7 @@ import { MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { useOrganizationRegions, OrganizationRegion } from '@/hooks/membership';
 import Constants from 'expo-constants';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
@@ -387,7 +374,7 @@ export default function YouthInviteCodeScreen() {
       <DashboardWallpaperBackground>
         <SafeAreaView style={styles.container}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.text, { marginTop: 12 }]}>Loading...</Text>
           </View>
         </SafeAreaView>
@@ -468,7 +455,7 @@ export default function YouthInviteCodeScreen() {
                 <Text style={styles.inputLabel}>Select Region *</Text>
                 {regionsLoading ? (
                   <View style={styles.loadingRegions}>
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                     <Text style={[styles.text, { marginLeft: 8 }]}>Loading regions...</Text>
                   </View>
                 ) : regions.length === 0 ? (
@@ -584,7 +571,7 @@ export default function YouthInviteCodeScreen() {
                   disabled={loading}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#000" />
+                    <EduDashSpinner color="#000" />
                   ) : (
                     <>
                       <Ionicons name="add-circle" size={20} color="#000" />

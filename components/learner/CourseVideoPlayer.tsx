@@ -13,11 +13,12 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional imports for native video
 let useVideoPlayer: any = null;
 let VideoView: any = null;
@@ -241,7 +242,7 @@ function NativeVideoPlayer({
 
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>
               {t('course.loading_video', { defaultValue: 'Loading video...' })}
             </Text>

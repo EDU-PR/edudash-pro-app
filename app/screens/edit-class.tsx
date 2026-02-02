@@ -4,17 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { Picker } from '@react-native-picker/picker';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Teacher {
   id: string;
   name: string;
@@ -183,7 +174,7 @@ export default function EditClassScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'Edit Class', headerShown: true }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading class information...</Text>
         </View>
       </SafeAreaView>
@@ -313,7 +304,7 @@ export default function EditClassScreen() {
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark" size={20} color="#fff" />

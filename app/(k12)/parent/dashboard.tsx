@@ -9,15 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +34,7 @@ import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function K12ParentDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { profile, user, loading: authLoading, profileLoading } = useAuth();
@@ -261,7 +254,7 @@ export default function K12ParentDashboardScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             {t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
           </Text>
@@ -397,7 +390,7 @@ export default function K12ParentDashboardScreen() {
             hint={t('dashboard.parent.section.my_children_hint', { defaultValue: 'Profiles, attendance, and progress for each child.' })}
           />
           {dataLoading ? (
-            <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 20 }} />
+            <EduDashSpinner size="small" color={theme.primary} style={{ marginVertical: 20 }} />
           ) : children.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="people-outline" size={48} color={theme.textSecondary} />

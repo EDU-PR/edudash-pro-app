@@ -2,25 +2,12 @@
 // Comprehensive profile management with security settings and activity logs
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Switch,
-  Platform,
-  Image,
-  FlatList,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Switch, Platform, Image, FlatList, Modal } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { EnhancedUser, SecurityEvent, NotificationSettings, PrivacySettings } from '../../types/auth-enhanced';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface UserProfileProps {
   user: EnhancedUser;
   onProfileUpdate?: (updatedUser: Partial<EnhancedUser>) => void;
@@ -472,7 +459,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator color={theme.onPrimary} />
+                <EduDashSpinner color={theme.onPrimary} />
               ) : (
                 <Text style={[styles.saveButtonText, { color: theme.onPrimary }]}>
                   Save Changes

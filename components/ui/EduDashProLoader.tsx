@@ -5,19 +5,12 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ActivityIndicator, 
-  Animated, 
-  Easing,
-  Platform,
-  Dimensions
-} from 'react-native';
+import { View, StyleSheet, Animated, Easing, Platform, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Text } from './Text';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width, height } = Dimensions.get('window');
 
 export interface EduDashProLoaderProps {
@@ -188,7 +181,7 @@ export function EduDashProLoader({
         {/* Spinner */}
         {showSpinner && (
           <Animated.View style={[styles.spinnerContainer, { opacity: fadeAnim }]}>
-            <ActivityIndicator 
+            <EduDashSpinner 
               size="large" 
               color={variant === 'splash' ? 'white' : (theme.colors.primary || '#00f5ff')}
             />

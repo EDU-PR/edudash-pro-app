@@ -7,17 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -37,6 +27,7 @@ import {
 import type { ActivityTemplate } from '@/components/principal/activities';
 import { useActivities } from '@/hooks/principal/useActivities';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalActivitiesScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -177,7 +168,7 @@ export default function PrincipalActivitiesScreen() {
       {/* Activity List */}
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       ) : (
         <ScrollView

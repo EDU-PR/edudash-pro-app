@@ -6,15 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 // import { router } from 'expo-router'; // TODO: Use for navigation after export complete
@@ -22,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { navigateBack } from '@/lib/navigation';
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // import { assertSupabase } from '@/lib/supabase'; // TODO: Use for actual export API calls
 
 interface ExportOption {
@@ -239,7 +232,7 @@ export default function DataExportScreen() {
       
       <View style={styles.exportAction}>
         {exportingItems.has(option.id) ? (
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
         ) : (
           <Ionicons name="download" size={20} color={theme.textSecondary} />
         )}

@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function InterviewSchedulerScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId: string }>();
   const { user } = useAuth();
@@ -158,7 +149,7 @@ export default function InterviewSchedulerScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading application...</Text>
         </View>
       </SafeAreaView>
@@ -301,7 +292,7 @@ export default function InterviewSchedulerScreen() {
           disabled={submitting}
         >
           {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <EduDashSpinner color="#FFFFFF" />
           ) : (
             <>
               <Ionicons name="calendar-sharp" size={20} color="#FFFFFF" />

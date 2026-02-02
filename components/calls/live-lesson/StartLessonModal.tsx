@@ -4,20 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  StyleSheet,
-  Animated,
-} from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AdvancedLessonSettings, AdvancedSettings } from './AdvancedLessonSettings';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Class {
   id: string;
   name: string;
@@ -372,7 +363,7 @@ export function StartLessonModal(props: StartLessonModalProps) {
               disabled={isCreating}
             >
               {isCreating ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <EduDashSpinner size="small" color="#ffffff" />
               ) : (
                 <>
                   <Ionicons name={isScheduled ? "calendar" : "play-circle"} size={20} color="#ffffff" />

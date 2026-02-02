@@ -4,17 +4,7 @@
  * Tailored from National President dashboard design
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions,
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +22,7 @@ import AdBanner from '@/components/ui/AdBanner';
 import { useAds } from '@/contexts/AdsContext';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Youth Wing specific stats interface
@@ -297,7 +288,7 @@ export default function YouthPresidentDashboard() {
       <DashboardWallpaperBackground>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading youth dashboard...
             </Text>

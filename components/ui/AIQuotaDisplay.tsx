@@ -11,7 +11,7 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +22,7 @@ import { useAIQuota, useAIUserLimits } from '@/hooks/useAI';
 import { track } from '@/lib/analytics';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface AIQuotaDisplayProps {
   /** Which quota feature to display */
   serviceType?: AIQuotaFeature;
@@ -174,7 +175,7 @@ export const AIQuotaDisplay: React.FC<AIQuotaDisplayProps> = ({
   if (isLoading) {
     return (
       <View style={[styles.container, containerStyle, { backgroundColor: theme.surface }]}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
       </View>
     );
   }
@@ -334,7 +335,7 @@ export const AIQuotaOverview: React.FC<{
   if (isLoading) {
     return (
       <View style={[styles.overviewContainer, containerStyle, { backgroundColor: theme.surface }]}>
-        <ActivityIndicator size="small" color={theme.primary} />
+        <EduDashSpinner size="small" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading AI quota...
         </Text>

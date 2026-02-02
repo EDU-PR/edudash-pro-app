@@ -14,14 +14,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -34,6 +27,7 @@ import { QuizActivity } from '@/components/lessons/QuizActivity';
 import { ColoringActivity } from '@/components/lessons/ColoringActivity';
 import { MemoryGame } from '@/components/lessons/MemoryGame';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Activity {
   id: string;
   activity_type: 'matching' | 'coloring' | 'tracing' | 'counting' | 'sorting' | 'puzzle' | 'memory' | 'quiz';
@@ -189,7 +183,7 @@ export default function InteractiveLessonPlayerScreen() {
     return (
       <DesktopLayout role="student">
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading activity...
           </Text>

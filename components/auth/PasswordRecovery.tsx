@@ -2,22 +2,12 @@
 // Comprehensive password reset with multiple verification methods
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { ValidationResult } from '../../types/auth-enhanced';
 import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface PasswordRecoveryProps {
   onRecoveryComplete?: (email: string) => void;
   onError?: (error: string) => void;
@@ -464,7 +454,7 @@ export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator color={theme.onPrimary} />
+          <EduDashSpinner color={theme.onPrimary} />
         ) : (
           <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>
             Continue
@@ -628,7 +618,7 @@ export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator color={theme.onPrimary} />
+          <EduDashSpinner color={theme.onPrimary} />
         ) : (
           <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>
             Verify Code
@@ -701,7 +691,7 @@ export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator color={theme.onPrimary} />
+          <EduDashSpinner color={theme.onPrimary} />
         ) : (
           <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>
             Submit Answers
@@ -795,7 +785,7 @@ export const PasswordRecovery: React.FC<PasswordRecoveryProps> = ({
         disabled={isLoading}
       >
         {isLoading ? (
-          <ActivityIndicator color={theme.onPrimary} />
+          <EduDashSpinner color={theme.onPrimary} />
         ) : (
           <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>
             Reset Password

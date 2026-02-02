@@ -6,15 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AssignedLesson {
   id: string;
   lesson_id: string | null;
@@ -172,7 +165,7 @@ export default function ParentAssignedLessonsScreen() {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading lessons...
           </Text>

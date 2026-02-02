@@ -6,17 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  TextInput,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +17,7 @@ import { useLessonAssignment } from '@/hooks/useLessonAssignment';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Lesson {
   id: string;
   title: string;
@@ -239,7 +230,7 @@ export default function AssignLessonScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
@@ -584,7 +575,7 @@ export default function AssignLessonScreen() {
               disabled={isAssigning}
             >
               {isAssigning ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="paper-plane" size={20} color="#fff" />

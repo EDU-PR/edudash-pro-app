@@ -1,17 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -21,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import * as Clipboard from 'expo-clipboard';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // AsyncStorage with web fallback
 let AsyncStorage: any = null;
 try {
@@ -398,7 +387,7 @@ export default function CreateProgramScreen() {
             <View style={styles.headerRight}>
               {autoSaving && (
                 <View style={styles.autoSaveIndicator}>
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                   <Text style={[styles.autoSaveText, { color: theme.textSecondary }]}>Saving...</Text>
                 </View>
               )}
@@ -713,7 +702,7 @@ export default function CreateProgramScreen() {
               disabled={saving || !title.trim() || !courseCode.trim()}
             >
               {saving ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={20} color="#fff" />

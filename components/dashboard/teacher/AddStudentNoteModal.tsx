@@ -12,19 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '../../../lib/supabase';
 // Update the import path below to match your actual ThemeContext location.
@@ -33,6 +21,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 // Or adjust as needed based on your file structure.
 import { useAuth } from '../../../contexts/AuthContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
   id: string;
   first_name: string;
@@ -215,7 +204,7 @@ export function AddStudentNoteModal({
             ]}
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <EduDashSpinner size="small" color="#FFF" />
             ) : (
               <Text style={styles.sendButtonText}>Send</Text>
             )}
@@ -227,7 +216,7 @@ export function AddStudentNoteModal({
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Student</Text>
             {loadingStudents ? (
-              <ActivityIndicator size="small" color={theme.primary} />
+              <EduDashSpinner size="small" color={theme.primary} />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.studentList}>
                 {students.map(student => (

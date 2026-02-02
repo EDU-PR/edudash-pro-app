@@ -1,18 +1,10 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface TeamInviteModalProps {
   visible: boolean;
   onClose: () => void;
@@ -152,7 +144,7 @@ export function TeamInviteModal({
                 disabled={sending || !email.trim() || !name.trim()}
               >
                 {sending ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <Text style={styles.sendText}>Send Invite</Text>
                 )}

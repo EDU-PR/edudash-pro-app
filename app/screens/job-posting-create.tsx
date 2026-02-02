@@ -1,14 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
 import { EmploymentType } from '@/types/hiring';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function JobPostingCreateScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
@@ -335,7 +327,7 @@ export default function JobPostingCreateScreen() {
           disabled={submitting}
         >
           {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <EduDashSpinner color="#FFFFFF" />
           ) : (
             <Text style={styles.submitButtonText}>Create Job Posting</Text>
           )}

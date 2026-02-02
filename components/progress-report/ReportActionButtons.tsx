@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ReportActionButtonsProps {
   onPreview: () => void;
   onExportCSV: () => void;
@@ -74,7 +75,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
           disabled={sending || disabled}
         >
           {sending ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : (
             <>
               <Ionicons name="eye-outline" size={18} color={theme.primary} />
@@ -93,7 +94,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
           disabled={sendDisabled}
         >
           {sending ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : (
             <>
               <Ionicons name="stats-chart-outline" size={18} color={sendDisabled ? theme.textSecondary : theme.primary} />
@@ -116,7 +117,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
           disabled={sending}
         >
           {sending ? (
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
           ) : (
             <>
               <Ionicons name="checkmark-done" size={20} color="#fff" />
@@ -157,7 +158,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
         disabled={sendDisabled}
       >
         {sending ? (
-          <ActivityIndicator size="small" color={theme.onPrimary} />
+          <EduDashSpinner size="small" color={theme.onPrimary} />
         ) : (
           <>
             <Ionicons name="document-text-outline" size={20} color={theme.onPrimary} />
@@ -177,7 +178,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
         disabled={sendDisabled}
       >
         {sending ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <EduDashSpinner size="small" color="#fff" />
         ) : (
           <>
             <Ionicons name="logo-whatsapp" size={20} color="#fff" />
@@ -197,7 +198,7 @@ export const ReportActionButtons: React.FC<ReportActionButtonsProps> = ({
         disabled={sendDisabled || !parentEmail}
       >
         {sending ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <EduDashSpinner size="small" color="#fff" />
         ) : (
           <>
             <Ionicons name="mail-outline" size={20} color="#fff" />

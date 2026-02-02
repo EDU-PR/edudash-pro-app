@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -19,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface TestResult {
   id: string;
   name: string;
@@ -786,7 +779,7 @@ export default function SuperAdminSystemTestScreen() {
       case 'failed':
         return <Ionicons name="close-circle" size={20} color="#ef4444" />;
       case 'running':
-        return <ActivityIndicator size="small" color="#f59e0b" />;
+        return <EduDashSpinner size="small" color="#f59e0b" />;
       default:
         return <Ionicons name="time" size={20} color="#6b7280" />;
     }
@@ -838,7 +831,7 @@ export default function SuperAdminSystemTestScreen() {
             disabled={runningAllTests}
           >
             {runningAllTests ? (
-              <ActivityIndicator size="small" color="#00f5ff" />
+              <EduDashSpinner size="small" color="#00f5ff" />
             ) : (
               <Ionicons name="play" size={24} color="#00f5ff" />
             )}
@@ -888,7 +881,7 @@ export default function SuperAdminSystemTestScreen() {
                   style={styles.runSuiteButton}
                 >
                   {suite.status === 'running' ? (
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                   ) : (
                     <Ionicons name="play" size={16} color={theme.primary} />
                   )}

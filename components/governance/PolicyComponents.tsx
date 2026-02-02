@@ -3,18 +3,11 @@
  * Policy list and document management
  */
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Modal,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface Policy {
   id: string;
   title: string;
@@ -87,7 +80,7 @@ export function PoliciesSection({ policies, theme, onPolicyPress, onAddPress, lo
           </TouchableOpacity>
         </View>
         <View style={[styles.emptyState, { backgroundColor: theme.card }]}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
             Loading documents...
           </Text>
@@ -253,7 +246,7 @@ export function DocumentUploadModal({
               disabled={uploading}
             >
               {uploading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.uploadButtonText}>Upload</Text>
               )}

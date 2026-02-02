@@ -4,14 +4,7 @@
  * Original: 1,298 lines → Refactored: ~180 lines
  */
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -28,6 +21,7 @@ import {
   takeFirst,
 } from '@/components/subscription';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SubscriptionUpgradePostScreen() {
   const rawParams = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -76,7 +70,7 @@ export default function SubscriptionUpgradePostScreen() {
   if (!screenMounted || loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
         <Text style={styles.loadingText}>Loading upgrade options...</Text>
       </View>
     );

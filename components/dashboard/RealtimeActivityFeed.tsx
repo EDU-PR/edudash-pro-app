@@ -6,16 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Alert
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'
 import { useTranslation } from 'react-i18next'
 import { 
@@ -27,6 +18,7 @@ import {
   MeetingEvent
 } from '@/lib/services/realtimeSubscriptionService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Activity types for the feed
 export interface ActivityFeedItem {
   id: string;
@@ -378,7 +370,7 @@ export const RealtimeActivityFeed: React.FC<RealtimeActivityFeedProps> = ({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color="#6B7280" />
+        <EduDashSpinner size="small" color="#6B7280" />
         <Text style={styles.loadingText}>{t('activity.loading', { defaultValue: 'Loading activity feed...' })}</Text>
       </View>
     );

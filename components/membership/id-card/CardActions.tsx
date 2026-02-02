@@ -3,10 +3,11 @@
  * Print, Save PDF, Share actions for ID card
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { IDCardActionsProps } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export function CardActions({ 
   member, 
   card,
@@ -26,7 +27,7 @@ export function CardActions({
           disabled={isGeneratingPDF}
         >
           {isGeneratingPDF ? (
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
           ) : (
             <>
               <View style={[styles.actionIcon, { backgroundColor: '#3B82F615' }]}>

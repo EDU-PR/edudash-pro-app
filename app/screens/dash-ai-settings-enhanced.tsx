@@ -4,7 +4,7 @@
  * Original: 1,295 lines → Refactored: ~280 lines
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +24,7 @@ import {
   ExpandedSections,
 } from '@/components/ai-settings';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function DashAISettingsEnhancedScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -60,7 +61,7 @@ export default function DashAISettingsEnhancedScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader title={roleCopy.settingsTitle} subtitle={roleCopy.settingsSubtitle} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading enhanced settings...</Text>
         </View>
       </SafeAreaView>

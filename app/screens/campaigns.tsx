@@ -9,15 +9,7 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
@@ -32,6 +24,7 @@ import {
   EmptyState,
 } from '@/components/campaigns';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function CampaignsScreen() {
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
@@ -65,7 +58,7 @@ export default function CampaignsScreen() {
   if (isStillLoading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={[styles.loadingText, { color: theme.text }]}>
           {t('common.loading', 'Loading...')}
         </Text>
@@ -178,7 +171,7 @@ export default function CampaignsScreen() {
       {/* Campaign List */}
       {loading ? (
         <View style={[styles.container, styles.centered]}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       ) : (
         <FlatList

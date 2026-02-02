@@ -3,18 +3,7 @@
  * Allows CEO to set custom wallpaper for organization dashboards
  */
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  Image, 
-  Alert,
-  ActivityIndicator,
-  TextInput,
-  Modal,
-  ScrollView,
-  Platform,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, TextInput, Modal, ScrollView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,6 +13,7 @@ import Slider from '@react-native-community/slider';
 import type { DashboardSettings } from './types';
 import { wallpaperSettingsStyles as styles } from './WallpaperSettingsStyles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface DashboardWallpaperSettingsProps {
   organizationId: string;
   currentSettings?: DashboardSettings;
@@ -305,7 +295,7 @@ export function DashboardWallpaperSettings({
             <Text style={[styles.modalTitle, { color: theme.text }]}>Dashboard Appearance</Text>
             <TouchableOpacity onPress={saveSettings} disabled={isSaving}>
               {isSaving ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <Text style={[styles.modalSave, { color: theme.primary }]}>Save</Text>
               )}
@@ -348,7 +338,7 @@ export function DashboardWallpaperSettings({
                       disabled={isUploading}
                     >
                       {isUploading ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                        <EduDashSpinner size="small" color="#fff" />
                       ) : (
                         <>
                           <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
@@ -372,7 +362,7 @@ export function DashboardWallpaperSettings({
                   disabled={isUploading}
                 >
                   {isUploading ? (
-                    <ActivityIndicator size="large" color={theme.primary} />
+                    <EduDashSpinner size="large" color={theme.primary} />
                   ) : wallpaperUrl ? (
                     <>
                       <Image 

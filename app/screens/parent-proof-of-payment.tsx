@@ -1,15 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Image,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -22,6 +12,7 @@ import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { formatFileSize } from '@/lib/popUpload';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Payment method options
 const PAYMENT_METHODS = [
   { value: 'cash', label: 'Cash' },
@@ -552,7 +543,7 @@ export default function ProofOfPaymentScreen() {
           disabled={createUpload.isPending || validateForm().length > 0}
         >
           {createUpload.isPending ? (
-            <ActivityIndicator size="small" color={theme.onPrimary} />
+            <EduDashSpinner size="small" color={theme.onPrimary} />
           ) : (
             <Text style={styles.submitButtonText}>{t('pop.uploadPaymentProof')}</Text>
           )}

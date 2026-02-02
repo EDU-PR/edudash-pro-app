@@ -1,17 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  Switch,
-  Modal,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, Platform, ScrollView, TouchableOpacity, RefreshControl, Switch, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +14,7 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { SuperAdminAIControl, SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface DashboardStats {
   total_users: number;
   active_users: number;
@@ -707,7 +696,7 @@ export default function SuperAdminDashboardScreen() {
       <View style={styles.container}>
         <ThemedStatusBar />
         <SafeAreaView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading admin profile…
           </Text>
@@ -797,7 +786,7 @@ export default function SuperAdminDashboardScreen() {
                 </Text>
               </View>
               {aiControlLoading ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : !aiControl ? (
                 <View style={[
                   styles.aiOwnerBadge,
@@ -1192,7 +1181,7 @@ export default function SuperAdminDashboardScreen() {
               </>
             ) : (
               <View style={styles.statusItem}>
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
                 <View style={styles.statusInfo}>
                   <Text style={[styles.statusLabel, { color: theme.textSecondary }]}>Loading system status...</Text>
                 </View>
@@ -1203,7 +1192,7 @@ export default function SuperAdminDashboardScreen() {
 
         {loading && (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading dashboard data...
             </Text>
@@ -1257,7 +1246,7 @@ export default function SuperAdminDashboardScreen() {
                 disabled={passwordSubmitting}
               >
                 {passwordSubmitting ? (
-                  <ActivityIndicator size="small" color={theme.onPrimary} />
+                  <EduDashSpinner size="small" color={theme.onPrimary} />
                 ) : (
                   <Text style={[styles.passwordButtonText, { color: theme.onPrimary }]}>Confirm</Text>
                 )}

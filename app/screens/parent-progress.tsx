@@ -6,16 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-  Dimensions,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useParentProgress, useLessonProgress } from '@/hooks/useLessonProgress';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
 export default function ParentProgressScreen() {
@@ -73,7 +65,7 @@ export default function ParentProgressScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading progress...</Text>
       </View>
     );
@@ -233,7 +225,7 @@ export default function ParentProgressScreen() {
               </View>
               
               {isLoadingDetails ? (
-                <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 20 }} />
+                <EduDashSpinner size="small" color={theme.primary} style={{ marginVertical: 20 }} />
               ) : progressDetails.length === 0 ? (
                 <View style={styles.emptySection}>
                   <Ionicons name="book-outline" size={32} color={theme.textSecondary} />

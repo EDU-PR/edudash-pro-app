@@ -4,18 +4,7 @@
  * Groups can be used for study groups, regional teams, special committees, etc.
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Alert, Modal } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +17,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Group types for SOA organization
 const GROUP_TYPES = [
   { value: 'study_group', label: 'Study Group', icon: 'book-outline', color: '#3B82F6' },
@@ -307,7 +297,7 @@ export default function MemberGroupsScreen() {
           {/* Groups List */}
           {isLoading ? (
             <View style={styles.centered}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             </View>
           ) : error ? (
             <View style={styles.centered}>
@@ -439,7 +429,7 @@ export default function MemberGroupsScreen() {
               disabled={createGroupMutation.isPending || !newGroupName.trim()}
             >
               {createGroupMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="add-circle" size={20} color="#fff" />

@@ -1,9 +1,10 @@
 // Seat assignment form component - manual email-based seat assignment
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface SeatAssignmentFormProps {
   subscriptionId: string | null;
   assigning: boolean;
@@ -65,7 +66,7 @@ export function SeatAssignmentForm({
           disabled={!subscriptionId || !teacherEmail || assigning}
         >
           {assigning ? (
-            <ActivityIndicator color="#000" />
+            <EduDashSpinner color="#000" />
           ) : (
             <Text style={styles.btnPrimaryText}>
               {t('seat_management.assign_seat', { defaultValue: 'Assign seat' })}
@@ -82,7 +83,7 @@ export function SeatAssignmentForm({
           disabled={!subscriptionId || !teacherEmail || revoking}
         >
           {revoking ? (
-            <ActivityIndicator color="#000" />
+            <EduDashSpinner color="#000" />
           ) : (
             <Text style={styles.btnDangerText}>
               {t('seat_management.revoke_seat', { defaultValue: 'Revoke seat' })}

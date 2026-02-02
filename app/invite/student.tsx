@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, ActivityIndicator, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function InviteStudentEntry() {
   const params = useLocalSearchParams<{ code?: string }>();
   const isWeb = Platform.OS === 'web';
@@ -44,14 +45,14 @@ export default function InviteStudentEntry() {
   if (!isWeb) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f' }}>
-        <ActivityIndicator color="#00f5ff" />
+        <EduDashSpinner color="#00f5ff" />
       </View>
     );
   }
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, backgroundColor: '#0a0a0f' }}>
-      <ActivityIndicator color="#00f5ff" />
+      <EduDashSpinner color="#00f5ff" />
       <Text style={{ color: '#ffffff' }}>{t('invite.opening_join_by_code', { defaultValue: 'Opening the app to join by code...' })}</Text>
       <TouchableOpacity onPress={() => tryOpenApp(`/screens/student-join-by-code?code=${encodeURIComponent(code)}`)} style={{ backgroundColor: '#00f5ff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }}>
         <Text style={{ color: '#000', fontWeight: '800' }}>{t('invite.open_app_cta', { defaultValue: 'Open EduDash Pro App' })}</Text>

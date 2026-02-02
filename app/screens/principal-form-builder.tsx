@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +19,7 @@ import type {
   FormField,
 } from '@/features/forms/types/form.types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
 const FIELD_TYPES: Array<{ id: FieldType; label: string; icon: IoniconName }> = [
@@ -358,7 +350,7 @@ export default function PrincipalFormBuilderScreen() {
   if (!ready) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <ActivityIndicator color={theme.primary} />
+        <EduDashSpinner color={theme.primary} />
       </View>
     );
   }
@@ -596,7 +588,7 @@ export default function PrincipalFormBuilderScreen() {
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator color={theme.onPrimary} size="small" />
+                <EduDashSpinner color={theme.onPrimary} size="small" />
               ) : (
                 <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Publish</Text>
               )}

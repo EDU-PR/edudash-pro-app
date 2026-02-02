@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, ActivityIndicator, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Image, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
@@ -16,6 +16,7 @@ import { BrandGradients, BrandColors } from '@/components/branding';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export interface MessageBubbleModernProps {
   message: DashMessage;
   onCopy?: () => void;
@@ -196,7 +197,7 @@ export function MessageBubbleModern({
                 />
                 {attachment.status === 'uploading' && (
                   <View style={styles.imageLoadingOverlay}>
-                    <ActivityIndicator size="small" color="#fff" />
+                    <EduDashSpinner size="small" color="#fff" />
                   </View>
                 )}
                 {attachment.status === 'failed' && (

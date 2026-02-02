@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { ViewStyle, TextStyle } from 'react-native';
 import type { SchoolSettings } from '@/lib/services/SchoolSettingsService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface SchoolSettingsSectionProps {
   schoolSettingsQuery: UseQueryResult<SchoolSettings, Error>;
   isVisible: boolean;
@@ -46,7 +47,7 @@ export function SchoolSettingsSection({
       {schoolSettingsQuery.isLoading && (
         <View style={styles.settingsCard}>
           <View style={[styles.settingItem, { justifyContent: 'center', paddingVertical: 24 }]}>
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
             <Text style={[styles.settingSubtitle, { marginTop: 8, textAlign: 'center' }]}>
               {t('settings.loadingSchoolSettings')}
             </Text>

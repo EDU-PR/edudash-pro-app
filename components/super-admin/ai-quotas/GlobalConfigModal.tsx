@@ -4,22 +4,13 @@
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Switch,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, Modal, ScrollView, TouchableOpacity, TextInput, Switch, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { GlobalQuotaConfig } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface GlobalConfigModalProps {
   visible: boolean;
   config: GlobalQuotaConfig;
@@ -54,7 +45,7 @@ export function GlobalConfigModal({
           <Text style={styles.modalTitle}>Global AI Configuration</Text>
           <TouchableOpacity onPress={onSave} disabled={saving}>
             {saving ? (
-              <ActivityIndicator size="small" color={theme.primary} />
+              <EduDashSpinner size="small" color={theme.primary} />
             ) : (
               <Text style={styles.saveButtonText}>Save</Text>
             )}

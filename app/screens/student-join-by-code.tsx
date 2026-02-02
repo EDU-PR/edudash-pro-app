@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Generic join-by-code for adults/learners (invitation types like 'student' or 'member').
 export default function StudentJoinByCodeScreen() {
   const { user, profile } = useAuth();
@@ -98,7 +99,7 @@ export default function StudentJoinByCodeScreen() {
       />
 
       <TouchableOpacity style={styles.button} onPress={onValidate} disabled={validating}>
-        {validating ? <ActivityIndicator color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Validate Code</Text>}
+        {validating ? <EduDashSpinner color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Validate Code</Text>}
       </TouchableOpacity>
 
       {validated && (
@@ -110,7 +111,7 @@ export default function StudentJoinByCodeScreen() {
           <Text style={styles.cardText}>Expires: {validated.expires_at ? new Date(validated.expires_at).toLocaleString() : 'No expiry'}</Text>
 
           <TouchableOpacity style={[styles.button, styles.joinBtn]} onPress={onJoin} disabled={redeeming}>
-            {redeeming ? <ActivityIndicator color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Join</Text>}
+            {redeeming ? <EduDashSpinner color={theme?.onPrimary || '#000'} /> : <Text style={styles.buttonText}>Join</Text>}
           </TouchableOpacity>
         </View>
       )}

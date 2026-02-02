@@ -11,14 +11,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity,
-  ActivityIndicator,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,6 +21,7 @@ import { useAIUserLimits, useAIRecentUsage } from '@/hooks/useAI';
 import { track } from '@/lib/analytics';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: screenWidth } = Dimensions.get('window');
 
 export interface QuotaUsageAnalyticsProps {
@@ -207,7 +201,7 @@ export const QuotaUsageAnalytics: React.FC<QuotaUsageAnalyticsProps> = ({
     return (
       <View style={[styles.container, containerStyle, { backgroundColor: theme.surface }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading usage data...
           </Text>

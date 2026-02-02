@@ -6,17 +6,7 @@
  * established by auth-callback.tsx before redirecting here.
  */
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +20,7 @@ import { marketingTokens } from '@/components/marketing/tokens';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useLocalSearchParams } from 'expo-router';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ResetPasswordScreen() {
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
@@ -222,7 +213,7 @@ export default function ResetPasswordScreen() {
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={marketingTokens.colors.accent.cyan400} />
+            <EduDashSpinner size="large" color={marketingTokens.colors.accent.cyan400} />
             <Text style={styles.loadingText}>Verifying your session...</Text>
           </View>
         </SafeAreaView>

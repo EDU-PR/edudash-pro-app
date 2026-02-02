@@ -4,17 +4,7 @@
  * Adapted from Youth President dashboard design
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions,
-  RefreshControl,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +20,7 @@ import {
   type DashboardSettings,
 } from '@/components/membership/dashboard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Veterans League specific stats interface
@@ -160,7 +151,7 @@ export default function VeteransDashboard() {
       <DashboardWallpaperBackground>
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#854D0E" />
+            <EduDashSpinner size="large" color="#854D0E" />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
               Loading veterans league dashboard...
             </Text>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { z } from 'zod';
 import { differenceInYears, parse, format, isValid } from 'date-fns';
@@ -8,6 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { createProgressReportStyles } from '@/styles/progress-report/creator.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * StudentInfoEditor Component
  * 
@@ -407,7 +408,7 @@ export const StudentInfoEditor: React.FC<StudentInfoEditorProps> = ({
           accessibilityRole="button"
         >
           {saving ? (
-            <ActivityIndicator size="small" color={theme.onPrimary} />
+            <EduDashSpinner size="small" color={theme.onPrimary} />
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={20} color={theme.onPrimary} />

@@ -10,22 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  TextInput,
-  ActivityIndicator,
-  StyleSheet,
-  Modal,
-  RefreshControl,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Share,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TouchableWithoutFeedback, TextInput, StyleSheet, Modal, RefreshControl, Keyboard, KeyboardAvoidingView, Platform, Share } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +20,7 @@ import { assertSupabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface FeeStructure {
   id: string;
   name: string;
@@ -536,7 +522,7 @@ export default function FeeManagementScreen() {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <Stack.Screen options={{ title: 'Fee Management' }} />
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={{ color: theme.textSecondary, marginTop: 16 }}>Loading fee data...</Text>
         </View>
       </View>
@@ -795,7 +781,7 @@ export default function FeeManagementScreen() {
                     disabled={saving}
                   >
                     {saving ? (
-                      <ActivityIndicator color={theme.onPrimary} size="small" />
+                      <EduDashSpinner color={theme.onPrimary} size="small" />
                     ) : (
                       <Text style={{ color: theme.onPrimary, fontWeight: '600' }}>
                         {editingFee ? 'Update' : 'Create'}
@@ -927,7 +913,7 @@ export default function FeeManagementScreen() {
                     disabled={saving}
                   >
                     {saving ? (
-                      <ActivityIndicator color="#fff" size="small" />
+                      <EduDashSpinner color="#fff" size="small" />
                     ) : (
                       <Text style={{ color: '#fff', fontWeight: '600' }}>
                         {editingPromo ? 'Update' : 'Create'}

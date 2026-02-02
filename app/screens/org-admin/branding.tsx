@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -16,6 +16,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function OrgBrandingScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -175,7 +176,7 @@ export default function OrgBrandingScreen() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('branding.title', { defaultValue: 'Branding' }) }} />
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       </View>
     );
@@ -189,7 +190,7 @@ export default function OrgBrandingScreen() {
           headerRight: () => (
             <TouchableOpacity onPress={handleSave} style={{ marginRight: 16 }}>
               {updateSettings.isPending ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>
                   {t('common.save', { defaultValue: 'Save' })}
@@ -224,7 +225,7 @@ export default function OrgBrandingScreen() {
               disabled={logoUploading || !canManageBranding}
             >
               {logoUploading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Ionicons name="camera-outline" size={20} color="#fff" />
               )}

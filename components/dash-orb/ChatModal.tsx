@@ -1,16 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -25,6 +14,7 @@ import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import type { DashAttachment } from '@/services/dash-ai/types';
 import { createSignedUrl } from '@/services/AttachmentService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -482,7 +472,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 >
                   {message.isLoading ? (
                     <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={theme.primary} />
+                      <EduDashSpinner size="small" color={theme.primary} />
                       <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
                         Processing...
                       </Text>
@@ -568,7 +558,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   )}
                   {message.isStreaming && (
                     <View style={styles.typingIndicator}>
-                      <ActivityIndicator size="small" color={theme.primary} />
+                      <EduDashSpinner size="small" color={theme.primary} />
                       <Text style={[styles.typingText, { color: theme.textSecondary }]}>Typing…</Text>
                     </View>
                   )}

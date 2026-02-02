@@ -8,19 +8,12 @@
  */
 
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVoicePreferences } from '@/lib/voice';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/lib/voice/types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export function VoiceSettings() {
   const {
     preferences,
@@ -69,7 +62,7 @@ export function VoiceSettings() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <EduDashSpinner size="large" color="#007AFF" />
         <Text style={styles.loadingText}>Loading voice settings...</Text>
       </View>
     );
@@ -120,7 +113,7 @@ export function VoiceSettings() {
               >
                 {isTesting ? (
                   <>
-                    <ActivityIndicator size="small" color="#007AFF" />
+                    <EduDashSpinner size="small" color="#007AFF" />
                     <Text style={styles.testButtonText}>Playing...</Text>
                   </>
                 ) : (

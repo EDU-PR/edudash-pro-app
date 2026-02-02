@@ -1,17 +1,7 @@
 // Meeting Detail Screen - View full meeting agenda with notes
 
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Share,
-  Alert,
-  Linking,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +9,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AgendaItem {
   order?: number;
   title: string;
@@ -218,7 +209,7 @@ export default function MeetingDetailScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading meeting...</Text>
         </View>
       </SafeAreaView>

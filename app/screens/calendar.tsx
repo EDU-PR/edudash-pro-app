@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  RefreshControl,
-  ActivityIndicator,
-  Dimensions 
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +10,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { log, logError } from '@/lib/debug';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
 
@@ -292,7 +284,7 @@ export default function CalendarScreen() {
         <View style={styles.container}>
           <Stack.Screen options={{ headerShown: false }} />
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
           </View>
         </View>
@@ -308,7 +300,7 @@ export default function CalendarScreen() {
           <View style={styles.container}>
             <Stack.Screen options={{ headerShown: false }} />
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
             </View>
           </View>
@@ -416,7 +408,7 @@ export default function CalendarScreen() {
         >
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
             </View>
           ) : Object.keys(eventsByDate).length === 0 ? (

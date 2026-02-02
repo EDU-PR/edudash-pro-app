@@ -3,16 +3,7 @@
  * Display and manage regional managers - REAL DATA from Supabase
  */
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground, PROVINCE_COLORS } from '@/components/membership/dashboard';
 import { useOrganizationStats, type RegionWithStats } from '@/hooks/membership/useOrganizationStats';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Province code to color mapping
 const CODE_COLORS: Record<string, string> = {
   GP: '#3B82F6',
@@ -70,7 +62,7 @@ export default function RegionalManagersScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading regions...
           </Text>

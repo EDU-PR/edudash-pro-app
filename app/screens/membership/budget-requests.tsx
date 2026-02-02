@@ -3,7 +3,7 @@
  * Manages budget requests and approvals for Youth President dashboard
  */
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import { useBudgetRequests, BudgetRequest, STATUS_CONFIG } from '@/hooks/members
 import { BudgetRequestForm } from '@/components/membership/BudgetRequestForm';
 import { styles } from '@/components/membership/styles/budget-requests.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterType = 'all' | 'pending' | 'approved' | 'rejected';
 const FILTERS: { key: FilterType; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'pending', label: 'Pending' }, { key: 'approved', label: 'Approved' }, { key: 'rejected', label: 'Rejected' },
@@ -80,7 +81,7 @@ export default function BudgetRequestsScreen() {
   );
 
   if (isLoading) {
-    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}><View style={styles.loadingContainer}><ActivityIndicator size="large" color="#10B981" /><Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading...</Text></View></SafeAreaView>;
+    return <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}><View style={styles.loadingContainer}><EduDashSpinner size="large" color="#10B981" /><Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading...</Text></View></SafeAreaView>;
   }
 
   return (

@@ -8,6 +8,7 @@ import {
   Calendar,
   DollarSign,
   Settings,
+  Gift,
 } from 'lucide-react';
 
 interface MobileTabBarProps {
@@ -21,9 +22,14 @@ export function MobileTabBar({ userRole = 'parent' }: MobileTabBarProps) {
     { href: `/dashboard/${userRole}`, label: 'Home', icon: LayoutDashboard },
     { href: `/dashboard/${userRole}/messages`, label: 'Messages', icon: MessageSquare },
     { href: `/dashboard/${userRole}/calendar`, label: 'Calendar', icon: Calendar },
+    ...(userRole === 'parent'
+      ? [{ href: `/dashboard/${userRole}/birthday-chart`, label: 'Birthdays', icon: Gift }]
+      : []),
     { href: `/dashboard/${userRole}/payments`, label: 'Fees', icon: DollarSign },
     { href: `/dashboard/${userRole}/settings`, label: 'Settings', icon: Settings },
   ];
+
+  const gridClass = items.length === 6 ? 'grid-cols-6' : 'grid-cols-5';
 
   return (
     <nav
@@ -31,7 +37,7 @@ export function MobileTabBar({ userRole = 'parent' }: MobileTabBarProps) {
       aria-label="Primary"
     >
       <div className="mx-auto max-w-screen-sm">
-        <ul className="grid grid-cols-5 gap-1 px-2 py-2">
+        <ul className={`grid ${gridClass} gap-1 px-2 py-2`}>
           {items.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + '/');
             const Icon = item.icon;

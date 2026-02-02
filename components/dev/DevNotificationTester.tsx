@@ -6,15 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -29,6 +21,7 @@ import {
 } from '@/lib/notification-test-utils';
 import * as Notifications from 'expo-notifications';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface NotificationButton {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -164,7 +157,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
               onPress={() => runAction('perms', requestNotificationPermissions)}
             >
               {loading === 'perms' ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="shield-checkmark" size={18} color="#fff" />
@@ -184,7 +177,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
           >
             <LinearGradient colors={['#06b6d4', '#0891b2']} style={styles.quickActionGradient}>
               {loading === 'suite' ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Ionicons name="play" size={20} color="#fff" />
               )}
@@ -198,7 +191,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
           >
             <LinearGradient colors={['#64748b', '#475569']} style={styles.quickActionGradient}>
               {loading === 'clear' ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Ionicons name="trash" size={20} color="#fff" />
               )}
@@ -212,7 +205,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
           >
             <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.quickActionGradient}>
               {loading === 'cancel' ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Ionicons name="close-circle" size={20} color="#fff" />
               )}
@@ -231,7 +224,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
               onPress={() => runAction(`badge-${num}`, () => setBadgeCount(num))}
             >
               {loading === `badge-${num}` ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <Text style={[styles.badgeBtnText, currentBadge === num && styles.badgeBtnTextActive]}>
                   {num}
@@ -252,7 +245,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
             >
               <LinearGradient colors={btn.color} style={styles.presetGradient}>
                 {loading === `preset-${idx}` ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Ionicons name={btn.icon} size={22} color="#fff" />
                 )}

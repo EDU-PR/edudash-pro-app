@@ -3,16 +3,7 @@
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ActivityDraft, MatchPair, CountingItem } from './activity-builder.types';
@@ -20,6 +11,7 @@ import { activityBuilderStyles as styles } from './activity-builder.styles';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import { EmojiPickerMode } from '@/hooks/useActivityBuilder';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ActivityContentBuilderProps {
   draft: ActivityDraft;
   saving: boolean;
@@ -181,7 +173,7 @@ export function ActivityContentBuilder({
           style={[styles.saveButton, { backgroundColor: '#4CAF50', opacity: saving ? 0.7 : 1 }]}
         >
           {saving ? (
-            <ActivityIndicator color="#fff" />
+            <EduDashSpinner color="#fff" />
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#fff" />

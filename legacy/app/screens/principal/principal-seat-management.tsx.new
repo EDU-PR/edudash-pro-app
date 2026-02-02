@@ -2,15 +2,7 @@
 // Principal Seat Management Screen - Refactored for WARP.md compliance (≤500 lines)
 
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +18,7 @@ import {
   NoSubscriptionBanner,
 } from '@/components/principal/seats';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalSeatManagementScreen() {
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
@@ -90,7 +83,7 @@ export default function PrincipalSeatManagementScreen() {
         <ThemedStatusBar />
         <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>
               {t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}
             </Text>
@@ -169,7 +162,7 @@ export default function PrincipalSeatManagementScreen() {
             onPress={seatManagement.onAssignAllTeachers}
           >
             {seatManagement.assigning ? (
-              <ActivityIndicator color="#000" />
+              <EduDashSpinner color="#000" />
             ) : (
               <Text style={styles.btnPrimaryText}>
                 {t('seat_management.assign_all_teachers', { defaultValue: 'Assign all current teachers' })}

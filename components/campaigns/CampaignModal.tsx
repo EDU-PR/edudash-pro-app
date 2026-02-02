@@ -3,21 +3,7 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { 
@@ -28,6 +14,7 @@ import {
   DISCOUNT_TYPE_LABELS,
 } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface CampaignModalProps {
   visible: boolean;
   isEditing: boolean;
@@ -76,7 +63,7 @@ export function CampaignModal({
               </Text>
               <TouchableOpacity onPress={onSave} disabled={saving}>
                 {saving ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                 ) : (
                   <Text style={[styles.saveButton, { color: theme.primary }]}>
                     Save

@@ -1,12 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
 import type { TeacherReference, TeacherRatingSummary } from '@/types/teacher-reputation';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherReferencesScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -118,7 +112,7 @@ export default function TeacherReferencesScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading references...</Text>
         </View>
       ) : (

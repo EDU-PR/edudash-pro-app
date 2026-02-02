@@ -1,16 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  StyleSheet,
-  Platform,
-} from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, Alert, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,6 +12,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface PaymentUploadModalProps {
   visible: boolean;
   onClose: () => void;
@@ -471,7 +461,7 @@ export function PaymentUploadModal({
             disabled={!selectedFile || uploading || !paymentForMonth}
           >
             {uploading ? (
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
             ) : (
               <>
                 <Ionicons name="cloud-upload" size={20} color="#fff" />

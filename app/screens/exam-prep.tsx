@@ -7,17 +7,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
@@ -35,6 +25,7 @@ import {
 } from '@/components/exam-prep/types';
 import { buildExamPrompt } from '@/components/exam-prep/prompt-builder';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Get phase from grade
@@ -361,7 +352,7 @@ export default function ExamPrepScreen() {
         disabled={generating}
       >
         {generating ? (
-          <ActivityIndicator color="#ffffff" />
+          <EduDashSpinner color="#ffffff" />
         ) : (
           <>
             <Ionicons name="sparkles" size={24} color="#ffffff" />

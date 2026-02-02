@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ParentJoinService, type SearchedStudent } from '@/lib/services/parentJoinService';
 import { useQueryClient } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type Step = 'search' | 'confirm';
 
 export default function ParentClaimChildScreen() {
@@ -204,7 +205,7 @@ export default function ParentClaimChildScreen() {
             disabled={searching || !searchQuery.trim()}
           >
             {searching ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <Text style={styles.searchButtonText}>Search</Text>
             )}
@@ -350,7 +351,7 @@ export default function ParentClaimChildScreen() {
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Text style={styles.submitButtonText}>Submit Request</Text>

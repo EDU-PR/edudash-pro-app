@@ -1,14 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +12,7 @@ import { createCheckout } from '@/lib/payments';
 import { navigateTo } from '@/lib/navigation/router-utils';
 import * as WebBrowser from 'expo-web-browser';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // RevenueCat removed - all payments now use PayFast
 
 type NormalizedPlan = SubscriptionPlan & {
@@ -491,7 +483,7 @@ export default function SubscriptionSetupScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
         <Text style={styles.loadingText}>Loading subscription plans...</Text>
       </View>
     );

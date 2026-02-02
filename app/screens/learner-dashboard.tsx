@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +28,7 @@ import SubscriptionAdGate from '@/components/ui/SubscriptionAdGate';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Soil of Africa organization ID
 const SOIL_OF_AFRICA_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 
@@ -123,7 +124,7 @@ export default function LearnerDashboard() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('learner.dashboard_title', { defaultValue: 'Learner Dashboard' }) }} />
         <View style={styles.empty}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
       </View>
@@ -136,7 +137,7 @@ export default function LearnerDashboard() {
       <View style={styles.container}>
         <Stack.Screen options={{ title: t('learner.dashboard_title', { defaultValue: 'Learner Dashboard' }) }} />
         <View style={styles.empty}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
       </View>
@@ -393,7 +394,7 @@ export default function LearnerDashboard() {
         {/* Loading State */}
         {isLoading && enrollments.length === 0 && (
           <View style={styles.empty}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>{t('dashboard.loading', { defaultValue: 'Loading...' })}</Text>
           </View>
         )}

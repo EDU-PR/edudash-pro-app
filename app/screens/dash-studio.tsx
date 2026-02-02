@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +14,7 @@ import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminolo
 import { FormBuilderService } from '@/features/forms/services/FormBuilderService';
 import type { FieldType, FormAudience, FormField } from '@/features/forms/types/form.types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ProgressStep {
   id: string;
   label: string;
@@ -306,7 +298,7 @@ export default function DashStudioScreen() {
   if (!ready) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}> 
-        <ActivityIndicator color={theme.primary} />
+        <EduDashSpinner color={theme.primary} />
       </View>
     );
   }
@@ -360,7 +352,7 @@ export default function DashStudioScreen() {
               disabled={!canUseStudio || isPlanning}
             >
               {isPlanning ? (
-                <ActivityIndicator color={theme.onPrimary} size="small" />
+                <EduDashSpinner color={theme.onPrimary} size="small" />
               ) : (
                 <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Generate Plan</Text>
               )}
@@ -386,7 +378,7 @@ export default function DashStudioScreen() {
               disabled={!canUseStudio || isCreatingForm}
             >
               {isCreatingForm ? (
-                <ActivityIndicator color={theme.onPrimary} size="small" />
+                <EduDashSpinner color={theme.onPrimary} size="small" />
               ) : (
                 <Text style={[styles.primaryButtonText, { color: theme.onPrimary }]}>Generate form + notify</Text>
               )}

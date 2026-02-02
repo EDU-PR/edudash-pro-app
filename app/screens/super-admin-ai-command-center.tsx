@@ -11,19 +11,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  RefreshControl,
-  ActivityIndicator,
-  Modal,
-  Platform,
-  KeyboardAvoidingView,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, RefreshControl, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -35,6 +23,7 @@ import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { toast } from '@/components/ui/ToastProvider';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Types matching database schema
 interface AIAgent {
   id: string;
@@ -504,7 +493,7 @@ export default function SuperAdminAICommandCenter() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <ThemedStatusBar />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading Dash AI Command Center...</Text>
         </View>
       </SafeAreaView>
@@ -898,7 +887,7 @@ export default function SuperAdminAICommandCenter() {
               )}
               {assistantLoading && (
                 <View style={[styles.chatBubble, styles.assistantBubble, { backgroundColor: theme.background }]}>
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                   <Text style={[styles.thinkingText, { color: theme.textSecondary }]}>Thinking...</Text>
                 </View>
               )}
@@ -925,7 +914,7 @@ export default function SuperAdminAICommandCenter() {
                 disabled={assistantLoading || !assistantMessage.trim()}
               >
                 {assistantLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Ionicons name="send" size={20} color="#fff" />
                 )}

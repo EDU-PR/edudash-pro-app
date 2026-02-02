@@ -11,19 +11,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  RefreshControl,
-  Modal,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, RefreshControl, Modal, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -37,6 +25,7 @@ import { ExportService } from '@/lib/services/finance/ExportService';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 import type { TransactionRecord, DateRange } from '@/services/FinancialDataService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface FilterOptions {
   type: 'all' | 'income' | 'expense';
   category: string;
@@ -495,7 +484,7 @@ export default function TransactionsScreen() {
                 disabled={receiptDisabled || isReceiptLoading}
               >
                 {isReceiptLoading ? (
-                  <ActivityIndicator size="small" color={theme?.primary || '#4F46E5'} />
+                  <EduDashSpinner size="small" color={theme?.primary || '#4F46E5'} />
                 ) : (
                   <Ionicons name="receipt-outline" size={14} color={receiptDisabled ? '#9CA3AF' : (theme?.primary || '#4F46E5')} />
                 )}

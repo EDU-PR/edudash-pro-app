@@ -4,16 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-  ActivityIndicator,
-  Animated,
-  Alert,
-} from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,6 +14,7 @@ import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
 import { CYAN_BORDER, CYAN_PRIMARY, CYAN_GLOW } from './theme';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Safe component imports
 let VoiceRecorder: React.FC<any> | null = null;
 let EmojiPicker: React.FC<any> | null = null;
@@ -260,7 +252,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   style={styles.gradientButton}
                 >
                   {sending ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <EduDashSpinner size="small" color="#fff" />
                   ) : (
                     <Ionicons name="send" size={20} color="#fff" />
                   )}

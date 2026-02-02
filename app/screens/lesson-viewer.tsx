@@ -6,16 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Share
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +17,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Helper to parse content - handles both JSON objects and markdown text
 interface LessonContent {
   overview?: string;
@@ -514,7 +506,7 @@ export default function LessonViewer() {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.text }]}>
             Loading lesson plan...
           </Text>
@@ -598,7 +590,7 @@ export default function LessonViewer() {
             disabled={generating}
           >
             {generating ? (
-              <ActivityIndicator size="small" color={theme.onPrimary} />
+              <EduDashSpinner size="small" color={theme.onPrimary} />
             ) : (
               <>
                 <Ionicons name="document-text" size={16} color={theme.onPrimary} />

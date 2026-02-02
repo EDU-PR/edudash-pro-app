@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { VoiceController } from '@/hooks/useVoiceController';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 function msToClock(ms: number) {
   const s = Math.floor(ms / 1000);
   const mm = String(Math.floor(s / 60)).padStart(2, '0');
@@ -88,7 +89,7 @@ export function VoiceDock({ vc }: { vc: VoiceController }) {
           )}
           {isThinking && (
             <View style={styles.row}> 
-              <ActivityIndicator size="small" color={theme.primary} />
+              <EduDashSpinner size="small" color={theme.primary} />
               <Text style={[styles.label, { marginLeft: 8, color: theme.text }]}>Thinking…</Text>
             </View>
           )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerProgramDetailScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
@@ -63,7 +64,7 @@ export default function LearnerProgramDetailScreen() {
       >
         {isLoading && (
           <View style={styles.empty}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         )}
 

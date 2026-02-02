@@ -8,6 +8,7 @@ import {
   Users, 
   Settings,
   ChevronLeft,
+  Gift,
   GraduationCap,
   LogOut,
   X
@@ -58,6 +59,14 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
       href: `/dashboard/${userRole}/children`,
       active: pathname?.includes('/children'),
     },
+    ...(userRole === 'parent'
+      ? [{
+          icon: Gift,
+          label: 'Birthdays',
+          href: `/dashboard/${userRole}/birthday-chart`,
+          active: pathname?.includes('/birthday-chart'),
+        }]
+      : []),
     // Admin-only: CAPS Mapping quick access
     ...(['teacher', 'principal', 'superadmin'].includes(String(userRole))
       ? [{

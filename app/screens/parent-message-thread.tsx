@@ -8,20 +8,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Platform,
-  KeyboardAvoidingView,
-  ActivityIndicator,
-  ScrollView,
-  Alert,
-  ImageBackground,
-  Keyboard,
-  Vibration,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, Platform, KeyboardAvoidingView, ScrollView, Alert, ImageBackground, Keyboard, Vibration, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -46,6 +33,7 @@ import {
   getDateSeparatorLabel,
 } from '@/components/messaging';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Safe imports with fallbacks
 let useTheme: () => { theme: any; isDark: boolean };
 let useAuth: () => { user: any; profile: any };
@@ -664,7 +652,7 @@ export default function ParentMessageThreadScreen() {
           >
           {loading ? (
             <View style={styles.center}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
               <Text style={styles.loadingText}>Loading messages...</Text>
             </View>
           ) : error ? (

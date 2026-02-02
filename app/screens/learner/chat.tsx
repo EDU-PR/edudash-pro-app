@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  ActivityIndicator,
-  ScrollView,
-  Platform,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +10,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallSafe } from '@/components/calls/CallProvider';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerChatScreen() {
   const { profile, user } = useAuth();
   const { theme } = useTheme();
@@ -270,7 +261,7 @@ export default function LearnerChatScreen() {
         >
           {threadLoading || messagesLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+              <EduDashSpinner size="large" color={theme.primary} />
             </View>
           ) : (
             messages.map((message: any) => {
@@ -320,7 +311,7 @@ export default function LearnerChatScreen() {
             disabled={!messageText.trim() || sending}
           >
             {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <Ionicons name="send" size={20} color="#fff" />
             )}

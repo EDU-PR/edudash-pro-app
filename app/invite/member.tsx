@@ -3,7 +3,7 @@
  * Handles deep links for member/youth invites
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useEduDashAlert } from '@/components/ui/EduDashAlert';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function MemberInviteScreen() {
   const { code } = useLocalSearchParams<{ code?: string }>();
   const { user, profile } = useAuth();
@@ -153,7 +154,7 @@ export default function MemberInviteScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Validating invite code...
           </Text>
@@ -236,7 +237,7 @@ export default function MemberInviteScreen() {
           disabled={joining}
         >
           {joining ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <EduDashSpinner size="small" color="#FFFFFF" />
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />

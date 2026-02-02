@@ -1,10 +1,11 @@
 // Message Composer Component
 
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface MessageComposerProps {
   subject: string;
   message: string;
@@ -67,7 +68,7 @@ export function MessageComposer({
           disabled={sending}
         >
           {sending ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <EduDashSpinner color="#fff" size="small" />
           ) : (
             <>
               <Ionicons name="send" size={18} color="#fff" />

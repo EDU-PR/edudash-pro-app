@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +7,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 /**
  * Screen for logged-in learners to enroll in programs using program codes.
  * This does NOT create a new account - it just enrolls the existing user.
@@ -406,7 +398,7 @@ export default function EnrollByProgramCodeScreen() {
           disabled={validating || !programCode.trim()}
         >
           {validating ? (
-            <ActivityIndicator color="#fff" />
+            <EduDashSpinner color="#fff" />
           ) : (
             <>
               <Text style={styles.buttonText}>Validate Code</Text>
@@ -452,7 +444,7 @@ export default function EnrollByProgramCodeScreen() {
               disabled={enrolling}
             >
               {enrolling ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Text style={styles.buttonText}>Enroll Now</Text>

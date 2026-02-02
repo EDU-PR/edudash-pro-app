@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useLearnerSubmissions } from '@/hooks/useLearnerData';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function LearnerSubmissionsScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
@@ -39,7 +40,7 @@ export default function LearnerSubmissionsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {isLoading && (
           <View style={styles.empty}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
           </View>
         )}
 

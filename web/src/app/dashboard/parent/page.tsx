@@ -24,12 +24,13 @@ import { TeacherQuickNotesCard } from '@/components/dashboard/parent/TeacherQuic
 import { ChildProgressBadgesCard } from '@/components/dashboard/parent/ChildProgressBadgesCard';
 import { DailyActivityFeedCard } from '@/components/dashboard/parent/DailyActivityFeedCard';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/parent/UpcomingBirthdaysCard';
+import { BirthdayChartPreviewCard } from '@/components/dashboard/parent/BirthdayChartPreviewCard';
 import { MetricCard } from '@/components/dashboard/parent/MetricCard';
 import { OnboardingHint } from '@/components/dashboard/parent/OnboardingHint';
 import { UpgradeBanner } from '@/components/dashboard/parent/UpgradeBanner';
 import { AdBannerPlaceholder } from '@/components/dashboard/parent/AdBannerPlaceholder';
 import { DashOrbButton } from '@/components/dashboard/parent/DashOrbButton';
-import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck, Video } from 'lucide-react';
+import { Users, BarChart3, BookOpen, Lightbulb, Search, Activity, Brain, Cpu, Laptop, Sparkles, Shirt, MessageCircle, PhoneOff, CalendarCheck, Video, Cake } from 'lucide-react';
 import { ActivityFeed } from '@/components/dashboard/parent/ActivityFeed';
 import { UniformSizesWidget } from '@/components/dashboard/parent/UniformSizesWidget';
 import { createClient } from '@/lib/supabase/client';
@@ -64,6 +65,7 @@ export default function ParentDashboard() {
       teacherNotes: t('dashboard.parent.section.teacher_notes', { defaultValue: 'Teacher Notes' }),
       progress: t('dashboard.parent.section.progress', { defaultValue: 'Progress & Achievements' }),
       birthdays: t('dashboard.parent.section.birthdays', { defaultValue: 'Upcoming Birthdays' }),
+      birthdayChart: t('dashboard.parent.section.birthday_chart', { defaultValue: 'Birthday Chart' }),
       dailyActivity: t('dashboard.parent.section.daily_activity', { defaultValue: 'Daily Activity' }),
       practiceAtHome: t('dashboard.parent.section.practice_at_home', { defaultValue: 'Practice at Home' }),
       earlyLearningActivities: t('dashboard.parent.section.early_learning_activities', { defaultValue: 'Early Learning Activities' }),
@@ -641,6 +643,25 @@ export default function ParentDashboard() {
               classId={activeChild.classId}
               onViewAll={() => router.push('/dashboard/parent/birthday-chart')}
             />
+          ) : (
+            <SectionEmptyState
+              title={t('dashboard.parent.empty.birthdays.title', { defaultValue: 'Upcoming birthdays preview' })}
+              description={t('dashboard.parent.empty.birthdays.description', { defaultValue: "Birthdays for your child's group will appear here after linking." })}
+              actionLabel={t('dashboard.parent.empty.add_child.cta', { defaultValue: 'Add Child' })}
+              onAction={() => router.push('/dashboard/parent/register-child')}
+            />
+          )}
+        </CollapsibleSection>
+
+        {/* Birthday Chart */}
+        <CollapsibleSection
+          title={COPY.sections.birthdayChart}
+          icon={Cake}
+          isOpen={openSection === 'birthday-chart'}
+          onToggle={() => toggleSection('birthday-chart')}
+        >
+          {hasOrganization ? (
+            <BirthdayChartPreviewCard organizationId={profile?.organizationId || profile?.preschoolId} />
           ) : (
             <SectionEmptyState
               title={t('dashboard.parent.empty.birthdays.title', { defaultValue: 'Upcoming birthdays preview' })}

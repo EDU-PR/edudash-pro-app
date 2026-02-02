@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function VerifyYourEmailScreen() {
   const { theme } = useTheme();
   const { email } = useLocalSearchParams<{ email?: string }>();
@@ -60,7 +61,7 @@ export default function VerifyYourEmailScreen() {
             activeOpacity={0.8}
           >
             {resending ? (
-              <ActivityIndicator color={theme.onPrimary} />
+              <EduDashSpinner color={theme.onPrimary} />
             ) : (
               <Text style={[styles.buttonText, { color: theme.onPrimary }]}>
                 {sent ? 'Resend again' : 'Resend confirmation'}

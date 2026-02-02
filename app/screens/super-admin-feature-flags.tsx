@@ -1,17 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Switch,
-  Modal,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Switch, Modal, TextInput } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -23,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface FeatureFlag {
   id: string;
   name: string;
@@ -549,7 +538,7 @@ export default function SuperAdminFeatureFlagsScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading feature flags...</Text>
           </View>
         ) : (
@@ -670,7 +659,7 @@ export default function SuperAdminFeatureFlagsScreen() {
               disabled={saving}
             >
               {saving ? (
-                <ActivityIndicator size="small" color={theme.primary} />
+                <EduDashSpinner size="small" color={theme.primary} />
               ) : (
                 <Text style={styles.saveButtonText}>Save</Text>
               )}

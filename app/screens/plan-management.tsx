@@ -5,17 +5,7 @@
  * compare available plans, and upgrade/downgrade their subscription.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  Dimensions,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, RefreshControl, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -37,6 +27,7 @@ import {
   type TierNameAligned,
 } from '@/lib/tiers';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width } = Dimensions.get('window');
 
 interface Plan {
@@ -345,7 +336,7 @@ export default function PlanManagementScreen() {
           }} 
         />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00f5ff" />
+          <EduDashSpinner size="large" color="#00f5ff" />
           <Text style={styles.loadingText}>
             {t('plan.loading', { defaultValue: 'Loading plans...' })}
           </Text>

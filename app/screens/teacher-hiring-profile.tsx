@@ -1,15 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Switch,
-  Alert,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +9,7 @@ import { TeacherReputationService } from '@/lib/services/TeacherReputationServic
 import { TeacherMarketProfileUpdateSchema } from '@/types/teacher-reputation';
 import type { TeacherMarketProfileUpdate } from '@/types/teacher-reputation';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type ExpoLocationModule = typeof import('expo-location');
 
 const loadExpoLocation = (): ExpoLocationModule | null => {
@@ -148,7 +139,7 @@ export default function TeacherHiringProfileScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </SafeAreaView>
@@ -236,7 +227,7 @@ export default function TeacherHiringProfileScreen() {
         </View>
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
+          {saving ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

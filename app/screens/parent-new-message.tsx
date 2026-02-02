@@ -1,15 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +11,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useCreateThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Child {
   id: string;
   first_name: string;
@@ -435,7 +426,7 @@ export default function ParentNewMessageScreen() {
           disabled={!selectedChildId || createThread.isPending}
         >
           {createThread.isPending ? (
-            <ActivityIndicator color={theme.onPrimary} />
+            <EduDashSpinner color={theme.onPrimary} />
           ) : (
             <Text style={styles.startButtonText}>
               {t('parent.startConversation', { defaultValue: 'Start Conversation' })}

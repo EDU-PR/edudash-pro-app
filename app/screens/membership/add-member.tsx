@@ -3,19 +3,7 @@
  * Form for administrators to manually add members to the organization
  */
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  TextInput,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Switch,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions, KeyboardAvoidingView, Platform, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +23,7 @@ import {
   isValidSAPhoneNumber 
 } from '@/lib/memberRegistrationUtils';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Regions
@@ -646,7 +635,7 @@ export default function AddMemberScreen() {
           {/* Retry Status Display */}
           {retryStatus && !errorMessage && (
             <View style={[styles.retryContainer, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]}>
-              <ActivityIndicator size="small" color="#3B82F6" />
+              <EduDashSpinner size="small" color="#3B82F6" />
               <Text style={[styles.retryText, { color: '#1E40AF' }]}>
                 {retryStatus.retry > 0 
                   ? `Retrying... (Attempt ${retryStatus.retry + 1}/${retryStatus.maxRetries})`
@@ -1017,7 +1006,7 @@ export default function AddMemberScreen() {
         >
           {isSubmitting || retryStatus ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <ActivityIndicator color="#fff" />
+              <EduDashSpinner color="#fff" />
               <Text style={styles.submitText}>
                 {retryStatus ? `Creating... (${retryStatus.retry + 1}/${retryStatus.maxRetries})` : 'Creating Member...'}
               </Text>

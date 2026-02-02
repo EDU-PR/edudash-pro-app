@@ -11,20 +11,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Dimensions, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,6 +25,7 @@ import { isTuitionFee } from '@/lib/utils/feeUtils';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import type { PostgrestError } from '@supabase/supabase-js';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Registration {
@@ -1058,7 +1046,7 @@ export default function RegistrationDetailScreen() {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ title: 'Loading...' }} />
-        <ActivityIndicator size="large" color={colors.primary} />
+        <EduDashSpinner size="large" color={colors.primary} />
       </View>
     );
   }
@@ -1285,7 +1273,7 @@ export default function RegistrationDetailScreen() {
                   disabled={processing || !popViewed}
                 >
                   {processing ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <EduDashSpinner size="small" color="#fff" />
                   ) : (
                     <>
                       <Ionicons name="shield-checkmark" size={20} color="#fff" />
@@ -1315,7 +1303,7 @@ export default function RegistrationDetailScreen() {
               disabled={processing}
             >
               {processing ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="shield-checkmark" size={20} color="#fff" />
@@ -1370,7 +1358,7 @@ export default function RegistrationDetailScreen() {
               disabled={processing || !canApprove(registration)}
             >
               {processing ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle" size={24} color={canApprove(registration) ? '#fff' : '#999'} />

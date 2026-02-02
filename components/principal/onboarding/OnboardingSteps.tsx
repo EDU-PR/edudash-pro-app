@@ -1,10 +1,11 @@
 // Individual step components for onboarding wizard
 
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import type { OnboardingStep, SchoolType, PlanTier, InviteResult, TemplateOption } from './types';
 import { SCHOOL_TYPES, PLAN_TIERS, AVAILABLE_TEMPLATES } from './types';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface TypeSelectionStepProps {
   schoolType: SchoolType;
   onSelectType: (type: SchoolType) => void;
@@ -61,7 +62,7 @@ export function DetailsStep({ schoolName, adminName, phone, planTier, onChangeSc
         </View>
       </View>
       <TouchableOpacity disabled={!canCreate || creating} style={[styles.button, (!canCreate || creating) && styles.buttonDisabled]} onPress={onCreate}>
-        {creating ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>Create school & Continue</Text>}
+        {creating ? <EduDashSpinner color="#000" /> : <Text style={styles.buttonText}>Create school & Continue</Text>}
       </TouchableOpacity>
     </View>
   );
@@ -88,7 +89,7 @@ export function InvitesStep({ emailInput, emails, sentInvites, sendingInvites, o
         </View>
       ))}</View>}
       <TouchableOpacity disabled={sendingInvites} style={[styles.button, sendingInvites && styles.buttonDisabled]} onPress={onSendInvites}>
-        {sendingInvites ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonText}>{emails.length ? 'Send invites & Continue' : 'Skip & Continue'}</Text>}
+        {sendingInvites ? <EduDashSpinner color="#000" /> : <Text style={styles.buttonText}>{emails.length ? 'Send invites & Continue' : 'Skip & Continue'}</Text>}
       </TouchableOpacity>
       {sentInvites.length > 0 && <View style={{ marginTop: 8 }}>{sentInvites.map((r, i) => <Text key={i} style={styles.hint}>• {r.email}: {r.status}</Text>)}</View>}
       <TouchableOpacity onPress={onBack} style={styles.linkBtn}><Text style={styles.linkText}>Back</Text></TouchableOpacity>

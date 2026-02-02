@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ReportProgressIndicatorProps {
   percentage: number;
   autoSaveStatus: 'saved' | 'saving' | 'unsaved';
@@ -21,7 +22,7 @@ export const ReportProgressIndicator: React.FC<ReportProgressIndicatorProps> = (
         <Text style={[styles.progressTitle, { color: theme.text }]}>Report Progress</Text>
         <View style={styles.autoSaveContainer}>
           {autoSaveStatus === 'saving' && (
-            <ActivityIndicator size="small" color={theme.primary} style={{ marginRight: 8 }} />
+            <EduDashSpinner size="small" color={theme.primary} style={{ marginRight: 8 }} />
           )}
           {autoSaveStatus === 'saved' && lastAutoSave && (
             <Text style={[styles.autoSaveText, { color: theme.textSecondary }]}>

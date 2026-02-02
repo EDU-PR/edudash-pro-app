@@ -7,17 +7,7 @@
  * @module app/screens/admin/manage-join-requests
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -27,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { logger } from '@/lib/logger';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type TabType = 'pending' | 'approved' | 'rejected' | 'all';
 
 interface JoinRequestWithProfile extends JoinRequest {
@@ -414,7 +405,7 @@ export default function ManageJoinRequestsScreen() {
                 disabled={rejectMutation.isPending}
               >
                 {rejectMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <Text style={styles.confirmRejectText}>Reject Request</Text>
                 )}

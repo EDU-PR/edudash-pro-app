@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -8,6 +8,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { createRegistrationStyles } from './child-registration.styles';
 import type { PromoApplied, RegistrationFormErrors } from '@/hooks/useChildRegistration';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface RegistrationFeeSectionProps {
   registrationFee: number;
   finalAmount: number;
@@ -160,7 +161,7 @@ export function RegistrationFeeSection({
               disabled={promoValidating || !promoCode.trim()}
             >
               {promoValidating ? (
-                <ActivityIndicator color={theme.onPrimary} size="small" />
+                <EduDashSpinner color={theme.onPrimary} size="small" />
               ) : (
                 <Text style={[styles.btnText, { color: theme.onPrimary }]}>Apply</Text>
               )}
@@ -212,7 +213,7 @@ export function RegistrationFeeSection({
           disabled={uploadingPop}
         >
           {uploadingPop ? (
-            <ActivityIndicator color={theme.primary} />
+            <EduDashSpinner color={theme.primary} />
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="cloud-upload" size={24} color={theme.primary} />

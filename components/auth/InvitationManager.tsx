@@ -2,18 +2,7 @@
 // Manage teacher and parent invitations with bulk support
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  FlatList,
-  Alert,
-  ActivityIndicator,
-  Modal
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, FlatList, Alert, Modal } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../contexts/ThemeContext';
 import { 
@@ -23,6 +12,7 @@ import {
   EnhancedUserRole 
 } from '../../types/auth-enhanced';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface InvitationManagerProps {
   userRole: 'principal' | 'teacher';
   organizationId: string;
@@ -639,7 +629,7 @@ export const InvitationManager: React.FC<InvitationManagerProps> = ({
               </TouchableOpacity>
             )}
             {item.status === 'sending' && (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <EduDashSpinner size="small" color={theme.colors.primary} />
             )}
             {item.status === 'sent' && (
               <Text style={[styles.statusText, { color: theme.colors.primary }]}>✓ Sent</Text>
@@ -779,7 +769,7 @@ export const InvitationManager: React.FC<InvitationManagerProps> = ({
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={theme.colors.onPrimary} />
+              <EduDashSpinner size="small" color={theme.colors.onPrimary} />
             ) : (
               <Text style={[styles.sendButtonText, { color: theme.colors.onPrimary }]}>
                 Send {invitations.length} Invitation{invitations.length > 1 ? 's' : ''}

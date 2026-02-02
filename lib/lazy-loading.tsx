@@ -6,12 +6,13 @@
  */
 
 import React, { Suspense, lazy, ComponentType } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { mark, measure } from './perf';
 import { logger } from './logger';
 import { useTranslation } from 'react-i18next';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface LazyComponentOptions {
   fallback?: React.ComponentType;
   errorBoundary?: React.ComponentType<{ error: Error; retry: () => void }>;
@@ -39,7 +40,7 @@ const DashLoadingIndicator: React.FC<{ message?: string }> = ({
         style={styles.loadingGradient}
       >
         <View style={styles.loadingContent}>
-          <ActivityIndicator size="large" color="#00f5ff" />
+          <EduDashSpinner size="large" color="#00f5ff" />
           <Text style={styles.loadingText}>{message || t('screens.loading')}</Text>
           <Text style={styles.loadingSubtext}>🧠 {t('dash_ai.optimizing', { defaultValue: 'Dash AI is optimizing...' })}</Text>
         </View>

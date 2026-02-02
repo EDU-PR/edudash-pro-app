@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
@@ -15,7 +15,8 @@ import { EducationalPDFService } from '@/lib/services/EducationalPDFService'
 
 interface StudentProgress {
   id: string;
-  name: string;
+  import EduDashSpinner from '@/components/ui/EduDashSpinner';
+name: string;
   recentGrades: number[];
   averageGrade: number;
   improvement: number;
@@ -409,7 +410,7 @@ export default function AIProgressAnalysisScreen() {
       <SafeAreaView style={styles.container}>
         <ScreenHeader title="AI Progress Analysis" subtitle="AI-powered student insights" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Analyzing student progress...</Text>
         </View>
       </SafeAreaView>

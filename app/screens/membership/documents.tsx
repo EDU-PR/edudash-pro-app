@@ -5,19 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  Modal,
-  TextInput,
-  FlatList,
-} from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, RefreshControl, Modal, TextInput, FlatList } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -35,6 +23,7 @@ import OrganizationDocumentService, {
   type AccessLevel,
 } from '@/lib/services/organizationDocumentService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -514,7 +503,7 @@ export default function DocumentVaultScreen() {
         }
       >
         {loading ? (
-          <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
+          <EduDashSpinner size="large" color={theme.primary} style={styles.loader} />
         ) : (
           <>
             {/* Folders */}
@@ -706,7 +695,7 @@ export default function DocumentVaultScreen() {
               disabled={uploading}
             >
               {uploading ? (
-                <ActivityIndicator color="#fff" />
+                <EduDashSpinner color="#fff" />
               ) : (
                 <>
                   <Ionicons name="cloud-upload" size={20} color="#fff" />

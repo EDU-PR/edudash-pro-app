@@ -3,15 +3,7 @@
  * Shows detailed view of a youth program for the Youth President dashboard
  */
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -23,6 +15,7 @@ import { DashboardWallpaperBackground } from '@/components/membership/dashboard'
 import { STATUS_CONFIG, CATEGORY_ICONS } from '@/hooks/membership/useYouthPrograms';
 import { styles } from '@/components/membership/styles/program-detail.styles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface YouthProgramDetail {
   id: string;
   name: string;
@@ -167,7 +160,7 @@ export default function YouthProgramDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10B981" />
+          <EduDashSpinner size="large" color="#10B981" />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading program...
           </Text>
@@ -342,7 +335,7 @@ export default function YouthProgramDetailScreen() {
             </View>
 
             {loadingParticipants ? (
-              <ActivityIndicator size="small" color="#10B981" style={styles.participantsLoader} />
+              <EduDashSpinner size="small" color="#10B981" style={styles.participantsLoader} />
             ) : participants && participants.length > 0 ? (
               <View style={styles.participantsList}>
                 {participants.slice(0, 5).map((participant) => (

@@ -9,23 +9,14 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, Modal, TextInput, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useUpdateStudent } from '@/hooks/useStudents';
 import { Student, StudentUpdatePayload } from '@/services/students';
 import { z } from 'zod';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Validation schema
 const StudentUpdateSchema = z.object({
   first_name: z.string().min(1, 'First name is required').max(50),
@@ -498,7 +489,7 @@ export default function StudentEditModal({ visible, onClose, student, onSuccess 
               disabled={updateMutation.isPending}
             >
               {updateMutation.isPending ? (
-                <ActivityIndicator size="small" color={theme.onPrimary} />
+                <EduDashSpinner size="small" color={theme.onPrimary} />
               ) : (
                 <Text style={styles.saveButtonText}>Save Changes</Text>
               )}

@@ -1,7 +1,7 @@
 // needs refactor to use AuthContext for sign-in state management
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ActivityIndicator, ScrollView, KeyboardAvoidingView, RefreshControl } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView, RefreshControl } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +25,7 @@ import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SignIn() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -303,14 +304,10 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // Use centralized session manager to avoid throwing on network/storage quirks
       const res = await signInWithSession(email.trim(), password);
       if (res.error) {
-        // #region agent log
-        console.log('[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
-        // #endregion
-        
-        // Check if this is an "email not confirmed" error
+        // Check if this is a timeout error first (auth might have succeeded)
         const errorLower = res.error.toLowerCase();
         if (errorLower.includes('timed out')) {
-          // If auth already succeeded in the background, skip error modal
+          // If auth already succeeded in the background, skip error modal/log
           try {
             const supabase = assertSupabase();
             const { data: sessionData } = await supabase.auth.getSession();
@@ -322,6 +319,12 @@ console.log('[SignIn] Component rendering, theme:', theme);
             // fall through to error modal
           }
         }
+
+        // #region agent log
+        console.log('[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
+        // #endregion
+        
+        // Check if this is an "email not confirmed" error
         if (errorLower.includes('email not confirmed') || errorLower.includes('email_not_confirmed')) {
           showAlert({
             title: t('auth.sign_in.email_not_verified', { defaultValue: 'Email Not Verified' }),
@@ -869,6 +872,31 @@ console.log('[SignIn] Component rendering, theme:', theme);
       fontSize: 14,
       fontWeight: '600',
     },
+    signInLoadingBanner: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      backgroundColor: theme.surfaceVariant,
+      borderWidth: 1,
+      borderColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6,
+    },
+    signInLoadingText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+      flex: 1,
+    },
   });
 
 return (
@@ -937,7 +965,7 @@ return (
                 
                 {biometricLoading && (
                   <View style={styles.biometricLoadingContainer}>
-                    <ActivityIndicator size="small" color={theme.primary} />
+                    <EduDashSpinner size="small" color={theme.primary} />
                     <Text style={styles.biometricLoadingText}>
                       {t('auth.sign_in.authenticating_biometric', { defaultValue: 'Authenticating with biometrics...' })}
                     </Text>
@@ -1069,7 +1097,7 @@ return (
               activeOpacity={0.7}
             >
               {googleLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <EduDashSpinner color="#fff" size="small" />
               ) : (
                 <>
                   <Ionicons name="logo-google" size={20} color="#fff" />
@@ -1102,6 +1130,15 @@ return (
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {loading && (
+        <View style={[styles.signInLoadingBanner, { bottom: Math.max(insets.bottom, 16) }]}>
+          <EduDashSpinner size="small" color={theme.primary} />
+          <Text style={styles.signInLoadingText}>
+            {t('auth.sign_in.loading_banner', { defaultValue: 'Signing you in... Please wait' })}
+          </Text>
+        </View>
+      )}
       
       {/* Custom Alert Modal */}
       <AlertModal {...alertProps} />

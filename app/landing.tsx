@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ActivityIndicator, Text, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -7,6 +7,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Central landing handler for deep links
 // Supports flows:
 // - Email confirmation: .../landing?type=email&token_hash=XYZ or .../landing?flow=email-confirm&token_hash=XYZ
@@ -341,7 +342,7 @@ setMessage(t('invite.opening_app', { defaultValue: 'Opening the app...' }));
     // On native, we keep a tiny loader, navigation happens above
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f' }}>
-        <ActivityIndicator color="#00f5ff" />
+        <EduDashSpinner color="#00f5ff" />
       </View>
     );
   }
@@ -350,7 +351,7 @@ setMessage(t('invite.opening_app', { defaultValue: 'Opening the app...' }));
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: '#0a0a0f' }}>
       {status === 'loading' || status === 'done' ? (
-        <ActivityIndicator size="large" color="#00f5ff" />
+        <EduDashSpinner size="large" color="#00f5ff" />
       ) : null}
       
       {!!message && (

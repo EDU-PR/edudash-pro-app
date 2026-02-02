@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type ProgramInfo = {
   id: string;
   title: string;
@@ -313,7 +303,7 @@ export default function PublicRegistrationScreen() {
                 disabled={loading || !programCode.trim()}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <>
                     <Text style={styles.buttonText}>Continue</Text>
@@ -430,7 +420,7 @@ export default function PublicRegistrationScreen() {
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" />
+                  <EduDashSpinner color="#fff" />
                 ) : (
                   <>
                     <Text style={styles.buttonText}>Register & Enroll</Text>

@@ -1,5 +1,6 @@
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import React from 'react'
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
 import { queryKeys } from '../../lib/query/queryClient'
@@ -157,7 +158,7 @@ export const OfflineBanner: React.FC = () => {
       <View style={styles.leftContent}>
         <View style={styles.iconContainer}>
           {syncStatus.isSyncing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <EduDashSpinner size="small" color="#FFFFFF" />
           ) : (
             getStatusIcon() && (
               <Ionicons

@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherProfileCompletionScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -235,7 +236,7 @@ export default function TeacherProfileCompletionScreen() {
           <TextInput style={styles.textArea} value={biography} onChangeText={setBiography} placeholder="Tell us a bit about your teaching journey" placeholderTextColor={theme.textSecondary} multiline />
 
           <TouchableOpacity style={styles.btn} onPress={onSave} disabled={saving}>
-            {saving ? <ActivityIndicator color={theme.onPrimary} /> : <Text style={styles.btnText}>Save Profile</Text>}
+            {saving ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={styles.btnText}>Save Profile</Text>}
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>

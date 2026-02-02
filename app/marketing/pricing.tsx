@@ -1,12 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  ActivityIndicator,
-  ColorValue,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, ScrollView, ColorValue, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +27,7 @@ import {
 } from '@/components/pricing/PricingPageComponents';
 import { pricingStyles as styles } from '@/lib/pricing/pricingStyles';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PricingPage() {
   const { t } = useTranslation();
   const { profile } = useAuth();
@@ -101,7 +95,7 @@ export default function PricingPage() {
         <StatusBar style="light" />
         <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={{ flex: 1 }}>
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#00f5ff" />
+            <EduDashSpinner size="large" color="#00f5ff" />
             <Text style={styles.loadingText}>{t('pricing.loading', { defaultValue: 'Loading pricing plans...' })}</Text>
           </View>
         </SafeAreaView>

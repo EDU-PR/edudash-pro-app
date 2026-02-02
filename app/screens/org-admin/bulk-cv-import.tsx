@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +11,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ImportProgress {
   total: number;
   processed: number;
@@ -262,7 +255,7 @@ bob.wilson@example.com,Bob,Wilson,+27555123456,9876543210987,Marketing course ca
 
         {importing && progress && (
           <View style={[styles.progressCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={[styles.progressTitle, { color: theme.text }]}>
               Processing... {progress.processed} / {progress.total}
             </Text>

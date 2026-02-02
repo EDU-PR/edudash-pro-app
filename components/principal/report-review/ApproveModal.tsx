@@ -1,9 +1,10 @@
 // Modal for approving a report with signature
 
 import React from 'react';
-import { View, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Modal, StyleSheet } from 'react-native';
 import { SignatureDisplay } from '@/components/progress-report/SignatureDisplay';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ApproveModalProps {
   visible: boolean;
   principalSignature: string;
@@ -81,7 +82,7 @@ export function ApproveModal({
               disabled={isApproving}
             >
               {isApproving ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <EduDashSpinner color="#FFFFFF" />
               ) : (
                 <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Confirm</Text>
               )}

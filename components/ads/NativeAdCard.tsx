@@ -1,15 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Linking, 
-  Platform,
-  Dimensions,
-  ActivityIndicator,
-  AccessibilityInfo
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Platform, Dimensions, AccessibilityInfo } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -20,6 +10,7 @@ import { getAdUnitId } from '@/lib/ads/config';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 import { router } from 'expo-router';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface NativeAdProps {
   placement?: string;
   onClose?: () => void;
@@ -227,7 +218,7 @@ export const NativeAdCard: React.FC<NativeAdProps> = ({
       {/* Loading state */}
       {!nativeAdLoaded && !nativeAdFailed && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading ad...</Text>
         </View>
       )}

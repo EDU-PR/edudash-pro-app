@@ -5,10 +5,11 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface AIActivityGeneratorProps {
   ageGroup: string;
   onGenerate?: (prompt: string) => void;
@@ -77,7 +78,7 @@ export function AIActivityGenerator({ ageGroup, onGenerate }: AIActivityGenerato
         disabled={!topic.trim() || generating}
       >
         {generating ? (
-          <ActivityIndicator color="#fff" />
+          <EduDashSpinner color="#fff" />
         ) : (
           <>
             <Ionicons name="sparkles" size={20} color="#fff" />

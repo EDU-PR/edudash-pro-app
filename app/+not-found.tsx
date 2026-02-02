@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Auto-redirect delay (in ms) - reduced for better UX
 const AUTO_REDIRECT_DELAY = 300;
 
@@ -155,7 +156,7 @@ export default function NotFound() {
         
         {/* Loading spinner */}
         <View style={styles.spinnerContainer}>
-          <ActivityIndicator size="large" color="#00f5ff" />
+          <EduDashSpinner size="large" color="#00f5ff" />
           <Text style={styles.loadingText}>
             {authLoading 
               ? t('common.loading', { defaultValue: 'Loading your dashboard...' }) 

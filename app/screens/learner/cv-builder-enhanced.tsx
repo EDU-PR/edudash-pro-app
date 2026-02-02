@@ -5,7 +5,7 @@
  * Now with template selection and enhanced preview
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +30,7 @@ import { CVPreviewEnhanced } from '@/components/cv-builder/CVPreviewEnhanced';
 import { ContentTemplateSelector } from '@/components/cv-builder/ContentTemplateSelector';
 import { ContentTemplate, getContentTemplate } from '@/components/cv-builder/sampleContent';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function CVBuilderEnhancedScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -159,12 +160,12 @@ export default function CVBuilderEnhancedScreen() {
               </TouchableOpacity>
               {viewMode === 'preview' && (
                 <TouchableOpacity onPress={showShareOptions} disabled={isSharing}>
-                  {isSharing ? <ActivityIndicator size="small" color={theme.primary} /> : <Ionicons name="share-outline" size={24} color={theme.primary} />}
+                  {isSharing ? <EduDashSpinner size="small" color={theme.primary} /> : <Ionicons name="share-outline" size={24} color={theme.primary} />}
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={handleSave} disabled={isSaving || createCV.isPending}>
                 {isSaving || createCV.isPending ? (
-                  <ActivityIndicator size="small" color={theme.primary} />
+                  <EduDashSpinner size="small" color={theme.primary} />
                 ) : (
                   <Text style={[styles.saveButton, { color: theme.primary }]}>{t('common.save', { defaultValue: 'Save' })}</Text>
                 )}

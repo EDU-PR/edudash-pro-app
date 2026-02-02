@@ -1,20 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, Alert, Platform } from 'react-native';
 import * as Updates from 'expo-updates';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface UpdateInfo {
   updateId: string | null;
   runtimeVersion: string | null;
@@ -223,7 +214,7 @@ export function UpdateDebugPanel() {
                 disabled={checking || fetching}
               >
                 {checking ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <EduDashSpinner size="small" color="#ffffff" />
                 ) : (
                   <Ionicons name="refresh" size={20} color="#ffffff" />
                 )}
@@ -238,7 +229,7 @@ export function UpdateDebugPanel() {
                 disabled={checking || fetching}
               >
                 {fetching ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
+                  <EduDashSpinner size="small" color="#ffffff" />
                 ) : (
                   <Ionicons name="download" size={20} color="#ffffff" />
                 )}

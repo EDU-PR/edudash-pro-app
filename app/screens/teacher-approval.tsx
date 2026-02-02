@@ -6,19 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  TextInput,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert, Modal, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +22,7 @@ import {
   type TeacherApprovalStats,
 } from '@/lib/services/teacherApprovalService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherApprovalScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -198,7 +187,7 @@ export default function TeacherApprovalScreen() {
             disabled={isProcessing}
           >
             {isProcessing ? (
-              <ActivityIndicator size="small" color="#EF4444" />
+              <EduDashSpinner size="small" color="#EF4444" />
             ) : (
               <>
                 <Ionicons name="close" size={18} color="#EF4444" />
@@ -213,7 +202,7 @@ export default function TeacherApprovalScreen() {
             disabled={isProcessing}
           >
             {isProcessing ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <EduDashSpinner size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons name="checkmark" size={18} color="#fff" />
@@ -230,7 +219,7 @@ export default function TeacherApprovalScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading pending approvals...</Text>
       </View>
     );
@@ -355,7 +344,7 @@ export default function TeacherApprovalScreen() {
                 disabled={processing === selectedTeacher?.id}
               >
                 {processing === selectedTeacher?.id ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <EduDashSpinner size="small" color="#fff" />
                 ) : (
                   <>
                     <Ionicons name="close-circle" size={20} color="#fff" />

@@ -6,17 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -25,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface SuperAdminDashboardProps {
   loading: boolean;
   setLoading: (loading: boolean) => void;
@@ -232,7 +223,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
           </View>
         ) : (
           <View style={styles.statusLoadingContainer}>
-            <ActivityIndicator size="small" color={theme.primary} />
+            <EduDashSpinner size="small" color={theme.primary} />
             <Text style={[styles.statusLoadingText, { color: theme.textSecondary }]}>
               Checking system status...
             </Text>

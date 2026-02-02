@@ -6,15 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  ActivityIndicator,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +17,7 @@ import { BirthdayChart } from '@/components/dashboard/BirthdayChart';
 import { BirthdayPlannerService, type StudentBirthday } from '@/services/BirthdayPlannerService';
 import { getActiveOrganizationId } from '@/lib/tenant/compat';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function BirthdayChartScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -163,7 +156,7 @@ export default function BirthdayChartScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
+        <EduDashSpinner size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading birthdays...</Text>
       </SafeAreaView>
     );

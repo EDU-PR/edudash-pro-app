@@ -9,18 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -31,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { assertSupabase } from '@/lib/supabase';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface LessonForm {
   title: string;
   description: string;
@@ -241,7 +231,7 @@ export default function LessonEditScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <ScreenHeader title="Edit Lesson" showBackButton />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
             Loading lesson...
           </Text>
@@ -277,7 +267,7 @@ export default function LessonEditScreen() {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <EduDashSpinner size="small" color="#FFF" />
             ) : (
               <>
                 <Ionicons name="checkmark" size={20} color="#FFF" />

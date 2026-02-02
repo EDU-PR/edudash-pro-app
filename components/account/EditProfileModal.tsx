@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import type { ViewStyle, TextStyle } from 'react-native';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface EditProfileModalProps {
   visible: boolean;
   onClose: () => void;
@@ -74,7 +75,7 @@ export function EditProfileModal({
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator color={theme.primary} size="small" />
+              <EduDashSpinner color={theme.primary} size="small" />
             ) : (
               <Text style={styles.editModalSave}>{t('navigation.save')}</Text>
             )}

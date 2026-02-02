@@ -7,15 +7,7 @@
  */
 
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -27,6 +19,7 @@ import {
   AnnouncementModal,
 } from '@/components/super-admin/announcements';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SuperAdminAnnouncementsScreen() {
   const { theme } = useTheme();
 
@@ -101,7 +94,7 @@ export default function SuperAdminAnnouncementsScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
+            <EduDashSpinner size="large" color={theme.primary} />
             <Text style={styles.loadingText}>Loading announcements...</Text>
           </View>
         ) : (

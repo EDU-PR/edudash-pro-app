@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -12,6 +12,7 @@ import {
   createRegistrationStyles,
 } from '@/components/registration';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ParentChildRegistrationScreen() {
   const { theme } = useTheme();
   const styles = createRegistrationStyles(theme);
@@ -137,7 +138,7 @@ export default function ParentChildRegistrationScreen() {
 
           <TouchableOpacity style={styles.btn} onPress={onSubmit} disabled={loading}>
             {loading ? (
-              <ActivityIndicator color={theme.onPrimary} />
+              <EduDashSpinner color={theme.onPrimary} />
             ) : (
               <Text style={styles.btnText}>Submit Registration Request</Text>
             )}

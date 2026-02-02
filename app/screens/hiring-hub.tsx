@@ -1,13 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +14,7 @@ import {
   formatSalaryRange,
 } from '@/types/hiring';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type TabType = 'new' | 'under_review' | 'shortlisted' | 'interview' | 'offered';
 
 export default function HiringHubScreen() {
@@ -127,7 +120,7 @@ const { data: stats, refetch: refetchStats } = useQuery({
           </TouchableOpacity>
         </View>
         {postingsLoading ? (
-          <ActivityIndicator size="small" color={theme.primary} />
+          <EduDashSpinner size="small" color={theme.primary} />
         ) : (
           <FlatList
             horizontal
@@ -170,7 +163,7 @@ const { data: stats, refetch: refetchStats } = useQuery({
       {/* Applications List */}
       {appsLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
+          <EduDashSpinner size="large" color={theme.primary} />
         </View>
       ) : (
         <FlatList

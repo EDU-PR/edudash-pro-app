@@ -7,11 +7,12 @@
  * @module components/organizations/JoinRequestCard
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { JoinRequestType, JoinRequestStatus } from '@/services/InviteService';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const REQUEST_TYPE_LABELS: Record<JoinRequestType, string> = {
   teacher_invite: 'Teacher Invite',
   parent_join: 'Parent Join',
@@ -156,7 +157,7 @@ export function JoinRequestCard({
               disabled={isApproving || isRejecting}
             >
               {isRejecting ? (
-                <ActivityIndicator size="small" color={theme?.error || '#ef4444'} />
+                <EduDashSpinner size="small" color={theme?.error || '#ef4444'} />
               ) : (
                 <>
                   <Ionicons name="close-circle-outline" size={18} color={theme?.error || '#ef4444'} />
@@ -174,7 +175,7 @@ export function JoinRequestCard({
               disabled={isApproving || isRejecting}
             >
               {isApproving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <EduDashSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { useEduDashAlert } from '@/components/ui/EduDashAlert';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BankDetails {
   bank_name: string;
   account_name: string;
@@ -192,7 +193,7 @@ export default function SchoolSettingsScreen() {
       <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           {loading ? (
-            <ActivityIndicator color={theme.primary} size="large" />
+            <EduDashSpinner color={theme.primary} size="large" />
           ) : (
             <>
               {/* Banking Details Section */}
@@ -260,7 +261,7 @@ export default function SchoolSettingsScreen() {
 
                 <TouchableOpacity style={styles.btn} onPress={saveBankDetails} disabled={savingBank}>
                   {savingBank ? (
-                    <ActivityIndicator color={theme.onPrimary} />
+                    <EduDashSpinner color={theme.onPrimary} />
                   ) : (
                     <>
                       <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
@@ -290,7 +291,7 @@ export default function SchoolSettingsScreen() {
                 
                 <TouchableOpacity style={[styles.btn, { backgroundColor: '#25D366' }]} onPress={save} disabled={saving}>
                   {saving ? (
-                    <ActivityIndicator color="#fff" />
+                    <EduDashSpinner color="#fff" />
                   ) : (
                     <>
                       <Ionicons name="save-outline" size={18} color="#fff" style={{ marginRight: 8 }} />

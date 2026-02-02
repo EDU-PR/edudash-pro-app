@@ -11,17 +11,7 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +22,7 @@ import { RegistrationCard, RegistrationHeader, RegistrationFilters } from '@/com
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { AlertModal } from '@/components/ui/AlertModal';
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function PrincipalRegistrationsScreen() {
   const { theme } = useTheme();
   const colors = theme;
@@ -136,7 +127,7 @@ export default function PrincipalRegistrationsScreen() {
           usesEdusiteSync={usesEdusiteSync}
         />
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EduDashSpinner size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading registrations...
           </Text>
