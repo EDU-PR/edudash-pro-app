@@ -435,7 +435,11 @@ export default function SettingsScreen() {
           <BillingSection styles={styles} />
 
           {/* Feedback test actions */}
-          <FeedbackTestSection styles={styles} />
+          <FeedbackTestSection
+            styles={styles}
+            hapticsEnabled={hapticsEnabled}
+            soundEnabled={soundEnabled}
+          />
 
           {/* Appearance Settings */}
           <View style={styles.section}>

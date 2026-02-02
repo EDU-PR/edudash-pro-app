@@ -303,6 +303,49 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
   return messages;
 }
 
+function chunkText(text: string, maxLen = 120): string[] {
+  const safe = (text || '').trim();
+  if (!safe) return [];
+  const words = safe.split(/\s+/);
+  const chunks: string[] = [];
+  let buffer = '';
+  for (const word of words) {
+    const next = buffer ? `${buffer} ${word}` : word;
+    if (next.length > maxLen && buffer) {
+      chunks.push(buffer);
+      buffer = word;
+    } else {
+      buffer = next;
+    }
+  }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
+
+function buildSseStream(content: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks = chunkText(content, 120);
+  return new ReadableStream({
+    async start(controller) {
+      if (chunks.length === 0) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+        return;
+      }
+      for (const chunk of chunks) {
+        const payload = {
+          type: 'content_block_delta',
+          delta: { text: `${chunk} ` },
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        await new Promise((resolve) => setTimeout(resolve, 12));
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+}
+
 async function callOpenAI(
   messages: Array<JsonRecord>,
   enableTools: boolean,
@@ -739,15 +782,7 @@ serve(async (req) => {
       }
     }
 
-    if (payload.stream) {
-      return new Response(JSON.stringify({
-        error: 'streaming_not_supported',
-        message: 'Streaming is not enabled in ai-proxy yet.',
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const wantsStream = payload.stream === true;
 
     const systemPrompt = buildSystemPrompt(payload.payload.context);
     const messages = normalizeMessages(payload.payload, systemPrompt);
@@ -859,6 +894,18 @@ serve(async (req) => {
       }
     } catch (usageError) {
       console.warn('[ai-proxy] record_ai_usage failed (non-fatal):', usageError);
+    }
+
+    if (wantsStream) {
+      return new Response(buildSseStream(providerResponse.content || ''), {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
     }
 
     return new Response(JSON.stringify({

@@ -321,6 +321,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         router.push('/screens/ai-homework-helper');
         break;
       case 'ask_dash':
+      case 'dash_tutor':
         router.push('/screens/dash-assistant');
         break;
       case 'dash_explain':
@@ -457,6 +458,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   };
 
   const baseQuickActions = useMemo<ParentQuickAction[]>(() => {
+    const dashTutorSubtitle = isDashOrbUnlocked
+      ? t('parent.dash_tutor_subtitle', { defaultValue: 'Homework help, practice, and explanations.' })
+      : t('parent.dash_tutor_locked', { defaultValue: 'Upgrade to unlock Dash Tutor.' });
     const actions = [
       { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
       { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
@@ -466,8 +470,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
       { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
       { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
-      { id: 'ask_dash', title: t('parent.ask_dash', { defaultValue: 'Ask Dash AI' }), icon: 'sparkles', color: '#8B5CF6' },
     ];
+
+    if (!isDashOrbUnlocked) {
+      actions.push({
+        id: 'dash_tutor',
+        title: t('parent.dash_tutor', { defaultValue: 'Dash Tutor' }),
+        icon: 'sparkles',
+        color: '#8B5CF6',
+        subtitle: dashTutorSubtitle,
+        disabled: !isDashOrbUnlocked,
+      });
+    }
 
     const shouldShowLearningHub = !isK12School || isEarlyLearner;
     if (shouldShowLearningHub) {
@@ -480,24 +494,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
 
     return isEarlyLearner ? actions.filter((action) => action.id !== 'view_grades') : actions;
-  }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle]);
+  }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked]);
 
-  const k12LearningActions = useMemo<ParentQuickAction[]>(() => {
-    if (isEarlyLearner) return [];
-    return [
-      { id: 'dash_explain', title: t('parent.dash_explain', { defaultValue: 'Explain a Concept' }), icon: 'bulb', color: '#7C3AED' },
-      { id: 'dash_quiz', title: t('parent.dash_quiz', { defaultValue: 'Practice Quiz' }), icon: 'clipboard-outline', color: '#F59E0B' },
-      { id: 'dash_study_plan', title: t('parent.dash_study_plan', { defaultValue: 'Study Plan' }), icon: 'map', color: '#2563EB' },
-      { id: 'ai_homework_help', title: t('parent.ai_homework_help', { defaultValue: 'AI Homework Help' }), icon: 'bulb', color: '#F59E0B', disabled: tier === 'free' },
-    ];
-  }, [t, tier, isEarlyLearner]);
-
-  const quickActions = useMemo<ParentQuickAction[]>(() => {
-    if (isK12School) {
-      return [...baseQuickActions, ...k12LearningActions];
-    }
-    return baseQuickActions;
-  }, [baseQuickActions, k12LearningActions, isK12School]);
+  const quickActions = useMemo<ParentQuickAction[]>(() => baseQuickActions, [baseQuickActions]);
 
   if (loading && !dashboardData) {
     return (
@@ -670,7 +669,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           {showQuickActionsHint && (
             <OnboardingHint
               hintId="parent_quick_actions"
-              message={t('hints.quick_actions_message', { defaultValue: "Tap any card below to quickly access homework, messages, fees, or get help from our AI assistant." })}
+              message={t('hints.quick_actions_message', { defaultValue: "Tap a card below to jump to homework, messages, fees, or Dash Tutor." })}
               icon="sparkles"
               position="bottom"
               screen="parent_dashboard"
