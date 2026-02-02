@@ -21,8 +21,8 @@ export interface EduDashSpinnerProps {
 }
 
 const SIZE_MAP = {
-  small: 20,
-  large: 32,
+  small: 22,
+  large: 40,
 } as const;
 
 function resolveSize(size: EduDashSpinnerProps['size']) {

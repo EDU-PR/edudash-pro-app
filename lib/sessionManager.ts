@@ -326,6 +326,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
     const planTier = undefined;
     const capabilities = await getUserCapabilities(profile.role, planTier);
 
+    const resolvedOrgId = profile.organization_id || profile.preschool_id;
+    const resolvedPreschoolId = profile.preschool_id || profile.organization_id;
+
     return {
       id: profile.id,
       email: profile.email,
@@ -333,8 +336,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       first_name: profile.first_name,
       last_name: profile.last_name,
       avatar_url: profile.avatar_url,
-      organization_id: profile.preschool_id,
+      organization_id: resolvedOrgId,
       organization_name: undefined,
+      preschool_id: resolvedPreschoolId,
       seat_status: profile.is_active !== false ? 'active' : 'inactive',
       capabilities,
       created_at: profile.created_at,
@@ -731,7 +735,7 @@ export async function signInWithSession(
       error: err,
     }));
 
-    const SIGN_IN_TIMEOUT_MS = 10000;
+    const SIGN_IN_TIMEOUT_MS = 15000;
     const { data, error } = await withTimeout(
       signInPromise,
       SIGN_IN_TIMEOUT_MS,
@@ -741,7 +745,7 @@ export async function signInWithSession(
     if ((error as any)?.message === 'Sign-in timed out') {
       console.warn('[SessionManager] Sign-in timed out - checking for late session...');
       try {
-        const lateSession = await waitForSessionOrAuth(6000);
+        const lateSession = await waitForSessionOrAuth(10000);
         if (lateSession?.user) {
           const session: UserSession = {
             access_token: lateSession.access_token,

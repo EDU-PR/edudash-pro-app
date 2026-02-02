@@ -75,11 +75,12 @@ export function GradientButton({
   }[size];
 
   const spinnerSize = {
-    sm: 20,
-    md: 24,
-    lg: 28,
+    sm: 22,
+    md: 28,
+    lg: 34,
   }[size];
-  const logoSize = Math.round(spinnerSize * 0.55);
+  const logoSize = Math.round(spinnerSize * 0.6);
+  const ringWidth = Math.max(2, Math.round(spinnerSize * 0.12));
   
   const isDisabled = disabled || loading;
   
@@ -118,6 +119,7 @@ export function GradientButton({
                       width: spinnerSize,
                       height: spinnerSize,
                       borderRadius: spinnerSize / 2,
+                      borderWidth: ringWidth,
                       borderTopColor: marketingTokens.colors.fg.inverse,
                     },
                   ]}

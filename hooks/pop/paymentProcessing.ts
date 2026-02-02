@@ -4,7 +4,7 @@
  */
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
-import { inferPaymentCategory } from '@/lib/utils/feeUtils';
+import { getUniformItemType, inferPaymentCategory, isTuitionFee } from '@/lib/utils/feeUtils';
 import type { POPUpload } from './types';
 
 const UNIFORM_KEYWORDS = ['uniform'];
@@ -21,6 +21,170 @@ function resolvePaymentDate(value?: string | null): Date {
   return parsed;
 }
 
+const DEFAULT_FEE_FREQUENCY = 'one_time';
+
+type FeeStructureRow = {
+  id: string;
+  amount: number;
+  fee_type: string;
+  name: string;
+  description?: string | null;
+  effective_from?: string | null;
+  created_at?: string | null;
+  is_active?: boolean | null;
+};
+
+const pickLatestFeeStructure = (rows: FeeStructureRow[] | null | undefined) => {
+  if (!rows || rows.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => {
+    const aEff = a.effective_from ? new Date(a.effective_from).getTime() : 0;
+    const bEff = b.effective_from ? new Date(b.effective_from).getTime() : 0;
+    if (aEff !== bEff) return bEff - aEff;
+    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return bCreated - aCreated;
+  });
+  return sorted[0];
+};
+
+async function findTuitionFeeStructure(preschoolId: string): Promise<FeeStructureRow | null> {
+  const { data, error } = await supabase
+    .from('fee_structures')
+    .select('id, amount, fee_type, name, description, effective_from, created_at, is_active')
+    .eq('preschool_id', preschoolId)
+    .eq('is_active', true);
+  if (error) {
+    logger.warn('[POP] Failed to load fee_structures for tuition lookup:', error);
+    return null;
+  }
+  const tuitionFees = (data || []).filter((fee) => isTuitionFee(fee.fee_type, fee.name, fee.description));
+  return pickLatestFeeStructure(tuitionFees as FeeStructureRow[]);
+}
+
+type UniformFeeResult = {
+  feeId: string;
+  feeStructureId: string;
+};
+
+async function ensureUniformFeeRecord(
+  data: POPUpload,
+  reviewerId: string
+): Promise<UniformFeeResult | null> {
+  if (!data.preschool_id || !data.student_id) return null;
+  const itemType = getUniformItemType(undefined, data.title, data.description);
+  const preferredFeeType =
+    itemType === 'tshirt' ? 'uniform_tshirt' :
+      itemType === 'shorts' ? 'uniform_shorts' :
+        'uniform';
+
+  const { data: feeStructures, error: feeError } = await supabase
+    .from('fee_structures')
+    .select('id, amount, fee_type, name, description, effective_from, created_at, is_active')
+    .eq('preschool_id', data.preschool_id)
+    .eq('is_active', true)
+    .in('fee_type', preferredFeeType === 'uniform' ? ['uniform', 'uniform_tshirt', 'uniform_shorts'] : [preferredFeeType, 'uniform']);
+
+  if (feeError) {
+    logger.warn('[POP] Failed to fetch uniform fee structures:', feeError);
+  }
+
+  let feeStructure = pickLatestFeeStructure(feeStructures as FeeStructureRow[]);
+
+  if (!feeStructure) {
+    const label =
+      preferredFeeType === 'uniform_tshirt' ? 'Uniform T-shirt' :
+        preferredFeeType === 'uniform_shorts' ? 'Uniform Shorts' :
+          'Uniform';
+    const { data: created, error: createError } = await supabase
+      .from('fee_structures')
+      .insert({
+        preschool_id: data.preschool_id,
+        created_by: reviewerId,
+        name: label,
+        description: data.description || label,
+        amount: data.payment_amount || 0,
+        fee_type: preferredFeeType,
+        frequency: DEFAULT_FEE_FREQUENCY,
+        is_active: true,
+      })
+      .select('id, amount, fee_type, name, description, effective_from, created_at, is_active')
+      .single();
+
+    if (createError) {
+      logger.error('[POP] Failed to create uniform fee structure:', createError);
+      return null;
+    }
+    feeStructure = created as FeeStructureRow;
+  }
+
+  if (!feeStructure) return null;
+
+  const targetDate = resolvePaymentDate(data.payment_for_month || data.payment_date);
+  const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+  const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
+  const monthStartIso = monthStart.toISOString().split('T')[0];
+  const monthEndIso = monthEnd.toISOString().split('T')[0];
+
+  const { data: existingFees, error: existingError } = await supabase
+    .from('student_fees')
+    .select('id, status')
+    .eq('student_id', data.student_id)
+    .eq('fee_structure_id', feeStructure.id)
+    .gte('due_date', monthStartIso)
+    .lte('due_date', monthEndIso)
+    .limit(1);
+
+  if (existingError) {
+    logger.warn('[POP] Failed to check uniform student fees:', existingError);
+  }
+
+  const paymentAmount = data.payment_amount || feeStructure.amount || 0;
+  const paidDate = (data.payment_date || new Date().toISOString()).split('T')[0];
+
+  if (existingFees?.length) {
+    const feeId = existingFees[0].id;
+    if (existingFees[0].status !== 'paid') {
+      const { error: updateError } = await supabase
+        .from('student_fees')
+        .update({
+          status: 'paid',
+          paid_date: paidDate,
+          amount_paid: paymentAmount,
+          amount_outstanding: 0,
+        })
+        .eq('id', feeId);
+      if (updateError) {
+        logger.error('[POP] Failed to mark uniform fee as paid:', updateError);
+      }
+    }
+    return { feeId, feeStructureId: feeStructure.id };
+  }
+
+  const dueDate = (data.payment_for_month || data.payment_date || monthStartIso).split('T')[0];
+  const { data: insertedFee, error: insertError } = await supabase
+    .from('student_fees')
+    .insert({
+      student_id: data.student_id,
+      fee_structure_id: feeStructure.id,
+      amount: feeStructure.amount || paymentAmount,
+      final_amount: feeStructure.amount || paymentAmount,
+      due_date: dueDate,
+      status: 'paid',
+      amount_paid: paymentAmount,
+      amount_outstanding: 0,
+      paid_date: paidDate,
+    })
+    .select('id')
+    .single();
+
+  if (insertError || !insertedFee) {
+    logger.error('[POP] Failed to create uniform student fee:', insertError);
+    return null;
+  }
+
+  return { feeId: insertedFee.id, feeStructureId: feeStructure.id };
+}
+
 // Create payment record for financial tracking
 export async function createPaymentRecord(
   data: POPUpload,
@@ -31,6 +195,7 @@ export async function createPaymentRecord(
     const uniformPayment = isUniformPayment(data);
     const description = data.description || data.title || (uniformPayment ? 'Uniform payment' : 'School fees payment');
     const feeCategory = inferPaymentCategory(description);
+    const uniformFee = uniformPayment ? await ensureUniformFeeRecord(data, reviewerId) : null;
 
     const paymentRecord = {
       student_id: data.student_id,
@@ -47,7 +212,7 @@ export async function createPaymentRecord(
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
       submitted_at: data.created_at,
-      fee_ids: uniformPayment ? [] : undefined,
+      fee_ids: uniformFee?.feeId ? [uniformFee.feeId] : (uniformPayment ? [] : undefined),
       metadata: {
         pop_upload_id: uploadId,
         payment_date: data.payment_date,
@@ -56,6 +221,7 @@ export async function createPaymentRecord(
         fee_category: feeCategory,
         payment_context: uniformPayment ? 'uniform' : 'school_fees',
         payment_purpose: description,
+        fee_structure_id: uniformFee?.feeStructureId || null,
         auto_created: true,
       },
     };
@@ -102,8 +268,11 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
   try {
     const periodDateValue = data.payment_for_month || data.payment_date;
     const paymentDate = resolvePaymentDate(periodDateValue);
-    const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
-    const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
+    const monthStartDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1);
+    const monthEndDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0);
+    const monthStart = monthStartDate.toISOString();
+    const monthEnd = monthEndDate.toISOString();
+    const hasExplicitPeriod = Boolean(data.payment_for_month);
     
     // First try to find a fee matching the payment month
     let { data: fees } = await supabase
@@ -114,6 +283,55 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
       .gte('due_date', monthStart)
       .lte('due_date', monthEnd)
       .limit(1);
+
+    // If payment is for a future or explicit month and no fee exists yet, create one
+    if (!fees?.length && hasExplicitPeriod && data.preschool_id) {
+      const { data: existingAny } = await supabase
+        .from('student_fees')
+        .select('id, status, amount, final_amount, due_date')
+        .eq('student_id', data.student_id)
+        .gte('due_date', monthStart)
+        .lte('due_date', monthEnd)
+        .limit(1);
+
+      if (existingAny?.length) {
+        if (existingAny[0].status === 'paid') {
+          logger.info('[updateFeeStatus] Fee already marked as paid for target month');
+          return;
+        }
+        fees = existingAny as any;
+      } else {
+        const tuitionFee = await findTuitionFeeStructure(data.preschool_id);
+        if (tuitionFee) {
+          const feeAmount = tuitionFee.amount || data.payment_amount || 0;
+          const paidDate = (data.payment_date || new Date().toISOString()).split('T')[0];
+          const { data: insertedFee, error: insertError } = await supabase
+            .from('student_fees')
+            .insert({
+              student_id: data.student_id,
+              fee_structure_id: tuitionFee.id,
+              amount: feeAmount,
+              final_amount: feeAmount,
+              due_date: monthStartDate.toISOString().split('T')[0],
+              status: 'paid',
+              amount_paid: feeAmount,
+              amount_outstanding: 0,
+              paid_date: paidDate,
+            })
+            .select('id, amount, final_amount')
+            .single();
+
+          if (insertError || !insertedFee) {
+            logger.error('[updateFeeStatus] Failed to create fee for prepayment month:', insertError);
+          } else {
+            logger.info('[updateFeeStatus] Created and paid fee for prepayment month');
+            return;
+          }
+        } else {
+          logger.warn('[updateFeeStatus] No tuition fee structure found to create prepayment fee');
+        }
+      }
+    }
     
     // If no fee found for the payment month, get the oldest pending fee
     if (!fees?.length) {
@@ -188,7 +406,10 @@ export async function generateInvoice(
     const today = new Date();
     const issueDate = paymentDate < today ? paymentDate : today;
     const issueDateStr = issueDate.toISOString().split('T')[0];
-    const dueDateStr = paymentDate.toISOString().split('T')[0];
+    let dueDateStr = paymentDate.toISOString().split('T')[0];
+    if (dueDateStr < issueDateStr) {
+      dueDateStr = issueDateStr;
+    }
 
     const { data: invoice, error } = await supabase
       .from('invoices')
