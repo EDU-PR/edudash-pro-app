@@ -73,20 +73,24 @@ export const useUpdatePOPStatus = () => {
 // Process approved payment
 async function processApproval(data: POPUpload, reviewerId: string, uploadId: string): Promise<void> {
   const parentName = await getParentName(data.uploaded_by);
+  const isUniform = `${data.description || ''} ${data.title || ''}`.toLowerCase().includes('uniform');
   
   // Create payment record and update statuses
   await createPaymentRecord(data, reviewerId, uploadId);
-  await updateInvoiceStatus(data);
-  await updateFeeStatus(data);
+  if (!isUniform) {
+    await updateInvoiceStatus(data);
+    await updateFeeStatus(data);
+  }
   
   // Generate invoice and notify parent
-  const invoiceNumber = await generateInvoice(data, parentName, reviewerId, uploadId);
+  const invoiceNumber = isUniform ? null : await generateInvoice(data, parentName, reviewerId, uploadId);
   await notifyApproval(data, parentName, invoiceNumber ?? undefined);
 }
 
 // Process rejection
 async function processRejection(data: POPUpload, reviewNotes?: string): Promise<void> {
   const parentName = await getParentName(data.uploaded_by);
+  const paymentPurpose = data.description || data.title || 'School Fees';
   
   await ApprovalNotificationService.notifyParentPOPRejected({
       id: data.id,
@@ -97,7 +101,7 @@ async function processRejection(data: POPUpload, reviewNotes?: string): Promise<
       payment_amount: data.payment_amount || 0,
       payment_date: data.payment_date || new Date().toISOString(),
       payment_method: 'bank_transfer',
-      payment_purpose: data.title || 'School Fees',
+      payment_purpose: paymentPurpose,
       status: 'rejected',
       rejection_reason: reviewNotes || 'Please review and resubmit',
       submitted_at: data.created_at,
@@ -110,6 +114,7 @@ async function processRejection(data: POPUpload, reviewNotes?: string): Promise<
 
 // Send approval notification
 async function notifyApproval(data: POPUpload, parentName: string, invoiceNumber?: string): Promise<void> {
+  const paymentPurpose = data.description || data.title || 'School Fees';
   await ApprovalNotificationService.notifyParentPOPApproved({
     id: data.id,
     preschool_id: data.preschool_id,
@@ -119,7 +124,7 @@ async function notifyApproval(data: POPUpload, parentName: string, invoiceNumber
     payment_amount: data.payment_amount || 0,
     payment_date: data.payment_date || new Date().toISOString(),
     payment_method: 'bank_transfer',
-    payment_purpose: data.title || 'School Fees',
+    payment_purpose: paymentPurpose,
     status: 'approved',
     submitted_at: data.created_at,
     created_at: data.created_at,

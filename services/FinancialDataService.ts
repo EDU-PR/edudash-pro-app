@@ -730,6 +730,7 @@ export class FinancialDataService {
               .map((category: string) => this.normalizeCategoryLabel(category))
           ));
 
+          const metadata = payment.metadata || {};
           const fallbackCategory = inferPaymentCategory(
             payment.description || metadata?.payment_purpose || metadata?.fee_category
           );
@@ -761,7 +762,6 @@ export class FinancialDataService {
             }
           }
 
-          const metadata = payment.metadata || {};
           const receiptUrl = typeof metadata?.receipt_url === 'string' ? metadata.receipt_url : null;
           const receiptStoragePath = typeof metadata?.receipt_storage_path === 'string' ? metadata.receipt_storage_path : null;
           const hasReceipt = Boolean(receiptUrl || receiptStoragePath);

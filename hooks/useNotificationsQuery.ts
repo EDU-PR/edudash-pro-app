@@ -29,6 +29,7 @@ interface AnnouncementRow {
   published_at: string | null;
   created_at: string;
   author_id: string | null;
+  target_audience?: string | string[] | null;
 }
 
 interface AuthorProfile {
@@ -103,10 +104,59 @@ function mapNotificationType(notifType: string): NotificationType {
   return typeMap[notifType] || 'system';
 }
 
+function normalizeAudience(value?: string | string[] | null): string[] {
+  if (!value) return ['all'];
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).toLowerCase());
+  }
+  return [String(value).toLowerCase()];
+}
+
+function resolveRoleAudiences(role?: string | null): string[] {
+  if (!role) return ['all'];
+  const normalized = role.toLowerCase();
+  if (['admin', 'superadmin'].includes(normalized)) {
+    return ['all', 'principals', 'teachers', 'parents', 'students', 'staff'];
+  }
+  if (normalized === 'principal') {
+    return ['all', 'principals', 'teachers', 'staff'];
+  }
+  if (normalized === 'teacher') {
+    return ['all', 'teachers', 'staff'];
+  }
+  if (normalized === 'staff') {
+    return ['all', 'staff'];
+  }
+  if (normalized === 'parent') {
+    return ['all', 'parents'];
+  }
+  if (normalized === 'student') {
+    return ['all', 'students'];
+  }
+  return ['all', normalized];
+}
+
+function shouldIncludeAnnouncement(
+  announcement: AnnouncementRow,
+  userId: string,
+  userRole?: string | null
+): boolean {
+  if (announcement.author_id && announcement.author_id === userId) return false;
+  const audiences = normalizeAudience(announcement.target_audience);
+  if (audiences.includes('all')) return true;
+  if (!userRole) return true;
+  const allowed = resolveRoleAudiences(userRole);
+  return audiences.some((audience) => allowed.includes(audience));
+}
+
 /**
  * Fetch notifications from all sources
  */
-async function fetchNotifications(userId: string, userPreschoolId?: string | null): Promise<Notification[]> {
+async function fetchNotifications(
+  userId: string,
+  userPreschoolId?: string | null,
+  userRole?: string | null
+): Promise<Notification[]> {
   const client = assertSupabase();
   
   // Get read and cleared notification data
@@ -217,7 +267,7 @@ async function fetchNotifications(userId: string, userPreschoolId?: string | nul
       const { data: announcements } = await client
         .from('announcements')
         .select(`
-          id, title, content, priority, published_at, created_at, author_id
+          id, title, content, priority, published_at, created_at, author_id, target_audience
         `)
         .eq('preschool_id', userPreschoolId)
         .eq('is_published', true)
@@ -251,6 +301,7 @@ async function fetchNotifications(userId: string, userPreschoolId?: string | nul
         const viewedIds = new Set((viewedAnnouncements || []).map((v: any) => v.announcement_id));
         
         announcementRows.forEach((a) => {
+          if (!shouldIncludeAnnouncement(a, userId, userRole)) return;
           const notifId = `announce-${a.id}`;
           const isRead = viewedIds.has(a.id) || readIds.has(notifId);
           
@@ -412,7 +463,11 @@ export const useNotificationsQuery = () => {
   
   return useQuery({
     queryKey: ['notifications', user?.id, profile?.preschool_id || profile?.organization_id],
-    queryFn: () => fetchNotifications(user!.id, profile?.preschool_id || profile?.organization_id),
+    queryFn: () => fetchNotifications(
+      user!.id,
+      profile?.preschool_id || profile?.organization_id,
+      profile?.role
+    ),
     enabled: !!user?.id,
     staleTime: 1000 * 30, // 30 seconds
   });

@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl,
   Modal,
   TextInput,
@@ -18,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { ApprovalWorkflowService, type ProofOfPayment, type PettyCashRequest, type ApprovalSummary } from '@/services/ApprovalWorkflowService';
 import { assertSupabase } from '@/lib/supabase';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 type TabType = 'summary' | 'pops' | 'petty_cash' | 'history';
 
@@ -30,6 +30,7 @@ export default function PrincipalApprovalDashboard() {
   const { user, profile, profileLoading, loading } = useAuth();
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
@@ -132,7 +133,11 @@ export default function PrincipalApprovalDashboard() {
 
     } catch (error) {
       console.error('Error loading approval data:', error);
-      Alert.alert('Error', 'Failed to load approval data');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to load approval data',
+        type: 'error',
+      });
     } finally {
       setDataLoading(false);
       setRefreshing(false);
@@ -161,18 +166,30 @@ export default function PrincipalApprovalDashboard() {
     );
 
     if (success) {
-      Alert.alert('Success', 'Payment proof approved successfully');
+      showAlert({
+        title: 'Success',
+        message: 'Payment proof approved successfully',
+        type: 'success',
+      });
       setSelectedPOP(null);
       setReviewNotes('');
       await loadApprovalData();
     } else {
-      Alert.alert('Error', 'Failed to approve payment proof');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to approve payment proof',
+        type: 'error',
+      });
     }
   };
 
   const handleRejectPOP = async (pop: ProofOfPayment) => {
     if (!user || !school || !rejectionReason.trim()) {
-      Alert.alert('Error', 'Please provide a rejection reason');
+      showAlert({
+        title: 'Error',
+        message: 'Please provide a rejection reason',
+        type: 'warning',
+      });
       return;
     }
 
@@ -185,13 +202,21 @@ export default function PrincipalApprovalDashboard() {
     );
 
     if (success) {
-      Alert.alert('Success', 'Payment proof rejected');
+      showAlert({
+        title: 'Success',
+        message: 'Payment proof rejected',
+        type: 'success',
+      });
       setSelectedPOP(null);
       setReviewNotes('');
       setRejectionReason('');
       await loadApprovalData();
     } else {
-      Alert.alert('Error', 'Failed to reject payment proof');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to reject payment proof',
+        type: 'error',
+      });
     }
   };
 
@@ -209,19 +234,31 @@ export default function PrincipalApprovalDashboard() {
     );
 
     if (success) {
-      Alert.alert('Success', 'Petty cash request approved');
+      showAlert({
+        title: 'Success',
+        message: 'Petty cash request approved',
+        type: 'success',
+      });
       setSelectedPettyCash(null);
       setReviewNotes('');
       setApprovedAmount('');
       await loadApprovalData();
     } else {
-      Alert.alert('Error', 'Failed to approve petty cash request');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to approve petty cash request',
+        type: 'error',
+      });
     }
   };
 
   const handleRejectPettyCash = async (request: PettyCashRequest) => {
     if (!user || !school || !rejectionReason.trim()) {
-      Alert.alert('Error', 'Please provide a rejection reason');
+      showAlert({
+        title: 'Error',
+        message: 'Please provide a rejection reason',
+        type: 'warning',
+      });
       return;
     }
 
@@ -234,13 +271,21 @@ export default function PrincipalApprovalDashboard() {
     );
 
     if (success) {
-      Alert.alert('Success', 'Petty cash request rejected');
+      showAlert({
+        title: 'Success',
+        message: 'Petty cash request rejected',
+        type: 'success',
+      });
       setSelectedPettyCash(null);
       setRejectionReason('');
       setReviewNotes('');
       await loadApprovalData();
     } else {
-      Alert.alert('Error', 'Failed to reject petty cash request');
+      showAlert({
+        title: 'Error',
+        message: 'Failed to reject petty cash request',
+        type: 'error',
+      });
     }
   };
 
@@ -453,6 +498,8 @@ export default function PrincipalApprovalDashboard() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

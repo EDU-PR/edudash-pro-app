@@ -19,11 +19,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  KeyboardAvoidingView,
   TextInput,
   Modal,
   ActivityIndicator,
   Share,
   Linking,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router } from 'expo-router';
@@ -645,86 +647,98 @@ export default function TeacherManagement() {
         onRequestClose={() => setShowDirectAddModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme?.card || 'white' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme?.text }]}>Add Teacher Directly</Text>
-              <TouchableOpacity onPress={() => {
-                setShowDirectAddModal(false);
-                resetDirectAddForm();
-              }}>
-                <Ionicons name="close" size={24} color={theme?.textSecondary || '#6b7280'} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.modalSubtitle, { color: theme?.textSecondary }]}>
-              Add a teacher record to your school. They&apos;ll need an account to sign in.
-            </Text>
-            <TextInput
-              style={[styles.modalInput, {
-                backgroundColor: theme?.surfaceVariant || '#f9fafb',
-                color: theme?.text,
-                borderColor: theme?.border || '#e5e7eb',
-              }]}
-              placeholder="Full name"
-              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
-              value={directTeacherName}
-              onChangeText={setDirectTeacherName}
-            />
-            <TextInput
-              style={[styles.modalInput, {
-                backgroundColor: theme?.surfaceVariant || '#f9fafb',
-                color: theme?.text,
-                borderColor: theme?.border || '#e5e7eb',
-              }]}
-              placeholder="teacher@example.com"
-              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={directTeacherEmail}
-              onChangeText={setDirectTeacherEmail}
-            />
-            <TextInput
-              style={[styles.modalInput, {
-                backgroundColor: theme?.surfaceVariant || '#f9fafb',
-                color: theme?.text,
-                borderColor: theme?.border || '#e5e7eb',
-              }]}
-              placeholder="Phone (optional)"
-              placeholderTextColor={theme?.textSecondary || '#9ca3af'}
-              keyboardType="phone-pad"
-              value={directTeacherPhone}
-              onChangeText={setDirectTeacherPhone}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.btn, styles.btnSecondary]}
-                onPress={() => {
-                  setShowDirectAddModal(false);
-                  resetDirectAddForm();
-                }}
-                disabled={directAddLoading}
-              >
-                <Text style={[styles.btnSecondaryText, { color: theme?.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.btn,
-                  styles.btnPrimary,
-                  (!directTeacherName.trim() || !directTeacherEmail.trim()) && styles.btnDisabled,
-                ]}
-                onPress={handleDirectAddTeacher}
-                disabled={directAddLoading || !directTeacherName.trim() || !directTeacherEmail.trim()}
-              >
-                {directAddLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="person-add" size={16} color="white" />
-                    <Text style={styles.btnPrimaryText}>Add Teacher</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardAvoider}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={insets.top + 24}
+          >
+            <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={[styles.modalContent, { backgroundColor: theme?.card || 'white' }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme?.text }]}>Add Teacher Directly</Text>
+                  <TouchableOpacity onPress={() => {
+                    setShowDirectAddModal(false);
+                    resetDirectAddForm();
+                  }}>
+                    <Ionicons name="close" size={24} color={theme?.textSecondary || '#6b7280'} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.modalSubtitle, { color: theme?.textSecondary }]}>
+                  Add a teacher record to your school. They&apos;ll need an account to sign in.
+                </Text>
+                <TextInput
+                  style={[styles.modalInput, {
+                    backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                    color: theme?.text,
+                    borderColor: theme?.border || '#e5e7eb',
+                  }]}
+                  placeholder="Full name"
+                  placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+                  value={directTeacherName}
+                  onChangeText={setDirectTeacherName}
+                />
+                <TextInput
+                  style={[styles.modalInput, {
+                    backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                    color: theme?.text,
+                    borderColor: theme?.border || '#e5e7eb',
+                  }]}
+                  placeholder="teacher@example.com"
+                  placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={directTeacherEmail}
+                  onChangeText={setDirectTeacherEmail}
+                />
+                <TextInput
+                  style={[styles.modalInput, {
+                    backgroundColor: theme?.surfaceVariant || '#f9fafb',
+                    color: theme?.text,
+                    borderColor: theme?.border || '#e5e7eb',
+                  }]}
+                  placeholder="Phone (optional)"
+                  placeholderTextColor={theme?.textSecondary || '#9ca3af'}
+                  keyboardType="phone-pad"
+                  value={directTeacherPhone}
+                  onChangeText={setDirectTeacherPhone}
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnSecondary]}
+                    onPress={() => {
+                      setShowDirectAddModal(false);
+                      resetDirectAddForm();
+                    }}
+                    disabled={directAddLoading}
+                  >
+                    <Text style={[styles.btnSecondaryText, { color: theme?.textSecondary }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.btn,
+                      styles.btnPrimary,
+                      (!directTeacherName.trim() || !directTeacherEmail.trim()) && styles.btnDisabled,
+                    ]}
+                    onPress={handleDirectAddTeacher}
+                    disabled={directAddLoading || !directTeacherName.trim() || !directTeacherEmail.trim()}
+                  >
+                    {directAddLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="person-add" size={16} color="white" />
+                        <Text style={styles.btnPrimaryText}>Add Teacher</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1286,6 +1300,13 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     padding: 20,
+  },
+  modalKeyboardAvoider: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  modalScrollContent: {
+    paddingVertical: 20,
   },
   actionSheet: {
     borderRadius: 20,

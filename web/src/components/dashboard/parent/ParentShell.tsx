@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import { getGradeNumber, isExamEligibleChild } from '@/lib/utils/gradeUtils';
 import { calculateAgeOnDate } from '@/lib/utils/dateUtils';
 import {
@@ -99,21 +100,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
     setShowProfileMenu(false);
     setMobileNavOpen(false);
 
-    try {
-      const timeoutMs = 2500;
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
-      ]);
-    } catch {
-      // ignore sign-out errors; we'll force local cleanup next
-    }
-
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // ignore
-    }
+    await signOutEverywhere({ timeoutMs: 2500 });
 
     router.replace('/sign-in');
     if (typeof window !== 'undefined') {

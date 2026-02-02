@@ -4,7 +4,22 @@
  */
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { inferPaymentCategory } from '@/lib/utils/feeUtils';
 import type { POPUpload } from './types';
+
+const UNIFORM_KEYWORDS = ['uniform'];
+
+function isUniformPayment(data: POPUpload): boolean {
+  const haystack = `${data.description || ''} ${data.title || ''}`.toLowerCase();
+  return UNIFORM_KEYWORDS.some((keyword) => haystack.includes(keyword));
+}
+
+function resolvePaymentDate(value?: string | null): Date {
+  if (!value) return new Date();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return new Date();
+  return parsed;
+}
 
 // Create payment record for financial tracking
 export async function createPaymentRecord(
@@ -13,6 +28,10 @@ export async function createPaymentRecord(
   uploadId: string
 ): Promise<void> {
   try {
+    const uniformPayment = isUniformPayment(data);
+    const description = data.description || data.title || (uniformPayment ? 'Uniform payment' : 'School fees payment');
+    const feeCategory = inferPaymentCategory(description);
+
     const paymentRecord = {
       student_id: data.student_id,
       parent_id: data.uploaded_by,
@@ -23,15 +42,20 @@ export async function createPaymentRecord(
       payment_method: data.payment_method || 'bank_transfer',
       payment_reference: data.payment_reference || `POP-${uploadId.slice(0, 8)}`,
       status: 'completed',
-      description: data.title || 'School fees payment',
+      description,
       attachment_url: data.file_path,
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
       submitted_at: data.created_at,
+      fee_ids: uniformPayment ? [] : undefined,
       metadata: {
         pop_upload_id: uploadId,
         payment_date: data.payment_date,
         payment_for_month: data.payment_for_month,
+        fee_type: uniformPayment ? 'uniform' : 'tuition',
+        fee_category: feeCategory,
+        payment_context: uniformPayment ? 'uniform' : 'school_fees',
+        payment_purpose: description,
         auto_created: true,
       },
     };
@@ -48,7 +72,7 @@ export async function createPaymentRecord(
 export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
   try {
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
+    const paymentDate = resolvePaymentDate(periodDateValue);
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
@@ -77,7 +101,7 @@ export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
 export async function updateFeeStatus(data: POPUpload): Promise<void> {
   try {
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
+    const paymentDate = resolvePaymentDate(periodDateValue);
     const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
     const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
     
@@ -154,21 +178,26 @@ export async function generateInvoice(
       .single();
     
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = periodDateValue ? new Date(periodDateValue) : new Date();
+    const paymentDate = resolvePaymentDate(periodDateValue);
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const invoiceMonth = monthNames[paymentDate.getMonth()];
     const invoiceYear = paymentDate.getFullYear();
     const invoiceNumber = `INV-${invoiceYear}${String(paymentDate.getMonth() + 1).padStart(2, '0')}-${uploadId.slice(0, 4).toUpperCase()}`;
     const studentName = student ? `${student.first_name || ''} ${student.last_name || ''}`.trim() : 'Student';
     
+    const today = new Date();
+    const issueDate = paymentDate < today ? paymentDate : today;
+    const issueDateStr = issueDate.toISOString().split('T')[0];
+    const dueDateStr = paymentDate.toISOString().split('T')[0];
+
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
         invoice_number: invoiceNumber,
         preschool_id: data.preschool_id,
         student_id: data.student_id,
-        issue_date: new Date().toISOString().split('T')[0],
-        due_date: paymentDate.toISOString().split('T')[0],
+        issue_date: issueDateStr,
+        due_date: dueDateStr,
         bill_to_name: parentName,
         bill_to_email: parentProfile?.email,
         bill_to_phone: parentProfile?.phone_number,
