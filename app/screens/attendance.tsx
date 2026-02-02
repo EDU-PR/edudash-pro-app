@@ -14,11 +14,11 @@ import { AlertModal, type AlertButton } from '@/components/ui/AlertModal'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import { format } from 'date-fns'
+import EduDashSpinner from '@/components/ui/EduDashSpinner'
 
 // Alert modal state interface
 interface AlertState {
   visible: boolean;
-  import EduDashSpinner from '@/components/ui/EduDashSpinner';
 title: string;
   message: string;
   type: 'info' | 'warning' | 'success' | 'error';

@@ -10,6 +10,7 @@ import { queryClient } from '../../lib/query/queryClient'
 import { convertToE164, formatAsUserTypes, validatePhoneNumber, EXAMPLE_PHONE_NUMBERS } from '../../lib/utils/phoneUtils'
 import { Vibration } from 'react-native';
 import Feedback from '../../lib/feedback'
+import EduDashSpinner from '../ui/EduDashSpinner'
 
 interface WhatsAppOptInModalProps {
   visible: boolean
@@ -95,8 +96,7 @@ export const WhatsAppOptInModal: React.FC<WhatsAppOptInModalProps> = ({
   // Use the new phone validation utility
   const validatePhone = (phone: string) => {
     return validatePhoneNumber(phone).isValid;
-  import EduDashSpinner from '@/components/ui/EduDashSpinner';
-}
+  }
 
   // Handle phone number input with auto-formatting
   const handlePhoneChange = (text: string) => {
