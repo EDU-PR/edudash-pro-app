@@ -10,6 +10,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader'
 import { useLocalSearchParams } from 'expo-router'
 import { toast } from '@/components/ui/ToastProvider'
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherMessagesScreen() {
   const { profile, permissions } = useAuth()
   const { theme } = useTheme()
@@ -38,8 +39,7 @@ export default function TeacherMessagesScreen() {
   const [sending, setSending] = useState(false)
 
   // Prefill support for Dash
-  const params = useLocalSearchParams<{ prefillSubject?: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
-prefillMessage?: string }>()
+  const params = useLocalSearchParams<{ prefillSubject?: string; prefillMessage?: string }>()
   React.useEffect(() => {
     const s = (params?.prefillSubject || '').trim()
     const m = (params?.prefillMessage || '').trim()
@@ -230,4 +230,3 @@ const styles = StyleSheet.create({
     fontSize: 16
   },
 })
-
