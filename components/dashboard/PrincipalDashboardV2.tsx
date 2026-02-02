@@ -84,8 +84,10 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const pendingPayments = stats?.pendingPayments?.total ?? 0;
   const pendingPOPs = stats?.pendingPOPUploads?.total ?? 0;
   const pendingReports = data.pendingReportApprovals ?? 0;
+  const pendingActivities = data.pendingActivityApprovals ?? 0;
+  const pendingApprovalsTotal = pendingReports + pendingActivities;
 
-  const urgentCount = pendingPayments + pendingPOPs + pendingReports;
+  const urgentCount = pendingPayments + pendingPOPs + pendingApprovalsTotal;
 
   const lastUpdatedAt = useMemo(() => {
     if (stats?.timestamp) {
@@ -169,6 +171,15 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
       tone: pendingReports > 0 ? 'error' : 'success',
       route: '/screens/principal-report-review',
     },
+    {
+      id: 'pendingActivities',
+      title: t('dashboard.pending_activities', { defaultValue: 'Activities Pending' }),
+      value: pendingActivities,
+      action: t('dashboard.review', { defaultValue: 'Review' }),
+      icon: 'checkmark-circle',
+      tone: pendingActivities > 0 ? 'warning' : 'success',
+      route: '/screens/principal-activity-approvals',
+    },
   ];
 
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
@@ -223,7 +234,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             icon="alert-circle"
             label={t('dashboard.urgent_items', { defaultValue: 'Urgent Items' })}
             value={`${urgentCount}`}
-            detail={`${pendingPayments} payments • ${pendingPOPs} POPs • ${pendingReports} reports`}
+            detail={`${pendingPayments} payments • ${pendingPOPs} POPs • ${pendingApprovalsTotal} approvals`}
             color={theme.error}
             theme={theme}
           />
@@ -409,7 +420,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
         <View style={styles.card}>
           <MetricInline label={t('dashboard.money_received', { defaultValue: 'Collected' })} value={formatCurrency(stats?.monthlyRevenue?.total)} theme={theme} />
           <MetricInline label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })} value={`${pendingPayments}`} theme={theme} />
-          <MetricInline label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })} value={`${pendingReports}`} theme={theme} />
+          <MetricInline label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })} value={`${pendingApprovalsTotal}`} theme={theme} />
         </View>
 
         {/* Quick Actions */}

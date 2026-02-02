@@ -106,6 +106,7 @@ export interface PrincipalHubData {
   capacityMetrics: CapacityMetrics | null;
   recentActivities: ActivitySummary[] | null;
   pendingReportApprovals: number;
+  pendingActivityApprovals: number;
   schoolId: string | null;
   schoolName: string;
 }
@@ -179,6 +180,7 @@ export const usePrincipalHub = () => {
     capacityMetrics: null,
     recentActivities: null,
     pendingReportApprovals: 0,
+    pendingActivityApprovals: 0,
     schoolId: null,
     schoolName: t('dashboard.no_school_assigned_text')
   });
@@ -302,7 +304,8 @@ export const usePrincipalHub = () => {
         pendingPaymentsResult,
         registrationFeesResult,
         childRegistrationFeesResult,
-        pendingPOPUploadsResult
+        pendingPOPUploadsResult,
+        pendingActivityApprovalsResult
       ] = await Promise.allSettled([
         // Get students count
         assertSupabase()
@@ -426,7 +429,14 @@ export const usePrincipalHub = () => {
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
           .eq('status', 'pending')
-          .eq('upload_type', 'proof_of_payment')
+          .eq('upload_type', 'proof_of_payment'),
+
+        // Get pending interactive activity approvals
+        assertSupabase()
+          .from('interactive_activities')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .eq('approval_status', 'pending')
       ]);
       
       // Extract data with error handling
@@ -450,6 +460,9 @@ export const usePrincipalHub = () => {
       const pendingRegistrationsCount = pendingRegistrationsFromRequests + pendingRegistrationsFromChildRequests;
       const pendingPaymentsCount = pendingPaymentsResult.status === 'fulfilled' ? (pendingPaymentsResult.value.count || 0) : 0;
       const pendingPOPUploadsCount = pendingPOPUploadsResult.status === 'fulfilled' ? (pendingPOPUploadsResult.value.count || 0) : 0;
+      const pendingActivityApprovalsCount = pendingActivityApprovalsResult.status === 'fulfilled'
+        ? (pendingActivityApprovalsResult.value.count || 0)
+        : 0;
       
       type RegistrationFeeRow = {
         registration_fee_amount: string | number | null;
@@ -502,6 +515,7 @@ export const usePrincipalHub = () => {
         classesCount,
         applicationsCount,
         pendingReportsCount,
+        pendingActivityApprovalsCount,
         pendingRegistrationsCount,
         pendingRegistrationsFromRequests,
         pendingRegistrationsFromChildRequests,
@@ -929,6 +943,7 @@ export const usePrincipalHub = () => {
           capacityMetrics,
           recentActivities,
           pendingReportApprovals: pendingReportsCount,
+          pendingActivityApprovals: pendingActivityApprovalsCount,
           schoolId: preschoolId,
           schoolName
         });
