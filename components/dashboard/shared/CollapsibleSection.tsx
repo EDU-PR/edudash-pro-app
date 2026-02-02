@@ -25,6 +25,7 @@ export interface CollapsibleSectionProps {
   title: string;
   sectionId: string;
   icon?: string;
+  hint?: string;
   children: React.ReactNode;
   defaultCollapsed?: boolean;
   onToggle?: (sectionId: string, isCollapsed: boolean) => void;
@@ -38,6 +39,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title, 
   sectionId,
   icon,
+  hint,
   children, 
   defaultCollapsed = false,
   onToggle,
@@ -109,8 +111,13 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
               <Text style={styles.headerIcon}>{icon}</Text>
             )
           )}
-          <View style={[styles.headerChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
+          <View style={styles.headerTextBlock}>
             <Text style={styles.headerTitle}>{title}</Text>
+            {hint ? (
+              <Text style={styles.headerHint} numberOfLines={2}>
+                {hint}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -159,7 +166,11 @@ const createStyles = (theme: any) => {
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingVertical: 12,
-      paddingHorizontal: 4,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.cardBackground || theme.surface,
     },
     headerLeft: {
       flexDirection: 'row',
@@ -176,21 +187,18 @@ const createStyles = (theme: any) => {
       fontSize: 18,
       marginRight: 4,
     },
-    headerChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 8,
-      borderWidth: 1,
-      shadowColor: theme.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
+    headerTextBlock: {
+      flex: 1,
     },
     headerTitle: {
-      fontSize: isTablet ? 22 : isSmallScreen ? 18 : 20,
-      fontWeight: '600',
+      fontSize: isTablet ? 20 : isSmallScreen ? 17 : 19,
+      fontWeight: '700',
       color: theme.text,
+    },
+    headerHint: {
+      marginTop: 4,
+      fontSize: isSmallScreen ? 11 : 12,
+      color: theme.textSecondary,
     },
     actionButton: {
       paddingHorizontal: 8,

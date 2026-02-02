@@ -210,6 +210,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         title={t('dashboard.your_school', { defaultValue: 'Your School' })}
         sectionId="school-metrics" 
         icon="🏫"
+        hint={t('dashboard.school_overview_hint', { defaultValue: 'A snapshot of your school today' })}
         defaultCollapsed={collapsedSections.has('school-metrics')}
         onToggle={onToggleSection}
       >
@@ -240,6 +241,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         title={t('dashboard.needs_attention', { defaultValue: 'Needs Attention' })}
         sectionId="action-items" 
         icon="⚡"
+        hint={t('dashboard.action_items_hint', { defaultValue: 'Tasks waiting for your action' })}
         defaultCollapsed={collapsedSections.has('action-items')}
         onToggle={onToggleSection}
       >
@@ -271,6 +273,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         title={t('dashboard.money_summary', { defaultValue: 'Money Summary' })}
         sectionId="financial-summary" 
         icon="💰"
+        hint={t('dashboard.money_summary_hint', { defaultValue: 'Registration fee collection at a glance' })}
         defaultCollapsed={collapsedSections.has('financial-summary')}
         onToggle={onToggleSection}
       >

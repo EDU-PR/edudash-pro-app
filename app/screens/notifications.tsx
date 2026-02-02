@@ -101,6 +101,23 @@ export default function NotificationsScreen() {
     queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
   }, [user?.id, notifications, queryClient, markCallsSeen, markAnnouncementsSeen]);
   
+  const navigateSafe = useCallback((path: string, params?: Record<string, string>) => {
+    try {
+      const { safeRouter } = require('@/lib/navigation/safeRouter');
+      if (params) {
+        safeRouter.push({ pathname: path, params });
+      } else {
+        safeRouter.push(path);
+      }
+    } catch {
+      if (params) {
+        router.push({ pathname: path, params });
+      } else {
+        router.push(path);
+      }
+    }
+  }, []);
+
   // Navigate based on notification type
   const handleNotificationPress = useCallback(async (notification: Notification) => {
     if (user?.id && !notification.read) {
@@ -111,69 +128,60 @@ export default function NotificationsScreen() {
     switch (notification.type) {
       case 'message':
         if (notification.data?.threadId) {
-          router.push({
-            pathname: '/screens/parent-message-thread',
-            params: { threadId: notification.data.threadId as string },
-          });
+          navigateSafe('/screens/parent-message-thread', { threadId: notification.data.threadId as string });
         } else {
-          router.push('/screens/parent-messages');
+          navigateSafe('/screens/parent-messages');
         }
         break;
       case 'call':
-        router.push('/screens/calls');
+        navigateSafe('/screens/calls');
         break;
       case 'homework':
         if (notification.data?.assignment_id) {
-          router.push({
-            pathname: '/screens/homework-details',
-            params: { assignmentId: notification.data.assignment_id as string },
-          });
+          navigateSafe('/screens/homework-details', { assignmentId: notification.data.assignment_id as string });
         } else {
-          router.push('/screens/homework');
+          navigateSafe('/screens/homework');
         }
         break;
       case 'grade':
-        router.push('/screens/grades');
+        navigateSafe('/screens/grades');
         break;
       case 'announcement':
-        router.push('/screens/parent-announcements');
+        navigateSafe('/screens/parent-announcements');
         break;
       case 'attendance':
-        router.push('/screens/child-progress');
+        navigateSafe('/screens/parent-progress');
         break;
       case 'registration':
         if (notification.data?.registration_id) {
-          router.push({
-            pathname: '/screens/registration-detail',
-            params: { id: notification.data.registration_id as string },
-          });
+          navigateSafe('/screens/registration-detail', { id: notification.data.registration_id as string });
         } else {
-          router.push('/screens/principal-registrations');
+          navigateSafe('/screens/principal-registrations');
         }
         break;
       case 'billing':
         if (isParent) {
-          router.push('/screens/parent-payments');
+          navigateSafe('/screens/parent-payments');
         } else if (isPrincipal) {
-          router.push('/screens/financial-dashboard');
+          navigateSafe('/screens/financial-dashboard');
         } else if (isTeacher) {
-          router.push('/screens/teacher-dashboard');
+          navigateSafe('/screens/teacher-dashboard');
         } else {
-          router.push('/screens/financial-dashboard');
+          navigateSafe('/screens/financial-dashboard');
         }
         break;
       case 'calendar':
-        router.push('/screens/school-calendar');
+        navigateSafe('/screens/calendar');
         break;
       case 'birthday':
-        router.push('/screens/birthday-planner');
+        navigateSafe('/screens/birthday-planner');
         break;
       case 'system':
       default:
         // For system notifications, don't navigate
         break;
     }
-  }, [user?.id, queryClient]);
+  }, [user?.id, queryClient, isParent, isPrincipal, isTeacher, navigateSafe]);
   
   // Clear call notifications
   const handleClearCallNotifications = useCallback(() => {

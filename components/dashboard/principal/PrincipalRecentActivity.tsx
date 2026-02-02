@@ -91,6 +91,7 @@ export const PrincipalRecentActivity: React.FC<PrincipalRecentActivityProps> = (
         title={t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })} 
         sectionId="recent-activity" 
         icon="🔔"
+        hint={t('dashboard.hints.recent_activity', { defaultValue: 'Latest events and pending items from today.' })}
         defaultCollapsed={collapsedSections.has('recent-activity')}
         onToggle={onToggleSection}
       >
@@ -112,6 +113,7 @@ export const PrincipalRecentActivity: React.FC<PrincipalRecentActivityProps> = (
       title={t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })} 
       sectionId="recent-activity" 
       icon="🔔"
+      hint={t('dashboard.hints.recent_activity', { defaultValue: 'Latest events and pending items from today.' })}
       defaultCollapsed={collapsedSections.has('recent-activity')}
       onToggle={onToggleSection}
     >
