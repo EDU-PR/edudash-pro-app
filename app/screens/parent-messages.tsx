@@ -24,6 +24,7 @@ import { useParentThreads, MessageThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 
 // Format timestamp for message threads
@@ -363,9 +364,20 @@ export default function ParentMessagesScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { profile } = useAuth();
+  const { tier } = useSubscription();
   const dashCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
+  const tierLower = String(tier || 'free').toLowerCase();
+  const isDashOrbUnlocked = [
+    'parent_plus',
+    'premium',
+    'pro',
+    'enterprise',
+    'school_premium',
+    'school_pro',
+    'school_enterprise',
+  ].includes(tierLower);
   
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
   
@@ -630,14 +642,16 @@ export default function ParentMessagesScreen() {
           onSettings={handleSettings}
         />
         {/* Still show Dash AI even when no messages */}
-        <View style={{ paddingTop: 8 }}>
-          <DashAIItem
-            onPress={handleOpenDashAI}
-            title={dashCopy.navLabel}
-            subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
-            description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
-          />
-        </View>
+        {!isDashOrbUnlocked && (
+          <View style={{ paddingTop: 8 }}>
+            <DashAIItem
+              onPress={handleOpenDashAI}
+              title={dashCopy.navLabel}
+              subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
+              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
+            />
+          </View>
+        )}
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
             <Ionicons name="chatbubbles-outline" size={48} color={theme.primary} />
@@ -679,12 +693,14 @@ export default function ParentMessagesScreen() {
           />
         )}
         ListHeaderComponent={
-          <DashAIItem
-            onPress={handleOpenDashAI}
-            title={dashCopy.navLabel}
-            subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
-            description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
-          />
+          !isDashOrbUnlocked ? (
+            <DashAIItem
+              onPress={handleOpenDashAI}
+              title={dashCopy.navLabel}
+              subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
+              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
+            />
+          ) : null
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}

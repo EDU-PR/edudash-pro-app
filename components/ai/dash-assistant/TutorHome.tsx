@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -156,7 +156,10 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   }, [isStaff, isPreschool]);
 
   return (
-    <View style={styles.emptyStateContainer}>
+    <ScrollView
+      contentContainerStyle={styles.emptyStateContainer}
+      showsVerticalScrollIndicator={false}
+    >
       <LinearGradient
         colors={['#0b1220', '#101b2d', '#0b1220']}
         style={[styles.emptyStateHero, { borderColor: theme.border }]}
@@ -392,7 +395,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
           </View>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 };
 

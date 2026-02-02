@@ -211,7 +211,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       .split(/\n+/)
       .filter(line => !/^\s*User:\s*/i.test(line))
       .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
-      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Topic:|Subject:|Grade:|Age band:|School type:)/i.test(line))
+      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Age band:|School type:)/i.test(line))
       .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
       .filter(line => !/^\s*Return ONLY JSON/i.test(line))
       .filter(line => !/TUTOR_PAYLOAD/i.test(line))
@@ -231,7 +231,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     if (isTutorPromptLeak(raw)) {
       return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
     }
-    return sanitizeAssistantContent(raw);
+    const cleaned = sanitizeAssistantContent(raw);
+    return cleaned || raw.trim();
   };
 
   return (

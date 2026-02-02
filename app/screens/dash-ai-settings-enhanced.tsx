@@ -29,6 +29,9 @@ export default function DashAISettingsEnhancedScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const roleCopy = getDashAIRoleCopy(profile?.role);
+  const normalizedRole = String(profile?.role || '').toLowerCase();
+  const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+  const showAdvanced = !isTutorRole;
   
   const {
     settings,
@@ -111,47 +114,59 @@ export default function DashAISettingsEnhancedScreen() {
         />
 
         {/* Chat Behavior */}
-        <SectionHeader title="Chat & Interaction" icon="💬" expanded={expandedSections.chat} onToggle={() => toggleSection('chat')} theme={theme} />
-        {expandedSections.chat && (
-          <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <ToggleSetting title="Enter to Send" subtitle="Send messages by pressing Enter" value={settings.enterToSend} onValueChange={(v) => handleSettingsChange('enterToSend', v)} theme={theme} />
-            <ToggleSetting title="Auto Voice Reply" subtitle="Automatically respond with voice" value={settings.autoVoiceReply} onValueChange={(v) => handleSettingsChange('autoVoiceReply', v)} theme={theme} />
-            <ToggleSetting title="Typing Indicator" subtitle="Show when Dash is thinking" value={settings.showTypingIndicator} onValueChange={(v) => handleSettingsChange('showTypingIndicator', v)} theme={theme} />
-            <ToggleSetting title="Question Suggestions" subtitle="Suggest follow-up questions" value={settings.autoSuggestQuestions} onValueChange={(v) => handleSettingsChange('autoSuggestQuestions', v)} theme={theme} />
-            <ToggleSetting title="Contextual Help" subtitle="Offer help based on current topic" value={settings.contextualHelp} onValueChange={(v) => handleSettingsChange('contextualHelp', v)} theme={theme} />
-          </View>
+        {showAdvanced && (
+          <>
+            <SectionHeader title="Chat & Interaction" icon="💬" expanded={expandedSections.chat} onToggle={() => toggleSection('chat')} theme={theme} />
+            {expandedSections.chat && (
+              <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <ToggleSetting title="Enter to Send" subtitle="Send messages by pressing Enter" value={settings.enterToSend} onValueChange={(v) => handleSettingsChange('enterToSend', v)} theme={theme} />
+                <ToggleSetting title="Auto Voice Reply" subtitle="Automatically respond with voice" value={settings.autoVoiceReply} onValueChange={(v) => handleSettingsChange('autoVoiceReply', v)} theme={theme} />
+                <ToggleSetting title="Typing Indicator" subtitle="Show when Dash is thinking" value={settings.showTypingIndicator} onValueChange={(v) => handleSettingsChange('showTypingIndicator', v)} theme={theme} />
+                <ToggleSetting title="Question Suggestions" subtitle="Suggest follow-up questions" value={settings.autoSuggestQuestions} onValueChange={(v) => handleSettingsChange('autoSuggestQuestions', v)} theme={theme} />
+                <ToggleSetting title="Contextual Help" subtitle="Offer help based on current topic" value={settings.contextualHelp} onValueChange={(v) => handleSettingsChange('contextualHelp', v)} theme={theme} />
+              </View>
+            )}
+          </>
         )}
 
         {/* Learning & Memory */}
-        <SectionHeader title="Learning & Memory" icon="🧠" expanded={expandedSections.learning} onToggle={() => toggleSection('learning')} theme={theme} />
-        {expandedSections.learning && (
-          <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <ToggleSetting title="Remember Preferences" subtitle="Save your settings and preferences" value={settings.rememberPreferences} onValueChange={(v) => handleSettingsChange('rememberPreferences', v)} theme={theme} />
-            <ToggleSetting title="Learn from Interactions" subtitle="Improve responses based on conversations" value={settings.learnFromInteractions} onValueChange={(v) => handleSettingsChange('learnFromInteractions', v)} theme={theme} />
-          </View>
+        {showAdvanced && (
+          <>
+            <SectionHeader title="Learning & Memory" icon="🧠" expanded={expandedSections.learning} onToggle={() => toggleSection('learning')} theme={theme} />
+            {expandedSections.learning && (
+              <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <ToggleSetting title="Remember Preferences" subtitle="Save your settings and preferences" value={settings.rememberPreferences} onValueChange={(v) => handleSettingsChange('rememberPreferences', v)} theme={theme} />
+                <ToggleSetting title="Learn from Interactions" subtitle="Improve responses based on conversations" value={settings.learnFromInteractions} onValueChange={(v) => handleSettingsChange('learnFromInteractions', v)} theme={theme} />
+              </View>
+            )}
+          </>
         )}
 
         {/* Customization */}
-        <SectionHeader title="Customization" icon="⚙️" expanded={expandedSections.custom} onToggle={() => toggleSection('custom')} theme={theme} />
-        {expandedSections.custom && (
-          <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <PickerSetting
-              title="Teaching Style"
-              subtitle="How Dash explains concepts"
-              value={settings.teachingStyle}
-              options={TEACHING_STYLE_OPTIONS}
-              onValueChange={(v) => handleSettingsChange('teachingStyle', v)}
-              theme={theme}
-            />
-            <TextInputSetting
-              title="User Context"
-              subtitle="Tell Dash about yourself for better assistance"
-              value={settings.userContext}
-              onChangeText={(text) => handleSettingsChange('userContext', text)}
-              placeholder="e.g., Grade 5 teacher, Math specialist, New to teaching"
-              theme={theme}
-            />
-          </View>
+        {showAdvanced && (
+          <>
+            <SectionHeader title="Customization" icon="⚙️" expanded={expandedSections.custom} onToggle={() => toggleSection('custom')} theme={theme} />
+            {expandedSections.custom && (
+              <View style={[styles.sectionContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <PickerSetting
+                  title="Teaching Style"
+                  subtitle="How Dash explains concepts"
+                  value={settings.teachingStyle}
+                  options={TEACHING_STYLE_OPTIONS}
+                  onValueChange={(v) => handleSettingsChange('teachingStyle', v)}
+                  theme={theme}
+                />
+                <TextInputSetting
+                  title="User Context"
+                  subtitle="Tell Dash about yourself for better assistance"
+                  value={settings.userContext}
+                  onChangeText={(text) => handleSettingsChange('userContext', text)}
+                  placeholder="e.g., Grade 5 teacher, Math specialist, New to teaching"
+                  theme={theme}
+                />
+              </View>
+            )}
+          </>
         )}
 
         {/* Accessibility */}

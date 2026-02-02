@@ -96,6 +96,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   const roleCopy = getDashAIRoleCopy(profile?.role);
   const normalizedRole = normalizeRole(profile?.role || '');
   const isTutorRole = normalizedRole === 'parent' || normalizedRole === 'student';
+  const schoolType = String((profile as any)?.school_type || (profile as any)?.organization_type || '').toLowerCase();
+  const isPreschool = schoolType.includes('preschool') || schoolType.includes('ecd') || schoolType.includes('early');
   
   // Check if user is super admin - use useMemo to ensure recalculation when profile changes
   const userRole = profile?.role || '';
@@ -133,26 +135,59 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   );
   const tierRank = TIER_HIERARCHY[normalizedTier];
   const quickCtas = isTutorRole
-    ? [
-        {
-          label: 'Explain it',
-          prompt: 'Ask me one short diagnostic question first, then explain step-by-step in simple language.',
-          icon: 'bulb-outline',
-          color: theme.primary,
-        },
-        {
-          label: 'Help me solve',
-          prompt: 'Give me one practice question to diagnose my level. Wait for my answer before continuing.',
-          icon: 'pencil-outline',
-          color: theme.success || '#16a34a',
-        },
-        {
-          label: 'Test me',
-          prompt: 'Quiz me with 5 questions, starting easy and getting harder.',
-          icon: 'school-outline',
-          color: theme.warning || '#f59e0b',
-        },
-      ]
+    ? (isPreschool
+      ? [
+          {
+            label: 'Story Time',
+            prompt: 'Use a short story and ask one simple question. Keep it playful and age-appropriate for preschool.',
+            icon: 'book-outline',
+            color: theme.primary,
+          },
+          {
+            label: 'Play & Learn',
+            prompt: 'Give one playful practice question using colors, shapes, or counting. Wait for the answer before continuing.',
+            icon: 'color-palette-outline',
+            color: theme.success || '#16a34a',
+          },
+          {
+            label: 'Quick Quiz',
+            prompt: 'Quiz with 3 very easy questions using colors, shapes, or counting. Keep it fun.',
+            icon: 'happy-outline',
+            color: theme.warning || '#f59e0b',
+          },
+          {
+            label: 'Recap',
+            prompt: 'Summarize in 3 simple bullet points with friendly tone, then ask one short check question.',
+            icon: 'sparkles-outline',
+            color: theme.info || theme.primary,
+          },
+        ]
+      : [
+          {
+            label: 'Explain',
+            prompt: 'Explain this step-by-step in simple language. Ask one diagnostic question first.',
+            icon: 'bulb-outline',
+            color: theme.primary,
+          },
+          {
+            label: 'Practice',
+            prompt: 'Give me one practice question and wait for my answer before continuing.',
+            icon: 'pencil-outline',
+            color: theme.success || '#16a34a',
+          },
+          {
+            label: 'Quiz me',
+            prompt: 'Quiz me with 5 questions, starting easy and getting harder.',
+            icon: 'school-outline',
+            color: theme.warning || '#f59e0b',
+          },
+          {
+            label: 'Summarize',
+            prompt: 'Summarize the key ideas in 5 bullet points and ask one quick check question.',
+            icon: 'sparkles-outline',
+            color: theme.info || theme.primary,
+          },
+        ])
     : [
         {
           label: 'Draft plan',
@@ -357,7 +392,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       )}
       
       {/* Education Section - Available to All */}
-      {educationActions.length > 0 && (
+      {!isTutorRole && educationActions.length > 0 && (
         <>
           <Text style={[styles.categoryLabel, { color: theme.primary }]}>📚 Education tools</Text>
           <View style={styles.quickActionsGrid}>

@@ -72,6 +72,22 @@ export default function ParentDashboard() {
       earlyLearningTips: t('dashboard.parent.section.early_learning_tips', { defaultValue: 'Early Learning Tips for Parents' }),
       overview: t('dashboard.parent.section.overview', { defaultValue: "Today's Overview" }),
     },
+    sectionDescriptions: {
+      myChildren: t('dashboard.parent.section_desc.my_children', { defaultValue: 'Profiles, homework, and updates for each child.' }),
+      uniformSizes: t('dashboard.parent.section_desc.uniform_sizes', { defaultValue: 'Confirm sizes, quantities, and upload uniform payment proof.' }),
+      recentActivity: t('dashboard.parent.section_desc.recent_activity', { defaultValue: 'Latest messages, announcements, and updates.' }),
+      homework: t('dashboard.parent.section_desc.homework', { defaultValue: 'Assignments, due dates, and feedback from teachers.' }),
+      liveClasses: t('dashboard.parent.section_desc.live_classes', { defaultValue: 'Join live lessons and school events when they start.' }),
+      teacherNotes: t('dashboard.parent.section_desc.teacher_notes', { defaultValue: "Notes and feedback from your child's teacher." }),
+      progress: t('dashboard.parent.section_desc.progress', { defaultValue: 'Badges, milestones, and learning progress.' }),
+      birthdays: t('dashboard.parent.section_desc.birthdays', { defaultValue: 'Upcoming class birthdays and reminders.' }),
+      birthdayChart: t('dashboard.parent.section_desc.birthday_chart', { defaultValue: 'Full month-by-month birthday list.' }),
+      dailyActivity: t('dashboard.parent.section_desc.daily_activity', { defaultValue: 'Daily photos, activities, and class updates.' }),
+      practiceAtHome: t('dashboard.parent.section_desc.practice_at_home', { defaultValue: 'At-home activities to reinforce learning.' }),
+      earlyLearningActivities: t('dashboard.parent.section_desc.early_learning_activities', { defaultValue: 'Age-appropriate activities for preschoolers.' }),
+      earlyLearningTips: t('dashboard.parent.section_desc.early_learning_tips', { defaultValue: 'Tips to support your preschooler at home.' }),
+      overview: t('dashboard.parent.section_desc.overview', { defaultValue: 'Attendance, fees, and key updates at a glance.' }),
+    },
     childCard: {
       homework: t('dashboard.parent.child_card.homework', { defaultValue: 'Homework' }),
       events: t('dashboard.parent.child_card.events', { defaultValue: 'Events' }),
@@ -411,6 +427,7 @@ export default function ParentDashboard() {
 
         <CollapsibleSection 
           title={COPY.sections.myChildren}
+          description={COPY.sectionDescriptions.myChildren}
           icon={Users} 
           isOpen={openSection === 'children'}
           onToggle={() => toggleSection('children')}
@@ -469,6 +486,7 @@ export default function ParentDashboard() {
         {uniformEnabled && (
           <CollapsibleSection
             title={COPY.sections.uniformSizes}
+            description={COPY.sectionDescriptions.uniformSizes}
             icon={Shirt}
             isOpen={openSection === 'uniforms'}
             onToggle={() => toggleSection('uniforms')}

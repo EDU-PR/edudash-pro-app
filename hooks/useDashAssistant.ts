@@ -846,6 +846,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         `Question: ${session.currentQuestion || 'N/A'}`,
         session.expectedAnswer ? `Expected answer: ${session.expectedAnswer}` : null,
         'Evaluate the learner’s latest message as the answer.',
+        'Be strict and factual: only mark correct when the answer clearly matches.',
+        'If unsure, mark incorrect and explain why.',
         'If incorrect, provide a gentle hint and ask ONE follow-up question.'
       );
       baseLines.push(
@@ -871,6 +873,95 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       return null;
     }
   }, []);
+
+  const normalizeTutorText = useCallback((value: string) => {
+    return (value || '')
+      .toLowerCase()
+      .replace(/[\u2019']/g, '')
+      .replace(/[^a-z0-9.+-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const splitExpectedAnswers = useCallback((expected: string) => {
+    return expected
+      .split(/\/|,|;|\bor\b|\band\b/i)
+      .map(part => part.trim())
+      .filter(Boolean);
+  }, []);
+
+  const extractNumbers = useCallback((value: string) => {
+    const matches = (value || '').match(/-?\d+(?:\.\d+)?/g);
+    return matches ? matches.map(Number).filter(n => !Number.isNaN(n)) : [];
+  }, []);
+
+  const reconcileTutorEvaluation = useCallback((payload: TutorPayload, learnerAnswer: string, session: TutorSession) => {
+    if (!payload || typeof payload.is_correct !== 'boolean' || !payload.is_correct) return payload;
+    const feedbackText = `${payload.feedback || ''} ${payload.explanation || ''}`.toLowerCase();
+    if (/(not\s+quite|incorrect|not correct|try again|almost|needs work)/i.test(feedbackText)) {
+      return { ...payload, is_correct: false };
+    }
+
+    const expected = (payload.correct_answer || session.expectedAnswer || '').trim();
+    if (!expected) return payload;
+
+    const normalizedAnswer = normalizeTutorText(learnerAnswer);
+    if (!normalizedAnswer) {
+      return {
+        ...payload,
+        is_correct: false,
+        score: typeof payload.score === 'number' ? Math.min(payload.score, 20) : payload.score,
+      };
+    }
+
+    const expectedNumbers = extractNumbers(expected);
+    const answerNumbers = extractNumbers(learnerAnswer);
+    if (expectedNumbers.length > 0 && answerNumbers.length > 0) {
+      const numericMatch = expectedNumbers.every(num =>
+        answerNumbers.some(answerNum => Math.abs(answerNum - num) < 1e-6)
+      );
+      if (!numericMatch) {
+        return {
+          ...payload,
+          is_correct: false,
+          score: typeof payload.score === 'number' ? Math.min(payload.score, 40) : payload.score,
+          follow_up_question: payload.follow_up_question || session.currentQuestion || 'Try that again.',
+        };
+      }
+      return payload;
+    }
+
+    const expectedCandidates = splitExpectedAnswers(expected).map(normalizeTutorText).filter(Boolean);
+    const normalizedExpected = normalizeTutorText(expected);
+    const isShortExpected = normalizedExpected.length <= 24 && normalizedExpected.split(' ').length <= 4;
+
+    const matchesExpected = expectedCandidates.length > 0
+      ? expectedCandidates.some(candidate =>
+          normalizedAnswer === candidate || normalizedAnswer.includes(candidate) || candidate.includes(normalizedAnswer)
+        )
+      : normalizedExpected
+        ? (normalizedAnswer === normalizedExpected || normalizedAnswer.includes(normalizedExpected) || normalizedExpected.includes(normalizedAnswer))
+        : false;
+
+    if (isShortExpected && !matchesExpected) {
+      return {
+        ...payload,
+        is_correct: false,
+        score: typeof payload.score === 'number' ? Math.min(payload.score, 40) : payload.score,
+        feedback: payload.feedback || 'Not quite yet — let’s try again.',
+        follow_up_question: payload.follow_up_question || session.currentQuestion || 'Try that again.',
+      };
+    }
+
+    if (typeof payload.score === 'number' && payload.score < 70) {
+      return {
+        ...payload,
+        is_correct: false,
+      };
+    }
+
+    return payload;
+  }, [extractNumbers, normalizeTutorText, splitExpectedAnswers]);
 
   const buildTutorDisplayContent = useCallback((payload: TutorPayload, isQuestionStep: boolean) => {
     if (isQuestionStep) {
@@ -1312,7 +1403,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           };
         });
       } else if (tutorPayload && tutorAction === 'evaluate') {
-        const displayContent = buildTutorDisplayContent(tutorPayload, false);
+        const adjustedPayload = activeSession
+          ? reconcileTutorEvaluation(tutorPayload, userText, activeSession)
+          : tutorPayload;
+        const displayContent = buildTutorDisplayContent(adjustedPayload, false);
         if (displayContent) {
           tutorOverridesRef.current[response.id] = displayContent;
           response = {
@@ -1321,20 +1415,20 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             metadata: {
               ...(response.metadata || {}),
               tutor_phase: tutorModeForMetadata ? getTutorPhaseLabel(tutorModeForMetadata) : getTutorPhaseLabel('practice'),
-              tutor_question: !!tutorPayload.follow_up_question,
-              tutor_question_text: tutorPayload.follow_up_question || undefined,
+              tutor_question: !!adjustedPayload.follow_up_question,
+              tutor_question_text: adjustedPayload.follow_up_question || undefined,
             },
           };
         }
 
         if (activeSession) {
-          await logTutorAttempt(activeSession, tutorPayload, userText);
+          await logTutorAttempt(activeSession, adjustedPayload, userText);
           setTutorSession(prev => {
             if (!prev) return prev;
             const totalQuestions = prev.totalQuestions + 1;
-            const correctCount = prev.correctCount + (tutorPayload.is_correct ? 1 : 0);
-            const followUp = tutorPayload.follow_up_question || null;
-            const followExpected = tutorPayload.next_expected_answer || null;
+            const correctCount = prev.correctCount + (adjustedPayload.is_correct ? 1 : 0);
+            const followUp = adjustedPayload.follow_up_question || null;
+            const followExpected = adjustedPayload.next_expected_answer || null;
             const completed = totalQuestions >= prev.maxQuestions && !followUp;
             if (completed) {
               const summary: DashMessage = {
@@ -1514,6 +1608,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     buildTutorEvaluationPrompt,
     buildTutorSystemContext,
     parseTutorPayload,
+    reconcileTutorEvaluation,
     buildTutorDisplayContent,
     extractTutorQuestionFromText,
     logTutorAttempt,
