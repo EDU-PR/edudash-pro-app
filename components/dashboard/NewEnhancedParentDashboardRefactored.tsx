@@ -630,6 +630,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.todays_overview', { defaultValue: "Today's Overview" })}
           sectionId="overview"
           icon="📊"
+          hint={t('dashboard.hints.overview', { defaultValue: 'Attendance, fees, messages, and highlights at a glance.' })}
           defaultCollapsed={collapsedSections.has('overview')}
           onToggle={toggleSection}
         >
@@ -661,6 +662,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
           sectionId="quick-actions"
           icon="⚡"
+          hint={t('dashboard.hints.quick_actions', { defaultValue: 'Shortcuts to homework, messages, fees, and AI help.' })}
           defaultCollapsed={collapsedSections.has('quick-actions')}
           onToggle={toggleSection}
         >
@@ -710,6 +712,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             title={t('dashboard.uniform_sizes', { defaultValue: 'Uniform Sizes' })}
             sectionId="uniform-sizes"
             icon="shirt-outline"
+            hint={t('dashboard.hints.uniform_sizes', { defaultValue: 'View sizes and uniform notes per child.' })}
             defaultCollapsed={collapsedSections.has('uniform-sizes')}
             onToggle={toggleSection}
           >
@@ -728,6 +731,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('calls.live_classes', { defaultValue: 'Live Classes' })}
           sectionId="live-classes"
           icon="videocam"
+          hint={t('dashboard.hints.live_classes', { defaultValue: 'Join live lessons and events when they start.' })}
           defaultCollapsed={collapsedSections.has('live-classes')}
           onToggle={toggleSection}
         >
@@ -765,6 +769,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.parent.section.teacher_notes', { defaultValue: 'Teacher Notes' })}
           sectionId="teacher-notes"
           icon="chatbubbles"
+          hint={t('dashboard.hints.teacher_notes', { defaultValue: 'Latest feedback and notes from educators.' })}
           defaultCollapsed={collapsedSections.has('teacher-notes')}
           onToggle={toggleSection}
         >
@@ -794,6 +799,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.parent.section.progress', { defaultValue: 'Progress & Achievements' })}
           sectionId="progress"
           icon="ribbon"
+          hint={t('dashboard.hints.progress', { defaultValue: 'Badges, milestones, and growth snapshots.' })}
           defaultCollapsed={collapsedSections.has('progress')}
           onToggle={toggleSection}
         >
@@ -823,6 +829,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays 🎂' })}
           sectionId="birthdays"
           icon="🎈"
+          hint={t('dashboard.hints.birthdays', { defaultValue: 'Upcoming class birthdays and reminders.' })}
           defaultCollapsed={collapsedSections.has('birthdays')}
           onToggle={toggleSection}
           actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
@@ -858,6 +865,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           title={t('dashboard.todays_activities', { defaultValue: "Today's Activities" })}
           sectionId="daily-activities"
           icon="☀️"
+          hint={t('dashboard.hints.daily_activities', { defaultValue: 'Daily class activities, photos, and updates.' })}
           defaultCollapsed={collapsedSections.has('daily-activities')}
           onToggle={toggleSection}
         >

@@ -346,6 +346,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })} 
       sectionId="quick-actions" 
       icon="⚡"
+      hint={t('dashboard.hints.principal_quick_actions', { defaultValue: 'Approve, message, and jump to key workflows.' })}
       defaultCollapsed={collapsedSections.has('quick-actions')}
       onToggle={onToggleSection}
     >

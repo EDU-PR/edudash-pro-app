@@ -965,6 +965,7 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
   }
 
   const userIds: string[] = [];
+  const excludedUserIds: string[] = [];
 
   // Role-based targeting within a preschool
   if (request.role_targets && request.role_targets.length > 0) {
@@ -1023,6 +1024,16 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
           .eq('is_active', true);
         if (parents) {
           userIds.push(...parents.map((p: { id: string }) => p.id));
+        }
+      }
+      if (request.announcement_id) {
+        const { data: announcement } = await supabase
+          .from('announcements')
+          .select('author_id')
+          .eq('id', request.announcement_id)
+          .maybeSingle();
+        if (announcement?.author_id) {
+          excludedUserIds.push(announcement.author_id);
         }
       }
       break;
@@ -1344,7 +1355,10 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
       break;
   }
 
-  return [...new Set(userIds.filter(Boolean))];
+  const deduped = [...new Set(userIds.filter(Boolean))];
+  if (excludedUserIds.length === 0) return deduped;
+  const excluded = new Set(excludedUserIds.filter(Boolean));
+  return deduped.filter((id) => !excluded.has(id));
 }
 
 function normalizeRecipientEmails(request: NotificationRequest): string[] {

@@ -214,6 +214,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             title={t('dashboard.parent_requests', { defaultValue: 'Parent Requests' })} 
             sectionId="parent-requests" 
             icon="👨‍👩‍👧"
+            hint={t('dashboard.hints.parent_requests', { defaultValue: 'Approve parent links and registration requests.' })}
             defaultCollapsed={collapsedSections.has('parent-requests')}
             onToggle={toggleSection}
           >
@@ -229,6 +230,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
               : t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays' })} 
             sectionId="birthdays" 
             icon="🎂"
+            hint={t('dashboard.hints.birthdays', { defaultValue: 'See birthdays coming up in each class.' })}
             defaultCollapsed={collapsedSections.has('birthdays')}
             onToggle={toggleSection}
             actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
@@ -271,6 +273,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             title={t('common.search', { defaultValue: 'Search Dashboard' })} 
             sectionId="search" 
             icon="🔍"
+            hint={t('dashboard.hints.search', { defaultValue: 'Jump to any module, report, or student.' })}
             defaultCollapsed={collapsedSections.has('search')}
             onToggle={toggleSection}
           >
@@ -296,6 +299,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             title={t('dashboard.quick_tips', { defaultValue: 'Quick Tips' })} 
             sectionId="tips" 
             icon="💡"
+            hint={t('dashboard.hints.tips', { defaultValue: 'Short tips to keep your school running smoothly.' })}
             defaultCollapsed={collapsedSections.has('tips')}
             onToggle={toggleSection}
           >

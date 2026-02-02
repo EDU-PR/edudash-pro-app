@@ -190,6 +190,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           title={t('dashboard.overview')}
           sectionId="teacher-overview"
           icon="stats-chart"
+          hint={t('dashboard.hints.teacher_overview', { defaultValue: 'Class metrics, alerts, and quick status checks.' })}
         >
           <View style={styles.metricsGrid}>
             {metrics.map((metric, index) => (
@@ -213,6 +214,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           title={t('dashboard.quick_actions')}
           sectionId="teacher-quick-actions"
           icon="flash"
+          hint={t('dashboard.hints.teacher_quick_actions', { defaultValue: 'Create lessons, homework, messages, and tasks fast.' })}
         >
           <View style={styles.actionsGrid}>
             {quickActions.map((action, index) => (
@@ -234,6 +236,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           title={t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}
           sectionId="teacher-birthday-donations"
           icon="gift"
+          hint={t('dashboard.hints.teacher_birthdays', { defaultValue: 'Track donations and class birthday contributions.' })}
         >
           <BirthdayDonationRegister organizationId={organizationId} />
         </CollapsibleSection>
@@ -243,6 +246,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           title={t('dashboard.my_students', { defaultValue: 'My Students' })}
           sectionId="teacher-students"
           icon="people"
+          hint={t('dashboard.hints.teacher_students', { defaultValue: 'Quick access to student profiles and notes.' })}
         >
           {teacherStudentsLoading ? (
             <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
@@ -266,6 +270,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           title={t('dashboard.parent_link_requests', { defaultValue: 'Parent Link Requests' })}
           sectionId="teacher-parent-links"
           icon="link"
+          hint={t('dashboard.hints.teacher_parent_links', { defaultValue: 'Approve or review new parent-child links.' })}
           defaultCollapsed
         >
           <PendingParentLinkRequests />

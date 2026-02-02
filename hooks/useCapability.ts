@@ -7,6 +7,7 @@
 
 import { useContext, useMemo } from 'react';
 import { SubscriptionContext } from '@/contexts/SubscriptionContext';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import {
   hasCapability,
   getCapabilities,
@@ -17,24 +18,29 @@ import {
 } from '@/lib/ai/capabilities';
 
 export function useCapability() {
-  const { tier, ready } = useContext(SubscriptionContext);
+  const { tier, capabilityTier, ready } = useContext(SubscriptionContext);
+  const effectiveTier = useMemo(() => {
+    if (!ready) return 'free' as Tier;
+    if (capabilityTier) return capabilityTier as Tier;
+    return getCapabilityTier(normalizeTierName(String(tier))) as Tier;
+  }, [tier, capabilityTier, ready]);
 
   const capabilities = useMemo(() => {
     if (!ready) return [];
-    return getCapabilities(tier as Tier);
-  }, [tier, ready]);
+    return getCapabilities(effectiveTier as Tier);
+  }, [effectiveTier, ready]);
 
   const tierInfo = useMemo(() => {
     if (!ready) return null;
-    return getTierInfo(tier as Tier);
-  }, [tier, ready]);
+    return getTierInfo(effectiveTier as Tier);
+  }, [effectiveTier, ready]);
 
   /**
    * Check if a single capability is available
    */
   const can = (capability: DashCapability): boolean => {
     if (!ready) return false;
-    return hasCapability(tier as Tier, capability);
+    return hasCapability(effectiveTier as Tier, capability);
   };
 
   /**
@@ -42,7 +48,7 @@ export function useCapability() {
    */
   const canMultiple = (caps: DashCapability[]) => {
     if (!ready) return {};
-    return checkCapabilities(tier as Tier, caps);
+    return checkCapabilities(effectiveTier as Tier, caps);
   };
 
   /**
@@ -50,7 +56,7 @@ export function useCapability() {
    */
   const canAny = (caps: DashCapability[]): boolean => {
     if (!ready) return false;
-    return caps.some(cap => hasCapability(tier as Tier, cap));
+    return caps.some(cap => hasCapability(effectiveTier as Tier, cap));
   };
 
   /**
@@ -58,12 +64,12 @@ export function useCapability() {
    */
   const canAll = (caps: DashCapability[]): boolean => {
     if (!ready) return false;
-    return caps.every(cap => hasCapability(tier as Tier, cap));
+    return caps.every(cap => hasCapability(effectiveTier as Tier, cap));
   };
 
   return {
     // State
-    tier: tier as Tier,
+    tier: effectiveTier as Tier,
     tierInfo,
     capabilities,
     ready,

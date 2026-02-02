@@ -21,6 +21,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeTierName, getCapabilityTier, type CapabilityTier } from '@/lib/tiers';
 
 // Test mode configuration - set to true during Google Play internal testing
 const SUBSCRIPTION_TEST_MODE = process.env.EXPO_PUBLIC_SUBSCRIPTION_TEST_MODE === 'true' || __DEV__;
@@ -53,6 +54,7 @@ type TierSource = 'profile' | 'organization' | 'school' | 'unknown';
 type Ctx = {
   ready: boolean;
   tier: Tier;
+  capabilityTier: CapabilityTier;
   seats: Seats;
   tierSource: TierSource;
   tierSourceDetail?: string;
@@ -67,6 +69,7 @@ type Ctx = {
 export const SubscriptionContext = createContext<Ctx>({
   ready: false,
   tier: 'free',
+  capabilityTier: 'free',
   seats: null,
   tierSource: 'unknown',
   tierSourceDetail: undefined,
@@ -82,6 +85,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const { user } = useAuth();
   const [ready, setReady] = useState(false);
   const [tier, setTier] = useState<Tier>('free');
+  const [capabilityTier, setCapabilityTier] = useState<CapabilityTier>('free');
   const [seats, setSeats] = useState<Seats>(null);
   const [tierSource, setTierSource] = useState<TierSource>('unknown');
   const [tierSourceDetail, setTierSourceDetail] = useState<string | undefined>(undefined);
@@ -111,6 +115,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       // Reset state when switching accounts to avoid cross-user bleed.
       setReady(false);
       setTier('free');
+      setCapabilityTier('free');
       setSeats(null);
       setTierSource('unknown');
       setTierSourceDetail(undefined);
@@ -139,6 +144,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           console.log('[SubscriptionContext] No authenticated user');
           if (mounted) {
             setTier('free');
+            setCapabilityTier('free');
             setTierSource('unknown');
             setTierSourceDetail(undefined);
             setSeats(null);
@@ -164,6 +170,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           console.error('[SubscriptionContext] Error fetching profile:', profileError);
           if (mounted) {
             setTier('free');
+            setCapabilityTier('free');
             setTierSource('unknown');
             setReady(true);
           }
@@ -179,8 +186,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         
         // Get tier from profile (single source of truth)
         if (profile?.subscription_tier) {
-          const tierStr = String(profile.subscription_tier).toLowerCase();
-          finalTier = tierStr as Tier;
+          const tierStr = String(profile.subscription_tier);
+          finalTier = normalizeTierName(tierStr) as Tier;
           source = 'profile';
           console.log('[SubscriptionContext] ✅ Tier from profile:', finalTier);
         }
@@ -224,7 +231,46 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         }
         
         // For teachers/principals/admins with 'free' tier, check organization tier
-        const isStaff = ['teacher', 'principal', 'admin'].includes(profile?.role || '');
+        const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(profile?.role || '');
+        const schoolId = profile?.organization_id || profile?.preschool_id || null;
+
+        // Priority: use active school subscription plan tier (if any)
+        if (isStaff && schoolId) {
+          try {
+            const { data: subscription } = await assertSupabase()
+              .from('subscriptions')
+              .select(`
+                status,
+                seats_total,
+                seats_used,
+                subscription_plans:plan_id (
+                  tier
+                )
+              `)
+              .eq('school_id', schoolId)
+              .in('status', ['active', 'trialing'])
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (subscription) {
+              seatsData = { total: subscription.seats_total ?? 0, used: subscription.seats_used ?? 0 };
+              const planInfo = Array.isArray(subscription.subscription_plans)
+                ? subscription.subscription_plans[0]
+                : subscription.subscription_plans;
+              const planTier = planInfo?.tier ? normalizeTierName(String(planInfo.tier)) : null;
+              if (planTier && (finalTier === 'free' || source === 'unknown')) {
+                finalTier = planTier as Tier;
+                source = 'school';
+                sourceDetail = 'subscription';
+                console.log('[SubscriptionContext] ✅ Tier from active school subscription:', finalTier);
+              }
+            }
+          } catch (err) {
+            console.warn('[SubscriptionContext] Error fetching active subscription:', err);
+          }
+        }
+
         if (finalTier === 'free' && isStaff && profile?.organization_id) {
           try {
             const { data: org } = await assertSupabase()
@@ -233,9 +279,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               .eq('id', profile.organization_id)
               .maybeSingle();
             
-            if (org?.plan_tier && org.plan_tier !== 'free') {
-              finalTier = String(org.plan_tier).toLowerCase() as Tier;
+            if (org?.plan_tier && String(org.plan_tier).toLowerCase() !== 'free') {
+              finalTier = normalizeTierName(String(org.plan_tier)) as Tier;
               source = 'organization';
+              sourceDetail = 'plan_tier';
               console.log('[SubscriptionContext] ✅ Teacher inheriting org tier:', finalTier);
             }
           } catch (err) {
@@ -264,9 +311,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                   .eq('id', profile.preschool_id)
                   .maybeSingle();
                 
-                if (school?.subscription_tier && school.subscription_tier !== 'free') {
-                  finalTier = String(school.subscription_tier).toLowerCase() as Tier;
+                if (school?.subscription_tier && String(school.subscription_tier).toLowerCase() !== 'free') {
+                  finalTier = normalizeTierName(String(school.subscription_tier)) as Tier;
                   source = 'school';
+                  sourceDetail = 'subscription_tier';
                   console.log('[SubscriptionContext] ✅ Teacher inheriting school tier:', finalTier);
                 }
               }
@@ -280,7 +328,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           console.log('[SubscriptionContext] FINAL tier:', finalTier, 'source:', source);
           
           // TESTING MODE: Check and handle 24-hour trial reset
-          if (SUBSCRIPTION_TEST_MODE && finalTier !== 'free') {
+          if (SUBSCRIPTION_TEST_MODE && finalTier !== 'free' && source === 'profile') {
             try {
               const trialStart = await AsyncStorage.getItem(TRIAL_START_KEY);
               const now = Date.now();
@@ -322,6 +370,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             setTrialHoursRemaining(undefined);
           }
           
+          const capTier = getCapabilityTier(normalizeTierName(String(finalTier)));
+          setCapabilityTier(capTier);
+
           setTier(finalTier);
           setTierSource(source);
           setTierSourceDetail(sourceDetail ?? source);
@@ -332,6 +383,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         console.error('[SubscriptionContext] Fatal error:', err);
         if (mounted) {
           setTier('free');
+          setCapabilityTier('free');
           setTierSource('unknown');
           setSeats(null);
           setReady(true);
@@ -385,6 +437,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const value = useMemo<Ctx>(() => ({ 
     ready, 
     tier, 
+    capabilityTier,
     seats, 
     tierSource, 
     tierSourceDetail, 
