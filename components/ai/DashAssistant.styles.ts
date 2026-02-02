@@ -1,6 +1,7 @@
 import { StyleSheet, Platform, Dimensions } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
+const bubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.9 : screenWidth * 0.88;
 
 export const styles = StyleSheet.create({
   container: {
@@ -196,14 +197,14 @@ export const styles = StyleSheet.create({
     marginBottom: 10,
     alignItems: 'flex-start',
     paddingHorizontal: 0, // No horizontal padding for better layout
+    width: '100%',
+    flex: 1,
   },
   userMessage: {
     justifyContent: 'flex-end',
-    alignSelf: 'flex-end',
   },
   assistantMessage: {
     justifyContent: 'flex-start',
-    alignSelf: 'flex-start',
   },
   avatarContainer: {
     width: 32,
@@ -226,7 +227,7 @@ export const styles = StyleSheet.create({
     }),
   },
   messageBubble: {
-    maxWidth: screenWidth < 400 ? screenWidth * 0.86 : screenWidth * 0.82,
+    maxWidth: bubbleMaxWidth,
     padding: screenWidth < 400 ? 12 : 14,
     minHeight: 48,
     flexShrink: 1,

@@ -17,9 +17,10 @@
  * Remove this when Google Play Store approves for production.
  */
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertSupabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Test mode configuration - set to true during Google Play internal testing
 const SUBSCRIPTION_TEST_MODE = process.env.EXPO_PUBLIC_SUBSCRIPTION_TEST_MODE === 'true' || __DEV__;
@@ -78,6 +79,7 @@ export const SubscriptionContext = createContext<Ctx>({
 });
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [ready, setReady] = useState(false);
   const [tier, setTier] = useState<Tier>('free');
   const [seats, setSeats] = useState<Seats>(null);
@@ -85,6 +87,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [tierSourceDetail, setTierSourceDetail] = useState<string | undefined>(undefined);
   const [trialHoursRemaining, setTrialHoursRemaining] = useState<number | undefined>(undefined);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const lastUserIdRef = useRef<string | null>(null);
 
   // Function to manually refresh subscription data
   const refresh = () => {
@@ -102,6 +105,24 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   };
 
   useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    const prevUserId = lastUserIdRef.current;
+    if (prevUserId !== nextUserId) {
+      // Reset state when switching accounts to avoid cross-user bleed.
+      setReady(false);
+      setTier('free');
+      setSeats(null);
+      setTierSource('unknown');
+      setTierSourceDetail(undefined);
+      setTrialHoursRemaining(undefined);
+      if (SUBSCRIPTION_TEST_MODE) {
+        AsyncStorage.removeItem(TRIAL_START_KEY).catch(() => {});
+      }
+    }
+    lastUserIdRef.current = nextUserId;
+  }, [user?.id]);
+
+  useEffect(() => {
     let mounted = true;
     
     console.log('[SubscriptionContext] useEffect triggered, refreshTrigger:', refreshTrigger);
@@ -109,11 +130,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     const fetchSubscriptionData = async () => {
       console.log('[SubscriptionContext] Fetching subscription data...');
       try {
+        if (mounted) {
+          setReady(false);
+        }
         const { data: userRes, error: userError } = await assertSupabase().auth.getUser();
         
         if (userError || !userRes.user) {
           console.log('[SubscriptionContext] No authenticated user');
-          if (mounted) setReady(true);
+          if (mounted) {
+            setTier('free');
+            setTierSource('unknown');
+            setTierSourceDetail(undefined);
+            setSeats(null);
+            setTrialHoursRemaining(undefined);
+            setReady(true);
+          }
           return;
         }
         
@@ -313,7 +344,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return () => {
       mounted = false;
     };
-  }, [refreshTrigger]);
+  }, [refreshTrigger, user?.id]);
 
   const assignSeat = async (subscriptionId: string, userId: string) => {
     try {

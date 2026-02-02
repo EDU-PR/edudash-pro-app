@@ -1,4 +1,7 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
+
+const { width: screenWidth } = Dimensions.get('window');
+const orbBubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.9 : screenWidth * 0.88;
 
 export const styles = StyleSheet.create({
   orbContainer: {
@@ -85,18 +88,22 @@ export const styles = StyleSheet.create({
   },
   upgradeBubble: {
     position: 'absolute',
-    maxWidth: 240,
+    minWidth: 200,
+    maxWidth: 280,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
     backgroundColor: '#0f172a',
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.4)',
+    alignSelf: 'flex-start',
+    flexShrink: 0,
+    zIndex: 2000,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 10,
+    elevation: 2000,
   },
   upgradeBubbleTitle: {
     fontSize: 14,
@@ -188,7 +195,7 @@ export const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   messageBubble: {
-    maxWidth: '85%',
+    maxWidth: orbBubbleMaxWidth,
     padding: 12,
     borderRadius: 16,
     marginBottom: 12,
@@ -423,7 +430,7 @@ export const styles = StyleSheet.create({
   quickActionLocked: {
     opacity: 0.55,
   },
-  lockBadge: {
+  quickActionLockBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,

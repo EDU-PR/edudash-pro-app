@@ -18,6 +18,7 @@ interface ChatHeaderProps {
   isLoading: boolean;
   isTyping?: boolean;
   typingName?: string;
+  typingText?: string | null;
   recipientRole?: string | null;
   onVoiceCall: () => void;
   onVideoCall: () => void;
@@ -32,6 +33,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isLoading,
   isTyping,
   typingName,
+  typingText,
   recipientRole,
   onVoiceCall,
   onVideoCall,
@@ -39,6 +41,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   borderColor = 'rgba(148, 163, 184, 0.15)',
 }) => {
   const insets = useSafeAreaInsets();
+  const typingLabel = typingText || (typingName ? `${typingName} is typing...` : 'Typing...');
+  const isAway = !isOnline && lastSeenText === 'Away';
+  const statusColor = isTyping
+    ? '#fbbf24'
+    : isOnline
+      ? '#22c55e'
+      : isAway
+        ? '#f59e0b'
+        : '#94a3b8';
 
   return (
     <LinearGradient
@@ -61,20 +72,18 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             {displayName}
           </Text>
           <View style={styles.onlineStatus}>
-            <View style={[styles.onlineDot, !isOnline && styles.offlineDot]} />
-            <Text style={styles.headerSub}>
-              {isLoading ? 'Loading...' : isOnline ? 'Online' : lastSeenText}
+            <View style={[
+              styles.onlineDot,
+              (!isOnline || isTyping) && styles.offlineDot,
+              isAway && styles.awayDot,
+            ]} />
+            <Text style={[styles.headerSub, { color: statusColor }]}>
+              {isLoading ? 'Loading...' : isTyping ? typingLabel : isOnline ? 'Online' : lastSeenText}
             </Text>
-            {recipientRole && (
+            {recipientRole && !isTyping && (
               <Text style={styles.roleInline}> · {recipientRole}</Text>
             )}
           </View>
-          {isTyping && (
-            <View style={styles.typingIndicator}>
-              <Text style={styles.typingName}>{typingName} is typing </Text>
-              <TypingIndicator />
-            </View>
-          )}
         </View>
       </TouchableOpacity>
 
@@ -151,9 +160,12 @@ const styles = StyleSheet.create({
   offlineDot: {
     backgroundColor: '#64748b',
   },
+  awayDot: {
+    backgroundColor: '#f59e0b',
+  },
   headerSub: { 
     fontSize: 13,
-    color: '#22c55e',
+    color: '#94a3b8',
   },
   roleInline: {
     fontSize: 13,

@@ -24,6 +24,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SignIn() {
@@ -44,6 +45,18 @@ export default function SignIn() {
   const [refreshing, setRefreshing] = useState(false);
   const passwordInputRef = useRef<TextInput>(null);
   const { showAlert, alertProps } = useAlertModal();
+  const isMountedRef = useRef(true);
+  const fallbackNavTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (fallbackNavTimeoutRef.current) {
+        clearTimeout(fallbackNavTimeoutRef.current);
+        fallbackNavTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Clear local loading state once auth state updates
   useEffect(() => {
@@ -193,9 +206,30 @@ console.log('[SignIn] Component rendering, theme:', theme);
       if (Platform.OS === 'web' || biometricAttempted) {
         return;
       }
-      
+
       try {
         setBiometricAttempted(true);
+
+        const skipParam =
+          searchParams?.fresh === '1' ||
+          searchParams?.signedOut === '1' ||
+          searchParams?.skipBiometric === '1';
+        if (skipParam) {
+          console.log('[SignIn] Skipping biometric auto prompt (fresh sign-out)');
+          return;
+        }
+
+        // Skip biometrics briefly after sign-out to avoid auto re-auth
+        try {
+          const skipUntilRaw = await storage.getItem('auth_skip_biometrics_until');
+          const skipUntil = skipUntilRaw ? Number(skipUntilRaw) : 0;
+          if (skipUntil && Date.now() < skipUntil) {
+            console.log('[SignIn] Skipping biometric auto prompt (cooldown)');
+            return;
+          }
+        } catch {
+          // non-fatal
+        }
         
         // Check if biometrics are enabled and available
         const isEnabled = await BiometricAuthService.isBiometricEnabled();
@@ -251,7 +285,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
     }, 500);
     
     return () => clearTimeout(timer);
-  }, []); // Only run once on mount
+  }, [searchParams]); // Re-run if sign-in is mounted with fresh params
   
   // Load saved credentials (web platform - no biometrics)
   useEffect(() => {
@@ -441,25 +475,97 @@ console.log('[SignIn] Component rendering, theme:', theme);
         }
       }
       
-      const navigationTimeout = setTimeout(() => {
-        console.warn('[SignIn] Navigation timeout (8s) - AuthContext may have failed to route, forcing fallback');
+      const routeWithBasicProfile = async () => {
+        try {
+          const supabase = assertSupabase();
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (!authUser?.id) {
+            return false;
+          }
+
+          let profile = null as any;
+          const { data: profileById } = await supabase
+            .from('profiles')
+            .select('id,role,preschool_id,organization_id')
+            .eq('id', authUser.id)
+            .maybeSingle();
+          profile = profileById || null;
+
+          if (!profile) {
+            const { data: profileByAuth } = await supabase
+              .from('profiles')
+              .select('id,role,preschool_id,organization_id')
+              .eq('auth_user_id', authUser.id)
+              .maybeSingle();
+            profile = profileByAuth || null;
+          }
+
+          const roleRaw = profile?.role || (authUser.user_metadata as any)?.role || (authUser.app_metadata as any)?.role;
+          const role = String(roleRaw || 'parent').toLowerCase();
+          const schoolType =
+            (authUser.user_metadata as any)?.school_type ||
+            (authUser.user_metadata as any)?.organization_type ||
+            (authUser.app_metadata as any)?.school_type;
+          const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
+          const isCommunity = (profile?.organization_id || profile?.preschool_id) === COMMUNITY_SCHOOL_ID;
+          const isK12 = isCommunity || (schoolType ? k12Types.has(String(schoolType).toLowerCase()) : false);
+
+          switch (role) {
+            case 'super_admin':
+            case 'superadmin':
+              router.replace('/screens/super-admin-dashboard');
+              return true;
+            case 'principal':
+            case 'principal_admin':
+              router.replace('/screens/principal-dashboard');
+              return true;
+            case 'teacher':
+              router.replace('/screens/teacher-dashboard');
+              return true;
+            case 'student':
+            case 'learner':
+              router.replace(isK12 ? '/(k12)/student/dashboard' : '/screens/learner-dashboard');
+              return true;
+            case 'admin':
+              router.replace('/screens/org-admin-dashboard');
+              return true;
+            case 'parent':
+            default:
+              router.replace(isK12 ? '/(k12)/parent/dashboard' : '/screens/parent-dashboard');
+              return true;
+          }
+        } catch (navErr) {
+          console.warn('[SignIn] Basic profile route failed:', navErr);
+          return false;
+        }
+      };
+
+      const navigationTimeout = setTimeout(async () => {
+        console.warn('[SignIn] Navigation timeout (4s) - AuthContext may have failed to route, using basic profile fallback');
         // #region agent log
         console.log('[DEBUG_AGENT] SignIn-TIMEOUT', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
         // #endregion
+        if (!isMountedRef.current) {
+          return;
+        }
         setLoading(false);
-        // Force navigation to profiles-gate as fallback (safer than tabs)
-        try {
-          router.replace('/profiles-gate' as any);
-        } catch (navErr) {
-          console.warn('[SignIn] Fallback navigation failed:', navErr);
-          // Last resort: try tabs
+        const routed = await routeWithBasicProfile();
+        if (!routed) {
+          // Force navigation to profiles-gate as fallback (safer than tabs)
           try {
-            router.replace('/(tabs)' as any);
-          } catch (finalErr) {
-            console.error('[SignIn] All fallback navigation attempts failed:', finalErr);
+            router.replace('/profiles-gate' as any);
+          } catch (navErr) {
+            console.warn('[SignIn] Fallback navigation failed:', navErr);
+            // Last resort: try tabs
+            try {
+              router.replace('/(tabs)' as any);
+            } catch (finalErr) {
+              console.error('[SignIn] All fallback navigation attempts failed:', finalErr);
+            }
           }
         }
-      }, 8000); // 8 second timeout
+      }, 4000); // 4 second timeout
+      fallbackNavTimeoutRef.current = navigationTimeout;
       
       // Let AuthContext handle navigation via onAuthStateChange SIGNED_IN event
       // Just wait and clear loading state if navigation happens

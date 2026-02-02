@@ -54,6 +54,7 @@ import { FloatingCallOverlay } from '../components/calls/FloatingCallOverlay';
 import { PlayStoreUpdateChecker } from '../components/updates/PlayStoreUpdateChecker';
 import { LoadingOverlayProvider, useLoadingOverlay } from '../contexts/LoadingOverlayContext';
 import GlobalLoadingOverlay from '../components/ui/GlobalLoadingOverlay';
+import { registerAppResetHandler } from '../lib/appReset';
 
 // Extracted utilities and hooks (WARP.md refactoring)
 import { useAuthGuard, useMobileWebGuard } from '../hooks/useRouteGuard';
@@ -214,6 +215,8 @@ function LayoutContent() {
 }
 
 export default function RootLayout() {
+  const [resetKey, setResetKey] = useState(0);
+
   if (__DEV__) console.log('[RootLayout] Rendering...');
   
   // Setup PWA meta tags on web
@@ -222,10 +225,16 @@ export default function RootLayout() {
       setupPWAMetaTags();
     }
   }, []);
+
+  useEffect(() => {
+    return registerAppResetHandler(() => {
+      setResetKey((prev) => prev + 1);
+    });
+  }, []);
   
   return (
     <ErrorBoundary>
-    <SafeAreaProvider>
+    <SafeAreaProvider key={resetKey}>
       <QueryProvider>
         <ThemeProvider>
           <AuthProvider>

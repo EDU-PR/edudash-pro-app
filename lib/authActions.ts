@@ -1,11 +1,20 @@
 import { router } from 'expo-router';
 import { signOut } from '@/lib/sessionManager';
-import { Platform } from 'react-native';
+import { Platform, BackHandler } from 'react-native';
 import { deactivateCurrentUserTokens } from './pushTokenUtils';
+
+let AsyncStorage: any = null;
+try {
+  AsyncStorage = require('@react-native-async-storage/async-storage').default;
+} catch {
+  AsyncStorage = null;
+}
 
 // Prevent duplicate sign-out calls with timestamp tracking
 let isSigningOut = false;
 let signOutStartTime = 0;
+let signOutSequence = 0;
+let activeSignOutId = 0;
 const STALE_SIGNOUT_THRESHOLD = 10000; // Consider sign-out stale after 10 seconds
 
 // Timeout constants for sign-out operations
@@ -21,6 +30,7 @@ export function resetSignOutState(): void {
   console.log('[authActions] Manually resetting sign-out state');
   isSigningOut = false;
   signOutStartTime = 0;
+  activeSignOutId = 0;
 }
 
 /**
@@ -86,7 +96,9 @@ function forceNavigate(targetRoute: string): void {
  * This ensures all auth state is properly cleaned up
  * Includes timeout protection to prevent hanging
  */
-export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: boolean; redirectTo?: string } | any): Promise<void> {
+type SignOutOptions = { clearBiometrics?: boolean; redirectTo?: string; exitApp?: boolean; resetApp?: boolean };
+
+export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any): Promise<void> {
   // Check if sign-out is in progress, but also handle stale sign-outs
   if (isSignOutInProgress()) {
     console.log('[authActions] Sign-out already in progress, skipping...');
@@ -94,23 +106,46 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
   }
   isSigningOut = true;
   signOutStartTime = Date.now();
+  const opId = ++signOutSequence;
+  activeSignOutId = opId;
   
   // If invoked as onPress handler, first argument will be an event; ignore it
   const options = (optionsOrEvent && typeof optionsOrEvent === 'object' && (
     Object.prototype.hasOwnProperty.call(optionsOrEvent, 'clearBiometrics') ||
-    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'redirectTo')
-  )) ? (optionsOrEvent as { clearBiometrics?: boolean; redirectTo?: string }) : undefined;
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'redirectTo') ||
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'exitApp') ||
+    Object.prototype.hasOwnProperty.call(optionsOrEvent, 'resetApp')
+  )) ? (optionsOrEvent as SignOutOptions) : undefined;
 
   const targetRoute = options?.redirectTo ?? '/(auth)/sign-in';
+  const targetRouteWithFresh =
+    targetRoute.includes('sign-in') && !targetRoute.includes('fresh=1')
+      ? `${targetRoute}${targetRoute.includes('?') ? '&' : '?'}fresh=1`
+      : targetRoute;
+  const shouldExitApp = Platform.OS === 'android' && options?.exitApp === true;
+  const shouldResetApp = options?.resetApp !== false;
   
   // Overall timeout to prevent infinite hang - force navigation after 15 seconds
   const overallTimeoutId = setTimeout(() => {
+    if (activeSignOutId !== opId) {
+      return;
+    }
     console.error('[authActions] Sign-out overall timeout reached, forcing navigation');
-    forceNavigate(targetRoute);
+    forceNavigate(targetRouteWithFresh);
     isSigningOut = false;
   }, OVERALL_SIGNOUT_TIMEOUT);
   
   try {
+    // Best-effort: prevent immediate biometric auto-sign-in after sign-out
+    if (AsyncStorage) {
+      try {
+        const skipUntil = Date.now() + 60_000;
+        await AsyncStorage.setItem('auth_skip_biometrics_until', String(skipUntil));
+      } catch {
+        // non-fatal
+      }
+    }
+
     // CRITICAL: Clear all navigation locks before sign-out to prevent stale locks
     // This prevents sign-in freeze caused by leftover locks from previous session
     try {
@@ -149,27 +184,53 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
     
     // Clear overall timeout since we succeeded
     clearTimeout(overallTimeoutId);
+
+    // If a newer auth flow has started, stop here to avoid stomping navigation
+    if (activeSignOutId !== opId) {
+      return;
+    }
     
     // Give the Supabase auth state change event time to propagate
     // This ensures AuthContext receives the SIGNED_OUT event
     await new Promise(resolve => setTimeout(resolve, 300));
     
+    // Optionally exit app after sign-out (Android only)
+    if (shouldExitApp) {
+      console.log('[authActions] Exiting app after sign-out');
+      try {
+        BackHandler.exitApp();
+      } catch (exitErr) {
+        console.warn('[authActions] Exit app failed, falling back to navigation:', exitErr);
+      }
+      return;
+    }
+
+    if (shouldResetApp) {
+      try {
+        const { requestAppReset } = await import('./appReset');
+        requestAppReset();
+      } catch (resetErr) {
+        console.warn('[authActions] App reset failed (non-fatal):', resetErr);
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
     // Then navigate to sign-in
-    console.log('[authActions] Navigating to:', targetRoute);
+    console.log('[authActions] Navigating to:', targetRouteWithFresh);
     
     // Web-specific: use location.replace to clear history
     if (Platform.OS === 'web') {
       try {
         const w = globalThis as any;
         if (w?.location) {
-          w.location.replace(targetRoute);
+          w.location.replace(targetRouteWithFresh);
           console.log('[authActions] Browser history cleared and navigated');
         } else {
-          router.replace(targetRoute);
+          router.replace(targetRouteWithFresh);
         }
       } catch (historyErr) {
         console.warn('[authActions] Browser history clear failed:', historyErr);
-        router.replace(targetRoute);
+        router.replace(targetRouteWithFresh);
       }
     } else {
       // Mobile: Use dismissAll first to clear the entire navigation stack
@@ -190,13 +251,16 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       // Then navigate to sign-in with a small delay to ensure stack is cleared
       setTimeout(() => {
         try {
-          router.replace(targetRoute as any);
+          if (activeSignOutId !== opId) {
+            return;
+          }
+          router.replace(targetRouteWithFresh as any);
           console.log('[authActions] Mobile navigation executed');
         } catch (navErr) {
           console.error('[authActions] Primary navigation failed, trying fallback:', navErr);
           // Fallback: try direct sign-in route
           try {
-            router.replace('/(auth)/sign-in' as any);
+            router.replace('/(auth)/sign-in?fresh=1' as any);
           } catch (fallbackErr) {
             console.error('[authActions] Fallback navigation also failed:', fallbackErr);
           }
@@ -212,12 +276,12 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       if (Platform.OS === 'web') {
         const w = globalThis as any;
         if (w?.location) {
-          w.location.replace(targetRoute);
+          w.location.replace(targetRouteWithFresh);
         } else {
-          router.replace(targetRoute);
+          router.replace(targetRouteWithFresh);
         }
       } else {
-        router.replace(targetRoute);
+        router.replace(targetRouteWithFresh);
       }
     } catch (navError) {
       console.error('[authActions] Navigation failed:', navError);
@@ -226,6 +290,15 @@ export async function signOutAndRedirect(optionsOrEvent?: { clearBiometrics?: bo
       try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
     }
   } finally {
+    if (shouldExitApp) {
+      // Delay reset to avoid auth guard flicker before app exits
+      setTimeout(() => {
+        isSigningOut = false;
+        signOutStartTime = 0;
+        console.log('[authActions] Sign-out flag reset after exit delay');
+      }, 2500);
+      return;
+    }
     // Reset flag immediately - no delay needed since we use timestamp tracking
     // This allows immediate sign-in after sign-out completes
     isSigningOut = false;

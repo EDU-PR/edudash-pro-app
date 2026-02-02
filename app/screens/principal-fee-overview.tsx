@@ -480,10 +480,10 @@ export default function PrincipalFeeOverviewScreen() {
       if (pettyRes.error) console.warn('[PrincipalFeeOverview] petty cash summary error:', pettyRes.error);
       if (finRes.error) console.warn('[PrincipalFeeOverview] financial expenses summary error:', finRes.error);
 
-      const paymentsData = paymentsRes.data || [];
-      const popsData = popsRes.data || [];
-      const pettyData = pettyRes.data || [];
-      const finData = finRes.data || [];
+      const paymentsData = Array.isArray(paymentsRes.data) ? paymentsRes.data : [];
+      const popsData = Array.isArray(popsRes.data) ? popsRes.data : [];
+      const pettyData = Array.isArray(pettyRes.data) ? pettyRes.data : [];
+      const finData = Array.isArray(finRes.data) ? finRes.data : [];
 
       const nextPaymentSummary: PaymentSummary = paymentsData.reduce((acc, payment: any) => {
         const status = String(payment.status || 'pending');

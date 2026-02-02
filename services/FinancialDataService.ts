@@ -723,12 +723,14 @@ export class FinancialDataService {
             .filter(Boolean);
 
           const feeLabels = feeRows.map((fee: any) => this.getFeeLabel(fee));
-          const feeCategories = feeRows.map((fee: any) => this.getFeeCategoryLabel(fee));
-          const uniqueCategories = Array.from(new Set(
-            feeCategories
-              .filter(Boolean)
-              .map((category: string) => this.normalizeCategoryLabel(category))
-          ));
+          const feeCategories: string[] = feeRows.map((fee: any) => this.getFeeCategoryLabel(fee));
+          const uniqueCategories = Array.from(
+            new Set(
+              feeCategories
+                .filter((category): category is string => Boolean(category))
+                .map((category) => this.normalizeCategoryLabel(category))
+            )
+          );
 
           const metadata = payment.metadata || {};
           const fallbackCategory = inferPaymentCategory(

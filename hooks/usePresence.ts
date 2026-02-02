@@ -134,15 +134,14 @@ export function usePresence(
   // Check if user is online
   // Users are considered online if:
   // 1. Status is 'online' and last seen within 2 minutes (active heartbeat)
-  // 2. Status is 'away' and last seen within 30 minutes (app backgrounded but still available)
-  // This accounts for iOS/Android background execution restrictions
+  // 'away' is treated as not online for chat header (shows "Away")
   const isUserOnline = useCallback((targetUserId: string): boolean => {
     const record = onlineUsers.get(targetUserId);
     if (!record) {
       console.log('[usePresence] isUserOnline: no record for', targetUserId);
       return false;
     }
-    if (record.status === 'offline') {
+    if (record.status !== 'online') {
       console.log('[usePresence] isUserOnline: user offline', targetUserId);
       return false;
     }
@@ -153,8 +152,7 @@ export function usePresence(
     
     // Different grace periods based on status
     // - 'online': 2 minutes (heartbeat is every 30s, so 4 missed heartbeats = offline)
-    // - 'away': 30 minutes (app is backgrounded, user may return)
-    const graceMs = record.status === 'online' ? 120000 : 1800000; // 2 min : 30 min
+    const graceMs = 120000; // 2 min
     const isOnline = lastSeen > (now - graceMs);
     
     console.log('[usePresence] isUserOnline check:', {
@@ -163,7 +161,7 @@ export function usePresence(
       lastSeen: new Date(record.last_seen_at).toISOString(),
       ageSeconds,
       isOnline,
-      threshold: record.status === 'online' ? '2min' : '30min'
+      threshold: '2min'
     });
     
     return isOnline;
@@ -178,7 +176,14 @@ export function usePresence(
   const getLastSeenText = useCallback((targetUserId: string): string => {
     const record = onlineUsers.get(targetUserId);
     if (!record) return 'Offline';
-    if (isUserOnline(targetUserId)) return 'Online';
+    if (record.status === 'online' && isUserOnline(targetUserId)) return 'Online';
+    if (record.status === 'away') {
+      const lastSeen = new Date(record.last_seen_at).getTime();
+      const now = Date.now();
+      if (lastSeen > now - 1800000) {
+        return 'Away';
+      }
+    }
     
     const lastSeen = new Date(record.last_seen_at);
     const now = new Date();
@@ -187,10 +192,12 @@ export function usePresence(
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
     
-    if (diffMins < 1) return 'Just now';
+    const timeText = lastSeen.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    
+    if (diffMins < 1) return 'Last seen just now';
     if (diffMins < 60) return `Last seen ${diffMins} min ago`;
-    if (diffHours < 24) return `Last seen ${diffHours}h ago`;
-    if (diffDays === 1) return 'Last seen yesterday';
+    if (diffHours < 24) return `Last seen today at ${timeText}`;
+    if (diffDays === 1) return `Last seen yesterday at ${timeText}`;
     if (diffDays < 7) return `Last seen ${diffDays} days ago`;
     return `Last seen ${lastSeen.toLocaleDateString()}`;
   }, [onlineUsers, isUserOnline]);

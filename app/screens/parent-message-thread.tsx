@@ -617,7 +617,7 @@ export default function ParentMessageThreadScreen() {
         lastSeenText={lastSeenText}
         isLoading={loading}
         isTyping={isOtherTyping}
-        typingName={recipientName}
+        typingText={typingText}
         recipientRole={recipientRole}
         onVoiceCall={handleVoiceCall}
         onVideoCall={handleVideoCall}

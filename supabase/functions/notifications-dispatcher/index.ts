@@ -173,6 +173,7 @@ interface PushDevice {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const EXPO_ACCESS_TOKEN = Deno.env.get('EXPO_ACCESS_TOKEN');
+const WEB_PUSH_URL = Deno.env.get('WEB_PUSH_URL') || Deno.env.get('APP_URL') || '';
 
 // Create Supabase client with service role for bypassing RLS
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
@@ -1932,6 +1933,12 @@ interface ExpoResult {
   error?: string;
 }
 
+interface WebPushResult {
+  success?: boolean;
+  error?: string;
+  result?: unknown;
+}
+
 /**
  * Send push notification via Expo
  */
@@ -1968,6 +1975,50 @@ async function sendExpoNotification(notification: ExpoNotificationPayload): Prom
   } catch (error) {
     console.error('Error sending Expo notification:', error);
     throw error;
+  }
+}
+
+/**
+ * Send push notification via Web Push (PWA)
+ */
+async function sendWebPushNotification(
+  userIds: string[],
+  template: NotificationTemplate,
+  eventType: string,
+  extraData: Record<string, unknown>
+): Promise<WebPushResult> {
+  if (!WEB_PUSH_URL) {
+    console.warn('WEB_PUSH_URL not configured, skipping web push notifications');
+    return { success: false, error: 'WEB_PUSH_URL not configured' };
+  }
+
+  try {
+    const response = await fetch(`${WEB_PUSH_URL}/api/notifications/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userIds,
+        title: template.title,
+        body: template.body,
+        type: eventType,
+        data: extraData,
+        tag: `${eventType}-${Date.now()}`
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Web push error:', response.status, errorText);
+      return { success: false, error: `Web push error: ${response.status} ${errorText}` };
+    }
+
+    const result = await response.json().catch(() => ({}));
+    return { success: true, result };
+  } catch (error) {
+    console.error('Web push request failed:', error);
+    return { success: false, error: String(error) };
   }
 }
 
@@ -2324,7 +2375,9 @@ async function dispatchNotification(request: Request): Promise<Response> {
 
     const pushTokens = filteredUserIds.length > 0 ? await getPushTokensForUsers(filteredUserIds) : [];
 
-    if (filteredUserIds.length > 0 && pushTokens.length === 0 && !notificationRequest.include_email && recipientEmails.length === 0) {
+    const canSendWebPush = !!WEB_PUSH_URL;
+
+    if (filteredUserIds.length > 0 && pushTokens.length === 0 && !notificationRequest.include_email && recipientEmails.length === 0 && !canSendWebPush) {
       await trackAnalyticsEvent('edudash.notifications.skipped', {
         event_type: notificationRequest.event_type,
         reason: 'no_push_tokens',
@@ -2376,6 +2429,22 @@ async function dispatchNotification(request: Request): Promise<Response> {
           console.error('Failed to send notification to:', notification.to[0], error);
           expoResults.push({ success: false, error: String(error) });
         }
+      }
+    }
+
+    if (filteredUserIds.length > 0 && canSendWebPush) {
+      try {
+        const webPushResult = await sendWebPushNotification(
+          filteredUserIds,
+          template,
+          notificationRequest.event_type,
+          enhancedData
+        );
+        if (!webPushResult.success) {
+          console.warn('Web push notification failed:', webPushResult.error);
+        }
+      } catch (webPushError) {
+        console.error('Error sending web push notifications:', webPushError);
       }
     }
 
