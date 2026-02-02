@@ -84,7 +84,7 @@ export default function FinanceDashboard() {
       const transactionData = await FinancialDataService.getTransactions({
         from: thirtyDaysAgo.toISOString(),
         to: new Date().toISOString(),
-      }, preschoolId || undefined);
+      }, preschoolId || undefined, { useAccountingDate: false });
       setTransactions(transactionData);
 
     } catch (error) {

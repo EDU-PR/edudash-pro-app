@@ -39,6 +39,8 @@ export function RoboticsActivitySelector({ preschoolId, onSelect }: RoboticsActi
           .select('*')
           .eq('preschool_id', preschoolId)
           .eq('stem_category', 'robotics')
+          .eq('approval_status', 'approved')
+          .eq('is_active', true)
           .eq('is_published', true)
           .order('title');
 

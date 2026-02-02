@@ -391,6 +391,57 @@ export function usePettyCash() {
     }
   };
 
+  const resetPettyCash = async (reason?: string) => {
+    if (!preschoolId || !accountId) {
+      Alert.alert(t('common.error'), t('petty_cash.error_no_school'));
+      return false;
+    }
+
+    const currentBalance = Number(summary.current_balance || 0);
+    if (Math.abs(currentBalance) < 0.01) {
+      Alert.alert(t('common.info', 'Info'), t('petty_cash.reset_already_zero', 'Petty cash balance is already zero.'));
+      return false;
+    }
+
+    const now = new Date();
+    const reference = `RESET-${now.toISOString().slice(0, 10).replace(/-/g, '')}`;
+    const description = reason?.trim()
+      ? `Petty cash reset: ${reason.trim()}`
+      : `Petty cash reset - ${now.toLocaleDateString()}`;
+    const type = currentBalance > 0 ? 'adjustment' : 'replenishment';
+    const amount = Math.abs(currentBalance);
+
+    try {
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            account_id: accountId,
+            amount,
+            description,
+            category: 'Reset',
+            type,
+            reference_number: reference,
+            created_by: user?.id,
+            status: 'approved',
+          })
+      );
+
+      if (error) {
+        Alert.alert(t('common.error'), t('petty_cash.reset_failed', 'Failed to reset petty cash.'));
+        return false;
+      }
+
+      Alert.alert(t('common.success'), t('petty_cash.reset_success', 'Petty cash reset to zero.'));
+      loadPettyCashData();
+      return true;
+    } catch {
+      Alert.alert(t('common.error'), t('petty_cash.reset_failed', 'Failed to reset petty cash.'));
+      return false;
+    }
+  };
+
   const cancelTransaction = async (transactionId: string) => {
     try {
       const { error } = await assertSupabase()
@@ -486,6 +537,7 @@ export function usePettyCash() {
     addExpense,
     addReplenishment,
     addWithdrawal,
+    resetPettyCash,
     cancelTransaction,
     deleteTransaction,
     reverseTransaction,

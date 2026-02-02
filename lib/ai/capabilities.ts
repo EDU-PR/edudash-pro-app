@@ -376,7 +376,9 @@ export interface CapabilityMetadata {
  * ```
  */
 export function hasCapability(tier: Tier, capability: DashCapability): boolean {
-  return CAPABILITY_MATRIX[tier].includes(capability);
+  const capabilities = CAPABILITY_MATRIX[tier];
+  if (!capabilities) return false;
+  return capabilities.includes(capability);
 }
 
 /**
@@ -392,7 +394,7 @@ export function hasCapability(tier: Tier, capability: DashCapability): boolean {
  * ```
  */
 export function getCapabilities(tier: Tier): readonly DashCapability[] {
-  return CAPABILITY_MATRIX[tier];
+  return CAPABILITY_MATRIX[tier] || [];
 }
 
 /**
@@ -590,6 +592,8 @@ export function getTierInfo(tier: Tier): {
     premium: { name: 'Premium', color: '#FF9500', order: 2 },
     enterprise: { name: 'Enterprise', color: '#007AFF', order: 3 },
   };
-  
-  return { id: tier, ...tiers[tier] };
+
+  const fallback = tiers.free;
+  const info = tiers[tier] || fallback;
+  return { id: (tiers[tier] ? tier : 'free'), ...info };
 }

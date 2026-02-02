@@ -7,6 +7,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
+import { isTuitionFee } from '@/lib/utils/feeUtils';
 
 export interface UnifiedTransaction {
   id: string;
@@ -53,10 +54,20 @@ export interface TransactionRecord {
   // Optional enrichments
   reference?: string | null;
   attachmentUrl?: string | null; // For payments POP/attachments
-  receiptUrl?: string | null;    // For petty cash single URL
+  receiptUrl?: string | null;    // For petty cash or payment receipts
+  receiptStoragePath?: string | null; // For payments with stored PDF path
   receiptCount?: number;         // Count from petty_cash_receipts
   hasReceipt?: boolean;          // True if any receipt evidence present
   source?: 'payment' | 'petty_cash' | 'financial_txn';
+  paidDate?: string | null;
+  dueDate?: string | null;
+  isAdvancePayment?: boolean;
+  feeIds?: string[] | null;
+  feeLabels?: string[];
+  feeSummary?: string | null;
+  paymentMethod?: string | null;
+  studentId?: string | null;
+  parentId?: string | null;
 }
 
 export interface FinanceOverviewData {
@@ -78,38 +89,59 @@ export class FinancialDataService {
    */
   static async getFinancialMetrics(preschoolId: string): Promise<FinancialMetrics> {
     try {
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
-      const monthStart = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
-      const nextMonthStart = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-01`;
+      const now = new Date();
+      const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const monthStart = `${monthStartDate.getFullYear()}-${String(monthStartDate.getMonth() + 1).padStart(2, '0')}-01`;
+      const nextMonthStart = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
 
-      // Get monthly revenue from completed payments
-      const { data: revenuePayments, error: revenueError } = await assertSupabase()
-        .from('payments')
-        .select('amount')
-        .eq('preschool_id', preschoolId)
-        .in('status', ['completed', 'approved'])
-        .gte('created_at', monthStart)
-        .lt('created_at', nextMonthStart);
+      let monthlyRevenue = 0;
+      let totalOutstanding = 0;
 
-      if (revenueError) {
-        console.error('Error fetching revenue:', revenueError);
+      // Prefer fee due-month accounting so advance payments land in the correct month
+      const [feesDueRes, feesFallbackRes] = await Promise.all([
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .gte('due_date', monthStart)
+          .lt('due_date', nextMonthStart),
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .is('due_date', null)
+          .gte('created_at', monthStartDate.toISOString())
+          .lt('created_at', nextMonthDate.toISOString()),
+      ]);
+
+      if (feesDueRes.error || feesFallbackRes.error) {
+        console.error('Error fetching fees for revenue:', feesDueRes.error || feesFallbackRes.error);
+
+        // Fallback to payment-created date accounting if fee query fails
+        const { data: revenuePayments } = await assertSupabase()
+          .from('payments')
+          .select('amount')
+          .eq('preschool_id', preschoolId)
+          .in('status', ['completed', 'approved'])
+          .gte('created_at', monthStart)
+          .lt('created_at', nextMonthStart);
+        monthlyRevenue = revenuePayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+
+        const { data: outstandingPayments } = await assertSupabase()
+          .from('payments')
+          .select('amount')
+          .eq('preschool_id', preschoolId)
+          .in('status', ['pending', 'proof_submitted', 'under_review']);
+        totalOutstanding = outstandingPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      } else {
+        const feeRows = [
+          ...(feesDueRes.data || []),
+          ...(feesFallbackRes.data || []),
+        ];
+        monthlyRevenue = feeRows.reduce((sum, fee) => sum + this.getPaidAmountForFee(fee), 0);
+        totalOutstanding = feeRows.reduce((sum, fee) => sum + this.getOutstandingAmountForFee(fee), 0);
       }
-
-      const monthlyRevenue = revenuePayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-
-      // Get outstanding payments
-      const { data: outstandingPayments, error: outstandingError } = await assertSupabase()
-        .from('payments')
-        .select('amount')
-        .eq('preschool_id', preschoolId)
-        .in('status', ['pending', 'proof_submitted', 'under_review']);
-
-      if (outstandingError) {
-        console.error('Error fetching outstanding:', outstandingError);
-      }
-
-      const totalOutstanding = outstandingPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
       // Get monthly expenses from petty cash
       const { data: expenseTransactions, error: expenseError } = await withPettyCashTenant((column, client) =>
@@ -127,7 +159,7 @@ export class FinancialDataService {
         console.error('Error fetching expenses:', expenseError);
       }
 
-let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+      let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
 
       // Include other expense sources from financial_transactions (completed/approved) for current month
       try {
@@ -197,14 +229,51 @@ let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.a
         const monthStart = `${year}-${month.toString().padStart(2, '0')}-01`;
         const nextMonthStart = `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
 
-        // Get revenue for this month
-        const { data: monthlyRevenue } = await assertSupabase()
-          .from('payments')
-          .select('amount')
-          .eq('preschool_id', preschoolId)
-          .in('status', ['completed', 'approved'])
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
+        // Get revenue for this month (fee due-month basis)
+        let revenue = 0;
+        try {
+          const [feesDueRes, feesFallbackRes] = await Promise.all([
+            assertSupabase()
+              .from('student_fees')
+              .select('amount, final_amount, amount_paid, status, due_date, created_at')
+              .eq('preschool_id', preschoolId)
+              .gte('due_date', monthStart)
+              .lt('due_date', nextMonthStart),
+            assertSupabase()
+              .from('student_fees')
+              .select('amount, final_amount, amount_paid, status, due_date, created_at')
+              .eq('preschool_id', preschoolId)
+              .is('due_date', null)
+              .gte('created_at', new Date(`${monthStart}T00:00:00`).toISOString())
+              .lt('created_at', new Date(`${nextMonthStart}T00:00:00`).toISOString()),
+          ]);
+
+          if (feesDueRes.error || feesFallbackRes.error) {
+            const { data: monthlyRevenue } = await assertSupabase()
+              .from('payments')
+              .select('amount')
+              .eq('preschool_id', preschoolId)
+              .in('status', ['completed', 'approved'])
+              .gte('created_at', monthStart)
+              .lt('created_at', nextMonthStart);
+            revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+          } else {
+            const feeRows = [
+              ...(feesDueRes.data || []),
+              ...(feesFallbackRes.data || []),
+            ];
+            revenue = feeRows.reduce((sum, fee) => sum + this.getPaidAmountForFee(fee), 0);
+          }
+        } catch {
+          const { data: monthlyRevenue } = await assertSupabase()
+            .from('payments')
+            .select('amount')
+            .eq('preschool_id', preschoolId)
+            .in('status', ['completed', 'approved'])
+            .gte('created_at', monthStart)
+            .lt('created_at', nextMonthStart);
+          revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+        }
 
         // Get expenses for this month
         const { data: monthlyExpenses } = await withPettyCashTenant((column, client) =>
@@ -218,21 +287,20 @@ let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.a
             .lt('created_at', nextMonthStart)
         );
 
-        const revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
-let otherExp = 0;
-try {
-  const { data: monthOther } = await assertSupabase()
-    .from('financial_transactions')
-    .select('amount, type, status, created_at')
-    .eq('preschool_id', preschoolId)
-    .in('type', ['expense','operational_expense','salary','purchase'])
-    .in('status', ['approved','completed'])
-    .gte('created_at', monthStart)
-    .lt('created_at', nextMonthStart);
-  otherExp = (monthOther || []).reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
-} catch { /* Intentional: non-fatal */ }
-const expenses = petty + otherExp;
+        const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+        let otherExp = 0;
+        try {
+          const { data: monthOther } = await assertSupabase()
+            .from('financial_transactions')
+            .select('amount, type, status, created_at')
+            .eq('preschool_id', preschoolId)
+            .in('type', ['expense','operational_expense','salary','purchase'])
+            .in('status', ['approved','completed'])
+            .gte('created_at', monthStart)
+            .lt('created_at', nextMonthStart);
+          otherExp = (monthOther || []).reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
+        } catch { /* Intentional: non-fatal */ }
+        const expenses = petty + otherExp;
 
         trendData.push({
           month: date.toLocaleDateString('en-US', { month: 'short' }),
@@ -267,7 +335,7 @@ const expenses = petty + otherExp;
       const transactions: UnifiedTransaction[] = [];
 
       // Get recent payments
-const { data: payments, error: paymentsError } = await assertSupabase()
+      const { data: payments, error: paymentsError } = await assertSupabase()
         .from('payments')
         .select(`
           id,
@@ -284,7 +352,7 @@ const { data: payments, error: paymentsError } = await assertSupabase()
         .limit(Math.ceil(limit / 2));
 
       if (!paymentsError && payments) {
-(payments || []).forEach((payment: any) => {
+        (payments || []).forEach((payment: any) => {
           const studentData = Array.isArray(payment.students) ? payment.students[0] : payment.students;
           const studentName = studentData 
             ? `${studentData.first_name} ${studentData.last_name}`
@@ -305,7 +373,7 @@ const { data: payments, error: paymentsError } = await assertSupabase()
       }
 
       // Get recent petty cash transactions
-const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((column, client) =>
+      const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((column, client) =>
         client
           .from('petty_cash_transactions')
           .select('id, amount, description, status, created_at, receipt_number, receipt_url, category, type')
@@ -315,7 +383,7 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
       );
 
       if (!pettyCashError && pettyCash) {
-(pettyCash || []).forEach((transaction: any) => {
+        (pettyCash || []).forEach((transaction: any) => {
           transactions.push({
             id: transaction.id,
             type: 'expense',
@@ -358,7 +426,6 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
       const now = new Date();
       const expenseTypes = ['expense', 'operational_expense', 'salary', 'purchase'] as const;
       const expenseStatuses = ['approved', 'completed'] as const;
-      const revenueStatuses = ['completed', 'approved'] as const;
 
       const formatMonthKey = (date: Date): string =>
         `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -385,15 +452,25 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
         throw new Error('Failed to compute financial overview date range');
       }
 
-      let paymentsQuery = assertSupabase()
-        .from('payments')
-        .select('amount, created_at')
-        .in('status', revenueStatuses as unknown as string[])
+      const rangeStartDateStr = `${monthWindows[0]?.start.getFullYear()}-${String(monthWindows[0]?.start.getMonth() + 1).padStart(2, '0')}-01`;
+      const rangeEndDateStr = `${monthWindows[monthWindows.length - 1]?.end.getFullYear()}-${String(monthWindows[monthWindows.length - 1]?.end.getMonth() + 1).padStart(2, '0')}-01`;
+
+      let feesDueQuery = assertSupabase()
+        .from('student_fees')
+        .select('amount, final_amount, amount_paid, status, due_date, created_at')
+        .gte('due_date', rangeStartDateStr)
+        .lt('due_date', rangeEndDateStr);
+
+      let feesFallbackQuery = assertSupabase()
+        .from('student_fees')
+        .select('amount, final_amount, amount_paid, status, due_date, created_at')
+        .is('due_date', null)
         .gte('created_at', rangeStartIso)
         .lt('created_at', rangeEndIso);
 
       if (preschoolId) {
-        paymentsQuery = paymentsQuery.eq('preschool_id', preschoolId);
+        feesDueQuery = feesDueQuery.eq('preschool_id', preschoolId);
+        feesFallbackQuery = feesFallbackQuery.eq('preschool_id', preschoolId);
       }
 
       const pettyCashResult = await withPettyCashTenant((column, client) => {
@@ -427,12 +504,20 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
         financialExpenseQuery = financialExpenseQuery.eq('preschool_id', preschoolId);
       }
 
-      const [paymentsResult, financialExpenseResult] = await Promise.allSettled([
-        paymentsQuery,
+      const [feesDueResult, feesFallbackResult, financialExpenseResult] = await Promise.allSettled([
+        feesDueQuery,
+        feesFallbackQuery,
         financialExpenseQuery,
       ]);
 
-      type PaymentRow = { amount: number | null; created_at: string | null };
+      type FeeRow = {
+        amount: number | null;
+        final_amount: number | null;
+        amount_paid: number | null;
+        status: string | null;
+        due_date: string | null;
+        created_at: string | null;
+      };
       type PettyCashRow = { amount: number | null; created_at: string | null; category: string | null };
       type ExpenseCategoryRow = { name?: string | null } | null;
       type FinancialExpenseRow = {
@@ -451,18 +536,23 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
         return index === undefined ? null : index;
       };
 
-      const paymentsData: PaymentRow[] = paymentsResult.status === 'fulfilled'
-        ? (paymentsResult.value.data as PaymentRow[] | null) || []
+      const feesDueData: FeeRow[] = feesDueResult.status === 'fulfilled'
+        ? (feesDueResult.value.data as FeeRow[] | null) || []
+        : [];
+      const feesFallbackData: FeeRow[] = feesFallbackResult.status === 'fulfilled'
+        ? (feesFallbackResult.value.data as FeeRow[] | null) || []
         : [];
       const pettyCashData: PettyCashRow[] = (pettyCashResult.data as PettyCashRow[] | null) || [];
       const financialExpenseData: FinancialExpenseRow[] = financialExpenseResult.status === 'fulfilled'
         ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || []
         : [];
 
-      paymentsData.forEach((payment) => {
-        const monthIndex = toMonthIndex(payment.created_at);
+      const feesData = [...feesDueData, ...feesFallbackData];
+
+      feesData.forEach((fee) => {
+        const monthIndex = toMonthIndex(fee.due_date || fee.created_at);
         if (monthIndex === null) return;
-        revenueMonthly[monthIndex] += Number(payment.amount) || 0;
+        revenueMonthly[monthIndex] += this.getPaidAmountForFee(fee);
       });
 
       pettyCashData.forEach((expense) => {
@@ -534,7 +624,11 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
   /**
    * Get transactions within a date range (for financial transactions screen)
    */
-  static async getTransactions(dateRange: DateRange, preschoolId?: string): Promise<TransactionRecord[]> {
+  static async getTransactions(
+    dateRange: DateRange,
+    preschoolId?: string,
+    options?: { useAccountingDate?: boolean }
+  ): Promise<TransactionRecord[]> {
     try {
       const transactions: TransactionRecord[] = [];
 
@@ -542,6 +636,17 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
         dateRange,
         preschoolId,
       });
+
+      const useAccountingDate = options?.useAccountingDate ?? true;
+      const rangeStart = new Date(dateRange.from);
+      const rangeEnd = new Date(dateRange.to);
+      const extendedStart = new Date(rangeStart);
+      if (!Number.isNaN(extendedStart.getTime())) {
+        extendedStart.setMonth(extendedStart.getMonth() - 2);
+      }
+      const paymentStartIso = useAccountingDate && !Number.isNaN(extendedStart.getTime())
+        ? extendedStart.toISOString()
+        : dateRange.from;
 
       // Get payments within date range
       // Use LEFT JOIN (no !inner) so payments without students still return
@@ -555,10 +660,14 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
           created_at,
           payment_reference,
           attachment_url,
+          metadata,
+          payment_method,
           student_id,
+          parent_id,
+          fee_ids,
           students(first_name, last_name)
         `)
-        .gte('created_at', dateRange.from)
+        .gte('created_at', paymentStartIso)
         .lte('created_at', dateRange.to)
         .order('created_at', { ascending: false });
 
@@ -577,23 +686,110 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
       if (paymentsError) {
         console.error('Error fetching payments for transactions:', paymentsError);
       } else if (payments) {
+        const feeIds = new Set<string>();
+        payments.forEach((payment: any) => {
+          const ids = Array.isArray(payment.fee_ids) ? payment.fee_ids : [];
+          ids.forEach((id: string) => feeIds.add(id));
+        });
+
+        const feeMap = new Map<string, any>();
+        if (feeIds.size > 0) {
+          const { data: feeRows, error: feeError } = await assertSupabase()
+            .from('student_fees')
+            .select('id, due_date, paid_date, amount, final_amount, amount_paid, status, fee_structures(name, fee_type, description)')
+            .in('id', Array.from(feeIds));
+          if (feeError) {
+            console.warn('[FinancialDataService] Failed to load fee metadata for payments:', feeError.message);
+          } else {
+            (feeRows || []).forEach((fee: any) => feeMap.set(fee.id, fee));
+          }
+        }
+
+        const buildFeeSummary = (labels: string[]): string | null => {
+          const unique = Array.from(new Set(labels.filter(Boolean)));
+          if (unique.length === 0) return null;
+          if (unique.length <= 2) return unique.join(' + ');
+          return `${unique[0]} + ${unique.length - 1} more`;
+        };
+
         payments.forEach((payment: any) => {
           const studentData = Array.isArray(payment.students) ? payment.students[0] : payment.students;
           const studentName = studentData 
             ? `${studentData.first_name} ${studentData.last_name}`
             : 'Student';
-          
+          const paymentFeeIds = Array.isArray(payment.fee_ids) ? payment.fee_ids : [];
+          const feeRows = paymentFeeIds
+            .map((id: string) => feeMap.get(id))
+            .filter(Boolean);
+
+          const feeLabels = feeRows.map((fee: any) => this.getFeeLabel(fee));
+          const feeCategories = feeRows.map((fee: any) => this.getFeeCategoryLabel(fee));
+          const uniqueCategories = Array.from(new Set(
+            feeCategories
+              .filter(Boolean)
+              .map((category: string) => this.normalizeCategoryLabel(category))
+          ));
+
+          const category = uniqueCategories.length === 1
+            ? uniqueCategories[0]
+            : uniqueCategories.length > 1
+              ? 'Multiple Fees'
+              : 'Tuition';
+
+          const feeSummary = buildFeeSummary(feeLabels);
+
+          const dueDates = feeRows
+            .map((fee: any) => fee?.due_date)
+            .filter(Boolean)
+            .map((dateStr: string) => new Date(dateStr));
+
+          let dueDate: string | null = null;
+          let accountingDate = payment.created_at || new Date().toISOString();
+          if (dueDates.length) {
+            dueDates.sort((a, b) => a.getTime() - b.getTime());
+            const earliest = dueDates[0];
+            const sameMonth = dueDates.every(
+              (date) => date.getFullYear() === earliest.getFullYear() && date.getMonth() === earliest.getMonth()
+            );
+            const earliestFee = feeRows.find((fee: any) => fee?.due_date && new Date(fee.due_date).getTime() === earliest.getTime());
+            dueDate = earliestFee?.due_date || earliest.toISOString();
+            if (sameMonth && dueDate) {
+              accountingDate = dueDate;
+            }
+          }
+
+          const metadata = payment.metadata || {};
+          const receiptUrl = typeof metadata?.receipt_url === 'string' ? metadata.receipt_url : null;
+          const receiptStoragePath = typeof metadata?.receipt_storage_path === 'string' ? metadata.receipt_storage_path : null;
+          const hasReceipt = Boolean(receiptUrl || receiptStoragePath);
+
+          const resolvedDate = useAccountingDate
+            ? accountingDate
+            : payment.created_at || accountingDate;
+
           transactions.push({
             id: payment.id,
             type: 'income',
-            category: 'Tuition',
+            category,
             amount: payment.amount || 0,
             description: payment.description || `Payment from ${studentName}`,
-            date: payment.created_at,
+            date: resolvedDate,
             status: this.mapPaymentStatus(payment.status),
             reference: payment.payment_reference ?? null,
             attachmentUrl: payment.attachment_url ?? null,
+            receiptUrl,
+            receiptStoragePath,
+            hasReceipt,
             source: 'payment',
+            paidDate: payment.created_at ?? null,
+            dueDate,
+            isAdvancePayment: this.isAdvancePayment(dueDate, payment.created_at),
+            feeIds: paymentFeeIds.length ? paymentFeeIds : null,
+            feeLabels,
+            feeSummary,
+            paymentMethod: payment.payment_method ?? null,
+            studentId: payment.student_id ?? null,
+            parentId: payment.parent_id ?? null,
           });
         });
       }
@@ -718,12 +914,22 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
         console.error('[FinancialDataService] Error fetching financial_transactions:', err);
       }
 
+      const rangeStartTime = rangeStart.getTime();
+      const rangeEndTime = rangeEnd.getTime();
+      const filteredTransactions = Number.isNaN(rangeStartTime) || Number.isNaN(rangeEndTime)
+        ? transactions
+        : transactions.filter((transaction) => {
+            const time = new Date(transaction.date).getTime();
+            if (Number.isNaN(time)) return false;
+            return time >= rangeStartTime && time <= rangeEndTime;
+          });
+
       // Sort by date (newest first)
-      transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      filteredTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
-      console.log('[FinancialDataService] Total transactions returned:', transactions.length);
+      console.log('[FinancialDataService] Total transactions returned:', filteredTransactions.length);
       
-      return transactions;
+      return filteredTransactions;
 
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -770,6 +976,59 @@ const { data: pettyCash, error: pettyCashError } = await withPettyCashTenant((co
       default:
         return 'pending';
     }
+  }
+
+  private static normalizeCategoryLabel(value?: string | null): string {
+    if (!value) return 'Other';
+    return value
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  private static getFeeStructure(fee: any) {
+    const relation = fee?.fee_structures;
+    return Array.isArray(relation) ? relation[0] : relation;
+  }
+
+  private static getFeeLabel(fee: any): string {
+    const structure = this.getFeeStructure(fee);
+    return structure?.name || structure?.fee_type || fee?.description || 'Fee';
+  }
+
+  private static getFeeCategoryLabel(fee: any): string {
+    const structure = this.getFeeStructure(fee);
+    if (isTuitionFee(structure?.fee_type, structure?.name, structure?.description)) {
+      return 'Tuition';
+    }
+    return structure?.fee_type || structure?.name || 'Fee';
+  }
+
+  private static getPaidAmountForFee(fee: any): number {
+    const paid = Number(fee?.amount_paid || 0);
+    if (paid > 0) return paid;
+    const finalAmount = Number(fee?.final_amount ?? fee?.amount ?? 0);
+    return String(fee?.status) === 'paid' ? finalAmount : 0;
+  }
+
+  private static getOutstandingAmountForFee(fee: any): number {
+    const outstanding = Number(fee?.amount_outstanding ?? 0);
+    if (outstanding > 0) return outstanding;
+    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
+    if (unpaidStatuses.has(String(fee?.status))) {
+      return Number(fee?.final_amount ?? fee?.amount ?? 0);
+    }
+    return 0;
+  }
+
+  private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
+    if (!dueDate || !paidDate) return false;
+    const due = new Date(dueDate);
+    const paid = new Date(paidDate);
+    if (Number.isNaN(due.getTime()) || Number.isNaN(paid.getTime())) return false;
+    const dueMonthStart = new Date(due.getFullYear(), due.getMonth(), 1);
+    return paid < dueMonthStart;
   }
 
   /**

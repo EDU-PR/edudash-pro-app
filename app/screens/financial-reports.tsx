@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 import { navigateBack } from '@/lib/navigation';
+import { derivePreschoolId } from '@/lib/roleUtils';
 
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { ChartDataService } from '@/lib/services/finance/ChartDataService';
@@ -74,13 +75,15 @@ export default function FinancialReportsScreen() {
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
+      const preschoolId = derivePreschoolId(profile);
+
       // Load data
       const [overviewData, transactionData] = await Promise.all([
-        FinancialDataService.getOverview(),
+        FinancialDataService.getOverview(preschoolId || undefined),
         FinancialDataService.getTransactions({
           from: fromDate.toISOString(),
           to: new Date().toISOString(),
-        }),
+        }, preschoolId || undefined, { useAccountingDate: true }),
       ]);
 
       setOverview(overviewData);

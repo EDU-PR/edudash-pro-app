@@ -56,6 +56,7 @@ export default function PettyCashScreen() {
     addExpense,
     addReplenishment,
     addWithdrawal,
+    resetPettyCash,
     cancelTransaction,
     deleteTransaction,
     reverseTransaction,
@@ -131,6 +132,21 @@ export default function PettyCashScreen() {
       console.error('Error uploading receipt:', error);
       return null;
     }
+  };
+
+  const handleResetPettyCash = () => {
+    Alert.alert(
+      t('petty_cash.reset_title', { defaultValue: 'Reset Petty Cash' }),
+      t('petty_cash.reset_confirm', { defaultValue: 'This will create a reset entry to bring the balance to zero. Continue?' }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('petty_cash.reset_cash', { defaultValue: 'Reset' }),
+          style: 'destructive',
+          onPress: () => resetPettyCash(),
+        },
+      ]
+    );
   };
 
   // Wrapper for addExpense that includes receipt upload
@@ -280,6 +296,7 @@ export default function PettyCashScreen() {
           onAddExpense={() => setShowAddExpense(true)}
           onReplenish={() => setShowReplenishment(true)}
           onWithdraw={() => setShowWithdrawal(true)}
+          onReset={handleResetPettyCash}
           theme={theme}
         />
 

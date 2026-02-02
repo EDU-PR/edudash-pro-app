@@ -28,6 +28,8 @@ export function useHomePractice(preschoolId: string | undefined, ageGroup?: stri
         .from('interactive_activities')
         .select('id, title, description, activity_type, stem_category, age_group, difficulty_level')
         .eq('preschool_id', preschoolId)
+        .eq('approval_status', 'approved')
+        .eq('is_active', true)
         .eq('is_published', true)
         .in('stem_category', ['ai', 'robotics', 'computer_literacy']);
 

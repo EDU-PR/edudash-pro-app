@@ -124,6 +124,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     { id: 'students', label: t('dashboard.manage_students', { defaultValue: 'Students' }), icon: 'school', route: '/screens/student-management', color: theme.primary },
     { id: 'teachers', label: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }), icon: 'people', route: '/screens/teacher-management', color: theme.success },
     { id: 'registrations', label: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', route: '/screens/principal-registrations', color: theme.warning },
+    { id: 'activity-approvals', label: t('dashboard.activity_approvals', { defaultValue: 'Activity Approvals' }), icon: 'checkmark-circle', route: '/screens/principal-activity-approvals', color: theme.info },
     { id: 'uniforms', label: t('dashboard.uniform_sizes', { defaultValue: 'Uniforms' }), icon: 'shirt-outline', route: '/screens/principal-uniforms', color: theme.info },
     { id: 'parent-links', label: t('dashboard.parent_links', { defaultValue: 'Connect Parent' }), icon: 'link', route: '/screens/principal-parent-requests', color: theme.info },
     { id: 'payments', label: t('dashboard.review_payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/principal-fee-overview', color: theme.info },

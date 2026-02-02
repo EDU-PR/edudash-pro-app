@@ -113,6 +113,38 @@ export default function PrincipalFormBuilderScreen() {
   const templates = useMemo(
     () => [
       {
+        id: 'my_school_1_3',
+        title: 'My School • Discovery Activity (Ages 1–3)',
+        description: 'Plan a simple discovery activity around the school theme with quick observation-based assessment.',
+        audience: ['teachers'] as FormAudience[],
+        fields: [
+          createField('Age group', 'dropdown', true, ['1-2', '2-3']),
+          createField('Learning goal', 'short_text', true),
+          createField('Materials needed', 'long_text'),
+          createField('Activity steps', 'long_text', true),
+          createField('Observation rubric', 'dropdown', true, ['Participation', 'Following instructions', 'Motor skills', 'Social interaction']),
+          createField('Photo / video evidence', 'file'),
+          createField('Homework included?', 'dropdown', false, ['No', 'Yes']),
+          createField('Parent note (optional)', 'long_text'),
+        ],
+      },
+      {
+        id: 'my_school_4_6',
+        title: 'My School • Explorer Activity (Ages 4–6)',
+        description: 'Create a structured lesson/homework plan with reflection prompts and optional homework.',
+        audience: ['teachers'] as FormAudience[],
+        fields: [
+          createField('Age group', 'dropdown', true, ['4-5', '5-6']),
+          createField('Learning goal', 'short_text', true),
+          createField('Warm-up prompt', 'long_text'),
+          createField('Activity steps', 'long_text', true),
+          createField('Assessment rubric', 'dropdown', true, ['Understanding', 'Creativity', 'Completion', 'Collaboration']),
+          createField('Homework included?', 'dropdown', false, ['No', 'Yes']),
+          createField('Homework instructions', 'long_text'),
+          createField('Evidence upload', 'file'),
+        ],
+      },
+      {
         id: 'excursion',
         title: 'Excursion Consent',
         description: 'Capture consent, allergies, emergency contact details, and payment.',

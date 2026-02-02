@@ -87,6 +87,18 @@ interface ExpenseSummary {
   missingReceiptCount: number;
 }
 
+interface FeeBreakdownRow {
+  key: string;
+  name: string;
+  feeType?: string | null;
+  totalDue: number;
+  totalPaid: number;
+  outstanding: number;
+  count: number;
+  prepaidAmount: number;
+  prepaidCount: number;
+}
+
 type FilterType = 'all' | 'outstanding' | 'paid' | 'overdue';
 type TimeFilter = 'month' | 'all';
 
@@ -101,6 +113,8 @@ export default function PrincipalFeeOverviewScreen() {
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary | null>(null);
   const [popSummary, setPopSummary] = useState<PopSummary | null>(null);
   const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
+  const [feeBreakdown, setFeeBreakdown] = useState<FeeBreakdownRow[]>([]);
+  const [advancePayments, setAdvancePayments] = useState<{ amount: number; count: number } | null>(null);
   const [accountingSnapshot, setAccountingSnapshot] = useState<{
     income: number;
     pending: number;
@@ -146,7 +160,7 @@ export default function PrincipalFeeOverviewScreen() {
       const { data: feesData, error: feesError } = studentIds.length
         ? await supabase
             .from('student_fees')
-            .select('*')
+            .select('*, fee_structures(name, fee_type, description)')
             .in('student_id', studentIds)
         : { data: [], error: null };
       
@@ -210,6 +224,12 @@ export default function PrincipalFeeOverviewScreen() {
         return 0;
       };
 
+      const getWaivedAmount = (fee: any) => {
+        const waived = toNumber((fee as any)?.waived_amount);
+        if (waived > 0) return waived;
+        return toNumber((fee as any)?.discount_amount);
+      };
+
       const isInMonth = (date?: Date | null) => {
         if (!date) return false;
         if (Number.isNaN(date.getTime())) return false;
@@ -223,22 +243,54 @@ export default function PrincipalFeeOverviewScreen() {
         return Number.isNaN(date.getTime()) ? null : date;
       };
 
+      const getFeeStructure = (fee: any) => {
+        const rel = (fee as any)?.fee_structures;
+        return Array.isArray(rel) ? rel[0] : rel;
+      };
+
+      const getFeeLabel = (fee: any) => {
+        const structure = getFeeStructure(fee);
+        return structure?.name || structure?.fee_type || 'Uncategorized';
+      };
+
+      const getFeeType = (fee: any) => {
+        const structure = getFeeStructure(fee);
+        return structure?.fee_type || null;
+      };
+
+      const isAdvancePayment = (fee: any) => {
+        const paidDateStr = fee?.paid_date;
+        const dueDateStr = fee?.due_date;
+        if (!paidDateStr || !dueDateStr) return false;
+        const paidDate = new Date(paidDateStr);
+        const dueDate = new Date(dueDateStr);
+        if (Number.isNaN(paidDate.getTime()) || Number.isNaN(dueDate.getTime())) return false;
+        const dueMonthStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
+        return paidDate < dueMonthStart && getPaidAmount(fee) > 0;
+      };
+
+      const enrollmentMonthByStudent = new Map<string, Date | null>();
+      (studentsData || []).forEach((student: any) => {
+        const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
+        const enrollmentMonthStart = enrollmentDate
+          ? new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1)
+          : null;
+        enrollmentMonthByStudent.set(student.id, enrollmentMonthStart);
+      });
+
+      const isPreEnrollment = (fee: any, enrollmentMonthStart?: Date | null) => {
+        if (!enrollmentMonthStart || !fee?.due_date) return false;
+        const due = new Date(fee.due_date);
+        if (Number.isNaN(due.getTime())) return false;
+        return due < enrollmentMonthStart;
+      };
+
       const processedStudents: StudentWithFees[] = (studentsData || []).map((student: any) => {
         const studentFees = feesByStudent.get(student.id) || [];
         const classData = Array.isArray(student.classes) ? student.classes[0] : student.classes;
         const parentData = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
 
-        const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : null;
-        const enrollmentMonthStart = enrollmentDate
-          ? new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1)
-          : null;
-
-        const isPreEnrollment = (fee: any) => {
-          if (!enrollmentMonthStart || !fee?.due_date) return false;
-          const due = new Date(fee.due_date);
-          if (Number.isNaN(due.getTime())) return false;
-          return due < enrollmentMonthStart;
-        };
+        const enrollmentMonthStart = enrollmentMonthByStudent.get(student.id) || null;
 
         const isDueNow = (fee: any) => {
           if (!fee?.due_date) return true;
@@ -247,7 +299,7 @@ export default function PrincipalFeeOverviewScreen() {
           return due <= todayStart;
         };
         
-        const payableFees = studentFees.filter(f => !isPreEnrollment(f));
+        const payableFees = studentFees.filter(f => !isPreEnrollment(f, enrollmentMonthStart));
         const monthFees = payableFees.filter((f: any) => isInMonth(getFeeMonthDate(f)));
         const baseFees = timeFilter === 'month' ? monthFees : payableFees;
         const dueFees = baseFees.filter(
@@ -261,7 +313,7 @@ export default function PrincipalFeeOverviewScreen() {
           .reduce((sum, f) => sum + getPaidAmount(f), 0);
         
         const waived = baseFees
-          .reduce((sum, f) => sum + toNumber(f.waived_amount), 0);
+          .reduce((sum, f) => sum + getWaivedAmount(f), 0);
         
         const overdue_count = baseFees.filter((f: any) => {
           if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
@@ -297,6 +349,57 @@ export default function PrincipalFeeOverviewScreen() {
       });
 
       setStudents(processedStudents);
+
+      // Build fee breakdown (by structure/type) and advance payment summary
+      const breakdownMap = new Map<string, FeeBreakdownRow>();
+      let advanceCount = 0;
+      let advanceAmount = 0;
+
+      (feesData || []).forEach((fee: any) => {
+        const enrollmentMonthStart = enrollmentMonthByStudent.get(fee.student_id) || null;
+        if (isPreEnrollment(fee, enrollmentMonthStart)) return;
+
+        if (timeFilter === 'month' && !isInMonth(getFeeMonthDate(fee))) return;
+
+        const key = fee.fee_structure_id || getFeeLabel(fee);
+        const label = getFeeLabel(fee);
+        const feeType = getFeeType(fee);
+        const amount = getFeeAmount(fee);
+        const paidAmount = getPaidAmount(fee);
+        const outstandingAmount = unpaidStatuses.has(String(fee?.status))
+          ? getOutstandingAmount(fee)
+          : 0;
+
+        const existing = breakdownMap.get(key) || {
+          key,
+          name: label,
+          feeType,
+          totalDue: 0,
+          totalPaid: 0,
+          outstanding: 0,
+          count: 0,
+          prepaidAmount: 0,
+          prepaidCount: 0,
+        };
+
+        existing.totalDue += amount;
+        existing.totalPaid += paidAmount;
+        existing.outstanding += outstandingAmount;
+        existing.count += 1;
+
+        if (timeFilter === 'month' && isAdvancePayment(fee)) {
+          existing.prepaidAmount += paidAmount;
+          existing.prepaidCount += 1;
+          advanceCount += 1;
+          advanceAmount += paidAmount;
+        }
+
+        breakdownMap.set(key, existing);
+      });
+
+      const breakdownList = Array.from(breakdownMap.values()).sort((a, b) => b.totalDue - a.totalDue);
+      setFeeBreakdown(breakdownList);
+      setAdvancePayments(timeFilter === 'month' && advanceCount > 0 ? { amount: advanceAmount, count: advanceCount } : null);
 
       // Calculate overall summary
       const totalOutstanding = processedStudents.reduce((sum, s) => sum + s.fees.outstanding, 0);
@@ -762,6 +865,60 @@ export default function PrincipalFeeOverviewScreen() {
                 </View>
               </View>
             </View>
+
+            {/* Advance Payments */}
+            {timeFilter === 'month' && advancePayments && (
+              <View style={styles.panelCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Advance Payments</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Payments received before this month for fees due now.
+                </Text>
+                <View style={styles.mainStatsRow}>
+                  <View style={[styles.mainStatCard, { borderLeftColor: theme.primary }]}>
+                    <Text style={[styles.mainStatValue, { color: theme.primary }]}>
+                      {formatCurrency(advancePayments.amount)}
+                    </Text>
+                    <Text style={styles.mainStatLabel}>Paid in Advance</Text>
+                  </View>
+                  <View style={[styles.mainStatCard, { borderLeftColor: theme.success }]}>
+                    <Text style={[styles.mainStatValue, { color: theme.success }]}>
+                      {advancePayments.count}
+                    </Text>
+                    <Text style={styles.mainStatLabel}>Fees Covered</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Fee Breakdown */}
+            {feeBreakdown.length > 0 && (
+              <View style={styles.panelCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Fee Breakdown</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  {timeFilter === 'month' ? 'Fees due this month by type.' : 'All fees by type.'}
+                </Text>
+                {feeBreakdown.map((row) => (
+                  <View key={row.key} style={styles.breakdownItem}>
+                    <View style={styles.breakdownItemHeader}>
+                      <Text style={styles.breakdownItemTitle}>{row.name}</Text>
+                      <Text style={styles.breakdownItemAmount}>{formatCurrency(row.totalDue)}</Text>
+                    </View>
+                    <View style={styles.breakdownItemMeta}>
+                      <Text style={styles.breakdownItemSub}>{row.feeType || 'Fee'}</Text>
+                      <Text style={styles.breakdownItemSub}>{row.count} fees</Text>
+                    </View>
+                    <View style={styles.breakdownItemStats}>
+                      <Text style={styles.breakdownItemStat}>Paid: {formatCurrency(row.totalPaid)}</Text>
+                      <Text style={styles.breakdownItemStat}>Outstanding: {formatCurrency(row.outstanding)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Payments & POP Overview */}
             {paymentSummary && popSummary && (
@@ -1256,6 +1413,46 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   breakdownValue: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  breakdownItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  breakdownItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  breakdownItemAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  breakdownItemMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  breakdownItemSub: {
+    fontSize: 11,
+    color: theme.textSecondary,
+  },
+  breakdownItemStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  breakdownItemStat: {
+    fontSize: 11,
+    color: theme.textSecondary,
   },
   searchSection: {
     marginBottom: 16,

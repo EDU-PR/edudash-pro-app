@@ -14,10 +14,11 @@ interface Props {
   onAddExpense: () => void;
   onReplenish: () => void;
   onWithdraw: () => void;
+  onReset: () => void;
   theme?: any;
 }
 
-export function PettyCashActions({ onAddExpense, onReplenish, onWithdraw, theme }: Props) {
+export function PettyCashActions({ onAddExpense, onReplenish, onWithdraw, onReset, theme }: Props) {
   const { t } = useTranslation('common');
   const router = useRouter();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
@@ -54,6 +55,18 @@ export function PettyCashActions({ onAddExpense, onReplenish, onWithdraw, theme 
           <Ionicons name="calculator" size={24} color="#8B5CF6" />
           <Text style={styles.actionText}>{t('petty_cash.reconcile')}</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.resetSection}>
+        <TouchableOpacity style={styles.resetButton} onPress={onReset}>
+          <Ionicons name="refresh-circle" size={22} color="#DC2626" />
+          <Text style={styles.resetText}>
+            {t('petty_cash.reset_cash', { defaultValue: 'Reset Cash to Zero' })}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.resetHint}>
+          {t('petty_cash.reset_hint', { defaultValue: 'Creates an adjustment entry so the balance starts fresh.' })}
+        </Text>
       </View>
     </View>
   );
@@ -94,6 +107,31 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     color: theme?.text || '#333',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  resetSection: {
+    marginTop: 8,
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  resetText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B91C1C',
+  },
+  resetHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: theme?.textSecondary || '#6B7280',
     textAlign: 'center',
   },
 });

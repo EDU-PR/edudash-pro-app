@@ -685,44 +685,80 @@ export const usePrincipalHub = () => {
         })
       );
       
-      // Get REAL financial data from transactions
+      // Get REAL financial data (due-month basis so advance payments land in the correct month)
       const now = new Date();
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       // Use Date object to correctly handle December -> January rollover
       const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
       
       const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-      
-      // Fetch actual financial transactions for current month
-      const { data: currentMonthTransactions } = await assertSupabase()
-        .from('financial_transactions')
-        .select('amount, type, status')
-        .eq('preschool_id', preschoolId)
-        .eq('type', 'fee_payment')
-        .eq('status', 'completed')
-        .gte('created_at', formatDateStr(currentMonthStart))
-        .lt('created_at', formatDateStr(nextMonthStart)) || { data: [] };
-      
+
+      const getPaidAmount = (fee: any) => {
+        const paid = Number(fee?.amount_paid || 0);
+        if (paid > 0) return paid;
+        const finalAmount = Number(fee?.final_amount || fee?.amount || 0);
+        return String(fee?.status) === 'paid' ? finalAmount : 0;
+      };
+
+      const currentRangeStart = formatDateStr(currentMonthStart);
+      const currentRangeEnd = formatDateStr(nextMonthStart);
+
+      const [currentFeesDueRes, currentFeesFallbackRes] = await Promise.all([
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .gte('due_date', currentRangeStart)
+          .lt('due_date', currentRangeEnd),
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .is('due_date', null)
+          .gte('created_at', currentMonthStart.toISOString())
+          .lt('created_at', nextMonthStart.toISOString()),
+      ]);
+
+      const currentMonthFees = [
+        ...(currentFeesDueRes.data || []),
+        ...(currentFeesFallbackRes.data || []),
+      ];
+
       // Fetch previous month for comparison (Date handles year rollover automatically)
       const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const { data: previousMonthTransactions } = await assertSupabase()
-        .from('financial_transactions')
-        .select('amount, type, status')
-        .eq('preschool_id', preschoolId)
-        .eq('type', 'fee_payment')
-        .eq('status', 'completed')
-        .gte('created_at', formatDateStr(prevMonthStart))
-        .lt('created_at', formatDateStr(prevMonthEnd)) || { data: [] };
-      
-      // Calculate real revenue
-      const currentMonthRevenue = (currentMonthTransactions || []).reduce((sum: number, transaction: any) => {
-        return sum + (transaction.amount || 0);
+
+      const prevRangeStart = formatDateStr(prevMonthStart);
+      const prevRangeEnd = formatDateStr(prevMonthEnd);
+
+      const [previousFeesDueRes, previousFeesFallbackRes] = await Promise.all([
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .gte('due_date', prevRangeStart)
+          .lt('due_date', prevRangeEnd),
+        assertSupabase()
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, status, due_date, created_at')
+          .eq('preschool_id', preschoolId)
+          .is('due_date', null)
+          .gte('created_at', prevMonthStart.toISOString())
+          .lt('created_at', prevMonthEnd.toISOString()),
+      ]);
+
+      const previousMonthFees = [
+        ...(previousFeesDueRes.data || []),
+        ...(previousFeesFallbackRes.data || []),
+      ];
+
+      // Calculate real revenue (paid fees due in the month)
+      const currentMonthRevenue = currentMonthFees.reduce((sum: number, fee: any) => {
+        return sum + getPaidAmount(fee);
       }, 0);
-      
-      const previousMonthRevenue = (previousMonthTransactions || []).reduce((sum: number, transaction: any) => {
-        return sum + (transaction.amount || 0);
+
+      const previousMonthRevenue = previousMonthFees.reduce((sum: number, fee: any) => {
+        return sum + getPaidAmount(fee);
       }, 0);
       
       // No estimates in production path per rules: use only real figures
