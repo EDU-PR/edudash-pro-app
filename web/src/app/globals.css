@@ -718,6 +718,13 @@ button {
   color: var(--foreground);
 }
 
+.section-subtitle {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 /* Quick action buttons */
 .qa {
   display: flex;

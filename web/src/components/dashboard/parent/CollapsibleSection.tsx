@@ -6,6 +6,7 @@ import { ChevronRight, LucideIcon } from 'lucide-react';
 
 interface CollapsibleSectionProps {
   title: string;
+  description?: string;
   children: React.ReactNode;
   defaultCollapsed?: boolean;
   icon?: LucideIcon;
@@ -15,6 +16,7 @@ interface CollapsibleSectionProps {
 
 export function CollapsibleSection({
   title,
+  description,
   children,
   defaultCollapsed = false,
   icon: Icon,
@@ -35,7 +37,7 @@ export function CollapsibleSection({
   };
 
   return (
-    <div className="section overflow-hidden rounded-lg">
+    <div className="section overflow-hidden rounded-lg" style={{ width: '100%' }}>
       <button
         onClick={handleToggle}
         style={{
@@ -51,7 +53,8 @@ export function CollapsibleSection({
           cursor: 'pointer',
           transition: 'all 0.2s ease',
           WebkitTapHighlightColor: 'transparent',
-          minHeight: '56px'
+          minHeight: '64px',
+          textAlign: 'left',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.borderColor = 'var(--primary)';
@@ -62,7 +65,7 @@ export function CollapsibleSection({
           e.currentTarget.style.background = 'linear-gradient(135deg, rgba(18, 24, 38, 0.95), rgba(22, 30, 46, 0.9))';
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3" style={{ flex: 1 }}>
           {Icon && (
             <div style={{
               padding: 'var(--space-2)',
@@ -75,9 +78,16 @@ export function CollapsibleSection({
               <Icon className="icon20" style={{ color: 'var(--primary)' }} />
             </div>
           )}
-          <h2 className="h2" style={{ fontSize: 15 }}>
-            {title}
-          </h2>
+          <div style={{ display: 'grid', gap: 4, flex: 1 }}>
+            <h2 className="h2" style={{ fontSize: 15, margin: 0 }}>
+              {title}
+            </h2>
+            {description && (
+              <p className="section-subtitle">
+                {description}
+              </p>
+            )}
+          </div>
         </div>
         <motion.div
           animate={{ rotate: collapsed ? 0 : 90 }}
