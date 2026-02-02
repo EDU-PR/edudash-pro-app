@@ -32,15 +32,28 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
+import { useCapability } from '@/hooks/useCapability';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import { useAuth } from '@/contexts/AuthContext';
 import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
 import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
+import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: screenWidth } = Dimensions.get('window');
+const formatGradeLabel = (grade?: string | null) => {
+  if (!grade) return null;
+  const raw = String(grade).trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('grade')) return raw.replace(/\s+/g, ' ');
+  if (lower === 'r' || lower.includes('grade r')) return 'Grade R';
+  const match = raw.match(/\d+/);
+  if (match) return `Grade ${match[0]}`;
+  return raw;
+};
 
 interface DashAssistantProps {
   conversationId?: string;
@@ -167,6 +180,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
+  const { can, ready: capsReady } = useCapability();
 
   const safeModels = Array.isArray(availableModels) ? availableModels : [];
   const selectedModelInfo = useMemo(
@@ -180,9 +194,45 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const { profile, user } = useAuth();
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const normalizedRole = String(profile?.role || '').toLowerCase();
+  const isParentOrStudent = ['parent', 'student'].includes(normalizedRole);
   const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
   const orgType = getOrganizationType(profile);
   const isPreschool = orgType === 'preschool';
+  const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
+
+  const contextChips = useMemo(() => {
+    if (!learnerContext) return [];
+    const chips: string[] = [];
+    const schoolLabel = learnerContext.schoolType || (isPreschool ? 'Preschool' : orgType ? String(orgType) : null);
+    if (schoolLabel) chips.push(schoolLabel);
+    const gradeLabel = formatGradeLabel(learnerContext.grade);
+    if (gradeLabel) chips.push(gradeLabel);
+    if (typeof learnerContext.ageYears === 'number') {
+      chips.push(`Age ${learnerContext.ageYears}`);
+    }
+    if (learnerContext.ageBand && !chips.find((chip) => chip.includes(learnerContext.ageBand!))) {
+      chips.push(`Band ${learnerContext.ageBand}`);
+    }
+    if (isPreschool) {
+      chips.push('Play-based');
+    }
+    return chips;
+  }, [learnerContext, isPreschool, orgType]);
+
+  const contextHint = useMemo(() => {
+    if (!learnerContext) return null;
+    if (isPreschool) {
+      return 'Play-based focus: games, letters, numbers, colors, and movement.';
+    }
+    return 'Step-by-step focus with quick checks for understanding.';
+  }, [learnerContext, isPreschool]);
+  const showAdvancedControls = !isParentOrStudent;
+  const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
+  const usageLabel = tierStatus
+    ? (isParentOrStudent
+        ? `${roleCopy.title} • ${remaining === null ? 'Unlimited' : `${remaining} left today`}`
+        : `${tierStatus.tierDisplayName} • ${remaining === null ? 'Unlimited' : `${remaining} left today`}`)
+    : '';
   const [lastSavedLessonId, setLastSavedLessonId] = useState<string | null>(null);
   const latestAssistantMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -193,8 +243,41 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     return null;
   }, [messages]);
 
+  const ensureLessonAccess = useCallback(async () => {
+    if (!capsReady) {
+      Alert.alert('Please wait', 'Loading your subscription details. Try again in a moment.');
+      return false;
+    }
+    if (!canInteractiveLessons) {
+      Alert.alert(
+        'Upgrade Required',
+        'Interactive lessons and activities are available on Premium or Pro Plus plans.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View Plans', onPress: () => router.push('/pricing') },
+        ]
+      );
+      return false;
+    }
+    if (user?.id) {
+      const lessonQuota = await checkAIQuota('lesson_generation', user.id, 1);
+      if (!lessonQuota.allowed) {
+        showQuotaExceededAlert('lesson_generation', lessonQuota.quotaInfo, {
+          customMessages: {
+            title: 'Lesson Generation Limit Reached',
+            message: 'You have used all lesson generation credits for this month.',
+          },
+        });
+        return false;
+      }
+    }
+    return true;
+  }, [capsReady, canInteractiveLessons, user?.id]);
+
   const saveLessonFromMessage = useCallback(async () => {
     if (!latestAssistantMessage || !profile) return;
+    const allowed = await ensureLessonAccess();
+    if (!allowed) return;
     const schoolId = profile.preschool_id || profile.organization_id;
     if (!schoolId || !profile.id) {
       Alert.alert('Missing school', 'Please connect your school profile first.');
@@ -248,10 +331,12 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       const message = err instanceof Error ? err.message : 'Failed to save lesson';
       Alert.alert('Save failed', message);
     }
-  }, [latestAssistantMessage, profile, isPreschool]);
+  }, [latestAssistantMessage, profile, isPreschool, ensureLessonAccess]);
 
   const saveActivityFromMessage = useCallback(async () => {
     if (!latestAssistantMessage || !user || !profile) return;
+    const allowed = await ensureLessonAccess();
+    if (!allowed) return;
     const schoolId = profile.preschool_id || profile.organization_id;
     if (!schoolId) {
       Alert.alert('Missing school', 'Please connect your school profile first.');
@@ -337,7 +422,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       const message = err instanceof Error ? err.message : 'Failed to save activity';
       Alert.alert('Save failed', message);
     }
-  }, [latestAssistantMessage, profile?.preschool_id, user, isPreschool]);
+  }, [latestAssistantMessage, profile?.preschool_id, user, isPreschool, ensureLessonAccess]);
 
   const saveRoutineFromMessage = useCallback(async () => {
     if (!latestAssistantMessage || !user || !profile) return;
@@ -624,25 +709,29 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             >
               <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
-              accessibilityLabel="Open Dash Orb"
-              onPress={() => router.push('/screens/dash-orb')}
-            >
-              <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
-              accessibilityLabel="Toggle wake word"
-              onPress={toggleWakeWord}
-              disabled={!wakeWordLoaded}
-            >
-              <Ionicons
-                name={wakeWordEnabled ? 'ear' : 'ear-outline'}
-                size={screenWidth < 400 ? 18 : 22}
-                color={wakeWordEnabled ? theme.success : theme.text}
-              />
-            </TouchableOpacity>
+            {showAdvancedControls && (
+              <TouchableOpacity
+                style={styles.iconButton}
+                accessibilityLabel="Open Dash Orb"
+                onPress={() => router.push('/screens/dash-orb')}
+              >
+                <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+              </TouchableOpacity>
+            )}
+            {showWakeWordToggle && (
+              <TouchableOpacity
+                style={styles.iconButton}
+                accessibilityLabel="Toggle wake word"
+                onPress={toggleWakeWord}
+                disabled={!wakeWordLoaded}
+              >
+                <Ionicons
+                  name={wakeWordEnabled ? 'ear' : 'ear-outline'}
+                  size={screenWidth < 400 ? 18 : 22}
+                  color={wakeWordEnabled ? theme.success : theme.text}
+                />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.iconButton}
               accessibilityLabel="Settings"
@@ -668,11 +757,27 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
         </View>
 
+        {contextChips.length > 0 && (
+          <View style={[styles.contextStrip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {contextChips.map((chip, idx) => (
+              <View
+                key={`${chip}-${idx}`}
+                style={[styles.contextChip, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
+              >
+                <Text style={[styles.contextChipText, { color: theme.textSecondary }]}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {contextHint && (
+          <Text style={[styles.contextHint, { color: theme.textSecondary }]}>{contextHint}</Text>
+        )}
+
         {tierStatus && (
           <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
             <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
-              {tierStatus.tierDisplayName} • {remaining === null ? 'Unlimited' : `${remaining} left today`}
+              {usageLabel}
             </Text>
             {tierStatus.quotaLimit > 0 && (
               <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
@@ -687,7 +792,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
         )}
 
-        {safeModels.length > 0 && (
+        {safeModels.length > 0 && showAdvancedControls && (
           <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <View style={styles.modelSelectorHeader}>
               <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>

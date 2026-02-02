@@ -22,6 +22,55 @@ import { getCurrentSession } from '@/lib/sessionManager';
 
 type AgeGroup = 'child' | 'teen' | 'adult';
 
+const LESSON_SUBJECT_PATTERNS: Array<{ key: RegExp; label: string }> = [
+  { key: /math|mathematics|algebra|geometry|numbers/i, label: 'Mathematics' },
+  { key: /science|physics|chemistry|biology/i, label: 'Science' },
+  { key: /english|reading|writing|language|literature/i, label: 'English' },
+  { key: /history|social\s+studies|geography/i, label: 'Social Sciences' },
+  { key: /life\s+skills|life\s+orientation/i, label: 'Life Skills' },
+  { key: /art|creative|drawing|painting/i, label: 'Arts' },
+];
+
+function extractLessonParamsFromContext(userInput: string, aiResponse: string) {
+  const combined = `${userInput}\n${aiResponse}`.trim();
+  const combinedLower = combined.toLowerCase();
+  const params: Record<string, string> = {};
+
+  const gradeMatch = combinedLower.match(/grade\s*(r|[0-9]{1,2})/i);
+  if (gradeMatch) {
+    const rawGrade = gradeMatch[1].toUpperCase();
+    params.gradeLevel = rawGrade === 'R' ? '0' : rawGrade;
+  } else {
+    const ageMatch = combinedLower.match(/age\s*(\d{1,2})/i);
+    if (ageMatch) {
+      const age = Number(ageMatch[1]);
+      if (!Number.isNaN(age)) {
+        if (age <= 5) params.gradeLevel = '0';
+        else params.gradeLevel = String(Math.max(age - 5, 1));
+      }
+    }
+  }
+
+  const subjectMatch = LESSON_SUBJECT_PATTERNS.find((entry) => entry.key.test(userInput))
+    || LESSON_SUBJECT_PATTERNS.find((entry) => entry.key.test(combined));
+  if (subjectMatch) params.subject = subjectMatch.label;
+
+  const quoted = userInput.match(/"([^"]{3,})"/) || userInput.match(/'([^']{3,})'/);
+  if (quoted?.[1]) {
+    params.topic = quoted[1].trim();
+  } else {
+    const topicMatch = combined.match(/(?:topic|about|on|covering)\s+([a-z0-9][a-z0-9\s-]{2,60})/i);
+    if (topicMatch?.[1]) {
+      const cleaned = topicMatch[1].split(/[.,;\n]/)[0].trim();
+      if (cleaned && !/grade|age|year|class/i.test(cleaned)) {
+        params.topic = cleaned;
+      }
+    }
+  }
+
+  return params;
+}
+
 function computeAgeGroupFromDob(dob?: string | null): AgeGroup | undefined {
   if (!dob) return undefined;
   const birthDate = new Date(dob);
@@ -260,8 +309,8 @@ export class DashAIAssistant implements IDashAIAssistant {
   async navigateToScreen(route: string, params?: Record<string, any>) { return this.core.navigation.navigateToScreen(route, params); }
   async navigateByVoice(command: string) { return this.core.navigation.navigateByVoice(command); }
   openLessonGeneratorFromContext(userInput: string, aiResponse: string): void {
-    // Legacy method - now uses navigator's openLessonGenerator
-    console.warn('[DashAICompat] openLessonGeneratorFromContext is deprecated');
+    const params = extractLessonParamsFromContext(userInput, aiResponse);
+    this.core.navigation.openLessonGenerator(params);
   }
 
   // Preferences
