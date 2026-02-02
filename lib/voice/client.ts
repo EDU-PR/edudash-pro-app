@@ -157,8 +157,18 @@ class VoiceServiceClient {
       const role = (session.user as any)?.user_metadata?.role || 'parent';
 
       if (!preschoolId) {
-        console.warn('[VoiceService] No preschool_id found in session, cannot save preferences');
-        throw this.createError('MISSING_PRESCHOOL', 'Preschool ID required');
+        console.warn('[VoiceService] No preschool_id found in session, skipping server save');
+        // Return a local-only preference object (keeps UI stable for superadmin/standalone users)
+        return {
+          user_id: user.id,
+          language: (preferences.language as SupportedLanguage) || 'en',
+          voice_id: preferences.voice_id || '',
+          speaking_rate: preferences.speaking_rate ?? 1.0,
+          pitch: preferences.pitch ?? 1.0,
+          volume: preferences.volume ?? 1.0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
       }
 
       // Map TypeScript types to database schema

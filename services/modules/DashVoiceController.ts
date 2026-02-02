@@ -151,7 +151,8 @@ export class DashVoiceController {
     const shortCode = this.mapLanguageCode(language);
     
     const { data, error } = await supabase.functions.invoke('tts-proxy', {
-      body: { text, language: shortCode, rate: 5, pitch: 0 }
+      // rate/pitch are in -50..50 scale; 0 = normal (1.0x)
+      body: { text, language: shortCode, rate: 0, pitch: 0 }
     });
     
     if (error) throw error;

@@ -38,7 +38,7 @@ const DEFAULT_PERSONALITY: DashPersonality = {
   personality_traits: ['helpful', 'encouraging', 'knowledgeable', 'patient', 'creative'],
   response_style: 'adaptive',
   expertise_areas: ['education', 'lesson planning', 'student assessment'],
-  voice_settings: { rate: 0.8, pitch: 1.0, language: 'en-ZA' },
+  voice_settings: { rate: 1.0, pitch: 1.0, language: 'en-ZA' },
   role_specializations: {
     teacher: {
       greeting: "Hello! I'm Dash, your teaching assistant.",

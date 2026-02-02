@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAlert } from '@/components/ui/StyledAlert';
+import * as Haptics from 'expo-haptics';
+import { sendTestNotification } from '@/lib/notification-test-utils';
 import type { ViewStyle, TextStyle } from 'react-native';
 
 interface FeedbackTestSectionProps {
@@ -18,9 +20,15 @@ interface FeedbackTestSectionProps {
     settingTitle: TextStyle;
     settingSubtitle: TextStyle;
   };
+  hapticsEnabled?: boolean;
+  soundEnabled?: boolean;
 }
 
-export function FeedbackTestSection({ styles }: FeedbackTestSectionProps) {
+export function FeedbackTestSection({
+  styles,
+  hapticsEnabled = true,
+  soundEnabled = true,
+}: FeedbackTestSectionProps) {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
   const alert = useAlert();
@@ -30,11 +38,40 @@ export function FeedbackTestSection({ styles }: FeedbackTestSectionProps) {
       <View style={styles.settingsCard}>
         <TouchableOpacity
           style={[styles.settingItem, styles.lastSettingItem]}
-          onPress={() => {
-            alert.showWarning(
-              t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }), 
-              t('settings.feedback_test_alert.message', { defaultValue: 'Haptics and sound feedback are temporarily disabled.' })
-            );
+          onPress={async () => {
+            if (!hapticsEnabled && !soundEnabled) {
+              alert.showWarning(
+                t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }),
+                t('settings.feedback_test_alert.message', { defaultValue: 'Haptics and sound feedback are disabled in your settings.' })
+              );
+              return;
+            }
+
+            try {
+              if (hapticsEnabled) {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            } catch {
+              // Non-fatal: device may not support haptics
+            }
+
+            try {
+              if (soundEnabled) {
+                await sendTestNotification({
+                  title: t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }),
+                  body: t('settings.feedback_test_alert.message', { defaultValue: 'Test sound played.' }),
+                  sound: true,
+                });
+              }
+            } catch (err) {
+              console.warn('[FeedbackTest] Failed to play sound test:', err);
+              if (Platform.OS === 'web') {
+                alert.showInfo(
+                  t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }),
+                  t('settings.feedback_test_alert.message', { defaultValue: 'Sound test is not available on web. Please test on the mobile app.' })
+                );
+              }
+            }
           }}
         >
           <View style={styles.settingLeft}>
