@@ -159,6 +159,31 @@ export const styles = StyleSheet.create({
   section: {
     marginBottom: 20,
   },
+  sectionHeaderCard: {
+    width: '100%',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sectionHeaderAction: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sectionHeaderHint: {
+    fontSize: 12,
+    marginTop: 6,
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -9,6 +9,7 @@
 
 import { supabase } from '../../lib/supabase';
 import type { ProofOfPayment, ApprovalActionParams } from './types';
+import { inferPaymentCategory } from '@/lib/utils/feeUtils';
 import { ApprovalNotificationService } from './ApprovalNotificationService';
 import { logger } from '../../lib/logger';
 
@@ -368,6 +369,7 @@ export class POPWorkflowService {
     reviewerId: string,
     uploadId: string
   ): Promise<void> {
+    const paymentPurpose = data.title || data.description || 'School fees payment';
     const paymentRecord = {
       student_id: data.student_id,
       parent_id: data.uploaded_by,
@@ -378,12 +380,18 @@ export class POPWorkflowService {
       payment_method: data.payment_method || 'bank_transfer',
       payment_reference: data.payment_reference || `POP-${uploadId.slice(0, 8)}`,
       status: 'completed',
-      description: data.title || 'School fees payment',
+      description: paymentPurpose,
       attachment_url: data.file_path,
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
       submitted_at: data.created_at,
-      metadata: { pop_upload_id: uploadId, payment_date: data.payment_date, auto_created: true },
+      metadata: {
+        pop_upload_id: uploadId,
+        payment_date: data.payment_date,
+        payment_purpose: paymentPurpose,
+        fee_category: inferPaymentCategory(paymentPurpose),
+        auto_created: true,
+      },
     };
     
     const { error } = await supabase.from('payments').insert(paymentRecord);

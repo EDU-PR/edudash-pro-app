@@ -17,7 +17,6 @@ import {
   Text,
   StyleSheet,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,12 +47,16 @@ import {
 export default function NotificationsScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   const alert = useAlert();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const role = profile?.role;
+  const isParent = role === 'parent';
+  const isTeacher = role === 'teacher';
+  const isPrincipal = role === 'principal' || role === 'principal_admin';
   
   const { data: notifications = [], isLoading, refetch } = useNotificationsQuery();
   
@@ -83,7 +86,7 @@ export default function NotificationsScreen() {
     if (!user?.id) return;
     await markNotificationRead(user.id, notificationId);
     queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
-  }, [user?.id, queryClient]);
+  }, [user?.id, queryClient, isParent, isPrincipal, isTeacher]);
   
   // Mark all as read
   const handleMarkAllRead = useCallback(async () => {
@@ -133,14 +136,7 @@ export default function NotificationsScreen() {
         router.push('/screens/grades');
         break;
       case 'announcement':
-        if (notification.data?.announcementId) {
-          router.push({
-            pathname: '/screens/announcement-detail',
-            params: { id: notification.data.announcementId as string },
-          });
-        } else {
-          router.push('/screens/announcements');
-        }
+        router.push('/screens/parent-announcements');
         break;
       case 'attendance':
         router.push('/screens/child-progress');
@@ -156,13 +152,14 @@ export default function NotificationsScreen() {
         }
         break;
       case 'billing':
-        if (notification.data?.invoice_id) {
-          router.push({
-            pathname: '/screens/invoice-detail',
-            params: { id: notification.data.invoice_id as string },
-          });
+        if (isParent) {
+          router.push('/screens/parent-payments');
+        } else if (isPrincipal) {
+          router.push('/screens/financial-dashboard');
+        } else if (isTeacher) {
+          router.push('/screens/teacher-dashboard');
         } else {
-          router.push('/screens/billing');
+          router.push('/screens/financial-dashboard');
         }
         break;
       case 'calendar':
@@ -181,8 +178,8 @@ export default function NotificationsScreen() {
   // Clear call notifications
   const handleClearCallNotifications = useCallback(() => {
     if (!user?.id) return;
-    
-    Alert.alert(
+
+    alert.show(
       t('notifications.clearCallNotifications', { defaultValue: 'Clear Call Notifications' }),
       t('notifications.clearCallNotificationsConfirm', { defaultValue: 'This will remove all call notifications from the list.' }),
       [
@@ -198,21 +195,23 @@ export default function NotificationsScreen() {
             queryClient.invalidateQueries({ queryKey: ['missed-calls-count'] });
           }
         }
-      ]
+      ],
+      { type: 'confirm' }
     );
-  }, [user?.id, t, queryClient, markCallsSeen, notifications]);
+  }, [alert, user?.id, t, queryClient, markCallsSeen, notifications]);
   
   // Clear message notifications
   const handleClearMessageNotifications = useCallback(() => {
     if (!user?.id) return;
-    
-    Alert.alert(
+
+    alert.show(
       t('notifications.markMessagesRead', { defaultValue: 'Clear Message Notifications' }),
       t('notifications.markMessagesReadConfirm', { defaultValue: 'This will remove all message notifications from the list.' }),
       [
         { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
           text: t('common.clear', { defaultValue: 'Clear' }),
+          style: 'destructive',
           onPress: async () => {
             const msgNotifIds = notifications.filter(n => n.type === 'message').map(n => n.id);
             await addToClearedNotifications(user.id, msgNotifIds);
@@ -228,9 +227,10 @@ export default function NotificationsScreen() {
             queryClient.invalidateQueries({ queryKey: ['parent', 'unread-count'] });
           }
         }
-      ]
+      ],
+      { type: 'confirm' }
     );
-  }, [user?.id, t, queryClient, notifications]);
+  }, [alert, user?.id, t, queryClient, notifications]);
   
   // Clear all notifications
   const handleClearAll = useCallback(() => {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 interface ParentProfile {
   id?: string | null;
@@ -71,6 +72,7 @@ interface DisplayRow {
   updatedAt: string | null;
   status: 'submitted' | 'missing';
   className: string;
+  paymentStatus: 'paid' | 'pending' | 'unpaid';
 }
 
 const SIZE_OPTIONS = [
@@ -113,6 +115,7 @@ export default function PrincipalUniformsScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   const schoolId = (profile?.organization_id as string) || (profile as any)?.preschool_id || null;
 
@@ -126,6 +129,9 @@ export default function PrincipalUniformsScreen() {
   const [exporting, setExporting] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
+    () => new Map()
+  );
 
   const load = useCallback(async () => {
     if (!schoolId) return;
@@ -149,13 +155,61 @@ export default function PrincipalUniformsScreen() {
       if (studentError) throw studentError;
       setRows((data as any) || []);
       setStudents((studentData as any) || []);
+
+      const studentIds = (studentData as any[] | null)?.map((s) => s.id).filter(Boolean) || [];
+      if (studentIds.length) {
+        const [{ data: popData }, { data: paymentsData }] = await Promise.all([
+          supabase
+            .from('pop_uploads')
+            .select('student_id, status, description')
+            .eq('preschool_id', schoolId)
+            .eq('upload_type', 'proof_of_payment')
+            .ilike('description', '%uniform%')
+            .in('student_id', studentIds),
+          supabase
+            .from('payments')
+            .select('student_id, status, description')
+            .eq('preschool_id', schoolId)
+            .ilike('description', '%uniform%')
+            .in('student_id', studentIds),
+        ]);
+
+        const nextMap = new Map<string, 'paid' | 'pending' | 'unpaid'>();
+        studentIds.forEach((id) => nextMap.set(id, 'unpaid'));
+
+        (popData || []).forEach((pop: any) => {
+          const current = nextMap.get(pop.student_id) || 'unpaid';
+          if (pop.status === 'approved') {
+            nextMap.set(pop.student_id, 'paid');
+            return;
+          }
+          if (current !== 'paid' && ['pending', 'submitted'].includes(String(pop.status))) {
+            nextMap.set(pop.student_id, 'pending');
+          }
+        });
+
+        (paymentsData || []).forEach((payment: any) => {
+          if (!payment.student_id) return;
+          if (['completed', 'approved'].includes(String(payment.status))) {
+            nextMap.set(payment.student_id, 'paid');
+          }
+        });
+
+        setPaymentStatusByStudent(nextMap);
+      } else {
+        setPaymentStatusByStudent(new Map());
+      }
     } catch (e: any) {
       console.error('Load uniform sizes failed', e);
-      Alert.alert('Error', e?.message || 'Failed to load uniform sizes');
+      showAlert({
+        title: 'Error',
+        message: e?.message || 'Failed to load uniform sizes',
+        buttons: [{ text: 'OK' }],
+      });
     } finally {
       setLoading(false);
     }
-  }, [schoolId]);
+  }, [schoolId, showAlert]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -201,8 +255,9 @@ export default function PrincipalUniformsScreen() {
       updatedAt: row.updated_at || null,
       status: 'submitted' as const,
       className: student?.classroom?.name || 'Unassigned',
+      paymentStatus: paymentStatusByStudent.get(row.student_id) || 'unpaid',
     };
-  }), [rows, studentLookup]);
+  }), [rows, studentLookup, paymentStatusByStudent]);
 
   const missingRows: DisplayRow[] = useMemo(() => missingStudents.map((student) => {
     const parentProfile = resolveParentProfile(student, null);
@@ -225,8 +280,9 @@ export default function PrincipalUniformsScreen() {
       updatedAt: null,
       status: 'missing' as const,
       className: student.classroom?.name || 'Unassigned',
+      paymentStatus: paymentStatusByStudent.get(student.id) || 'unpaid',
     };
-  }), [missingStudents]);
+  }), [missingStudents, paymentStatusByStudent]);
 
   const submittedCount = submittedRows.length;
   const missingCount = missingRows.length;
@@ -277,7 +333,11 @@ export default function PrincipalUniformsScreen() {
 
   const exportPdf = useCallback(async () => {
     if (!filtered.length) {
-      Alert.alert('Nothing to export', 'No uniform records to export.');
+      showAlert({
+        title: 'Nothing to export',
+        message: 'No uniform records to export.',
+        buttons: [{ text: 'OK' }],
+      });
       return;
     }
     setExporting(true);
@@ -310,6 +370,7 @@ export default function PrincipalUniformsScreen() {
             <td>${escapeHtml(row.parentName || '-')}</td>
             <td>${escapeHtml(updatedText)}</td>
             <td>${escapeHtml(row.status)}</td>
+            <td>${escapeHtml(row.paymentStatus)}</td>
           </tr>
         `;
       }).join('');
@@ -365,6 +426,7 @@ export default function PrincipalUniformsScreen() {
                   <th>Submitted By</th>
                   <th>Last Updated</th>
                   <th>Status</th>
+                  <th>Payment</th>
                 </tr>
               </thead>
               <tbody>
@@ -385,15 +447,33 @@ export default function PrincipalUniformsScreen() {
           UTI: 'com.adobe.pdf',
         });
       } else {
-        Alert.alert('PDF Generated', 'The uniform sizes PDF has been generated.');
+        showAlert({
+          title: 'PDF Generated',
+          message: 'The uniform sizes PDF has been generated.',
+          buttons: [{ text: 'OK' }],
+        });
       }
     } catch (e: any) {
       console.error('Export PDF failed', e);
-      Alert.alert('Export Error', e?.message || 'Failed to export PDF');
+      showAlert({
+        title: 'Export Error',
+        message: e?.message || 'Failed to export PDF',
+        buttons: [{ text: 'OK' }],
+      });
     } finally {
       setExporting(false);
     }
-  }, [filtered, missingByClass, sizeSummary]);
+  }, [filtered, missingByClass, showAlert, sizeSummary]);
+
+  const paymentStatusMeta = useCallback((status: DisplayRow['paymentStatus']) => {
+    if (status === 'paid') {
+      return { label: 'Paid', bg: theme.success + '22', border: theme.success + '55', text: theme.success };
+    }
+    if (status === 'pending') {
+      return { label: 'Pending', bg: theme.warning + '22', border: theme.warning + '55', text: theme.warning };
+    }
+    return { label: 'Unpaid', bg: theme.error + '22', border: theme.error + '55', text: theme.error };
+  }, [theme]);
 
   const handleMessageParent = useCallback(async (row: DisplayRow) => {
     const parentLabel = row.parentName || 'Parent';
@@ -401,9 +481,13 @@ export default function PrincipalUniformsScreen() {
     try {
       await Share.share({ message });
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Unable to open sharing options.');
+      showAlert({
+        title: 'Error',
+        message: e?.message || 'Unable to open sharing options.',
+        buttons: [{ text: 'OK' }],
+      });
     }
-  }, []);
+  }, [showAlert]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -543,7 +627,24 @@ export default function PrincipalUniformsScreen() {
             }
             renderItem={({ item }) => (
               <View style={[styles.card, item.status === 'missing' && styles.missingCard]}>
-                <Text style={styles.name}>{item.childName}</Text>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.name}>{item.childName}</Text>
+                  {item.status === 'submitted' && (
+                    <View
+                      style={[
+                        styles.paymentChip,
+                        {
+                          backgroundColor: paymentStatusMeta(item.paymentStatus).bg,
+                          borderColor: paymentStatusMeta(item.paymentStatus).border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.paymentChipText, { color: paymentStatusMeta(item.paymentStatus).text }]}>
+                        {paymentStatusMeta(item.paymentStatus).label}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 {item.status === 'missing' ? (
                   <>
                     <Text style={styles.muted}>No size submitted yet.</Text>
@@ -583,6 +684,7 @@ export default function PrincipalUniformsScreen() {
           />
         </>
       )}
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
@@ -662,7 +764,18 @@ const createStyles = (theme: any) => StyleSheet.create({
   picker: { color: theme?.text || '#fff' },
   card: { backgroundColor: theme?.cardBackground || '#111827', borderRadius: 12, padding: 12, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 10 },
   missingCard: { borderStyle: 'dashed', borderColor: theme?.warning || '#f59e0b' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   name: { color: theme?.text || '#fff', fontWeight: '800', fontSize: 16, marginBottom: 4 },
+  paymentChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  paymentChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   text: { color: theme?.text || '#fff', fontSize: 13 },
   messageButton: {
     marginTop: 8,

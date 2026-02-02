@@ -46,6 +46,7 @@ export function POPUploadForm({
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState(defaultDescription ?? '');
   const [feeId] = useState(defaultFeeId ?? '');
+  const isUniformPayment = feeId.startsWith('uniform:');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -106,7 +107,9 @@ export function POPUploadForm({
       return;
     }
 
-    const normalizedDate = paymentDate?.trim();
+    const normalizedDate = isUniformPayment
+      ? new Date().toISOString().split('T')[0]
+      : paymentDate?.trim();
     if (!normalizedDate) {
       setValidationError('Please select the payment date');
       return;
@@ -132,6 +135,8 @@ export function POPUploadForm({
       : (feeId ? 'School Fees' : '');
     const finalDescription = normalizedDescription || fallbackDescription || undefined;
     
+    const finalPaymentDate = isoDate || new Date().toISOString().split('T')[0];
+
     const result = await upload({
       student_id: selectedChild,
       upload_type: 'proof_of_payment',
@@ -140,7 +145,7 @@ export function POPUploadForm({
       file: selectedFile,
       payment_amount: amountValue,
       payment_method: paymentMethod,
-      payment_date: isoDate,
+      payment_date: finalPaymentDate,
       payment_reference: studentCode, // Always use the child's unique code
     });
     
@@ -283,7 +288,7 @@ export function POPUploadForm({
       </div>
 
       {/* Payment Method & Date Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isUniformPayment ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 20 }}>
         <div>
           <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
             Payment Method
@@ -300,20 +305,22 @@ export function POPUploadForm({
             <option value="Other">Other</option>
           </select>
         </div>
-        
-        <div>
-          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-            Payment Date
-          </label>
-          <input
-            type="date"
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            className="input"
-            style={{ width: '100%' }}
-            max={new Date().toISOString().split('T')[0]}
-          />
-        </div>
+
+        {!isUniformPayment && (
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+              Payment Date
+            </label>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="input"
+              style={{ width: '100%' }}
+              max={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+        )}
       </div>
 
       {/* Description */}

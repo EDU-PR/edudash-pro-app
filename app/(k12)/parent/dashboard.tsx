@@ -232,6 +232,30 @@ export default function K12ParentDashboardScreen() {
     { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
   ]), [t]);
 
+  const SectionHeaderCard = ({
+    title,
+    hint,
+    actionLabel,
+    onActionPress,
+  }: {
+    title: string;
+    hint: string;
+    actionLabel?: string;
+    onActionPress?: () => void;
+  }) => (
+    <View style={[styles.sectionHeaderCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={[styles.sectionHeaderTitle, { color: theme.text }]}>{title}</Text>
+        {actionLabel && onActionPress && (
+          <TouchableOpacity onPress={onActionPress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={[styles.sectionHeaderAction, { color: theme.primary }]}>{actionLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <Text style={[styles.sectionHeaderHint, { color: theme.textSecondary }]}>{hint}</Text>
+    </View>
+  );
+
   // Loading state
   if (authLoading || profileLoading) {
     return (
@@ -368,9 +392,10 @@ export default function K12ParentDashboardScreen() {
 
         {/* Children Cards */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            {t('dashboard.parent.section.my_children', { defaultValue: 'My Children' })}
-          </Text>
+          <SectionHeaderCard
+            title={t('dashboard.parent.section.my_children', { defaultValue: 'My Children' })}
+            hint={t('dashboard.parent.section.my_children_hint', { defaultValue: 'Profiles, attendance, and progress for each child.' })}
+          />
           {dataLoading ? (
             <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 20 }} />
           ) : children.length === 0 ? (
@@ -389,9 +414,10 @@ export default function K12ParentDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            {t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
-          </Text>
+          <SectionHeaderCard
+            title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
+            hint={t('dashboard.quick_actions_hint', { defaultValue: 'Shortcuts to messages, attendance, payments, and announcements.' })}
+          />
           <View style={styles.quickActionsGrid}>
             {quickActions.map((action) => (
               <TouchableOpacity
@@ -411,9 +437,10 @@ export default function K12ParentDashboardScreen() {
 
         {/* AI & Learning Tools - PWA Feature Migration */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            {t('dashboard.parent.k12.ai_tools.title', { defaultValue: 'AI & Learning Tools' })}
-          </Text>
+          <SectionHeaderCard
+            title={t('dashboard.parent.k12.ai_tools.title', { defaultValue: 'AI & Learning Tools' })}
+            hint={t('dashboard.parent.k12.ai_tools.hint', { defaultValue: 'Dash AI, exam prep, homework, and weekly reports.' })}
+          />
           <View style={styles.quickActionsGrid}>
             {aiQuickActions.map((action) => {
               const isExamPrep = action.id === 'exam-prep';
@@ -513,18 +540,14 @@ export default function K12ParentDashboardScreen() {
 
         {/* Recent Updates */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              {t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })}
-            </Text>
-            <TouchableOpacity onPress={() => {
+          <SectionHeaderCard
+            title={t('dashboard.recent_activity', { defaultValue: 'Recent Activity' })}
+            hint={t('dashboard.recent_activity_hint', { defaultValue: 'Latest updates from teachers and classwork.' })}
+            actionLabel={t('common.see_all', { defaultValue: 'See All' })}
+            onActionPress={() => {
               track('k12.parent.see_all_updates_tap', { user_id: user?.id });
-            }}>
-              <Text style={[styles.seeAllText, { color: theme.primary }]}>
-                {t('common.see_all', { defaultValue: 'See All' })}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            }}
+          />
           {recentUpdates.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="newspaper-outline" size={32} color={theme.textSecondary} />
@@ -553,19 +576,15 @@ export default function K12ParentDashboardScreen() {
 
         {/* Upcoming Events */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              {t('dashboard.upcoming_events', { defaultValue: 'Upcoming Events' })}
-            </Text>
-            <TouchableOpacity onPress={() => {
+          <SectionHeaderCard
+            title={t('dashboard.upcoming_events', { defaultValue: 'Upcoming Events' })}
+            hint={t('dashboard.upcoming_events_hint', { defaultValue: 'Calendar reminders and important school dates.' })}
+            actionLabel={t('common.see_all', { defaultValue: 'See All' })}
+            onActionPress={() => {
               track('k12.parent.see_all_events_tap', { user_id: user?.id });
               router.push('/screens/parent-events' as any);
-            }}>
-              <Text style={[styles.seeAllText, { color: theme.primary }]}>
-                {t('common.see_all', { defaultValue: 'See All' })}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            }}
+          />
           {upcomingEvents.length === 0 ? (
             <View style={[styles.emptyState, { backgroundColor: theme.surface }]}>
               <Ionicons name="calendar-outline" size={32} color={theme.textSecondary} />
