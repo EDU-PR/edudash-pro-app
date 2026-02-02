@@ -110,6 +110,11 @@ export interface TeacherInvite {
   email: string;
   status: string;
   created_at: string;
+  token?: string;
+  invited_by?: string;
+  expires_at?: string | null;
+  accepted_by?: string | null;
+  accepted_at?: string | null;
 }
 
 // Helper functions

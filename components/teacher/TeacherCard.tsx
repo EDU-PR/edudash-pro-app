@@ -22,6 +22,9 @@ interface TeacherCardProps {
   isRevoking: boolean;
   shouldDisableAssignment: boolean;
   theme?: ThemeColors;
+  inviteStatus?: string;
+  onInvite?: () => void;
+  onCopyInviteLink?: () => void;
 }
 
 export function TeacherCard({
@@ -33,10 +36,28 @@ export function TeacherCard({
   isRevoking,
   shouldDisableAssignment,
   theme,
+  inviteStatus,
+  onInvite,
+  onCopyInviteLink,
 }: TeacherCardProps) {
   const teacherHasSeat = useTeacherHasSeat(teacher.teacherUserId);
   const fullName = `${teacher.firstName} ${teacher.lastName}`;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const isInvitePending = inviteStatus && inviteStatus !== 'accepted' && inviteStatus !== 'active';
+  const inviteLabel = inviteStatus === 'pending'
+    ? 'Invite pending'
+    : inviteStatus === 'accepted'
+      ? 'Invite accepted'
+      : inviteStatus === 'revoked'
+        ? 'Invite revoked'
+        : inviteStatus === 'expired'
+          ? 'Invite expired'
+          : inviteStatus === 'needed'
+            ? 'Invite needed'
+            : inviteStatus || '';
+  const inviteActionLabel = inviteStatus === 'pending' ? 'Resend Invite' : 'Send Invite';
+  const showInviteActions = Boolean(onInvite) && !teacher.authUserId;
+  const showInviteStatus = Boolean(inviteLabel);
 
   // Debug logging for teacher card
   useEffect(() => {
@@ -52,6 +73,14 @@ export function TeacherCard({
       }
     });
   }, [teacher, teacherHasSeat, fullName]);
+
+  const getInviteStatusColor = () => {
+    if (inviteStatus === 'accepted' || inviteStatus === 'active') return '#16a34a';
+    if (inviteStatus === 'pending') return '#f59e0b';
+    if (inviteStatus === 'revoked' || inviteStatus === 'expired') return '#ef4444';
+    if (inviteStatus === 'needed') return '#f97316';
+    return '#6b7280';
+  };
 
   return (
     <TouchableOpacity
@@ -83,6 +112,18 @@ export function TeacherCard({
               {teacherHasSeat ? 'Has teacher seat' : 'No teacher seat'}
             </Text>
           </View>
+          {showInviteStatus && (
+            <View style={styles.inviteStatusContainer}>
+              <Ionicons
+                name={inviteStatus === 'accepted' ? 'checkmark-circle' : 'time'}
+                size={14}
+                color={getInviteStatusColor()}
+              />
+              <Text style={[styles.inviteStatusText, { color: getInviteStatusColor() }]}>
+                {inviteLabel}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -134,6 +175,35 @@ export function TeacherCard({
               />
               <Text style={styles.seatActionText}>Assign Seat</Text>
             </TouchableOpacity>
+          )}
+
+          {showInviteActions && (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.seatActionButton,
+                  styles.inviteButton,
+                  isInvitePending && styles.invitePendingButton,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onInvite?.();
+                }}
+              >
+                <Ionicons name="paper-plane" size={16} color="#fff" />
+                <Text style={styles.seatActionText}>{inviteActionLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.seatActionButton, styles.copyInviteButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onCopyInviteLink?.();
+                }}
+              >
+                <Ionicons name="link" size={16} color="#e2e8f0" />
+                <Text style={styles.seatActionText}>Copy Link</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           <TouchableOpacity
@@ -215,6 +285,16 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
+  inviteStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  inviteStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   teacherActionsColumn: {
     gap: 8,
   },
@@ -235,6 +315,8 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginLeft: 'auto',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
   },
   seatActionButton: {
     flexDirection: 'row',
@@ -259,6 +341,18 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     backgroundColor: '#e5e7eb',
     borderColor: '#e5e7eb',
     opacity: 0.6,
+  },
+  inviteButton: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  invitePendingButton: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#f59e0b',
+  },
+  copyInviteButton: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
   },
   seatActionText: {
     fontSize: 11,
