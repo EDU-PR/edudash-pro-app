@@ -7,7 +7,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { X, LogOut } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import type { NavItem } from './types';
 
 interface TeacherMobileNavProps {
@@ -19,7 +19,6 @@ interface TeacherMobileNavProps {
 export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
 
   if (!isOpen) return null;
 
@@ -94,7 +93,10 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
           <button
             className="navItem"
             style={{ width: '100%' }}
-            onClick={async () => { await supabase.auth.signOut(); router.push('/sign-in'); }}
+            onClick={async () => {
+              await signOutEverywhere({ timeoutMs: 2500 });
+              router.push('/sign-in');
+            }}
           >
             <LogOut className="navIcon" />
             <span>Sign out</span>

@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 
 interface SideNavProps {
   userRole?: string;
@@ -35,8 +35,7 @@ export function SideNav({ userRole = 'parent', preschoolName = 'Young Eagles' }:
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOutEverywhere({ timeoutMs: 2500 });
     router.push('/sign-in');
   };
 

@@ -8,7 +8,6 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import type { NavItem } from './types';
 
@@ -23,7 +22,6 @@ interface TeacherSideNavProps {
 export function TeacherSideNav({ nav, collapsed, hovered, onHoverStart, onHoverEnd }: TeacherSideNavProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
   const isExpanded = !collapsed || hovered;
 
   return (

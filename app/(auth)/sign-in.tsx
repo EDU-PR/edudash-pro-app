@@ -292,6 +292,8 @@ console.log('[SignIn] Component rendering, theme:', theme);
     resetSignOutState();
 
     setLoading(true);
+    // Give the UI a tick to render the spinner before heavy auth work begins.
+    await new Promise(resolve => setTimeout(resolve, 50));
     let signInSuccess = false;
     // #region agent log
     console.log('[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));

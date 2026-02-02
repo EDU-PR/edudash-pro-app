@@ -462,7 +462,7 @@ export const useNotificationsQuery = () => {
   const { user, profile } = useAuth();
   
   return useQuery({
-    queryKey: ['notifications', user?.id, profile?.preschool_id || profile?.organization_id],
+    queryKey: ['notifications', user?.id, profile?.preschool_id || profile?.organization_id, profile?.role],
     queryFn: () => fetchNotifications(
       user!.id,
       profile?.preschool_id || profile?.organization_id,

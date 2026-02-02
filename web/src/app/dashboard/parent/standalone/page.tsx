@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActivitiesWidget';
 import { ExamPrepWidget } from '@/components/dashboard/exam-prep/ExamPrepWidget';
 import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
@@ -211,7 +212,7 @@ export default function StandaloneParentDashboard() {
             <div style={{ fontSize: 14, color: '#94a3b8' }}>{userEmail}</div>
             <button
               onClick={async () => {
-                await supabase.auth.signOut();
+                await signOutEverywhere({ timeoutMs: 2500 });
                 router.push('/sign-in');
               }}
               style={{ padding: '8px 16px', background: '#334155', border: 0, borderRadius: 8, color: '#e2e8f0', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}

@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
-import { Text, Pressable, StyleSheet, ActivityIndicator, View } from 'react-native';
+import { Text, Pressable, StyleSheet, View, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withRepeat,
+  Easing,
 } from 'react-native-reanimated';
 import { marketingTokens } from './tokens';
 
@@ -40,10 +42,27 @@ export function GradientButton({
   disabled = false,
 }: GradientButtonProps) {
   const scale = useSharedValue(1);
+  const spin = useSharedValue(0);
   
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withTiming(scale.value, { duration: 120 }) }],
   }));
+
+  const spinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${spin.value * 360}deg` }],
+  }));
+
+  useEffect(() => {
+    if (loading) {
+      spin.value = withRepeat(
+        withTiming(1, { duration: 900, easing: Easing.linear }),
+        -1,
+        false
+      );
+    } else {
+      spin.value = 0;
+    }
+  }, [loading, spin]);
   
   const gradientColors = variant === 'primary' 
     ? marketingTokens.gradients.primary 
@@ -54,6 +73,13 @@ export function GradientButton({
     md: { paddingHorizontal: 24, paddingVertical: 14, fontSize: 16 },
     lg: { paddingHorizontal: 32, paddingVertical: 16, fontSize: 18 },
   }[size];
+
+  const spinnerSize = {
+    sm: 20,
+    md: 24,
+    lg: 28,
+  }[size];
+  const logoSize = Math.round(spinnerSize * 0.55);
   
   const isDisabled = disabled || loading;
   
@@ -83,11 +109,27 @@ export function GradientButton({
         >
           <View style={styles.content}>
             {loading && (
-              <ActivityIndicator 
-                size="small" 
-                color={marketingTokens.colors.fg.inverse} 
-                style={styles.spinner}
-              />
+              <View style={[styles.spinnerWrap, { width: spinnerSize, height: spinnerSize }]}>
+                <Animated.View
+                  style={[
+                    styles.spinnerRing,
+                    spinStyle,
+                    {
+                      width: spinnerSize,
+                      height: spinnerSize,
+                      borderRadius: spinnerSize / 2,
+                      borderTopColor: marketingTokens.colors.fg.inverse,
+                    },
+                  ]}
+                />
+                <View style={[styles.spinnerLogo, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
+                  <Image
+                    source={require('@/assets/icon.png')}
+                    style={{ width: logoSize * 0.7, height: logoSize * 0.7 }}
+                    resizeMode="contain"
+                  />
+                </View>
+              </View>
             )}
             <Text style={[styles.text, { fontSize: sizeStyles.fontSize }, textStyle]}>
               {label}
@@ -122,8 +164,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  spinner: {
+  spinnerWrap: {
     marginRight: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spinnerRing: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: 'rgba(10, 14, 22, 0.25)',
+  },
+  spinnerLogo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   text: {
     color: marketingTokens.colors.fg.inverse,

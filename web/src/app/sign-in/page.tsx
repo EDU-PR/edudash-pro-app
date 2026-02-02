@@ -109,6 +109,15 @@ function SignInFormWithParams() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+
+        .signInSpinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(0, 0, 0, 0.25);
+          border-top-color: #000;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
         
         /* Google Sign-In Button Styles */
         .googleSignInBtn {
@@ -243,9 +252,20 @@ function SignInFormWithParams() {
               fontSize: 16,
               fontWeight: 700,
               cursor: loading ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
             }}
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? (
+              <>
+                <span className="signInSpinner" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </button>
         </form>
 

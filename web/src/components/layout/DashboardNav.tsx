@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import { LogOut, User, Settings, Home, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -20,8 +20,7 @@ export function DashboardNav({ userEmail, userRole, preschoolName = 'Young Eagle
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOutEverywhere({ timeoutMs: 2500 });
     router.push('/sign-in');
   };
 

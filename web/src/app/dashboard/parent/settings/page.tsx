@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { changeLanguage, getCurrentLanguage } from '@/lib/i18n';
@@ -344,21 +345,7 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    try {
-      const timeoutMs = 2500;
-      await Promise.race([
-        supabase.auth.signOut(),
-        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
-      ]);
-    } catch {
-      // ignore
-    }
-
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-    } catch {
-      // ignore
-    }
+    await signOutEverywhere({ timeoutMs: 2500 });
 
     router.replace('/sign-in');
     if (typeof window !== 'undefined') {
@@ -386,21 +373,7 @@ export default function SettingsPage() {
         throw error ?? new Error('Failed to delete account');
       }
 
-      try {
-        const timeoutMs = 2500;
-        await Promise.race([
-          supabase.auth.signOut(),
-          new Promise((resolve) => setTimeout(resolve, timeoutMs)),
-        ]);
-      } catch {
-        // ignore
-      }
-
-      try {
-        await supabase.auth.signOut({ scope: 'local' });
-      } catch {
-        // ignore
-      }
+      await signOutEverywhere({ timeoutMs: 2500 });
 
       router.replace('/sign-in?accountDeleted=1');
       if (typeof window !== 'undefined') {

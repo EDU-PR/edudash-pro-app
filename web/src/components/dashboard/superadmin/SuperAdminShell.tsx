@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import {
   LayoutDashboard,
@@ -38,7 +37,6 @@ export function SuperAdminShell({
 }: SuperAdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const avatarLetter = useMemo(() => (userName?.[0] || userEmail?.[0] || 'S').toUpperCase(), [userName, userEmail]);
 

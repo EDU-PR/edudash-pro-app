@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import Link from 'next/link';
 import { Settings, BookMarked, LogOut, Loader2, FileText } from 'lucide-react';
 import RegistrationNotifications from '@/components/admin/RegistrationNotifications';
@@ -61,7 +62,7 @@ export default function AdminLayout({
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOutEverywhere({ timeoutMs: 2500 });
     router.push('/sign-in');
   };
 
