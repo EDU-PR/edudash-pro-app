@@ -287,7 +287,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           stars_reward: 2,
           subject: isPreschool ? 'life_skills' : 'general',
           skills: JSON.stringify(['discussion', 'reflection']),
-          is_active: true,
+          is_active: false,
+          is_published: false,
+          approval_status: 'pending',
+          approved_by: null,
+          approved_at: null,
           is_template: false,
         })
         .select('id')

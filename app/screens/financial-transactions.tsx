@@ -21,6 +21,8 @@ import {
   Alert,
   RefreshControl,
   Modal,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,9 +30,11 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 import { navigateBack } from '@/lib/navigation';
 import { derivePreschoolId } from '@/lib/roleUtils';
+import { assertSupabase } from '@/lib/supabase';
 
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { ExportService } from '@/lib/services/finance/ExportService';
+import { ReceiptService } from '@/lib/services/ReceiptService';
 import type { TransactionRecord, DateRange } from '@/services/FinancialDataService';
 
 interface FilterOptions {
@@ -52,6 +56,7 @@ export default function TransactionsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [receiptLoadingId, setReceiptLoadingId] = useState<string | null>(null);
   
   const [filters, setFilters] = useState<FilterOptions>({
     type: 'all',
@@ -64,6 +69,34 @@ export default function TransactionsScreen() {
     searchTerm: '',
   });
 
+  const categoryOptions = React.useMemo(() => {
+    const baseCategories = [
+      { key: 'Tuition', label: t('transactions.cat_tuition', { defaultValue: 'Tuition' }) },
+      { key: 'Supplies', label: t('transactions.cat_supplies', { defaultValue: 'Supplies' }) },
+      { key: 'Salaries', label: t('transactions.cat_salaries', { defaultValue: 'Salaries' }) },
+      { key: 'Maintenance', label: t('transactions.cat_maintenance', { defaultValue: 'Maintenance' }) },
+      { key: 'Utilities', label: t('transactions.cat_utilities', { defaultValue: 'Utilities' }) },
+    ];
+
+    const dynamic = Array.from(new Set(
+      transactions
+        .map((transaction) => transaction.category)
+        .filter(Boolean)
+    ));
+
+    const baseKeys = new Set(baseCategories.map((category) => category.key));
+    const dynamicOptions = dynamic
+      .filter((category) => !baseKeys.has(category))
+      .sort((a, b) => a.localeCompare(b))
+      .map((category) => ({ key: category, label: category }));
+
+    return [
+      { key: 'all', label: t('transactions.all_categories', { defaultValue: 'All Categories' }) },
+      ...baseCategories,
+      ...dynamicOptions,
+    ];
+  }, [transactions, t]);
+
   useEffect(() => {
     loadTransactions();
   }, []);
@@ -71,6 +104,12 @@ export default function TransactionsScreen() {
   useEffect(() => {
     applyFilters();
   }, [transactions, filters]);
+
+  useEffect(() => {
+    if (filters.category !== 'all' && !categoryOptions.some(option => option.key === filters.category)) {
+      setFilters(prev => ({ ...prev, category: 'all' }));
+    }
+  }, [categoryOptions, filters.category]);
 
   const canAccessFinances = (): boolean => {
     return profile?.role === 'principal' || profile?.role === 'principal_admin';
@@ -94,7 +133,11 @@ export default function TransactionsScreen() {
         dateRange: filters.dateRange,
       });
 
-      const data = await FinancialDataService.getTransactions(filters.dateRange, preschoolId || undefined);
+      const data = await FinancialDataService.getTransactions(
+        filters.dateRange,
+        preschoolId || undefined,
+        { useAccountingDate: true }
+      );
       
       console.log('[TransactionsScreen] Loaded transactions count:', data.length);
       
@@ -132,7 +175,8 @@ export default function TransactionsScreen() {
       const term = filters.searchTerm.toLowerCase();
       filtered = filtered.filter(t => 
         t.description.toLowerCase().includes(term) ||
-        t.category.toLowerCase().includes(term)
+        t.category.toLowerCase().includes(term) ||
+        (t.feeSummary || '').toLowerCase().includes(term)
       );
     }
 
@@ -166,12 +210,203 @@ export default function TransactionsScreen() {
     });
   };
 
+  const openReceiptUrl = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert(t('common.error'), t('receipt.unable_open', { defaultValue: 'Unable to open receipt link.' }));
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(t('common.error'), t('receipt.unable_open', { defaultValue: 'Unable to open receipt link.' }));
+    }
+  };
+
+  const handleReceiptPress = async (item: TransactionRecord) => {
+    if (item.source !== 'payment') return;
+
+    if (item.receiptUrl) {
+      await openReceiptUrl(item.receiptUrl);
+      return;
+    }
+
+    if (item.receiptStoragePath) {
+      try {
+        const { data } = await assertSupabase()
+          .storage
+          .from('generated-pdfs')
+          .createSignedUrl(item.receiptStoragePath, 60 * 60);
+        if (data?.signedUrl) {
+          await openReceiptUrl(data.signedUrl);
+          return;
+        }
+      } catch {
+        // fall through to generation
+      }
+    }
+
+    if (item.status !== 'completed') {
+      Alert.alert(
+        t('common.info', { defaultValue: 'Info' }),
+        t('receipt.pending_payment', { defaultValue: 'Receipts are available once a payment is completed.' })
+      );
+      return;
+    }
+
+    await generateReceiptForPayment(item);
+  };
+
+  const generateReceiptForPayment = async (item: TransactionRecord) => {
+    if (!profile?.id) {
+      Alert.alert(t('common.error'), t('receipt.missing_profile', { defaultValue: 'Unable to identify receipt issuer.' }));
+      return;
+    }
+
+    setReceiptLoadingId(item.id);
+    try {
+      const supabase = assertSupabase();
+      const { data: payment, error: paymentError } = await supabase
+        .from('payments')
+        .select('id, amount, payment_reference, payment_method, created_at, student_id, parent_id, fee_ids, description, metadata, preschool_id, attachment_url')
+        .eq('id', item.id)
+        .maybeSingle();
+
+      if (paymentError || !payment) {
+        throw new Error(paymentError?.message || 'Payment not found');
+      }
+
+      const schoolId = payment.preschool_id || derivePreschoolId(profile);
+      if (!schoolId) {
+        throw new Error('School not found for receipt generation');
+      }
+
+      const { data: student } = await supabase
+        .from('students')
+        .select('id, first_name, last_name, class_name')
+        .eq('id', payment.student_id)
+        .maybeSingle();
+
+      if (!student) {
+        throw new Error('Student not found for receipt generation');
+      }
+
+      let parentProfile: { id?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null } | null = null;
+      if (payment.parent_id) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .eq('id', payment.parent_id)
+          .maybeSingle();
+        parentProfile = data || null;
+      }
+
+      let feeId = payment.id;
+      let feeDescription = payment.description || 'School fee';
+      let feeDueDate: string | null = null;
+      const primaryFeeId = Array.isArray(payment.fee_ids) ? payment.fee_ids[0] : null;
+      if (primaryFeeId) {
+        feeId = primaryFeeId;
+        const { data: feeRow } = await supabase
+          .from('student_fees')
+          .select('id, due_date, fee_structures(name, fee_type, description)')
+          .eq('id', primaryFeeId)
+          .maybeSingle();
+        const feeStructure = Array.isArray(feeRow?.fee_structures) ? feeRow?.fee_structures[0] : feeRow?.fee_structures;
+        feeDescription = feeStructure?.name || feeStructure?.fee_type || payment.description || 'School fee';
+        feeDueDate = feeRow?.due_date || null;
+      }
+
+      const issuerName =
+        profile.full_name ||
+        `${profile.first_name || ''} ${profile.last_name || ''}`.trim() ||
+        'School Administrator';
+
+      const paymentReference = payment.payment_reference || `PAY-${payment.id.slice(0, 8)}`;
+      const receiptAmount = Number(payment.amount ?? item.amount ?? 0);
+
+      const result = await ReceiptService.generateFeeReceipt({
+        schoolId,
+        fee: {
+          id: feeId,
+          description: feeDescription,
+          amount: receiptAmount,
+          dueDate: feeDueDate,
+          paidDate: payment.created_at || new Date().toISOString(),
+          paymentReference,
+          paymentMethod: payment.payment_method || 'manual',
+        },
+        student: {
+          id: student.id,
+          firstName: student.first_name,
+          lastName: student.last_name,
+          className: student.class_name || null,
+        },
+        parent: {
+          id: parentProfile?.id || null,
+          name: parentProfile
+            ? `${parentProfile.first_name || ''} ${parentProfile.last_name || ''}`.trim()
+            : null,
+          email: parentProfile?.email || null,
+        },
+        issuer: {
+          id: profile.id,
+          name: issuerName,
+        },
+      });
+
+      const nowIso = new Date().toISOString();
+      const nextMetadata = {
+        ...(payment.metadata || {}),
+        receipt_storage_path: result.storagePath,
+        receipt_url: result.receiptUrl,
+      };
+
+      const updates: any = {
+        metadata: nextMetadata,
+        updated_at: nowIso,
+      };
+      if (!payment.attachment_url && result.receiptUrl) {
+        updates.attachment_url = result.receiptUrl;
+      }
+
+      await supabase
+        .from('payments')
+        .update(updates)
+        .eq('id', payment.id);
+
+      if (result.storagePath && payment.payment_reference) {
+        await supabase
+          .from('financial_transactions')
+          .update({
+            receipt_image_path: result.storagePath,
+            updated_at: nowIso,
+          })
+          .eq('payment_reference', payment.payment_reference);
+      }
+
+      Alert.alert(t('common.success'), t('receipt.generated_success', { defaultValue: 'Receipt generated successfully.' }));
+      if (result.receiptUrl) {
+        await openReceiptUrl(result.receiptUrl);
+      }
+
+      loadTransactions(true);
+    } catch (error: any) {
+      Alert.alert(t('common.error'), error?.message || t('receipt.generate_failed', { defaultValue: 'Failed to generate receipt.' }));
+    } finally {
+      setReceiptLoadingId(null);
+    }
+  };
+
   const formatCurrency = (amount: number): string => {
     return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
   };
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-ZA', {
+  const formatDate = (dateString?: string | null): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-ZA', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -190,9 +425,34 @@ export default function TransactionsScreen() {
   };
 
   const renderTransaction = ({ item }: { item: TransactionRecord }) => {
+    const isPayment = item.source === 'payment';
+    const hasReceipt = Boolean(item.receiptUrl || item.receiptStoragePath || item.hasReceipt);
     const hasEvidence = Boolean(
-      (item as any).attachmentUrl || (item as any).hasReceipt || ((item as any).receiptCount ?? 0) > 0
+      item.attachmentUrl || hasReceipt || (item.receiptCount ?? 0) > 0
     );
+    const dueLabel = isPayment && item.dueDate
+      ? t('transactions.due_label', { defaultValue: 'Due {{date}}', date: formatDate(item.dueDate) })
+      : formatDate(item.date);
+    const paidLabel = isPayment && item.paidDate
+      ? t('transactions.paid_label', { defaultValue: 'Paid {{date}}', date: formatDate(item.paidDate) })
+      : '';
+    const dateLine = paidLabel ? `${dueLabel} • ${paidLabel}` : dueLabel;
+    const advanceTag = isPayment && item.isAdvancePayment
+      ? ` • ${t('transactions.advance', { defaultValue: 'Advance' })}`
+      : '';
+    const showReceiptButton = item.source === 'payment';
+    const isReceiptLoading = receiptLoadingId === item.id;
+    const receiptDisabled = !hasReceipt && item.status !== 'completed';
+    const receiptLabel = hasReceipt
+      ? t('receipt.view_receipt', { defaultValue: 'View Receipt' })
+      : item.status === 'completed'
+        ? t('receipt.generate_receipt', { defaultValue: 'Generate Receipt' })
+        : t('receipt.pending_payment', { defaultValue: 'Awaiting Approval' });
+    const evidenceLabel = item.source === 'payment'
+      ? (hasReceipt ? t('receipt.view_receipt', { defaultValue: 'View Receipt' }) : t('receipt.attach_receipt', { defaultValue: 'Attach Receipt' }))
+      : ((item.receiptCount ?? 0) > 0
+        ? `${item.receiptCount} ${t('receipt.view_receipts', { defaultValue: 'View Receipts' })}`
+        : t('receipt.attach_receipt', { defaultValue: 'Attach Receipt' }));
     return (
       <TouchableOpacity style={styles.transactionCard}>
         <View style={styles.transactionHeader}>
@@ -205,7 +465,10 @@ export default function TransactionsScreen() {
           </View>
           <View style={styles.transactionInfo}>
             <Text style={styles.transactionDescription}>{item.description}</Text>
-            <Text style={styles.transactionCategory}>{item.category} • {formatDate(item.date)}</Text>
+            <Text style={styles.transactionCategory}>{item.category} • {dateLine}{advanceTag}</Text>
+            {item.feeSummary && item.feeSummary !== item.category && (
+              <Text style={styles.transactionSubtext}>{item.feeSummary}</Text>
+            )}
           </View>
           <View style={styles.transactionAmount}>
             <Text style={[
@@ -218,9 +481,31 @@ export default function TransactionsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                 <Ionicons name="document-attach" size={16} color={theme?.primary || '#4F46E5'} />
                 <Text style={{ fontSize: 11, color: theme?.textSecondary || '#6B7280' }}>
-                  {(item as any).receiptCount ? `${(item as any).receiptCount} ${t('receipt.view_receipts', { defaultValue: 'View Receipts' })}` : t('receipt.attach_receipt', { defaultValue: 'Attach Receipt' })}
+                  {evidenceLabel}
                 </Text>
               </View>
+            )}
+            {showReceiptButton && (
+              <TouchableOpacity
+                style={[
+                  styles.receiptButton,
+                  receiptDisabled && styles.receiptButtonDisabled,
+                ]}
+                onPress={() => handleReceiptPress(item)}
+                disabled={receiptDisabled || isReceiptLoading}
+              >
+                {isReceiptLoading ? (
+                  <ActivityIndicator size="small" color={theme?.primary || '#4F46E5'} />
+                ) : (
+                  <Ionicons name="receipt-outline" size={14} color={receiptDisabled ? '#9CA3AF' : (theme?.primary || '#4F46E5')} />
+                )}
+                <Text style={[
+                  styles.receiptButtonText,
+                  receiptDisabled && styles.receiptButtonTextDisabled,
+                ]}>
+                  {receiptLabel}
+                </Text>
+              </TouchableOpacity>
             )}
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
               <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
@@ -274,14 +559,7 @@ export default function TransactionsScreen() {
           <View style={styles.filterSection}>
             <Text style={styles.filterLabel}>{t('transactions.category', { defaultValue: 'Category' })}</Text>
             <View style={styles.filterOptions}>
-              {[
-                { key: 'all', label: t('transactions.all_categories', { defaultValue: 'All Categories' }) },
-                { key: 'Tuition', label: t('transactions.cat_tuition', { defaultValue: 'Tuition' }) },
-                { key: 'Supplies', label: t('transactions.cat_supplies', { defaultValue: 'Supplies' }) },
-                { key: 'Salaries', label: t('transactions.cat_salaries', { defaultValue: 'Salaries' }) },
-                { key: 'Maintenance', label: t('transactions.cat_maintenance', { defaultValue: 'Maintenance' }) },
-                { key: 'Utilities', label: t('transactions.cat_utilities', { defaultValue: 'Utilities' }) },
-              ].map(({ key, label }) => (
+              {categoryOptions.map(({ key, label }) => (
                 <TouchableOpacity
                   key={key}
                   style={[
@@ -514,6 +792,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme?.textSecondary || '#666',
   },
+  transactionSubtext: {
+    marginTop: 2,
+    fontSize: 12,
+    color: theme?.textSecondary || '#6B7280',
+  },
   transactionAmount: {
     alignItems: 'flex-end',
   },
@@ -521,6 +804,29 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  receiptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme?.primary || '#4F46E5',
+  },
+  receiptButtonDisabled: {
+    borderColor: theme?.border || '#E5E7EB',
+    backgroundColor: theme?.surfaceVariant || '#F3F4F6',
+  },
+  receiptButtonText: {
+    fontSize: 11,
+    color: theme?.primary || '#4F46E5',
+    fontWeight: '600',
+  },
+  receiptButtonTextDisabled: {
+    color: theme?.textSecondary || '#9CA3AF',
   },
   statusBadge: {
     paddingHorizontal: 8,

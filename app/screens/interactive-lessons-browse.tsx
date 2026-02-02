@@ -71,6 +71,7 @@ export default function InteractiveLessonsBrowseScreen() {
         .from('interactive_activities')
         .select('*')
         .eq('is_active', true)
+        .eq('approval_status', 'approved')
         .order('difficulty_level')
         .order('title');
 

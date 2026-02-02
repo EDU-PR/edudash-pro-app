@@ -95,6 +95,7 @@ export default function InteractiveLessonPlayerScreen() {
         .from('interactive_activities')
         .select('*')
         .eq('id', activityId)
+        .eq('approval_status', 'approved')
         .single();
 
       if (error) throw error;

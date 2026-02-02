@@ -251,7 +251,11 @@ export function useActivityBuilder(): UseActivityBuilderReturn {
           stars_reward: draft.starsReward,
           subject: draft.subject,
           skills: JSON.stringify(getSkillsForType(draft.type)),
-          is_active: true,
+          is_active: false,
+          is_published: false,
+          approval_status: 'pending',
+          approved_by: null,
+          approved_at: null,
           is_template: false,
         });
 
