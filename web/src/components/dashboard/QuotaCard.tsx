@@ -73,6 +73,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   const { usage, loading, refreshUsage } = useQuotaCheck(userId);
   const [limits, setLimits] = useState<TierLimits | null>(null);
   const [trialInfo, setTrialInfo] = useState<{ isActive: boolean; daysLeft: number } | null>(null);
+  const [schoolType, setSchoolType] = useState<'preschool' | 'k12' | 'unknown'>('preschool');
   const supabase = createClient();
 
   // Fetch trial status from profile
@@ -101,6 +102,65 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   }, [userId, supabase]);
 
   useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    const resolveSchoolType = async () => {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, preschool_id, organization_id, school_type')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const profileSchoolType = (profile as any)?.school_type;
+        if (profileSchoolType && !cancelled) {
+          const normalized = String(profileSchoolType).toLowerCase();
+          setSchoolType(normalized.includes('k12') ? 'k12' : 'preschool');
+          return;
+        }
+
+        const schoolId = (profile as any)?.preschool_id || (profile as any)?.organization_id;
+        if (!schoolId) {
+          if (!cancelled) setSchoolType('preschool');
+          return;
+        }
+
+        const { data: preschool } = await supabase
+          .from('preschools')
+          .select('id, school_type, type')
+          .eq('id', schoolId)
+          .maybeSingle();
+
+        if (preschool?.school_type || preschool?.type) {
+          const normalized = String(preschool.school_type || preschool.type).toLowerCase();
+          if (!cancelled) setSchoolType(normalized.includes('k12') ? 'k12' : 'preschool');
+          return;
+        }
+
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('id, school_type, organization_type, type')
+          .eq('id', schoolId)
+          .maybeSingle();
+
+        const orgType = org?.school_type || (org as any)?.organization_type || org?.type;
+        if (!cancelled) {
+          const normalized = String(orgType || 'preschool').toLowerCase();
+          setSchoolType(normalized.includes('k12') ? 'k12' : 'preschool');
+        }
+      } catch {
+        if (!cancelled) setSchoolType('preschool');
+      }
+    };
+
+    resolveSchoolType();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, supabase]);
+
+  useEffect(() => {
     // Default to 'free' tier if no tier is detected
     const tier = usage?.current_tier?.toLowerCase() || 'free';
     const tierLimits = TIER_LIMITS[tier] || TIER_LIMITS.free;
@@ -118,6 +178,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
   // If no usage data exists yet, default to free tier
   if (!usage) {
     const freeLimits = TIER_LIMITS.free;
+    const isPreschool = schoolType !== 'k12';
     return (
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
@@ -143,11 +204,19 @@ export function QuotaCard({ userId }: QuotaCardProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', fontSize: 14, color: 'var(--text-muted)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <FileText size={16} style={{ color: '#3b82f6' }} />
-            <span>{freeLimits.exams_per_month} exams/month (10/week) • ad-supported</span>
+            <span>
+              {isPreschool
+                ? `${freeLimits.exams_per_month} activities/month (10/week) • ad-supported`
+                : `${freeLimits.exams_per_month} exams/month (10/week) • ad-supported`}
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <HelpCircle size={16} style={{ color: '#8b5cf6' }} />
-            <span>{freeLimits.explanations_per_month} explanations/month (50/day) • ad-supported</span>
+            <span>
+              {isPreschool
+                ? `${freeLimits.explanations_per_month} learning tips/month (50/day) • ad-supported`
+                : `${freeLimits.explanations_per_month} explanations/month (50/day) • ad-supported`}
+            </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <MessageSquare size={16} style={{ color: '#10b981' }} />
@@ -201,11 +270,12 @@ export function QuotaCard({ userId }: QuotaCardProps) {
 
   const isUnlimited = usage?.current_tier && ['school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
   const isHighestTier = usage?.current_tier && ['parent_plus', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].includes(usage.current_tier.toLowerCase());
+  const isPreschool = schoolType !== 'k12';
 
   const quotaItems = [
     {
       icon: FileText,
-      label: 'Exams Generated',
+      label: isPreschool ? 'Activities Generated' : 'Exams Generated',
       used: usage.exams_generated_this_month,
       limit: limits.exams_per_month,
       period: 'this month',
@@ -213,7 +283,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     },
     {
       icon: HelpCircle,
-      label: 'Explanations',
+      label: isPreschool ? 'Learning Tips' : 'Explanations',
       used: usage.explanations_requested_this_month,
       limit: limits.explanations_per_month,
       period: 'this month',
