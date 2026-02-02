@@ -9,6 +9,7 @@ import { LessonGeneratorService } from '@/lib/ai/lessonGenerator'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function CreateLessonScreen() {
   const { profile } = useAuth()
   const { t } = useTranslation('common')
@@ -29,8 +30,7 @@ export default function CreateLessonScreen() {
     queryFn: async () => {
       const { data, error } = await assertSupabase().from('lesson_categories').select('id,name')
       if (error) throw error
-      return (data || []) as { id: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
-name: string }[]
+      return (data || []) as { id: string; name: string }[]
     },
     staleTime: 60_000,
   })
@@ -169,4 +169,3 @@ const styles = StyleSheet.create({
   primaryBtn: { backgroundColor: '#00f5ff', paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   primaryBtnText: { color: '#000', fontWeight: '800' },
 })
-

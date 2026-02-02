@@ -17,6 +17,7 @@ import { toast } from '@/components/ui/ToastProvider'
 import { useHomeworkHelperModels, useTierInfo } from '@/hooks/useAIModelSelection'
 import { useTheme } from '@/contexts/ThemeContext'
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function AIHomeworkHelperScreen() {
   const { theme } = useTheme()
   const [question, setQuestion] = useState('Explain how to solve long division: 156 ÷ 12 step by step for a Grade 4 learner.')
@@ -24,8 +25,11 @@ export default function AIHomeworkHelperScreen() {
   const { loading, generate, result } = useHomeworkGenerator()
   const [pending, setPending] = useState(false)
   const [answer, setAnswer] = useState('')
-  const [usage, setUsage] = useState<{ lesson_generation: number; import EduDashSpinner from '@/components/ui/EduDashSpinner';
-grading_assistance: number; homework_help: number }>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
+  const [usage, setUsage] = useState<{ lesson_generation: number; grading_assistance: number; homework_help: number }>({
+    lesson_generation: 0,
+    grading_assistance: 0,
+    homework_help: 0,
+  })
   const [models, setModels] = useState<Array<{ id: string; name: string; provider: 'claude' | 'openai' | 'custom'; relativeCost: number }>>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
 

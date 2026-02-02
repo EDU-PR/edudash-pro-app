@@ -10,8 +10,8 @@ import { queryClient } from '../../lib/query/queryClient'
 import { convertToE164, formatAsUserTypes, validatePhoneNumber, EXAMPLE_PHONE_NUMBERS } from '../../lib/utils/phoneUtils'
 import { Vibration } from 'react-native';
 import Feedback from '../../lib/feedback'
-import EduDashSpinner from '../ui/EduDashSpinner'
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface WhatsAppOptInModalProps {
   visible: boolean
   onClose: () => void

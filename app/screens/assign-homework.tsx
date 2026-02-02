@@ -10,6 +10,7 @@ import { WorksheetQuickWidget } from '@/components/worksheets/WorksheetQuickActi
 import type { Assignment } from '@/lib/models/Assignment'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
 
+import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function AssignHomeworkScreen() {
   const { profile } = require('@/contexts/AuthContext') as any
   const canAssign = !!profile?.hasCapability && profile.hasCapability('create_assignments' as any)
@@ -42,8 +43,7 @@ export default function AssignHomeworkScreen() {
         .eq('active', true)
         .order('name')
       if (error) throw error
-      return (data || []) as { id: string; import EduDashSpinner from '@/components/ui/EduDashSpinner';
-name: string; grade_level?: string }[]
+      return (data || []) as { id: string; name: string; grade_level?: string }[]
     },
     enabled: !!schoolId,
     staleTime: 60_000,
