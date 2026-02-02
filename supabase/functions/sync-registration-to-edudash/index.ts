@@ -197,14 +197,20 @@ function calculateAgeYears(dobIso: string, referenceDate = new Date()): number |
 
 function parseAgeRange(value?: string | null): { min: number; max: number } | null {
   if (!value) return null;
-  const matches = value.match(/\d+(?:\.\d+)?/g);
-  if (!matches || matches.length === 0) return null;
-  const numbers = matches.map((item) => Number(item)).filter((num) => Number.isFinite(num));
-  if (numbers.length === 0) return null;
-  if (numbers.length === 1) {
-    return { min: numbers[0], max: numbers[0] };
+  const tokens: number[] = [];
+  const regex = /(\d+(?:\.\d+)?)(?:\s*(months?|mos?|m|yrs?|years?|y))?/gi;
+  for (const match of value.matchAll(regex)) {
+    const raw = Number(match[1]);
+    if (!Number.isFinite(raw)) continue;
+    const unit = (match[2] || '').toLowerCase();
+    const years = unit.startsWith('m') ? raw / 12 : raw;
+    tokens.push(years);
   }
-  return { min: Math.min(numbers[0], numbers[1]), max: Math.max(numbers[0], numbers[1]) };
+  if (tokens.length === 0) return null;
+  if (tokens.length === 1) {
+    return { min: tokens[0], max: tokens[0] };
+  }
+  return { min: Math.min(tokens[0], tokens[1]), max: Math.max(tokens[0], tokens[1]) };
 }
 
 function normalizeGrade(value: string | null | undefined): string | null {
@@ -806,12 +812,16 @@ serve(async (req) => {
     // Step 3.5: Ensure correct tuition fee for next month based on age/grade
     if (studentId && organizationId) {
       try {
-        const { data: feeRows } = await supabase
+        const { data: feeRows, error: feeRowsError } = await supabase
           .from('school_fee_structures')
           .select('id, age_group, grade_level, amount_cents, fee_category, is_active, due_day_of_month')
-          .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+          .eq('preschool_id', organizationId)
           .eq('is_active', true)
           .eq('fee_category', 'tuition');
+
+        if (feeRowsError) {
+          console.warn('[sync-registration] Failed to load fee structures:', feeRowsError.message);
+        }
 
         const feeStructures = (feeRows || []) as FeeStructureRow[];
         const ageYears = normalizedDob ? calculateAgeYears(normalizedDob) : null;
@@ -822,7 +832,7 @@ serve(async (req) => {
         if (!selectedFee && ageYears !== null) {
           selectedFee = selectFeeStructureByAge(feeStructures, ageYears);
         }
-        if (!selectedFee && feeStructures.length > 0) {
+        if (!selectedFee && feeStructures.length === 1) {
           selectedFee = feeStructures[0];
         }
 

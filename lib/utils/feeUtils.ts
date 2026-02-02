@@ -51,3 +51,17 @@ export const getUniformItemType = (
   }
   return null;
 };
+
+export const inferPaymentCategory = (value?: string | null): string => {
+  const text = (value ?? '').toLowerCase();
+  if (!text) return 'Tuition';
+  if (text.includes('uniform')) return 'Uniform';
+  if (/\b(excursion|trip|tour|outing)\b/.test(text)) return 'Excursions';
+  if (/\b(donation|sponsor|sponsorship|contribution)\b/.test(text)) return 'Donations';
+  if (/\b(registration|admission|enrolment|enrollment)\b/.test(text)) return 'Registration';
+  if (/\b(book|stationery|materials|supplies)\b/.test(text)) return 'Materials';
+  if (/\b(transport|bus|shuttle)\b/.test(text)) return 'Transport';
+  if (/\b(meal|lunch|snack|food)\b/.test(text)) return 'Meals';
+  if (/\b(activity|event|camp)\b/.test(text)) return 'Activities';
+  return 'Tuition';
+};

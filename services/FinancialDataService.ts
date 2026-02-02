@@ -7,7 +7,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
-import { isTuitionFee } from '@/lib/utils/feeUtils';
+import { inferPaymentCategory, isTuitionFee } from '@/lib/utils/feeUtils';
 
 export interface UnifiedTransaction {
   id: string;
@@ -730,11 +730,14 @@ export class FinancialDataService {
               .map((category: string) => this.normalizeCategoryLabel(category))
           ));
 
+          const fallbackCategory = inferPaymentCategory(
+            payment.description || metadata?.payment_purpose || metadata?.fee_category
+          );
           const category = uniqueCategories.length === 1
             ? uniqueCategories[0]
             : uniqueCategories.length > 1
               ? 'Multiple Fees'
-              : 'Tuition';
+              : fallbackCategory;
 
           const feeSummary = buildFeeSummary(feeLabels);
 

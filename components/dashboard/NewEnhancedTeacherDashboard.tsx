@@ -33,7 +33,7 @@ import { TeacherQuickActionCard } from './teacher/TeacherQuickActionCard';
 import { BirthdayDonationRegister } from './teacher/BirthdayDonationRegister';
 import { useNewEnhancedTeacherState } from '@/hooks/useNewEnhancedTeacherState';
 import { useTeacherStudents } from '@/hooks/useTeacherStudents';
-import { StudentSummaryCard } from '@/components/dashboard/shared';
+import { CollapsibleSection, StudentSummaryCard } from '@/components/dashboard/shared';
 import { router } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
@@ -186,10 +186,11 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
         </View>
 
         {/* Metrics Grid */}
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
-            <Text style={styles.sectionTitle}>{t('dashboard.overview')}</Text>
-          </View>
+        <CollapsibleSection
+          title={t('dashboard.overview')}
+          sectionId="teacher-overview"
+          icon="stats-chart"
+        >
           <View style={styles.metricsGrid}>
             {metrics.map((metric, index) => (
               <TeacherMetricsCard
@@ -205,13 +206,14 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
               />
             ))}
           </View>
-        </View>
+        </CollapsibleSection>
 
         {/* Quick Actions */}
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
-            <Text style={styles.sectionTitle}>{t('dashboard.quick_actions')}</Text>
-          </View>
+        <CollapsibleSection
+          title={t('dashboard.quick_actions')}
+          sectionId="teacher-quick-actions"
+          icon="flash"
+        >
           <View style={styles.actionsGrid}>
             {quickActions.map((action, index) => (
               <TeacherQuickActionCard
@@ -225,21 +227,23 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
               />
             ))}
           </View>
-        </View>
+        </CollapsibleSection>
 
         {/* Birthday Donations */}
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
-            <Text style={styles.sectionTitle}>{t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}</Text>
-          </View>
+        <CollapsibleSection
+          title={t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}
+          sectionId="teacher-birthday-donations"
+          icon="gift"
+        >
           <BirthdayDonationRegister organizationId={organizationId} />
-        </View>
+        </CollapsibleSection>
 
         {/* My Students */}
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleChip, { borderColor: theme.primary, backgroundColor: theme.surface }]}>
-            <Text style={styles.sectionTitle}>{t('dashboard.my_students', { defaultValue: 'My Students' })}</Text>
-          </View>
+        <CollapsibleSection
+          title={t('dashboard.my_students', { defaultValue: 'My Students' })}
+          sectionId="teacher-students"
+          icon="people"
+        >
           {teacherStudentsLoading ? (
             <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
           ) : (
@@ -255,12 +259,17 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           {!teacherStudentsLoading && teacherStudents.length === 0 && (
             <Text style={styles.emptyText}>{t('dashboard.no_students', { defaultValue: 'No students yet.' })}</Text>
           )}
-        </View>
+        </CollapsibleSection>
 
         {/* Parent Link Requests Widget */}
-        <View style={styles.section}>
+        <CollapsibleSection
+          title={t('dashboard.parent_link_requests', { defaultValue: 'Parent Link Requests' })}
+          sectionId="teacher-parent-links"
+          icon="link"
+          defaultCollapsed
+        >
           <PendingParentLinkRequests />
-        </View>
+        </CollapsibleSection>
 
       </ScrollView>
     </View>

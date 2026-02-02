@@ -35,6 +35,12 @@ interface PaymentRecord {
   created_at?: string | null;
 }
 
+interface POPPaymentRecord {
+  payment_amount: number | null;
+  status: string | null;
+  description: string | null;
+}
+
 interface ExpenseRecord {
   id?: string;
   amount: number | null;
@@ -177,6 +183,21 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
         .eq('preschool_id', preschoolId)
         .eq('status', 'pending');
 
+      const { data: uniformPOPs } = await supabase
+        .from('pop_uploads')
+        .select('payment_amount, status, description')
+        .eq('preschool_id', preschoolId)
+        .eq('upload_type', 'proof_of_payment')
+        .ilike('description', '%uniform%');
+
+      const uniformRecords = (uniformPOPs || []) as POPPaymentRecord[];
+      const uniformCollected = uniformRecords
+        .filter((pop) => pop.status === 'approved')
+        .reduce((sum, pop) => sum + (Number(pop.payment_amount) || 0), 0);
+      const uniformOutstanding = uniformRecords
+        .filter((pop) => pop.status === 'pending' || pop.status === 'needs_revision')
+        .reduce((sum, pop) => sum + (Number(pop.payment_amount) || 0), 0);
+
       // 5. Expenses from petty cash
       const { data: expenses } = await supabase
         .from('petty_cash_transactions')
@@ -192,6 +213,19 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
 
       // 6. Fee type breakdown
       const feeTypeBreakdown = calculateFeeTypeBreakdown(feeRecords);
+      if (uniformCollected > 0 || uniformOutstanding > 0) {
+        const existingUniform = feeTypeBreakdown.find((entry) => entry.type.toLowerCase() === 'uniform');
+        if (existingUniform) {
+          existingUniform.collected += uniformCollected;
+          existingUniform.outstanding += uniformOutstanding;
+        } else {
+          feeTypeBreakdown.push({
+            type: 'Uniform',
+            collected: uniformCollected,
+            outstanding: uniformOutstanding,
+          });
+        }
+      }
 
       // 7. Monthly trend (last 6 months)
       const monthlyTrend = await fetchMonthlyTrend(supabase, preschoolId);
@@ -270,6 +304,7 @@ function formatFeeType(type: string): string {
     transport: 'Transport',
     meals: 'Meals',
     activities: 'Activities',
+    uniform: 'Uniform',
     other: 'Other',
   };
   return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
