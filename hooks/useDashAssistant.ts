@@ -36,6 +36,7 @@ import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
 import { getCurrentLanguage } from '@/lib/i18n';
 import { useAIModelSelection } from '@/hooks/useAIModelSelection';
+import { useCapability } from '@/hooks/useCapability';
 import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
 import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
 
@@ -73,6 +74,26 @@ function resolveAgeBand(ageYears?: number | null, grade?: string | null): string
   }
 
   return null;
+}
+
+function formatGradeLabel(grade?: string | null): string | null {
+  if (!grade) return null;
+  const raw = String(grade).trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('grade')) return raw.replace(/\s+/g, ' ');
+  if (lower === 'r' || lower.includes('grade r')) return 'Grade R';
+  const match = raw.match(/\d+/);
+  if (match) return `Grade ${match[0]}`;
+  return raw;
+}
+
+function isPreschoolContext(learner?: LearnerContext | null): boolean {
+  const schoolType = (learner?.schoolType || '').toLowerCase();
+  if (schoolType.includes('preschool') || schoolType.includes('ecd') || schoolType.includes('early')) return true;
+  if (typeof learner?.ageYears === 'number' && learner.ageYears <= 6) return true;
+  if (learner?.ageBand === '3-5') return true;
+  return false;
 }
 
 const FREE_VOICE_BUDGET_MS = 10 * 60 * 1000;
@@ -220,6 +241,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
+  const { can, ready: capsReady } = useCapability();
   
   // State
   const [messages, setMessages] = useState<DashMessage[]>([]);
@@ -330,6 +352,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [learnerContext]);
 
   const isFreeTier = (tier || 'free').toLowerCase().includes('free');
+  const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
 
   const loadVoiceBudget = useCallback(async () => {
     if (!isFreeTier) {
@@ -683,6 +706,51 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       schoolType: fallback?.schoolType || null,
       learnerName: fallback?.learnerName || null,
     };
+  }, []);
+
+  const buildDashContextOverride = useCallback((context?: LearnerContext | null) => {
+    const learner = context || null;
+    const gradeLabel = formatGradeLabel(learner?.grade);
+    const ageYears = learner?.ageYears ?? null;
+    const ageBand = learner?.ageBand || resolveAgeBand(ageYears, gradeLabel);
+    const schoolType = learner?.schoolType || null;
+    const preschoolMode = isPreschoolContext({
+      ...learner,
+      ageBand,
+    });
+
+    const preschoolRules = preschoolMode
+      ? [
+          'PRESCHOOL TEACHING RULES (always on for preschool):',
+          '- Always use play-based, game-like activities.',
+          '- Focus on letter recognition, phonics, number recognition, counting, shapes, colors, and fine-motor skills.',
+          '- Keep instructions short (3-6 steps) and hands-on.',
+          '- Include a quick interactive check (e.g., “Point to the letter A” or “Count to 5 with me”).',
+          '- Avoid formal tests or exam language unless a teacher explicitly asks.',
+        ].join('\n')
+      : null;
+
+    const generalRules = [
+      'CONSISTENCY RULES:',
+      '- Maintain continuity with prior messages; recap in 1-2 lines when resuming.',
+      '- Ask for missing grade/age/subject when needed before deep instruction.',
+      '- Use short steps, clear headings, and a quick check question.',
+      '- If a tutor override is present, follow it exactly.',
+    ].join('\n');
+
+    const lines = [
+      'DASH CONTEXT PACK (do not repeat verbatim):',
+      learner?.learnerName ? `Learner: ${learner.learnerName}.` : null,
+      gradeLabel ? `Grade: ${gradeLabel}.` : null,
+      typeof ageYears === 'number' ? `Age: ${ageYears}.` : null,
+      ageBand ? `Age band: ${ageBand}.` : null,
+      schoolType ? `School type: ${schoolType}.` : null,
+      learner?.role ? `User role: ${learner.role}.` : null,
+      generalRules,
+      preschoolRules,
+    ].filter(Boolean);
+
+    return lines.join('\n');
   }, []);
 
   const resolveVoiceLocale = useCallback((lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' => {
@@ -1089,6 +1157,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       let tutorAction: 'start' | 'evaluate' | null = null;
       let tutorModeForMetadata: TutorMode | null = null;
       let tutorContextOverride: string | null = null;
+      const baseContextOverride = buildDashContextOverride(learnerContextRef.current || learnerContext);
 
       const activeSession = tutorSessionRef.current;
       const stopTutor = isTutorStopIntent(userText);
@@ -1130,6 +1199,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           learnerContext: learnerContextRef.current || learnerContext,
         });
       }
+      const mergedContextOverride = [baseContextOverride, tutorContextOverride]
+        .filter(Boolean)
+        .join('\n\n') || null;
       const localUserMessage: DashMessage = {
         id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'user',
@@ -1177,7 +1249,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             scrollToBottom({ animated: true, delay: 60 });
           },
           {
-            contextOverride: tutorContextOverride,
+            contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
           }
         );
@@ -1192,7 +1264,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
           undefined,
           {
-            contextOverride: tutorContextOverride,
+            contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
           }
         );
@@ -1365,6 +1437,33 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const intentType = response?.metadata?.user_intent?.primary_intent || '';
         const shouldOpen = intentType === 'create_lesson' || wantsLessonGenerator(userText, response?.content);
         if (shouldOpen) {
+          if (!capsReady) {
+            Alert.alert('Please wait', 'Loading your subscription details. Try again in a moment.');
+            return;
+          }
+          if (!canInteractiveLessons) {
+            Alert.alert(
+              'Upgrade Required',
+              'Interactive lessons and activities are available on Premium or Pro Plus plans.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'View Plans', onPress: () => router.push('/pricing') },
+              ]
+            );
+            return;
+          }
+          if (user?.id) {
+            const lessonQuota = await checkAIQuota('lesson_generation', user.id, 1);
+            if (!lessonQuota.allowed) {
+              showQuotaExceededAlert('lesson_generation', lessonQuota.quotaInfo, {
+                customMessages: {
+                  title: 'Lesson Generation Limit Reached',
+                  message: 'You have used all lesson generation credits for this month.',
+                },
+              });
+              return;
+            }
+          }
           Alert.alert(
             'Open Lesson Generator?',
             'I can open the AI Lesson Generator with the details we discussed.',
@@ -1409,6 +1508,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     detectTutorIntent,
     isTutorStopIntent,
     extractLearningContext,
+    buildDashContextOverride,
     getMaxQuestions,
     buildTutorQuestionPrompt,
     buildTutorEvaluationPrompt,
@@ -1419,6 +1519,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     logTutorAttempt,
     getTutorPhaseLabel,
     learnerContext,
+    capsReady,
+    canInteractiveLessons,
+    user?.id,
   ]);
 
   // Process queue
@@ -1468,6 +1571,26 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         console.warn('[useDashAssistant] Quota check failed:', quotaError);
       }
     }
+
+    if (user?.id && text) {
+      try {
+        const wantsLesson = wantsLessonGenerator(text);
+        if (wantsLesson) {
+          const lessonQuota = await checkAIQuota('lesson_generation', user.id, 1);
+          if (!lessonQuota.allowed) {
+            showQuotaExceededAlert('lesson_generation', lessonQuota.quotaInfo, {
+              customMessages: {
+                title: 'Lesson Generation Limit Reached',
+                message: 'You have used all lesson generation credits for this month.',
+              },
+            });
+            return;
+          }
+        }
+      } catch (lessonQuotaError) {
+        console.warn('[useDashAssistant] Lesson quota check failed:', lessonQuotaError);
+      }
+    }
     
     requestQueueRef.current.push({
       text,
@@ -1477,7 +1600,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setInputText('');
     setSelectedAttachments([]);
     processQueue();
-  }, [inputText, selectedAttachments, dashInstance, user?.id, tier, processQueue]);
+  }, [inputText, selectedAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator]);
 
   const sendTutorAnswer = useCallback(async (answer: string, sourceMessageId?: string) => {
     const trimmed = answer.trim();

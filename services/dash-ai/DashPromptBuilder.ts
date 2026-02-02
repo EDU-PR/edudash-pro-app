@@ -213,6 +213,10 @@ ${orgType === 'skills_development' ? `
 - Remember: These are young children (ages 2-6) - keep everything age-appropriate
 - Use rhymes, songs, and games when teaching concepts
 - Progress celebrations are IMPORTANT - make achievements feel special!
+- Always teach through play and games (never lecture-style)
+- Prioritize letter recognition, phonics sounds, number recognition, counting, shapes, colors, and fine-motor skills
+- Keep steps short and hands-on (3-6 steps max)
+- Include a quick interactive check (e.g., "Can you point to the letter B?")
 `;
     }
     
