@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import { useBackButton } from '@/hooks/useBackButton';
 import {
@@ -59,7 +58,6 @@ export function PrincipalShell({
 }: PrincipalShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileWidgetsOpen, setMobileWidgetsOpen] = useState(false);
   const avatarLetter = useMemo(() => (userName?.[0] || userEmail?.[0] || 'P').toUpperCase(), [userName, userEmail]);

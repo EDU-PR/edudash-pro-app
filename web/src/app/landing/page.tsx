@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { signOutEverywhere } from "@/lib/auth/signOut";
 
 function LandingInner() {
   const searchParams = useSearchParams();
@@ -261,7 +262,7 @@ function LandingInner() {
             if (error) throw error;
             
             // Sign out on web so user signs in fresh in the app
-            await supabase.auth.signOut();
+            await signOutEverywhere({ timeoutMs: 2500 });
             
             setMessage("Email verified! Opening the app...");
             setStatus("done");

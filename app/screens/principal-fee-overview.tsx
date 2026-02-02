@@ -193,7 +193,8 @@ export default function PrincipalFeeOverviewScreen() {
       // Process students with fee summaries
       const today = new Date();
       const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid', 'pending_verification']);
+      const pendingVerificationStatus = 'pending_verification';
+      const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid', pendingVerificationStatus]);
 
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -292,22 +293,12 @@ export default function PrincipalFeeOverviewScreen() {
 
         const enrollmentMonthStart = enrollmentMonthByStudent.get(student.id) || null;
 
-        const isDueNow = (fee: any) => {
-          if (!fee?.due_date) return true;
-          const due = new Date(fee.due_date);
-          if (Number.isNaN(due.getTime())) return true;
-          return due <= todayStart;
-        };
-        
         const payableFees = studentFees.filter(f => !isPreEnrollment(f, enrollmentMonthStart));
         const monthFees = payableFees.filter((f: any) => isInMonth(getFeeMonthDate(f)));
         const baseFees = timeFilter === 'month' ? monthFees : payableFees;
-        const dueFees = baseFees.filter(
-          (f: any) => unpaidStatuses.has(String(f.status)) && String(f.status) !== 'pending_verification' && isDueNow(f)
-        );
+        const unpaidFees = baseFees.filter((f: any) => unpaidStatuses.has(String(f.status)));
         
-        const outstanding = dueFees
-          .reduce((sum, f) => sum + getOutstandingAmount(f), 0);
+        const outstanding = unpaidFees.reduce((sum, f) => sum + getOutstandingAmount(f), 0);
         
         const paid = baseFees
           .reduce((sum, f) => sum + getPaidAmount(f), 0);
@@ -316,14 +307,15 @@ export default function PrincipalFeeOverviewScreen() {
           .reduce((sum, f) => sum + getWaivedAmount(f), 0);
         
         const overdue_count = baseFees.filter((f: any) => {
-          if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
+          if (!unpaidStatuses.has(String(f.status)) || String(f.status) === pendingVerificationStatus) return false;
           if (!f?.due_date) return false;
           const due = new Date(f.due_date);
           if (Number.isNaN(due.getTime())) return false;
           return due < todayStart;
         }).length;
         const pending_count = baseFees.filter((f: any) => {
-          if (!unpaidStatuses.has(String(f.status)) || String(f.status) === 'pending_verification') return false;
+          if (!unpaidStatuses.has(String(f.status))) return false;
+          if (String(f.status) === pendingVerificationStatus) return true;
           if (!f?.due_date) return true;
           const due = new Date(f.due_date);
           if (Number.isNaN(due.getTime())) return true;
@@ -727,7 +719,7 @@ export default function PrincipalFeeOverviewScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
-        <Stack.Screen options={{ title: 'Fee Management' }} />
+        <Stack.Screen options={{ title: 'Financial Overview' }} />
         <ActivityIndicator size="large" color={theme.primary} />
         <Text style={styles.loadingText}>Loading financial data...</Text>
       </SafeAreaView>
@@ -738,7 +730,7 @@ export default function PrincipalFeeOverviewScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: 'Fee Management',
+          title: 'Financial Overview',
           headerRight: () => (
             <TouchableOpacity
               style={styles.headerButton}
@@ -767,7 +759,10 @@ export default function PrincipalFeeOverviewScreen() {
         {summary && (
           <View style={styles.summarySection}>
             <View style={styles.summaryHeader}>
-              <Text style={styles.sectionTitle}>Financial Overview</Text>
+              <View style={styles.summaryTitleBlock}>
+                <Text style={styles.sectionTitle}>Financial Overview</Text>
+                <Text style={styles.sectionSubtitle}>Track fees, collections, and approvals at a glance.</Text>
+              </View>
               <View style={styles.summaryActions}>
                 <TouchableOpacity
                   style={styles.expensesButton}
@@ -787,22 +782,24 @@ export default function PrincipalFeeOverviewScreen() {
             </View>
 
             <View style={styles.timeFilterRow}>
-              <TouchableOpacity
-                style={[styles.timeChip, timeFilter === 'month' && styles.timeChipActive]}
-                onPress={() => setTimeFilter('month')}
-              >
-                <Text style={[styles.timeChipText, timeFilter === 'month' && styles.timeChipTextActive]}>
-                  This Month
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.timeChip, timeFilter === 'all' && styles.timeChipActive]}
-                onPress={() => setTimeFilter('all')}
-              >
-                <Text style={[styles.timeChipText, timeFilter === 'all' && styles.timeChipTextActive]}>
-                  All Time
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.timeFilterGroup}>
+                <TouchableOpacity
+                  style={[styles.timeChip, timeFilter === 'month' && styles.timeChipActive]}
+                  onPress={() => setTimeFilter('month')}
+                >
+                  <Text style={[styles.timeChipText, timeFilter === 'month' && styles.timeChipTextActive]}>
+                    This Month
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.timeChip, timeFilter === 'all' && styles.timeChipActive]}
+                  onPress={() => setTimeFilter('all')}
+                >
+                  <Text style={[styles.timeChipText, timeFilter === 'all' && styles.timeChipTextActive]}>
+                    All Time
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
             
             {/* Main Stats Row */}
@@ -1231,17 +1228,25 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   },
   summaryHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
     gap: 12,
+  },
+  summaryTitleBlock: {
+    flex: 1,
   },
   summaryActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 4,
   },
   panelCard: {
     marginTop: 12,
@@ -1298,21 +1303,26 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     borderColor: theme.border,
   },
   timeFilterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  timeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
+  timeFilterGroup: {
+    flexDirection: 'row',
+    gap: 6,
+    alignSelf: 'flex-start',
+    padding: 4,
+    borderRadius: 18,
     backgroundColor: theme.card,
     borderWidth: 1,
     borderColor: theme.border,
   },
+  timeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'transparent',
+  },
   timeChipActive: {
     backgroundColor: theme.primary,
-    borderColor: theme.primary,
   },
   timeChipText: {
     fontSize: 12,
@@ -1335,13 +1345,15 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   },
   mainStatCard: {
     flex: 1,
-    backgroundColor: theme.card,
-    borderRadius: 12,
+    backgroundColor: theme.surface,
+    borderRadius: 14,
     padding: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
     borderLeftWidth: 4,
   },
   mainStatValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
   },
   mainStatLabel: {
@@ -1356,10 +1368,14 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   },
   subStatCard: {
     flex: 1,
-    backgroundColor: theme.card,
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+    minHeight: 86,
+    justifyContent: 'center',
   },
   subStatValue: {
     fontSize: 16,
@@ -1390,9 +1406,11 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     color: theme.textSecondary,
   },
   breakdownSection: {
-    backgroundColor: theme.card,
+    backgroundColor: theme.surface,
     borderRadius: 12,
     padding: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   breakdownRow: {
     flexDirection: 'row',

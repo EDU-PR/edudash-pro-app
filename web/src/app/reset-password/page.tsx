@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { signOutEverywhere } from "@/lib/auth/signOut";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -83,7 +84,7 @@ export default function ResetPasswordPage() {
     setSuccess(true);
     
     // Sign out after password change (user needs to sign in with new password)
-    await supabase.auth.signOut();
+    await signOutEverywhere({ timeoutMs: 2500 });
     
     // Redirect after 3 seconds
     setTimeout(() => {

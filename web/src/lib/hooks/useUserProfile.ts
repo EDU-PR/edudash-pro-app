@@ -36,6 +36,8 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
 
   const loadProfile = useCallback(async () => {
     if (!userId) {
+      setProfile(null);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -161,6 +163,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       setProfile(profileObj);
     } catch (err) {
       console.error('Failed to load user profile:', err);
+      setProfile(null);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {
       setLoading(false);

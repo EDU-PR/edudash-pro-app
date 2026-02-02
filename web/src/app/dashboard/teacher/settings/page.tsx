@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { signOutEverywhere } from '@/lib/auth/signOut';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
@@ -210,7 +211,7 @@ export default function TeacherSettingsPage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    await supabase.auth.signOut();
+    await signOutEverywhere({ timeoutMs: 2500 });
     router.push('/sign-in');
   };
 

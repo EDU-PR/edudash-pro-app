@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import {
   LayoutDashboard,
@@ -44,7 +43,6 @@ export function TertiaryShell({
 }: TertiaryShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const supabase = createClient();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const avatarLetter = useMemo(() => (userName?.[0] || userEmail?.[0] || 'U').toUpperCase(), [userName, userEmail]);
 

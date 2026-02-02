@@ -19,6 +19,7 @@ import {
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { SubPageHeader } from '@/components/SubPageHeader';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -215,47 +216,34 @@ export default function ParentAnnouncementsScreen() {
     content: {
       flex: 1,
     },
-    header: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      backgroundColor: theme.surface,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border,
-    },
-    headerTitle: {
-      fontSize: 24,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    headerSubtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      marginTop: 4,
-    },
     filtersContainer: {
       paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingVertical: 10,
       backgroundColor: theme.surface,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
     filtersScroll: {
       flexDirection: 'row',
+      alignItems: 'center',
       gap: 8,
+      paddingRight: 8,
     },
     filterButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: 18,
       borderWidth: 1,
-      minWidth: 80,
+      minHeight: 34,
+      minWidth: 72,
       alignItems: 'center',
+      alignSelf: 'flex-start',
     },
     filterButtonActive: {
       borderWidth: 0,
     },
     filterButtonText: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '600',
     },
     listContent: {
@@ -360,20 +348,15 @@ export default function ParentAnnouncementsScreen() {
     <View style={{ flex: 1 }}>
       <Stack.Screen
         options={{
-          title: 'Announcements',
-          headerStyle: { backgroundColor: theme.surface },
-          headerTitleStyle: { color: theme.text },
-          headerTintColor: theme.primary,
+          headerShown: false,
         }}
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>School Announcements</Text>
-          <Text style={styles.headerSubtitle}>
-            Important updates and news from your child's school
-          </Text>
-        </View>
+        <SubPageHeader
+          title="School Announcements"
+          subtitle="Important updates and news from your child's school"
+          onBack={() => router.back()}
+        />
 
         {/* Priority Filter Tabs */}
         <ScrollView
