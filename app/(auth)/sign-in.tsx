@@ -344,10 +344,13 @@ console.log('[SignIn] Component rendering, theme:', theme);
           // If auth already succeeded in the background, skip error modal/log
           try {
             const supabase = assertSupabase();
-            const { data: sessionData } = await supabase.auth.getSession();
-            if (sessionData?.session?.user) {
-              setLoading(false);
-              return;
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+              const { data: sessionData } = await supabase.auth.getSession();
+              if (sessionData?.session?.user) {
+                setLoading(false);
+                return;
+              }
+              await new Promise(resolve => setTimeout(resolve, 1200));
             }
           } catch {
             // fall through to error modal
