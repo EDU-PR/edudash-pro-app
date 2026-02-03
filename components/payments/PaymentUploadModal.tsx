@@ -53,13 +53,6 @@ export function PaymentUploadModal({
   const [showPaymentForPicker, setShowPaymentForPicker] = useState(false);
   const insets = useSafeAreaInsets();
 
-  const styles = createStyles(theme, insets);
-  const paymentDateValue = new Date().toISOString().split('T')[0];
-  const paymentForLabel = paymentForMonth
-    ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
-    : null;
-  const isPaymentForLocked = Boolean(paymentForDate);
-
   const resolveMonthStart = (dateValue?: string) => {
     if (!dateValue) return null;
     const parsed = new Date(dateValue);
@@ -67,13 +60,28 @@ export function PaymentUploadModal({
     return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
   };
 
+  const styles = createStyles(theme, insets);
+  const today = new Date();
+  const paymentDateValue = today.toISOString().split('T')[0];
+  const lowerPurpose = (paymentPurpose || '').toLowerCase();
+  const isUniformPayment = (feeId || '').startsWith('uniform:') || lowerPurpose.includes('uniform');
+  const autoPaymentForMonth = resolveMonthStart(paymentForDate) ?? new Date(today.getFullYear(), today.getMonth(), 1);
+  const autoMonthLabel = autoPaymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+  const paymentForLabel = paymentForMonth
+    ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
+    : null;
+  const isPaymentForLocked = Boolean(paymentForDate) || isUniformPayment;
+  const showPaymentForField = !isUniformPayment;
+  const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment);
+
   React.useEffect(() => {
     if (visible) {
       setPaymentReference(initialReference);
       setPaymentAmount(initialAmount);
-      setPaymentForMonth(resolveMonthStart(paymentForDate));
+      const resolvedMonth = resolveMonthStart(paymentForDate);
+      setPaymentForMonth(isUniformPayment ? (resolvedMonth ?? autoPaymentForMonth) : resolvedMonth);
     }
-  }, [visible, initialReference, initialAmount, paymentForDate]);
+  }, [visible, initialReference, initialAmount, paymentForDate, isUniformPayment, autoPaymentForMonth]);
 
   const handleImagePicker = async () => {
     try {
@@ -129,7 +137,11 @@ export function PaymentUploadModal({
       Alert.alert('Error', 'Please select a file first');
       return;
     }
-    if (!paymentForMonth) {
+    const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
+    if (isUniformPayment && !paymentForMonth && effectivePaymentForMonth) {
+      setPaymentForMonth(effectivePaymentForMonth);
+    }
+    if (!effectivePaymentForMonth) {
       Alert.alert('Select Month', 'Please choose the month you are paying for.');
       return;
     }
@@ -204,6 +216,10 @@ export function PaymentUploadModal({
 
     try {
       const supabase = assertSupabase();
+      const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
+      if (isUniformPayment && !paymentForMonth && effectivePaymentForMonth) {
+        setPaymentForMonth(effectivePaymentForMonth);
+      }
 
       const uploadResult = await uploadPOPFile(
         selectedFile.uri,
@@ -230,8 +246,8 @@ export function PaymentUploadModal({
 
       const finalPreschoolId = selectedChild?.preschool_id || preschoolId;
       const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount) : 0;
-      const paymentForMonthValue = paymentForMonth
-        ? new Date(paymentForMonth.getFullYear(), paymentForMonth.getMonth(), 1)
+      const paymentForMonthValue = effectivePaymentForMonth
+        ? new Date(effectivePaymentForMonth.getFullYear(), effectivePaymentForMonth.getMonth(), 1)
             .toISOString()
             .split('T')[0]
         : paymentDateValue;
@@ -387,28 +403,39 @@ export function PaymentUploadModal({
             Always include this reference when making bank payments
           </Text>
 
-          <Text style={styles.modalLabel}>Payment For Month *</Text>
-          <TouchableOpacity
-            style={[
-              styles.datePickerButton,
-              isPaymentForLocked && styles.datePickerButtonDisabled,
-            ]}
-            onPress={() => {
-              if (!isPaymentForLocked) setShowPaymentForPicker(true);
-            }}
-            activeOpacity={isPaymentForLocked ? 1 : 0.7}
-          >
-            <Ionicons name="calendar-outline" size={20} color={theme.primary} />
-            <Text style={styles.datePickerText}>
-              {paymentForLabel || 'Select month'}
-            </Text>
-            {!isPaymentForLocked && (
-              <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
-            )}
-          </TouchableOpacity>
-          <Text style={styles.referenceHint}>
-            This proof of payment will be matched to the selected billing month.
-          </Text>
+          {showPaymentForField ? (
+            <>
+              <Text style={styles.modalLabel}>Payment For Month *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.datePickerButton,
+                  isPaymentForLocked && styles.datePickerButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (!isPaymentForLocked) setShowPaymentForPicker(true);
+                }}
+                activeOpacity={isPaymentForLocked ? 1 : 0.7}
+              >
+                <Ionicons name="calendar-outline" size={20} color={theme.primary} />
+                <Text style={styles.datePickerText}>
+                  {paymentForLabel || 'Select month'}
+                </Text>
+                {!isPaymentForLocked && (
+                  <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+                )}
+              </TouchableOpacity>
+              <Text style={styles.referenceHint}>
+                This proof of payment will be matched to the selected billing month.
+              </Text>
+            </>
+          ) : (
+            <View style={styles.oneTimePaymentRow}>
+              <Text style={styles.modalLabel}>Payment Month</Text>
+              <Text style={styles.referenceHint}>
+                Recorded automatically for {autoMonthLabel}.
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.modalLabel}>Bank Transaction Reference (Optional)</Text>
           <View style={styles.inputContainer}>
@@ -436,7 +463,7 @@ export function PaymentUploadModal({
           </View>
         </ScrollView>
 
-        {showPaymentForPicker && (
+        {showPaymentForField && showPaymentForPicker && (
           <DateTimePicker
             value={paymentForMonth || new Date()}
             mode="date"
@@ -456,9 +483,9 @@ export function PaymentUploadModal({
 
         <View style={styles.modalFooter}>
           <TouchableOpacity 
-            style={[styles.submitButton, (!selectedFile || uploading || !paymentForMonth) && styles.submitButtonDisabled]}
+            style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
             onPress={handleUpload}
-            disabled={!selectedFile || uploading || !paymentForMonth}
+            disabled={!canSubmit}
           >
             {uploading ? (
               <EduDashSpinner color="#fff" />
@@ -518,6 +545,9 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) => St
   },
   requiredText: { fontSize: 10, fontWeight: '600', color: '#fff' },
   referenceHint: { fontSize: 12, color: theme.textSecondary, marginTop: 6, fontStyle: 'italic' },
+  oneTimePaymentRow: {
+    marginBottom: 8,
+  },
   filePickerRow: { flexDirection: 'row', gap: 12 },
   filePickerButton: {
     flex: 1,

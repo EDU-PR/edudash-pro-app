@@ -461,7 +461,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     const dashTutorSubtitle = isDashOrbUnlocked
       ? t('parent.dash_tutor_subtitle', { defaultValue: 'Homework help, practice, and explanations.' })
       : t('parent.dash_tutor_locked', { defaultValue: 'Upgrade to unlock Dash Tutor.' });
-    const actions = [
+    const actions: ParentQuickAction[] = [
       { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
       { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
       { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },

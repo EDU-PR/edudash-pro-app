@@ -892,6 +892,7 @@ export default function ParentDashboard() {
         {/* Early Learning Activities - ONLY for preschoolers */}
         <CollapsibleSection 
           title={COPY.sections.earlyLearningActivities}
+          description={COPY.sectionDescriptions.earlyLearningActivities}
           icon={BookOpen} 
           isOpen={openSection === 'activities'}
           onToggle={() => toggleSection('activities')}
@@ -917,6 +918,7 @@ export default function ParentDashboard() {
         {/* Preschool Learning Tips - ONLY for preschoolers */}
         <CollapsibleSection 
           title={COPY.sections.earlyLearningTips}
+          description={COPY.sectionDescriptions.earlyLearningTips}
           icon={Lightbulb} 
           isOpen={openSection === 'tips'}
           onToggle={() => toggleSection('tips')}
@@ -948,6 +950,7 @@ export default function ParentDashboard() {
         {/* Overview Section (ONLY for organization-linked parents) */}
         <CollapsibleSection 
           title={COPY.sections.overview}
+          description={COPY.sectionDescriptions.overview}
           icon={BarChart3} 
           isOpen={openSection === 'overview'}
           onToggle={() => toggleSection('overview')}
