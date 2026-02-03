@@ -66,9 +66,11 @@ export function FeedbackTestSection({
             } catch (err) {
               console.warn('[FeedbackTest] Failed to play sound test:', err);
               if (Platform.OS === 'web') {
-                alert.showInfo(
+                alert.show(
                   t('settings.feedback_test_alert.title', { defaultValue: 'Feedback' }),
-                  t('settings.feedback_test_alert.message', { defaultValue: 'Sound test is not available on web. Please test on the mobile app.' })
+                  t('settings.feedback_test_alert.message', { defaultValue: 'Sound test is not available on web. Please test on the mobile app.' }),
+                  [{ text: 'OK' }],
+                  { type: 'info' }
                 );
               }
             }

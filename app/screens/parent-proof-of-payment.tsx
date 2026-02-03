@@ -30,13 +30,20 @@ interface SelectedFile {
 }
 
 export default function ProofOfPaymentScreen() {
-  const { studentId, studentName } = useLocalSearchParams<{
+  const { studentId, studentName, feeId, paymentPurpose } = useLocalSearchParams<{
     studentId: string;
     studentName: string;
+    feeId?: string;
+    paymentPurpose?: string;
   }>();
   const { theme } = useTheme();
   const { t } = useTranslation();
   const createUpload = useCreatePOPUpload();
+  const today = new Date();
+  const lowerPurpose = (paymentPurpose || '').toLowerCase();
+  const isUniformPayment = (feeId || '').startsWith('uniform:') || lowerPurpose.includes('uniform');
+  const autoPaymentForMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const showPaymentForField = !isUniformPayment;
   
   // Form state
   const [title, setTitle] = useState('');
@@ -44,7 +51,7 @@ export default function ProofOfPaymentScreen() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState(new Date());
-  const [paymentForMonth, setPaymentForMonth] = useState<Date | null>(null);
+  const [paymentForMonth, setPaymentForMonth] = useState<Date | null>(() => (isUniformPayment ? autoPaymentForMonth : null));
   const [paymentReference, setPaymentReference] = useState('');
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -73,6 +80,14 @@ export default function ProofOfPaymentScreen() {
       fontWeight: '500',
       color: theme.text,
       marginBottom: 8,
+    },
+    autoMonthRow: {
+      marginBottom: 16,
+    },
+    autoMonthText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginBottom: 4,
     },
     input: {
       backgroundColor: theme.surface,
@@ -282,7 +297,7 @@ export default function ProofOfPaymentScreen() {
     if (!paymentMethod) {
       errors.push('Payment method is required');
     }
-    if (!paymentForMonth) {
+    if (!paymentForMonth && !isUniformPayment) {
       errors.push('Payment month is required');
     }
     if (!selectedFile) {
@@ -300,6 +315,10 @@ export default function ProofOfPaymentScreen() {
     }
     
     if (!studentId || !selectedFile) return;
+    const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
+    if (isUniformPayment && !paymentForMonth && effectivePaymentForMonth) {
+      setPaymentForMonth(effectivePaymentForMonth);
+    }
     
     try {
       const uploadData: CreatePOPUploadData = {
@@ -312,8 +331,8 @@ export default function ProofOfPaymentScreen() {
         payment_amount: parseFloat(amount),
         payment_method: paymentMethod,
         payment_date: paymentDate.toISOString().split('T')[0], // YYYY-MM-DD format
-        payment_for_month: paymentForMonth
-          ? new Date(paymentForMonth.getFullYear(), paymentForMonth.getMonth(), 1)
+        payment_for_month: effectivePaymentForMonth
+          ? new Date(effectivePaymentForMonth.getFullYear(), effectivePaymentForMonth.getMonth(), 1)
               .toISOString()
               .split('T')[0]
           : undefined,
@@ -418,32 +437,43 @@ export default function ProofOfPaymentScreen() {
             )}
           </View>
           
-          <Text style={styles.label}>
-            {t('pop.paymentForMonth', { defaultValue: 'Payment For Month' })} *
-          </Text>
-          <TouchableOpacity
-            style={styles.datePickerButton}
-            onPress={() => setShowPaymentForPicker(true)}
-          >
-            <Text style={styles.datePickerText}>
-              {paymentForMonth
-                ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
-                : t('pop.selectMonth', { defaultValue: 'Select month' })}
-            </Text>
-            <Ionicons name="calendar" size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
+          {showPaymentForField ? (
+            <>
+              <Text style={styles.label}>
+                {t('pop.paymentForMonth', { defaultValue: 'Payment For Month' })} *
+              </Text>
+              <TouchableOpacity
+                style={styles.datePickerButton}
+                onPress={() => setShowPaymentForPicker(true)}
+              >
+                <Text style={styles.datePickerText}>
+                  {paymentForMonth
+                    ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
+                    : t('pop.selectMonth', { defaultValue: 'Select month' })}
+                </Text>
+                <Ionicons name="calendar" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
 
-          {showPaymentForPicker && (
-            <DateTimePicker
-              value={paymentForMonth || new Date()}
-              mode="date"
-              onChange={(event, selectedDate) => {
-                setShowPaymentForPicker(false);
-                if (selectedDate) {
-                  setPaymentForMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
-                }
-              }}
-            />
+              {showPaymentForPicker && (
+                <DateTimePicker
+                  value={paymentForMonth || new Date()}
+                  mode="date"
+                  onChange={(event, selectedDate) => {
+                    setShowPaymentForPicker(false);
+                    if (selectedDate) {
+                      setPaymentForMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+                    }
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <View style={styles.autoMonthRow}>
+              <Text style={styles.label}>Payment Month</Text>
+              <Text style={styles.autoMonthText}>
+                Recorded automatically for {autoPaymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })}.
+              </Text>
+            </View>
           )}
 
           <Text style={styles.label}>{t('pop.paymentDate')} *</Text>

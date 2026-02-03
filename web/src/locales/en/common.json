@@ -784,11 +784,28 @@
         "teacher_notes": "Teacher Notes",
         "progress": "Progress & Achievements",
         "birthdays": "Upcoming Birthdays",
+        "birthday_chart": "Birthday Chart",
         "daily_activity": "Daily Activity",
         "practice_at_home": "Practice at Home",
         "early_learning_activities": "Early Learning Activities",
         "early_learning_tips": "Early Learning Tips for Parents",
         "overview": "Today's Overview"
+      },
+      "section_desc": {
+        "my_children": "Profiles, homework, and updates for each child.",
+        "uniform_sizes": "Confirm sizes, quantities, and upload uniform payment proof.",
+        "recent_activity": "Latest messages, announcements, and updates.",
+        "homework": "Assignments, due dates, and feedback from teachers.",
+        "live_classes": "Join live lessons and school events when they start.",
+        "teacher_notes": "Notes and feedback from your child's teacher.",
+        "progress": "Badges, milestones, and learning progress.",
+        "birthdays": "Upcoming class birthdays and reminders.",
+        "birthday_chart": "Full month-by-month birthday list.",
+        "daily_activity": "Daily photos, activities, and class updates.",
+        "practice_at_home": "At-home activities to reinforce learning.",
+        "early_learning_activities": "Age-appropriate activities for preschoolers.",
+        "early_learning_tips": "Tips to support your preschooler at home.",
+        "overview": "Attendance, fees, and key updates at a glance."
       },
       "daily_activity": {
         "title": "Today's Activities",
