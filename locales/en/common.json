@@ -89,6 +89,11 @@
     "students": "students",
     "email": "Email",
     "status": "Status",
+    "completed": "Completed",
+    "pending": "Pending",
+    "overdue": "Overdue",
+    "approved": "Approved",
+    "rejected": "Rejected",
     "see_all": "See All",
     "account": "Account",
     "settings": "Settings",
@@ -486,7 +491,9 @@
       "mark_unpaid": "Mark unpaid",
       "confirm_unpaid_title": "Mark unpaid?",
       "confirm_unpaid_message": "This will remove the payment for {{name}}.",
-      "confirm_unpaid_cta": "Mark unpaid"
+      "confirm_unpaid_cta": "Mark unpaid",
+      "paid_title": "Birthday donation received",
+      "paid_message": "{{payer}} contributed for {{birthday}} (R{{amount}})."
     },
     "ai_teaching_tools": "🤖 AI Teaching Tools",
     "my_classes": "📚 My Classes",

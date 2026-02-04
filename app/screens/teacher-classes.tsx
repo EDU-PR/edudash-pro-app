@@ -9,7 +9,9 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ClassInfo {
@@ -30,6 +32,7 @@ interface TeacherInfo {
 
 export default function TeacherClassesScreen() {
   const { theme } = useTheme();
+  const { profile } = useAuth();
   const { teacherId } = useLocalSearchParams<{ teacherId: string }>();
 
   const [teacherInfo, setTeacherInfo] = useState<TeacherInfo | null>(null);
@@ -38,6 +41,7 @@ export default function TeacherClassesScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const styles = createStyles(theme);
+  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
 
   const fetchData = useCallback(async () => {
     if (!teacherId) return;
@@ -129,6 +133,43 @@ export default function TeacherClassesScreen() {
     router.push(`/screens/edit-class?classId=${classId}` as any);
   };
 
+  const handleRemoveTeacher = () => {
+    if (!orgId) {
+      Alert.alert('Error', 'No school found for this account.');
+      return;
+    }
+    if (!teacherId) {
+      Alert.alert('Error', 'Missing teacher identifier.');
+      return;
+    }
+
+    Alert.alert(
+      'Remove Teacher',
+      `Remove ${teacherInfo?.name || 'this teacher'} from your school? This will unassign their classes and revoke their seat.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeTeacherFromSchool({
+                teacherUserId: teacherId,
+                organizationId: orgId,
+              });
+              Alert.alert('Success', 'Teacher removed from school', [
+                { text: 'OK', onPress: navigateBack },
+              ]);
+            } catch (error) {
+              console.error('Error removing teacher:', error);
+              Alert.alert('Error', 'Failed to remove teacher');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const getEnrollmentColor = (current: number, max: number) => {
     if (max === 0) return theme.textSecondary;
     const ratio = current / max;
@@ -196,6 +237,10 @@ export default function TeacherClassesScreen() {
               {classes.length} {classes.length === 1 ? 'Class' : 'Classes'} Assigned
             </Text>
           </View>
+          <TouchableOpacity style={styles.removeButton} onPress={handleRemoveTeacher}>
+            <Ionicons name="trash-outline" size={16} color="#fff" />
+            <Text style={styles.removeButtonText}>Remove</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Classes List */}
@@ -369,6 +414,20 @@ const createStyles = (theme: any) =>
       color: theme.primary,
       marginTop: 8,
       fontWeight: '500',
+    },
+    removeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.error,
+      borderRadius: 8,
+      gap: 4,
+    },
+    removeButtonText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '600',
     },
     section: {
       padding: 16,

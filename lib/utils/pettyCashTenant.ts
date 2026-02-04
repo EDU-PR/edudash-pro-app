@@ -1,9 +1,9 @@
 import { assertSupabase } from '@/lib/supabase';
 
-export type PettyCashTenantColumn = 'preschool_id' | 'school_id';
+export type PettyCashTenantColumn = 'school_id' | 'preschool_id';
 
-const PRIMARY_TENANT_COLUMN: PettyCashTenantColumn = 'preschool_id';
-const FALLBACK_TENANT_COLUMN: PettyCashTenantColumn = 'school_id';
+const PRIMARY_TENANT_COLUMN: PettyCashTenantColumn = 'school_id';
+const FALLBACK_TENANT_COLUMN: PettyCashTenantColumn = 'preschool_id';
 
 const isMissingColumnError = (error: any, column: PettyCashTenantColumn): boolean => {
   if (!error) return false;

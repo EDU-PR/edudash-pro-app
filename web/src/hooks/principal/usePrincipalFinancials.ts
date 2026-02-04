@@ -216,8 +216,8 @@ export function usePrincipalFinancials(preschoolId: string | undefined): UsePrin
       if (uniformCollected > 0 || uniformOutstanding > 0) {
         const existingUniform = feeTypeBreakdown.find((entry) => entry.type.toLowerCase() === 'uniform');
         if (existingUniform) {
-          existingUniform.collected += uniformCollected;
-          existingUniform.outstanding += uniformOutstanding;
+          existingUniform.collected = Math.max(existingUniform.collected, uniformCollected);
+          existingUniform.outstanding = Math.max(existingUniform.outstanding, uniformOutstanding);
         } else {
           feeTypeBreakdown.push({
             type: 'Uniform',

@@ -478,7 +478,13 @@ export function useTeacherManagement(
       const schoolId = getPreschoolId();
       if (!schoolId) return;
       const list = await TeacherInviteService.listInvites(schoolId);
-      setInvites(list.map(i => ({ id: i.id, email: i.email, status: i.status, created_at: i.created_at })));
+      setInvites(list.map(i => ({
+        id: i.id,
+        email: i.email,
+        status: i.status,
+        created_at: i.created_at,
+        token: i.token,
+      })));
     } catch {
       // ignore
     }

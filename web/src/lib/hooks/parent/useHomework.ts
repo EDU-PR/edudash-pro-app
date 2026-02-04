@@ -65,6 +65,7 @@ export const useChildHomework = (studentId: string | undefined, userId: string |
           class:classes(name, grade_level)
         `)
         .eq('class_id', student.class_id)
+        .eq('is_published', true)
         .order('due_date', { ascending: true });
 
       if (schoolId) {
@@ -130,7 +131,8 @@ export const useHomeworkStats = (studentId: string | undefined, userId: string |
       let assignmentsQuery = client
         .from('homework_assignments')
         .select('id, due_date')
-        .eq('class_id', student.class_id);
+        .eq('class_id', student.class_id)
+        .eq('is_published', true);
 
       if (schoolId) {
         assignmentsQuery = assignmentsQuery.eq('preschool_id', schoolId);

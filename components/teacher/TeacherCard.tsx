@@ -20,8 +20,11 @@ interface TeacherCardProps {
   onRevokeSeat: (teacherUserId: string, teacherName: string) => void;
   onInvite?: (teacher: Teacher) => void;
   onCopyInviteLink?: (teacher: Teacher) => void;
+  onDeleteInvite?: (inviteId: string, email: string) => void;
+  onDeleteTeacher?: (teacher: Teacher) => void;
   inviteStatus?: string | null;
   inviteToken?: string | null;
+  inviteId?: string | null;
   isAssigning: boolean;
   isRevoking: boolean;
   shouldDisableAssignment: boolean;
@@ -35,8 +38,11 @@ export function TeacherCard({
   onRevokeSeat,
   onInvite,
   onCopyInviteLink,
+  onDeleteInvite,
+  onDeleteTeacher,
   inviteStatus,
   inviteToken,
+  inviteId,
   isAssigning,
   isRevoking,
   shouldDisableAssignment,
@@ -201,6 +207,19 @@ export function TeacherCard({
                 <Ionicons name="link-outline" size={16} color="#fff" />
                 <Text style={styles.seatActionText}>Copy Link</Text>
               </TouchableOpacity>
+              {invitePending && inviteId && (
+                <TouchableOpacity
+                  style={[styles.seatActionButton, styles.deleteInviteButton]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onDeleteInvite?.(inviteId, teacher.email);
+                  }}
+                  disabled={!onDeleteInvite}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#fff" />
+                  <Text style={styles.seatActionText}>Delete Invite</Text>
+                </TouchableOpacity>
+              )}
             </>
           ) : teacherHasSeat ? (
             <TouchableOpacity
@@ -253,6 +272,19 @@ export function TeacherCard({
             <Ionicons name="eye" size={16} color="#e2e8f0" />
             <Text style={styles.seatActionText}>View Profile</Text>
           </TouchableOpacity>
+
+          {onDeleteTeacher && (
+            <TouchableOpacity
+              style={[styles.seatActionButton, styles.deleteTeacherButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                onDeleteTeacher(teacher);
+              }}
+            >
+              <Ionicons name="trash-outline" size={16} color="#fff" />
+              <Text style={styles.seatActionText}>Remove Teacher</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -413,6 +445,14 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
   copyInviteButton: {
     backgroundColor: '#0ea5e9',
     borderColor: '#0ea5e9',
+  },
+  deleteInviteButton: {
+    backgroundColor: '#ef4444',
+    borderColor: '#ef4444',
+  },
+  deleteTeacherButton: {
+    backgroundColor: '#b91c1c',
+    borderColor: '#b91c1c',
   },
 });
 

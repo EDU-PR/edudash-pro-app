@@ -272,7 +272,7 @@ export default function TransactionsScreen() {
 
       const { data: student } = await supabase
         .from('students')
-        .select('id, first_name, last_name, class_name')
+        .select('id, first_name, last_name, classes(name)')
         .eq('id', payment.student_id)
         .maybeSingle();
 
@@ -329,7 +329,7 @@ export default function TransactionsScreen() {
           id: student.id,
           firstName: student.first_name,
           lastName: student.last_name,
-          className: student.class_name || null,
+          className: (student as any).classes?.name || null,
         },
         parent: {
           id: parentProfile?.id || null,

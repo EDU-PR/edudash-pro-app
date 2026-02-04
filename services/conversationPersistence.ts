@@ -74,7 +74,7 @@ export async function setLastActiveConversationId(userId: string, conversationId
 export async function getConversationSnapshot(
   userId: string,
   conversationId: string,
-  limit: number = 20
+  limit: number = 100
 ): Promise<ConversationSnapshot | null> {
   try {
     const key = CONVERSATION_CACHE_KEY(userId, conversationId);
@@ -116,7 +116,7 @@ export async function saveConversationSnapshot(
   userId: string,
   conversationId: string,
   messages: PersistedMessage[],
-  maxMessages: number = 50
+  maxMessages: number = 200
 ): Promise<void> {
   try {
     const key = CONVERSATION_CACHE_KEY(userId, conversationId);

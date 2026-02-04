@@ -28,6 +28,7 @@ interface DashInputBarProps {
   setInputText: (text: string) => void;
   enterToSend?: boolean;
   selectedAttachments: DashAttachment[];
+  attachmentProgress?: Map<string, { id: string; progress: number; status: 'uploading' | 'uploaded' | 'failed' }>;
   learnerContext?: LearnerContext | null;
   isLoading: boolean;
   isUploading: boolean;
@@ -36,6 +37,7 @@ interface DashInputBarProps {
   partialTranscript?: string;
   bottomInset?: number;
   placeholder?: string;
+  messages?: any[]; // Track conversation history
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
@@ -50,6 +52,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   setInputText,
   enterToSend = true,
   selectedAttachments,
+  attachmentProgress,
   learnerContext,
   isLoading,
   isUploading,
@@ -58,6 +61,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   partialTranscript = '',
   bottomInset = 0,
   placeholder,
+  messages = [],
   onSend,
   onMicPress,
   onTakePhoto,
@@ -67,8 +71,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 }) => {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
-  const orbSize = screenWidth < 360 ? 38 : screenWidth < 400 ? 40 : 42;
-  const orbRingSize = orbSize + 10;
+  const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
+  const orbRingSize = orbSize + 14;
 
   const renderAttachmentChips = () => {
     if (selectedAttachments.length === 0) return null;
@@ -76,28 +80,33 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
     return (
       <View style={styles.attachmentChipsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {selectedAttachments.map((attachment) => (
-            <View 
-              key={attachment.id} 
-              style={[
-                styles.attachmentChip,
-                { 
-                  backgroundColor: theme.surface,
-                  borderColor: attachment.status === 'failed' ? theme.error : theme.border
-                }
-              ]}
-            >
+          {selectedAttachments.map((attachment) => {
+            // Get real-time progress from the hook
+            const progress = attachmentProgress?.get(attachment.id);
+            const status = progress?.status || attachment.status || 'pending';
+            const uploadProgress = progress?.progress ?? attachment.uploadProgress ?? 0;
+            
+            return (
+              <View 
+                key={attachment.id}
+                style={[styles.attachmentChip,
+                  { 
+                    backgroundColor: theme.surface,
+                    borderColor: status === 'failed' ? theme.error : theme.border
+                  }
+                ]}
+              >
               <View style={styles.attachmentChipContent}>
                 <Ionicons 
                   name={getFileIconName(attachment.kind)}
                   size={16} 
-                  color={attachment.status === 'failed' ? theme.error : theme.text} 
+                  color={status === 'failed' ? theme.error : theme.text} 
                 />
                 <View style={styles.attachmentChipText}>
                   <Text 
                     style={[
                       styles.attachmentChipName, 
-                      { color: attachment.status === 'failed' ? theme.error : theme.text }
+                      { color: status === 'failed' ? theme.error : theme.text }
                     ]}
                     numberOfLines={1}
                   >
@@ -109,23 +118,23 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                 </View>
                 
                 {/* Progress indicator */}
-                {attachment.status === 'uploading' && (
+                {status === 'uploading' && (
                   <View style={styles.attachmentProgressContainer}>
                     <EduDashSpinner size="small" color={theme.primary} />
                   </View>
                 )}
                 
                 {/* Status indicator */}
-                {attachment.status === 'uploaded' && (
+                {status === 'uploaded' && (
                   <Ionicons name="checkmark-circle" size={16} color={theme.success} />
                 )}
                 
-                {attachment.status === 'failed' && (
+                {status === 'failed' && (
                   <Ionicons name="alert-circle" size={16} color={theme.error} />
                 )}
                 
                 {/* Remove button */}
-                {attachment.status !== 'uploading' && (
+                {status !== 'uploading' && (
                   <TouchableOpacity
                     style={styles.attachmentChipRemove}
                     onPress={() => onRemoveAttachment(attachment.id)}
@@ -137,28 +146,30 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
               </View>
               
               {/* Progress bar */}
-              {attachment.status === 'uploading' && attachment.uploadProgress !== undefined && (
+              {status === 'uploading' && uploadProgress !== undefined && (
                 <View style={[styles.attachmentProgressBar, { backgroundColor: theme.surfaceVariant }]}>
                   <View 
                     style={[
                       styles.attachmentProgressFill,
                       { 
                         backgroundColor: theme.primary,
-                        width: `${attachment.uploadProgress}%`
+                        width: `${uploadProgress}%`
                       }
                     ]} 
                   />
                 </View>
               )}
             </View>
-          ))}
+            );
+          })}
         </ScrollView>
       </View>
     );
   };
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
-  const canShowTutorChips = !hasContent && !isRecording && !isLoading;
+  const hasMessages = messages && messages.length > 0;
+  const canShowTutorChips = !hasContent && !isRecording && !isLoading && !hasMessages;
   const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
   const isPreschool = normalizedSchool.includes('preschool') || normalizedSchool.includes('ecd') || normalizedSchool.includes('early') || ['3-5', '6-8'].includes(learnerContext?.ageBand || '');
 

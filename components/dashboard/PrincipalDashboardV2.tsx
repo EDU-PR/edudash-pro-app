@@ -85,7 +85,8 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const pendingPOPs = stats?.pendingPOPUploads?.total ?? 0;
   const pendingReports = data.pendingReportApprovals ?? 0;
   const pendingActivities = data.pendingActivityApprovals ?? 0;
-  const pendingApprovalsTotal = pendingReports + pendingActivities;
+  const pendingHomework = data.pendingHomeworkApprovals ?? 0;
+  const pendingApprovalsTotal = pendingReports + pendingActivities + pendingHomework;
 
   const urgentCount = pendingPayments + pendingPOPs + pendingApprovalsTotal;
 
@@ -127,6 +128,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     { id: 'teachers', label: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }), icon: 'people', route: '/screens/teacher-management', color: theme.success },
     { id: 'registrations', label: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', route: '/screens/principal-registrations', color: theme.warning },
     { id: 'activity-approvals', label: t('dashboard.activity_approvals', { defaultValue: 'Activity Approvals' }), icon: 'checkmark-circle', route: '/screens/principal-activity-approvals', color: theme.info },
+    { id: 'homework-approvals', label: t('dashboard.homework_approvals', { defaultValue: 'Homework Approvals' }), icon: 'document-text', route: '/screens/principal-homework-approvals', color: theme.info },
     { id: 'uniforms', label: t('dashboard.uniform_sizes', { defaultValue: 'Uniforms' }), icon: 'shirt-outline', route: '/screens/principal-uniforms', color: theme.info },
     { id: 'parent-links', label: t('dashboard.parent_links', { defaultValue: 'Connect Parent' }), icon: 'link', route: '/screens/principal-parent-requests', color: theme.info },
     { id: 'payments', label: t('dashboard.review_payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/principal-fee-overview', color: theme.info },
@@ -179,6 +181,15 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
       icon: 'checkmark-circle',
       tone: pendingActivities > 0 ? 'warning' : 'success',
       route: '/screens/principal-activity-approvals',
+    },
+    {
+      id: 'pendingHomework',
+      title: t('dashboard.pending_homework', { defaultValue: 'Homework Pending' }),
+      value: pendingHomework,
+      action: t('dashboard.review', { defaultValue: 'Review' }),
+      icon: 'document-text',
+      tone: pendingHomework > 0 ? 'warning' : 'success',
+      route: '/screens/principal-homework-approvals',
     },
   ];
 

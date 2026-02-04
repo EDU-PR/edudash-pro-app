@@ -76,7 +76,7 @@ export default function FinanceDashboard() {
       const transactionData = await FinancialDataService.getTransactions({
         from: thirtyDaysAgo.toISOString(),
         to: new Date().toISOString(),
-      }, preschoolId || undefined, { useAccountingDate: false });
+      }, preschoolId || undefined, { useAccountingDate: true });
       setTransactions(transactionData);
 
     } catch (error) {
@@ -168,11 +168,11 @@ export default function FinanceDashboard() {
   };
 
   const statusLabels: Record<TransactionStatus, string> = {
-    completed: t('common.completed', { defaultValue: 'Completed' }),
-    pending: t('common.pending', { defaultValue: 'Pending' }),
-    overdue: t('common.overdue', { defaultValue: 'Overdue' }),
-    approved: t('common.approved', { defaultValue: 'Approved' }),
-    rejected: t('common.rejected', { defaultValue: 'Rejected' }),
+    completed: t('completed', { defaultValue: 'Completed' }),
+    pending: t('pending', { defaultValue: 'Pending' }),
+    overdue: t('overdue', { defaultValue: 'Overdue' }),
+    approved: t('approved', { defaultValue: 'Approved' }),
+    rejected: t('rejected', { defaultValue: 'Rejected' }),
   };
 
   const statusColors: Record<TransactionStatus, string> = {

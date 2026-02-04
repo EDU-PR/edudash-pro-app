@@ -6,6 +6,7 @@ import type {
   BirthdayDonationBirthdays,
   BirthdayDonationMonthSummary,
   RecordBirthdayDonationInput,
+  RecordBirthdayDonationReminderInput,
 } from '../types/birthdayDonations.types';
 
 const DaySchema = z.object({
@@ -60,6 +61,15 @@ const RecordInputSchema = z.object({
 
 const UnrecordInputSchema = z.object({
   donationId: z.string().uuid(),
+});
+
+const ReminderInputSchema = z.object({
+  donationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  birthdayStudentId: z.string().uuid(),
+  payerStudentId: z.string().uuid().nullable().optional(),
+  recipientUserId: z.string().uuid(),
+  classId: z.string().uuid().nullable().optional(),
+  sentBy: z.string().uuid().nullable().optional(),
 });
 
 const mapDay = (row: z.infer<typeof DaySchema>): BirthdayDonationDay => ({
@@ -291,6 +301,31 @@ export class BirthdayDonationsService {
     }
 
     return mapDay(dayParsed.data);
+  }
+
+  static async recordDonationReminders(
+    organizationId: string,
+    reminders: RecordBirthdayDonationReminderInput[]
+  ): Promise<void> {
+    if (!organizationId || reminders.length === 0) return;
+    const supabase = assertSupabase();
+    const parsed = z.array(ReminderInputSchema).parse(reminders);
+    const rows = parsed.map((reminder) => ({
+      organization_id: organizationId,
+      donation_date: reminder.donationDate,
+      birthday_student_id: reminder.birthdayStudentId,
+      payer_student_id: reminder.payerStudentId ?? null,
+      recipient_user_id: reminder.recipientUserId,
+      class_id: reminder.classId ?? null,
+      sent_by: reminder.sentBy ?? null,
+    }));
+
+    const { error } = await supabase
+      .from('birthday_donation_reminders')
+      .insert(rows);
+    if (error) {
+      throw new Error(error.message);
+    }
   }
 
   static async getMonthSummary(organizationId: string, monthStart: string, monthEnd: string): Promise<BirthdayDonationMonthSummary> {

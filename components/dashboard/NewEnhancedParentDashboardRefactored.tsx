@@ -47,7 +47,6 @@ import { OnboardingHint, useOnboardingHint } from '@/components/ui/OnboardingHin
 import { EmptyState } from '@/components/ui/EmptyState';
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
-import DashOrb from '@/components/dash-orb';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -75,10 +74,12 @@ const getGradeNumber = (value?: string | null): number => {
 
 interface NewEnhancedParentDashboardProps {
   refreshTrigger?: number;
+  focusSection?: string;
 }
 
 export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProps> = ({ 
-  refreshTrigger
+  refreshTrigger,
+  focusSection,
 }) => {
   const { user, profile } = useAuth();
   const { t } = useTranslation();
@@ -141,6 +142,16 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [showLiveClassesHint, dismissLiveClassesHint] = useOnboardingHint('parent_live_classes');
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
+
+  useEffect(() => {
+    if (!focusSection) return;
+    setCollapsedSections(prev => {
+      if (!prev.has(focusSection)) return prev;
+      const next = new Set(prev);
+      next.delete(focusSection);
+      return next;
+    });
+  }, [focusSection]);
   
   // Main parent dashboard data hook
   const {
@@ -896,22 +907,6 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           margin={16} 
         />
       </ScrollView>
-      <DashOrb
-        position="bottom-right"
-        size={56}
-        locked={!isDashOrbUnlocked}
-        lockedTitle={t('dash_ai.orb_locked_title', { defaultValue: 'Dash Orb Locked' })}
-        lockedMessage={t('dash_ai.orb_locked_message', { defaultValue: 'Upgrade to Parent Plus to unlock the Dash Orb.' })}
-        lockedCtaLabel={t('common.upgrade', { defaultValue: 'Upgrade' })}
-        onUpgradePress={() => router.push('/screens/subscription-setup')}
-        learnerContext={{
-          ageYears: activeChildAgeYears ?? undefined,
-          grade: activeChild?.grade || activeChild?.grade_level || null,
-          name: activeChild ? `${activeChild.firstName || ''} ${activeChild.lastName || ''}`.trim() : null,
-          schoolType: isEarlyLearner ? 'preschool' : (isK12School ? 'k12' : schoolTypeNormalized),
-        }}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'parent_dashboard' })}
-      />
       <AlertModal {...alertProps} />
     </View>
   );

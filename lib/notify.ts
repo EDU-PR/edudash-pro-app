@@ -111,6 +111,23 @@ export async function notifyBirthdayDonationPaid(
   })
 }
 
+export async function notifyBirthdayDonationReminder(
+  user_ids: string[],
+  payload: {
+    child_name?: string;
+    days_until?: number;
+    donation_amount?: number;
+    donation_date?: string;
+    school_name?: string;
+  }
+) {
+  return dispatch('birthday_donation_reminder', {
+    user_ids,
+    custom_payload: payload,
+    include_push: true,
+  })
+}
+
 // ============================================================================
 // School Calendar Event Notifications
 // ============================================================================

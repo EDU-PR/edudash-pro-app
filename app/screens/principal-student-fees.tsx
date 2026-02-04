@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, Platform, Linking } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -810,7 +810,14 @@ export default function StudentFeeManagementScreen() {
     studentName: string,
     receiptUrl: string | null,
     receiptNumber: string,
-    amount: number
+    amount: number,
+    context?: {
+      studentId?: string;
+      feeId?: string;
+      feeType?: string;
+      paymentPurpose?: string;
+      paymentReference?: string;
+    }
   ) => {
     if (!parent?.email && !parent?.id) return;
     const supabase = assertSupabase();
@@ -837,6 +844,11 @@ export default function StudentFeeManagementScreen() {
             type: 'receipt',
             student_name: studentName,
             receipt_url: receiptUrl,
+            student_id: context?.studentId,
+            fee_id: context?.feeId,
+            fee_type: context?.feeType,
+            payment_purpose: context?.paymentPurpose,
+            payment_reference: context?.paymentReference,
           },
         },
         email_template_override: {
@@ -848,10 +860,14 @@ export default function StudentFeeManagementScreen() {
     });
   };
 
-  const generateReceiptForFee = async (fee: StudentFee, amount: number, paidDate: string) => {
-    if (!student || !profile?.id) return;
+  const generateReceiptForFee = async (
+    fee: StudentFee,
+    amount: number,
+    paidDate: string
+  ): Promise<{ receiptUrl?: string | null; storagePath?: string | null } | null> => {
+    if (!student || !profile?.id) return null;
     const preschoolId = student.preschool_id || organizationId;
-    if (!preschoolId) return;
+    if (!preschoolId) return null;
 
     const parentProfile = await fetchParentProfile(student.parent_id);
     const issuerName =
@@ -894,9 +910,95 @@ export default function StudentFeeManagementScreen() {
       });
 
       await attachReceiptToPayments(fee, result.receiptUrl ?? null, result.storagePath);
-      await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amount);
+      await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amount, {
+        studentId: student.id,
+        feeId: fee.id,
+        feeType: fee.fee_type,
+        paymentPurpose: fee.description || fee.fee_type,
+        paymentReference: paymentReference,
+      });
+      return { receiptUrl: result.receiptUrl ?? null, storagePath: result.storagePath };
     } catch (error) {
       console.warn('[StudentFeeManagement] Receipt generation failed:', error);
+      return null;
+    }
+  };
+
+  const fetchReceiptUrlForFee = async (fee: StudentFee): Promise<string | null> => {
+    const supabase = assertSupabase();
+    const paymentReference = `MANUAL-FEE-${fee.id.slice(0, 8)}`;
+    const { data: payment } = await supabase
+      .from('payments')
+      .select('attachment_url, metadata')
+      .eq('payment_reference', paymentReference)
+      .maybeSingle();
+
+    const metadata = (payment?.metadata as Record<string, any>) || {};
+    const receiptUrl =
+      (typeof metadata.receipt_url === 'string' && metadata.receipt_url) ||
+      (typeof payment?.attachment_url === 'string' && payment.attachment_url) ||
+      null;
+    const receiptStoragePath =
+      typeof metadata.receipt_storage_path === 'string' ? metadata.receipt_storage_path : null;
+
+    if (receiptUrl) return receiptUrl;
+    if (receiptStoragePath) {
+      const { data, error } = await supabase.storage
+        .from('generated-pdfs')
+        .createSignedUrl(receiptStoragePath, 3600);
+      if (!error) {
+        return data?.signedUrl || null;
+      }
+    }
+    return null;
+  };
+
+  const openReceiptUrl = async (url: string) => {
+    const lower = url.toLowerCase();
+    if (lower.endsWith('.pdf')) {
+      router.push({ pathname: '/screens/pdf-viewer', params: { url, title: 'Receipt' } } as any);
+      return;
+    }
+    await Linking.openURL(url);
+  };
+
+  const handleReceiptAction = async (fee: StudentFee) => {
+    if (fee.status !== 'paid') {
+      showAlert('Receipt Unavailable', 'Only paid fees can generate receipts.', 'warning');
+      return;
+    }
+
+    try {
+      const existingUrl = await fetchReceiptUrlForFee(fee);
+      if (existingUrl) {
+        await openReceiptUrl(existingUrl);
+        return;
+      }
+
+      showAlert(
+        'Generate Receipt?',
+        'No receipt exists yet for this fee. Generate one now?',
+        'info',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Generate',
+            onPress: async () => {
+              const paidDate = fee.paid_date || new Date().toISOString().split('T')[0];
+              const amount = fee.final_amount || fee.amount;
+              const result = await generateReceiptForFee(fee, amount, paidDate);
+              const url = result?.receiptUrl || null;
+              if (url) {
+                await openReceiptUrl(url);
+              } else {
+                showAlert('Receipt Error', 'Receipt generated but link is unavailable.', 'warning');
+              }
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      showAlert('Receipt Error', error?.message || 'Failed to open receipt.', 'error');
     }
   };
 
@@ -1307,6 +1409,13 @@ export default function StudentFeeManagementScreen() {
 
                 {fee.status === 'paid' && (
                   <View style={styles.feeActions}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.receiptButton]}
+                      onPress={() => handleReceiptAction(fee)}
+                    >
+                      <Ionicons name="receipt-outline" size={16} color={theme.primary} />
+                      <Text style={styles.receiptButtonText}>Receipt</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.unpaidButton]}
                       onPress={() => handleMarkUnpaid(fee)}
@@ -1871,6 +1980,14 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
     fontSize: 14,
     fontWeight: '600',
     color: theme.success,
+  },
+  receiptButton: {
+    backgroundColor: theme.primary + '12',
+  },
+  receiptButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.primary,
   },
   unpaidButton: {
     backgroundColor: theme.warning + '15',

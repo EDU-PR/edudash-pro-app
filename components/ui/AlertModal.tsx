@@ -168,13 +168,17 @@ export const AlertModal: React.FC<AlertModalProps> = ({
           )}
 
           {/* Action Buttons */}
-          <View style={[styles.buttonContainer, buttons.length === 1 && styles.singleButtonContainer]}>
+          <View style={[
+            buttons.length >= 4 ? styles.buttonContainerVertical : styles.buttonContainer,
+            buttons.length === 1 && styles.singleButtonContainer
+          ]}>
             {sortedButtons.map((button, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
                   styles.button,
                   buttons.length === 1 && styles.singleButton,
+                  buttons.length >= 4 && styles.buttonFullWidth,
                   getButtonStyle(button, index),
                 ]}
                 onPress={() => handleButtonPress(button)}
@@ -283,6 +287,11 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
   },
+  buttonContainerVertical: {
+    flexDirection: 'column',
+    gap: 10,
+    width: '100%',
+  },
   singleButtonContainer: {
     justifyContent: 'center',
   },
@@ -294,6 +303,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    minHeight: 48,
+  },
+  buttonFullWidth: {
+    flex: 0,
+    width: '100%',
   },
   singleButton: {
     flex: 0,

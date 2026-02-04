@@ -19,7 +19,6 @@ import {
   TextInput,
   Image,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +31,7 @@ import {
   type ExpenseFormData, 
   type PettyCashSummary 
 } from '@/hooks/usePettyCash';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 interface ReceiptItem {
   id: string;
@@ -58,6 +58,12 @@ interface Props {
   onAddExpense: (form: ExpenseFormData, receiptImage: string | null) => Promise<boolean>;
   onAddReplenishment: (amount: string) => Promise<boolean>;
   onAddWithdrawal: (form: ExpenseFormData) => Promise<boolean>;
+  showAlert: (config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
   // Theme
   theme?: any;
 }
@@ -77,6 +83,7 @@ export function PettyCashModals({
   onAddExpense,
   onAddReplenishment,
   onAddWithdrawal,
+  showAlert,
   theme,
 }: Props) {
   const { t } = useTranslation('common');
@@ -132,31 +139,36 @@ export function PettyCashModals({
 
   const handleWithdrawal = async () => {
     // Show confirmation
-    Alert.alert(
-      t('petty_cash.confirm_withdrawal'),
-      t('petty_cash.confirm_withdrawal_message', { amount: formatCurrency(parseFloat(expenseForm.amount) || 0) }),
-      [
+    showAlert({
+      title: t('petty_cash.confirm_withdrawal'),
+      message: t('petty_cash.confirm_withdrawal_message', { amount: formatCurrency(parseFloat(expenseForm.amount) || 0) }),
+      type: 'warning',
+      buttons: [
         { text: t('common.cancel'), style: 'cancel' },
-        { 
-          text: t('petty_cash.withdraw'), 
-          style: 'destructive', 
+        {
+          text: t('petty_cash.withdraw'),
+          style: 'destructive',
           onPress: async () => {
             const success = await onAddWithdrawal(expenseForm);
             if (success) {
               resetForm();
               setShowWithdrawal(false);
             }
-          }
-        }
-      ]
-    );
+          },
+        },
+      ],
+    });
   };
 
   const takeReceiptPhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('receipt.permission_required'), t('receipt.camera_permission'));
+        showAlert({
+          title: t('receipt.permission_required'),
+          message: t('receipt.camera_permission'),
+          type: 'warning',
+        });
         return;
       }
 
@@ -171,7 +183,7 @@ export function PettyCashModals({
         setReceiptImage(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert(t('common.error'), t('receipt.error_take_photo'));
+      showAlert({ title: t('common.error'), message: t('receipt.error_take_photo'), type: 'error' });
     }
   };
 
@@ -179,7 +191,11 @@ export function PettyCashModals({
     try {
       const hasPermission = await ensureImageLibraryPermission();
       if (!hasPermission) {
-        Alert.alert(t('receipt.permission_required'), t('receipt.gallery_permission'));
+        showAlert({
+          title: t('receipt.permission_required'),
+          message: t('receipt.gallery_permission'),
+          type: 'warning',
+        });
         return;
       }
 
@@ -194,20 +210,20 @@ export function PettyCashModals({
         setReceiptImage(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert(t('common.error'), t('receipt.error_select_image'));
+      showAlert({ title: t('common.error'), message: t('receipt.error_select_image'), type: 'error' });
     }
   };
 
   const selectReceiptImage = () => {
-    Alert.alert(
-      t('petty_cash.attach_receipt'),
-      t('receipt.choose_method'),
-      [
+    showAlert({
+      title: t('petty_cash.attach_receipt'),
+      message: t('receipt.choose_method'),
+      buttons: [
         { text: t('receipt.take_photo'), onPress: takeReceiptPhoto },
         { text: t('receipt.choose_from_gallery'), onPress: pickReceiptFromGallery },
-        { text: t('common.cancel'), style: 'cancel' }
-      ]
-    );
+        { text: t('common.cancel'), style: 'cancel' },
+      ],
+    });
   };
 
   return (

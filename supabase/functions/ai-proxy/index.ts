@@ -89,7 +89,7 @@ const RequestSchema = z.object({
 
 function normalizeServiceType(serviceType?: string): string {
   if (!serviceType) return 'chat_message';
-  if (serviceType === 'dash_conversation' || serviceType === 'dash_ai' || serviceType === 'homework_help') {
+  if (serviceType === 'dash_conversation' || serviceType === 'dash_ai') {
     return 'chat_message';
   }
   return serviceType;
@@ -135,6 +135,18 @@ const RETRYABLE_PROVIDER_STATUSES = new Set([429, 503, 529]);
 
 function buildSystemPrompt(extraContext?: string): string {
   if (!extraContext) return DEFAULT_SYSTEM_PROMPT;
+  
+  // Check if extra context contains image/attachment directives (high priority)
+  const hasImageDirective = extraContext.includes('IMAGE PROCESSING') || 
+                            extraContext.includes('IMAGE ANALYSIS') ||
+                            extraContext.includes('VISION PROCESSING');
+  
+  if (hasImageDirective) {
+    // Put image directives FIRST (higher priority than default prompt)
+    return `${extraContext}\n\n${DEFAULT_SYSTEM_PROMPT}`;
+  }
+  
+  // Normal context appended after default prompt
   return `${DEFAULT_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`;
 }
 
@@ -300,7 +312,70 @@ function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], sy
     messages.push({ role: 'user', content: payload.prompt });
   }
 
+  const images = Array.isArray(payload.images) ? payload.images : [];
+  if (images.length > 0) {
+    const imageBlocks = images.map((img) => ({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.media_type,
+        data: img.data,
+      },
+    }));
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        const existing = messages[i].content;
+        if (Array.isArray(existing)) {
+          messages[i] = { ...messages[i], content: [...existing, ...imageBlocks] };
+        } else {
+          messages[i] = {
+            ...messages[i],
+            content: [
+              { type: 'text', text: typeof existing === 'string' ? existing : '' },
+              ...imageBlocks,
+            ],
+          };
+        }
+        return messages;
+      }
+    }
+    messages.push({
+      role: 'user',
+      content: [{ type: 'text', text: 'Attached image for review.' }, ...imageBlocks],
+    });
+  }
+
   return messages;
+}
+
+function mapOpenAIContent(content: unknown) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return String(content ?? '');
+  const mapped = content.map((part: any) => {
+    if (part?.type === 'text') {
+      return { type: 'text', text: part.text || '' };
+    }
+    if (part?.type === 'image' && part?.source?.data) {
+      const mediaType = part.source.media_type || 'image/jpeg';
+      const url = `data:${mediaType};base64,${part.source.data}`;
+      return { type: 'image_url', image_url: { url } };
+    }
+    if (part?.type === 'tool_use' || part?.type === 'tool_result') {
+      return { type: 'text', text: JSON.stringify(part) };
+    }
+    if (typeof part?.text === 'string') {
+      return { type: 'text', text: part.text };
+    }
+    return { type: 'text', text: '' };
+  });
+  return mapped;
+}
+
+function normalizeOpenAIMessages(messages: Array<JsonRecord>) {
+  return messages.map((msg) => {
+    const content = mapOpenAIContent((msg as any).content);
+    return { ...msg, content };
+  });
 }
 
 function chunkText(text: string, maxLen = 120): string[] {
@@ -366,7 +441,7 @@ async function callOpenAI(
 
   const body: JsonRecord = {
     model,
-    messages,
+    messages: normalizeOpenAIMessages(messages),
     temperature: 0.4,
   };
 
@@ -447,7 +522,7 @@ async function callOpenAI(
     if (toolResults.length > 0) {
       const followUpBody: JsonRecord = {
         model,
-        messages,
+        messages: normalizeOpenAIMessages(messages),
         temperature: 0.4,
       };
 
@@ -762,24 +837,33 @@ serve(async (req) => {
       });
     }
 
-    const quota = await supabase.rpc('check_ai_usage_limit', {
-      p_user_id: userData.user.id,
-      p_request_type: normalizeServiceType(payload.service_type),
-    });
+    // Check if dev mode is enabled to bypass quota checks
+    const devModeBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' || 
+                          Deno.env.get('ENVIRONMENT') === 'development';
+    
+    if (!devModeBypass) {
+      const quota = await supabase.rpc('check_ai_usage_limit', {
+        p_user_id: userData.user.id,
+        p_request_type: normalizeServiceType(payload.service_type),
+      });
 
-    if (quota.error) {
-      console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
-    } else {
-      const quotaData = quota.data as JsonRecord | null;
-      if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
-        return new Response(JSON.stringify({
-          error: 'quota_exceeded',
-          details: quotaData,
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      if (quota.error) {
+        console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
+      } else {
+        const quotaData = quota.data as JsonRecord | null;
+        if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
+          return new Response(JSON.stringify({
+            error: 'quota_exceeded',
+            message: 'AI usage quota exceeded for this billing period',
+            details: quotaData,
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
+    } else {
+      console.log('[ai-proxy] Dev mode: quota check bypassed');
     }
 
     const wantsStream = payload.stream === true;

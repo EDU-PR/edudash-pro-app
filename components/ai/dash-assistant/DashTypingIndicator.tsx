@@ -13,7 +13,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 interface DashTypingIndicatorProps {
   isLoading: boolean;
-  loadingStatus: 'uploading' | 'thinking' | 'responding' | null;
+  loadingStatus: 'uploading' | 'analyzing' | 'thinking' | 'responding' | null;
 }
 
 export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
@@ -61,6 +61,8 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
     switch (loadingStatus) {
       case 'uploading':
         return 'Uploading files...';
+      case 'analyzing':
+        return 'Analyzing attachments...';
       case 'thinking':
         return 'Thinking...';
       case 'responding':
@@ -74,6 +76,8 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
     switch (loadingStatus) {
       case 'uploading':
         return 'cloud-upload-outline';
+      case 'analyzing':
+        return 'scan-outline';
       case 'thinking':
         return 'bulb-outline';
       case 'responding':

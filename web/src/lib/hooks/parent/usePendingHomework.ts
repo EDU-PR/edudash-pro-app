@@ -89,6 +89,7 @@ export function usePendingHomework(userId: string | undefined) {
             homework_submissions!homework_submissions_assignment_id_fkey(id, status, student_id)
           `)
           .in('class_id', classIds)
+          .eq('is_published', true)
           .gte('due_date', new Date().toISOString())
           .order('due_date', { ascending: true });
 

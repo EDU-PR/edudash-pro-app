@@ -36,6 +36,7 @@ interface TeacherProfileViewProps {
   onAssignSeat: (teacherUserId: string, teacherName: string) => void;
   onRevokeSeat: (teacherUserId: string, teacherName: string) => void;
   onAttachDocument: () => void;
+  onDeleteTeacher?: (teacher: Teacher) => void;
 }
 
 export function TeacherProfileView({
@@ -52,6 +53,7 @@ export function TeacherProfileView({
   onAssignSeat,
   onRevokeSeat,
   onAttachDocument,
+  onDeleteTeacher,
 }: TeacherProfileViewProps) {
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   const fullName = `${teacher.firstName} ${teacher.lastName}`;
@@ -149,6 +151,18 @@ export function TeacherProfileView({
             <Text style={styles.actionButtonText}>Revoke Seat</Text>
           </TouchableOpacity>
         </View>
+
+        {onDeleteTeacher && (
+          <View style={styles.removeRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => onDeleteTeacher(teacher)}
+            >
+              <Ionicons name="trash-outline" size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>Remove Teacher</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Documents Card */}
@@ -391,6 +405,9 @@ const createStyles = (theme?: ThemeColors) =>
       gap: 8,
       marginTop: 8,
     },
+    removeRow: {
+      marginTop: 8,
+    },
     actionButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -410,6 +427,9 @@ const createStyles = (theme?: ThemeColors) =>
     },
     revokeButton: {
       backgroundColor: '#dc2626',
+    },
+    deleteButton: {
+      backgroundColor: '#b91c1c',
     },
     actionButtonText: {
       color: 'white',

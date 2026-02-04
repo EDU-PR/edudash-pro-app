@@ -81,6 +81,8 @@ const DEFAULT_PERSONALITY: DashPersonality = {
 
 type AgeGroup = 'child' | 'teen' | 'adult';
 
+const MAX_CONTEXT_MESSAGES = 20;
+
 function inferAgeGroupFromGrade(gradeLevel?: string): AgeGroup | undefined {
   if (!gradeLevel) return undefined;
   const normalized = gradeLevel.trim().toUpperCase();
@@ -457,6 +459,18 @@ export class DashAICore {
 
   // ==================== AI INTEGRATION ====================
 
+  private sanitizeAttachmentsForStorage(attachments?: any[]) {
+    if (!Array.isArray(attachments)) return attachments;
+    return attachments.map((att) => {
+      if (!att || typeof att !== 'object') return att;
+      const meta = (att as any).meta;
+      if (!meta || typeof meta !== 'object') return att;
+      const { image_base64, image_media_type, ...rest } = meta as Record<string, unknown>;
+      const cleanedMeta = Object.keys(rest).length > 0 ? rest : undefined;
+      return { ...att, meta: cleanedMeta };
+    });
+  }
+
   public async sendMessage(
     content: string,
     conversationId?: string,
@@ -471,12 +485,13 @@ export class DashAICore {
       this.conversation.setCurrentConversationId(convId);
     }
 
+    const storedAttachments = this.sanitizeAttachmentsForStorage(attachments);
     const userMessage: DashMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type: 'user',
       content,
       timestamp: Date.now(),
-      attachments,
+      attachments: storedAttachments,
     };
 
     await this.conversation.addMessageToConversation(convId, userMessage);
@@ -505,7 +520,7 @@ export class DashAICore {
   ): Promise<DashMessage> {
     try {
       const conversation = await this.conversation.getConversation(conversationId);
-      const recentMessages = conversation?.messages?.slice(-5) || [];
+      const recentMessages = conversation?.messages?.slice(-MAX_CONTEXT_MESSAGES) || [];
 
       // Check if strict language mode is enabled in personality settings
       const personality = this.profileManager.getPersonality();
@@ -527,6 +542,7 @@ export class DashAICore {
       const tutoringGuidance = (userProfile?.role === 'parent' || userProfile?.role === 'student')
         ? `Tutoring guidance: For homework/math help, use the student_tutor tool. Ask for the exact question and confirm grade/age before proceeding. If the parent has multiple children, ask which child to focus on. Teach step-by-step, include worked examples, then give short practice and ask a follow-up question. IMPORTANT: Ask ONE question at a time and STOP. Do not continue to the next question until the learner answers. Do not include placeholders like "[Wait for the learner's response]". Avoid inventing specific tests unless requested.`
         : '';
+      const serviceType = 'homework_help';
 
       const contextParts = [
         systemPrompt,
@@ -542,6 +558,7 @@ export class DashAICore {
         messages: this.promptBuilder.buildMessageHistory(recentMessages, userInput),
         context: contextParts.join('\n'),
         attachments,
+        serviceType,
         stream: shouldStream,
         onChunk: onStreamChunk,
         model: modelOverride || undefined,

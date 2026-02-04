@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Modular components
 import { PettyCashSummaryCard } from '@/components/petty-cash/PettyCashSummary';
@@ -43,6 +44,7 @@ export default function PettyCashScreen() {
   const { t } = useTranslation('common');
   const router = useRouter();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   // Use the petty cash hook for all data operations
   const {
@@ -62,7 +64,7 @@ export default function PettyCashScreen() {
     reverseTransaction,
     canDelete,
     onRefresh,
-  } = usePettyCash();
+  } = usePettyCash(showAlert);
 
   // Modal visibility state
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -135,18 +137,19 @@ export default function PettyCashScreen() {
   };
 
   const handleResetPettyCash = () => {
-    Alert.alert(
-      t('petty_cash.reset_title', { defaultValue: 'Reset Petty Cash' }),
-      t('petty_cash.reset_confirm', { defaultValue: 'This will create a reset entry to bring the balance to zero. Continue?' }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
+    showAlert({
+      title: t('petty_cash.reset_title', { defaultValue: 'Reset Petty Cash' }),
+      message: t('petty_cash.reset_confirm', { defaultValue: 'This will create a reset entry to bring the balance to zero. Continue?' }),
+      type: 'warning',
+      buttons: [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
         {
-          text: t('petty_cash.reset_cash', { defaultValue: 'Reset' }),
+          text: t('petty_cash.reset_cash', { defaultValue: 'Reset Cash to Zero' }),
           style: 'destructive',
           onPress: () => resetPettyCash(),
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Wrapper for addExpense that includes receipt upload
@@ -171,7 +174,12 @@ export default function PettyCashScreen() {
       const list = rows || [];
       if (list.length === 0) {
         setShowReceipts(false);
-        Alert.alert(t('common.info'), t('receipt.no_receipts', { defaultValue: 'No receipts attached for this transaction.' }));
+        showAlert({
+          title: t('common.info', { defaultValue: 'Information' }),
+          message: t('receipt.no_receipts', { defaultValue: 'No receipts attached for this transaction.' }),
+          type: 'info',
+          buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+        });
         return;
       }
 
@@ -193,7 +201,12 @@ export default function PettyCashScreen() {
       setReceiptItems(items);
     } catch {
       setShowReceipts(false);
-      Alert.alert(t('common.error'), t('receipt.error_select_image', { defaultValue: 'Failed to load receipts' }));
+      showAlert({
+        title: t('common.error'),
+        message: t('receipt.error_select_image', { defaultValue: 'Failed to load receipts' }),
+        type: 'error',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+      });
     } finally {
       setReceiptsLoading(false);
     }
@@ -203,17 +216,23 @@ export default function PettyCashScreen() {
   const attachReceiptToTransaction = async (transactionId: string) => {
     const ImagePicker = require('expo-image-picker');
     
-    Alert.alert(
-      t('receipt.attach_receipt', { defaultValue: 'Attach Receipt' }),
-      t('receipt.choose_method', { defaultValue: 'Choose how to add your receipt:' }),
-      [
+    showAlert({
+      title: t('receipt.attach_receipt', { defaultValue: 'Attach Receipt' }),
+      message: t('receipt.choose_method', { defaultValue: 'Choose how to add your receipt:' }),
+      type: 'info',
+      buttons: [
         {
           text: t('receipt.take_photo', { defaultValue: 'Take Photo' }),
           onPress: async () => {
             try {
               const { status } = await ImagePicker.requestCameraPermissionsAsync();
               if (status !== 'granted') {
-                Alert.alert(t('receipt.permission_required'), t('receipt.camera_permission'));
+                showAlert({
+                  title: t('receipt.permission_required'),
+                  message: t('receipt.camera_permission'),
+                  type: 'warning',
+                  buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+                });
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
@@ -224,10 +243,22 @@ export default function PettyCashScreen() {
               });
               if (!result.canceled && result.assets[0]) {
                 const path = await uploadReceiptImage(result.assets[0].uri, transactionId);
-                if (path) Alert.alert(t('common.success'), t('receipt.attached_success', { defaultValue: 'Receipt attached' }));
+                if (path) {
+                  showAlert({
+                    title: t('common.success'),
+                    message: t('receipt.attached_success', { defaultValue: 'Receipt attached' }),
+                    type: 'success',
+                    buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+                  });
+                }
               }
             } catch {
-              Alert.alert(t('common.error'), t('receipt.attached_failed', { defaultValue: 'Failed to attach receipt' }));
+              showAlert({
+                title: t('common.error'),
+                message: t('receipt.attached_failed', { defaultValue: 'Failed to attach receipt' }),
+                type: 'error',
+                buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+              });
             }
           },
         },
@@ -237,7 +268,12 @@ export default function PettyCashScreen() {
             try {
               const hasPermission = await ensureImageLibraryPermission();
               if (!hasPermission) {
-                Alert.alert(t('receipt.permission_required'), t('receipt.gallery_permission'));
+                showAlert({
+                  title: t('receipt.permission_required'),
+                  message: t('receipt.gallery_permission'),
+                  type: 'warning',
+                  buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+                });
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
@@ -248,16 +284,28 @@ export default function PettyCashScreen() {
               });
               if (!result.canceled && result.assets[0]) {
                 const path = await uploadReceiptImage(result.assets[0].uri, transactionId);
-                if (path) Alert.alert(t('common.success'), t('receipt.attached_success', { defaultValue: 'Receipt attached' }));
+                if (path) {
+                  showAlert({
+                    title: t('common.success'),
+                    message: t('receipt.attached_success', { defaultValue: 'Receipt attached' }),
+                    type: 'success',
+                    buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+                  });
+                }
               }
             } catch {
-              Alert.alert(t('common.error'), t('receipt.attached_failed', { defaultValue: 'Failed to attach receipt' }));
+              showAlert({
+                title: t('common.error'),
+                message: t('receipt.attached_failed', { defaultValue: 'Failed to attach receipt' }),
+                type: 'error',
+                buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+              });
             }
           },
         },
-        { text: t('common.cancel'), style: 'cancel' },
-      ]
-    );
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+      ],
+    });
   };
 
   if (loading && !refreshing) {
@@ -309,16 +357,17 @@ export default function PettyCashScreen() {
           onReverseTransaction={reverseTransaction}
           onDeleteTransaction={deleteTransaction}
           canDelete={canDelete}
+          showAlert={showAlert}
           theme={theme}
         />
       </ScrollView>
 
       {/* All Modals */}
-      <PettyCashModals
-        showAddExpense={showAddExpense}
-        showReplenishment={showReplenishment}
-        showWithdrawal={showWithdrawal}
-        showReceipts={showReceipts}
+        <PettyCashModals
+          showAddExpense={showAddExpense}
+          showReplenishment={showReplenishment}
+          showWithdrawal={showWithdrawal}
+          showReceipts={showReceipts}
         setShowAddExpense={setShowAddExpense}
         setShowReplenishment={setShowReplenishment}
         setShowWithdrawal={setShowWithdrawal}
@@ -326,11 +375,14 @@ export default function PettyCashScreen() {
         summary={summary}
         receiptItems={receiptItems}
         receiptsLoading={receiptsLoading}
-        onAddExpense={handleAddExpense}
-        onAddReplenishment={addReplenishment}
-        onAddWithdrawal={addWithdrawal}
-        theme={theme}
-      />
+          onAddExpense={handleAddExpense}
+          onAddReplenishment={addReplenishment}
+          onAddWithdrawal={addWithdrawal}
+          showAlert={showAlert}
+          theme={theme}
+        />
+
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

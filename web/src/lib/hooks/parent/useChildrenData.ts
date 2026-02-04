@@ -61,6 +61,7 @@ export function useChildrenData(userId: string | undefined): UseChildrenDataRetu
           .from('homework_assignments')
           .select('id')
           .eq('class_id', child.class_id)
+          .eq('is_published', true)
           .gte('due_date', today);
 
         if (schoolId) {

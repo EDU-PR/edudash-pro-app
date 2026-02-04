@@ -86,50 +86,38 @@ export default function BirthdayChartScreen() {
     
     try {
       setError(null);
-      if (isParentView) {
+      
+      // For parents, we need to get their organization ID from their children
+      let effectiveOrgId = organizationId;
+      if (isParentView && !effectiveOrgId) {
         const parentId = profile?.id || user?.id || null;
         if (!parentId) {
           setError('Unable to determine parent account. Please try again.');
           return;
         }
-        if (debugEnabled) console.log('[BirthdayChart] Loading birthdays for parent:', parentId);
+        if (debugEnabled) console.log('[BirthdayChart] Parent view - getting organization from children');
         const children = await fetchParentChildren(parentId);
-        const parentBirthdays: StudentBirthday[] = (children || [])
-          .filter((child) => !!child.date_of_birth)
-          .map((child) => {
-            const birthDate = getThisYearsBirthday(child.date_of_birth as string);
-            const daysUntil = getDaysUntil(birthDate);
-            const classesValue = Array.isArray(child.classes) ? child.classes[0] : child.classes;
-            return {
-              id: `birthday-${child.id}`,
-              studentId: child.id,
-              firstName: child.first_name,
-              lastName: child.last_name,
-              dateOfBirth: child.date_of_birth as string,
-              birthDate,
-              age: calculateAge(child.date_of_birth as string, birthDate),
-              daysUntil,
-              classId: child.class_id ?? undefined,
-              className: classesValue?.name ?? undefined,
-              parentId: child.parent_id ?? undefined,
-              parentName: undefined,
-              photoUrl: child.avatar_url ?? undefined,
-            };
-          });
-        parentBirthdays.sort((a, b) => {
-          const aDate = new Date(a.dateOfBirth);
-          const bDate = new Date(b.dateOfBirth);
-          const monthDiff = aDate.getMonth() - bDate.getMonth();
-          if (monthDiff !== 0) return monthDiff;
-          return aDate.getDate() - bDate.getDate();
-        });
-        setBirthdays(parentBirthdays);
-        if (debugEnabled) console.log('[BirthdayChart] Loaded parent birthdays:', parentBirthdays.length);
+        if (children && children.length > 0) {
+          // Get organization from first child (all children should be in same org)
+          const firstChild = children[0];
+          effectiveOrgId = firstChild.organization_id || (firstChild as any).preschool_id;
+          if (debugEnabled) console.log('[BirthdayChart] Parent org from child:', effectiveOrgId);
+        }
+        if (!effectiveOrgId) {
+          setError('Unable to determine school. Please ensure your children are enrolled.');
+          return;
+        }
+      }
+
+      if (!effectiveOrgId) {
+        setError('Unable to determine school. Please try again.');
         return;
       }
 
-      if (debugEnabled) console.log('[BirthdayChart] Loading birthdays for org:', organizationId);
-      const data = await BirthdayPlannerService.getAllBirthdays(organizationId as string, targetYear);
+      // Load ALL birthdays for the organization (not just parent's children)
+      // This allows parents to see all upcoming birthdays in the school and plan ahead
+      if (debugEnabled) console.log('[BirthdayChart] Loading all birthdays for org:', effectiveOrgId);
+      const data = await BirthdayPlannerService.getAllBirthdays(effectiveOrgId as string, targetYear);
       if (debugEnabled) console.log('[BirthdayChart] Loaded birthdays:', data.length, 'students');
       setBirthdays(data);
       

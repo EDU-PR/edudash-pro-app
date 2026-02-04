@@ -5,7 +5,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol'
 import { useQuery } from '@tanstack/react-query'
 import { assertSupabase } from '@/lib/supabase'
 import { TeacherDataService } from '@/lib/services/teacherDataService'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { WorksheetQuickWidget } from '@/components/worksheets/WorksheetQuickAction'
 import type { Assignment } from '@/lib/models/Assignment'
 import { useTeacherSchool } from '@/hooks/useTeacherSchool'
@@ -29,7 +29,8 @@ export default function AssignHomeworkScreen() {
   const [instructionsInput, setInstructionsInput] = useState('')
   const [dueDays, setDueDays] = useState<number>(3)
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>('30')
-  const lessonId = '' // wire via navigation params later
+  const params = useLocalSearchParams<{ lessonId?: string }>()
+  const lessonId = params.lessonId || null
 
   // Fetch classes filtered by teacher's school
   const classesQuery = useQuery({
@@ -78,7 +79,6 @@ export default function AssignHomeworkScreen() {
   })
 
   const onAssign = async () => {
-    if (!lessonId) { Alert.alert('Missing lesson', 'No lesson selected.'); return }
     if (mode === 'class' && !classId) { Alert.alert('Select class', 'Please select a class to assign to.'); return }
     if (mode === 'students' && selected.size === 0) { Alert.alert('Pick students', 'Please pick at least one student.'); return }
     setAssigning(true)
@@ -88,7 +88,7 @@ export default function AssignHomeworkScreen() {
       const authUserId = auth?.user?.id || ''
 
       const res = await TeacherDataService.assignLesson(authUserId, {
-        lessonId,
+        lessonId: lessonId || null,
         classId: mode === 'class' ? classId || undefined : undefined,
         studentIds: mode === 'students' ? Array.from(selected) : undefined,
         title: titleInput.trim() || 'Homework',
@@ -100,7 +100,11 @@ export default function AssignHomeworkScreen() {
         materialsNeeded: [],
       })
       if (res.success) {
-        Alert.alert('Assigned', 'Homework assigned successfully.', [{ text: 'OK', onPress: () => router.back() }])
+        Alert.alert(
+          'Submitted for approval',
+          'Homework saved and queued for principal approval. Parents will see it once approved.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        )
       } else {
         Alert.alert('Assign failed', res.error || 'Unknown error')
       }
@@ -127,8 +131,18 @@ export default function AssignHomeworkScreen() {
             <Text style={{ color: palette.textSecondary }}>Your teacher seat is not active or you lack permission to assign homework. Please contact your administrator.</Text>
           </View>
         )}
-        {!lessonId && (
-          <Text style={styles.errorText}>No lesson selected.</Text>
+        {canAssign && (
+          <View style={[styles.noticeCard, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
+            <Text style={[styles.noticeTitle, { color: palette.text }]}>Principal approval required</Text>
+            <Text style={[styles.noticeText, { color: palette.textSecondary }]}>
+              This homework will be queued for principal approval before parents can view it.
+            </Text>
+          </View>
+        )}
+        {canAssign && !lessonId && (
+          <Text style={[styles.helperText, { color: palette.textSecondary }]}>
+            No lesson selected. This homework will be sent as a standalone assignment.
+          </Text>
         )}
 
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.outline }]}>
@@ -324,6 +338,10 @@ const styles = StyleSheet.create({
   title: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700' },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, marginBottom: 16 },
   cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  noticeCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, marginBottom: 12 },
+  noticeTitle: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  noticeText: { fontSize: 12, lineHeight: 16 },
+  helperText: { fontSize: 12, marginBottom: 12 },
   label: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
   input: { borderWidth: StyleSheet.hairlineWidth, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   multiline: { minHeight: 70, textAlignVertical: 'top' },
@@ -339,7 +357,6 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#fff', fontWeight: '700' },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
   contentPadding: { padding: 16 },
-  errorText: { color: '#EF4444', marginBottom: 12 },
   mt10: { marginTop: 10 },
   h8: { height: 8 },
   rowMv8: { flexDirection: 'row', marginVertical: 8 },

@@ -55,6 +55,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'primary',
     category: 'lessons',
   },
+  create_activity: {
+    path: '/screens/teacher-activity-builder' as Href,
+    title: 'Create Activity',
+    titleKey: 'teacher.create_activity',
+    icon: 'color-wand',
+    color: '#F97316',
+    category: 'lessons',
+  },
   edit_lesson: {
     path: '/screens/lesson-edit' as Href,
     title: 'Edit Lesson',
@@ -69,6 +77,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     titleKey: 'teacher.grade_assignments',
     icon: 'checkmark-circle',
     color: 'success',
+    category: 'lessons',
+  },
+  assign_homework: {
+    path: '/screens/assign-homework' as Href,
+    title: 'Assign Homework',
+    titleKey: 'teacher.assign_homework',
+    icon: 'document-text',
+    color: '#6366F1',
     category: 'lessons',
   },
   
@@ -187,9 +203,11 @@ export const getRoutesByCategory = (category: TeacherRoute['category']): Teacher
 export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'browse_lessons',
   'create_lesson',
+  'create_activity',
   'take_attendance',
   'start_live_lesson',
   'assign_lesson',
+  'assign_homework',
   'my_class',
   'birthday_chart',
   'messages',

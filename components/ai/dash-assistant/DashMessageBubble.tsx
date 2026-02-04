@@ -13,6 +13,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const AttachmentImagePreview: React.FC<{
   attachment: DashMessage['attachments'][number];
@@ -88,6 +89,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
   const [inlineAnswer, setInlineAnswer] = React.useState('');
+  
+  // Enhanced gradients for better visual appeal
+  const userGradient = isDark
+    ? [theme.primaryDark || '#1e40af', theme.primary, theme.accentDark || '#7c3aed']
+    : ['#0ea5e9', '#3b82f6', '#6366f1']; // Sky blue → Blue → Indigo
 
   React.useEffect(() => {
     setInlineAnswer('');
@@ -194,8 +200,14 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     if (typeof payload.feedback === 'string' && payload.feedback.trim()) {
       lines.push(payload.feedback.trim());
     }
+    if (typeof payload.hint === 'string' && payload.hint.trim()) {
+      lines.push(payload.hint.trim());
+    }
     if (typeof payload.correct_answer === 'string' && payload.correct_answer.trim()) {
       lines.push(`Correct answer: ${payload.correct_answer.trim()}`);
+    }
+    if (typeof payload.steps === 'string' && payload.steps.trim()) {
+      lines.push(payload.steps.trim());
     }
     if (typeof payload.explanation === 'string' && payload.explanation.trim()) {
       lines.push(payload.explanation.trim());
@@ -227,13 +239,54 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       if (display) return display;
     }
     const metaQuestion = message.metadata?.tutor_question_text;
-    if (metaQuestion) return metaQuestion;
+    if (metaQuestion) {
+      const cleaned = sanitizeAssistantContent(raw);
+      if (cleaned && cleaned.length > metaQuestion.trim().length + 20) {
+        return cleaned;
+      }
+      return metaQuestion;
+    }
     if (isTutorPromptLeak(raw)) {
       return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
     }
     const cleaned = sanitizeAssistantContent(raw);
     return cleaned || raw.trim();
   };
+
+  const sanitizeUserDisplayContent = (content: string) => {
+    if (!content) return content;
+    const lower = content.toLowerCase();
+    const isTutorPrompt = /you are dash, an interactive tutor|tutor_payload|return only json|tutor mode override/i.test(lower);
+    if (!isTutorPrompt) return content;
+    const requestMatch = content.match(/Learner request:\s*([^\n]+)/i);
+    if (requestMatch?.[1]) return requestMatch[1].trim();
+    const answerMatch = content.match(/Learner answer:\s*([^\n]+)/i);
+    if (answerMatch?.[1]) return answerMatch[1].trim();
+    const questionMatch = content.match(/Question:\s*([^\n]+)/i);
+    if (questionMatch?.[1]) return questionMatch[1].trim();
+    return 'Tutor request';
+  };
+
+  const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
+  const bubbleSurfaceProps = isUser
+    ? { 
+        colors: userGradient, 
+        start: { x: 0, y: 0 }, 
+        end: { x: 1, y: 1 } 
+      }
+    : {};
+  
+  // Enhanced bubble shadows for depth
+  const bubbleShadow = Platform.OS === 'ios'
+    ? {
+        shadowColor: isUser ? theme.primary : '#000',
+        shadowOffset: { width: 0, height: isUser ? 4 : 2 },
+        shadowOpacity: isUser ? 0.3 : 0.1,
+        shadowRadius: isUser ? 12 : 8,
+      }
+    : {
+        elevation: isUser ? 5 : 2,
+      };
 
   return (
     <View
@@ -242,21 +295,23 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
         isUser ? styles.userMessage : styles.assistantMessage,
       ]}
     >
-      <View
+      <BubbleSurface
+        {...bubbleSurfaceProps}
         style={[
           styles.messageBubble,
           isUser ? styles.userBubble : styles.assistantBubble,
+          { alignSelf: isUser ? 'flex-end' : 'flex-start' },
           isUser
-            ? { backgroundColor: theme.primary }
-            : { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 0.5 },
-          Platform.OS === 'ios' ? {
-            shadowColor: isDark ? '#000' : '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: isUser ? 0.25 : 0.12,
-            shadowRadius: 4,
-          } : {
-            elevation: isUser ? 3 : 2,
-          }
+            ? { 
+                borderColor: 'rgba(255,255,255,0.3)', 
+                borderWidth: 0.5 
+              }
+            : { 
+                backgroundColor: theme.surface, 
+                borderColor: theme.border, 
+                borderWidth: 1.5 
+              },
+          bubbleShadow,
         ]}
       >
         {!isUser && (
@@ -270,7 +325,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               </Text>
             </View>
             {phase && (
-              <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg }]}>
+              <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg, borderColor: phaseColors?.text || theme.border }]}>
                 <Text style={[styles.phaseText, { color: phaseColors?.text }]}>{phase}</Text>
               </View>
             )}
@@ -281,11 +336,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             style={[
               styles.messageText,
               { color: isUser ? theme.onPrimary : theme.text, flex: 1 },
+              message.content?.length < 18 ? { textAlign: 'center' } : null,
             ]}
             selectable={true}
             selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
           >
-            {isUser ? message.content : getAssistantDisplayContent()}
+            {isUser ? sanitizeUserDisplayContent(message.content || '') : getAssistantDisplayContent()}
           </Text>
           
           {isUser && isLastUserMessage && !isLoading && (
@@ -493,7 +549,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           <Text
             style={[
               styles.messageTime,
-              { color: isUser ? theme.onPrimary : theme.textTertiary },
+              { color: isUser ? 'rgba(255,255,255,0.72)' : theme.textTertiary },
             ]}
           >
             {new Date(message.timestamp).toLocaleTimeString([], { 
@@ -502,7 +558,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             })}
           </Text>
         </View>
-      </View>
+      </BubbleSurface>
     </View>
   );
 };

@@ -5,6 +5,7 @@ import { reportError } from '@/lib/monitoring';
 import { fetchEnhancedUserProfile, type EnhancedUserProfile, type Role } from '@/lib/rbac';
 import type { User } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { getPendingTeacherInvite, clearPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
 
 const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 const debugLog = (...args: unknown[]) => {
@@ -238,6 +239,15 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       clearNavigationLock(userId);
       clearTimeout(overallTimeout);
       router.replace('/profiles-gate');
+      return;
+    }
+
+    const pendingInvite = await getPendingTeacherInvite();
+    if (pendingInvite?.token && pendingInvite?.email) {
+      await clearPendingTeacherInvite();
+      clearNavigationLock(userId);
+      clearTimeout(overallTimeout);
+      router.replace(`/screens/teacher-invite-accept?token=${encodeURIComponent(pendingInvite.token)}&email=${encodeURIComponent(pendingInvite.email)}`);
       return;
     }
 

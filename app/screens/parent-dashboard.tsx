@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
@@ -18,6 +18,8 @@ export default function ParentDashboardScreen() {
   const { user, profile, loading: authLoading, profileLoading } = useAuth();
   const permissions = usePermissions();
   const { ready: subscriptionReady, tier } = useSubscription();
+  const { focus } = useLocalSearchParams<{ focus?: string | string[] }>();
+  const focusSection = Array.isArray(focus) ? focus[0] : focus;
   const isAuthMissing = !user?.id;
 
   // Enforce RBAC: must be parent role with dashboard access
@@ -160,7 +162,7 @@ export default function ParentDashboardScreen() {
         translucent={false}
       />
       <DesktopLayout role="parent">
-        <ParentDashboardWrapper />
+        <ParentDashboardWrapper focusSection={focusSection} />
       </DesktopLayout>
     </>
   );

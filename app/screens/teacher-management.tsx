@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { TeacherDocumentsService, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 import { assertSupabase } from '@/lib/supabase';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 
 // Extracted components
 import { TeacherCard } from '@/components/teacher/TeacherCard';
@@ -348,6 +349,104 @@ export default function TeacherManagement() {
     [getPreschoolId, inviteByEmail, loadInvites, showAlert, user?.id]
   );
 
+  const handleDeleteInvite = useCallback(
+    (inviteId: string, inviteEmail: string) => {
+      showAlert({
+        title: 'Delete Invite?',
+        message: `Remove the invite for ${inviteEmail}? This cannot be undone.`,
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const { TeacherInviteService } = await import('@/lib/services/teacherInviteService');
+                await TeacherInviteService.deleteInvite(inviteId);
+                await loadInvites();
+                showAlert({
+                  title: 'Invite Deleted',
+                  message: 'The invite has been removed.',
+                  type: 'success',
+                });
+              } catch (err) {
+                showAlert({
+                  title: 'Delete Failed',
+                  message: err instanceof Error ? err.message : 'Unable to delete invite.',
+                  type: 'error',
+                });
+              }
+            },
+          },
+        ],
+      });
+    },
+    [loadInvites, showAlert]
+  );
+
+  const handleDeleteTeacher = useCallback(
+    (teacher: Teacher) => {
+      const teacherName = `${teacher.firstName} ${teacher.lastName}`.trim() || teacher.email;
+      showAlert({
+        title: 'Remove Teacher?',
+        message: `Remove ${teacherName} from your school? This will unassign their classes, deactivate the teacher record, and revoke their seat.`,
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const orgId = getPreschoolId();
+                if (!orgId) {
+                  showAlert({
+                    title: 'No School Found',
+                    message: 'Please make sure you are linked to a school.',
+                    type: 'error',
+                  });
+                  return;
+                }
+                if (!teacher.teacherUserId) {
+                  showAlert({
+                    title: 'Missing Teacher ID',
+                    message: 'This teacher record is missing a user id.',
+                    type: 'error',
+                  });
+                  return;
+                }
+                await removeTeacherFromSchool({
+                  teacherUserId: teacher.teacherUserId,
+                  organizationId: orgId,
+                  teacherRecordId: teacher.id,
+                });
+                await fetchTeachers();
+                refetchSeatLimits();
+                if (selectedTeacher?.id === teacher.id) {
+                  setSelectedTeacher(null);
+                  setCurrentView('overview');
+                }
+                showAlert({
+                  title: 'Teacher Removed',
+                  message: `${teacherName} has been removed from the school.`,
+                  type: 'success',
+                });
+              } catch (err) {
+                showAlert({
+                  title: 'Remove Failed',
+                  message: err instanceof Error ? err.message : 'Unable to remove teacher.',
+                  type: 'error',
+                });
+              }
+            },
+          },
+        ],
+      });
+    },
+    [fetchTeachers, getPreschoolId, refetchSeatLimits, selectedTeacher?.id, setCurrentView, setSelectedTeacher, showAlert]
+  );
+
   const closeInviteShareModal = useCallback(() => {
     setShowInviteShareModal(false);
   }, []);
@@ -631,7 +730,9 @@ export default function TeacherManagement() {
     );
   };
 
-  const renderTeacher = ({ item }: { item: Teacher }) => (
+  const renderTeacher = ({ item }: { item: Teacher }) => {
+    const invite = inviteByEmail.get(item.email.toLowerCase());
+    return (
     <TeacherCard
       teacher={item}
       onPress={handleTeacherPress}
@@ -639,14 +740,18 @@ export default function TeacherManagement() {
       onRevokeSeat={handleRevokeSeat}
       onInvite={handleInviteTeacher}
       onCopyInviteLink={handleCopyInviteLink}
-      inviteStatus={inviteByEmail.get(item.email.toLowerCase())?.status || null}
-      inviteToken={inviteByEmail.get(item.email.toLowerCase())?.token || null}
+      onDeleteInvite={handleDeleteInvite}
+      onDeleteTeacher={handleDeleteTeacher}
+      inviteStatus={invite?.status || null}
+      inviteToken={invite?.token || null}
+      inviteId={invite?.id || null}
       isAssigning={isAssigning}
       isRevoking={isRevoking}
       shouldDisableAssignment={shouldDisableAssignment}
       theme={theme}
     />
-  );
+    );
+  };
 
   // Stats for header
   const stats = {
@@ -663,7 +768,7 @@ export default function TeacherManagement() {
       {/* Enhanced Gradient Header */}
       <LinearGradient
         colors={['#6366F1', '#8B5CF6']}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
+        style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -1174,6 +1279,7 @@ export default function TeacherManagement() {
             onAssignSeat={handleAssignSeat}
             onRevokeSeat={handleRevokeSeat}
             onAttachDocument={showAttachDocActionSheet}
+            onDeleteTeacher={handleDeleteTeacher}
           />
         )}
       </View>
@@ -1251,55 +1357,56 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   // Enhanced Header Styles
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   backButton: {
-    padding: 8,
+    padding: 6,
   },
   headerTitleContainer: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#fff',
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 2,
   },
   settingsButton: {
-    padding: 8,
+    padding: 6,
   },
   // Stats Row
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 20,
+    marginTop: 12,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   statItem: {
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.7)',
     marginTop: 2,
   },

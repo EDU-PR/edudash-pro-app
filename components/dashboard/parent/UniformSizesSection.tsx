@@ -647,8 +647,19 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
     <>
       <View>
         <View style={styles.header}>
-          <Text style={styles.title}>{t('dashboard.parent.uniform.title', { defaultValue: 'Uniform Sizes' })}</Text>
-          <Text style={styles.subtitle}>{t('dashboard.parent.uniform.subtitle', { defaultValue: 'Select sizes, quantities, and add a returning number if needed.' })}</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>{t('dashboard.parent.uniform.title', { defaultValue: 'Uniform Sizes' })}</Text>
+              <Text style={styles.subtitle}>{t('dashboard.parent.uniform.subtitle', { defaultValue: 'Select sizes, quantities, and add a returning number if needed.' })}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.paymentsButton}
+              onPress={() => router.push('/screens/parent-uniform-payments')}
+            >
+              <Ionicons name="receipt-outline" size={14} color={theme.primary} />
+              <Text style={styles.paymentsButtonText}>Payments</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading && (
@@ -990,6 +1001,15 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   header: {
     marginBottom: 12,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerText: {
+    flex: 1,
+  },
   title: {
     fontSize: 16,
     fontWeight: '700',
@@ -999,6 +1019,22 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 12,
     color: theme.textSecondary,
     marginTop: 4,
+  },
+  paymentsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.primary + '40',
+    backgroundColor: theme.primary + '10',
+  },
+  paymentsButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.primary,
   },
   inlineRow: {
     flexDirection: 'row',

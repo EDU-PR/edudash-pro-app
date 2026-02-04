@@ -167,15 +167,31 @@ export async function getAccountForSchool(schoolId: string): Promise<PettyCashAc
 
     // Create account if it doesn't exist and no record found
     if (error?.code === 'PGRST116') {
-      const { data: created, error: createError } = await assertSupabase()
-        .rpc('ensure_petty_cash_account', { preschool_uuid: schoolId });
+      let created: string | null = null;
+      try {
+        const { data: createdId, error: createError } = await assertSupabase()
+          .rpc('ensure_petty_cash_account', { school_uuid: schoolId });
 
-      if (createError) {
-        console.error('Error creating petty cash account:', createError);
-        throw new Error('Failed to create petty cash account');
+        if (createError) throw createError;
+        created = createdId ? String(createdId) : null;
+      } catch (primaryError) {
+        try {
+          const { data: createdId, error: createError } = await assertSupabase()
+            .rpc('ensure_petty_cash_account_v2', { preschool_uuid: schoolId });
+
+          if (createError) throw createError;
+          created = createdId ? String(createdId) : null;
+        } catch (fallbackError) {
+          console.error('Error creating petty cash account:', fallbackError || primaryError);
+          throw new Error('Failed to create petty cash account');
+        }
       }
 
       // Fetch the created account
+      if (!created) {
+        throw new Error('Failed to create petty cash account');
+      }
+
       const { data: newAccount, error: fetchError } = await assertSupabase()
         .from('petty_cash_accounts')
         .select('*')

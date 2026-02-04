@@ -10,7 +10,7 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -30,6 +30,13 @@ export default function TeacherSignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+
+  const params = useLocalSearchParams<{ email?: string }>();
+  React.useEffect(() => {
+    if (typeof params?.email === 'string' && params.email) {
+      setEmail(params.email);
+    }
+  }, [params?.email]);
 
   // UI state
   const [loading, setLoading] = useState(false);

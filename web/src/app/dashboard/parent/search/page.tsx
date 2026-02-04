@@ -85,6 +85,7 @@ function SearchContent() {
           .from('homework_assignments')
           .select('id, title, description, due_date, class_id')
           .in('class_id', classIds)
+          .eq('is_published', true)
           .ilike('title', `%${searchQuery}%`)
           .order('due_date', { ascending: false })
           .limit(10);

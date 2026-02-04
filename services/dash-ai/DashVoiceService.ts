@@ -19,6 +19,7 @@ import * as Speech from 'expo-speech';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
+import type { SupportedLanguage } from '@/lib/voice/types';
 
 // Declare global window for web platform type safety
 declare const window: any;
@@ -466,7 +467,10 @@ export class DashVoiceService {
   /**
    * Languages with full TTS support (Azure Neural voices available)
    */
-  private static readonly TTS_SUPPORTED_LANGUAGES = ['en', 'af', 'zu', 'en-ZA', 'af-ZA', 'zu-ZA'];
+  private static readonly TTS_SUPPORTED_LANGUAGES = [
+    'en', 'af', 'zu',
+    'en-ZA', 'af-ZA', 'zu-ZA',
+  ];
 
   /**
    * Check if a language has TTS support
@@ -476,6 +480,93 @@ export class DashVoiceService {
     return DashVoiceService.TTS_SUPPORTED_LANGUAGES.some(l => 
       l === shortLang || l.toLowerCase().startsWith(shortLang)
     );
+  }
+
+  /**
+   * Lightweight language detection for South African languages.
+   * Used to avoid reading Afrikaans/isiZulu with English TTS.
+   */
+  private detectLanguageFromText(text: string): SupportedLanguage {
+    const t = (text || '').toLowerCase();
+    const score = { af: 0, zu: 0, xh: 0, nso: 0 };
+
+    const count = (regex: RegExp) => (t.match(regex) || []).length;
+
+    // isiXhosa
+    score.xh += count(/\b(molo|ndiyabulela|enkosi|ndicela|uxolo|ewe|hayi|yintoni|ndiza|umntwana)\b/g) * 2;
+    score.xh += count(/\b(siyabonga|ndiyakucela|ndiyaxolisa)\b/g);
+
+    // isiZulu
+    score.zu += count(/\b(sawubona|ngiyabonga|ngiyacela|ngiyaphila|yebo|cha|kakhulu|umfundi|siyakusiza)\b/g) * 2;
+    score.zu += count(/\b(ngiyaxolisa|sibonga|ngikhona|ngiyazi)\b/g);
+
+    // Afrikaans
+    score.af += count(/\b(hallo|asseblief|baie|dankie|welkom|lekker|goeie|môre|middag|aand)\b/g) * 2;
+    score.af += count(/\b(ek|jy|ons|julle|nie|graag)\b/g);
+
+    // Sepedi (Northern Sotho)
+    score.nso += count(/\b(thobela|dumela|ke\s+a\s+leboga|ka\s+kgopelo|hle|o\s+kae|o\s+tšwa|o\s+tshwa)\b/g) * 2;
+
+    const entries = Object.entries(score).sort((a, b) => b[1] - a[1]);
+    const [bestLang, bestScore] = entries[0] || ['en', 0];
+
+    if (bestScore >= 2) {
+      return bestLang as SupportedLanguage;
+    }
+
+    return 'en';
+  }
+
+  private mapToDeviceLocale(language: string): string {
+    const code = (language || 'en').toLowerCase();
+    if (code.startsWith('af')) return 'af-ZA';
+    if (code.startsWith('zu')) return 'zu-ZA';
+    if (code.startsWith('xh')) return 'xh-ZA';
+    if (code.startsWith('en')) return 'en-ZA';
+    return 'en-ZA';
+  }
+
+  private async speakWithDeviceTTS(
+    text: string,
+    callbacks?: SpeechCallbacks,
+    options?: { language?: string }
+  ): Promise<void> {
+    if (!Speech || typeof Speech.speak !== 'function') {
+      callbacks?.onError?.(new Error('Device TTS unavailable'));
+      return;
+    }
+
+    const voiceSettings = this.config.voiceSettings;
+    const locale = this.mapToDeviceLocale(options?.language || voiceSettings.language || 'en');
+    const rate = Math.min(Math.max(voiceSettings.rate ?? 1.0, 0.5), 2.0);
+    const pitch = Math.min(Math.max(voiceSettings.pitch ?? 1.0, 0.5), 2.0);
+
+    try {
+      if (typeof Speech.stop === 'function') {
+        await Speech.stop();
+      }
+    } catch {}
+
+    await new Promise<void>((resolve) => {
+      Speech.speak(text, {
+        language: locale,
+        rate,
+        pitch,
+        onStart: () => callbacks?.onStart?.(),
+        onDone: () => {
+          callbacks?.onDone?.();
+          resolve();
+        },
+        onStopped: () => {
+          callbacks?.onStopped?.();
+          resolve();
+        },
+        onError: (error: unknown) => {
+          callbacks?.onError?.(error);
+          resolve();
+        },
+      });
+    });
   }
 
   // Tiers that have TTS access (aligned with tts-proxy Edge Function)
@@ -529,22 +620,6 @@ export class DashVoiceService {
         // Allow request to proceed - Edge Function will do final tier check
       }
       
-      // Check if TTS is supported for this language
-      const requestedLang = options?.language || voiceSettings.language || 'en';
-      if (!this.isTTSSupported(requestedLang)) {
-        const langNames: Record<string, string> = {
-          'xh': 'isiXhosa',
-          'xh-ZA': 'isiXhosa',
-          'nso': 'Sepedi',
-          'nso-ZA': 'Sepedi',
-          'st': 'Sesotho',
-        };
-        const langName = langNames[requestedLang] || requestedLang;
-        console.warn(`[DashVoice] TTS not supported for ${langName}. Only English, Afrikaans, and isiZulu have voice support.`);
-        callbacks?.onError?.(`Voice output not available for ${langName}. Only English, Afrikaans, and isiZulu are supported.`);
-        return;
-      }
-
       // Normalize text first
       const normalizedText = this.normalizeTextForSpeech(text);
       if (normalizedText.length === 0) {
@@ -553,13 +628,40 @@ export class DashVoiceService {
         return;
       }
 
+      const detectedLang = this.detectLanguageFromText(normalizedText);
+
       // Short language code for Edge Function (af, zu, xh, nso, en)
-      let shortLang = 'en';
+      let shortLang: SupportedLanguage = 'en';
+      const requestedLang = options?.language || voiceSettings.language || 'en';
       try {
         const { getCurrentLanguage } = await import('@/lib/i18n');
         const { normalizeLanguageCode, resolveDefaultVoiceId } = await import('@/lib/ai/dashSettings');
         const ui = getCurrentLanguage?.();
-        shortLang = normalizeLanguageCode(options?.language || ui || voiceSettings.language) as any;
+        shortLang = normalizeLanguageCode(requestedLang || ui || voiceSettings.language) as SupportedLanguage;
+
+        // If no explicit language was provided (or it defaults to English),
+        // and the content clearly matches another language, switch to that.
+        if (shortLang === 'en' && detectedLang !== 'en' && this.isTTSSupported(detectedLang)) {
+          shortLang = detectedLang;
+        }
+
+        // Check if TTS is supported for this language
+        if (!this.isTTSSupported(shortLang)) {
+          const langNames: Record<string, string> = {
+            'xh': 'isiXhosa',
+            'xh-ZA': 'isiXhosa',
+            'nso': 'Sepedi',
+            'nso-ZA': 'Sepedi',
+            'st': 'Sesotho',
+            'zu': 'isiZulu',
+            'af': 'Afrikaans',
+            'en': 'English',
+          };
+          const langName = langNames[shortLang] || shortLang;
+          console.warn(`[DashVoice] TTS not supported for ${langName}.`);
+          callbacks?.onError?.(`Voice output not available for ${langName}.`);
+          return;
+        }
 
         // Resolve voice ID preference
         const { voiceService } = await import('@/lib/voice/client');
@@ -574,7 +676,7 @@ export class DashVoiceService {
         const pitch = Math.round(((voiceSettings.pitch ?? 1.0) - 1.0) * 100);
 
 
-        // Try Edge Function (Azure/Google)
+        // Try Edge Function (Azure)
         try {
           const resp = await voiceService.synthesize({
             text: normalizedText,
@@ -596,15 +698,13 @@ export class DashVoiceService {
           });
           return;
         } catch (edgeError: any) {
-          if (edgeError?.code !== 'DEVICE_FALLBACK') {
-            console.warn('[DashVoice] Edge TTS failed or unavailable');
-          }
-          callbacks?.onError?.(new Error('TTS unavailable right now.'));
+          console.warn('[DashVoice] Azure TTS failed or unavailable');
+          callbacks?.onError?.(edgeError instanceof Error ? edgeError : new Error('TTS unavailable right now.'));
           return;
         }
       } catch (mapErr) {
-        console.warn('[DashVoice] Language normalization failed, TTS unavailable');
-        callbacks?.onError?.(new Error('TTS unavailable right now.'));
+        console.warn('[DashVoice] Language normalization failed');
+        callbacks?.onError?.(mapErr instanceof Error ? mapErr : new Error('TTS unavailable right now.'));
         return;
       }
       return;
@@ -758,6 +858,9 @@ export class DashVoiceService {
     
     // Handle underscores and special formatting
     normalized = this.normalizeSpecialFormatting(normalized);
+
+    // Normalize South African language names for cleaner TTS
+    normalized = this.normalizeSouthAfricanLanguageNames(normalized);
     
     // Handle abbreviations and acronyms
     normalized = this.normalizeAbbreviations(normalized);
@@ -945,6 +1048,24 @@ export class DashVoiceService {
       .replace(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|jpg|png|gif)\b/gi, (match, ext) => {
         return ` dot ${ext.toUpperCase().split('').join(' ')}`;
       });
+  }
+
+  /**
+   * Normalize South African language names so TTS pronounces them naturally.
+   * Prevents "i s i Zulu" style spelling.
+   */
+  private normalizeSouthAfricanLanguageNames(text: string): string {
+    return text
+      // Collapse spaced isi-* variants
+      .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
+      .replace(/\bi\s*s\s*i\s+xhosa\b/gi, 'isiXhosa')
+      .replace(/\bi\s*s\s*i\s+ndebele\b/gi, 'isiNdebele')
+      .replace(/\bisi\s+zulu\b/gi, 'isiZulu')
+      .replace(/\bisi\s+xhosa\b/gi, 'isiXhosa')
+      .replace(/\bisi\s+ndebele\b/gi, 'isiNdebele')
+      // Sepedi/Sesotho spacing fixes
+      .replace(/\bse\s+pedi\b/gi, 'Sepedi')
+      .replace(/\bse\s+sotho\b/gi, 'Sesotho');
   }
 
   /**

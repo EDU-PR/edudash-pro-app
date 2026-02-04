@@ -111,8 +111,11 @@ class ExpoSpeechSession implements VoiceSession {
       });
       
       ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
-        console.error('[ExpoProvider] Recognition error:', event.error);
+        const errorText = event?.error ? String(event.error) : 'Speech recognition error';
+        console.error('[ExpoProvider] Recognition error:', errorText);
         this.active = false;
+        this.currentOpts?.onError?.(errorText);
+        this.stop().catch(() => {});
       });
       
       ExpoSpeechRecognitionModule.addListener('end', () => {
@@ -203,4 +206,3 @@ export const expoSpeech: VoiceProvider = {
     return new ExpoSpeechSession();
   },
 };
-

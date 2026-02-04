@@ -48,3 +48,12 @@ export interface BirthdayDonationMonthSummary {
   totalReceived: number;
   daysWithBirthdays: number;
 }
+
+export interface RecordBirthdayDonationReminderInput {
+  donationDate: string;
+  birthdayStudentId: string;
+  payerStudentId?: string | null;
+  recipientUserId: string;
+  classId?: string | null;
+  sentBy?: string | null;
+}

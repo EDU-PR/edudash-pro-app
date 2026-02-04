@@ -262,6 +262,7 @@ export const useParentDashboard = () => {
               student_id
             )
           `)
+          .eq('is_published', true)
           .order('due_date', { ascending: false })
           .limit(10);
 

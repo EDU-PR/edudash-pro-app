@@ -31,6 +31,7 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
     totalReceived: 0,
     daysWithBirthdays: 0,
   });
+  const [todayBirthdaysCount, setTodayBirthdaysCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const monthRange = useMemo(() => {
@@ -47,12 +48,14 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
     if (!organizationId) return;
     setLoading(true);
     try {
-      const [day, month] = await Promise.all([
+      const [day, month, birthdays] = await Promise.all([
         BirthdayDonationsService.getDaySummary(organizationId, todayString),
         BirthdayDonationsService.getMonthSummary(organizationId, monthRange.start, monthRange.end),
+        BirthdayDonationsService.getTodayBirthdays(organizationId, todayString),
       ]);
       setDaySummary(day);
       setMonthSummary(month);
+      setTodayBirthdaysCount(Array.isArray(birthdays) ? birthdays.length : 0);
     } finally {
       setLoading(false);
     }
@@ -62,13 +65,18 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
     void loadSummary();
   }, [loadSummary]);
 
-  const expectedToday = daySummary?.expectedAmount ?? 25;
+  const birthdayCountToday = Math.max(daySummary?.birthdayCount ?? 0, todayBirthdaysCount);
+  const expectedToday = Math.max(daySummary?.expectedAmount ?? 0, birthdayCountToday * 25);
   const receivedToday = daySummary?.totalReceived ?? 0;
-  const remainingToday = Math.max(expectedToday - receivedToday, 0);
+  const displayExpectedToday = Math.max(expectedToday, receivedToday);
+  const remainingToday = Math.max(displayExpectedToday - receivedToday, 0);
+  const noBirthdaysToday = expectedToday <= 0;
 
   const monthExpected = monthSummary.totalExpected;
   const monthReceived = monthSummary.totalReceived;
-  const monthPercent = monthExpected > 0 ? Math.round((monthReceived / monthExpected) * 100) : 0;
+  const displayMonthExpected = Math.max(monthExpected, monthReceived);
+  const monthPercentRaw = monthExpected > 0 ? Math.round((monthReceived / monthExpected) * 100) : 0;
+  const monthPercent = Math.min(100, monthPercentRaw);
 
   if (!organizationId) {
     return (
@@ -92,20 +100,28 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
         <>
           <View style={styles.summaryRow}>
             <Text style={styles.label}>{t('dashboard.birthday_donations.today_label', { defaultValue: 'Today' })}</Text>
-            <Text style={styles.value}>R{receivedToday.toFixed(2)} / R{expectedToday.toFixed(2)}</Text>
+            <Text style={styles.value}>R{receivedToday.toFixed(2)} / R{displayExpectedToday.toFixed(2)}</Text>
           </View>
-          {isPreschool && isFriday && (
-            <Text style={styles.badge}>
-              {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration day' })}
+          {noBirthdaysToday ? (
+            <Text style={styles.muted}>
+              {t('dashboard.birthday_donations.no_birthdays_today', { defaultValue: 'No birthdays today across the school.' })}
             </Text>
+          ) : (
+            <>
+              {isPreschool && isFriday && (
+                <Text style={styles.badge}>
+                  {t('dashboard.birthday_donations.friday_mode', { defaultValue: 'Friday celebration day' })}
+                </Text>
+              )}
+              <Text style={styles.muted}>{t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}: R{remainingToday.toFixed(2)}</Text>
+            </>
           )}
-          <Text style={styles.muted}>{t('dashboard.birthday_donations.remaining', { defaultValue: 'Remaining' })}: R{remainingToday.toFixed(2)}</Text>
 
           <View style={styles.divider} />
 
           <View style={styles.summaryRow}>
             <Text style={styles.label}>{t('dashboard.birthday_donations.month_label', { defaultValue: 'This month' })}</Text>
-            <Text style={styles.value}>R{monthReceived.toFixed(2)} / R{monthExpected.toFixed(2)}</Text>
+            <Text style={styles.value}>R{monthReceived.toFixed(2)} / R{displayMonthExpected.toFixed(2)}</Text>
           </View>
           <Text style={styles.muted}>
             {t('dashboard.birthday_donations.month_progress', { defaultValue: '{{percent}}% collected across {{days}} birthday days', percent: monthPercent, days: monthSummary.daysWithBirthdays })}

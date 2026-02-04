@@ -1,11 +1,39 @@
 import { StyleSheet, Platform, Dimensions } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
-const bubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.9 : screenWidth * 0.88;
+const bubbleMaxWidth = screenWidth < 360 ? screenWidth * 0.92 : screenWidth * 0.94;
+const bubbleMinWidth = screenWidth * 0.9;
 
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
+    overflow: 'hidden',
+  },
+  backgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backgroundGlowA: {
+    position: 'absolute',
+    top: -140,
+    right: -160,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+  },
+  backgroundGlowB: {
+    position: 'absolute',
+    bottom: -180,
+    left: -140,
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+  },
+  contentLayer: {
+    flex: 1,
+    zIndex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -63,12 +91,12 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   usageBanner: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    marginBottom: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -185,8 +213,9 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    padding: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   phaseRailContainer: {
     paddingVertical: 12,
@@ -222,11 +251,9 @@ export const styles = StyleSheet.create({
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 16,
     alignItems: 'flex-start',
-    paddingHorizontal: 0, // No horizontal padding for better layout
     width: '100%',
-    flex: 1,
   },
   userMessage: {
     justifyContent: 'flex-end',
@@ -256,30 +283,40 @@ export const styles = StyleSheet.create({
   },
   messageBubble: {
     maxWidth: bubbleMaxWidth,
-    padding: screenWidth < 400 ? 12 : 14,
+    minWidth: bubbleMinWidth,
+    paddingHorizontal: screenWidth < 400 ? 16 : 18,
+    paddingVertical: screenWidth < 400 ? 12 : 14,
     minHeight: 48,
-    flexShrink: 1,
+    alignSelf: 'flex-start',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    overflow: 'hidden',
   },
   // Modern bubble styles with smooth rounded corners
   userBubble: {
-    borderRadius: 20,
-    borderBottomRightRadius: 6, // Subtle tail effect
+    borderRadius: 22,
+    borderBottomRightRadius: 8,
+    marginLeft: 16,
+    alignSelf: 'flex-end',
   },
   assistantBubble: {
-    borderRadius: 20,
-    borderBottomLeftRadius: 6, // Subtle tail effect
+    borderRadius: 22,
+    borderBottomLeftRadius: 8, // Subtle tail effect
+    marginRight: 32,
   },
   messageText: {
-    fontSize: 14,
-    lineHeight: 21,
-    flexWrap: 'wrap',
-    letterSpacing: 0.3,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.2,
+    flexShrink: 1,
+    fontWeight: '400',
   },
   messageHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   messageHeaderLeft: {
     flexDirection: 'row',
@@ -287,30 +324,33 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   messageRoleLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   phasePill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
+    borderWidth: 1,
   },
   phaseText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   messageContentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 6,
   },
   inlineBubbleRetryButton: {
-    padding: 4,
+    padding: 6,
     marginLeft: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   bubbleHeaderRow: {
@@ -319,9 +359,9 @@ export const styles = StyleSheet.create({
     marginBottom: 6,
   },
   inlineAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6, // Space between avatar and speak button
@@ -345,9 +385,17 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   imagePreviewCard: {
-    borderRadius: 14,
+    borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 1.5,
+    ...(Platform.OS === 'ios' ? {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+    } : {
+      elevation: 3,
+    }),
   },
   imagePreview: {
     width: screenWidth < 360 ? 180 : 210,
@@ -356,8 +404,8 @@ export const styles = StyleSheet.create({
   },
   inlineAnswerContainer: {
     marginTop: 10,
-    padding: 10,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
   },
   inlineAnswerLabel: {
@@ -374,25 +422,34 @@ export const styles = StyleSheet.create({
   },
   inlineAnswerInput: {
     flex: 1,
-    minHeight: 36,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    fontSize: 14,
+    minHeight: 42,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    fontSize: 15,
+    fontWeight: '400',
   },
   inlineAnswerSend: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    ...(Platform.OS === 'ios' ? {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+    } : {
+      elevation: 2,
+    }),
   },
   messageAttachment: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
     gap: 6,
   },
@@ -406,6 +463,7 @@ export const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 10,
+    letterSpacing: 0.2,
     marginTop: 0,
     alignSelf: 'flex-end',
   },
@@ -420,27 +478,27 @@ export const styles = StyleSheet.create({
   followUpChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.08)',
     backgroundColor: 'rgba(0,0,0,0.03)',
     gap: 8,
-    minHeight: 34,
+    minHeight: 40,
     ...(Platform.OS === 'ios' ? {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 2,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     } : {
-      elevation: 1,
+      elevation: 2,
     }),
   },
   followUpText: {
     maxWidth: screenWidth < 360 ? 180 : 220,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '600',
   },
   followUpSendIcon: {
@@ -527,8 +585,21 @@ export const styles = StyleSheet.create({
     textTransform: 'none',
   },
   inputContainer: {
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderTopWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   staffActionsRow: {
     flexDirection: 'row',
@@ -597,15 +668,15 @@ export const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
     position: 'relative',
-    minHeight: 36,
+    minHeight: 44,
   },
   inputAccessoryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     paddingLeft: 10,
   },
   inputIconButton: {
@@ -617,9 +688,10 @@ export const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     maxHeight: 88,
     fontSize: 15,
+    lineHeight: 20,
     borderWidth: 0, // No border, wrapper has border
   },
   sendButton: {
@@ -630,17 +702,29 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   orbButton: {
-    width: 46,
-    height: 46,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 26,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0ea5e9',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   orbPulseRing: {
     position: 'absolute',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 2,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 2.5,
   },
   recordButton: {
     width: 40,
@@ -666,7 +750,8 @@ export const styles = StyleSheet.create({
   messageBubbleFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 8,
+    gap: 8,
   },
   inlineSpeakButton: {
     width: 20,

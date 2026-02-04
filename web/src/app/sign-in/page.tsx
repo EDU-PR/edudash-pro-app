@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { getPendingTeacherInvite, clearPendingTeacherInvite } from "@/lib/utils/pendingTeacherInvite";
 
 // Separate component for search params handling
 function SignInFormWithParams() {
@@ -30,6 +31,10 @@ function SignInFormWithParams() {
     // Check if logged out from another device
     if (searchParams.get('reason') === 'logged_out_other_device') {
       setError('You were logged out because you signed in on another device. EduDash Pro can only be used on one device at a time.');
+    }
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
     }
   }, [searchParams]);
 
@@ -65,6 +70,16 @@ function SignInFormWithParams() {
     }
 
     const role = profile?.role as string | undefined;
+
+    const pendingInvite = getPendingTeacherInvite();
+    if (pendingInvite?.token && pendingInvite?.email) {
+      const params = new URLSearchParams();
+      params.set('token', pendingInvite.token);
+      params.set('email', pendingInvite.email);
+      clearPendingTeacherInvite();
+      router.push(`/invite/teacher?${params.toString()}`);
+      return;
+    }
 
     // Role-based routing
     switch (role) {
