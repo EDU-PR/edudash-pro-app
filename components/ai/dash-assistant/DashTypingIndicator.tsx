@@ -21,6 +21,7 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
   loadingStatus,
 }) => {
   const { theme } = useTheme();
+  const isActive = isLoading || !!loadingStatus;
   
   // Animated typing indicator
   const [dotAnimations] = useState([
@@ -30,7 +31,7 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
   ]);
 
   useEffect(() => {
-    if (isLoading) {
+    if (isActive) {
       const animations = dotAnimations.map((dot: Animated.Value, index: number) => 
         Animated.loop(
           Animated.sequence([
@@ -55,7 +56,7 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
         dot.setValue(0.3);
       });
     }
-  }, [isLoading, dotAnimations]);
+  }, [isActive, dotAnimations]);
 
   const getStatusText = (): string => {
     switch (loadingStatus) {
@@ -87,7 +88,7 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
     }
   };
 
-  if (!isLoading) return null;
+  if (!isActive) return null;
 
   return (
     <View style={styles.typingIndicator}>

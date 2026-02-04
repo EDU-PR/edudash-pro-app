@@ -105,10 +105,26 @@ async function buildFallbackProfileFromSession(
   existingProfile?: EnhancedUserProfile | null
 ): Promise<EnhancedUserProfile> {
   const safeProfile = isSameUserProfile(user, existingProfile) ? existingProfile : null;
+  let dbProfile: any = null;
+  try {
+    const profileQuery = assertSupabase()
+      .from('profiles')
+      .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
+      .eq('id', user.id)
+      .maybeSingle();
+    dbProfile = await Promise.race([
+      profileQuery,
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
+  } catch {
+    dbProfile = null;
+  }
+
   const userMeta = (user.user_metadata || {}) as Record<string, any>;
   const appMeta = (user.app_metadata || {}) as Record<string, any>;
-  const role = (userMeta.role || appMeta.role || safeProfile?.role || 'parent') as any;
+  const role = (dbProfile?.role || userMeta.role || appMeta.role || safeProfile?.role || 'parent') as any;
   const seatStatus =
+    dbProfile?.seat_status ||
     userMeta.seat_status ||
     appMeta.seat_status ||
     safeProfile?.seat_status ||
@@ -122,26 +138,32 @@ async function buildFallbackProfileFromSession(
     safeProfile?.organization_membership?.plan_tier ||
     'free';
   let organizationId =
+    dbProfile?.organization_id ||
+    dbProfile?.preschool_id ||
     userMeta.organization_id ||
     appMeta.organization_id ||
     safeProfile?.organization_id ||
     safeProfile?.organization_membership?.organization_id;
   let organizationName =
+    dbProfile?.organization_name ||
     userMeta.organization_name ||
     appMeta.organization_name ||
     safeProfile?.organization_name ||
     safeProfile?.organization_membership?.organization_name;
   const firstName =
+    dbProfile?.first_name ||
     userMeta.first_name ||
     userMeta.given_name ||
     safeProfile?.first_name ||
     '';
   const lastName =
+    dbProfile?.last_name ||
     userMeta.last_name ||
     userMeta.family_name ||
     safeProfile?.last_name ||
     '';
   const fullName =
+    dbProfile?.full_name ||
     userMeta.full_name ||
     userMeta.name ||
     safeProfile?.full_name ||
@@ -201,7 +223,7 @@ async function buildFallbackProfileFromSession(
 
   const baseProfile = {
     id: user.id,
-    email: user.email || safeProfile?.email || '',
+    email: dbProfile?.email || user.email || safeProfile?.email || '',
     role,
     first_name: firstName,
     last_name: lastName,
@@ -209,7 +231,12 @@ async function buildFallbackProfileFromSession(
     avatar_url: userMeta.avatar_url || userMeta.picture || safeProfile?.avatar_url,
     organization_id: organizationId,
     organization_name: organizationName,
-    preschool_id: userMeta.preschool_id || appMeta.preschool_id || (safeProfile as any)?.preschool_id || organizationId,
+    preschool_id:
+      dbProfile?.preschool_id ||
+      userMeta.preschool_id ||
+      appMeta.preschool_id ||
+      (safeProfile as any)?.preschool_id ||
+      organizationId,
     seat_status: seatStatus,
     capabilities,
     created_at: safeProfile?.created_at || new Date().toISOString(),
@@ -683,7 +710,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (event === 'SIGNED_IN' && s?.user) {
             authDebug('auth.signed_in', { userId: s.user.id });
             // Fetch enhanced profile on sign in (non-blocking for routing)
-            const QUICK_PROFILE_TIMEOUT_MS = 5000;
+            const QUICK_PROFILE_TIMEOUT_MS = 8000;
             let enhancedProfile: EnhancedUserProfile | null = null;
             let usedFallback = false;
             let profileSource: 'rpc' | 'stored' | 'fallback' = 'rpc';
