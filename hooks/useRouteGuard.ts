@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
+import { authDebug } from '@/lib/authDebug';
 
 /**
  * Mobile web guard - currently no-op
@@ -65,20 +66,33 @@ export const useAuthGuard = () => {
         pathname.includes('auth-callback') ||
         pathname.includes('verify'));
     
+    const isProfilesGate =
+      typeof pathname === 'string' && pathname.includes('profiles-gate');
+
     // Not authenticated: redirect to sign-in (unless on auth route)
     if (!user) {
       if (!isAuthRoute && !hasNavigated.current) {
         console.log('[AuthGuard] No user, redirecting to sign-in from:', pathname);
+        authDebug('guard.redirect', { from: pathname, to: '/(auth)/sign-in' });
         hasNavigated.current = true;
         router.replace('/(auth)/sign-in');
       }
+      return;
+    }
+
+    // Authenticated but missing profile: avoid dashboards getting stuck loading
+    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate) {
+      console.log('[AuthGuard] Missing profile, redirecting to profiles-gate from:', pathname);
+      authDebug('guard.redirect', { from: pathname, to: '/profiles-gate' });
+      hasNavigated.current = true;
+      router.replace('/profiles-gate');
       return;
     }
     
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute) {
       // If profile is still loading, let AuthContext handle routing first
-      if (profileLoading) {
+      if (profileLoading || !profile) {
         return;
       }
       // Avoid redirecting with a stale profile from a different user
@@ -98,6 +112,7 @@ export const useAuthGuard = () => {
       }
       
       console.log('[AuthGuard] User authenticated, redirecting from auth route:', pathname);
+      authDebug('guard.redirect', { from: pathname, to: 'dashboard' });
       hasNavigated.current = true;
       lastAttemptAt.current = now;
       

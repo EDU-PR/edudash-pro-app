@@ -3,7 +3,7 @@ import { Text, View, StyleSheet, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
-import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { setPasswordRecoveryInProgress, signOut as signOutSession } from '@/lib/sessionManager';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -116,7 +116,7 @@ export default function AuthCallback() {
               .update({ email: nextEmail, updated_at: new Date().toISOString() })
               .eq('id', session.user.id);
           }
-          await supabase.auth.signOut();
+          await signOutSession();
           const emailParam = nextEmail ? `&email=${encodeURIComponent(nextEmail)}` : '';
           router.replace(`/(auth)/sign-in?emailChanged=true${emailParam}` as `/${string}`);
         } catch {

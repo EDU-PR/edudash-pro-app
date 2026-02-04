@@ -43,7 +43,14 @@ interface UseRealtimeVoiceOptions {
 export function useRealtimeVoice(opts: UseRealtimeVoiceOptions = {}) {
   const {
     enabled = false,
-    url = (process.env.EXPO_PUBLIC_DASH_STREAM_URL as string) || '',
+    url = (() => {
+      const raw = (process.env.EXPO_PUBLIC_DASH_STREAM_URL as string) || '';
+      const normalized = String(raw).trim();
+      if (!normalized) return '';
+      const lowered = normalized.toLowerCase();
+      if (['auto', 'none', 'null', 'undefined'].includes(lowered)) return '';
+      return normalized;
+    })(),
     provider,
     tokenProvider,
     timesliceMs = 250,

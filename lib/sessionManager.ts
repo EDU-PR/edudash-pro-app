@@ -4,6 +4,7 @@ import { track, identifyUser } from '@/lib/analytics';
 import { identifyUserForFlags } from '@/lib/featureFlags';
 import { reportError } from '@/lib/monitoring';
 import { storage as supabaseStorage } from '@/lib/storage';
+import { authDebug } from '@/lib/authDebug';
 import type { Session, User } from '@supabase/supabase-js';
 
 // ============================================================================
@@ -227,10 +228,42 @@ async function getStoredProfile(): Promise<UserProfile | null> {
 }
 
 /**
+ * Get stored profile that matches the requested user (if any).
+ * Useful as a safe fallback during auth transitions.
+ */
+export async function getStoredProfileForUser(userId?: string): Promise<UserProfile | null> {
+  try {
+    const [storedProfile, storedSession] = await Promise.all([
+      getStoredProfile(),
+      getStoredSession(),
+    ]);
+    if (!storedProfile) return null;
+
+    const storedEmail = storedProfile.email?.toLowerCase();
+    const sessionEmail = storedSession?.email?.toLowerCase();
+
+    if (userId) {
+      if (storedProfile.id === userId) return storedProfile;
+      if (storedSession?.user_id === userId) return storedProfile;
+      if (storedEmail && sessionEmail && storedEmail === sessionEmail) return storedProfile;
+      return null;
+    }
+
+    if (storedSession?.user_id && storedProfile.id === storedSession.user_id) return storedProfile;
+    if (storedEmail && sessionEmail && storedEmail === sessionEmail) return storedProfile;
+    return storedProfile;
+  } catch (error) {
+    console.warn('[SessionManager] getStoredProfileForUser failed (non-fatal):', error);
+    return null;
+  }
+}
+
+/**
  * Clear stored session and profile data
  */
 async function clearStoredData(): Promise<void> {
   try {
+    authDebug('clearStoredData.start');
     console.log('[SessionManager] Clearing all stored data...');
     await Promise.all([
       storage.removeItem(SESSION_STORAGE_KEY),
@@ -258,8 +291,41 @@ async function clearStoredData(): Promise<void> {
     await Promise.all(extraKeys.map((key) => supabaseStorage.removeItem(key)));
     
     console.log('[SessionManager] All stored data cleared successfully');
+    authDebug('clearStoredData.done');
   } catch (error) {
     console.error('Failed to clear stored data:', error);
+  }
+}
+
+/**
+ * Clear all stored auth/session data (exported for cross-module cleanup).
+ */
+export async function clearStoredAuthData(): Promise<void> {
+  await clearStoredData();
+}
+
+/**
+ * Persist the current Supabase session into local storage.
+ * Keeps sessionManager in sync with auth flows that bypass signInWithSession.
+ */
+export async function syncSessionFromSupabase(session: Session | null): Promise<void> {
+  try {
+    if (!session?.user?.id) {
+      await clearStoredData();
+      return;
+    }
+
+    const userSession: UserSession = {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token || '',
+      expires_at: session.expires_at || Math.floor(Date.now() / 1000) + 3600,
+      user_id: session.user.id,
+      email: session.user.email || undefined,
+    };
+
+    await storeSession(userSession);
+  } catch (error) {
+    console.warn('[SessionManager] syncSessionFromSupabase failed (non-fatal):', error);
   }
 }
 
@@ -273,10 +339,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
     let profile = null;
     let profileError = null;
     
-    const { data: profileData, error: fetchError } = await assertSupabase()
-      .from('profiles')
-      .select(`
+    const profileSelect = `
         id,
+        auth_user_id,
         email,
         role,
         first_name,
@@ -286,7 +351,11 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
         preschool_id,
         organization_id,
         is_active
-      `)
+      `;
+
+    const { data: profileData, error: fetchError } = await assertSupabase()
+      .from('profiles')
+      .select(profileSelect)
       .eq('id', userId)
       .maybeSingle();
       
@@ -294,6 +363,20 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       profile = profileData;
     } else {
       profileError = fetchError;
+    }
+
+    // Fallback: Some deployments use profiles.auth_user_id instead of id
+    if (!profile) {
+      const { data: authLinkedProfile, error: authLinkedError } = await assertSupabase()
+        .from('profiles')
+        .select(profileSelect)
+        .eq('auth_user_id', userId)
+        .maybeSingle();
+      if (!authLinkedError && authLinkedProfile) {
+        profile = authLinkedProfile;
+      } else if (authLinkedError && !profileError) {
+        profileError = authLinkedError;
+      }
     }
 
     if (profileError && !profile) {
@@ -699,6 +782,7 @@ export async function signInWithSession(
   error?: string;
 }> {
   try {
+    authDebug('signIn.start');
     if (__DEV__) console.log('[SessionManager] signInWithSession called for:', email);
 
     // Quick check if there's an existing session for a different user
@@ -736,13 +820,47 @@ export async function signInWithSession(
     }));
 
     const SIGN_IN_TIMEOUT_MS = 15000;
-    const { data, error } = await withTimeout(
-      signInPromise,
+    const racePromise = Promise.race([
+      signInPromise.then((result) => ({ kind: 'signIn' as const, result })),
+      waitForSessionOrAuth(SIGN_IN_TIMEOUT_MS + 5000).then((session) => ({ kind: 'session' as const, session })),
+    ]);
+
+    const raceResult = await withTimeout(
+      racePromise,
       SIGN_IN_TIMEOUT_MS,
-      { data: { session: null, user: null }, error: new Error('Sign-in timed out') as any }
+      { kind: 'timeout' as const }
     );
 
-    if ((error as any)?.message === 'Sign-in timed out') {
+    if (raceResult.kind === 'session' && raceResult.session?.user) {
+      const wantedEmail = email.trim().toLowerCase();
+      const sessionEmail = raceResult.session.user.email?.toLowerCase();
+      if (!sessionEmail || sessionEmail === wantedEmail) {
+        const session: UserSession = {
+          access_token: raceResult.session.access_token,
+          refresh_token: raceResult.session.refresh_token,
+          expires_at: raceResult.session.expires_at || Date.now() / 1000 + 3600,
+          user_id: raceResult.session.user.id,
+          email: raceResult.session.user.email,
+        };
+        const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
+          fetchUserProfile(raceResult.session.user.id),
+          4000
+        );
+        let profile = fetchedProfile;
+        if (!profile) {
+          if (timedOut) {
+            console.warn('[SessionManager] fetchUserProfile timed out after session signal, using minimal fallback');
+          }
+          profile = await buildMinimalProfileFromUser(raceResult.session.user);
+        }
+        await storeSession(session);
+        await storeProfile(profile);
+        setupAutoRefresh(session);
+        return { session, profile };
+      }
+    }
+
+    if (raceResult.kind === 'timeout') {
       console.warn('[SessionManager] Sign-in timed out - checking for late session...');
       try {
         const lateSession = await waitForSessionOrAuth(10000);
@@ -776,8 +894,14 @@ export async function signInWithSession(
       return { session: null, profile: null, error: 'Sign-in timed out. Please try again.' };
     }
 
+    const { data, error } =
+      raceResult.kind === 'signIn'
+        ? raceResult.result
+        : await signInPromise;
+
     if (error) {
       console.error('[SessionManager] Supabase auth error:', error.message);
+      authDebug('signIn.error', { message: error.message });
       
       // Special handling for "already signed in" errors
       if (error.message?.includes('already') || error.message?.includes('signed in')) {
@@ -909,7 +1033,8 @@ export async function signInWithSession(
         storeSession(session),
         storeProfile(profile),
       ]);
-      console.log('[SessionManager] Session and profile stored successfully');
+    console.log('[SessionManager] Session and profile stored successfully');
+    authDebug('signIn.success', { userId: data.user.id });
     } catch (storeError) {
       console.error('[SessionManager] Storage error:', storeError);
       throw new Error(`Storage failed: ${storeError instanceof Error ? storeError.message : 'Unknown error'}`);
@@ -967,6 +1092,7 @@ export async function signInWithSession(
       stack: error instanceof Error ? error.stack : 'No stack',
     });
     reportError(new Error('Sign-in failed'), { email, error });
+    authDebug('signIn.error', { message: error instanceof Error ? error.message : 'Sign-in failed' });
     return { 
       session: null, 
       profile: null, 
@@ -1057,6 +1183,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
  */
 export async function signOut(): Promise<void> {
   try {
+    authDebug('signOut.start');
     console.log('[SessionManager] Starting sign-out process...');
     const session = await getStoredSession();
     const currentUserId = session?.user_id;
@@ -1121,6 +1248,7 @@ export async function signOut(): Promise<void> {
     });
 
     console.log('[SessionManager] Sign-out completed successfully');
+    authDebug('signOut.done');
 
   } catch (error) {
     console.error('[SessionManager] Sign-out failed:', error);

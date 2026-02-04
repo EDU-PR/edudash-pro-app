@@ -5,7 +5,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
-import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { setPasswordRecoveryInProgress, signOut as signOutSession } from '@/lib/sessionManager';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Central landing handler for deep links
@@ -157,7 +157,7 @@ export default function LandingHandler() {
             );
             setStatus('done');
 
-            await supabase.auth.signOut();
+            await signOutSession();
 
             const nextEmail = data.user?.email || '';
             const emailParam = nextEmail ? `&email=${encodeURIComponent(nextEmail)}` : '';
@@ -236,7 +236,7 @@ export default function LandingHandler() {
             // On native, route to sign-in (preserve invite code if present)
             if (!isWeb) {
               // Sign out user first so they need to sign in with verified credentials
-              await assertSupabase().auth.signOut();
+              await signOutSession();
               // Small delay to show success message
               setTimeout(() => {
                 const inviteParam = inviteCode ? `?invitationCode=${encodeURIComponent(inviteCode)}` : '';
@@ -246,7 +246,7 @@ export default function LandingHandler() {
             }
             
             // On web/PWA, sign out and redirect to sign-in page (preserve invite code)
-            await assertSupabase().auth.signOut();
+            await signOutSession();
             setTimeout(() => {
               const inviteParam = inviteCode ? `&invitationCode=${encodeURIComponent(inviteCode)}` : '';
               window.location.href = `/sign-in?verified=true${inviteParam}`;

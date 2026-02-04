@@ -5,6 +5,7 @@ import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { signOutAndRedirect } from '@/lib/authActions';
 import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
@@ -723,7 +724,7 @@ export default function SuperAdminDashboardScreen() {
           </Text>
           <TouchableOpacity 
             style={[styles.signOutButton, { backgroundColor: theme.error }]}
-            onPress={() => router.replace('/(auth)/sign-in' as any)}
+            onPress={() => signOutAndRedirect({ redirectTo: '/(auth)/sign-in' })}
           >
             <Text style={[styles.signOutButtonText, { color: theme.onError }]}>
               Sign Out

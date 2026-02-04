@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { authDebug } from '@/lib/authDebug';
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import * as Sentry from 'sentry-expo';
 import { assertSupabase } from '@/lib/supabase';
@@ -15,7 +16,7 @@ import {
   type EnhancedUserProfile,
   type PermissionChecker
 } from '@/lib/rbac';
-import { initializeSession, signOut, isPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { initializeSession, signOut, isPasswordRecoveryInProgress, syncSessionFromSupabase, clearStoredAuthData } from '@/lib/sessionManager';
 import { securityAuditor } from '@/lib/security-audit';
 import { initializeVisibilityHandler, destroyVisibilityHandler } from '@/lib/visibilityHandler';
 import type { User } from '@supabase/supabase-js';
@@ -149,10 +150,27 @@ async function buildFallbackProfileFromSession(
   // Best-effort: if org is missing, try to resolve from organization_members
   if (!organizationId) {
     try {
+      const candidateUserIds = new Set<string>();
+      candidateUserIds.add(user.id);
+
+      // If profiles.id differs from auth uid, include it as a lookup key.
+      try {
+        const { data: profileRow } = await assertSupabase()
+          .from('profiles')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        if (profileRow?.id) {
+          candidateUserIds.add(profileRow.id);
+        }
+      } catch {
+        // non-fatal
+      }
+
       const { data: membership } = await assertSupabase()
         .from('organization_members')
         .select('organization_id')
-        .eq('user_id', user.id)
+        .in('user_id', Array.from(candidateUserIds))
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -236,7 +254,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const timeoutPromise = new Promise<EnhancedUserProfile | null>((resolve) => {
         timeoutId = setTimeout(() => resolve(null), PROFILE_FETCH_TIMEOUT_MS);
       });
-      const enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
+      let enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
         fetchEnhancedUserProfile(userId),
         timeoutPromise,
       ]);
@@ -245,6 +263,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       if (!enhancedProfile) {
         console.warn('[AuthContext] fetchProfile timed out or returned null');
+        try {
+          const { getStoredProfileForUser } = await import('@/lib/sessionManager');
+          const storedProfile = await getStoredProfileForUser(userId);
+          if (storedProfile) {
+            enhancedProfile = toEnhancedProfile(storedProfile as any);
+          }
+        } catch (storedErr) {
+          console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+        }
+      }
+      if (!enhancedProfile) {
+        console.warn('[AuthContext] Falling back to session metadata for profile');
+        try {
+          const { data: { user: authUser } } = await assertSupabase().auth.getUser();
+          if (authUser?.id === userId) {
+            enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
+          }
+        } catch (fallbackErr) {
+          console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+        }
       }
       setProfile(enhancedProfile);
       setPermissions(createPermissionChecker(enhancedProfile));
@@ -365,7 +403,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const timeoutPromise = new Promise<null>((resolve) => {
           timeoutId = setTimeout(() => resolve(null), PROFILE_FETCH_TIMEOUT_MS);
         });
-        const enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
+        let enhancedProfile = await Promise.race<EnhancedUserProfile | null>([
           fetchEnhancedUserProfile(userId),
           timeoutPromise,
         ]);
@@ -374,6 +412,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (!enhancedProfile) {
           console.warn('[AuthContext] Profile fetch returned null or timed out');
+          try {
+            const { getStoredProfileForUser } = await import('@/lib/sessionManager');
+            const storedProfile = await getStoredProfileForUser(userId);
+            if (storedProfile) {
+              enhancedProfile = toEnhancedProfile(storedProfile as any);
+            }
+          } catch (storedErr) {
+            console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+          }
+        }
+        if (!enhancedProfile) {
+          try {
+            const { data: { user: authUser } } = await assertSupabase().auth.getUser();
+            if (authUser?.id === userId) {
+              enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
+            }
+          } catch (fallbackErr) {
+            console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+          }
         }
         if (mounted) {
           setProfile(enhancedProfile);
@@ -424,6 +481,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         // Initialize session from storage first
         const { session: storedSession, profile: storedProfile } = await initializeSession();
+        authDebug('initializeSession.result', {
+          hasStoredSession: !!storedSession,
+          storedUserId: storedSession?.user_id,
+          hasStoredProfile: !!storedProfile,
+          storedProfileId: (storedProfile as any)?.id,
+        });
         
         // Debug session restoration
         debugLog('=== SESSION RESTORATION DEBUG ===');
@@ -471,6 +534,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Get current auth session
         const client = assertSupabase();
         const { data } = await client.auth.getSession();
+        authDebug('auth.getSession', {
+          hasSession: !!data.session,
+          userId: data.session?.user?.id,
+        });
+        // Keep sessionManager storage in sync (handles auth flows that bypass signInWithSession)
+        syncSessionFromSupabase(data.session ?? null).catch(() => {});
         if (mounted) {
           setSession(data.session ?? null);
           setUser(data.session?.user ?? null);
@@ -482,8 +551,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const fresh = await fetchProfileLocal(data.session.user.id);
             if (fresh) currentProfile = fresh;
+            authDebug('profile.refresh.boot', { userId: data.session.user.id, success: !!fresh });
           } catch (e) {
             logger.debug('Initial profile refresh failed', e);
+            authDebug('profile.refresh.boot', { userId: data.session.user.id, success: false });
           }
         }
 
@@ -582,6 +653,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // #region agent log
         debugLog('[DEBUG_AGENT] AuthStateChange', JSON.stringify({event,userId:s?.user?.id,email:s?.user?.email,mounted,timestamp:Date.now()}));
         // #endregion
+        authDebug('auth.state', { event, userId: s?.user?.id });
+
+        // Sync session storage for auth flows that bypass sessionManager
+        try {
+          if (event === 'SIGNED_OUT') {
+            await clearStoredAuthData();
+          } else {
+            await syncSessionFromSupabase(s ?? null);
+          }
+        } catch {
+          // Non-fatal: keep going
+        }
         
         const nextUserId = s?.user?.id ?? null;
         const lastUserId = lastUserIdRef.current;
@@ -598,10 +681,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           if (event === 'SIGNED_IN' && s?.user) {
+            authDebug('auth.signed_in', { userId: s.user.id });
             // Fetch enhanced profile on sign in (non-blocking for routing)
             const QUICK_PROFILE_TIMEOUT_MS = 5000;
             let enhancedProfile: EnhancedUserProfile | null = null;
             let usedFallback = false;
+            let profileSource: 'rpc' | 'stored' | 'fallback' = 'rpc';
 
             if (mounted) {
               setProfileLoading(true);
@@ -623,41 +708,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setPermissions(createPermissionChecker(null));
             }
 
-            if (!enhancedProfile) {
-              usedFallback = true;
-              enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
-            }
+            try {
+              if (!enhancedProfile) {
+                try {
+                  const { getStoredProfileForUser } = await import('@/lib/sessionManager');
+                  const storedProfile = await getStoredProfileForUser(s.user.id);
+                  if (storedProfile) {
+                    enhancedProfile = toEnhancedProfile(storedProfile as any);
+                    profileSource = 'stored';
+                  }
+                } catch (storedErr) {
+                  console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+                }
+              }
 
-            if (mounted && enhancedProfile) {
-              setProfile(enhancedProfile);
-              setPermissions(createPermissionChecker(enhancedProfile));
-              if (__DEV__) {
-                console.log('[AuthContext][DEV] Resolved org after sign-in:', {
-                  organization_id: enhancedProfile.organization_id,
-                  organization_name: enhancedProfile.organization_name,
-                  preschool_id: (enhancedProfile as any)?.preschool_id,
-                  membership: enhancedProfile.organization_membership,
+              if (!enhancedProfile) {
+                try {
+                  enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
+                  profileSource = 'fallback';
+                  authDebug('profile.fallback', { userId: s.user.id });
+                } catch (fallbackErr) {
+                  console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+                  enhancedProfile = null;
+                }
+              }
+
+              usedFallback = profileSource !== 'rpc';
+
+              if (mounted && enhancedProfile) {
+                setProfile(enhancedProfile);
+                setPermissions(createPermissionChecker(enhancedProfile));
+                if (__DEV__) {
+                  console.log('[AuthContext][DEV] Resolved org after sign-in:', {
+                    organization_id: enhancedProfile.organization_id,
+                    organization_name: enhancedProfile.organization_name,
+                    preschool_id: (enhancedProfile as any)?.preschool_id,
+                    membership: enhancedProfile.organization_membership,
+                  });
+                }
+                
+                track('edudash.auth.profile_loaded', {
+                  user_id: s.user.id,
+                  has_profile: true,
+                  role: enhancedProfile.role,
+                  capabilities_count: enhancedProfile.capabilities?.length || 0,
+                  source: profileSource,
+                });
+                
+                securityAuditor.auditAuthenticationEvent(s.user.id, 'login', {
+                  role: enhancedProfile.role,
+                  organization: enhancedProfile.organization_id,
+                  capabilities_count: enhancedProfile.capabilities?.length || 0,
+                  source: profileSource,
                 });
               }
-              
-              track('edudash.auth.profile_loaded', {
-                user_id: s.user.id,
-                has_profile: true,
-                role: enhancedProfile.role,
-                capabilities_count: enhancedProfile.capabilities?.length || 0,
-                source: usedFallback ? 'fallback' : 'rpc',
-              });
-              
-              securityAuditor.auditAuthenticationEvent(s.user.id, 'login', {
-                role: enhancedProfile.role,
-                organization: enhancedProfile.organization_id,
-                capabilities_count: enhancedProfile.capabilities?.length || 0,
-                source: usedFallback ? 'fallback' : 'rpc',
-              });
-            }
-
-            if (mounted) {
-              setProfileLoading(false);
+            } catch (profileErr) {
+              console.warn('[AuthContext] Sign-in profile resolution failed:', profileErr);
+            } finally {
+              if (mounted) {
+                setProfileLoading(false);
+              }
             }
 
             // Best-effort: update last_login_at via RPC for OAuth and external flows
@@ -721,7 +831,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               track('edudash.auth.signed_in', {
                 user_id: s.user.id,
                 role: enhancedProfile?.role,
-                profile_source: usedFallback ? 'fallback' : 'rpc',
+                profile_source: profileSource,
               });
 
               // Check if this is a password recovery session
@@ -769,6 +879,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // #region agent log
                 debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
                 // #endregion
+                authDebug('routeAfterLogin.called', { userId: s.user.id });
               } catch (error) {
                 console.error('Post-login routing failed:', error);
                 // #region agent log
@@ -801,6 +912,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (event === 'SIGNED_OUT' && mounted) {
+            authDebug('auth.signed_out', { userId: s?.user?.id || user?.id });
             console.log('[AuthContext] SIGNED_OUT event received, clearing all auth state');
             setProfile(null);
             setPermissions(createPermissionChecker(null));
