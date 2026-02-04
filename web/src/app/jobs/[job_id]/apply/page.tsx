@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { buildJobApplyMetadata } from '@/lib/metadata/jobPosting';
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
@@ -6,6 +8,14 @@ const getParam = (value?: string | string[]) => {
   if (!value) return '';
   return Array.isArray(value) ? value[0] || '' : value;
 };
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { job_id: string };
+}): Promise<Metadata> {
+  return buildJobApplyMetadata(params.job_id);
+}
 
 export default function JobApplyRedirect({
   params,

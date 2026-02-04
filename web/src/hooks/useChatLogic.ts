@@ -345,19 +345,35 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
         }
       }
 
-      // Check for exam request
+      // Check for exam/assessment request
       if (detectExamRequest(textToSend)) {
         const context = extractExamContext(textToSend);
         setExamContext(context);
+        const phase = resolveLearningPhase(context, textToSend);
 
         setTimeout(() => {
-          const examBuilderPrompt: ChatMessage = {
+          if (phase === 'exam') {
+            const examBuilderPrompt: ChatMessage = {
+              id: `msg-${Date.now()}-prompt`,
+              role: 'assistant',
+              content:
+                'Would you like me to help you create a structured exam using the interactive exam builder? It provides a step-by-step process with CAPS-aligned questions.',
+              timestamp: new Date(),
+            };
+            setMessages([...finalMessages, examBuilderPrompt]);
+            return;
+          }
+
+          const assessmentPrompt: ChatMessage = {
             id: `msg-${Date.now()}-prompt`,
             role: 'assistant',
-            content: `Would you like me to help you create a structured exam using the interactive exam builder? It provides a step-by-step process with CAPS-aligned questions.`,
+            content:
+              phase === 'preschool'
+                ? 'For preschoolers, we focus on play-based learning instead of exams. I can guide a short interactive activity, a game, or a simple observation checklist. Want a fun 10-minute activity?'
+                : 'Foundation phase uses assessments, not exams. I can create a short assessment activity or checklist aligned to the topic. Want a quick assessment plan?',
             timestamp: new Date(),
           };
-          setMessages([...finalMessages, examBuilderPrompt]);
+          setMessages([...finalMessages, assessmentPrompt]);
         }, 500);
       }
 
@@ -425,6 +441,12 @@ function extractExamContext(text: string): ExamContext {
   const lowerText = text.toLowerCase();
   
   let grade: string | undefined;
+  if (/(preschool|pre-school|pre k|pre-k|nursery|early childhood)/i.test(lowerText)) {
+    grade = 'preschool';
+  }
+  if (!grade && /(foundation phase|grade r|grade\s*r)/i.test(lowerText)) {
+    grade = 'grade_r';
+  }
   const gradeMatch = lowerText.match(/grade\s*(\d+|r)/i);
   if (gradeMatch) {
     const gradeNum = gradeMatch[1];
@@ -460,6 +482,32 @@ function extractExamContext(text: string): ExamContext {
   }
   
   return { grade, subject, topics: topics.length > 0 ? topics : undefined };
+}
+
+function parseGradeLevel(grade?: string): number | null {
+  if (!grade) return null;
+  const normalized = grade.toLowerCase();
+  if (normalized === 'preschool') return -1;
+  if (normalized === 'grade_r') return 0;
+  const match = normalized.match(/grade_(\d+)/);
+  if (match) return Number(match[1]);
+  return null;
+}
+
+function resolveLearningPhase(
+  context: ExamContext,
+  text: string
+): 'preschool' | 'foundation' | 'exam' | 'unknown' {
+  const lowerText = text.toLowerCase();
+  const gradeLevel = parseGradeLevel(context.grade);
+  const isPreschool =
+    context.grade === 'preschool' ||
+    /(preschool|pre-school|pre k|pre-k|nursery|early childhood)/i.test(lowerText);
+  if (isPreschool) return 'preschool';
+  if (gradeLevel !== null && gradeLevel <= 3) return 'foundation';
+  if (/(foundation phase|grade r|grade\\s*r)/i.test(lowerText)) return 'foundation';
+  if (gradeLevel !== null && gradeLevel >= 4) return 'exam';
+  return 'unknown';
 }
 
 // Helper: Format error message

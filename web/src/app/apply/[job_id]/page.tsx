@@ -34,6 +34,17 @@ type CandidateProfile = {
   id: string;
 };
 
+type SchoolInfo = {
+  id?: string;
+  name: string;
+  logoUrl?: string | null;
+  city?: string | null;
+  province?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+};
+
 export default function ApplyPage() {
   const params = useParams();
   const jobId = Array.isArray(params.job_id) ? params.job_id[0] : params.job_id;
@@ -47,6 +58,7 @@ export default function ApplyPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop'>('desktop');
+  const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -58,6 +70,7 @@ export default function ApplyPage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       if (!jobId || typeof jobId !== 'string') return;
       setLoading(true);
@@ -91,10 +104,56 @@ export default function ApplyPage() {
       }
 
       setJobPosting(data as JobPosting);
-      setLoading(false);
+
+      if (data.preschool_id) {
+        try {
+          const { data: preschool } = await supabase
+            .from('preschools')
+            .select('name, logo_url, city, province, phone, contact_email, website_url')
+            .eq('id', data.preschool_id)
+            .maybeSingle();
+
+          if (preschool) {
+            if (isMounted) {
+              setSchoolInfo({
+                id: data.preschool_id,
+                name: preschool.name,
+                logoUrl: preschool.logo_url,
+                city: preschool.city,
+                province: preschool.province,
+                phone: preschool.phone,
+                email: preschool.contact_email,
+                website: preschool.website_url,
+              });
+            }
+          } else {
+            const { data: org } = await supabase
+              .from('organizations')
+              .select('name, logo_url')
+              .eq('id', data.preschool_id)
+              .maybeSingle();
+            if (org && isMounted) {
+              setSchoolInfo({
+                id: data.preschool_id,
+                name: org.name,
+                logoUrl: org.logo_url,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load school info:', err);
+        }
+      }
+
+      if (isMounted) {
+        setLoading(false);
+      }
     };
 
     void load();
+    return () => {
+      isMounted = false;
+    };
   }, [jobId, supabase, t]);
 
   useEffect(() => {
@@ -127,6 +186,21 @@ export default function ApplyPage() {
     }
     return 'Negotiable';
   };
+
+  const formatSchoolDetails = (info?: SchoolInfo | null) => {
+    if (!info) return '';
+    const location = [info.city, info.province].filter(Boolean).join(', ');
+    const parts = [location, info.phone, info.email, info.website].filter(Boolean);
+    return parts.join(' • ');
+  };
+
+  const getInitials = (name: string) =>
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('');
 
   const validateEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
@@ -295,6 +369,35 @@ export default function ApplyPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-10 px-4">
       <div className="max-w-3xl mx-auto">
         <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 md:p-8 shadow-2xl">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-900/60 border border-slate-700/60 flex items-center justify-center">
+              <img src="/favicon.png" alt="EduDash Pro" className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-widest text-cyan-300/80">EduDash Pro</p>
+              <p className="text-slate-300 text-sm">Hiring Hub Application</p>
+            </div>
+          </div>
+
+          {schoolInfo ? (
+            <div className="mb-6 flex items-center gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/50 p-4">
+              {schoolInfo.logoUrl ? (
+                <img src={schoolInfo.logoUrl} alt={schoolInfo.name} className="w-14 h-14 rounded-2xl object-cover" />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-200 flex items-center justify-center text-lg font-semibold">
+                  {getInitials(schoolInfo.name)}
+                </div>
+              )}
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-400">School</p>
+                <p className="text-white font-semibold text-lg">{schoolInfo.name}</p>
+                {formatSchoolDetails(schoolInfo) ? (
+                  <p className="text-slate-400 text-sm mt-1">{formatSchoolDetails(schoolInfo)}</p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mb-6">
             <p className="text-xs uppercase tracking-widest text-cyan-300/80">{t('apply.headerTitle', { defaultValue: 'Apply for Position' })}</p>
             <h1 className="text-3xl font-bold text-white">{jobPosting?.title || t('apply.screenTitle', { defaultValue: 'Apply for Job' })}</h1>
