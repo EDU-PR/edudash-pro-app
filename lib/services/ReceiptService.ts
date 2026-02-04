@@ -194,7 +194,7 @@ export class ReceiptService {
       .createSignedUrl(result.storagePath, 60 * 60 * 24 * 365);
 
     if (result.storagePath) {
-      await supabase.from('pdf_documents').insert({
+      const receiptRow = {
         document_type: 'receipt',
         filename: result.filename || `receipt-${receiptNumber}.pdf`,
         storage_path: result.storagePath,
@@ -207,8 +207,21 @@ export class ReceiptService {
           fee_id: request.fee.id,
           payment_reference: request.fee.paymentReference,
           receipt_number: receiptNumber,
+          document_subtype: 'receipt',
         },
-      });
+      } as const;
+
+      const { error: receiptInsertError } = await supabase
+        .from('pdf_documents')
+        .insert(receiptRow);
+
+      if (receiptInsertError) {
+        console.warn('[ReceiptService] pdf_documents insert failed, retrying as invoice:', receiptInsertError.message);
+        await supabase.from('pdf_documents').insert({
+          ...receiptRow,
+          document_type: 'invoice',
+        });
+      }
     }
 
     return {
