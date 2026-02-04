@@ -200,6 +200,11 @@ export default function TransactionsScreen() {
   };
 
   const openReceiptUrl = async (url: string) => {
+    const isPdf = /\.pdf(\?|$)/i.test(url);
+    if (isPdf) {
+      router.push({ pathname: '/screens/pdf-viewer', params: { url, title: 'Receipt' } } as any);
+      return;
+    }
     try {
       const supported = await Linking.canOpenURL(url);
       if (!supported) {
@@ -313,6 +318,8 @@ export default function TransactionsScreen() {
 
       const paymentReference = payment.payment_reference || `PAY-${payment.id.slice(0, 8)}`;
       const receiptAmount = Number(payment.amount ?? item.amount ?? 0);
+      const studentName = `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Student';
+      const receiptNumber = `REC-${new Date().getFullYear()}-${payment.id.slice(0, 6).toUpperCase()}`;
 
       const result = await ReceiptService.generateFeeReceipt({
         schoolId,
@@ -374,6 +381,21 @@ export default function TransactionsScreen() {
           .eq('payment_reference', payment.payment_reference);
       }
 
+      await sendReceiptNotification(
+        parentProfile,
+        studentName,
+        result.receiptUrl ?? null,
+        receiptNumber,
+        receiptAmount,
+        {
+          studentId: student.id,
+          feeId,
+          paymentId: payment.id,
+          paymentPurpose: feeDescription,
+          paymentReference,
+        }
+      );
+
       Alert.alert(t('common.success'), t('receipt.generated_success', { defaultValue: 'Receipt generated successfully.' }));
       if (result.receiptUrl) {
         await openReceiptUrl(result.receiptUrl);
@@ -385,6 +407,61 @@ export default function TransactionsScreen() {
     } finally {
       setReceiptLoadingId(null);
     }
+  };
+
+  const sendReceiptNotification = async (
+    parent: { id?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null } | null,
+    studentName: string,
+    receiptUrl: string | null,
+    receiptNumber: string,
+    amount: number,
+    context?: {
+      studentId?: string;
+      feeId?: string;
+      paymentId?: string;
+      paymentPurpose?: string;
+      paymentReference?: string;
+    }
+  ) => {
+    if (!parent?.email && !parent?.id) return;
+    const supabase = assertSupabase();
+    const subject = `Payment receipt for ${studentName}`;
+    const text = receiptUrl
+      ? `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}. Download: ${receiptUrl}`
+      : `Your payment of R ${amount.toFixed(2)} for ${studentName} has been marked as paid. Receipt #${receiptNumber}.`;
+    const html = `
+      <p>Your payment of <strong>R ${amount.toFixed(2)}</strong> for <strong>${studentName}</strong> has been marked as paid.</p>
+      <p>Receipt #: <strong>${receiptNumber}</strong></p>
+      ${receiptUrl ? `<p><a href="${receiptUrl}">Download your receipt</a></p>` : ''}
+    `;
+
+    await supabase.functions.invoke('notifications-dispatcher', {
+      body: {
+        event_type: 'payment_receipt',
+        user_ids: parent?.id ? [parent.id] : undefined,
+        recipient_email: parent?.email || undefined,
+        include_email: true,
+        template_override: {
+          title: 'Payment Receipt Ready',
+          body: `Receipt issued for ${studentName}.`,
+          data: {
+            type: 'receipt',
+            student_name: studentName,
+            receipt_url: receiptUrl,
+            student_id: context?.studentId,
+            fee_id: context?.feeId,
+            payment_id: context?.paymentId,
+            payment_purpose: context?.paymentPurpose,
+            payment_reference: context?.paymentReference,
+          },
+        },
+        email_template_override: {
+          subject,
+          text,
+          html,
+        },
+      },
+    });
   };
 
   const formatCurrency = (amount: number): string => {

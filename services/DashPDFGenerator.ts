@@ -1395,7 +1395,7 @@ class DashPDFGeneratorImpl {
       onProgress?.('render', 85, 'Finalizing...');
 
       // Generate meaningful filename from context
-      const timestamp = new Date().toISOString().split('T')[0];
+      const timestamp = `${new Date().toISOString().replace('T', '_').replace(/[:.]/g, '-')}-${Math.random().toString(36).slice(2, 8)}`;
       
       // Clean and sanitize title for filename
       const sanitizedTitle = title
@@ -1548,7 +1548,8 @@ class DashPDFGeneratorImpl {
         });
 
         if (uploadResult.status < 200 || uploadResult.status >= 300) {
-          throw new Error(`Storage upload failed (${uploadResult.status})`);
+          const details = uploadResult.body ? `: ${uploadResult.body}` : '';
+          throw new Error(`Storage upload failed (${uploadResult.status})${details}`);
         }
       }
 

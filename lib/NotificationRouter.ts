@@ -341,8 +341,8 @@ const resolveBillingTab = (data: NotificationPayload): 'history' | 'upload' => {
 };
 
 const openReceipt = async (receiptUrl: string): Promise<void> => {
-  const lowerUrl = receiptUrl.toLowerCase();
-  if (lowerUrl.endsWith('.pdf')) {
+  const isPdf = /\.pdf(\?|$)/i.test(receiptUrl);
+  if (isPdf) {
     router.push({ pathname: '/screens/pdf-viewer', params: { url: receiptUrl, title: 'Receipt' } } as any);
     return;
   }

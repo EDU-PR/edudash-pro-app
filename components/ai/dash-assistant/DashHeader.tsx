@@ -86,7 +86,7 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
             <View style={{ marginTop: 4 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '500' }}>
-                  Question {tutorSession.questionIndex + 1} of {tutorSession.maxQuestions}
+                  Question {tutorSession.totalQuestions + 1} of {tutorSession.maxQuestions}
                 </Text>
                 <Text style={{ fontSize: 11, color: theme.success, fontWeight: '600' }}>
                   • {tutorSession.correctCount} correct
@@ -101,7 +101,7 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
               }}>
                 <View style={{ 
                   height: '100%', 
-                  width: `${Math.min(100, (tutorSession.questionIndex / tutorSession.maxQuestions) * 100)}%`,
+                  width: `${Math.min(100, (tutorSession.totalQuestions / tutorSession.maxQuestions) * 100)}%`,
                   backgroundColor: theme.primary,
                 }} />
               </View>
