@@ -2092,15 +2092,44 @@ async function recordNotification(
 /**
  * Map event types to notification UI types
  */
-function mapEventTypeToNotificationType(eventType: string): 'info' | 'warning' | 'success' | 'error' {
-  const warningTypes = ['payment_overdue', 'fee_due_soon', 'emergency', 'urgent_announcement', 'pop_uploaded'];
-  const successTypes = ['payment_received', 'assignment_graded', 'homework_submitted'];
-  const errorTypes = ['payment_failed', 'registration_rejected'];
-  
-  if (warningTypes.includes(eventType)) return 'warning';
-  if (successTypes.includes(eventType)) return 'success';
-  if (errorTypes.includes(eventType)) return 'error';
-  return 'info';
+function mapEventTypeToNotificationType(
+  eventType: string
+): 'general' | 'homework' | 'announcement' | 'payment' | 'emergency' | 'reminder' | 'message' {
+  const normalized = eventType.toLowerCase();
+
+  if (normalized.includes('message')) return 'message';
+  if (
+    normalized.includes('announcement') ||
+    normalized === 'form_published' ||
+    normalized.startsWith('school_event_')
+  ) {
+    return 'announcement';
+  }
+  if (normalized.includes('homework') || normalized.includes('assignment')) return 'homework';
+  if (
+    normalized.includes('payment') ||
+    normalized.includes('invoice') ||
+    normalized.includes('subscription') ||
+    normalized.includes('trial') ||
+    normalized.includes('fee') ||
+    normalized.startsWith('pop_')
+  ) {
+    return 'payment';
+  }
+  if (normalized.includes('emergency')) return 'emergency';
+  if (normalized.includes('reminder') || normalized.includes('birthday')) {
+    if (
+      normalized.includes('payment') ||
+      normalized.includes('fee') ||
+      normalized.includes('invoice') ||
+      normalized.includes('trial')
+    ) {
+      return 'payment';
+    }
+    return 'reminder';
+  }
+
+  return 'general';
 }
 
 /**
