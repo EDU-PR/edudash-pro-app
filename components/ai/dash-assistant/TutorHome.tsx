@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,8 @@ interface TutorHomeProps {
   } | null;
 }
 
+const TUTOR_HOME_COLLAPSE_KEY = '@dash_ai_tutor_home_collapsed';
+
 export const TutorHome: React.FC<TutorHomeProps> = ({
   styles,
   theme,
@@ -29,6 +31,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const [ageBand, setAgeBand] = useState('auto');
   const [ageBandLoaded, setAgeBandLoaded] = useState(false);
   const [lastConversationId, setLastConversationId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(Dimensions.get('window').width < 420);
 
   const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
   const isPreschool = normalizedSchool.includes('preschool') ||
@@ -69,6 +72,33 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCollapsePref = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(TUTOR_HOME_COLLAPSE_KEY);
+        if (!mounted) return;
+        if (stored !== null) {
+          setCollapsed(stored === 'true');
+        }
+      } catch {
+        // keep default
+      }
+    };
+    loadCollapsePref();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem(TUTOR_HOME_COLLAPSE_KEY, next ? 'true' : 'false').catch(() => {});
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -123,6 +153,12 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     onSendMessage?.(buildPrompt(intent, topic));
   };
 
+  const defaultQuickStart = useMemo(() => (
+    isPreschool
+      ? 'Use a short story and ask one simple question to get started.'
+      : 'Ask me one short diagnostic question first, then explain step-by-step in simple language.'
+  ), [isPreschool]);
+
   const staffActions = useMemo(() => {
     if (!isStaff) return [];
     const base = isPreschool
@@ -155,6 +191,70 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     return isPreschool ? '/screens/preschool-lesson-generator' : '/screens/ai-lesson-generator';
   }, [isStaff, isPreschool]);
 
+  if (collapsed) {
+    return (
+      <View style={[styles.emptyStateContainer, { paddingBottom: 8 }]}>
+        <LinearGradient
+          colors={['#0b1220', '#101b2d', '#0b1220']}
+          style={[styles.emptyStateHero, { borderColor: theme.border, paddingVertical: 16, marginBottom: 8 }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <View style={[styles.emptyStateLogo, { width: 44, height: 44, borderRadius: 22, backgroundColor: theme.primary }]}>
+                <Ionicons name="sparkles" size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.emptyStateTitle, { color: theme.text, fontSize: 18, marginBottom: 2 }]}>
+                  Tutor mode
+                </Text>
+                <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary, fontSize: 12 }]}>
+                  {isPreschool ? 'Play‑based help in seconds.' : 'Quick help, clear steps, focused practice.'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={toggleCollapsed}
+              accessibilityLabel="Expand tutor mode"
+              style={{
+                padding: 8,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.border,
+                backgroundColor: theme.surfaceVariant,
+              }}
+            >
+              <Ionicons name="chevron-down" size={18} color={theme.text} />
+            </TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <TouchableOpacity
+              style={[
+                styles.primaryCta,
+                { backgroundColor: theme.primary, flexBasis: 'auto', flexGrow: 0, paddingHorizontal: 14, paddingVertical: 8 },
+              ]}
+              onPress={() => sendTutorIntent(defaultQuickStart)}
+            >
+              <Ionicons name="play" size={16} color={theme.onPrimary || '#fff'} />
+              <Text style={[styles.primaryCtaText, { color: theme.onPrimary || '#fff' }]}>Start</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.primaryCta,
+                { backgroundColor: theme.surfaceVariant, borderWidth: 1, borderColor: theme.border, flexBasis: 'auto', flexGrow: 0, paddingHorizontal: 14, paddingVertical: 8 },
+              ]}
+              onPress={toggleCollapsed}
+            >
+              <Ionicons name="options-outline" size={16} color={theme.text} />
+              <Text style={[styles.primaryCtaText, { color: theme.text }]}>Customize</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       contentContainerStyle={styles.emptyStateContainer}
@@ -166,29 +266,42 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        <View style={styles.emptyStateHeroTop}>
-          <View style={[styles.emptyStateLogo, { backgroundColor: theme.primary }]}>
-            <Ionicons name="sparkles" size={28} color="#fff" />
+        <View style={[styles.emptyStateHeroTop, { justifyContent: 'space-between' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <View style={[styles.emptyStateLogo, { backgroundColor: theme.primary }]}>
+              <Ionicons name="sparkles" size={28} color="#fff" />
+            </View>
+            <View style={styles.emptyStateHeroText}>
+              <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
+                {isPreschool ? 'Your play‑based tutor' : 'Your personal tutor'}
+              </Text>
+              <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
+                {isPreschool
+                  ? 'Tell me what your child is learning. I’ll use stories and simple questions.'
+                  : 'Tell me what you’re stuck on. I’ll diagnose, teach, and practice with you.'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.emptyStateHeroText}>
-            <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
-              {isPreschool ? 'Your play‑based tutor' : 'Your personal tutor'}
-            </Text>
-            <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
-              {isPreschool
-                ? 'Tell me what your child is learning. I’ll use stories and simple questions.'
-                : 'Tell me what you’re stuck on. I’ll diagnose, teach, and practice with you.'}
-            </Text>
-          </View>
+          <TouchableOpacity
+            onPress={toggleCollapsed}
+            accessibilityLabel="Collapse tutor mode"
+            style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: theme.surfaceVariant,
+            }}
+          >
+            <Ionicons name="chevron-up" size={18} color={theme.text} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.primaryCtasRow}>
           <TouchableOpacity
             style={[styles.primaryCta, { backgroundColor: theme.primary }]}
             onPress={() => sendTutorIntent(
-              isPreschool
-                ? 'Use a short story and ask one simple question to get started.'
-                : 'Ask me one short diagnostic question first, then explain step-by-step in simple language.'
+              defaultQuickStart
             )}
           >
             <Ionicons name="bulb-outline" size={18} color={theme.onPrimary || '#fff'} />
