@@ -46,6 +46,8 @@ export interface StudentFee {
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived' | 'pending_verification';
   payment_method?: string;
   pop_status?: 'pending' | 'approved' | 'rejected' | 'needs_revision'; // Status of linked POP upload
+  receipt_url?: string | null;
+  receipt_storage_path?: string | null;
 }
 
 export interface FeeStructure {
@@ -82,7 +84,7 @@ export interface POPUpload {
   description?: string;
   file_path: string;
   file_name: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'needs_revision';
   payment_amount?: number;
   payment_date?: string;
   payment_for_month?: string;

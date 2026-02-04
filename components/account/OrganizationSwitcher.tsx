@@ -99,6 +99,7 @@ export function OrganizationSwitcher({
           role,
           member_type,
           membership_status,
+          organization_id,
           organizations:organization_id (
             id,
             name,
@@ -110,6 +111,7 @@ export function OrganizationSwitcher({
         .in('membership_status', ['active', 'pending_verification']);
 
       if (memberships) {
+        const missingOrgIds = new Set<string>();
         for (const membership of memberships) {
           const org = membership.organizations as any;
           if (org?.id) {
@@ -125,7 +127,33 @@ export function OrganizationSwitcher({
                 member_type: membership.member_type,
               });
             }
+          } else if ((membership as any).organization_id) {
+            const orgId = (membership as any).organization_id as string;
+            if (!orgs.some(o => o.id === orgId)) {
+              missingOrgIds.add(orgId);
+            }
           }
+        }
+
+        if (missingOrgIds.size > 0) {
+          const { data: preschools } = await supabase
+            .from('preschools')
+            .select('id, name, logo_url')
+            .in('id', Array.from(missingOrgIds));
+
+          (preschools || []).forEach((school) => {
+            if (!orgs.some(o => o.id === school.id)) {
+              const membership = memberships.find((m: any) => m.organization_id === school.id);
+              orgs.push({
+                id: school.id,
+                name: school.name,
+                logo_url: school.logo_url,
+                type: 'preschool',
+                role: membership?.role,
+                member_type: membership?.member_type,
+              });
+            }
+          });
         }
       }
 
@@ -169,6 +197,8 @@ export function OrganizationSwitcher({
       const supabase = assertSupabase();
 
       // Update profile with new organization
+      const nextRole = org.role || profile?.role;
+
       if (org.type === 'preschool') {
         await supabase
           .from('profiles')
@@ -176,6 +206,7 @@ export function OrganizationSwitcher({
             preschool_id: org.id,
             // Keep canonical organization_id aligned with preschool_id.
             organization_id: org.id,
+            ...(nextRole ? { role: nextRole } : {}),
           })
           .eq('id', user!.id);
       } else {
@@ -184,6 +215,7 @@ export function OrganizationSwitcher({
           .update({ 
             organization_id: org.id,
             // Keep preschool_id for users who have both
+            ...(nextRole ? { role: nextRole } : {}),
           })
           .eq('id', user!.id);
       }

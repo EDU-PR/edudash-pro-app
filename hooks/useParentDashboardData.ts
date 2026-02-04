@@ -134,6 +134,7 @@ export function useParentDashboardData() {
           .from('homework_assignments')
           .select('id')
           .eq('class_id', studentData.class_id)
+          .eq('is_published', true)
           .gte('due_date', today)
           .limit(10);
         
@@ -279,6 +280,7 @@ export function useParentDashboardData() {
                 .from('homework_assignments')
                 .select('id, due_date')
                 .eq('class_id', child.class_id)
+                .eq('is_published', true)
                 .gte('due_date', new Date(Date.now() - 7*24*60*60*1000).toISOString())
                 .lte('due_date', new Date(Date.now() + 14*24*60*60*1000).toISOString());
               const assignmentIds = (assignments || []).map((a: any) => a.id);

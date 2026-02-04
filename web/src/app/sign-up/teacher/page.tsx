@@ -24,7 +24,13 @@ export default function TeacherSignUpPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("invite");
+    const code = params.get("invite") || params.get("inviteCode");
+    const emailParam = params.get("email");
+
+    if (emailParam && !email) {
+      setEmail(emailParam.trim());
+    }
+
     if (!code) return;
     const trimmed = code.trim();
     if (!trimmed) return;
@@ -57,7 +63,7 @@ export default function TeacherSignUpPage() {
         setInviteSchool(null);
       })
       .finally(() => setValidatingInvite(false));
-  }, [supabase]);
+  }, [supabase, email]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,8 +128,8 @@ export default function TeacherSignUpPage() {
       return;
     }
 
-    // Success - redirect to email verification notice
-    router.push('/sign-up/verify-email');
+    // Success - redirect to teacher success screen
+    router.push('/sign-up/teacher/success');
   }
 
   return (

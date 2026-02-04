@@ -30,6 +30,7 @@ export interface DashAssistantMessagesProps {
   onAgeBandChange?: (ageBand: string) => void;
   learnerContext?: LearnerContext | null;
   bottomInset?: number;
+  onScroll?: (scrollY: number) => void;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -48,6 +49,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onSendMessage,
   onAgeBandChange,
   learnerContext,
+  onScroll,
   bottomInset = 0,
   keyboardVisible = false,
 }) => {
@@ -95,12 +97,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
 
   const listStyle = StyleSheet.flatten([
     styles.messagesContainer,
-    { backgroundColor: theme.background },
+    { backgroundColor: 'transparent' },
   ]) as ViewStyle;
   const listContentStyle = StyleSheet.flatten([
     styles.messagesContent,
     {
-      backgroundColor: theme.background,
+      backgroundColor: 'transparent',
       flexGrow: 1,
       paddingBottom: Math.max(
         keyboardVisible ? 80 : 104,
@@ -123,6 +125,13 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       onScroll={(e: any) => {
         try {
           const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent as any;
+          const currentScrollY = contentOffset.y;
+          
+          // Call parent scroll handler for header auto-hide
+          if (onScroll) {
+            onScroll(currentScrollY);
+          }
+          
           const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
           const near = distanceFromBottom <= 200;
           if (near !== isNearBottom) {

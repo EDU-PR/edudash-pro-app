@@ -44,6 +44,7 @@ class ReactNativeVoiceSession implements VoiceSession {
   private active = false;
   private onPartialCallback?: (text: string) => void;
   private onFinalCallback?: (text: string) => void;
+  private onErrorCallback?: (error: string) => void;
   private partialResults: string[] = [];
 
   async start(opts: VoiceStartOptions): Promise<boolean> {
@@ -58,6 +59,7 @@ class ReactNativeVoiceSession implements VoiceSession {
       // Store callbacks
       this.onPartialCallback = opts.onPartial;
       this.onFinalCallback = opts.onFinal;
+      this.onErrorCallback = opts.onError;
       this.partialResults = [];
 
       // Set up event listeners
@@ -150,6 +152,7 @@ class ReactNativeVoiceSession implements VoiceSession {
 
     console.error('[ReactNativeVoice] ❌ Speech error:', e.error);
     this.active = false;
+    this.onErrorCallback?.(errorMsg);
   };
 
   // Cleanup

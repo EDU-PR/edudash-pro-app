@@ -53,7 +53,7 @@ export class DashConversationManager {
       preschoolId: config.preschoolId,
       currentConversationKey:
         config.currentConversationKey || '@dash_ai_current_conversation_id',
-      maxContextMessages: config.maxContextMessages || 10,
+      maxContextMessages: config.maxContextMessages || 20,
     };
 
     // Initialize Supabase service with tenant context

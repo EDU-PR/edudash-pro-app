@@ -64,14 +64,16 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
             grade,
             feedback,
             student_id,
-            assignment:homework_assignments(title)
+            assignment:homework_assignments(title, is_published)
           `)
           .in('student_id', childIds)
           .order('submitted_at', { ascending: false })
           .limit(5);
 
         if (submissions) {
-          submissions.forEach((sub: any) => {
+          submissions
+            .filter((sub: any) => sub.assignment?.is_published !== false)
+            .forEach((sub: any) => {
             const child = children.find((c: any) => c.id === sub.student_id);
             
             if (sub.grade !== null) {

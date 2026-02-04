@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { StudentFee } from '@/types/payments';
 import { formatCurrency, formatPaymentDate } from '@/lib/utils/payment-utils';
@@ -7,9 +7,10 @@ import { formatCurrency, formatPaymentDate } from '@/lib/utils/payment-utils';
 interface PaymentHistoryListProps {
   paidFees: StudentFee[];
   theme: any;
+  onViewReceipt?: (fee: StudentFee) => void;
 }
 
-export function PaymentHistoryList({ paidFees, theme }: PaymentHistoryListProps) {
+export function PaymentHistoryList({ paidFees, theme, onViewReceipt }: PaymentHistoryListProps) {
   const styles = createStyles(theme);
 
   if (paidFees.length === 0) {
@@ -41,6 +42,12 @@ export function PaymentHistoryList({ paidFees, theme }: PaymentHistoryListProps)
             <Ionicons name="checkmark-circle" size={12} color="#22c55e" />
             <Text style={styles.paidBadgeText}>Paid</Text>
           </View>
+          {(fee.receipt_url || fee.receipt_storage_path) && onViewReceipt && (
+            <TouchableOpacity style={styles.receiptButton} onPress={() => onViewReceipt(fee)}>
+              <Ionicons name="document-text-outline" size={14} color={theme.primary} />
+              <Text style={[styles.receiptButtonText, { color: theme.primary }]}>View Receipt</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ))}
     </>
@@ -74,4 +81,14 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 8,
   },
   paidBadgeText: { fontSize: 11, color: '#22c55e', fontWeight: '600' },
+  receiptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  receiptButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

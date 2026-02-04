@@ -14,6 +14,7 @@ interface TeacherCardProps {
   theme: any;
   onViewClasses: (teacherId: string) => void;
   onEditTeacher: (teacherId: string) => void;
+  onDeleteTeacher?: (teacher: Teacher) => void;
 }
 
 export function TeacherCard({
@@ -21,6 +22,7 @@ export function TeacherCard({
   theme,
   onViewClasses,
   onEditTeacher,
+  onDeleteTeacher,
 }: TeacherCardProps) {
   const styles = getStyles(theme);
   const workloadColor = getTeacherWorkloadColor(teacher, theme);
@@ -78,6 +80,15 @@ export function TeacherCard({
         >
           <Ionicons name="create" size={16} color={theme.textSecondary} />
         </TouchableOpacity>
+
+        {onDeleteTeacher && (
+          <TouchableOpacity
+            style={[styles.editTeacherButton, styles.deleteTeacherButton]}
+            onPress={() => onDeleteTeacher(teacher)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -191,6 +202,10 @@ const getStyles = (theme: any) =>
       padding: 12,
       backgroundColor: theme.elevated,
       borderRadius: 6,
+    },
+    deleteTeacherButton: {
+      backgroundColor: theme.error,
+      marginLeft: 8,
     },
     emptyState: {
       alignItems: 'center',

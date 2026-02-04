@@ -10,7 +10,7 @@ import type { POPUpload } from './types';
 const UNIFORM_KEYWORDS = ['uniform'];
 
 function isUniformPayment(data: POPUpload): boolean {
-  const haystack = `${data.description || ''} ${data.title || ''}`.toLowerCase();
+  const haystack = `${data.description || ''} ${data.title || ''} ${data.payment_reference || ''}`.toLowerCase();
   return UNIFORM_KEYWORDS.some((keyword) => haystack.includes(keyword));
 }
 

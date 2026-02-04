@@ -136,6 +136,7 @@ export function useChildMetrics(childId: string | null): UseChildMetricsReturn {
           .from('homework_assignments')
           .select('id')
           .eq('class_id', studentData.class_id)
+          .eq('is_published', true)
           .gte('due_date', today)
           .limit(10);
 

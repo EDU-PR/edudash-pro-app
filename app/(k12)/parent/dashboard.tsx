@@ -27,7 +27,6 @@ import { calculateAge } from '@/lib/date-utils';
 import { styles } from '@/domains/k12/components/K12ParentDashboard.styles';
 import { ChildCard } from '@/domains/k12/components/K12ParentChildCard';
 import { useK12ParentData } from '@/domains/k12/hooks/useK12ParentData';
-import DashOrb from '@/components/dash-orb';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { TierBadge } from '@/components/ui/TierBadge';
 import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
@@ -150,15 +149,6 @@ export default function K12ParentDashboardScreen() {
   const tierLower = String(tier || 'free').toLowerCase();
   const isStarterTier = tierLower === 'parent_starter' || tierLower === 'starter';
   const showGreetingUpgrade = tierLower === 'free' || isStarterTier;
-  const isDashOrbUnlocked = [
-    'parent_plus',
-    'premium',
-    'pro',
-    'enterprise',
-    'school_premium',
-    'school_pro',
-    'school_enterprise',
-  ].includes(tierLower);
 
   const normalizeTierForCapabilities = (value?: string | null): Tier => {
     const raw = String(value || 'free').toLowerCase().replace(/-/g, '_');
@@ -646,17 +636,6 @@ export default function K12ParentDashboardScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Floating Dash AI Orb - Role-aware, works for all users */}
-      <DashOrb 
-        position="bottom-right"
-        size={56}
-        locked={!isDashOrbUnlocked}
-        lockedTitle={t('dash_ai.orb_locked_title', { defaultValue: 'Dash Orb Locked' })}
-        lockedMessage={t('dash_ai.orb_locked_message', { defaultValue: 'Upgrade to Parent Plus to unlock the Dash Orb.' })}
-        lockedCtaLabel={t('common.upgrade', { defaultValue: 'Upgrade' })}
-        onUpgradePress={() => router.push('/screens/subscription-setup' as any)}
-        onCommandExecuted={(cmd) => track('dash_orb_command', { command: cmd, screen: 'k12_parent_dashboard' })}
-      />
       <AlertModal {...alertProps} />
 
       {/* Mobile Navigation Drawer */}

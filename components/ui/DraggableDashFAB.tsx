@@ -16,16 +16,14 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, usePathname } from 'expo-router';
+import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/contexts/SubscriptionContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import DashOrb from '@/components/dash-orb';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const FAB_SIZE = 56;
@@ -39,15 +37,18 @@ interface DraggableDashFABProps {
 export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: DraggableDashFABProps) {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const { tier } = useSubscription();
   const insets = useSafeAreaInsets();
   const { showDashFAB, fabPosition, setFabPosition } = useAppPreferencesSafe();
-  const pathname = usePathname();
+  const normalizedRole = String(profile?.role || '').toLowerCase();
+  const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
   
   // Determine destination based on user role
   const getDestination = () => {
     if (isSuperAdmin(profile?.role)) {
       return '/screens/super-admin-ai-command-center';
+    }
+    if (isTutorRole) {
+      return '/screens/dash-orb';
     }
     return '/screens/dash-assistant';
   };
@@ -170,42 +171,6 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
 
   if (!showDashFAB) {
     return null;
-  }
-
-  const normalizedRole = String(profile?.role || '').toLowerCase();
-  const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
-  const tierLower = String(tier || 'free').toLowerCase();
-  const isDashOrbUnlocked = [
-    'parent_plus',
-    'premium',
-    'pro',
-    'enterprise',
-    'school_premium',
-    'school_pro',
-    'school_enterprise',
-  ].includes(tierLower);
-  const isParentDashboardRoute = typeof pathname === 'string' && (
-    pathname.includes('/screens/parent-dashboard') ||
-    pathname.includes('/(k12)/parent/dashboard') ||
-    pathname.includes('/parent/dashboard')
-  );
-
-  if (isTutorRole && isParentDashboardRoute) {
-    return null;
-  }
-
-  if (isTutorRole && !isParentDashboardRoute) {
-    return (
-      <DashOrb
-        position="bottom-right"
-        size={56}
-        locked={!isDashOrbUnlocked}
-        lockedTitle="Dash Orb Locked"
-        lockedMessage="Upgrade to Parent Plus to unlock the Dash Orb."
-        lockedCtaLabel="Upgrade"
-        onUpgradePress={() => router.push('/screens/subscription-setup')}
-      />
-    );
   }
 
   return (

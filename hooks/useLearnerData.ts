@@ -257,7 +257,8 @@ export function useLearnerSubmissions(enrollmentId?: string) {
             id,
             title,
             description,
-            due_date
+            due_date,
+            is_published
           )
         `)
         .eq('learner_id', learnerId)
@@ -270,7 +271,8 @@ export function useLearnerSubmissions(enrollmentId?: string) {
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as LearnerSubmission[];
+      const filtered = (data || []).filter((row: any) => row.assignment?.is_published !== false);
+      return filtered as LearnerSubmission[];
     },
     enabled: !!learnerId,
     staleTime: 1 * 60 * 1000, // 1 minute
@@ -469,7 +471,6 @@ export function useLearnerProgress() {
     staleTime: 2 * 60 * 1000, // 2 minutes
   });
 }
-
 
 
 

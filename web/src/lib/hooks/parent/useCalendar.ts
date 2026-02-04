@@ -81,6 +81,7 @@ export const useChildCalendarEvents = (studentId: string | undefined, userId: st
             .from('homework_assignments')
             .select('id, title, due_date, class_id, class:classes(name, grade_level)')
             .eq('class_id', student.class_id)
+            .eq('is_published', true)
             .gte('due_date', today.toISOString().split('T')[0])
             .lte('due_date', thirtyDaysLater.toISOString().split('T')[0]);
 

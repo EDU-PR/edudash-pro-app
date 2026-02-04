@@ -29,7 +29,9 @@ export interface AIServiceParams {
   userInput?: string;
   context?: string;
   attachments?: any[];
+  images?: Array<{ data: string; media_type: string }>;
   model?: string;
+  serviceType?: string;
   stream?: boolean;
   onChunk?: (chunk: string) => void;
 }
@@ -78,6 +80,38 @@ export class DashAIClient {
     this.supabaseClient = config.supabaseClient;
     this.getUserProfile = config.getUserProfile;
   }
+
+  private buildAttachmentContext(attachments?: any[]): string | null {
+    if (!Array.isArray(attachments) || attachments.length === 0) return null;
+    const lines = attachments.map((attachment: any) => {
+      const name = attachment?.name || 'Attachment';
+      const kind = attachment?.kind || 'file';
+      const size = typeof attachment?.size === 'number' ? `${Math.round(attachment.size / 1024)} KB` : '';
+      return `- ${name} (${kind}${size ? `, ${size}` : ''})`;
+    });
+    return [
+      'ATTACHMENTS RECEIVED:',
+      ...lines,
+      'If you cannot view the attachments, ask the learner to type the exact question or summarize the document.',
+    ].join('\n');
+  }
+
+  private buildImagePayloads(attachments?: any[], images?: Array<{ data: string; media_type: string }>) {
+    if (Array.isArray(images) && images.length > 0) {
+      return images;
+    }
+    if (!Array.isArray(attachments) || attachments.length === 0) return [];
+    const payloads: Array<{ data: string; media_type: string }> = [];
+    for (const attachment of attachments) {
+      const meta = attachment?.meta || {};
+      const data = meta.image_base64 as string | undefined;
+      const mediaType = (meta.image_media_type as string | undefined) || attachment?.mimeType || 'image/jpeg';
+      if (data && data.length <= 4_000_000) {
+        payloads.push({ data, media_type: mediaType });
+      }
+    }
+    return payloads;
+  }
   
   /**
    * Call AI service with tool support (non-streaming)
@@ -105,7 +139,15 @@ export class DashAIClient {
         const promptText = messagesArr.length > 0
           ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
           : String(params.content || params.userInput || '');
-        return await this.callAIServiceStreaming({ promptText, context: params.context || undefined, model: params.model }, params.onChunk);
+        return await this.callAIServiceStreaming(
+          {
+            promptText,
+            context: params.context || undefined,
+            model: params.model,
+            serviceType: params.serviceType,
+          },
+          params.onChunk
+        );
       }
       
       // Non-streaming call to ai-proxy
@@ -113,6 +155,11 @@ export class DashAIClient {
       const promptText = messagesArr.length > 0
         ? messagesArr.map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content || ''}`).join('\n')
         : String(params.content || params.userInput || '');
+      const attachmentContext = params.context?.includes('ATTACHMENTS RECEIVED')
+        ? null
+        : this.buildAttachmentContext(params.attachments);
+      const mergedContext = [params.context, attachmentContext].filter(Boolean).join('\n\n') || undefined;
+      const images = this.buildImagePayloads(params.attachments, params.images);
       const role = (this.getUserProfile()?.role || 'teacher').toString().toLowerCase();
       const scope: 'teacher' | 'principal' | 'parent' | 'student' =
         (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
@@ -121,10 +168,12 @@ export class DashAIClient {
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
           scope,
-          service_type: 'chat_message',
+          service_type: params.serviceType || 'chat_message',
           payload: {
-            prompt: promptText,
-            context: params.context || undefined,
+            prompt: messagesArr.length > 0 ? undefined : promptText,
+            context: mergedContext,
+            messages: messagesArr.length > 0 ? messagesArr : undefined,
+            images: images.length > 0 ? images : undefined,
             model: params.model || undefined,
           },
           stream: false,
@@ -216,9 +265,14 @@ export class DashAIClient {
     status?: number;
     code?: string;
     message?: string;
+    details?: any;
   }): string {
     if (error.status === 429 || error.code === 'quota_exceeded') {
-      return 'You’ve reached your AI usage limit for today. Please try again later or upgrade your plan.';
+      const quotaInfo = error.details as { usage_count?: number; limit?: number; tier?: string } | undefined;
+      if (quotaInfo?.usage_count && quotaInfo?.limit) {
+        return `You've used ${quotaInfo.usage_count} of ${quotaInfo.limit} AI requests this month (${quotaInfo.tier || 'Free'} tier). Upgrade your plan for more requests!`;
+      }
+      return "You've reached your AI usage limit. Upgrade your plan for unlimited access, or contact support to increase your quota.";
     }
     if (error.status === 401) {
       return 'Your session expired. Please sign in again to continue.';
@@ -304,7 +358,7 @@ export class DashAIClient {
         },
         body: JSON.stringify({
           scope: scope,
-          service_type: 'chat_message',
+          service_type: params.serviceType || 'chat_message',
           payload: {
             prompt: params.promptText,
             context: params.context || undefined,
@@ -496,7 +550,7 @@ export class DashAIClient {
             scope: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
               ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
               : 'teacher'),
-            service_type: 'chat_message',
+            service_type: params.serviceType || 'chat_message',
             payload: {
               prompt: params.promptText,
               context: params.context || undefined,

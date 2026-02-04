@@ -1,5 +1,11 @@
 const APP_SCHEME = 'edudashpro';
 const DEFAULT_WEB_URL = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+export const TEACHER_INVITE_DEEP_LINK = (token: string, email: string): string => {
+  const safeToken = encodeURIComponent(token);
+  const safeEmail = encodeURIComponent(email);
+  // Use triple-slash to avoid treating the first path segment as hostname on Android.
+  return `${APP_SCHEME}:///screens/teacher-invite-accept?token=${safeToken}&email=${safeEmail}`;
+};
 
 interface BuildTeacherInviteMessageInput {
   token: string;
@@ -12,7 +18,7 @@ interface BuildTeacherInviteMessageInput {
 export const buildTeacherInviteLink = (token: string, email: string): string => {
   const safeToken = encodeURIComponent(token);
   const safeEmail = encodeURIComponent(email);
-  return `${APP_SCHEME}://screens/teacher-invite-accept?token=${safeToken}&email=${safeEmail}`;
+  return `${DEFAULT_WEB_URL}/invite/teacher?token=${safeToken}&email=${safeEmail}`;
 };
 
 export const buildTeacherInviteMessage = ({
@@ -30,10 +36,9 @@ export const buildTeacherInviteMessage = ({
   return (
     `You're invited to join ${schoolLabel} on EduDash Pro as a ${role}.\n\n` +
     `${inviterLine}` +
-    `Open in the app: ${inviteLink}\n` +
+    `Open the invite link: ${inviteLink}\n` +
     `Invite token: ${token}\n` +
     `Email: ${email}\n\n` +
     `If the app doesn't open, install EduDash Pro (${DEFAULT_WEB_URL}) and enter the token on "Accept ${role} Invite".`
   );
 };
-

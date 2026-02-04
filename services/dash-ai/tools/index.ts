@@ -21,6 +21,8 @@ import { TextbookContentTool } from './TextbookContentTool';
 import { ExamPrepTool } from './ExamPrepTool';
 import { StudentTutorTool } from './StudentTutorTool';
 import { LearningProgressTool } from './LearningProgressTool';
+import { MistakePatternTool } from './MistakePatternTool';
+import { ContextAwareResourceTool } from './ContextAwareResourceTool';
 
 /**
  * Initialize all tools and register them with the registry.
@@ -42,9 +44,11 @@ export function initializeTools(): void {
   
   // Register Analytics Tools
   DashToolRegistry.registerTool(LearningProgressTool);
+  DashToolRegistry.registerTool(MistakePatternTool);
   
-  // Register User Context Tools
+  // Register Resource & Context Tools
   DashToolRegistry.registerTool(UserContextTool);
+  DashToolRegistry.registerTool(ContextAwareResourceTool);
 
   // TODO: Add more tools here as they're implemented:
   // DashToolRegistry.registerTool(NavigationTool);
@@ -72,3 +76,5 @@ export { TextbookContentTool } from './TextbookContentTool';
 export { ExamPrepTool } from './ExamPrepTool';
 export { StudentTutorTool } from './StudentTutorTool';
 export { LearningProgressTool } from './LearningProgressTool';
+export { MistakePatternTool } from './MistakePatternTool';
+export { ContextAwareResourceTool } from './ContextAwareResourceTool';

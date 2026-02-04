@@ -107,6 +107,7 @@ export interface PrincipalHubData {
   recentActivities: ActivitySummary[] | null;
   pendingReportApprovals: number;
   pendingActivityApprovals: number;
+  pendingHomeworkApprovals: number;
   schoolId: string | null;
   schoolName: string;
 }
@@ -181,6 +182,7 @@ export const usePrincipalHub = () => {
     recentActivities: null,
     pendingReportApprovals: 0,
     pendingActivityApprovals: 0,
+    pendingHomeworkApprovals: 0,
     schoolId: null,
     schoolName: t('dashboard.no_school_assigned_text')
   });
@@ -305,7 +307,8 @@ export const usePrincipalHub = () => {
         registrationFeesResult,
         childRegistrationFeesResult,
         pendingPOPUploadsResult,
-        pendingActivityApprovalsResult
+        pendingActivityApprovalsResult,
+        pendingHomeworkApprovalsResult
       ] = await Promise.allSettled([
         // Get students count
         assertSupabase()
@@ -436,7 +439,15 @@ export const usePrincipalHub = () => {
           .from('interactive_activities')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .eq('approval_status', 'pending')
+          .eq('approval_status', 'pending'),
+
+        // Get pending homework approvals (draft + unpublished)
+        assertSupabase()
+          .from('homework_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .eq('is_published', false)
+          .eq('status', 'draft')
       ]);
       
       // Extract data with error handling
@@ -462,6 +473,9 @@ export const usePrincipalHub = () => {
       const pendingPOPUploadsCount = pendingPOPUploadsResult.status === 'fulfilled' ? (pendingPOPUploadsResult.value.count || 0) : 0;
       const pendingActivityApprovalsCount = pendingActivityApprovalsResult.status === 'fulfilled'
         ? (pendingActivityApprovalsResult.value.count || 0)
+        : 0;
+      const pendingHomeworkApprovalsCount = pendingHomeworkApprovalsResult.status === 'fulfilled'
+        ? (pendingHomeworkApprovalsResult.value.count || 0)
         : 0;
       
       type RegistrationFeeRow = {
@@ -516,6 +530,7 @@ export const usePrincipalHub = () => {
         applicationsCount,
         pendingReportsCount,
         pendingActivityApprovalsCount,
+        pendingHomeworkApprovalsCount,
         pendingRegistrationsCount,
         pendingRegistrationsFromRequests,
         pendingRegistrationsFromChildRequests,
@@ -944,6 +959,7 @@ export const usePrincipalHub = () => {
           recentActivities,
           pendingReportApprovals: pendingReportsCount,
           pendingActivityApprovals: pendingActivityApprovalsCount,
+          pendingHomeworkApprovals: pendingHomeworkApprovalsCount,
           schoolId: preschoolId,
           schoolName
         });

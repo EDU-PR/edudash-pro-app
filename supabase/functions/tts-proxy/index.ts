@@ -186,11 +186,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    const audioBuffer = new Uint8Array(await azureResp.arrayBuffer());
     const contentHash = await sha256(`${text}|${language}|${voiceId}|${speakingRate}|${pitch}|${outputFormat}`);
     const extension = format;
     const objectPath = `tts/${userData.user.id}/${contentHash}.${extension}`;
 
+    // Check if cached audio already exists
+    const { data: existingFile } = await supabase.storage
+      .from(bucket)
+      .list(`tts/${userData.user.id}`, {
+        search: `${contentHash}.${extension}`,
+      });
+
+    if (existingFile && existingFile.length > 0) {
+      const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
+      return jsonResponse(200, {
+        provider: 'azure',
+        audio_url: publicUrl,
+        cache_hit: true,
+        content_hash: contentHash,
+        language,
+        voice_id: voiceId,
+      });
+    }
+
+    // Download audio buffer from Azure
+    const audioBuffer = new Uint8Array(await azureResp.arrayBuffer());
+    
+    if (!audioBuffer || audioBuffer.length === 0) {
+      return jsonResponse(502, {
+        error: 'Azure returned empty audio buffer',
+        provider: 'azure',
+      });
+    }
+
+    // Upload to Supabase Storage
     const upload = await supabase.storage
       .from(bucket)
       .upload(objectPath, audioBuffer, {
@@ -200,9 +229,11 @@ Deno.serve(async (req) => {
       });
 
     if (upload.error) {
+      console.error('[TTS-Proxy] Storage upload failed:', upload.error);
       return jsonResponse(500, {
         error: 'Failed to store audio',
         details: upload.error.message,
+        fallback: 'device',
       });
     }
 
@@ -215,6 +246,7 @@ Deno.serve(async (req) => {
       content_hash: contentHash,
       language,
       voice_id: voiceId,
+      size_bytes: audioBuffer.length,
     });
   } catch (error) {
     return jsonResponse(500, {

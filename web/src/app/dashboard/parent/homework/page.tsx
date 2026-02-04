@@ -164,6 +164,7 @@ export default function HomeworkPage() {
           .from('homework_assignments')
           .select('*')
           .eq('class_id', studentData.class_id)
+          .eq('is_published', true)
           .order('due_date', { ascending: true });
 
         if (schoolId) {

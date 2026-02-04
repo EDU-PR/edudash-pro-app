@@ -4,8 +4,7 @@
  * Handles voice synthesis (TTS) for Dash AI Assistant responses.
  * 
  * Language routing strategy:
- * - en-ZA, af-ZA, zu-ZA: Use native device TTS (excellent support on Android/iOS)
- * - xh-ZA, nso-ZA, others: Use Azure TTS via Edge Function
+ * - Azure TTS only (consistent voices across platforms and better pronunciation for SA languages)
  * 
  * Extracted from DashAIAssistant.ts as part of Phase 4 modularization.
  */
@@ -15,11 +14,8 @@ import { Platform } from 'react-native';
 import { voiceService } from '@/lib/voice/client';
 import type { DashMessage } from '@/services/dash-ai/types';
 
-// Languages with excellent native device TTS support (no Azure needed)
-const NATIVE_TTS_LANGUAGES = ['en', 'af', 'zu'];
-
-// Languages that need Azure TTS (poor or no native support)
-const AZURE_TTS_LANGUAGES = ['xh', 'nso'];
+// Azure TTS languages (short codes accepted by tts-proxy)
+const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
 
 export interface VoiceSettings {
   rate: number;
@@ -44,7 +40,7 @@ export class DashVoiceController {
   
   /**
    * Speak assistant message with TTS
-   * Uses Azure for SA languages (af, zu, xh, nso), device TTS for others
+   * Azure-only to keep pronunciation consistent across platforms
    */
   public async speakResponse(
     message: DashMessage,
@@ -62,7 +58,13 @@ export class DashVoiceController {
         return;
       }
       
-      const normalizedText = this.normalizeTextForSpeech(message.content);
+      const tutorQuestion = (message as any)?.metadata?.tutor_question_text as string | undefined;
+      let rawText = tutorQuestion || message.content || '';
+      if (!tutorQuestion && /next question:/i.test(rawText)) {
+        const split = rawText.split(/next question:/i);
+        rawText = split[1]?.trim() || rawText;
+      }
+      const normalizedText = this.normalizeTextForSpeech(rawText);
       if (normalizedText.length === 0) {
         callbacks?.onError?.('No speakable content');
         return;
@@ -74,34 +76,24 @@ export class DashVoiceController {
       if (!language) {
         const metaLang = (message.metadata?.detected_language || '').toString();
         if (metaLang) language = this.mapLanguageCode(metaLang);
-        else language = this.detectLanguageFromText(message.content);
+        else language = this.detectLanguageFromText(normalizedText);
       }
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
-      const shortCode = this.mapLanguageCode(language);
-      
-      // Routing decision based on language support:
-      // - en, af, zu: Use native device TTS (excellent support)
-      // - xh, nso, others: Use Azure TTS (poor/no native support)
-      const useNativeTTS = NATIVE_TTS_LANGUAGES.includes(shortCode);
-      
-      console.log(`[DashVoiceController] TTS routing: language=${shortCode}, useNative=${useNativeTTS}`);
-      
-      if (useNativeTTS) {
-        // Use native device TTS for well-supported languages
-        try {
-          await this.speakWithDeviceTTS(normalizedText, {
-            ...voiceSettings,
-            language: this.mapToDeviceLocale(shortCode)
-          }, callbacks);
-          if (this.isSpeechAborted) callbacks?.onStopped?.();
-          return;
-        } catch (deviceError) {
-          console.warn('[DashVoiceController] Device TTS failed, trying Azure:', deviceError);
-        }
+      let shortCode = this.mapLanguageCode(language);
+      const detected = this.detectLanguageFromText(normalizedText);
+      if (shortCode === 'en' && detected !== 'en') {
+        shortCode = detected;
       }
       
-      // Use Azure TTS for xh, nso, or as fallback for failed device TTS
+      if (!AZURE_TTS_LANGUAGES.includes(shortCode)) {
+        console.warn(`[DashVoiceController] Unsupported TTS language, defaulting to English: ${shortCode}`);
+        shortCode = 'en';
+      }
+      
+      console.log(`[DashVoiceController] TTS routing: language=${shortCode}, provider=azure`);
+      
+      // Azure-only
       try {
         await this.speakWithAzureTTS(normalizedText, shortCode, callbacks);
         if (this.isSpeechAborted) callbacks?.onStopped?.();
@@ -150,35 +142,60 @@ export class DashVoiceController {
     // The Edge Function expects short codes (af, zu, xh, nso, en)
     const shortCode = this.mapLanguageCode(language);
     
-    const { data, error } = await supabase.functions.invoke('tts-proxy', {
-      // rate/pitch are in -50..50 scale; 0 = normal (1.0x)
-      body: { text, language: shortCode, rate: 0, pitch: 0 }
-    });
-    
-    if (error) throw error;
-    if (data.fallback === 'device') throw new Error('Edge Function returned device fallback');
-    if (!data.audio_url) throw new Error('No audio URL');
-    
-    if (this.isSpeechAborted) {
-      callbacks?.onStopped?.();
-      return;
-    }
-    
-    callbacks?.onStart?.();
-    
-    const { audioManager } = await import('@/lib/voice/audio');
-    await audioManager.play(data.audio_url, (state) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('tts-proxy', {
+        // rate/pitch are in -50..50 scale; 0 = normal (1.0x)
+        body: { text, language: shortCode, rate: 0, pitch: 0 }
+      });
+      
+      if (error) {
+        console.error('[DashVoiceController] TTS proxy error:', error);
+        throw new Error(error.message || 'TTS proxy invocation failed');
+      }
+      
+      if (!data) {
+        throw new Error('No data returned from TTS proxy');
+      }
+      
+      // Check if Edge Function suggests fallback to device
+      if (data.fallback === 'device') {
+        console.log('[DashVoiceController] Azure TTS unavailable, Edge Function returned device fallback');
+        throw new Error('Edge Function returned device fallback');
+      }
+      
+      if (!data.audio_url) {
+        console.error('[DashVoiceController] No audio URL in response:', data);
+        throw new Error('No audio URL in TTS response');
+      }
+      
+      // Check if speech was aborted before playing
       if (this.isSpeechAborted) {
-        audioManager.stop();
+        console.log('[DashVoiceController] Speech aborted before playback started');
         callbacks?.onStopped?.();
         return;
       }
-      if (!state.isPlaying && state.position === 0 && !state.error) {
-        callbacks?.onDone?.();
-      } else if (state.error) {
-        callbacks?.onError?.(new Error(state.error));
-      }
-    });
+      
+      callbacks?.onStart?.();
+      
+      const { audioManager } = await import('@/lib/voice/audio');
+      await audioManager.play(data.audio_url, (state) => {
+        if (this.isSpeechAborted) {
+          console.log('[DashVoiceController] Speech aborted during playback');
+          audioManager.stop();
+          callbacks?.onStopped?.();
+          return;
+        }
+        if (!state.isPlaying && state.position === 0 && !state.error) {
+          callbacks?.onDone?.();
+        } else if (state.error) {
+          console.error('[DashVoiceController] Audio playback error:', state.error);
+          callbacks?.onError?.(new Error(state.error));
+        }
+      });
+    } catch (error) {
+      console.error('[DashVoiceController] Azure TTS failed:', error);
+      throw error;
+    }
   }
   
   /**
@@ -282,6 +299,10 @@ export class DashVoiceController {
       .replace(/[-*+]\s+/g, '') // Lists
       .replace(/\n{2,}/g, '. ') // Multi-newlines
       .replace(/\n/g, ' ') // Single newlines
+      .replace(/[✅❌]/g, '') // Remove emoji status
+      .replace(/\bCorrect answer:\s*/gi, '') // Remove labels
+      .replace(/\bNext question:\s*/gi, '')
+      .replace(/\bHint:\s*/gi, 'Hint. ')
       // IMPROVEMENT: Remove "User:" and "Assistant:" prefixes that shouldn't be spoken
       .replace(/^\s*User:\s*/gi, '') // Remove "User:" at start
       .replace(/\bUser:\s*/gi, '') // Remove "User:" anywhere
@@ -304,8 +325,28 @@ export class DashVoiceController {
       .replace(/(\d+)\s+years\s+old\s+(student|child|kid|boy|girl)/gi, '$1 year old $2')
       // Normalize "X-Y year old" patterns
       .replace(/(\d+)-(\d+)\s+years?\s+old/gi, '$1 to $2 year old');
+
+    normalized = this.normalizeSouthAfricanLanguageNames(normalized);
     
     return normalized;
+  }
+
+  /**
+   * Normalize South African language names so TTS pronounces them naturally.
+   * Prevents "i s i Zulu" style spelling.
+   */
+  private normalizeSouthAfricanLanguageNames(text: string): string {
+    return text
+      // Collapse spaced isi-* variants
+      .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
+      .replace(/\bi\s*s\s*i\s+xhosa\b/gi, 'isiXhosa')
+      .replace(/\bi\s*s\s*i\s+ndebele\b/gi, 'isiNdebele')
+      .replace(/\bisi\s+zulu\b/gi, 'isiZulu')
+      .replace(/\bisi\s+xhosa\b/gi, 'isiXhosa')
+      .replace(/\bisi\s+ndebele\b/gi, 'isiNdebele')
+      // Sepedi/Sesotho spacing fixes
+      .replace(/\bse\s+pedi\b/gi, 'Sepedi')
+      .replace(/\bse\s+sotho\b/gi, 'Sesotho');
   }
   
   /**

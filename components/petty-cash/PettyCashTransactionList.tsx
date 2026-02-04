@@ -5,10 +5,11 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import type { AlertButton } from '@/components/ui/AlertModal';
 import { 
   type PettyCashTransaction, 
   EXPENSE_CATEGORIES,
@@ -25,6 +26,12 @@ interface Props {
   onReverseTransaction: (transaction: PettyCashTransaction) => void;
   onDeleteTransaction: (transactionId: string) => void;
   canDelete: () => Promise<boolean>;
+  showAlert: (config: {
+    title: string;
+    message?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
   theme?: any;
 }
 
@@ -38,6 +45,7 @@ export function PettyCashTransactionList({
   onReverseTransaction,
   onDeleteTransaction,
   canDelete,
+  showAlert,
   theme,
 }: Props) {
   const { t } = useTranslation('common');
@@ -66,7 +74,7 @@ export function PettyCashTransactionList({
   }, [transactions, selectedCategory, selectedRange]);
 
   const handleTransactionOptions = async (transaction: PettyCashTransaction) => {
-    const options: any[] = [];
+    const options: AlertButton[] = [];
     
     options.push({ 
       text: t('receipt.view_receipts', { defaultValue: 'View Receipts' }), 
@@ -100,12 +108,11 @@ export function PettyCashTransactionList({
 
     options.push({ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' });
 
-    Alert.alert(
-      t('transaction.options', { defaultValue: 'Transaction Options' }), 
-      t('transaction.choose_action', { defaultValue: 'Choose an action' }), 
-      options, 
-      { cancelable: true }
-    );
+    showAlert({
+      title: t('transaction.options', { defaultValue: 'Transaction Options' }),
+      message: t('transaction.choose_action', { defaultValue: 'Choose an action' }),
+      buttons: options,
+    });
   };
 
   const allCategories = ['All', ...EXPENSE_CATEGORIES, 'Replenishment', 'Withdrawal/Adjustment'];

@@ -59,6 +59,7 @@ export default function ClassTeacherManagementScreen() {
     handleCreateClass,
     handleAssignTeacher,
     handleRemoveTeacher,
+    handleDeleteTeacher,
     handleToggleClassStatus,
     setShowClassModal,
     setShowTeacherAssignment,
@@ -252,6 +253,7 @@ export default function ClassTeacherManagementScreen() {
                 theme={theme}
                 onViewClasses={navigateTo.teacherClasses}
                 onEditTeacher={navigateTo.editTeacher}
+                onDeleteTeacher={handleDeleteTeacher}
               />
             ))
           )}

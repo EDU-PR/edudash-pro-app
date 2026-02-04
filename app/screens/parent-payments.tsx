@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useParentPayments } from '@/hooks/useParentPayments';
 import type { PaymentTabType, StudentFee } from '@/types/payments';
+import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Import components
 import {
@@ -27,6 +29,15 @@ export default function ParentPaymentsScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const router = useRouter();
+  const { showAlert, alertProps } = useAlertModal();
+  const { tab, childId, studentId } = useLocalSearchParams<{
+    tab?: string;
+    childId?: string;
+    studentId?: string;
+  }>();
+  const normalizedTab: PaymentTabType | undefined =
+    tab === 'upcoming' || tab === 'history' || tab === 'upload' ? (tab as PaymentTabType) : undefined;
+  const requestedChildId = childId || studentId;
   
   // Data hook
   const {
@@ -47,7 +58,7 @@ export default function ParentPaymentsScreen() {
   } = useParentPayments();
 
   // Local UI state
-  const [activeTab, setActiveTab] = useState<PaymentTabType>('upcoming');
+  const [activeTab, setActiveTab] = useState<PaymentTabType>(normalizedTab || 'upcoming');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFeeAmount, setSelectedFeeAmount] = useState('');
   const [selectedFeeReference, setSelectedFeeReference] = useState('');
@@ -62,6 +73,20 @@ export default function ParentPaymentsScreen() {
       reloadFees();
     }, [reloadFees])
   );
+
+  React.useEffect(() => {
+    if (normalizedTab && normalizedTab !== activeTab) {
+      setActiveTab(normalizedTab);
+    }
+  }, [normalizedTab, activeTab]);
+
+  React.useEffect(() => {
+    if (!requestedChildId || children.length === 0) return;
+    const exists = children.some(child => child.id === requestedChildId);
+    if (exists) {
+      setSelectedChildId(requestedChildId);
+    }
+  }, [requestedChildId, children, setSelectedChildId]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -106,6 +131,46 @@ export default function ParentPaymentsScreen() {
       },
     });
   };
+
+  const openReceipt = useCallback(async (fee: StudentFee) => {
+    try {
+      let receiptUrl = fee.receipt_url || null;
+      if (!receiptUrl && fee.receipt_storage_path) {
+        const { data, error } = await assertSupabase().storage
+          .from('generated-pdfs')
+          .createSignedUrl(fee.receipt_storage_path, 3600);
+        if (error) {
+          throw error;
+        }
+        receiptUrl = data?.signedUrl || null;
+      }
+
+      if (!receiptUrl) {
+        showAlert({
+          title: 'Receipt unavailable',
+          message: 'This payment does not have a receipt yet.',
+          type: 'info',
+          buttons: [{ text: 'OK' }],
+        });
+        return;
+      }
+
+      const lowerUrl = receiptUrl.toLowerCase();
+      if (lowerUrl.endsWith('.pdf')) {
+        router.push({ pathname: '/screens/pdf-viewer', params: { url: receiptUrl, title: 'Receipt' } });
+        return;
+      }
+
+      await Linking.openURL(receiptUrl);
+    } catch (error: any) {
+      showAlert({
+        title: 'Receipt error',
+        message: error?.message || 'Unable to open receipt.',
+        type: 'error',
+        buttons: [{ text: 'OK' }],
+      });
+    }
+  }, [router, showAlert]);
 
   const handleUploadSuccess = () => {
     console.log('[ParentPayments] Upload success - reloading all payment data');
@@ -214,7 +279,7 @@ export default function ParentPaymentsScreen() {
           {activeTab === 'history' && (
             <>
               <Text style={styles.sectionTitle}>Payment History</Text>
-              <PaymentHistoryList paidFees={paidFees} theme={theme} />
+              <PaymentHistoryList paidFees={paidFees} theme={theme} onViewReceipt={openReceipt} />
             </>
           )}
 
@@ -260,6 +325,7 @@ export default function ParentPaymentsScreen() {
         paymentForDate={selectedFeeDueDate}
         theme={theme}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 }

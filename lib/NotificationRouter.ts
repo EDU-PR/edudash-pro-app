@@ -7,7 +7,7 @@
  */
 
 import * as Notifications from 'expo-notifications';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { assertSupabase } from './supabase';
 import { signOutAndRedirect } from './authActions';
@@ -288,10 +288,112 @@ export function setupNotificationRouter(): () => void {
   };
 }
 
+const getString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const extractReceiptUrl = (data: NotificationPayload): string | null => {
+  const candidates = [
+    (data as any)?.receipt_url,
+    (data as any)?.receiptUrl,
+    (data as any)?.receiptURL,
+    (data as any)?.receipt,
+    (data as any)?.url,
+  ];
+  for (const candidate of candidates) {
+    const url = getString(candidate);
+    if (url && url.trim()) return url;
+  }
+  return null;
+};
+
+const extractPaymentContext = (data: NotificationPayload): string => {
+  const parts = [
+    getString((data as any)?.payment_context),
+    getString((data as any)?.fee_type),
+    getString((data as any)?.fee_category),
+    getString((data as any)?.payment_purpose),
+    getString((data as any)?.paymentPurpose),
+    getString((data as any)?.description),
+    getString((data as any)?.title),
+    getString((data as any)?.payment_reference),
+  ].filter(Boolean) as string[];
+  return parts.join(' ').toLowerCase();
+};
+
+const isUniformNotification = (data: NotificationPayload): boolean => {
+  const context = extractPaymentContext(data);
+  if (context.includes('uniform')) return true;
+  const feeId = getString((data as any)?.fee_id) || getString((data as any)?.feeId);
+  if (feeId && feeId.toLowerCase().startsWith('uniform')) return true;
+  return false;
+};
+
+const resolveChildId = (data: NotificationPayload): string | undefined =>
+  getString((data as any)?.student_id) || getString((data as any)?.child_id) || getString((data as any)?.childId);
+
+const resolveBillingTab = (data: NotificationPayload): 'history' | 'upload' => {
+  const type = getString(data.type)?.toLowerCase() || '';
+  const combined = `${type} ${getString(data.title) || ''} ${getString(data.body) || ''}`.toLowerCase();
+  if (combined.includes('review') || combined.includes('rejected') || combined.includes('needs attention')) {
+    return 'upload';
+  }
+  return 'history';
+};
+
+const openReceipt = async (receiptUrl: string): Promise<void> => {
+  const lowerUrl = receiptUrl.toLowerCase();
+  if (lowerUrl.endsWith('.pdf')) {
+    router.push({ pathname: '/screens/pdf-viewer', params: { url: receiptUrl, title: 'Receipt' } } as any);
+    return;
+  }
+  try {
+    await Linking.openURL(receiptUrl);
+  } catch {
+    router.push({ pathname: '/screens/pdf-viewer', params: { url: receiptUrl, title: 'Receipt' } } as any);
+  }
+};
+
 /**
  * Handle notification interaction (user tapped notification)
  */
 function handleNotificationInteraction(data: NotificationPayload): void {
+  const receiptUrl = extractReceiptUrl(data);
+  if (receiptUrl) {
+    void openReceipt(receiptUrl);
+    return;
+  }
+
+  const dataType = getString(data.type)?.toLowerCase() || '';
+  const isPaymentLike = [
+    'payment_approved',
+    'payment_rejected',
+    'payment_receipt',
+    'payment_status',
+    'payment_confirmed',
+    'pop_approved',
+    'pop_rejected',
+    'pop_submitted',
+    'receipt',
+  ].includes(dataType);
+
+  if (isUniformNotification(data)) {
+    const childId = resolveChildId(data);
+    if (isPaymentLike) {
+      const params = childId ? { childId } : undefined;
+      router.push({ pathname: '/screens/parent-uniform-payments', params } as any);
+    } else {
+      router.push({ pathname: '/screens/parent-dashboard', params: { focus: 'uniform-sizes' } } as any);
+    }
+    return;
+  }
+  if (isPaymentLike) {
+    const childId = resolveChildId(data);
+    const tab = resolveBillingTab(data);
+    const params = childId ? { tab, childId } : { tab };
+    router.push({ pathname: '/screens/parent-payments', params } as any);
+    return;
+  }
+
   // Route to appropriate screen based on notification type
   switch (data.type) {
     case 'message':
@@ -339,4 +441,3 @@ function handleNotificationInteraction(data: NotificationPayload): void {
       router.push('/screens/parent-dashboard' as any);
   }
 }
-

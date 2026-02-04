@@ -1456,12 +1456,34 @@ class DashPDFGeneratorImpl {
    */
   private async uploadToStorage(localUri: string, filename: string): Promise<string> {
     try {
-      const session = await getCurrentSession();
+      let session = await getCurrentSession();
+      if (!session?.user_id) {
+        const supabase = assertSupabase();
+        const { data: authData } = await supabase.auth.getSession();
+        if (authData?.session?.user?.id) {
+          session = {
+            user_id: authData.session.user.id,
+            access_token: authData.session.access_token,
+            refresh_token: authData.session.refresh_token || '',
+            expires_at: authData.session.expires_at || Math.floor(Date.now() / 1000) + 3600,
+          } as any;
+        }
+      }
+
       if (!session?.user_id) {
         throw new Error('User not authenticated');
       }
 
-      const profile = await getCurrentProfile();
+      let profile = await getCurrentProfile();
+      if (!profile) {
+        const { data: profileRow } = await assertSupabase()
+          .from('profiles')
+          .select('preschool_id, organization_id')
+          .eq('auth_user_id', session.user_id)
+          .maybeSingle();
+        profile = profileRow as any;
+      }
+
       const organizationId = (profile as any)?.preschool_id || (profile as any)?.organization_id;
 
       const storagePath = organizationId 
@@ -1505,10 +1527,20 @@ class DashPDFGeneratorImpl {
           .map((segment) => encodeURIComponent(segment))
           .join('/');
         const uploadUrl = `${supabaseUrl}/storage/v1/object/generated-pdfs/${encodedPath}`;
+        const anonKey =
+          expoConfig.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+          process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+          '';
+        if (!anonKey) {
+          throw new Error('Supabase anon key not configured');
+        }
+
         const uploadResult = await FileSystem.uploadAsync(uploadUrl, localUri, {
           httpMethod: 'POST',
           headers: {
             Authorization: `Bearer ${session.access_token}`,
+            apikey: anonKey,
             'Content-Type': 'application/pdf',
             'x-upsert': 'false',
           },

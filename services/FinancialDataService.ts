@@ -7,7 +7,40 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
-import { inferPaymentCategory, isTuitionFee } from '@/lib/utils/feeUtils';
+import { inferPaymentCategory, isTuitionFee, isUniformFee } from '@/lib/utils/feeUtils';
+
+type FinanceTenantColumn = 'preschool_id' | 'organization_id' | 'school_id';
+
+const PRIMARY_FINANCE_COLUMN: FinanceTenantColumn = 'preschool_id';
+const SECONDARY_FINANCE_COLUMN: FinanceTenantColumn = 'organization_id';
+const FALLBACK_FINANCE_COLUMN: FinanceTenantColumn = 'school_id';
+
+const isMissingFinanceColumnError = (error: any, column: FinanceTenantColumn): boolean => {
+  if (!error) return false;
+  if (error?.code === '42703') return true;
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes(column) && message.includes('does not exist');
+};
+
+const isMissingFinanceTenantColumn = (error: any): boolean =>
+  isMissingFinanceColumnError(error, 'preschool_id') ||
+  isMissingFinanceColumnError(error, 'organization_id') ||
+  isMissingFinanceColumnError(error, 'school_id');
+
+async function withFinanceTenant<T>(
+  buildQuery: (column: FinanceTenantColumn) => Promise<{ data: T | null; error: any; count?: number | null }>
+): Promise<{ data: T | null; error: any; count?: number | null; column: FinanceTenantColumn }> {
+  const primary = await buildQuery(PRIMARY_FINANCE_COLUMN);
+  if (primary?.error && isMissingFinanceColumnError(primary.error, PRIMARY_FINANCE_COLUMN)) {
+    const secondary = await buildQuery(SECONDARY_FINANCE_COLUMN);
+    if (secondary?.error && isMissingFinanceColumnError(secondary.error, SECONDARY_FINANCE_COLUMN)) {
+      const fallback = await buildQuery(FALLBACK_FINANCE_COLUMN);
+      return { ...fallback, column: FALLBACK_FINANCE_COLUMN };
+    }
+    return { ...secondary, column: SECONDARY_FINANCE_COLUMN };
+  }
+  return { ...primary, column: PRIMARY_FINANCE_COLUMN };
+}
 
 export interface UnifiedTransaction {
   id: string;
@@ -84,6 +117,26 @@ export interface FinanceOverviewData {
 }
 
 export class FinancialDataService {
+  private static buildStudentFeesQuery(
+    preschoolId: string,
+    options: { from: string; to: string; useDueDate: boolean }
+  ) {
+    let query = assertSupabase()
+      .from('student_fees')
+      .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at, students!inner(preschool_id, organization_id)')
+      .or(
+        `preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`,
+        { foreignTable: 'students' }
+      );
+
+    if (options.useDueDate) {
+      query = query.gte('due_date', options.from).lt('due_date', options.to);
+    } else {
+      query = query.is('due_date', null).gte('created_at', options.from).lt('created_at', options.to);
+    }
+
+    return query;
+  }
   /**
    * Get financial metrics for a preschool
    */
@@ -100,44 +153,48 @@ export class FinancialDataService {
 
       // Prefer fee due-month accounting so advance payments land in the correct month
       const [feesDueRes, feesFallbackRes] = await Promise.all([
-        assertSupabase()
-          .from('student_fees')
-          .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
-          .gte('due_date', monthStart)
-          .lt('due_date', nextMonthStart),
-        assertSupabase()
-          .from('student_fees')
-          .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
-          .is('due_date', null)
-          .gte('created_at', monthStartDate.toISOString())
-          .lt('created_at', nextMonthDate.toISOString()),
+        this.buildStudentFeesQuery(preschoolId, {
+          from: monthStart,
+          to: nextMonthStart,
+          useDueDate: true,
+        }),
+        this.buildStudentFeesQuery(preschoolId, {
+          from: monthStartDate.toISOString(),
+          to: nextMonthDate.toISOString(),
+          useDueDate: false,
+        }),
       ]);
 
-      if (feesDueRes.error || feesFallbackRes.error) {
-        console.error('Error fetching fees for revenue:', feesDueRes.error || feesFallbackRes.error);
+      if ((feesDueRes as any).error || (feesFallbackRes as any).error) {
+        const feeError = (feesDueRes as any).error || (feesFallbackRes as any).error;
+        if (!isMissingFinanceTenantColumn(feeError)) {
+          console.error('Error fetching fees for revenue:', feeError);
+        }
 
         // Fallback to payment-created date accounting if fee query fails
-        const { data: revenuePayments } = await assertSupabase()
-          .from('payments')
-          .select('amount')
-          .eq('preschool_id', preschoolId)
-          .in('status', ['completed', 'approved'])
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
+        const { data: revenuePayments } = await withFinanceTenant((column) =>
+          assertSupabase()
+            .from('payments')
+            .select('amount')
+            .eq(column, preschoolId)
+            .in('status', ['completed', 'approved'])
+            .gte('created_at', monthStart)
+            .lt('created_at', nextMonthStart)
+        );
         monthlyRevenue = revenuePayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
-        const { data: outstandingPayments } = await assertSupabase()
-          .from('payments')
-          .select('amount')
-          .eq('preschool_id', preschoolId)
-          .in('status', ['pending', 'proof_submitted', 'under_review']);
+        const { data: outstandingPayments } = await withFinanceTenant((column) =>
+          assertSupabase()
+            .from('payments')
+            .select('amount')
+            .eq(column, preschoolId)
+            .in('status', ['pending', 'proof_submitted', 'under_review'])
+        );
         totalOutstanding = outstandingPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
       } else {
         const feeRows = [
-          ...(feesDueRes.data || []),
-          ...(feesFallbackRes.data || []),
+          ...((feesDueRes as any).data || []),
+          ...((feesFallbackRes as any).data || []),
         ];
         monthlyRevenue = feeRows.reduce((sum, fee) => sum + this.getPaidAmountForFee(fee), 0);
         totalOutstanding = feeRows.reduce((sum, fee) => sum + this.getOutstandingAmountForFee(fee), 0);
@@ -163,24 +220,28 @@ export class FinancialDataService {
 
       // Include other expense sources from financial_transactions (completed/approved) for current month
       try {
-        const { data: otherExpTx } = await assertSupabase()
-          .from('financial_transactions')
-          .select('amount, type, status, created_at')
-          .eq('preschool_id', preschoolId)
-          .in('type', ['expense','operational_expense','salary','purchase'])
-          .in('status', ['approved','completed'])
-          .gte('created_at', monthStart)
-          .lt('created_at', nextMonthStart);
+        const { data: otherExpTx } = await withFinanceTenant((column) =>
+          assertSupabase()
+            .from('financial_transactions')
+            .select('amount, type, status, created_at')
+            .eq(column, preschoolId)
+            .in('type', ['expense','operational_expense','salary','purchase'])
+            .in('status', ['approved','completed'])
+            .gte('created_at', monthStart)
+            .lt('created_at', nextMonthStart)
+        );
         const otherExp = (otherExpTx || []).reduce((sum: number, t: any) => sum + Math.abs(Number(t.amount) || 0), 0);
         monthlyExpenses += otherExp;
       } catch { /* Intentional: non-fatal */ }
 
       // Get student count
-      const { count: studentCount } = await assertSupabase()
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .eq('is_active', true);
+      const { count: studentCount } = await withFinanceTenant((column) =>
+        assertSupabase()
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .eq(column, preschoolId)
+          .eq('is_active', true)
+      );
 
       // Calculate metrics
       const netIncome = monthlyRevenue - monthlyExpenses;
@@ -233,45 +294,46 @@ export class FinancialDataService {
         let revenue = 0;
         try {
           const [feesDueRes, feesFallbackRes] = await Promise.all([
-            assertSupabase()
-              .from('student_fees')
-              .select('amount, final_amount, amount_paid, status, due_date, created_at')
-              .eq('preschool_id', preschoolId)
-              .gte('due_date', monthStart)
-              .lt('due_date', nextMonthStart),
-            assertSupabase()
-              .from('student_fees')
-              .select('amount, final_amount, amount_paid, status, due_date, created_at')
-              .eq('preschool_id', preschoolId)
-              .is('due_date', null)
-              .gte('created_at', new Date(`${monthStart}T00:00:00`).toISOString())
-              .lt('created_at', new Date(`${nextMonthStart}T00:00:00`).toISOString()),
+            this.buildStudentFeesQuery(preschoolId, {
+              from: monthStart,
+              to: nextMonthStart,
+              useDueDate: true,
+            }),
+            this.buildStudentFeesQuery(preschoolId, {
+              from: new Date(`${monthStart}T00:00:00`).toISOString(),
+              to: new Date(`${nextMonthStart}T00:00:00`).toISOString(),
+              useDueDate: false,
+            }),
           ]);
 
-          if (feesDueRes.error || feesFallbackRes.error) {
-            const { data: monthlyRevenue } = await assertSupabase()
-              .from('payments')
-              .select('amount')
-              .eq('preschool_id', preschoolId)
-              .in('status', ['completed', 'approved'])
-              .gte('created_at', monthStart)
-              .lt('created_at', nextMonthStart);
+          if ((feesDueRes as any).error || (feesFallbackRes as any).error) {
+            const { data: monthlyRevenue } = await withFinanceTenant((column) =>
+              assertSupabase()
+                .from('payments')
+                .select('amount')
+                .eq(column, preschoolId)
+                .in('status', ['completed', 'approved'])
+                .gte('created_at', monthStart)
+                .lt('created_at', nextMonthStart)
+            );
             revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
           } else {
             const feeRows = [
-              ...(feesDueRes.data || []),
-              ...(feesFallbackRes.data || []),
+              ...((feesDueRes as any).data || []),
+              ...((feesFallbackRes as any).data || []),
             ];
             revenue = feeRows.reduce((sum, fee) => sum + this.getPaidAmountForFee(fee), 0);
           }
         } catch {
-          const { data: monthlyRevenue } = await assertSupabase()
-            .from('payments')
-            .select('amount')
-            .eq('preschool_id', preschoolId)
-            .in('status', ['completed', 'approved'])
-            .gte('created_at', monthStart)
-            .lt('created_at', nextMonthStart);
+          const { data: monthlyRevenue } = await withFinanceTenant((column) =>
+            assertSupabase()
+              .from('payments')
+              .select('amount')
+              .eq(column, preschoolId)
+              .in('status', ['completed', 'approved'])
+              .gte('created_at', monthStart)
+              .lt('created_at', nextMonthStart)
+          );
           revenue = monthlyRevenue?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
         }
 
@@ -290,14 +352,16 @@ export class FinancialDataService {
         const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
         let otherExp = 0;
         try {
-          const { data: monthOther } = await assertSupabase()
-            .from('financial_transactions')
-            .select('amount, type, status, created_at')
-            .eq('preschool_id', preschoolId)
-            .in('type', ['expense','operational_expense','salary','purchase'])
-            .in('status', ['approved','completed'])
-            .gte('created_at', monthStart)
-            .lt('created_at', nextMonthStart);
+          const { data: monthOther } = await withFinanceTenant((column) =>
+            assertSupabase()
+              .from('financial_transactions')
+              .select('amount, type, status, created_at')
+              .eq(column, preschoolId)
+              .in('type', ['expense','operational_expense','salary','purchase'])
+              .in('status', ['approved','completed'])
+              .gte('created_at', monthStart)
+              .lt('created_at', nextMonthStart)
+          );
           otherExp = (monthOther || []).reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
         } catch { /* Intentional: non-fatal */ }
         const expenses = petty + otherExp;
@@ -335,21 +399,23 @@ export class FinancialDataService {
       const transactions: UnifiedTransaction[] = [];
 
       // Get recent payments
-      const { data: payments, error: paymentsError } = await assertSupabase()
-        .from('payments')
-        .select(`
-          id,
-          amount,
-          description,
-          status,
-          created_at,
-          payment_reference,
-          metadata,
-          students!inner(first_name, last_name)
-        `)
-        .eq('preschool_id', preschoolId)
-        .order('created_at', { ascending: false })
-        .limit(Math.ceil(limit / 2));
+      const { data: payments, error: paymentsError } = await withFinanceTenant((column) =>
+        assertSupabase()
+          .from('payments')
+          .select(`
+            id,
+            amount,
+            description,
+            status,
+            created_at,
+            payment_reference,
+            metadata,
+            students!inner(first_name, last_name)
+          `)
+          .eq(column, preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(Math.ceil(limit / 2))
+      );
 
       if (!paymentsError && payments) {
         (payments || []).forEach((payment: any) => {
@@ -455,23 +521,30 @@ export class FinancialDataService {
       const rangeStartDateStr = `${monthWindows[0]?.start.getFullYear()}-${String(monthWindows[0]?.start.getMonth() + 1).padStart(2, '0')}-01`;
       const rangeEndDateStr = `${monthWindows[monthWindows.length - 1]?.end.getFullYear()}-${String(monthWindows[monthWindows.length - 1]?.end.getMonth() + 1).padStart(2, '0')}-01`;
 
-      let feesDueQuery = assertSupabase()
-        .from('student_fees')
-        .select('amount, final_amount, amount_paid, status, due_date, created_at')
-        .gte('due_date', rangeStartDateStr)
-        .lt('due_date', rangeEndDateStr);
+      const feesDuePromise = preschoolId
+        ? this.buildStudentFeesQuery(preschoolId, {
+            from: rangeStartDateStr,
+            to: rangeEndDateStr,
+            useDueDate: true,
+          })
+        : assertSupabase()
+            .from('student_fees')
+            .select('amount, final_amount, amount_paid, status, due_date, created_at')
+            .gte('due_date', rangeStartDateStr)
+            .lt('due_date', rangeEndDateStr);
 
-      let feesFallbackQuery = assertSupabase()
-        .from('student_fees')
-        .select('amount, final_amount, amount_paid, status, due_date, created_at')
-        .is('due_date', null)
-        .gte('created_at', rangeStartIso)
-        .lt('created_at', rangeEndIso);
-
-      if (preschoolId) {
-        feesDueQuery = feesDueQuery.eq('preschool_id', preschoolId);
-        feesFallbackQuery = feesFallbackQuery.eq('preschool_id', preschoolId);
-      }
+      const feesFallbackPromise = preschoolId
+        ? this.buildStudentFeesQuery(preschoolId, {
+            from: rangeStartIso,
+            to: rangeEndIso,
+            useDueDate: false,
+          })
+        : assertSupabase()
+            .from('student_fees')
+            .select('amount, final_amount, amount_paid, status, due_date, created_at')
+            .is('due_date', null)
+            .gte('created_at', rangeStartIso)
+            .lt('created_at', rangeEndIso);
 
       const pettyCashResult = await withPettyCashTenant((column, client) => {
         let query = client
@@ -487,27 +560,39 @@ export class FinancialDataService {
         return query;
       });
 
-      let financialExpenseQuery = assertSupabase()
-        .from('financial_transactions')
-        .select(`
-          amount,
-          created_at,
-          type,
-          expense_categories(name)
-        `)
-        .in('type', expenseTypes as unknown as string[])
-        .in('status', expenseStatuses as unknown as string[])
-        .gte('created_at', rangeStartIso)
-        .lt('created_at', rangeEndIso);
-
-      if (preschoolId) {
-        financialExpenseQuery = financialExpenseQuery.eq('preschool_id', preschoolId);
-      }
+      const financialExpensePromise = preschoolId
+        ? withFinanceTenant((column) =>
+            assertSupabase()
+              .from('financial_transactions')
+              .select(`
+                amount,
+                created_at,
+                type,
+                expense_categories(name)
+              `)
+              .eq(column, preschoolId)
+              .in('type', expenseTypes as unknown as string[])
+              .in('status', expenseStatuses as unknown as string[])
+              .gte('created_at', rangeStartIso)
+              .lt('created_at', rangeEndIso)
+          )
+        : assertSupabase()
+            .from('financial_transactions')
+            .select(`
+              amount,
+              created_at,
+              type,
+              expense_categories(name)
+            `)
+            .in('type', expenseTypes as unknown as string[])
+            .in('status', expenseStatuses as unknown as string[])
+            .gte('created_at', rangeStartIso)
+            .lt('created_at', rangeEndIso);
 
       const [feesDueResult, feesFallbackResult, financialExpenseResult] = await Promise.allSettled([
-        feesDueQuery,
-        feesFallbackQuery,
-        financialExpenseQuery,
+        feesDuePromise,
+        feesFallbackPromise,
+        financialExpensePromise,
       ]);
 
       type FeeRow = {
@@ -537,14 +622,14 @@ export class FinancialDataService {
       };
 
       const feesDueData: FeeRow[] = feesDueResult.status === 'fulfilled'
-        ? (feesDueResult.value.data as FeeRow[] | null) || []
+        ? ('data' in feesDueResult.value ? (feesDueResult.value.data as FeeRow[] | null) || [] : (feesDueResult.value as FeeRow[] | null) || [])
         : [];
       const feesFallbackData: FeeRow[] = feesFallbackResult.status === 'fulfilled'
-        ? (feesFallbackResult.value.data as FeeRow[] | null) || []
+        ? ('data' in feesFallbackResult.value ? (feesFallbackResult.value.data as FeeRow[] | null) || [] : (feesFallbackResult.value as FeeRow[] | null) || [])
         : [];
       const pettyCashData: PettyCashRow[] = (pettyCashResult.data as PettyCashRow[] | null) || [];
       const financialExpenseData: FinancialExpenseRow[] = financialExpenseResult.status === 'fulfilled'
-        ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || []
+        ? ('data' in financialExpenseResult.value ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || [] : (financialExpenseResult.value as FinancialExpenseRow[] | null) || [])
         : [];
 
       const feesData = [...feesDueData, ...feesFallbackData];
@@ -650,32 +735,50 @@ export class FinancialDataService {
 
       // Get payments within date range
       // Use LEFT JOIN (no !inner) so payments without students still return
-      let paymentsQuery = assertSupabase()
-        .from('payments')
-        .select(`
-          id,
-          amount,
-          description,
-          status,
-          created_at,
-          payment_reference,
-          attachment_url,
-          metadata,
-          payment_method,
-          student_id,
-          parent_id,
-          fee_ids,
-          students(first_name, last_name)
-        `)
-        .gte('created_at', paymentStartIso)
-        .lte('created_at', dateRange.to)
-        .order('created_at', { ascending: false });
-
-      if (preschoolId) {
-        paymentsQuery = paymentsQuery.eq('preschool_id', preschoolId);
-      }
-
-      const { data: payments, error: paymentsError } = await paymentsQuery;
+      const { data: payments, error: paymentsError } = preschoolId
+        ? await withFinanceTenant((column) =>
+            assertSupabase()
+              .from('payments')
+              .select(`
+                id,
+                amount,
+                description,
+                status,
+                created_at,
+                payment_reference,
+                attachment_url,
+                metadata,
+                payment_method,
+                student_id,
+                parent_id,
+                fee_ids,
+                students(first_name, last_name)
+              `)
+              .eq(column, preschoolId)
+              .gte('created_at', paymentStartIso)
+              .lte('created_at', dateRange.to)
+              .order('created_at', { ascending: false })
+          )
+        : await assertSupabase()
+            .from('payments')
+            .select(`
+              id,
+              amount,
+              description,
+              status,
+              created_at,
+              payment_reference,
+              attachment_url,
+              metadata,
+              payment_method,
+              student_id,
+              parent_id,
+              fee_ids,
+              students(first_name, last_name)
+            `)
+            .gte('created_at', paymentStartIso)
+            .lte('created_at', dateRange.to)
+            .order('created_at', { ascending: false });
 
       console.log('[FinancialDataService] Payments query result:', {
         count: payments?.length ?? 0,
@@ -687,9 +790,17 @@ export class FinancialDataService {
         console.error('Error fetching payments for transactions:', paymentsError);
       } else if (payments) {
         const feeIds = new Set<string>();
+        const isUuid = (value: string) =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
         payments.forEach((payment: any) => {
           const ids = Array.isArray(payment.fee_ids) ? payment.fee_ids : [];
-          ids.forEach((id: string) => feeIds.add(id));
+          ids.filter((id: string) => typeof id === 'string' && isUuid(id)).forEach((id: string) => feeIds.add(id));
+          const metadata = payment.metadata || {};
+          const feeStructureId = metadata?.fee_structure_id || metadata?.fee_id;
+          if (typeof feeStructureId === 'string' && isUuid(feeStructureId)) {
+            feeIds.add(feeStructureId);
+          }
         });
 
         const feeMap = new Map<string, any>();
@@ -718,11 +829,22 @@ export class FinancialDataService {
             ? `${studentData.first_name} ${studentData.last_name}`
             : 'Student';
           const paymentFeeIds = Array.isArray(payment.fee_ids) ? payment.fee_ids : [];
-          const feeRows = paymentFeeIds
+          const validFeeIds = paymentFeeIds.filter((id: string) => typeof id === 'string' && isUuid(id));
+          const fallbackLabels = paymentFeeIds.filter((id: string) => typeof id === 'string' && !isUuid(id));
+          const metadata = payment.metadata || {};
+          const feeStructureId = metadata?.fee_structure_id || metadata?.fee_id;
+          if (typeof feeStructureId === 'string' && isUuid(feeStructureId) && !validFeeIds.includes(feeStructureId)) {
+            validFeeIds.push(feeStructureId);
+          }
+
+          const feeRows = validFeeIds
             .map((id: string) => feeMap.get(id))
             .filter(Boolean);
 
-          const feeLabels = feeRows.map((fee: any) => this.getFeeLabel(fee));
+          const feeLabels = [
+            ...feeRows.map((fee: any) => this.getFeeLabel(fee)),
+            ...fallbackLabels,
+          ];
           const feeCategories: string[] = feeRows.map((fee: any) => this.getFeeCategoryLabel(fee));
           const uniqueCategories = Array.from(
             new Set(
@@ -732,10 +854,14 @@ export class FinancialDataService {
             )
           );
 
-          const metadata = payment.metadata || {};
+          const metadataHint = metadata?.payment_context || metadata?.fee_type || metadata?.fee_category;
           const fallbackCategory = inferPaymentCategory(
-            payment.description || metadata?.payment_purpose || metadata?.fee_category
+            payment.description || metadata?.payment_purpose || metadataHint
           );
+          if (metadataHint && typeof metadataHint === 'string') {
+            const label = this.normalizeCategoryLabel(metadataHint);
+            if (!feeLabels.length) feeLabels.push(label);
+          }
           const category = uniqueCategories.length === 1
             ? uniqueCategories[0]
             : uniqueCategories.length > 1
@@ -789,7 +915,7 @@ export class FinancialDataService {
             paidDate: payment.created_at ?? null,
             dueDate,
             isAdvancePayment: this.isAdvancePayment(dueDate, payment.created_at),
-            feeIds: paymentFeeIds.length ? paymentFeeIds : null,
+            feeIds: validFeeIds.length ? validFeeIds : null,
             feeLabels,
             feeSummary,
             paymentMethod: payment.payment_method ?? null,
@@ -867,25 +993,40 @@ export class FinancialDataService {
       // Include financial transactions (expenses) within date range
       // Note: financial_transactions uses expense_category_id, not category
       try {
-        let finQuery = assertSupabase()
-          .from('financial_transactions')
-          .select(`
-            id, 
-            amount, 
-            description, 
-            status, 
-            created_at, 
-            type,
-            expense_category_id,
-            expense_categories(name)
-          `)
-          .gte('created_at', dateRange.from)
-          .lte('created_at', dateRange.to)
-          .order('created_at', { ascending: false });
-        if (preschoolId) {
-          finQuery = finQuery.eq('preschool_id', preschoolId);
-        }
-        const { data: finTx, error: finError } = await finQuery;
+        const { data: finTx, error: finError } = preschoolId
+          ? await withFinanceTenant((column) =>
+              assertSupabase()
+                .from('financial_transactions')
+                .select(`
+                  id, 
+                  amount, 
+                  description, 
+                  status, 
+                  created_at, 
+                  type,
+                  expense_category_id,
+                  expense_categories(name)
+                `)
+                .eq(column, preschoolId)
+                .gte('created_at', dateRange.from)
+                .lte('created_at', dateRange.to)
+                .order('created_at', { ascending: false })
+            )
+          : await assertSupabase()
+              .from('financial_transactions')
+              .select(`
+                id, 
+                amount, 
+                description, 
+                status, 
+                created_at, 
+                type,
+                expense_category_id,
+                expense_categories(name)
+              `)
+              .gte('created_at', dateRange.from)
+              .lte('created_at', dateRange.to)
+              .order('created_at', { ascending: false });
         
         console.log('[FinancialDataService] Financial transactions query result:', {
           count: finTx?.length ?? 0,
@@ -1004,6 +1145,9 @@ export class FinancialDataService {
 
   private static getFeeCategoryLabel(fee: any): string {
     const structure = this.getFeeStructure(fee);
+    if (isUniformFee(structure?.fee_type, structure?.name, structure?.description)) {
+      return 'Uniform';
+    }
     if (isTuitionFee(structure?.fee_type, structure?.name, structure?.description)) {
       return 'Tuition';
     }

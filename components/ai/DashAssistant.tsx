@@ -11,17 +11,22 @@
  * - DashTypingIndicator for loading states
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Platform, Dimensions, KeyboardAvoidingView, Keyboard, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { styles } from './DashAssistant.styles';
+import { layoutStyles, headerStyles, messageStyles, inputStyles } from './dash-assistant/styles';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   DashAssistantMessages, 
   DashMessageBubble,
   DashInputBar,
-  DashTypingIndicator 
+  DashTypingIndicator,
+  DashHeader,
+  DashUsageBanner,
+  DashModelSelector,
+  DashContextChips,
 } from './dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
@@ -43,6 +48,15 @@ import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: screenWidth } = Dimensions.get('window');
+
+// Merge all style domains for backward compatibility with child components
+const styles = {
+  ...layoutStyles,
+  ...headerStyles,
+  ...messageStyles,
+  ...inputStyles,
+};
+
 const formatGradeLabel = (grade?: string | null) => {
   if (!grade) return null;
   const raw = String(grade).trim();
@@ -68,15 +82,18 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { tierStatus } = useRealtimeTier();
+  const { tierStatus, refresh: refreshTier } = useRealtimeTier();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
+  const [headerVisible, setHeaderVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
+  const wasLoadingRef = useRef(false);
   // Keyboard listeners for reliable show/hide detection
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -94,6 +111,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) {
+      refreshTier?.();
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, refreshTier]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,6 +158,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     DeviceEventEmitter.emit('dash:wake_word_toggle', next);
   }, [wakeWordEnabled]);
 
+  const handleNewChat = useCallback(async () => {
+    await stopSpeaking();
+    await startNewConversation();
+  }, [startNewConversation, stopSpeaking]);
+
   // Use custom hook for all business logic
   const {
     messages,
@@ -147,11 +176,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     isInitialized,
     enterToSend,
     voiceEnabled,
-    showTypingIndicator,
     autoSuggestQuestions,
     contextualHelp,
     selectedAttachments,
     isUploading,
+    attachmentProgress,
     isNearBottom,
     setIsNearBottom,
     unreadCount,
@@ -164,12 +193,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     alertState,
     hideAlert,
     learnerContext,
+    tutorSession,
     flashListRef,
     inputRef,
     sendMessage,
     sendTutorAnswer,
     speakResponse,
     stopSpeaking,
+    startNewConversation,
     scrollToBottom,
     handleAttachFile,
     handleTakePhoto,
@@ -558,14 +589,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
   // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
-    if (!showTypingIndicator) return null;
+    if (!isLoading) return null;
     return (
       <DashTypingIndicator 
         isLoading={isLoading} 
         loadingStatus={loadingStatus} 
       />
     );
-  }, [isLoading, loadingStatus, showTypingIndicator]);
+  }, [isLoading, loadingStatus]);
 
   // Render suggested actions
   const renderSuggestedActions = useCallback(() => {
@@ -616,20 +647,20 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     };
 
     return (
-      <View style={styles.suggestedActionsContainer}>
-        <Text style={[styles.suggestedActionsTitle, { color: theme.textSecondary }]}>
-          Quick actions:
+      <View style={messageStyles.suggestedActionsContainer}>
+        <Text style={[messageStyles.suggestedActionsTitle, { color: theme.textSecondary }]}>
+          Quick actions
         </Text>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.suggestedActionsScrollContent}
+          contentContainerStyle={messageStyles.suggestedActionsScrollContent}
         >
           {lastMessage.metadata.suggested_actions.map((action: string, index: number) => (
             <TouchableOpacity
               key={index}
               style={[
-                styles.suggestedAction, 
+                messageStyles.suggestedAction, 
                 { 
                   backgroundColor: action.includes('dashboard') ? theme.primaryLight : theme.surfaceVariant,
                   borderColor: action.includes('dashboard') ? theme.primary : theme.border,
@@ -638,7 +669,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               ]}
               onPress={() => handleSuggestedAction(action)}
             >
-              <Text style={[styles.suggestedActionText, { color: theme.text }]}>
+              <Text style={[messageStyles.suggestedActionText, { color: theme.text }]}>
                 {getActionDisplayText(action)}
               </Text>
             </TouchableOpacity>
@@ -651,182 +682,96 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   // Loading state
   if (!isInitialized) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+      <View style={[layoutStyles.loadingContainer, { backgroundColor: theme.background }]}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <EduDashSpinner size="large" color={theme.primary} />
-        <Text style={[styles.loadingText, { color: theme.text }]}>
+        <Text style={[layoutStyles.loadingText, { color: theme.text }]}>
           Initializing Dash...
         </Text>
       </View>
     );
   }
 
-    const Container: React.ElementType = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-    const keyboardOffset = insets.top + (Platform.OS === 'ios' ? 6 : 0);
-    const containerProps = Platform.OS === 'ios'
-      ? { behavior: 'padding' as const, keyboardVerticalOffset: keyboardOffset }
-      : {};
+    const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
+    const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
+    const backgroundBase = isDark
+      ? ['#0B1020', '#0F172A', theme.background]
+      : ['#F7FAFF', '#EEF2FF', '#F8FAFC'];
+    const glowA = isDark
+      ? ['rgba(14,165,233,0.32)', 'rgba(59,130,246,0.05)', 'transparent']
+      : ['rgba(14,165,233,0.35)', 'rgba(34,211,238,0.12)', 'transparent'];
+    const glowB = isDark
+      ? ['rgba(16,185,129,0.25)', 'rgba(99,102,241,0.06)', 'transparent']
+      : ['rgba(16,185,129,0.3)', 'rgba(59,130,246,0.08)', 'transparent'];
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
-      <Container 
-        style={[styles.container, { backgroundColor: theme.background }]}
-        {...containerProps}
+      <KeyboardAvoidingView 
+        style={[layoutStyles.container, { backgroundColor: theme.background }]}
+        behavior={keyboardBehavior}
+        keyboardVerticalOffset={keyboardOffset}
       >
+        <View pointerEvents="none" style={layoutStyles.backgroundLayer}>
+          <LinearGradient colors={backgroundBase} style={layoutStyles.backgroundGradient} />
+          <LinearGradient colors={glowA} style={layoutStyles.backgroundGlowA} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          <LinearGradient colors={glowB} style={layoutStyles.backgroundGlowB} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} />
+        </View>
+        <View style={layoutStyles.contentLayer}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-          <View style={styles.headerLeft}>
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>
-                  {roleCopy.title}
-                </Text>
-                {subReady && tier && (
-                  <TierBadge tier={tier as any} size="sm" />
-                )}
-              </View>
-              <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-                {roleCopy.subtitle}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.headerRight}>
-            {isSpeaking && (
-              <TouchableOpacity
-                style={[styles.iconButton, { backgroundColor: theme.error }]}
-                accessibilityLabel="Stop speaking"
-                onPress={stopSpeaking}
-              >
-                <Ionicons name="stop" size={screenWidth < 400 ? 18 : 22} color={theme.onError || theme.background} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.iconButton}
-              accessibilityLabel="Conversations"
-              onPress={() => router.push('/screens/dash-conversations-history')}
-            >
-              <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
-            </TouchableOpacity>
-            {showAdvancedControls && (
-              <TouchableOpacity
-                style={styles.iconButton}
-                accessibilityLabel="Open Dash Orb"
-                onPress={() => router.push('/screens/dash-orb')}
-              >
-                <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
-              </TouchableOpacity>
-            )}
-            {showWakeWordToggle && (
-              <TouchableOpacity
-                style={styles.iconButton}
-                accessibilityLabel="Toggle wake word"
-                onPress={toggleWakeWord}
-                disabled={!wakeWordLoaded}
-              >
-                <Ionicons
-                  name={wakeWordEnabled ? 'ear' : 'ear-outline'}
-                  size={screenWidth < 400 ? 18 : 22}
-                  color={wakeWordEnabled ? theme.success : theme.text}
-                />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.iconButton}
-              accessibilityLabel="Settings"
-              onPress={() => router.push('/screens/dash-ai-settings')}
-            >
-              <Ionicons name="settings-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
-            </TouchableOpacity>
-            {onClose && (
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={async () => {
-                  if (dashInstance) {
-                    await stopSpeaking();
-                    dashInstance.cleanup();
-                  }
-                  onClose();
-                }}
-                accessibilityLabel="Close"
-              >
-                <Ionicons name="close" size={screenWidth < 400 ? 20 : 24} color={theme.text} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {contextChips.length > 0 && (
-          <View style={[styles.contextStrip, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            {contextChips.map((chip, idx) => (
-              <View
-                key={`${chip}-${idx}`}
-                style={[styles.contextChip, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
-              >
-                <Text style={[styles.contextChipText, { color: theme.textSecondary }]}>{chip}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {contextHint && (
-          <Text style={[styles.contextHint, { color: theme.textSecondary }]}>{contextHint}</Text>
+        {/* Header - auto-hide on scroll down */}
+        {headerVisible && (
+        <DashHeader
+          roleCopy={roleCopy}
+          tier={tier}
+          subReady={subReady}
+          isSpeaking={isSpeaking}
+          showAdvancedControls={showAdvancedControls}
+          showWakeWordToggle={showWakeWordToggle}
+          wakeWordEnabled={wakeWordEnabled}
+          wakeWordLoaded={wakeWordLoaded}
+          tutorSession={tutorSession}
+          onClose={onClose}
+          stopSpeaking={stopSpeaking}
+          handleNewChat={handleNewChat}
+          toggleWakeWord={toggleWakeWord}
+          cleanup={dashInstance?.cleanup}
+          styles={styles}
+          theme={theme}
+        />
         )}
 
-        {tierStatus && (
-          <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-            <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
-            <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
-              {usageLabel}
-            </Text>
-            {tierStatus.quotaLimit > 0 && (
-              <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
-                <View
-                  style={[
-                    styles.usageProgressFill,
-                    { backgroundColor: theme.primary, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
-                  ]}
-                />
-              </View>
-            )}
-          </View>
+        {/* Context chips - only for preschool/ECD contexts */}
+        {headerVisible && contextChips.length > 0 && (() => {
+          const st = String(learnerContext?.schoolType || '').toLowerCase();
+          return st.includes('preschool') || st.includes('ecd') || st.includes('early');
+        })() && (
+        <DashContextChips
+          chips={contextChips}
+          contextHint={contextHint}
+          styles={styles}
+          theme={theme}
+        />
         )}
 
-        {safeModels.length > 0 && showAdvancedControls && (
-          <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-            <View style={styles.modelSelectorHeader}>
-              <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
-              {selectedModelInfo && (
-                <Text style={[styles.modelSelectorHint, { color: theme.textSecondary }]}>
-                  {selectedModelInfo.displayName} • {estimatedRemaining === null ? 'Unlimited' : `~${estimatedRemaining} chats left`}
-                </Text>
-              )}
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modelSelectorRow}>
-              {safeModels.map((model) => {
-                const isActive = model.id === selectedModel;
-                return (
-                  <TouchableOpacity
-                    key={model.id}
-                    style={[
-                      styles.modelChip,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
-                      isActive && { borderColor: theme.primary, backgroundColor: theme.primary + '22' },
-                    ]}
-                    onPress={() => setSelectedModel(model.id)}
-                  >
-                    <Text style={[styles.modelChipTitle, { color: isActive ? theme.primary : theme.text }]}>
-                      {model.displayName}
-                    </Text>
-                    <Text style={[styles.modelChipSub, { color: theme.textSecondary }]}>
-                      {model.relativeCost}x usage
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
+        {/* Usage banner - auto-hide with header */}
+        {headerVisible && (
+        <DashUsageBanner
+          tierStatus={tierStatus}
+          usageLabel={usageLabel}
+          styles={styles}
+          theme={theme}
+        />
         )}
+
+        {/* Model selector - always visible for transparency */}
+        <DashModelSelector
+          models={safeModels}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          estimatedRemaining={estimatedRemaining}
+          styles={styles}
+          theme={theme}
+        />
 
         {/* Messages */}
         <DashAssistantMessages
@@ -848,44 +793,49 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           learnerContext={learnerContext}
           bottomInset={insets.bottom}
           keyboardVisible={keyboardVisible}
+          onScroll={(currentScrollY) => {
+            // Header auto-hide disabled - was causing flickering
+            // Keep header visible always for better UX
+            setLastScrollY(currentScrollY);
+          }}
         />
 
         {isStaff && latestAssistantMessage && (
-          <View style={[styles.staffActionsRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <View style={[inputStyles.staffActionsRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
             <TouchableOpacity
-              style={[styles.staffActionButton, { backgroundColor: theme.primary }]}
+              style={[inputStyles.staffActionButton, { backgroundColor: theme.primary }]}
               onPress={saveLessonFromMessage}
             >
               <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
-              <Text style={[styles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
+              <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
               onPress={saveRoutineFromMessage}
             >
               <Ionicons name="time-outline" size={16} color={theme.text} />
-              <Text style={[styles.staffActionText, { color: theme.text }]}>Save routine</Text>
+              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
               onPress={saveThemeFromMessage}
             >
               <Ionicons name="color-palette-outline" size={16} color={theme.text} />
-              <Text style={[styles.staffActionText, { color: theme.text }]}>Save theme</Text>
+              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
               onPress={saveActivityFromMessage}
             >
               <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-              <Text style={[styles.staffActionText, { color: theme.text }]}>Create activity</Text>
+              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
               onPress={() => router.push('/screens/teacher-activity-builder')}
             >
               <Ionicons name="hammer-outline" size={16} color={theme.text} />
-              <Text style={[styles.staffActionText, { color: theme.text }]}>Edit activity</Text>
+              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -893,15 +843,15 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         {/* Jump to end FAB */}
         {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
           <TouchableOpacity
-            style={[styles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: (styles.scrollToBottomFab?.bottom || 24) + 8 }]}
+            style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: (messageStyles.scrollToBottomFab?.bottom || 24) + 8 }]}
             onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0 }); }}
             accessibilityLabel="Jump to bottom"
             activeOpacity={0.8}
           >
             <Ionicons name="chevron-down" size={20} color={theme.onPrimary || '#fff'} />
             {unreadCount > 0 && (
-              <View style={[styles.scrollToBottomBadge, { backgroundColor: theme.error }]}>
-                <Text style={[styles.scrollToBottomBadgeText, { color: theme.onError || '#fff' }]}>
+              <View style={[messageStyles.scrollToBottomBadge, { backgroundColor: theme.error }]}>
+                <Text style={[messageStyles.scrollToBottomBadgeText, { color: theme.onError || '#fff' }]}>
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </Text>
               </View>
@@ -916,6 +866,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           setInputText={setInputText}
           enterToSend={enterToSend}
           selectedAttachments={selectedAttachments}
+          attachmentProgress={attachmentProgress}
           learnerContext={learnerContext}
           isLoading={isLoading}
           isUploading={isUploading}
@@ -923,6 +874,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           isSpeaking={isSpeaking}
           partialTranscript={partialTranscript}
           placeholder={roleCopy.inputPlaceholder}
+          messages={messages}
           onSend={() => sendMessage()}
           onMicPress={handleInputMicPress}
           onTakePhoto={handleTakePhoto}
@@ -945,7 +897,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           buttons={alertState.buttons}
           onClose={hideAlert}
         />
-      </Container>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

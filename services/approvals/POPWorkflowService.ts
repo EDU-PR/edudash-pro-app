@@ -351,6 +351,7 @@ export class POPWorkflowService {
         payment_date: data.payment_date || new Date().toISOString(),
         payment_method: (data.payment_method || 'bank_transfer') as any,
         payment_purpose: data.title || 'School Fees',
+        fee_type: isUniform ? 'uniform' : undefined,
         status: 'approved',
         approved_at: new Date().toISOString(),
         auto_matched: false,
@@ -419,6 +420,7 @@ export class POPWorkflowService {
         : 'Parent';
 
       // Send notification to parent
+      const isUniform = `${data.description || ''} ${data.title || ''}`.toLowerCase().includes('uniform');
       const popForNotification: ProofOfPayment = {
         id: data.id,
         preschool_id: data.preschool_id,
@@ -429,6 +431,7 @@ export class POPWorkflowService {
         payment_date: data.payment_date || new Date().toISOString(),
         payment_method: (data.payment_method || 'bank_transfer') as any,
         payment_purpose: data.title || 'School Fees',
+        fee_type: isUniform ? 'uniform' : undefined,
         status: 'rejected',
         rejection_reason: rejectionReason,
         auto_matched: false,

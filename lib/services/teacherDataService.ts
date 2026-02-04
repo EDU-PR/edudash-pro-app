@@ -4,7 +4,7 @@ export class TeacherDataService {
   static async assignLesson(
     teacherUserId: string,
     params: {
-      lessonId: string
+      lessonId?: string | null
       classId?: string
       studentIds?: string[]
       title: string
@@ -30,6 +30,8 @@ export class TeacherDataService {
 
       const title = params.title || 'Lesson Assignment'
       const dueOffset = typeof params.dueDateOffsetDays === 'number' ? params.dueDateOffsetDays : 3
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + dueOffset);
       const difficulty = params.difficultyLevel === 'easy' ? 1 : params.difficultyLevel === 'hard' ? 3 : 2
       const materials = Array.isArray(params.materialsNeeded) ? params.materialsNeeded.join(', ') : (params.materialsNeeded || null)
 
@@ -43,11 +45,14 @@ export class TeacherDataService {
           preschool_id: teacherProfile.preschool_id,
           class_id: params.classId || null,
           due_date_offset_days: dueOffset,
+          due_date: dueDate.toISOString().split('T')[0],
           estimated_time_minutes: params.estimatedTimeMinutes ?? null,
           materials_needed: materials,
           difficulty_level: difficulty,
           is_required: params.isRequired ?? true,
-          lesson_id: params.lessonId,
+          lesson_id: params.lessonId || null,
+          status: 'draft',
+          is_published: false,
           is_active: true,
         } as any)
         .select('id')

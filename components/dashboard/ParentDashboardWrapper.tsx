@@ -4,6 +4,7 @@ import { NewEnhancedParentDashboard } from './NewEnhancedParentDashboardRefactor
 
 interface ParentDashboardWrapperProps {
   refreshTrigger?: number;
+  focusSection?: string;
 }
 
 /**
@@ -14,11 +15,13 @@ interface ParentDashboardWrapperProps {
  * - Parent components: ChildSwitcher
  */
 export const ParentDashboardWrapper: React.FC<ParentDashboardWrapperProps> = ({
-  refreshTrigger
+  refreshTrigger,
+  focusSection,
 }) => {
   return (
     <NewEnhancedParentDashboard 
       refreshTrigger={refreshTrigger}
+      focusSection={focusSection}
     />
   );
 };

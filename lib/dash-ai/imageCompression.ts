@@ -1,0 +1,125 @@
+/**
+ * Image Compression Utilities
+ * 
+ * Progressive image compression for AI attachments.
+ * Compresses images in multiple steps to stay under API limits.
+ */
+
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+
+export const MAX_IMAGE_BASE64_LEN = 4_000_000; // ~3MB payload after base64 encoding
+
+export const IMAGE_COMPRESS_STEPS = [
+  { width: 1280, compress: 0.75 },
+  { width: 1024, compress: 0.7 },
+  { width: 768, compress: 0.6 },
+  { width: 512, compress: 0.5 },
+];
+
+export interface CompressedImage {
+  uri: string;
+  base64: string;
+  width: number;
+  height: number;
+  size: number;
+}
+
+/**
+ * Progressively compress image until it's under size limit
+ */
+export async function compressImageForAI(
+  imageUri: string,
+  maxBase64Length: number = MAX_IMAGE_BASE64_LEN
+): Promise<CompressedImage> {
+  let currentUri = imageUri;
+  let base64Data = '';
+  let finalWidth = 0;
+  let finalHeight = 0;
+
+  // Try each compression step
+  for (const step of IMAGE_COMPRESS_STEPS) {
+    const result = await ImageManipulator.manipulateAsync(
+      currentUri,
+      [{ resize: { width: step.width } }],
+      {
+        compress: step.compress,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+    if (!result.base64) {
+      throw new Error('Failed to generate base64');
+    }
+
+    base64Data = result.base64;
+    finalWidth = result.width;
+    finalHeight = result.height;
+    currentUri = result.uri;
+
+    // Check if under limit
+    if (base64Data.length <= maxBase64Length) {
+      break;
+    }
+  }
+
+  // If still too large after all steps, throw error
+  if (base64Data.length > maxBase64Length) {
+    throw new Error(
+      `Image too large even after compression. Size: ${Math.round(base64Data.length / 1024)}KB, Max: ${Math.round(maxBase64Length / 1024)}KB`
+    );
+  }
+
+  return {
+    uri: currentUri,
+    base64: base64Data,
+    width: finalWidth,
+    height: finalHeight,
+    size: base64Data.length,
+  };
+}
+
+/**
+ * Batch compress multiple images
+ */
+export async function compressImagesForAI(
+  imageUris: string[],
+  onProgress?: (current: number, total: number) => void
+): Promise<CompressedImage[]> {
+  const results: CompressedImage[] = [];
+
+  for (let i = 0; i < imageUris.length; i++) {
+    onProgress?.(i + 1, imageUris.length);
+    const compressed = await compressImageForAI(imageUris[i]);
+    results.push(compressed);
+  }
+
+  return results;
+}
+
+/**
+ * Get image file size without compression
+ */
+export async function getImageSize(uri: string): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    return info.exists ? info.size || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Format bytes to human-readable string
+ */
+export function formatBytes(bytes: number, decimals: number = 2): string {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}

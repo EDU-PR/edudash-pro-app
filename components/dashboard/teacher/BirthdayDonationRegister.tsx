@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,12 +8,13 @@ import { BirthdayDonationsService } from '@/features/birthday-donations/services
 import type {
   BirthdayDonationEntry,
 } from '@/features/birthday-donations/types/birthdayDonations.types';
-import { notifyBirthdayDonationPaid } from '@/lib/notify';
+import { notifyBirthdayDonationPaid, notifyBirthdayDonationReminder } from '@/lib/notify';
 import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { router } from 'expo-router';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useAlertModal } from '@/components/ui/AlertModal';
 interface BirthdayDonationRegisterProps {
   organizationId?: string | null;
 }
@@ -158,6 +159,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   const { t } = useTranslation();
   const { theme } = useTheme();
   const { user, profile } = useAuth();
+  const { showAlert, AlertModalComponent } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const orgType = useMemo(() => getOrganizationType(profile), [profile]);
   const isPreschool = orgType === 'preschool';
@@ -169,9 +171,11 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   const [birthdayWindowMode, setBirthdayWindowMode] = useState<BirthdayWindowMode>('upcoming');
   const [useFridayCelebration, setUseFridayCelebration] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [reminderClassId, setReminderClassId] = useState<string>('all');
   const [donations, setDonations] = useState<BirthdayDonationEntry[]>([]);
   const [loadingDonations, setLoadingDonations] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [sendingReminders, setSendingReminders] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [schoolStudents, setSchoolStudents] = useState<TeacherStudentSummary[]>([]);
   const [loadingSchoolStudents, setLoadingSchoolStudents] = useState(false);
@@ -254,6 +258,28 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
     () => classGroups.find((group) => group.id === selectedClassId) || null,
     [classGroups, selectedClassId]
   );
+
+  const reminderClassGroups = useMemo(() => {
+    if (!useSchoolWide) return [];
+    const groups = new Map<string, { id: string; name: string; students: TeacherStudentSummary[] }>();
+    schoolStudents.forEach((student) => {
+      const classId = student.classId || 'unassigned';
+      const className = student.className || t('dashboard.class_unassigned', { defaultValue: 'Unassigned' });
+      const group = groups.get(classId) || { id: classId, name: className, students: [] };
+      group.students.push(student);
+      groups.set(classId, group);
+    });
+    return Array.from(groups.values());
+  }, [useSchoolWide, schoolStudents, t]);
+
+  useEffect(() => {
+    if (!useSchoolWide) return;
+    if (reminderClassId === 'all') return;
+    const exists = reminderClassGroups.some((group) => group.id === reminderClassId);
+    if (!exists) {
+      setReminderClassId('all');
+    }
+  }, [useSchoolWide, reminderClassGroups, reminderClassId]);
 
   const classStudents = isPreschool ? teacherStudents : (selectedClass?.students ?? []);
   const birthdaySourceStudents = useSchoolWide ? schoolStudents : classStudents;
@@ -369,12 +395,24 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
   }, [visibleDonations]);
 
   const payerStudents = useMemo(
-    () => classStudents.filter((student) => student.id !== selectedBirthday?.student.id),
-    [classStudents, selectedBirthday]
+    () => birthdaySourceStudents.filter((student) => student.id !== selectedBirthday?.student.id),
+    [birthdaySourceStudents, selectedBirthday]
   );
 
   const paidStudents = payerStudents.filter((student) => paidStudentIds.has(student.id));
   const unpaidStudents = payerStudents.filter((student) => !paidStudentIds.has(student.id));
+  const reminderUnpaidStudents = useMemo(() => {
+    if (!useSchoolWide || reminderClassId === 'all') return unpaidStudents;
+    return unpaidStudents.filter((student) => (student.classId || 'unassigned') === reminderClassId);
+  }, [useSchoolWide, reminderClassId, unpaidStudents]);
+  const reminderParentIds = useMemo(() => {
+    const ids = new Set<string>();
+    reminderUnpaidStudents.forEach((student) => {
+      if (student.parentId) ids.add(student.parentId);
+      if (student.guardianId) ids.add(student.guardianId);
+    });
+    return Array.from(ids);
+  }, [reminderUnpaidStudents]);
 
   const schoolPayerCount = useMemo(() => (
     birthdaySourceStudents.filter((student) => student.id !== selectedBirthday?.student.id).length
@@ -408,6 +446,29 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
           donation_amount: DEFAULT_AMOUNT,
           donation_date: donationDate,
         });
+        try {
+          await assertSupabase()
+            .from('in_app_notifications')
+            .insert({
+              user_id: parentId,
+              title: t('dashboard.birthday_donations.paid_title', { defaultValue: 'Birthday donation received' }),
+              message: t('dashboard.birthday_donations.paid_message', {
+                defaultValue: '{{payer}} contributed for {{birthday}} (R{{amount}}).',
+                payer: `${student.firstName} ${student.lastName}`.trim(),
+                birthday: `${selectedBirthday.student.firstName} ${selectedBirthday.student.lastName}`.trim(),
+                amount: DEFAULT_AMOUNT.toFixed(2),
+              }),
+              type: 'birthday_donation_paid',
+              data: {
+                donation_date: donationDate,
+                donation_amount: DEFAULT_AMOUNT,
+                payer_student_id: student.id,
+                birthday_student_id: selectedBirthday.student.id,
+              },
+            });
+        } catch (notifyError) {
+          console.warn('[BirthdayDonations] Failed to insert in-app notification:', notifyError);
+        }
       }
 
       await loadDonations();
@@ -433,6 +494,107 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
       setSavingId(null);
     }
   }, [organizationId, loadDonations]);
+
+  const handleSendReminders = useCallback(async () => {
+    if (!organizationId || !selectedBirthday || !donationDate || reminderParentIds.length === 0) return;
+    setSendingReminders(true);
+    setError(null);
+    try {
+      await notifyBirthdayDonationReminder(reminderParentIds, {
+        child_name: `${selectedBirthday.student.firstName} ${selectedBirthday.student.lastName}`.trim(),
+        days_until: selectedBirthday.daysUntil >= 0 ? selectedBirthday.daysUntil : undefined,
+        donation_amount: DEFAULT_AMOUNT,
+        donation_date: donationDate,
+      });
+      let reminderLogError: string | null = null;
+      try {
+        const reminderRows = reminderUnpaidStudents.flatMap((student) => {
+          const recipients = [student.parentId, student.guardianId].filter(Boolean) as string[];
+          return recipients.map((recipientId) => ({
+            donationDate,
+            birthdayStudentId: selectedBirthday.student.id,
+            payerStudentId: student.id,
+            classId: student.classId ?? null,
+            recipientUserId: recipientId,
+            sentBy: user?.id ?? null,
+          }));
+        });
+        await BirthdayDonationsService.recordDonationReminders(organizationId, reminderRows);
+      } catch (logError) {
+        reminderLogError = logError instanceof Error ? logError.message : 'Reminder tracking failed.';
+      }
+      const successMessage = reminderLogError
+        ? t('dashboard.birthday_donations.reminder_sent_tracking_error', {
+          defaultValue: 'Reminders sent, but tracking failed. Please try again.',
+        })
+        : t('dashboard.birthday_donations.reminder_sent_message', {
+          defaultValue: 'Sent birthday donation reminders to {{count}} parent(s).',
+          count: reminderParentIds.length,
+        });
+      showAlert({
+        title: t('dashboard.birthday_donations.reminder_sent_title', { defaultValue: 'Reminders sent' }),
+        message: successMessage,
+        type: reminderLogError ? 'warning' : 'success',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+      });
+      if (reminderLogError) {
+        setError(reminderLogError);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send reminders.';
+      setError(message);
+      showAlert({
+        title: t('dashboard.birthday_donations.reminder_failed_title', { defaultValue: 'Reminder failed' }),
+        message,
+        type: 'error',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+      });
+    } finally {
+      setSendingReminders(false);
+    }
+  }, [donationDate, selectedBirthday, reminderParentIds, reminderUnpaidStudents, organizationId, showAlert, t, user?.id]);
+
+  const handleSendReminderPress = useCallback(() => {
+    if (!selectedBirthday || !donationDate) return;
+    if (reminderUnpaidStudents.length === 0) {
+      showAlert({
+        title: t('dashboard.birthday_donations.reminder_none_title', { defaultValue: 'No reminders needed' }),
+        message: t('dashboard.birthday_donations.reminder_none_message', {
+          defaultValue: 'All parents have already paid for this birthday.',
+        }),
+        type: 'info',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+      });
+      return;
+    }
+    if (reminderParentIds.length === 0) {
+      showAlert({
+        title: t('dashboard.birthday_donations.reminder_no_contacts_title', { defaultValue: 'No contacts found' }),
+        message: t('dashboard.birthday_donations.reminder_no_contacts_message', {
+          defaultValue: 'Add parent or guardian details to send reminders.',
+        }),
+        type: 'warning',
+        buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+      });
+      return;
+    }
+
+    showAlert({
+      title: t('dashboard.birthday_donations.reminder_confirm_title', { defaultValue: 'Send reminders?' }),
+      message: t('dashboard.birthday_donations.reminder_confirm_message', {
+        defaultValue: 'Send a birthday donation reminder to {{count}} parent(s) who have not paid yet?',
+        count: reminderParentIds.length,
+      }),
+      type: 'warning',
+      buttons: [
+        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+        {
+          text: t('dashboard.birthday_donations.reminder_confirm_cta', { defaultValue: 'Send' }),
+          onPress: () => void handleSendReminders(),
+        },
+      ],
+    });
+  }, [donationDate, selectedBirthday, reminderUnpaidStudents.length, reminderParentIds.length, showAlert, t, handleSendReminders]);
 
   if (!organizationId) {
     return (
@@ -646,10 +808,63 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
               {error && <Text style={styles.errorText}>{error}</Text>}
 
               <View style={styles.listSection}>
-                <Text style={styles.sectionTitle}>
-                  {t('dashboard.birthday_donations.pending_title', { defaultValue: 'Not paid yet' })}
-                  {` (${unpaidStudents.length})`}
-                </Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
+                    {t('dashboard.birthday_donations.pending_title', { defaultValue: 'Not paid yet' })}
+                    {` (${unpaidStudents.length})`}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.reminderButton,
+                      (sendingReminders || reminderUnpaidStudents.length === 0) && styles.reminderButtonDisabled,
+                    ]}
+                    onPress={handleSendReminderPress}
+                    disabled={sendingReminders || reminderUnpaidStudents.length === 0}
+                  >
+                    <Text
+                      style={[
+                        styles.reminderButtonText,
+                        (sendingReminders || reminderUnpaidStudents.length === 0) && styles.reminderButtonTextDisabled,
+                      ]}
+                    >
+                      {sendingReminders
+                        ? t('common.sending', { defaultValue: 'Sending...' })
+                        : t('dashboard.birthday_donations.send_reminder', { defaultValue: 'Send reminder' })}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {useSchoolWide && reminderClassGroups.length > 1 && (
+                  <View style={styles.reminderScopeSection}>
+                    <Text style={styles.label}>
+                      {t('dashboard.birthday_donations.reminder_scope', { defaultValue: 'Reminder scope' })}
+                    </Text>
+                    <View style={styles.classRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.classChip,
+                          reminderClassId === 'all' && { backgroundColor: theme.primary },
+                        ]}
+                        onPress={() => setReminderClassId('all')}
+                      >
+                        <Text style={[styles.classChipText, reminderClassId === 'all' && { color: '#fff' }]}>
+                          {t('dashboard.birthday_donations.reminder_scope_all', { defaultValue: 'All classes' })}
+                        </Text>
+                      </TouchableOpacity>
+                      {reminderClassGroups.map((group) => {
+                        const selected = group.id === reminderClassId;
+                        return (
+                          <TouchableOpacity
+                            key={group.id}
+                            style={[styles.classChip, selected && { backgroundColor: theme.primary }]}
+                            onPress={() => setReminderClassId(group.id)}
+                          >
+                            <Text style={[styles.classChipText, selected && { color: '#fff' }]}>{group.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
                 {loadingDonations ? (
                   <Text style={styles.muted}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
                 ) : unpaidStudents.length === 0 ? (
@@ -692,21 +907,22 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
                           onPress={() => {
                             const donationEntry = paidEntriesByStudentId.get(student.id);
                             if (!donationEntry) return;
-                            Alert.alert(
-                              t('dashboard.birthday_donations.confirm_unpaid_title', { defaultValue: 'Mark unpaid?' }),
-                              t('dashboard.birthday_donations.confirm_unpaid_message', {
+                            showAlert({
+                              title: t('dashboard.birthday_donations.confirm_unpaid_title', { defaultValue: 'Mark unpaid?' }),
+                              message: t('dashboard.birthday_donations.confirm_unpaid_message', {
                                 defaultValue: 'This will remove the payment for {{name}}.',
                                 name: `${student.firstName} ${student.lastName}`.trim(),
                               }),
-                              [
+                              type: 'warning',
+                              buttons: [
                                 { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
                                 {
                                   text: t('dashboard.birthday_donations.confirm_unpaid_cta', { defaultValue: 'Mark unpaid' }),
                                   style: 'destructive',
                                   onPress: () => handleMarkUnpaid(student, donationEntry),
                                 },
-                              ]
-                            );
+                              ],
+                            });
                           }}
                           disabled={savingId === student.id}
                         >
@@ -725,6 +941,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
           )}
         </>
       )}
+      <AlertModalComponent />
     </View>
   );
 };
@@ -907,10 +1124,43 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
   listSection: {
     marginTop: 12,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: theme.text,
+    marginBottom: 8,
+  },
+  sectionTitleInline: {
+    marginBottom: 0,
+  },
+  reminderButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.primary,
+  },
+  reminderButtonDisabled: {
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+  },
+  reminderButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.primary,
+  },
+  reminderButtonTextDisabled: {
+    color: theme.textSecondary,
+  },
+  reminderScopeSection: {
     marginBottom: 8,
   },
   studentRow: {

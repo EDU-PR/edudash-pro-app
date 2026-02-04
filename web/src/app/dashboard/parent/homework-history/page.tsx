@@ -76,14 +76,16 @@ export default function HomeworkHistoryPage() {
           submitted_at,
           grade,
           feedback,
-          assignment:homework_assignments(title, due_date, total_points),
+          assignment:homework_assignments(title, due_date, total_points, is_published),
           student:students(first_name, last_name)
         `)
         .in('student_id', childIds)
         .order('submitted_at', { ascending: false });
 
       if (!error && data) {
-        const processedData = data.map((sub: any) => ({
+        const processedData = data
+          .filter((sub: any) => sub.assignment?.is_published !== false)
+          .map((sub: any) => ({
           ...sub,
           status: sub.grade !== null 
             ? 'graded' 

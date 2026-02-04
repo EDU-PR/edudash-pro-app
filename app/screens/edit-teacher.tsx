@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface TeacherData {
@@ -150,6 +151,14 @@ export default function EditTeacherScreen() {
   };
 
   const handleRemoveFromSchool = () => {
+    if (!orgId) {
+      Alert.alert('Error', 'No school found for this account.');
+      return;
+    }
+    if (!teacherId) {
+      Alert.alert('Error', 'Missing teacher identifier.');
+      return;
+    }
     Alert.alert(
       'Remove Teacher',
       'Are you sure you want to remove this teacher from your school? They will lose access to all classes and data.',
@@ -160,26 +169,10 @@ export default function EditTeacherScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const supabase = assertSupabase();
-
-              // Unassign from all classes
-              await supabase
-                .from('classes')
-                .update({ teacher_id: null })
-                .eq('teacher_id', teacherId);
-
-              // Deactivate in teachers table
-              await supabase
-                .from('teachers')
-                .update({ is_active: false })
-                .eq('user_id', teacherId);
-
-              // Remove organization membership
-              await supabase
-                .from('organization_members')
-                .delete()
-                .eq('user_id', teacherId)
-                .eq('organization_id', orgId);
+              await removeTeacherFromSchool({
+                teacherUserId: teacherId,
+                organizationId: orgId,
+              });
 
               Alert.alert('Success', 'Teacher removed from school', [
                 { text: 'OK', onPress: navigateBack },

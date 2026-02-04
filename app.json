@@ -114,6 +114,41 @@
             "BROWSABLE",
             "DEFAULT"
           ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.edudashpro.org.za",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "edudashpro.org.za",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "app.edudashpro.org.za",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "www.edudashpro.app",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "edudashpro.app",
+              "pathPrefix": "/invite"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -122,6 +157,13 @@
       "expo-updates",
       "expo-web-browser",
       "sentry-expo",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EduDash Pro needs access to your photos to share images with Dash.",
+          "cameraPermission": "EduDash Pro needs camera access to take photos to share with Dash."
+        }
+      ],
       [
         "expo-audio",
         {

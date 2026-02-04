@@ -34,6 +34,7 @@ export interface VoiceStartOptions {
   language?: string; // 'en' | 'af' | 'zu' | 'xh' | 'nso'
   onPartial?: VoicePartialCb;
   onFinal?: VoiceFinalCb;
+  onError?: (error: string) => void;
 }
 
 export interface VoiceSession {

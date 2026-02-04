@@ -205,10 +205,10 @@ export default function POPReviewScreen() {
     const supabase = assertSupabase();
     const { data } = await supabase
       .from('students')
-      .select('class_name')
+      .select('classes(name)')
       .eq('id', studentId)
       .maybeSingle();
-    return (data as any)?.class_name || null;
+    return (data as any)?.classes?.name || null;
   };
 
   const attachReceiptToPayment = async (
@@ -266,7 +266,13 @@ export default function POPReviewScreen() {
     studentName: string,
     receiptUrl: string | null,
     receiptNumber: string,
-    amount: number
+    amount: number,
+    context?: {
+      studentId?: string;
+      popId?: string;
+      paymentPurpose?: string;
+      paymentReference?: string;
+    }
   ) => {
     if (!parent?.email && !parent?.id) return;
     const supabase = assertSupabase();
@@ -293,6 +299,10 @@ export default function POPReviewScreen() {
             type: 'receipt',
             student_name: studentName,
             receipt_url: receiptUrl,
+            student_id: context?.studentId,
+            pop_id: context?.popId,
+            payment_purpose: context?.paymentPurpose,
+            payment_reference: context?.paymentReference,
           },
         },
         email_template_override: {
@@ -354,7 +364,12 @@ export default function POPReviewScreen() {
       await attachReceiptToPayment(receiptDraft.upload, result.receiptUrl ?? null, result.storagePath);
 
       if (sendToParent) {
-        await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amountValue);
+        await sendReceiptNotification(parentProfile, studentName, result.receiptUrl ?? null, receiptNumber, amountValue, {
+          studentId: receiptDraft.upload.student_id,
+          popId: receiptDraft.upload.id,
+          paymentPurpose: receiptDraft.description,
+          paymentReference: receiptDraft.paymentReference,
+        });
         showAlert({
           title: 'Receipt Sent',
           message: `Receipt sent to ${parentProfile.email || 'the parent'}.`,

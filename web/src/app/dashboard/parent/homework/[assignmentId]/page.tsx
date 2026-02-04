@@ -181,6 +181,7 @@ export default function ParentHomeworkDetailPage() {
             .from('homework_assignments')
             .select('*')
             .eq('id', assignmentParam)
+            .eq('is_published', true)
             .single()
             .then((res: any) => res.data),
           supabase

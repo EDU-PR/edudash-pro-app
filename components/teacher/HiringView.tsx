@@ -179,18 +179,37 @@ export function HiringView({
     );
   };
 
-  const handleRevokeInvite = async (inviteId: string) => {
-    try {
-      await TeacherInviteService.revoke(inviteId);
-      await onLoadInvites();
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Failed to revoke invite';
-      showAlert({
-        title: 'Error',
-        message,
-        type: 'error',
-      });
-    }
+  const handleDeleteInvite = async (inviteId: string, inviteEmail: string) => {
+    showAlert({
+      title: 'Delete Invite?',
+      message: `Remove the invite for ${inviteEmail}? This cannot be undone.`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await TeacherInviteService.deleteInvite(inviteId);
+              await onLoadInvites();
+              showAlert({
+                title: 'Invite Deleted',
+                message: 'The invite has been removed.',
+                type: 'success',
+              });
+            } catch (e: unknown) {
+              const message = e instanceof Error ? e.message : 'Failed to delete invite';
+              showAlert({
+                title: 'Delete Failed',
+                message,
+                type: 'error',
+              });
+            }
+          },
+        },
+      ],
+    });
   };
 
   const renderAvailableTeacher = ({ item }: { item: AvailableTeacher }) => (
@@ -236,9 +255,12 @@ export function HiringView({
           <Text style={styles.candidateEmail}>Status: {item.status}</Text>
         </View>
         {item.status === 'pending' && (
-          <TouchableOpacity style={styles.revokeButton} onPress={() => handleRevokeInvite(item.id)}>
+          <TouchableOpacity
+            style={styles.revokeButton}
+            onPress={() => handleDeleteInvite(item.id, item.email)}
+          >
             <Ionicons name="trash" size={18} color="#dc2626" />
-            <Text style={styles.revokeButtonText}>Revoke</Text>
+            <Text style={styles.revokeButtonText}>Delete Invite</Text>
           </TouchableOpacity>
         )}
       </View>

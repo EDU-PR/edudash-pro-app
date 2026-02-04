@@ -176,13 +176,15 @@ export default function PettyCashReconcileScreen() {
       const systemBalance = openingBalance + replenishments - expenses - adjustments;
 
       // Get last reconciliation
-      const { data: lastRecon } = await assertSupabase()
-        .from('petty_cash_reconciliations')
-        .select('created_at, physical_amount')
-        .eq('preschool_id', preschoolId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: lastRecon } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_reconciliations')
+          .select('created_at, physical_amount')
+          .eq(column, preschoolId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      );
 
       setReconciliationData({
         systemBalance,
@@ -237,17 +239,19 @@ export default function PettyCashReconcileScreen() {
       const preschoolId = orgId;
 
       // Save reconciliation record
-      const { error } = await assertSupabase()
-        .from('petty_cash_reconciliations')
-        .insert({
-          preschool_id: preschoolId,
-          system_amount: reconciliationData.systemBalance,
-          physical_amount: reconciliationData.physicalCash,
-          variance: reconciliationData.variance,
-          cash_breakdown: cashCounts,
-          notes: notes.trim() || null,
-          reconciled_by: user.id,
-        });
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_reconciliations')
+          .insert({
+            [column]: preschoolId,
+            system_amount: reconciliationData.systemBalance,
+            physical_amount: reconciliationData.physicalCash,
+            variance: reconciliationData.variance,
+            cash_breakdown: cashCounts,
+            notes: notes.trim() || null,
+            reconciled_by: user.id,
+          })
+      );
 
       if (error) {
         throw error;

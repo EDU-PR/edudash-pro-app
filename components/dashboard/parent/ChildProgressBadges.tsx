@@ -134,6 +134,7 @@ export function ChildProgressBadges({
           .from('homework_assignments')
           .select('id')
           .eq('class_id', studentData.class_id)
+          .eq('is_published', true)
           .gte('created_at', weekStart.toISOString())
           .lte('due_date', new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString());
 

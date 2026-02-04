@@ -54,6 +54,7 @@ export interface ClassTeacherActions {
   handleCreateClass: () => Promise<void>;
   handleAssignTeacher: () => Promise<void>;
   handleRemoveTeacher: (classInfo: ClassInfo) => void;
+  handleDeleteTeacher: (teacher: Teacher) => void;
   handleToggleClassStatus: (classInfo: ClassInfo) => Promise<void>;
   setShowClassModal: (show: boolean) => void;
   setShowTeacherAssignment: (show: boolean) => void;

@@ -20,6 +20,12 @@ export type TeacherInvite = {
   accepted_at?: string | null;
 };
 
+export type TeacherInviteAcceptResult = {
+  status: 'linked' | 'requires_switch';
+  schoolId: string;
+  existingOrgId?: string | null;
+};
+
 export class TeacherInviteService {
   static async createInvite(params: { schoolId: string; email: string; invitedBy: string }): Promise<TeacherInvite> {
     const token = randomToken(48);
@@ -50,7 +56,15 @@ export class TeacherInviteService {
     if (error) throw error;
   }
 
-  static async accept(params: { token: string; authUserId: string; email: string }): Promise<void> {
+  static async deleteInvite(inviteId: string): Promise<void> {
+    const { error } = await assertSupabase()
+      .from('teacher_invites')
+      .delete()
+      .eq('id', inviteId);
+    if (error) throw error;
+  }
+
+  static async accept(params: { token: string; authUserId: string; email: string }): Promise<TeacherInviteAcceptResult> {
     // Verify invite
     const { data: invite, error: invErr } = await assertSupabase()
       .from('teacher_invites')
@@ -68,23 +82,34 @@ export class TeacherInviteService {
       .eq('id', invite.id);
 
     // Ensure teacher profile linkage and active seat membership
+    let existingOrgId: string | null = null;
+    let requiresSwitch = false;
     try {
       // Use profiles table (not deprecated users table)
       const { data: existing } = await assertSupabase()
         .from('profiles')
-        .select('id, role, preschool_id')
+        .select('id, role, preschool_id, organization_id')
         .eq('id', params.authUserId)
         .maybeSingle();
+      existingOrgId = (existing as any)?.organization_id || (existing as any)?.preschool_id || null;
+      requiresSwitch = !!(existingOrgId && existingOrgId !== invite.school_id);
       if (existing) {
-        await assertSupabase()
-          .from('profiles')
-          .update({
-            role: 'teacher',
-            preschool_id: invite.school_id,
-            organization_id: invite.school_id,
-            auth_user_id: params.authUserId,
-          })
-          .eq('id', existing.id);
+        if (!requiresSwitch) {
+          await assertSupabase()
+            .from('profiles')
+            .update({
+              role: 'teacher',
+              preschool_id: invite.school_id,
+              organization_id: invite.school_id,
+              auth_user_id: params.authUserId,
+            })
+            .eq('id', existing.id);
+        } else if (!(existing as any)?.auth_user_id) {
+          await assertSupabase()
+            .from('profiles')
+            .update({ auth_user_id: params.authUserId })
+            .eq('id', existing.id);
+        }
       } else {
         // Create new profile if doesn't exist
         await assertSupabase()
@@ -97,6 +122,7 @@ export class TeacherInviteService {
             organization_id: invite.school_id,
             email: params.email,
           });
+        requiresSwitch = false;
       }
       // Ensure organization membership with active seat
       try {
@@ -115,5 +141,10 @@ export class TeacherInviteService {
         // ignore if table not present
       }
     } catch { /* Intentional: non-fatal */ }
+    return {
+      status: requiresSwitch ? 'requires_switch' : 'linked',
+      schoolId: invite.school_id,
+      existingOrgId,
+    };
   }
 }

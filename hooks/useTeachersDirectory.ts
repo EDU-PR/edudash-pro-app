@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Alert, Linking } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
+import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 import {
   Teacher,
   FilterOptions,
@@ -178,11 +179,11 @@ export function useTeachersDirectory(): UseTeachersDirectoryReturn {
   // ====================================================================
 
   const canManageTeacher = useCallback((): boolean => {
-    return profile?.role === 'principal_admin';
+    return ['principal', 'principal_admin', 'admin', 'super_admin'].includes(profile?.role || '');
   }, [profile?.role]);
 
   const canViewFullDetails = useCallback((): boolean => {
-    return profile?.role === 'principal_admin' || profile?.role === 'teacher';
+    return ['principal', 'principal_admin', 'teacher', 'admin', 'super_admin'].includes(profile?.role || '');
   }, [profile?.role]);
 
   // ====================================================================
@@ -213,22 +214,37 @@ export function useTeachersDirectory(): UseTeachersDirectoryReturn {
       return;
     }
 
+    const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
+    if (!organizationId) {
+      Alert.alert('Error', 'No school found for this account.');
+      return;
+    }
+
     Alert.alert(
       'Delete Teacher',
-      'Are you sure you want to delete this teacher? This action cannot be undone.',
+      'Are you sure you want to delete this teacher? This will unassign their classes and revoke their seat.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setTeachers(prev => prev.filter(t => t.id !== teacherId));
-            // In production, this would call the delete API
-          }
+          onPress: async () => {
+            try {
+              await removeTeacherFromSchool({
+                teacherUserId: teacherId,
+                organizationId,
+              });
+              setTeachers(prev => prev.filter(t => t.id !== teacherId));
+              loadTeachers(true);
+            } catch (error) {
+              console.error('Failed to delete teacher:', error);
+              Alert.alert('Error', 'Failed to delete teacher');
+            }
+          },
         }
       ]
     );
-  }, [canManageTeacher]);
+  }, [canManageTeacher, loadTeachers, profile, setTeachers]);
 
   const toggleTeacherStatus = useCallback((teacherId: string, currentStatus: string) => {
     if (!canManageTeacher()) {

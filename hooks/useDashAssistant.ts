@@ -13,6 +13,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { AudioModule } from 'expo-audio';
+import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import type { DashMessage, DashConversation, DashAttachment } from '@/services/dash-ai/types';
 import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
@@ -23,14 +25,15 @@ import {
   pickDocuments, 
   pickImages,
   takePhoto,
-  uploadAttachment
+  uploadAttachment,
+  formatFileSize
 } from '@/services/AttachmentService';
 import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
-import { getChatUIPrefs, getVoiceChatPrefs, normalizeLanguageCode } from '@/lib/ai/dashSettings';
+import { getChatUIPrefs, getVoiceChatPrefs, initAndMigrate, normalizeLanguageCode } from '@/lib/ai/dashSettings';
 import { assertSupabase } from '@/lib/supabase';
 import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
@@ -39,72 +42,47 @@ import { useAIModelSelection } from '@/hooks/useAIModelSelection';
 import { useCapability } from '@/hooks/useCapability';
 import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
 import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
+import { useDashAttachments } from '@/hooks/useDashAttachments';
+import {
+  getConversationSnapshot,
+  saveConversationSnapshot,
+  getLastActiveConversationId,
+  setLastActiveConversationId,
+} from '@/services/conversationPersistence';
+
+// Extracted utilities
+import { 
+  resolveAgeBand, 
+  formatGradeLabel, 
+  isPreschoolContext,
+  detectLearningStyle,
+  detectStuckPattern,
+  type LearnerContext,
+} from '@/lib/dash-ai/learnerContext';
+import {
+  buildIntelligentSystemPrompt,
+  buildAttachmentContext,
+  buildGreeting,
+  shouldCelebrate,
+} from '@/lib/dash-ai/promptBuilder';
+import {
+  compressImageForAI,
+  MAX_IMAGE_BASE64_LEN,
+  IMAGE_COMPRESS_STEPS,
+  formatBytes,
+} from '@/lib/dash-ai/imageCompression';
+import {
+  loadVoiceBudget,
+  trackVoiceUsage,
+  hasVoiceBudget,
+  formatTimeRemaining,
+  FREE_VOICE_BUDGET_MS,
+} from '@/lib/dash-ai/voiceBudget';
 
 interface UseDashAssistantOptions {
   conversationId?: string;
   initialMessage?: string;
   onClose?: () => void;
-}
-
-function resolveAgeBand(ageYears?: number | null, grade?: string | null): string | null {
-  const raw = (grade || '').toString().toLowerCase();
-  const gradeNum = raw.startsWith('r')
-    ? 0
-    : (() => {
-        const match = raw.match(/(\d{1,2})/);
-        return match ? Number(match[1]) : null;
-      })();
-
-  if (typeof gradeNum === 'number' && !Number.isNaN(gradeNum)) {
-    if (gradeNum <= 1) return '3-5';
-    if (gradeNum <= 3) return '6-8';
-    if (gradeNum <= 7) return '9-12';
-    if (gradeNum <= 9) return '13-15';
-    if (gradeNum <= 12) return '16-18';
-    return 'adult';
-  }
-
-  if (typeof ageYears === 'number' && !Number.isNaN(ageYears)) {
-    if (ageYears <= 5) return '3-5';
-    if (ageYears <= 8) return '6-8';
-    if (ageYears <= 12) return '9-12';
-    if (ageYears <= 15) return '13-15';
-    if (ageYears <= 18) return '16-18';
-    return 'adult';
-  }
-
-  return null;
-}
-
-function formatGradeLabel(grade?: string | null): string | null {
-  if (!grade) return null;
-  const raw = String(grade).trim();
-  if (!raw) return null;
-  const lower = raw.toLowerCase();
-  if (lower.startsWith('grade')) return raw.replace(/\s+/g, ' ');
-  if (lower === 'r' || lower.includes('grade r')) return 'Grade R';
-  const match = raw.match(/\d+/);
-  if (match) return `Grade ${match[0]}`;
-  return raw;
-}
-
-function isPreschoolContext(learner?: LearnerContext | null): boolean {
-  const schoolType = (learner?.schoolType || '').toLowerCase();
-  if (schoolType.includes('preschool') || schoolType.includes('ecd') || schoolType.includes('early')) return true;
-  if (typeof learner?.ageYears === 'number' && learner.ageYears <= 6) return true;
-  if (learner?.ageBand === '3-5') return true;
-  return false;
-}
-
-const FREE_VOICE_BUDGET_MS = 10 * 60 * 1000;
-const FREE_VOICE_BUDGET_KEY_PREFIX = '@dash_voice_free_budget_';
-
-function getTodayKey(): string {
-  return new Date().toISOString().split('T')[0];
-}
-
-function buildVoiceBudgetKey(dayKey?: string): string {
-  return `${FREE_VOICE_BUDGET_KEY_PREFIX}${dayKey || getTodayKey()}`;
 }
 
 interface AlertState {
@@ -126,7 +104,7 @@ interface UseDashAssistantReturn {
   inputText: string;
   setInputText: (text: string) => void;
   isLoading: boolean;
-  loadingStatus: 'uploading' | 'thinking' | 'responding' | null;
+  loadingStatus: 'uploading' | 'analyzing' | 'thinking' | 'responding' | null;
   streamingMessageId: string | null;
   streamingContent: string;
   isSpeaking: boolean;
@@ -160,6 +138,7 @@ interface UseDashAssistantReturn {
   alertState: AlertState;
   hideAlert: () => void;
   learnerContext: LearnerContext | null;
+  tutorSession: TutorSession | null;
   
   // Refs
   flashListRef: React.RefObject<any>;
@@ -207,6 +186,10 @@ type TutorSession = {
   totalQuestions: number;
   correctCount: number;
   maxQuestions: number;
+  difficulty: number;
+  incorrectStreak: number;
+  correctStreak: number;
+  attemptsOnQuestion: number;
 };
 
 type TutorPayload = {
@@ -225,6 +208,8 @@ type TutorPayload = {
   misconception?: string;
   follow_up_question?: string;
   next_expected_answer?: string;
+  hint?: string;
+  steps?: string;
 };
 
 type LearnerContext = {
@@ -235,6 +220,9 @@ type LearnerContext = {
   schoolType?: string | null;
   role?: string | null;
 };
+
+const LOCAL_SNAPSHOT_LIMIT = 200;
+const LOCAL_SNAPSHOT_MAX = 200;
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
   const { conversationId, initialMessage, onClose } = options;
@@ -247,24 +235,24 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [messages, setMessages] = useState<DashMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState<'uploading' | 'thinking' | 'responding' | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState<'uploading' | 'analyzing' | 'thinking' | 'responding' | null>(null);
   const [statusStartTime, setStatusStartTime] = useState<number>(0);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>('');
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<DashConversation | null>(null);
   const [dashInstance, setDashInstance] = useState<IDashAIAssistant | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [enterToSend, setEnterToSend] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [autoSpeakResponses, setAutoSpeakResponses] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [partialTranscript, setPartialTranscript] = useState('');
   const [showTypingIndicator, setShowTypingIndicator] = useState(true);
   const [autoSuggestQuestions, setAutoSuggestQuestions] = useState(true);
   const [contextualHelp, setContextualHelp] = useState(true);
   const [streamingEnabledPref, setStreamingEnabledPref] = useState(false);
-  const [selectedAttachments, setSelectedAttachments] = useState<DashAttachment[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [tutorSession, setTutorSession] = useState<TutorSession | null>(null);
@@ -308,13 +296,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
   const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
   
-  // Voice input state
-  const [isRecording, setIsRecording] = useState(false);
-  const [partialTranscript, setPartialTranscript] = useState('');
-  const voiceSessionRef = useRef<VoiceSession | null>(null);
-  const voiceProviderRef = useRef<VoiceProvider | null>(null);
-  const voiceInputStartAtRef = useRef<number | null>(null);
-  
   // Alert state for premium modals (replaces native Alert.alert)
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
@@ -332,9 +313,18 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setAlertState(prev => ({ ...prev, visible: false }));
   }, []);
   
+  // Initialize attachments hook
+  const dashAttachments = useDashAttachments({
+    conversation,
+    onShowAlert: showAlert,
+  });
+  
   // Refs
   const flashListRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
+  const voiceSessionRef = useRef<VoiceSession | null>(null);
+  const voiceProviderRef = useRef<VoiceProvider | null>(null);
+  const voiceInputStartAtRef = useRef<number | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
   const isProcessingRef = useRef(false);
@@ -351,44 +341,37 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     learnerContextRef.current = learnerContext;
   }, [learnerContext]);
 
+  // Save conversation ID whenever it changes for persistence
+  useEffect(() => {
+    if (conversation?.id) {
+      AsyncStorage.setItem('@dash_ai_current_conversation_id', conversation.id).catch(err => {
+        console.error('[useDashAssistant] Failed to save conversation ID:', err);
+      });
+    }
+  }, [conversation?.id]);
+
   const isFreeTier = (tier || 'free').toLowerCase().includes('free');
   const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
 
-  const loadVoiceBudget = useCallback(async () => {
+  // Load voice budget on mount and when tier changes
+  const refreshVoiceBudget = useCallback(async () => {
     if (!isFreeTier) {
       setVoiceBudgetRemainingMs(null);
       return;
     }
-    try {
-      const raw = await AsyncStorage.getItem(buildVoiceBudgetKey());
-      if (!raw) {
-        setVoiceBudgetRemainingMs(FREE_VOICE_BUDGET_MS);
-        return;
-      }
-      const parsed = JSON.parse(raw) as { usedMs?: number };
-      const usedMs = typeof parsed?.usedMs === 'number' ? parsed.usedMs : 0;
-      setVoiceBudgetRemainingMs(Math.max(FREE_VOICE_BUDGET_MS - usedMs, 0));
-    } catch {
-      setVoiceBudgetRemainingMs(FREE_VOICE_BUDGET_MS);
-    }
+    const budget = await loadVoiceBudget();
+    setVoiceBudgetRemainingMs(budget.remainingMs);
   }, [isFreeTier]);
 
   const consumeVoiceBudget = useCallback(async (deltaMs: number) => {
     if (!isFreeTier || deltaMs <= 0) return;
-    const key = buildVoiceBudgetKey();
-    try {
-      const raw = await AsyncStorage.getItem(key);
-      const parsed = raw ? (JSON.parse(raw) as { usedMs?: number }) : { usedMs: 0 };
-      const usedMs = typeof parsed?.usedMs === 'number' ? parsed.usedMs : 0;
-      const nextUsed = Math.max(0, usedMs + deltaMs);
-      await AsyncStorage.setItem(key, JSON.stringify({ usedMs: nextUsed }));
-      setVoiceBudgetRemainingMs(Math.max(FREE_VOICE_BUDGET_MS - nextUsed, 0));
-    } catch {}
-  }, [isFreeTier]);
+    await trackVoiceUsage(deltaMs);
+    await refreshVoiceBudget();
+  }, [isFreeTier, refreshVoiceBudget]);
 
   useEffect(() => {
-    loadVoiceBudget();
-  }, [loadVoiceBudget]);
+    refreshVoiceBudget();
+  }, [refreshVoiceBudget]);
 
   useEffect(() => {
     let mounted = true;
@@ -415,7 +398,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const applyLearnerContext = async () => {
       const profileAny = profile as any;
       const role = profile?.role || '';
-      const schoolType = profileAny?.school_type || profileAny?.organization_type || profileAny?.organization_membership?.school_type || null;
+      
+      // Get school/organization info
+      const schoolId = profile?.organization_id || profile?.preschool_id;
+      
+      // For now, assume K-12 unless explicitly a preschool ID
+      // (organization_type column doesn't exist in profiles table)
+      const schoolType = schoolId && String(schoolId).toLowerCase().includes('preschool') 
+        ? 'preschool' 
+        : 'primary_school';
+      
+      // Normalize school type to detect K-12 vs preschool/ECD
+      const normalizedSchoolType = String(schoolType || '').toLowerCase();
+      const isPreschoolOrg = normalizedSchoolType.includes('preschool') || 
+                            normalizedSchoolType.includes('ecd') || 
+                            normalizedSchoolType.includes('early') ||
+                            normalizedSchoolType.includes('daycare') ||
+                            normalizedSchoolType.includes('creche');
 
       const setDefaultAgeBand = async (band: string | null) => {
         if (!band) return;
@@ -644,10 +643,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const detectTutorIntent = useCallback((text: string): TutorMode | null => {
     const value = (text || '').toLowerCase();
+    if (!value) return null;
     if (/diagnostic/.test(value)) return 'diagnostic';
-    if (/(quiz|test\s+me|assessment)/.test(value)) return 'quiz';
-    if (/(practice|help\s+me\s+solve|one\s+practice\s+question)/.test(value)) return 'practice';
-    if (/(explain|teach\s+me|walk\s+me\s+through)/.test(value)) return 'explain';
+    if (/(quiz|test\s+me|assessment|mock\s+test)/.test(value)) return 'quiz';
+    if (/(practice|worksheet|exercise|drill|one\s+practice\s+question)/.test(value)) return 'practice';
+    if (/(explain|teach\s+me|walk\s+me\s+through|step\s+by\s+step|mini\s+lesson|lesson|study\s+guidance|study\s+tips|study\s+plan|review|summarize)/.test(value)) {
+      return 'explain';
+    }
+    if (/(homework|question|problem|solve|answer|calculate|work\s+out|worksheet|assignment|stuck|confused|don'?t\s+understand)/.test(value)) {
+      return 'diagnostic';
+    }
     return null;
   }, []);
 
@@ -731,11 +736,40 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       : null;
 
     const generalRules = [
-      'CONSISTENCY RULES:',
-      '- Maintain continuity with prior messages; recap in 1-2 lines when resuming.',
-      '- Ask for missing grade/age/subject when needed before deep instruction.',
-      '- Use short steps, clear headings, and a quick check question.',
-      '- If a tutor override is present, follow it exactly.',
+      'DASH CONVERSATION STYLE:',
+      '- Be warm, friendly, and conversational - like a helpful learning companion',
+      '- Celebrate progress: "Great job!", "You\'re getting it!", "That\'s a smart connection!"',
+      '- Be proactive: Suggest next steps, offer insights, make connections',
+      '- Balance teaching with conversation - not every interaction needs to be a lesson',
+      '',
+      'RESPONSE STRUCTURE (for homework/learning questions):',
+      '1. When user shares an image/document: ANALYZE THE ACTUAL CONTENT',
+      '   - Describe what you see: "This is [textbook/worksheet/diagram]..."',
+      '   - Read visible text word-for-word',
+      '   - Be SPECIFIC to content shown, not generic advice',
+      '   - NEVER say "I cannot see it" - the attachment is visible',
+      '',
+      '2. FORBIDDEN generic responses:',
+      '   ❌ "Identify the problem, break it down, check your work"',
+      '   ❌ "Organize approach, apply concept, reflect"',
+      '   ✅ CORRECT: "This is Activity 7.1 about Multiple Intelligences..."',
+      '',
+      '3. Structure learning responses as:',
+      '   **1. What this is about** (brief overview)',
+      '   **2. Key concepts** (with examples)',
+      '   **3. Step-by-step solution/explanation**',
+      '   **4. Check understanding** (ONE diagnostic question)',
+      '',
+      '3. Formatting rules:',
+      '- Use **bold** for headings',
+      '- Use bullet points (•) for lists',
+      '- Use numbered steps (1., 2., 3.) for sequences',
+      '- Keep paragraphs short (2-3 sentences max)',
+      '- Use line breaks between sections',
+      '',
+      '4. NEVER say: "I need more context", "I cannot see", "Please describe"',
+      '   - If image attached: analyze it directly',
+      '   - If unclear: make reasonable inference and explain',
     ].join('\n');
 
     const lines = [
@@ -750,7 +784,121 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       preschoolRules,
     ].filter(Boolean);
 
-    return lines.join('\n');
+    // Use intelligent prompt builder for enhanced AI capabilities
+    const messageHistory = messages.map(msg => ({ role: msg.role, content: msg.content || '' }));
+    const hour = new Date().getHours();
+    const timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night' = 
+      hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
+
+    const enrichedLearner: LearnerContext = {
+      ...learner,
+      ageBand: ageBand || undefined,
+      ageYears: ageYears || undefined,
+      grade: gradeLabel || undefined,
+      schoolType: schoolType || undefined,
+    };
+
+    const intelligentPrompt = buildIntelligentSystemPrompt({
+      learner: enrichedLearner,
+      messageHistory,
+      tutorMode: true,
+      sessionStart: messages.length === 0,
+      timeOfDay,
+    });
+
+    // Combine traditional context with intelligent prompt
+    return `${lines.join('\n')}\n\n${intelligentPrompt}`;
+  }, [messages]);
+
+  const buildAttachmentContextInternal = useCallback((attachments: DashAttachment[]) => {
+    if (!attachments || attachments.length === 0) return null;
+    
+    const hasImages = attachments.some(a => a.kind === 'image');
+    const hasDocuments = attachments.some(a => a.kind === 'document' || a.kind === 'pdf');
+    
+    // Use extracted utility for attachment context
+    const baseContext = buildAttachmentContext(attachments.length, hasImages, hasDocuments);
+    
+    // Add attachment list
+    const lines = attachments.map((attachment) => {
+      const label = attachment.name || 'Attachment';
+      const kind = attachment.kind || 'file';
+      const size = typeof attachment.size === 'number' ? formatFileSize(attachment.size) : null;
+      return `- ${label} (${kind}${size ? `, ${size}` : ''})`;
+    });
+    
+    return `${baseContext}\n\nATTACHMENT LIST:\n${lines.join('\n')}`;
+  }, []);
+
+  const prepareAttachmentsForAI = useCallback(async (attachments: DashAttachment[]) => {
+    if (Platform.OS === 'web') return attachments;
+    if (!attachments || attachments.length === 0) return attachments;
+
+    const prepared: DashAttachment[] = [];
+
+    for (const attachment of attachments) {
+      if (attachment.kind !== 'image' || !attachment.previewUri) {
+        prepared.push(attachment);
+        continue;
+      }
+
+      const uri = attachment.previewUri || '';
+      if (!uri) {
+        prepared.push(attachment);
+        continue;
+      }
+
+      let base64: string | null = null;
+      let mediaType = 'image/jpeg';
+
+      for (const step of IMAGE_COMPRESS_STEPS) {
+        try {
+          const result = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: step.width } }],
+            {
+              compress: step.compress,
+              format: ImageManipulator.SaveFormat.JPEG,
+              base64: true,
+            }
+          );
+          if (result.base64 && result.base64.length <= MAX_IMAGE_BASE64_LEN) {
+            base64 = result.base64;
+            mediaType = 'image/jpeg';
+            break;
+          }
+        } catch {
+          // Try next compression step
+        }
+      }
+
+      if (!base64) {
+        try {
+          const fallback = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+          if (fallback && fallback.length <= MAX_IMAGE_BASE64_LEN) {
+            base64 = fallback;
+            mediaType = attachment.mimeType || 'image/jpeg';
+          }
+        } catch {
+          base64 = null;
+        }
+      }
+
+      if (base64) {
+        prepared.push({
+          ...attachment,
+          meta: {
+            ...(attachment.meta || {}),
+            image_base64: base64,
+            image_media_type: mediaType,
+          },
+        });
+      } else {
+        prepared.push(attachment);
+      }
+    }
+
+    return prepared;
   }, []);
 
   const resolveVoiceLocale = useCallback((lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' => {
@@ -760,40 +908,81 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     return 'en-ZA';
   }, []);
 
-  const buildTutorQuestionPrompt = useCallback((session: TutorSession, userText: string) => {
-    const contextParts = [
-      'You are Dash, an interactive tutor for learners.',
-      `Mode: ${session.mode}.`,
-      session.subject ? `Subject: ${session.subject}.` : null,
-      session.grade ? `Grade: ${session.grade}.` : null,
-      session.topic ? `Topic: ${session.topic}.` : null,
-      'Ask ONE question only and stop. Do not add extra questions or commentary.',
-      'If grade or topic is missing, ask a single clarifying question instead.',
-      'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
-      'JSON keys: question, expected_answer, subject, grade, topic, difficulty, next_step.',
-    ].filter(Boolean).join('\n');
+  const sanitizeTutorUserContent = useCallback((content?: string | null) => {
+    if (!content) return { content: '', sanitized: false };
+    const lower = content.toLowerCase();
+    const isTutorPrompt = /you are dash, an interactive tutor|tutor_payload|return only json|tutor mode override/i.test(lower);
+    if (!isTutorPrompt) return { content, sanitized: false };
 
-    return `${contextParts}\nLearner request: ${userText}\n<TUTOR_PAYLOAD>{"question":"...","expected_answer":"...","subject":"...","grade":"...","topic":"...","difficulty":1,"next_step":"answer"}</TUTOR_PAYLOAD>`;
+    const requestMatch = content.match(/Learner request:\s*([^\n]+)/i);
+    if (requestMatch?.[1]) {
+      return { content: requestMatch[1].trim(), sanitized: true };
+    }
+    const answerMatch = content.match(/Learner answer:\s*([^\n]+)/i);
+    if (answerMatch?.[1]) {
+      return { content: answerMatch[1].trim(), sanitized: true };
+    }
+    const questionMatch = content.match(/Question:\s*([^\n]+)/i);
+    if (questionMatch?.[1]) {
+      return { content: questionMatch[1].trim(), sanitized: true };
+    }
+    return { content: 'Tutor request', sanitized: true };
   }, []);
 
-  const buildTutorEvaluationPrompt = useCallback((session: TutorSession, learnerAnswer: string) => {
-    const contextParts = [
-      'You are Dash, an interactive tutor for learners.',
-      `Mode: ${session.mode}.`,
-      session.subject ? `Subject: ${session.subject}.` : null,
-      session.grade ? `Grade: ${session.grade}.` : null,
-      session.topic ? `Topic: ${session.topic}.` : null,
-      `Question: ${session.currentQuestion || 'N/A'}`,
-      session.expectedAnswer ? `Expected answer: ${session.expectedAnswer}` : null,
-      `Learner answer: ${learnerAnswer}`,
-      'Evaluate the answer with short feedback and the correct answer.',
-      'If incorrect, provide a gentle hint or example and ask ONE follow-up question.',
-      'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
-      'JSON keys: is_correct, score (0-100), feedback, correct_answer, explanation, misconception, follow_up_question, next_expected_answer.',
-    ].filter(Boolean).join('\n');
+  const normalizeConversationMessages = useCallback((items: DashMessage[]) => {
+    return items.map((msg) => {
+      if (msg.type !== 'user') return msg;
+      const { content, sanitized } = sanitizeTutorUserContent(msg.content);
+      return sanitized ? { ...msg, content } : msg;
+    });
+  }, [sanitizeTutorUserContent]);
 
-    return `${contextParts}\n<TUTOR_PAYLOAD>{"is_correct":true,"score":100,"feedback":"...","correct_answer":"...","explanation":"...","misconception":"...","follow_up_question":"...","next_expected_answer":"..."}</TUTOR_PAYLOAD>`;
+  const mapToPersistedMessages = useCallback((items: DashMessage[]) => {
+    return items.map((msg) => {
+      const meta: any = {};
+      if (msg.metadata && typeof msg.metadata === 'object') {
+        if ('tts' in msg.metadata) meta.tts = (msg.metadata as any).tts;
+        if ('ackType' in msg.metadata) meta.ackType = (msg.metadata as any).ackType;
+      }
+      return {
+        id: msg.id,
+        type: msg.type,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        meta: Object.keys(meta).length > 0 ? meta : undefined,
+      };
+    });
   }, []);
+
+  const persistConversationSnapshot = useCallback(async (conv?: DashConversation | null) => {
+    if (!user?.id || !conv?.id) return;
+    const messages = mapToPersistedMessages(conv.messages || []);
+    await saveConversationSnapshot(user.id, conv.id, messages, LOCAL_SNAPSHOT_MAX);
+    await setLastActiveConversationId(user.id, conv.id);
+  }, [mapToPersistedMessages, user?.id]);
+
+  const hydrateFromSnapshot = useCallback(async (convId: string) => {
+    if (!user?.id) return null;
+    const snapshot = await getConversationSnapshot(user.id, convId, LOCAL_SNAPSHOT_LIMIT);
+    if (!snapshot?.messages?.length) return null;
+    const messages: DashMessage[] = snapshot.messages.map((m) => ({
+      id: m.id,
+      type: m.type,
+      content: m.content,
+      timestamp: m.timestamp,
+      ...(m.meta ? { metadata: { ...(m.meta as any) } } : {}),
+    }));
+    const createdAt = messages.length > 0 ? Math.min(...messages.map(m => m.timestamp)) : snapshot.updatedAt;
+    const updatedAt = snapshot.updatedAt || (messages.length > 0 ? Math.max(...messages.map(m => m.timestamp)) : Date.now());
+    const conversation: DashConversation = {
+      id: convId,
+      title: 'Dash AI Chat',
+      messages,
+      created_at: createdAt,
+      updated_at: updatedAt,
+    };
+    return { conversation, messages };
+  }, [user?.id]);
 
   const buildTutorSystemContext = useCallback((
     session: TutorSession,
@@ -823,12 +1012,22 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       : [
           'K-12 MODE:',
           '- Match the learner grade and keep the difficulty age-appropriate.',
-          '- Use short steps and ask one question at a time.',
+          '- Use clear step-by-step explanations with numbered points.',
+          '- Break complex topics into simple, digestible parts.',
+          '- Provide concrete examples to illustrate concepts.',
+          '- Use bullet points and structured formatting for clarity.',
+          '- When explaining, follow this structure:',
+          '  1. Simple introduction',
+          '  2. Key concepts with examples',
+          '  3. Step-by-step breakdown',
+          '  4. One diagnostic question to check understanding',
+          '- Keep each section concise but comprehensive.',
         ].join('\n');
 
     const baseLines = [
       'TUTOR MODE OVERRIDE:',
       `Mode: ${session.mode}.`,
+      `Difficulty target: ${session.difficulty || 1}/3.`,
       learner?.learnerName ? `Learner: ${learner.learnerName}.` : null,
       learner?.grade ? `Grade: ${learner.grade}.` : session.grade ? `Grade: ${session.grade}.` : null,
       session.subject ? `Subject: ${session.subject}.` : null,
@@ -836,8 +1035,24 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       ageBand ? `Age band: ${ageBand}.` : null,
       learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
       levelGuidance,
+      '',
+      'RESPONSE FORMATTING:',
+      '- Be highly interactive: ask ONE short question at a time and wait.',
+      '- If the learner is wrong, provide a hint plus a step-by-step scaffold before asking the next question.',
+      '- When explaining concepts, use clear headers and numbered steps.',
+      '- Break down complex information into sections with headings.',
+      '- Use bullet points for lists of related items.',
+      '- Provide concrete examples after each key concept.',
+      '- For homework help, structure responses as:',
+      '  1. "What this is about" - brief overview',
+      '  2. Key concepts breakdown with examples',
+      '  3. Step-by-step solution or explanation',
+      '  4. One check question to verify understanding',
+      '',
       'Ask ONE question only and stop. Do not add extra questions or commentary.',
+      'Keep responses very short (2-4 short lines max) unless explaining a concept.',
       'If grade or topic is missing, ask a single clarifying question instead.',
+      'If the learner shared an attachment, assume it contains the question and ask about it directly.',
       'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
     ];
 
@@ -848,13 +1063,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         'Evaluate the learner’s latest message as the answer.',
         'Be strict and factual: only mark correct when the answer clearly matches.',
         'If unsure, mark incorrect and explain why.',
-        'If incorrect, provide a gentle hint and ask ONE follow-up question.'
+        'If incorrect, provide a gentle hint, show a short step-by-step scaffold, then ask ONE follow-up question.'
       );
       baseLines.push(
-        'JSON keys: is_correct, score (0-100), feedback, correct_answer, explanation, misconception, follow_up_question, next_expected_answer.'
+        'JSON keys: is_correct, score (0-100), feedback, correct_answer, explanation, misconception, follow_up_question, next_expected_answer.',
+        'Example: <TUTOR_PAYLOAD>{"is_correct":false,"score":40,"feedback":"...","correct_answer":"...","explanation":"...","misconception":"...","follow_up_question":"...","next_expected_answer":"..."}</TUTOR_PAYLOAD>'
       );
     } else {
-      baseLines.push('JSON keys: question, expected_answer, subject, grade, topic, difficulty, next_step.');
+      baseLines.push(
+        'JSON keys: question, expected_answer, subject, grade, topic, difficulty, next_step.',
+        'Example: <TUTOR_PAYLOAD>{"question":"...","expected_answer":"...","subject":"...","grade":"...","topic":"...","difficulty":1,"next_step":"answer"}</TUTOR_PAYLOAD>'
+      );
     }
 
     return baseLines.filter(Boolean).join('\n');
@@ -902,7 +1121,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       return { ...payload, is_correct: false };
     }
 
-    const expected = (payload.correct_answer || session.expectedAnswer || '').trim();
+    const expected = String(payload.correct_answer || session.expectedAnswer || '').trim();
     if (!expected) return payload;
 
     const normalizedAnswer = normalizeTutorText(learnerAnswer);
@@ -975,9 +1194,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
     }
     if (payload.feedback) lines.push(payload.feedback.trim());
+    if (payload.hint) lines.push(payload.hint.trim());
     if (payload.correct_answer) {
       lines.push(`Correct answer: ${payload.correct_answer}`);
     }
+    if (payload.steps) lines.push(payload.steps.trim());
     if (payload.explanation) lines.push(payload.explanation.trim());
     if (payload.follow_up_question) {
       lines.push(`\nNext question:\n${payload.follow_up_question.trim()}`);
@@ -1003,6 +1224,165 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     const keywordMatch = cleaned.match(/(?:^|\n)(?:what|which|how|why|solve|calculate|find|name|explain|define)[^\n]{0,120}$/i);
     return keywordMatch ? keywordMatch[0].trim() : null;
   }, []);
+
+  const buildTutorHintPack = useCallback((params: {
+    question?: string | null;
+    subject?: string | null;
+    expectedAnswer?: string | null;
+    incorrectStreak?: number;
+  }) => {
+    const question = (params.question || '').trim();
+    const lower = question.toLowerCase();
+    const subject = (params.subject || '').toLowerCase();
+    const numbers = extractNumbers(question);
+    const numberList = numbers.slice(0, 3).join(', ');
+    const isMath = subject.includes('math') ||
+      numbers.length > 0 ||
+      /(add|sum|plus|subtract|minus|difference|multiply|times|product|divide|quotient|fraction|decimal|percent|ratio|equation)/i.test(lower);
+    const isReading = subject.includes('english') ||
+      /(define|meaning|vocab|synonym|antonym|main idea|summarize|theme|character|plot|story|infer|explain)/i.test(lower);
+
+    let hint = '';
+    let steps = '';
+    let followUpQuestion = '';
+
+    if (isMath) {
+      const opHint = /add|sum|plus/.test(lower)
+        ? 'addition'
+        : /subtract|minus|difference/.test(lower)
+          ? 'subtraction'
+          : /multiply|times|product/.test(lower)
+            ? 'multiplication'
+            : /divide|quotient|per/.test(lower)
+              ? 'division'
+              : 'the correct operation';
+      hint = numberList
+        ? `Hint: the key numbers are ${numberList}.`
+        : 'Hint: find the key numbers and what the question is asking.';
+      steps = [
+        'Steps:',
+        '1. Identify what the question is asking.',
+        `2. Choose ${opHint}.`,
+        '3. Calculate carefully.',
+        '4. Check your result.'
+      ].join('\n');
+      followUpQuestion = numberList
+        ? `Step 1: Which operation should we use with ${numberList}?`
+        : 'Step 1: Which operation should we use?';
+    } else if (isReading) {
+      hint = 'Hint: focus on the key word or idea in the question.';
+      steps = [
+        'Steps:',
+        '1. Restate the question in your own words.',
+        '2. Find the key term or idea.',
+        '3. Give a short explanation or example.'
+      ].join('\n');
+      followUpQuestion = 'Step 1: What is the key word or idea in the question?';
+    } else {
+      hint = 'Hint: start by identifying what the question is asking you to do.';
+      steps = [
+        'Steps:',
+        '1. Identify the goal of the question.',
+        '2. List the important information.',
+        '3. Apply the rule or concept.',
+        '4. Check your answer.'
+      ].join('\n');
+      followUpQuestion = 'Step 1: What is the question asking you to find or explain?';
+    }
+
+    if (params.incorrectStreak && params.incorrectStreak >= 2) {
+      hint = hint ? `Let’s slow down. ${hint}` : 'Let’s slow down and take it step by step.';
+      if (params.expectedAnswer && params.expectedAnswer.length <= 12 && !hint.includes(params.expectedAnswer)) {
+        hint = `${hint} The target answer is ${params.expectedAnswer}.`;
+      }
+    }
+
+    if (followUpQuestion && !followUpQuestion.trim().endsWith('?')) {
+      followUpQuestion = `${followUpQuestion.trim()}?`;
+    }
+
+    return { hint, steps, followUpQuestion };
+  }, [extractNumbers]);
+
+  const buildFallbackTutorEvaluation = useCallback((session: TutorSession, learnerAnswer: string): TutorPayload => {
+    const expected = String(session.expectedAnswer || '').trim();
+    const normalizedAnswer = normalizeTutorText(learnerAnswer || '');
+    let isCorrect = false;
+
+    if (expected && normalizedAnswer) {
+      const expectedNumbers = extractNumbers(expected);
+      const answerNumbers = extractNumbers(learnerAnswer);
+      if (expectedNumbers.length > 0 && answerNumbers.length > 0) {
+        isCorrect = expectedNumbers.every(num =>
+          answerNumbers.some(answerNum => Math.abs(answerNum - num) < 1e-6)
+        );
+      } else {
+        const expectedCandidates = splitExpectedAnswers(expected).map(normalizeTutorText).filter(Boolean);
+        const normalizedExpected = normalizeTutorText(expected);
+        isCorrect = expectedCandidates.length > 0
+          ? expectedCandidates.some(candidate =>
+              normalizedAnswer === candidate || normalizedAnswer.includes(candidate) || candidate.includes(normalizedAnswer)
+            )
+          : normalizedExpected
+            ? (normalizedAnswer === normalizedExpected || normalizedAnswer.includes(normalizedExpected) || normalizedExpected.includes(normalizedAnswer))
+            : false;
+      }
+    }
+
+    return {
+      is_correct: isCorrect,
+      score: isCorrect ? 100 : 30,
+      feedback: isCorrect ? 'Correct.' : 'Not quite yet.',
+      correct_answer: expected || undefined,
+      follow_up_question: undefined,
+      subject: session.subject || undefined,
+      grade: session.grade || undefined,
+      topic: session.topic || undefined,
+    };
+  }, [extractNumbers, normalizeTutorText, splitExpectedAnswers]);
+
+  const applyTutorHints = useCallback((payload: TutorPayload, params: {
+    session?: TutorSession | null;
+    incorrectStreak: number;
+  }) => {
+    if (payload.is_correct !== false) return payload;
+    const session = params.session;
+    const question = payload.follow_up_question || payload.question || session?.currentQuestion || '';
+    const expectedAnswer = payload.correct_answer || session?.expectedAnswer || payload.expected_answer || null;
+    const hintPack = buildTutorHintPack({
+      question,
+      subject: payload.subject || session?.subject || null,
+      expectedAnswer,
+      incorrectStreak: params.incorrectStreak,
+    });
+
+    const feedback = payload.feedback || 'Not quite yet — let’s work it out together.';
+
+    let explanation = payload.explanation || '';
+    if (hintPack.steps && !explanation.includes(hintPack.steps)) {
+      explanation = explanation ? `${explanation}\n${hintPack.steps}` : hintPack.steps;
+    }
+
+    let followUpQuestion = payload.follow_up_question || hintPack.followUpQuestion || session?.currentQuestion || null;
+    if (followUpQuestion && !followUpQuestion.trim().endsWith('?')) {
+      followUpQuestion = `${followUpQuestion.trim()}?`;
+    }
+
+    let correctAnswer = payload.correct_answer;
+    if (!correctAnswer && expectedAnswer && params.incorrectStreak >= 2) {
+      correctAnswer = expectedAnswer;
+    }
+
+    return {
+      ...payload,
+      feedback,
+      explanation,
+      follow_up_question: followUpQuestion || payload.follow_up_question,
+      correct_answer: correctAnswer,
+      hint: payload.hint || hintPack.hint,
+      steps: payload.steps || hintPack.steps,
+    };
+  }, [buildTutorHintPack]);
 
   const logTutorAttempt = useCallback(async (session: TutorSession, payload: TutorPayload, learnerAnswer: string) => {
     if (!user?.id) return;
@@ -1039,6 +1419,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const loadChatPrefs = useCallback(async () => {
     try {
+      try {
+        await initAndMigrate();
+      } catch (e) {
+        if (__DEV__) console.warn('[useDashAssistant] migration warn', e);
+      }
       const [voiceChatPrefs, chatUiPrefs] = await Promise.all([
         getVoiceChatPrefs(),
         getChatUIPrefs(),
@@ -1065,15 +1450,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, []);
 
-  // Attachment progress updater
-  const updateAttachmentProgress = useCallback((attachmentId: string, progress: number, status?: DashAttachment['status']) => {
-    setSelectedAttachments(prev => prev.map(att => 
-      att.id === attachmentId 
-        ? { ...att, uploadProgress: progress, ...(status && { status }) }
-        : att
-    ));
-  }, []);
-
+  // hasFreeVoiceBudget check - used by voice gating and quota checks
   const hasFreeVoiceBudget = voiceBudgetRemainingMs === null
     ? true
     : voiceBudgetRemainingMs > 0;
@@ -1147,7 +1524,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
 
     try {
-      if (isFreeTier && message.content) {
+      if (isFreeTier && message.content && process.env.NODE_ENV !== 'development') {
         const estimatedMs = Math.max(1500, Math.round((message.content.length / 12.5) * 1000));
         await consumeVoiceBudget(estimatedMs);
       }
@@ -1193,6 +1570,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, [dashInstance, speakingMessageId, isSpeaking, hasTTSAccess, showAlert, hideAlert, voiceEnabled, stopSpeaking, isFreeTier, consumeVoiceBudget]);
 
+  // Voice and speaking functions (custom gating + alerts)
+
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
     if (!dashInstance) return;
@@ -1204,41 +1583,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (attachments.length > 0) {
         setLoadingStatus('uploading');
         setStatusStartTime(Date.now());
-        setIsUploading(true);
       } else {
         setLoadingStatus('thinking');
         setStatusStartTime(Date.now());
       }
 
-      // Upload attachments
-      const uploadedAttachments: DashAttachment[] = [];
-      if (attachments.length > 0 && conversation?.id) {
-        for (const attachment of attachments) {
-          try {
-            updateAttachmentProgress(attachment.id, 0, 'uploading');
-            const uploaded = await uploadAttachment(
-              attachment, 
-              conversation.id,
-              (progress) => updateAttachmentProgress(attachment.id, progress)
-            );
-            updateAttachmentProgress(attachment.id, 100, 'uploaded');
-            uploadedAttachments.push(uploaded);
-          } catch (error) {
-            console.error(`Failed to upload ${attachment.name}:`, error);
-            updateAttachmentProgress(attachment.id, 0, 'failed');
-            showAlert({
-              title: 'Upload Failed',
-              message: `Failed to upload ${attachment.name}. Please try again.`,
-              type: 'error',
-              icon: 'cloud-offline-outline',
-              buttons: [{ text: 'OK', style: 'default' }]
-            });
-          }
-        }
-      }
-
-      setIsUploading(false);
-      setLoadingStatus('thinking');
+      // Upload attachments using dashAttachments hook
+      const uploadedAttachments = await dashAttachments.uploadAttachments(attachments);
+      const hasAttachmentPayload = uploadedAttachments.length > 0 || attachments.length > 0;
+      setLoadingStatus(hasAttachmentPayload ? 'analyzing' : 'thinking');
       setStatusStartTime(Date.now());
       scrollToBottom({ animated: true, delay: 120 });
 
@@ -1248,19 +1601,42 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       let tutorAction: 'start' | 'evaluate' | null = null;
       let tutorModeForMetadata: TutorMode | null = null;
       let tutorContextOverride: string | null = null;
+      let sessionForTutorAction: TutorSession | null = null;
+      
+      // Build intelligent context with learning style adaptation
       const baseContextOverride = buildDashContextOverride(learnerContextRef.current || learnerContext);
+      const attachmentContextOverride = buildAttachmentContextInternal(uploadedAttachments);
+      
+      // Check if we should add celebration or greeting
+      const messageHistory = messages.map(msg => ({ role: msg.role, content: msg.content || '' }));
+      const needsCelebration = shouldCelebrate(messageHistory);
+      const isFirstMessage = messages.length === 0;
+      
+      // Add celebration hint if detected understanding/progress
+      let celebrationHint = '';
+      if (needsCelebration && !isFirstMessage) {
+        celebrationHint = '\n\n[HINT: The learner just showed understanding or made progress. Celebrate this! Use encouraging phrases like "Great job!", "You got it!", "Nice work!"]';
+      }
 
       const activeSession = tutorSessionRef.current;
+      const normalizedRole = String(profile?.role || '').toLowerCase();
+      const isLearnerRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+      const hasLearningAttachment = attachments.some(
+        (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
+      );
       const stopTutor = isTutorStopIntent(userText);
       if (stopTutor && activeSession) {
         setTutorSession(null);
       }
 
-      const tutorIntent = detectTutorIntent(userText);
+      let tutorIntent = isLearnerRole ? detectTutorIntent(userText) : null;
+      if (!tutorIntent && isLearnerRole && hasLearningAttachment) {
+        tutorIntent = 'diagnostic';
+      }
       if (activeSession?.awaitingAnswer && !stopTutor) {
         tutorAction = 'evaluate';
         tutorModeForMetadata = activeSession.mode;
-        outgoingText = userText;
+        sessionForTutorAction = activeSession;
         tutorContextOverride = buildTutorSystemContext(activeSession, {
           phase: 'evaluate',
           learnerContext: learnerContextRef.current || learnerContext,
@@ -1280,19 +1656,25 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           totalQuestions: 0,
           correctCount: 0,
           maxQuestions: getMaxQuestions(tutorIntent),
+          difficulty: 1,
+          incorrectStreak: 0,
+          correctStreak: 0,
+          attemptsOnQuestion: 0,
         };
         setTutorSession(newSession);
         tutorAction = 'start';
         tutorModeForMetadata = newSession.mode;
-        outgoingText = userText;
+        sessionForTutorAction = newSession;
         tutorContextOverride = buildTutorSystemContext(newSession, {
           phase: 'start',
           learnerContext: learnerContextRef.current || learnerContext,
         });
       }
-      const mergedContextOverride = [baseContextOverride, tutorContextOverride]
+      const mergedContextOverride = [baseContextOverride, tutorContextOverride, attachmentContextOverride, celebrationHint]
         .filter(Boolean)
         .join('\n\n') || null;
+
+      const aiAttachments = await prepareAttachmentsForAI(uploadedAttachments);
       const localUserMessage: DashMessage = {
         id: `local_user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'user',
@@ -1324,7 +1706,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         response = await dashInstance.sendMessage(
           outgoingText, 
           undefined, 
-          uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          aiAttachments.length > 0 ? aiAttachments : undefined,
           (chunk: string) => {
             setStreamingContent(prev => {
               const newContent = prev + chunk;
@@ -1352,7 +1734,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         response = await dashInstance.sendMessage(
           outgoingText, 
           undefined, 
-          uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          aiAttachments.length > 0 ? aiAttachments : undefined,
           undefined,
           {
             contextOverride: mergedContextOverride,
@@ -1371,7 +1753,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
       }
 
-      const tutorPayload = parseTutorPayload(response?.content || '');
+      const rawTutorPayload = parseTutorPayload(response?.content || '');
+      const hasTutorQuestion = !!rawTutorPayload?.question;
+      const hasTutorEvaluation = typeof rawTutorPayload?.is_correct === 'boolean' ||
+        !!rawTutorPayload?.feedback ||
+        !!rawTutorPayload?.follow_up_question;
+      let tutorPayload = (tutorAction === 'start' && !hasTutorQuestion) ||
+        (tutorAction === 'evaluate' && !hasTutorEvaluation)
+        ? null
+        : rawTutorPayload;
+      if (!tutorPayload && tutorAction === 'evaluate' && sessionForTutorAction) {
+        tutorPayload = buildFallbackTutorEvaluation(sessionForTutorAction, userText);
+      }
+
       if (tutorPayload && tutorAction === 'start' && tutorPayload.question) {
         const displayContent = buildTutorDisplayContent(tutorPayload, true);
         if (displayContent) {
@@ -1396,6 +1790,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             subject: tutorPayload.subject || prev.subject,
             grade: tutorPayload.grade || prev.grade,
             topic: tutorPayload.topic || prev.topic,
+            difficulty: typeof tutorPayload.difficulty === 'number' ? tutorPayload.difficulty : prev.difficulty,
             awaitingAnswer: true,
             currentQuestion: tutorPayload.question || prev.currentQuestion,
             expectedAnswer: tutorPayload.expected_answer || prev.expectedAnswer,
@@ -1403,9 +1798,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           };
         });
       } else if (tutorPayload && tutorAction === 'evaluate') {
-        const adjustedPayload = activeSession
+        const basePayload = activeSession
           ? reconcileTutorEvaluation(tutorPayload, userText, activeSession)
           : tutorPayload;
+        const isCorrect = basePayload.is_correct === true;
+        const nextIncorrectStreak = isCorrect ? 0 : (activeSession?.incorrectStreak || 0) + 1;
+        const nextCorrectStreak = isCorrect ? (activeSession?.correctStreak || 0) + 1 : 0;
+        const attemptsOnQuestion = isCorrect ? 0 : (activeSession?.attemptsOnQuestion || 0) + 1;
+        const adjustedPayload = !isCorrect
+          ? applyTutorHints(basePayload, { session: activeSession, incorrectStreak: nextIncorrectStreak })
+          : basePayload;
         const displayContent = buildTutorDisplayContent(adjustedPayload, false);
         if (displayContent) {
           tutorOverridesRef.current[response.id] = displayContent;
@@ -1430,6 +1832,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             const followUp = adjustedPayload.follow_up_question || null;
             const followExpected = adjustedPayload.next_expected_answer || null;
             const completed = totalQuestions >= prev.maxQuestions && !followUp;
+            let nextDifficulty = prev.difficulty || 1;
+            if (!isCorrect && nextIncorrectStreak >= 2) {
+              nextDifficulty = Math.max(1, nextDifficulty - 1);
+            } else if (isCorrect && nextCorrectStreak >= 2) {
+              nextDifficulty = Math.min(3, nextDifficulty + 1);
+            }
             if (completed) {
               const summary: DashMessage = {
                 id: `tutor_summary_${Date.now()}`,
@@ -1448,37 +1856,51 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               awaitingAnswer: !!followUp,
               currentQuestion: followUp,
               expectedAnswer: followExpected,
+              incorrectStreak: nextIncorrectStreak,
+              correctStreak: nextCorrectStreak,
+              attemptsOnQuestion,
+              difficulty: nextDifficulty,
             };
           });
         }
-      } else if (!tutorPayload && tutorAction && activeSession) {
-        const fallbackQuestion = extractTutorQuestionFromText(response?.content || '');
-        if (fallbackQuestion) {
-          response = {
-            ...response,
-            metadata: {
-              ...(response.metadata || {}),
-              tutor_phase: tutorModeForMetadata
-                ? getTutorPhaseLabel(tutorModeForMetadata)
-                : getTutorPhaseLabel(activeSession.mode),
-              tutor_question: true,
-              tutor_question_text: fallbackQuestion,
-            },
+      } else if (!tutorPayload && tutorAction && sessionForTutorAction) {
+        const fallbackFromResponse = extractTutorQuestionFromText(response?.content || '');
+        const fallbackQuestion = fallbackFromResponse || (() => {
+          if (!sessionForTutorAction.grade) return 'What grade are you in?';
+          if (!sessionForTutorAction.subject) return 'Which subject is this?';
+          if (hasLearningAttachment) {
+            return 'Please type the exact question from the attachment.';
+          }
+          return 'What exact question do you need help with?';
+        })();
+
+        tutorOverridesRef.current[response.id] = fallbackQuestion;
+        response = {
+          ...response,
+          content: fallbackQuestion,
+          metadata: {
+            ...(response.metadata || {}),
+            tutor_phase: tutorModeForMetadata
+              ? getTutorPhaseLabel(tutorModeForMetadata)
+              : getTutorPhaseLabel(sessionForTutorAction.mode),
+            tutor_question: true,
+            tutor_question_text: fallbackQuestion,
+          },
+        };
+
+        setTutorSession(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            subject: prev.subject,
+            grade: prev.grade,
+            topic: prev.topic,
+            awaitingAnswer: true,
+            currentQuestion: fallbackQuestion,
+            expectedAnswer: null,
+            questionIndex: tutorAction === 'start' ? prev.questionIndex + 1 : prev.questionIndex,
           };
-          setTutorSession(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              subject: prev.subject,
-              grade: prev.grade,
-              topic: prev.topic,
-              awaitingAnswer: true,
-              currentQuestion: fallbackQuestion,
-              expectedAnswer: null,
-              questionIndex: tutorAction === 'start' ? prev.questionIndex + 1 : prev.questionIndex,
-            };
-          });
-        }
+        });
       }
 
       // Add assistant message locally for immediate UI feedback
@@ -1519,11 +1941,19 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const overrideMap = tutorOverridesRef.current;
         const merged = updatedConv.messages.map(msg => {
           const override = overrideMap[msg.id];
-          return override ? { ...msg, content: override } : msg;
+          if (override) {
+            return { ...msg, content: override };
+          }
+          if (msg.type === 'user') {
+            const { content, sanitized } = sanitizeTutorUserContent(msg.content);
+            return sanitized ? { ...msg, content } : msg;
+          }
+          return msg;
         });
         setMessages(prev => (merged.length >= prev.length ? merged : prev));
         setConversation(updatedConv);
         scrollToBottom({ animated: true, delay: 150 });
+        persistConversationSnapshot(updatedConv).catch(() => {});
       }
 
       // Check for lesson generator intent
@@ -1591,7 +2021,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     dashInstance,
     conversation,
     scrollToBottom,
-    updateAttachmentProgress,
     setLayout,
     wantsLessonGenerator,
     showAlert,
@@ -1603,20 +2032,25 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     isTutorStopIntent,
     extractLearningContext,
     buildDashContextOverride,
+    buildAttachmentContext,
+    prepareAttachmentsForAI,
     getMaxQuestions,
-    buildTutorQuestionPrompt,
-    buildTutorEvaluationPrompt,
     buildTutorSystemContext,
     parseTutorPayload,
+    buildFallbackTutorEvaluation,
     reconcileTutorEvaluation,
+    applyTutorHints,
     buildTutorDisplayContent,
     extractTutorQuestionFromText,
+    sanitizeTutorUserContent,
     logTutorAttempt,
     getTutorPhaseLabel,
+    persistConversationSnapshot,
     learnerContext,
     capsReady,
     canInteractiveLessons,
     user?.id,
+    profile?.role,
   ]);
 
   // Process queue
@@ -1639,7 +2073,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   // Public send message
   const sendMessage = useCallback(async (text: string = inputText.trim()) => {
-    if ((!text && selectedAttachments.length === 0) || !dashInstance) return;
+    if ((!text && dashAttachments.selectedAttachments.length === 0) || !dashInstance) return;
     
     if (user?.id) {
       try {
@@ -1689,13 +2123,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     
     requestQueueRef.current.push({
       text,
-      attachments: [...selectedAttachments],
+      attachments: [...dashAttachments.selectedAttachments],
     });
 
     setInputText('');
-    setSelectedAttachments([]);
+    dashAttachments.setSelectedAttachments([]);
     processQueue();
-  }, [inputText, selectedAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator]);
+  }, [inputText, dashAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator]);
 
   const sendTutorAnswer = useCallback(async (answer: string, sourceMessageId?: string) => {
     const trimmed = answer.trim();
@@ -1714,110 +2148,30 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [sendMessage]);
 
   // Attachment handlers
-  const handleAttachFile = useCallback(async () => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      showAlert({
-        title: 'Attach Files',
-        message: 'Choose the type of files to attach',
-        type: 'info',
-        icon: 'attach-outline',
-        buttons: [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Documents', onPress: () => { hideAlert(); handlePickDocuments(); } },
-          { text: 'Photos', onPress: () => { hideAlert(); handlePickImages(); } }
-        ]
-      });
-    } catch (error) {
-      console.error('Failed to show file picker:', error);
-    }
-  }, [showAlert, hideAlert]);
+  // Attachment functions delegated to dashAttachments hook
 
-  const handlePickDocuments = useCallback(async () => {
-    try {
-      const documents = await pickDocuments();
-      if (documents.length > 0) {
-        setSelectedAttachments(prev => [...prev, ...documents]);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } catch (error) {
-      console.error('Failed to pick documents:', error);
-      showAlert({
-        title: 'Error',
-        message: 'Failed to select documents.',
-        type: 'error',
-        icon: 'document-outline',
-        buttons: [{ text: 'OK', style: 'default' }]
-      });
-    }
-  }, [showAlert]);
-
-  const handlePickImages = useCallback(async () => {
-    try {
-      const images = await pickImages();
-      if (images.length > 0) {
-        setSelectedAttachments(prev => [...prev, ...images]);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } catch (error) {
-      console.error('Failed to pick images:', error);
-      showAlert({
-        title: 'Error',
-        message: 'Failed to select images.',
-        type: 'error',
-        icon: 'image-outline',
-        buttons: [{ text: 'OK', style: 'default' }]
-      });
-    }
-  }, [showAlert]);
-
-  const handleTakePhoto = useCallback(async () => {
-    try {
-      const photos = await takePhoto();
-      if (photos.length > 0) {
-        setSelectedAttachments(prev => [...prev, ...photos]);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } catch (error) {
-      console.error('Failed to take photo:', error);
-      showAlert({
-        title: 'Error',
-        message: 'Failed to take photo.',
-        type: 'error',
-        icon: 'camera-outline',
-        buttons: [{ text: 'OK', style: 'default' }]
-      });
-    }
-  }, [showAlert]);
-
-  const handleRemoveAttachment = useCallback(async (attachmentId: string) => {
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setSelectedAttachments(prev => prev.filter(att => att.id !== attachmentId));
-    } catch (error) {
-      console.error('Failed to remove attachment:', error);
-    }
-  }, []);
-
-  // Stop voice recording
   const stopVoiceRecording = useCallback(async () => {
-    try {
-      if (voiceSessionRef.current && voiceSessionRef.current.isActive()) {
-        await voiceSessionRef.current.stop();
-      }
-      if (isFreeTier && voiceInputStartAtRef.current) {
-        const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
-        consumeVoiceBudget(deltaMs);
-        voiceInputStartAtRef.current = null;
-      }
+    if (!voiceSessionRef.current) {
       setIsRecording(false);
-      setPartialTranscript('');
-    } catch (error) {
-      console.error('[useDashAssistant] Error stopping voice:', error);
-      setIsRecording(false);
-      setPartialTranscript('');
+      return;
     }
-  }, [isFreeTier, consumeVoiceBudget]);
+
+    try {
+      await voiceSessionRef.current.stop();
+    } catch (error) {
+      console.error('[useDashAssistant] Failed to stop voice session:', error);
+    }
+
+    if (isFreeTier && voiceInputStartAtRef.current) {
+      const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
+      await consumeVoiceBudget(deltaMs);
+      voiceInputStartAtRef.current = null;
+    }
+
+    setIsRecording(false);
+    setPartialTranscript('');
+    voiceSessionRef.current = null;
+  }, [consumeVoiceBudget, isFreeTier]);
 
   // Handle voice input mic press - START/STOP toggle
   const handleInputMicPress = useCallback(async () => {
@@ -1987,6 +2341,29 @@ You can also use text input to chat with Dash.`;
             user_tier: tier || 'free',
           });
         },
+        onError: (error: string) => {
+          const msg = String(error || '');
+          const isNetwork = /network|internet|offline|timeout|connection/i.test(msg);
+          setIsRecording(false);
+          setPartialTranscript('');
+          if (voiceSessionRef.current?.isActive?.()) {
+            voiceSessionRef.current.stop().catch(() => {});
+          }
+          if (isFreeTier && voiceInputStartAtRef.current) {
+            const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
+            consumeVoiceBudget(deltaMs);
+            voiceInputStartAtRef.current = null;
+          }
+          showAlert({
+            title: 'Voice Recognition Error',
+            message: isNetwork
+              ? 'Voice recognition needs a stable internet connection on this device. Please check your connection or use text input.'
+              : 'Voice recognition failed. Please try again or use text input.',
+            type: 'warning',
+            icon: 'mic-off-outline',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        },
       });
 
       if (started) {
@@ -2022,14 +2399,7 @@ You can also use text input to chat with Dash.`;
     }
   }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale, isFreeTier, consumeVoiceBudget]);
 
-  // Cleanup voice session on unmount
-  useEffect(() => {
-    return () => {
-      if (voiceSessionRef.current && voiceSessionRef.current.isActive()) {
-        voiceSessionRef.current.stop().catch(() => {});
-      }
-    };
-  }, []);
+  // Voice session cleanup handled locally
 
   const startNewConversation = useCallback(async () => {
     if (!dashInstance) return;
@@ -2039,7 +2409,20 @@ You can also use text input to chat with Dash.`;
       const newConv = await dashInstance.getConversation(newConvId);
       if (newConv) {
         setConversation(newConv);
+        persistConversationSnapshot(newConv).catch(() => {});
         setMessages([]);
+        setInputText('');
+        dashAttachments.setSelectedAttachments([]);
+        setStreamingMessageId(null);
+        setStreamingContent('');
+        setUnreadCount(0);
+        setTutorSession(null);
+        tutorOverridesRef.current = {};
+        
+        // Clear voice state
+        if (isRecording) {
+          await stopVoiceRecording();
+        }
         
         const greeting: DashMessage = {
           id: `greeting_${Date.now()}`,
@@ -2059,7 +2442,7 @@ You can also use text input to chat with Dash.`;
         buttons: [{ text: 'OK', style: 'default' }]
       });
     }
-  }, [dashInstance, showAlert]);
+  }, [dashInstance, dashAttachments, isRecording, showAlert, stopVoiceRecording, persistConversationSnapshot]);
 
   // Initialize Dash AI
   useEffect(() => {
@@ -2076,26 +2459,49 @@ You can also use text input to chat with Dash.`;
         let hasExistingMessages = false;
 
         if (conversationId) {
+          const snapshot = await hydrateFromSnapshot(conversationId);
+          const hasSnapshot = !!snapshot;
+          if (hasSnapshot) {
+            hasExistingMessages = snapshot.messages.length > 0;
+            setConversation(snapshot.conversation);
+            setMessages(normalizeConversationMessages(snapshot.messages));
+            dash.setCurrentConversationId(conversationId);
+          }
           const existingConv = await dash.getConversation(conversationId);
           if (existingConv) {
             hasExistingMessages = (existingConv.messages?.length || 0) > 0;
             setConversation(existingConv);
-            setMessages(existingConv.messages || []);
+            setMessages(normalizeConversationMessages(existingConv.messages || []));
+            dash.setCurrentConversationId(conversationId);
+            persistConversationSnapshot(existingConv).catch(() => {});
+          } else if (hasSnapshot) {
             dash.setCurrentConversationId(conversationId);
           }
         } else {
           const savedConvId = await AsyncStorage.getItem('@dash_ai_current_conversation_id');
-          let newConvId = savedConvId || null;
+          const lastActiveId = user?.id ? await getLastActiveConversationId(user.id) : null;
+          let newConvId = savedConvId || lastActiveId || null;
           
           if (newConvId) {
+            const snapshot = await hydrateFromSnapshot(newConvId);
+            const hasSnapshot = !!snapshot;
+            if (hasSnapshot) {
+              hasExistingMessages = snapshot.messages.length > 0;
+              setConversation(snapshot.conversation);
+              setMessages(normalizeConversationMessages(snapshot.messages));
+              dash.setCurrentConversationId(newConvId);
+            }
             const existingConv = await dash.getConversation(newConvId);
             if (existingConv) {
               hasExistingMessages = (existingConv.messages?.length || 0) > 0;
               setConversation(existingConv);
-              setMessages(existingConv.messages || []);
+              setMessages(normalizeConversationMessages(existingConv.messages || []));
               dash.setCurrentConversationId(newConvId);
-            } else {
+              persistConversationSnapshot(existingConv).catch(() => {});
+            } else if (!hasSnapshot) {
               newConvId = null;
+            } else {
+              dash.setCurrentConversationId(newConvId);
             }
           }
           
@@ -2106,17 +2512,24 @@ You can also use text input to chat with Dash.`;
                 const latest = convs.reduce((a: any, b: any) => (a.updated_at > b.updated_at ? a : b));
                 hasExistingMessages = (latest.messages?.length || 0) > 0;
                 setConversation(latest);
-                setMessages(latest.messages || []);
+                setMessages(normalizeConversationMessages(latest.messages || []));
                 dash.setCurrentConversationId(latest.id);
+                persistConversationSnapshot(latest).catch(() => {});
               } else {
                 const createdId = await dash.startNewConversation('Chat with Dash');
                 const newConv = await dash.getConversation(createdId);
-                if (newConv) setConversation(newConv);
+                if (newConv) {
+                  setConversation(newConv);
+                  persistConversationSnapshot(newConv).catch(() => {});
+                }
               }
             } catch {
               const createdId = await dash.startNewConversation('Chat with Dash');
               const newConv = await dash.getConversation(createdId);
-              if (newConv) setConversation(newConv);
+              if (newConv) {
+                setConversation(newConv);
+                persistConversationSnapshot(newConv).catch(() => {});
+              }
             }
           }
         }
@@ -2143,7 +2556,15 @@ You can also use text input to chat with Dash.`;
     };
 
     initializeDash();
-  }, [conversationId, initialMessage, loadChatPrefs]);
+  }, [
+    conversationId,
+    initialMessage,
+    loadChatPrefs,
+    normalizeConversationMessages,
+    hydrateFromSnapshot,
+    persistConversationSnapshot,
+    user?.id,
+  ]);
 
   // Auto-scroll effects
   useEffect(() => {
@@ -2154,7 +2575,13 @@ You can also use text input to chat with Dash.`;
 
   useEffect(() => {
     if (isLoading && flashListRef.current) {
-      scrollToBottom({ animated: true, delay: 150 });
+      // Scroll immediately when loading starts
+      scrollToBottom({ animated: false, delay: 0 });
+      // Then scroll again to catch any late renders
+      const timer = setTimeout(() => {
+        scrollToBottom({ animated: true, delay: 0 });
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isLoading, loadingStatus, scrollToBottom]);
 
@@ -2180,19 +2607,28 @@ You can also use text input to chat with Dash.`;
       if (dashInstance && conversation) {
         dashInstance.getConversation(conversation.id).then((updatedConv: any) => {
           if (updatedConv && updatedConv.messages.length !== messages.length) {
-            setMessages(updatedConv.messages);
+            setMessages(normalizeConversationMessages(updatedConv.messages));
             setConversation(updatedConv);
+            persistConversationSnapshot(updatedConv).catch(() => {});
           }
         });
       }
 
       return () => {
-        if (dashInstance && isSpeaking) {
-          setIsSpeaking(false);
-          dashInstance.stopSpeaking().catch(() => {});
+        if (isSpeaking) {
+          stopSpeaking().catch(() => {});
         }
       };
-    }, [dashInstance, conversation, messages.length, isSpeaking, loadChatPrefs])
+    }, [
+      dashInstance,
+      conversation,
+      messages.length,
+      isSpeaking,
+      loadChatPrefs,
+      stopSpeaking,
+      normalizeConversationMessages,
+      persistConversationSnapshot,
+    ])
   );
 
   // Cleanup on unmount
@@ -2202,17 +2638,17 @@ You can also use text input to chat with Dash.`;
         clearTimeout(scrollTimeoutRef.current);
       }
       if (dashInstance) {
-        dashInstance.stopSpeaking().catch(() => {});
+        stopSpeaking().catch(() => {});
         dashInstance.cleanup();
       }
     };
-  }, [dashInstance]);
+  }, [dashInstance, stopSpeaking]);
 
   // Web beforeunload handler
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (dashInstance && isSpeaking) {
-        dashInstance.stopSpeaking().catch(() => {});
+        stopSpeaking().catch(() => {});
       }
     };
 
@@ -2225,7 +2661,7 @@ You can also use text input to chat with Dash.`;
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
     return undefined;
-  }, [dashInstance, isSpeaking]);
+  }, [dashInstance, isSpeaking, stopSpeaking]);
 
   return {
     // State
@@ -2247,8 +2683,9 @@ You can also use text input to chat with Dash.`;
     showTypingIndicator,
     autoSuggestQuestions,
     contextualHelp,
-    selectedAttachments,
-    isUploading,
+    selectedAttachments: dashAttachments.selectedAttachments,
+    isUploading: dashAttachments.isUploading,
+    attachmentProgress: dashAttachments.attachmentProgress,
     isNearBottom,
     setIsNearBottom,
     unreadCount,
@@ -2265,6 +2702,7 @@ You can also use text input to chat with Dash.`;
     alertState,
     hideAlert,
     learnerContext,
+    tutorSession,
     
     // Refs
     flashListRef,
@@ -2276,11 +2714,11 @@ You can also use text input to chat with Dash.`;
     speakResponse,
     stopSpeaking,
     scrollToBottom,
-    handleAttachFile,
-    handlePickDocuments,
-    handlePickImages,
-    handleTakePhoto,
-    handleRemoveAttachment,
+    handleAttachFile: dashAttachments.handleAttachFile,
+    handlePickDocuments: dashAttachments.handlePickDocuments,
+    handlePickImages: dashAttachments.handlePickImages,
+    handleTakePhoto: dashAttachments.handleTakePhoto,
+    handleRemoveAttachment: dashAttachments.handleRemoveAttachment,
     handleInputMicPress,
     stopVoiceRecording,
     startNewConversation,

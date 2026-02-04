@@ -17,6 +17,7 @@ import {
   Text,
   StyleSheet,
   RefreshControl,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -118,11 +119,123 @@ export default function NotificationsScreen() {
     }
   }, []);
 
+  const getString = (value: unknown): string | undefined =>
+    typeof value === 'string' ? value : undefined;
+
+  const extractReceiptUrl = (data?: Record<string, unknown>): string | null => {
+    if (!data) return null;
+    const candidates = [
+      data.receipt_url,
+      data.receiptUrl,
+      data.receiptURL,
+      data.receipt,
+      data.url,
+    ];
+    for (const candidate of candidates) {
+      const url = getString(candidate);
+      if (url && url.trim()) return url;
+    }
+    return null;
+  };
+
+  const extractPaymentContext = (data?: Record<string, unknown>, fallbackText = ''): string => {
+    const parts = [
+      getString(data?.payment_context),
+      getString(data?.fee_type),
+      getString(data?.fee_category),
+      getString(data?.payment_purpose),
+      getString(data?.paymentPurpose),
+      getString(data?.description),
+      getString(data?.title),
+      getString(data?.payment_reference),
+      fallbackText,
+    ].filter(Boolean) as string[];
+    return parts.join(' ').toLowerCase();
+  };
+
+  const isUniformNotification = (data?: Record<string, unknown>, fallbackText = ''): boolean => {
+    const context = extractPaymentContext(data, fallbackText);
+    if (context.includes('uniform')) return true;
+    const feeId = getString(data?.fee_id) || getString(data?.feeId);
+    if (feeId && feeId.toLowerCase().startsWith('uniform')) return true;
+    return false;
+  };
+
+  const resolveChildId = (data?: Record<string, unknown>): string | undefined =>
+    getString(data?.student_id) || getString(data?.child_id) || getString(data?.childId);
+
+  const resolveBillingTab = (data?: Record<string, unknown>, fallbackText = ''): 'history' | 'upload' => {
+    const type = getString(data?.type)?.toLowerCase() || '';
+    const combined = `${type} ${fallbackText}`.toLowerCase();
+    if (
+      combined.includes('review') ||
+      combined.includes('rejected') ||
+      combined.includes('needs attention')
+    ) {
+      return 'upload';
+    }
+    return 'history';
+  };
+
   // Navigate based on notification type
   const handleNotificationPress = useCallback(async (notification: Notification) => {
     if (user?.id && !notification.read) {
       await markNotificationRead(user.id, notification.id);
       queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+    }
+
+    const receiptUrl = extractReceiptUrl(notification.data);
+    if (receiptUrl) {
+      const lowerUrl = receiptUrl.toLowerCase();
+      if (lowerUrl.endsWith('.pdf')) {
+        navigateSafe('/screens/pdf-viewer', { url: receiptUrl, title: 'Receipt' });
+      } else {
+        try {
+          await Linking.openURL(receiptUrl);
+        } catch {
+          navigateSafe('/screens/pdf-viewer', { url: receiptUrl, title: 'Receipt' });
+        }
+      }
+      return;
+    }
+
+    const fallbackText = `${notification.title} ${notification.body}`.trim();
+    const dataType = getString(notification.data?.type)?.toLowerCase() || '';
+    const isPaymentLike = [
+      'payment_approved',
+      'payment_rejected',
+      'payment_receipt',
+      'payment_status',
+      'payment_confirmed',
+      'pop_approved',
+      'pop_rejected',
+      'pop_submitted',
+      'receipt',
+    ].includes(dataType);
+
+    if (isUniformNotification(notification.data, fallbackText)) {
+      const childId = resolveChildId(notification.data);
+      if (isParent && isPaymentLike) {
+        if (childId) {
+          navigateSafe('/screens/parent-uniform-payments', { childId });
+        } else {
+          navigateSafe('/screens/parent-uniform-payments');
+        }
+      } else {
+        navigateSafe('/screens/parent-dashboard', { focus: 'uniform-sizes' });
+      }
+      return;
+    }
+
+    if (isParent && isPaymentLike) {
+      const childId = resolveChildId(notification.data);
+      const tab = resolveBillingTab(notification.data, fallbackText);
+      if (childId) {
+        navigateSafe('/screens/parent-payments', { tab, childId });
+      } else {
+        navigateSafe('/screens/parent-payments', { tab });
+      }
+      return;
     }
     
     switch (notification.type) {
@@ -161,7 +274,13 @@ export default function NotificationsScreen() {
         break;
       case 'billing':
         if (isParent) {
-          navigateSafe('/screens/parent-payments');
+          const childId = resolveChildId(notification.data);
+          const tab = resolveBillingTab(notification.data, `${notification.title} ${notification.body}`.trim());
+          if (childId) {
+            navigateSafe('/screens/parent-payments', { tab, childId });
+          } else {
+            navigateSafe('/screens/parent-payments', { tab });
+          }
         } else if (isPrincipal) {
           navigateSafe('/screens/financial-dashboard');
         } else if (isTeacher) {

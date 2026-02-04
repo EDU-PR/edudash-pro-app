@@ -40,41 +40,74 @@ export default function ParentBirthdayChartPage() {
       const userId = session.user.id;
       setUserEmail(session.user.email || '');
 
-      const { data: profile } = await supabase
+      const { data: profileById } = await supabase
         .from('profiles')
-        .select('first_name, last_name, preschool_id, organization_id, preschool_name')
+        .select('id, auth_user_id, first_name, last_name, preschool_name, organization_name')
         .eq('id', userId)
         .maybeSingle();
+
+      const { data: profileByAuth } = profileById
+        ? { data: null }
+        : await supabase
+            .from('profiles')
+            .select('id, auth_user_id, first_name, last_name, preschool_name, organization_name')
+            .eq('auth_user_id', userId)
+            .maybeSingle();
+
+      const profile = profileById || profileByAuth;
 
       if (profile?.first_name || profile?.last_name) {
         setUserName(`${profile?.first_name || ''} ${profile?.last_name || ''}`.trim());
       }
 
-      const organizationId = profile?.organization_id || profile?.preschool_id;
+      setTenantSlug(profile?.preschool_name || profile?.organization_name || '');
+
+      // Get organization ID from parent's children to load ALL birthdays in school
+      // This allows parents to see all students' upcoming birthdays and plan ahead
+      const resolvedParentId = profile?.id || userId;
+      const resolvedAuthUserId = profile?.auth_user_id || userId;
+      const parentFilters = [
+        `parent_id.eq.${resolvedParentId}`,
+        `guardian_id.eq.${resolvedParentId}`,
+      ];
+      if (resolvedAuthUserId && resolvedAuthUserId !== resolvedParentId) {
+        parentFilters.push(`parent_id.eq.${resolvedAuthUserId}`);
+        parentFilters.push(`guardian_id.eq.${resolvedAuthUserId}`);
+      }
+
+      // First, get one of the parent's children to determine the organization
+      const { data: firstChild } = await supabase
+        .from('students')
+        .select('organization_id, preschool_id')
+        .or(parentFilters.join(','))
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      const organizationId = firstChild?.organization_id || firstChild?.preschool_id;
+
       if (!organizationId) {
+        console.warn('[ParentBirthdayChart] No organization found from parent children');
         setBirthdays([]);
         setLoading(false);
         return;
       }
 
-      setTenantSlug(profile?.preschool_name || '');
-
-      const { data, error } = await supabase
+      // Load ALL students' birthdays in the organization (not just parent's children)
+      // Parents can see general info (name, class, birthday) to plan ahead for classmates
+      const allStudentsQuery = supabase
         .from('students')
         .select('id, first_name, last_name, date_of_birth, class_id, avatar_url, classes!students_class_id_fkey(name)')
         .or(`organization_id.eq.${organizationId},preschool_id.eq.${organizationId}`)
         .eq('is_active', true)
         .not('date_of_birth', 'is', null);
 
-      if (error) {
-        setBirthdays([]);
-        setLoading(false);
-        return;
-      }
+      const { data: allStudents } = await allStudentsQuery;
+      const allChildren = (allStudents || []) as StudentRow[];
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const mapped: WebStudentBirthday[] = (data || []).map((row: StudentRow): WebStudentBirthday => {
+      const mapped: WebStudentBirthday[] = allChildren.map((row: StudentRow): WebStudentBirthday => {
         const dob = row.date_of_birth || '';
         const nextBirthday = dob ? getNextBirthdayDate(dob, today) : null;
         const ageTurning = dob && nextBirthday ? calculateAgeOnDate(dob, nextBirthday) : 0;
@@ -105,6 +138,15 @@ export default function ParentBirthdayChartPage() {
 
     void load();
   }, [router, supabase, t]);
+
+function deduplicateById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
 
   return (
     <ParentShell tenantSlug={tenantSlug} userEmail={userEmail} userName={userName}>

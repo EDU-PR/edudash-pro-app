@@ -35,6 +35,18 @@ const buildFeeContext = (child?: PaymentChild) => ({
   gradeLevel: child?.grade_level ?? child?.grade ?? null,
 });
 
+const toMonthKey = (value?: string | null): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+type ReceiptInfo = {
+  receiptUrl?: string | null;
+  receiptStoragePath?: string | null;
+};
+
 export function useParentPayments() {
   const { user, profile } = useAuth();
   const appState = useRef(AppState.currentState);
@@ -124,6 +136,36 @@ export function useParentPayments() {
       const popUploadsData = uploads || [];
       setPOPUploads(popUploadsData as POPUpload[]);
 
+      // Fetch completed/approved payments to attach receipt links
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('id, amount, status, created_at, fee_ids, metadata, payment_reference, student_id')
+        .eq('student_id', selectedChildId)
+        .in('status', ['completed', 'approved'])
+        .order('created_at', { ascending: false });
+
+      const receiptsByFeeId = new Map<string, ReceiptInfo>();
+      const receiptsByMonth = new Map<string, ReceiptInfo>();
+      (payments || []).forEach((payment: any) => {
+        const metadata = payment?.metadata || {};
+        const receiptUrl = typeof metadata?.receipt_url === 'string' ? metadata.receipt_url : null;
+        const receiptStoragePath = typeof metadata?.receipt_storage_path === 'string' ? metadata.receipt_storage_path : null;
+        if (!receiptUrl && !receiptStoragePath) return;
+
+        const feeIds = Array.isArray(payment?.fee_ids) ? [...payment.fee_ids] : [];
+        if (typeof metadata?.fee_id === 'string') feeIds.push(metadata.fee_id);
+        feeIds.forEach((id: string) => {
+          if (id) {
+            receiptsByFeeId.set(id, { receiptUrl, receiptStoragePath });
+          }
+        });
+
+        const monthKey = toMonthKey(metadata?.payment_for_month);
+        if (monthKey && !receiptsByMonth.has(monthKey)) {
+          receiptsByMonth.set(monthKey, { receiptUrl, receiptStoragePath });
+        }
+      });
+
       // Get student fees with fee structure details
       const { data: fees } = await supabase
         .from('student_fees')
@@ -186,15 +228,34 @@ export function useParentPayments() {
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         
         mappedFees = filteredFees.map((f: any) => {
-          // Generate month-specific description from due_date
           const dueDate = new Date(f.due_date);
           const month = monthNames[dueDate.getMonth()];
           const year = dueDate.getFullYear();
-          const baseName = f.fee_structures?.name || f.fee_structures?.description || 'School Fees';
-          // Extract age group if present (e.g., "Monthly School Fees - Ages 4-6" -> "4-6 years")
-          const ageMatch = baseName.match(/Ages?\s*([\d]+-[\d]+|[\d]+\s*(?:months?|years?)?)/i);
-          const ageGroup = ageMatch ? ageMatch[1] : '';
-          const description = `${month} ${year} School Fees${ageGroup ? ` (${ageGroup}${!ageGroup.includes('year') && !ageGroup.includes('month') ? ' years' : ''})` : ''}`;
+          const baseName =
+            f.fee_structures?.name ||
+            f.fee_structures?.description ||
+            f.description ||
+            f.fee_type ||
+            'Fee';
+          const isTuitionForFee = isTuitionFee(
+            f.fee_structures?.fee_type,
+            f.fee_structures?.name,
+            f.fee_structures?.description
+          );
+          let description = baseName;
+          if (isTuitionForFee) {
+            // Extract age group if present (e.g., "Monthly School Fees - Ages 4-6" -> "4-6 years")
+            const ageMatch = baseName.match(/Ages?\s*([\d]+-[\d]+|[\d]+\s*(?:months?|years?)?)/i);
+            const ageGroup = ageMatch ? ageMatch[1] : '';
+            description = `${month} ${year} School Fees${ageGroup ? ` (${ageGroup}${!ageGroup.includes('year') && !ageGroup.includes('month') ? ' years' : ''})` : ''}`;
+          } else if (!Number.isNaN(dueDate.getTime())) {
+            description = `${baseName} • ${month} ${year}`;
+          }
+
+          const directReceipt = receiptsByFeeId.get(f.id);
+          const dueMonthKey = toMonthKey(f.due_date);
+          const monthReceipt = dueMonthKey ? receiptsByMonth.get(dueMonthKey) : undefined;
+          const receiptInfo = directReceipt || monthReceipt;
           
           // SIMPLIFIED: Trust database student_fees.status as source of truth
           // The approvePayment function in usePrincipalHub already updates this to 'paid'
@@ -220,6 +281,8 @@ export function useParentPayments() {
             paid_date: f.paid_date,
             status: f.status, // Trust database status directly
             pop_status: matchingPOP?.status, // Include POP status for UI display
+            receipt_url: receiptInfo?.receiptUrl ?? null,
+            receipt_storage_path: receiptInfo?.receiptStoragePath ?? null,
           };
         });
       }

@@ -23,6 +23,9 @@ export function useActiveSchoolId(): string | null {
   const { user, profile } = useAuth();
   
   // First try to get from enhanced profile (most reliable)
+  if (profile?.preschool_id) {
+    return profile.preschool_id;
+  }
   if (profile?.organization_id) {
     return profile.organization_id;
   }

@@ -6,18 +6,18 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
+import type { useAlertModal } from '@/components/ui/AlertModal';
 
 export interface PettyCashTransaction {
   id: string;
   amount: number;
   description: string;
   category: string;
-  type: 'expense' | 'replenishment' | 'adjustment';
+  type: 'expense' | 'replenishment';
   receipt_number?: string;
   reference_number?: string;
   created_at: string;
@@ -40,6 +40,8 @@ export interface ExpenseFormData {
   category: string;
   receipt_number: string;
 }
+
+export type ShowAlert = ReturnType<typeof useAlertModal>['showAlert'];
 
 export const EXPENSE_CATEGORIES = [
   // Office & Educational
@@ -105,7 +107,7 @@ export const EXPENSE_CATEGORIES = [
   'Other',
 ];
 
-export function usePettyCash() {
+export function usePettyCash(showAlert?: ShowAlert) {
   const { user } = useAuth();
   const { t } = useTranslation('common');
 
@@ -122,6 +124,18 @@ export function usePettyCash() {
   const [refreshing, setRefreshing] = useState(false);
   const [preschoolId, setPreschoolId] = useState<string | null>(null);
 
+  const alert = useCallback(
+    (config: Parameters<NonNullable<ShowAlert>>[0]) => {
+      if (showAlert) {
+        showAlert(config);
+      } else {
+        const message = config.message ? ` ${config.message}` : '';
+        console.warn(`[PettyCash] ${config.title}${message}`);
+      }
+    },
+    [showAlert]
+  );
+
   const loadPettyCashData = useCallback(async () => {
     if (!user) return;
 
@@ -135,29 +149,46 @@ export function usePettyCash() {
         .eq('auth_user_id', user.id)
         .single();
 
-      const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
+      let schoolId = userProfile?.preschool_id || null;
+
+      if (!schoolId && userProfile?.organization_id) {
+        const { data: preschoolRow } = await assertSupabase()
+          .from('preschools')
+          .select('id')
+          .eq('organization_id', userProfile.organization_id)
+          .maybeSingle();
+        schoolId = preschoolRow?.id || userProfile.organization_id;
+      }
       if (!schoolId) {
-        Alert.alert(t('common.error'), t('petty_cash.error_no_school'));
+        alert({ title: t('common.error'), message: t('petty_cash.error_no_school'), type: 'error' });
         return;
       }
 
       setPreschoolId(schoolId);
 
-      // Ensure petty cash account exists
+      // Ensure petty cash account exists (support both function signatures)
       try {
-        const { data: ensuredId } = await assertSupabase()
+        const { data: ensuredId, error: ensureError } = await assertSupabase()
           .rpc('ensure_petty_cash_account', { school_uuid: schoolId });
+        if (ensureError) throw ensureError;
         if (ensuredId) setAccountId(String(ensuredId));
       } catch {
-        const { data: acct } = await withPettyCashTenant((column, client) =>
-          client
-            .from('petty_cash_accounts')
-            .select('id')
-            .eq(column, schoolId)
-            .eq('is_active', true)
-            .maybeSingle()
-        );
-        if (acct?.id) setAccountId(String(acct.id));
+        try {
+          const { data: ensuredIdV2, error: ensureErrorV2 } = await assertSupabase()
+            .rpc('ensure_petty_cash_account_v2', { preschool_uuid: schoolId });
+          if (ensureErrorV2) throw ensureErrorV2;
+          if (ensuredIdV2) setAccountId(String(ensuredIdV2));
+        } catch {
+          const { data: acct } = await withPettyCashTenant((column, client) =>
+            client
+              .from('petty_cash_accounts')
+              .select('id')
+              .eq(column, schoolId)
+              .eq('is_active', true)
+              .maybeSingle()
+          );
+          if (acct?.id) setAccountId(String(acct.id));
+        }
       }
 
       // Load transactions
@@ -222,7 +253,6 @@ export function usePettyCash() {
         const amt = Number(tx.amount || 0);
         if (tx.type === 'expense') return sum - amt;
         if (tx.type === 'replenishment') return sum + amt;
-        if (tx.type === 'adjustment') return sum - amt;
         return sum;
       }, 0);
 
@@ -236,27 +266,31 @@ export function usePettyCash() {
 
     } catch (error) {
       console.error('Error loading petty cash data:', error);
-      Alert.alert(t('common.error'), t('petty_cash.error_failed_load'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_failed_load'), type: 'error' });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, t]);
+  }, [user, t, alert]);
 
   const addExpense = async (form: ExpenseFormData, receiptImage: string | null, uploadReceiptImage: (uri: string, txId: string) => Promise<string | null>) => {
     if (!form.amount || !form.description || !form.category) {
-      Alert.alert(t('common.error'), t('petty_cash.error_fill_fields'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_fill_fields'), type: 'error' });
+      return false;
+    }
+    if (!preschoolId || !accountId) {
+      alert({ title: t('common.error'), message: t('petty_cash.error_no_school'), type: 'error' });
       return false;
     }
 
     const amount = parseFloat(form.amount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert(t('common.error'), t('petty_cash.error_valid_amount'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_valid_amount'), type: 'error' });
       return false;
     }
 
     if (amount > summary.current_balance) {
-      Alert.alert(t('common.error'), t('petty_cash.error_insufficient_balance'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_insufficient_balance'), type: 'error' });
       return false;
     }
 
@@ -273,6 +307,7 @@ export function usePettyCash() {
             type: 'expense',
             reference_number: form.receipt_number.trim() || null,
             created_by: user?.id,
+            approved_by: user?.id,
             status: 'approved',
           })
           .select()
@@ -280,7 +315,8 @@ export function usePettyCash() {
       );
 
       if (transactionError) {
-        Alert.alert(t('common.error'), t('petty_cash.error_failed_add'));
+        console.error('Error adding expense:', transactionError);
+        alert({ title: t('common.error'), message: t('petty_cash.error_failed_add'), type: 'error' });
         return false;
       }
 
@@ -289,27 +325,32 @@ export function usePettyCash() {
         receiptPath = await uploadReceiptImage(receiptImage, transactionData.id);
       }
 
-      Alert.alert(
-        t('common.success'), 
-        t('petty_cash.success_expense_added') + (receiptPath ? t('petty_cash.success_expense_receipt') : '')
-      );
+      alert({
+        title: t('common.success'),
+        message: t('petty_cash.success_expense_added') + (receiptPath ? t('petty_cash.success_expense_receipt') : ''),
+        type: 'success',
+      });
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('petty_cash.error_failed_add'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_failed_add'), type: 'error' });
       return false;
     }
   };
 
   const addReplenishment = async (amount: string) => {
     if (!amount) {
-      Alert.alert(t('common.error'), t('petty_cash.error_replenishment_amount'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_replenishment_amount'), type: 'error' });
+      return false;
+    }
+    if (!preschoolId || !accountId) {
+      alert({ title: t('common.error'), message: t('petty_cash.error_no_school'), type: 'error' });
       return false;
     }
 
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
-      Alert.alert(t('common.error'), t('petty_cash.error_valid_amount'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_valid_amount'), type: 'error' });
       return false;
     }
 
@@ -325,38 +366,44 @@ export function usePettyCash() {
             category: 'Replenishment',
             type: 'replenishment',
             created_by: user?.id,
+            approved_by: user?.id,
             status: 'approved',
           })
       );
 
       if (error) {
-        Alert.alert(t('common.error'), t('petty_cash.error_failed_record'));
+        console.error('Error adding replenishment:', error);
+        alert({ title: t('common.error'), message: t('petty_cash.error_failed_record'), type: 'error' });
         return false;
       }
 
-      Alert.alert(t('common.success'), t('petty_cash.success_replenishment'));
+      alert({ title: t('common.success'), message: t('petty_cash.success_replenishment'), type: 'success' });
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('petty_cash.error_failed_record'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_failed_record'), type: 'error' });
       return false;
     }
   };
 
   const addWithdrawal = async (form: ExpenseFormData) => {
     if (!form.amount || !form.description) {
-      Alert.alert(t('common.error'), t('petty_cash.error_amount_description'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_amount_description'), type: 'error' });
+      return false;
+    }
+    if (!preschoolId || !accountId) {
+      alert({ title: t('common.error'), message: t('petty_cash.error_no_school'), type: 'error' });
       return false;
     }
 
     const amount = parseFloat(form.amount);
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert(t('common.error'), t('petty_cash.error_valid_amount'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_valid_amount'), type: 'error' });
       return false;
     }
 
     if (amount > summary.current_balance) {
-      Alert.alert(t('common.error'), t('petty_cash.error_withdrawal_exceeds'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_withdrawal_exceeds'), type: 'error' });
       return false;
     }
 
@@ -370,36 +417,38 @@ export function usePettyCash() {
             amount,
             description: form.description.trim(),
             category: 'Withdrawal/Adjustment',
-            type: 'adjustment',
+            type: 'expense',
             reference_number: form.receipt_number.trim() || null,
             created_by: user?.id,
+            approved_by: user?.id,
             status: 'approved',
           })
       );
 
       if (error) {
-        Alert.alert(t('common.error'), t('petty_cash.error_failed_withdrawal'));
+        console.error('Error adding withdrawal:', error);
+        alert({ title: t('common.error'), message: t('petty_cash.error_failed_withdrawal'), type: 'error' });
         return false;
       }
 
-      Alert.alert(t('common.success'), t('petty_cash.success_withdrawal'));
+      alert({ title: t('common.success'), message: t('petty_cash.success_withdrawal'), type: 'success' });
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('petty_cash.error_failed_withdrawal'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_failed_withdrawal'), type: 'error' });
       return false;
     }
   };
 
   const resetPettyCash = async (reason?: string) => {
     if (!preschoolId || !accountId) {
-      Alert.alert(t('common.error'), t('petty_cash.error_no_school'));
+      alert({ title: t('common.error'), message: t('petty_cash.error_no_school'), type: 'error' });
       return false;
     }
 
     const currentBalance = Number(summary.current_balance || 0);
     if (Math.abs(currentBalance) < 0.01) {
-      Alert.alert(t('common.info', 'Info'), t('petty_cash.reset_already_zero', 'Petty cash balance is already zero.'));
+      alert({ title: t('common.info', 'Info'), message: t('petty_cash.reset_already_zero', 'Petty cash balance is already zero.'), type: 'info' });
       return false;
     }
 
@@ -408,7 +457,7 @@ export function usePettyCash() {
     const description = reason?.trim()
       ? `Petty cash reset: ${reason.trim()}`
       : `Petty cash reset - ${now.toLocaleDateString()}`;
-    const type = currentBalance > 0 ? 'adjustment' : 'replenishment';
+    const type = currentBalance > 0 ? 'expense' : 'replenishment';
     const amount = Math.abs(currentBalance);
 
     try {
@@ -424,20 +473,21 @@ export function usePettyCash() {
             type,
             reference_number: reference,
             created_by: user?.id,
+            approved_by: user?.id,
             status: 'approved',
           })
       );
 
       if (error) {
-        Alert.alert(t('common.error'), t('petty_cash.reset_failed', 'Failed to reset petty cash.'));
+        alert({ title: t('common.error'), message: t('petty_cash.reset_failed', 'Failed to reset petty cash.'), type: 'error' });
         return false;
       }
 
-      Alert.alert(t('common.success'), t('petty_cash.reset_success', 'Petty cash reset to zero.'));
+      alert({ title: t('common.success'), message: t('petty_cash.reset_success', 'Petty cash reset to zero.'), type: 'success' });
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('petty_cash.reset_failed', 'Failed to reset petty cash.'));
+      alert({ title: t('common.error'), message: t('petty_cash.reset_failed', 'Failed to reset petty cash.'), type: 'error' });
       return false;
     }
   };
@@ -453,7 +503,7 @@ export function usePettyCash() {
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('transaction.failed_cancel', 'Failed to cancel transaction'));
+      alert({ title: t('common.error'), message: t('transaction.failed_cancel', 'Failed to cancel transaction'), type: 'error' });
       return false;
     }
   };
@@ -463,9 +513,18 @@ export function usePettyCash() {
       const { data } = await assertSupabase()
         .from('profiles')
         .select('role')
-        .eq('id', user?.id)
-        .single();
-      return data?.role === 'principal_admin';
+        .eq('auth_user_id', user?.id)
+        .maybeSingle();
+      const role = data?.role;
+      if (role) {
+        return ['principal', 'principal_admin', 'admin', 'superadmin'].includes(role);
+      }
+      const { data: userRow } = await assertSupabase()
+        .from('users')
+        .select('role')
+        .eq('auth_user_id', user?.id)
+        .maybeSingle();
+      return ['principal', 'principal_admin', 'admin', 'superadmin'].includes(userRow?.role || '');
     } catch {
       return false;
     }
@@ -475,7 +534,7 @@ export function usePettyCash() {
     try {
       const allowed = await canDelete();
       if (!allowed) {
-        Alert.alert(t('common.not_allowed', 'Not allowed'), t('transaction.principals_only_delete', 'Only principals can delete transactions'));
+        alert({ title: t('common.not_allowed', 'Not allowed'), message: t('transaction.principals_only_delete', 'Only principals can delete transactions'), type: 'warning' });
         return false;
       }
 
@@ -487,7 +546,7 @@ export function usePettyCash() {
       loadPettyCashData();
       return true;
     } catch {
-      Alert.alert(t('common.error'), t('transaction.failed_delete', 'Failed to delete transaction'));
+      alert({ title: t('common.error'), message: t('transaction.failed_delete', 'Failed to delete transaction'), type: 'error' });
       return false;
     }
   };
@@ -510,11 +569,11 @@ export function usePettyCash() {
           })
       );
       if (error) throw error;
-      Alert.alert(t('common.success'), t('transaction.reversal_success', 'Transaction reversed successfully'));
+      alert({ title: t('common.success'), message: t('transaction.reversal_success', 'Transaction reversed successfully'), type: 'success' });
       loadPettyCashData();
       return true;
     } catch (error: any) {
-      Alert.alert(t('common.error'), error?.message || t('transaction.failed_reverse', 'Failed to create reversal'));
+      alert({ title: t('common.error'), message: error?.message || t('transaction.failed_reverse', 'Failed to create reversal'), type: 'error' });
       return false;
     }
   };

@@ -6,6 +6,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
+import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 import type {
   ClassInfo,
   Teacher,
@@ -290,6 +291,45 @@ export function useClassTeacherManagement({
     [loadData]
   );
 
+  const handleDeleteTeacher = useCallback(
+    (teacher: Teacher) => {
+      if (!orgId) {
+        Alert.alert('Error', 'No school found for this account.');
+        return;
+      }
+      if (!teacher.id) {
+        Alert.alert('Error', 'Missing teacher identifier.');
+        return;
+      }
+
+      Alert.alert(
+        'Remove Teacher',
+        `Remove ${teacher.full_name} from your school? This will unassign their classes, deactivate the teacher record, and revoke their seat.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await removeTeacherFromSchool({
+                  teacherUserId: teacher.id,
+                  organizationId: orgId,
+                });
+                Alert.alert('Success', 'Teacher removed from school');
+                loadData();
+              } catch (error) {
+                console.error('Error removing teacher:', error);
+                Alert.alert('Error', 'Failed to remove teacher');
+              }
+            },
+          },
+        ]
+      );
+    },
+    [loadData, orgId]
+  );
+
   const handleToggleClassStatus = useCallback(
     async (classInfo: ClassInfo) => {
       try {
@@ -335,6 +375,7 @@ export function useClassTeacherManagement({
     handleCreateClass,
     handleAssignTeacher,
     handleRemoveTeacher,
+    handleDeleteTeacher,
     handleToggleClassStatus,
     setShowClassModal,
     setShowTeacherAssignment,
