@@ -2,6 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import DashOrb from '@/components/dash-orb';
+import DashTutorVoiceChat from '@/components/ai/DashTutorVoiceChat';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { router } from 'expo-router';
@@ -24,19 +25,40 @@ export default function DashOrbScreen() {
   ].includes(tierLower);
   const locked = isTutorRole && !isDashOrbUnlocked;
 
+  if (!isTutorRole) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <DashOrb
+          autoOpen
+          hideButton
+          position="bottom-right"
+          size={64}
+        />
+      </View>
+    );
+  }
+
+  if (locked) {
+    return (
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <DashOrb
+          autoOpen
+          hideButton
+          position="bottom-right"
+          size={64}
+          locked={locked}
+          lockedTitle="Dash Orb Locked"
+          lockedMessage="Upgrade to Parent Plus to unlock the Dash Orb."
+          lockedCtaLabel="Upgrade"
+          onUpgradePress={() => router.push('/screens/subscription-setup')}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <DashOrb
-        autoOpen
-        hideButton
-        position="bottom-right"
-        size={64}
-        locked={locked}
-        lockedTitle="Dash Orb Locked"
-        lockedMessage="Upgrade to Parent Plus to unlock the Dash Orb."
-        lockedCtaLabel="Upgrade"
-        onUpgradePress={() => router.push('/screens/subscription-setup')}
-      />
+      <DashTutorVoiceChat />
     </View>
   );
 }

@@ -176,6 +176,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     isInitialized,
     enterToSend,
     voiceEnabled,
+    showTypingIndicator,
     autoSuggestQuestions,
     contextualHelp,
     selectedAttachments,
@@ -212,6 +213,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
   const { can, ready: capsReady } = useCapability();
+  const isTypingActive = isLoading || !!loadingStatus;
 
   const safeModels = Array.isArray(availableModels) ? availableModels : [];
   const selectedModelInfo = useMemo(
@@ -589,14 +591,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
   // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
-    if (!isLoading) return null;
+    if (!isTypingActive) return null;
     return (
       <DashTypingIndicator 
-        isLoading={isLoading} 
+        isLoading={isTypingActive} 
         loadingStatus={loadingStatus} 
       />
     );
-  }, [isLoading, loadingStatus]);
+  }, [isTypingActive, loadingStatus]);
 
   // Render suggested actions
   const renderSuggestedActions = useCallback(() => {
@@ -780,7 +782,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           renderMessage={renderMessage}
           styles={styles}
           theme={theme}
-          isLoading={isLoading}
+          isLoading={isTypingActive}
           isNearBottom={isNearBottom}
           setIsNearBottom={setIsNearBottom}
           unreadCount={unreadCount}

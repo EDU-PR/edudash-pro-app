@@ -45,7 +45,7 @@ import {
   generateRings,
 } from './VoiceOrbAnimations';
 import { useVoiceRecorder } from './useVoiceRecorder';
-import { useVoiceSTT, SUPPORTED_LANGUAGES, SupportedLanguage } from './useVoiceSTT';
+import { useVoiceSTT, SUPPORTED_LANGUAGES, SupportedLanguage, TranscribeLanguage } from './useVoiceSTT';
 import { useVoiceTTS } from './useVoiceTTS';
 
 // ============================================================================
@@ -132,7 +132,8 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       }
       
       setStatusText('Transcribing...');
-      const result = await transcribe(uri, 'auto');
+      const sttLanguage: TranscribeLanguage = selectedLanguage === 'en-ZA' ? 'auto' : selectedLanguage;
+      const result = await transcribe(uri, sttLanguage);
       
       if (result?.text) {
         const detected = result.language;

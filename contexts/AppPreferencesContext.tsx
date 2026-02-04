@@ -43,7 +43,7 @@ const AppPreferencesContext = createContext<AppPreferencesContextValue | undefin
 
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppPreferencesState>({
-    showDashFAB: false,
+    showDashFAB: true,
     fabPosition: null,
     tutorialCompleted: false,
     bottomNavAutoHide: true, // Default to auto-hide
@@ -61,8 +61,9 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(STORAGE_KEYS.BOTTOM_NAV_AUTO_HIDE),
         ]);
 
+        const resolvedShowDashFAB = showDashFAB === null ? true : showDashFAB === 'true';
         setState({
-          showDashFAB: showDashFAB === 'true', // Default false
+          showDashFAB: resolvedShowDashFAB, // Default true if unset
           fabPosition: fabPosition ? JSON.parse(fabPosition) : null,
           tutorialCompleted: tutorialCompleted === 'true',
           bottomNavAutoHide: bottomNavAutoHide !== 'false', // Default true
@@ -156,7 +157,7 @@ export function useAppPreferencesSafe() {
     return useAppPreferences();
   } catch {
     return {
-      showDashFAB: false,
+      showDashFAB: true,
       fabPosition: null,
       tutorialCompleted: true,
       bottomNavAutoHide: true,

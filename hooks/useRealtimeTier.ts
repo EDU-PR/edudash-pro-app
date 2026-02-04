@@ -82,11 +82,22 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       const effectiveTier = tierData?.tier || usageData?.current_tier || contextTier || 'free';
       
       // Get tier limits (daily chat quota)
-      const { data: limitsData } = await supabase
+      // Valid tiers: free, trial, parent_starter, parent_plus, teacher_starter, teacher_pro, 
+      // school_starter, school_premium, school_pro, school_enterprise
+      const normalizedTier = effectiveTier.toLowerCase();
+      const { data: limitsData, error: tierError } = await supabase
         .from('ai_usage_tiers')
-        .select('chat_messages_per_day, exams_per_month')
-        .eq('tier_name', effectiveTier)
+        .select('chat_messages_per_day, exams_per_month, explanations_per_month')
+        .eq('tier_name', normalizedTier)
+        .eq('is_active', true)
         .maybeSingle();
+      
+      if (tierError) {
+        logger.warn('[RealtimeTier] Failed to fetch tier limits', { 
+          tier: effectiveTier, 
+          error: tierError 
+        });
+      }
 
       let quotaLimit = limitsData?.chat_messages_per_day || 10;
       let quotaUsed = usageData?.chat_messages_today || 0;

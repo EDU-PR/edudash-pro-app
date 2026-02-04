@@ -1167,7 +1167,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         ...payload,
         is_correct: false,
         score: typeof payload.score === 'number' ? Math.min(payload.score, 40) : payload.score,
-        feedback: payload.feedback || 'Let's think about this - let’s try again.',
+        feedback: payload.feedback || 'Not quite yet — let’s try again.',
         follow_up_question: payload.follow_up_question || session.currentQuestion || 'Try that again.',
       };
     }
@@ -1362,7 +1362,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       incorrectStreak: params.incorrectStreak,
     });
 
-    const feedback = payload.feedback || 'Let's think about this - let’s work it out together.';
+    const feedback = payload.feedback || 'Not quite yet — let’s work it out together.';
 
     let explanation = payload.explanation || '';
     if (hintPack.steps && !explanation.includes(hintPack.steps)) {

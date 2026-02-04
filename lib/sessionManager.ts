@@ -503,9 +503,25 @@ async function getUserCapabilities(role: string, planTier?: string): Promise<str
  * Build a minimal profile from auth user metadata (fallback when profile fetch fails or times out)
  */
 async function buildMinimalProfileFromUser(user: User, overrides?: Partial<UserProfile>): Promise<UserProfile> {
+  let dbProfile: Partial<UserProfile> | null = null;
+  try {
+    const profileQuery = assertSupabase()
+      .from('profiles')
+      .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
+      .eq('id', user.id)
+      .maybeSingle();
+    const profileResult = await withTimeout(profileQuery as any, 1500, null as any);
+    if (profileResult) {
+      dbProfile = profileResult as Partial<UserProfile>;
+    }
+  } catch {
+    // Non-fatal fallback
+  }
+
+  const mergedOverrides = { ...(dbProfile || {}), ...(overrides || {}) };
   const userMeta = (user.user_metadata || {}) as Record<string, any>;
   const appMeta = (user.app_metadata || {}) as Record<string, any>;
-  const role = (overrides?.role ||
+  const role = (mergedOverrides?.role ||
     userMeta.role ||
     appMeta.role ||
     'parent') as UserProfile['role'];
@@ -515,40 +531,41 @@ async function buildMinimalProfileFromUser(user: User, overrides?: Partial<UserP
     appMeta.plan_tier ||
     appMeta.subscription_tier;
   const capabilities = await getUserCapabilities(role, planTier);
-  const firstName = overrides?.first_name || userMeta.first_name || userMeta.given_name || '';
-  const lastName = overrides?.last_name || userMeta.last_name || userMeta.family_name || '';
+  const firstName = mergedOverrides?.first_name || userMeta.first_name || userMeta.given_name || '';
+  const lastName = mergedOverrides?.last_name || userMeta.last_name || userMeta.family_name || '';
   const fullName =
-    overrides?.full_name ||
+    mergedOverrides?.full_name ||
     userMeta.full_name ||
     userMeta.name ||
     `${firstName} ${lastName}`.trim() ||
     undefined;
   const organizationId =
-    overrides?.organization_id ||
+    mergedOverrides?.organization_id ||
+    mergedOverrides?.preschool_id ||
     userMeta.organization_id ||
     appMeta.organization_id ||
     userMeta.preschool_id ||
     appMeta.preschool_id;
   const preschoolId =
-    overrides?.preschool_id ||
+    mergedOverrides?.preschool_id ||
     userMeta.preschool_id ||
     appMeta.preschool_id;
 
   return {
     id: user.id,
-    email: overrides?.email || user.email || '',
+    email: mergedOverrides?.email || user.email || '',
     role,
     first_name: firstName,
     last_name: lastName,
     full_name: fullName,
-    avatar_url: overrides?.avatar_url || userMeta.avatar_url || userMeta.picture,
+    avatar_url: mergedOverrides?.avatar_url || userMeta.avatar_url || userMeta.picture,
     organization_id: organizationId,
-    organization_name: overrides?.organization_name || userMeta.organization_name || appMeta.organization_name,
+    organization_name: mergedOverrides?.organization_name || userMeta.organization_name || appMeta.organization_name,
     preschool_id: preschoolId,
-    seat_status: overrides?.seat_status || 'active',
+    seat_status: mergedOverrides?.seat_status || 'active',
     capabilities,
-    created_at: overrides?.created_at || new Date().toISOString(),
-    last_login_at: overrides?.last_login_at || new Date().toISOString(),
+    created_at: mergedOverrides?.created_at || new Date().toISOString(),
+    last_login_at: mergedOverrides?.last_login_at || new Date().toISOString(),
   };
 }
 
@@ -874,7 +891,7 @@ export async function signInWithSession(
           };
           const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
             fetchUserProfile(lateSession.user.id),
-            4000
+            8000
           );
           let profile = fetchedProfile;
           if (!profile) {
@@ -935,7 +952,7 @@ export async function signInWithSession(
               };
               const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
                 fetchUserProfile(retry.data.user.id),
-                4000
+                8000
               );
               let profile = fetchedProfile;
               if (!profile) {
@@ -959,7 +976,7 @@ export async function signInWithSession(
             };
             const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
               fetchUserProfile(sessionData.session.user.id),
-              4000
+              8000
             );
             let profile = fetchedProfile;
             if (!profile) {
@@ -1013,7 +1030,7 @@ export async function signInWithSession(
     if (__DEV__) console.log('[SessionManager] Fetching user profile for:', data.user.id);
     const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
       fetchUserProfile(data.user.id),
-      4000
+      8000
     );
     let profile = fetchedProfile;
     if (!profile) {
