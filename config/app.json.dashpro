@@ -58,7 +58,6 @@
       "expo-updates",
       "sentry-expo",
       "expo-audio",
-      "@react-native-voice/voice",
       "expo-speech-recognition",
       [
         "react-native-google-mobile-ads",

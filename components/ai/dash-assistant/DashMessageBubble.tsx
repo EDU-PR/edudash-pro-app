@@ -15,6 +15,104 @@ import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/Att
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const isWeb = Platform.OS === 'web';
+let Markdown: React.ComponentType<any> | null = null;
+if (!isWeb) {
+  try {
+    Markdown = require('react-native-markdown-display').default;
+  } catch (e) {
+    console.warn('[DashMessageBubble] Markdown not available:', e);
+  }
+}
+
+const buildMarkdownStyles = (theme: ReturnType<typeof useTheme>['theme'], isUser: boolean) => ({
+  body: {
+    color: isUser ? theme.onPrimary : theme.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  paragraph: {
+    color: isUser ? theme.onPrimary : theme.text,
+    marginBottom: 6,
+  },
+  heading1: {
+    color: isUser ? theme.onPrimary : theme.text,
+    fontSize: 18,
+    fontWeight: '700' as const,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  heading2: {
+    color: isUser ? theme.onPrimary : theme.text,
+    fontSize: 16,
+    fontWeight: '700' as const,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  heading3: {
+    color: isUser ? theme.onPrimary : theme.text,
+    fontSize: 15,
+    fontWeight: '600' as const,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  strong: {
+    fontWeight: '700' as const,
+    color: isUser ? theme.onPrimary : theme.text,
+  },
+  em: {
+    fontStyle: 'italic' as const,
+    color: isUser ? theme.onPrimary : theme.textSecondary,
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  ordered_list: {
+    marginVertical: 4,
+  },
+  list_item: {
+    marginBottom: 2,
+  },
+  bullet_list_icon: {
+    color: isUser ? theme.onPrimary : theme.primary,
+    marginRight: 8,
+  },
+  code_inline: {
+    backgroundColor: isUser ? 'rgba(255,255,255,0.18)' : theme.surfaceVariant,
+    color: isUser ? theme.onPrimary : theme.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    fontFamily: 'monospace',
+    fontSize: 12,
+  },
+  code_block: {
+    backgroundColor: isUser ? 'rgba(0,0,0,0.25)' : '#101420',
+    padding: 12,
+    borderRadius: 10,
+    marginVertical: 8,
+  },
+  fence: {
+    backgroundColor: isUser ? 'rgba(0,0,0,0.25)' : '#101420',
+    padding: 12,
+    borderRadius: 10,
+    marginVertical: 8,
+  },
+  blockquote: {
+    backgroundColor: (isUser ? theme.onPrimary : theme.primary) + '12',
+    borderLeftWidth: 3,
+    borderLeftColor: isUser ? theme.onPrimary : theme.primary,
+    paddingLeft: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
+    borderRadius: 6,
+  },
+  link: {
+    color: isUser ? theme.onPrimary : theme.primary,
+    textDecorationLine: 'underline' as const,
+  },
+});
+
 const AttachmentImagePreview: React.FC<{
   attachment: DashMessage['attachments'][number];
   isUser: boolean;
@@ -267,6 +365,10 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     return 'Tutor request';
   };
 
+  const assistantContent = getAssistantDisplayContent();
+  const userContent = sanitizeUserDisplayContent(message.content || '');
+  const markdownStyles = React.useMemo(() => buildMarkdownStyles(theme, isUser), [theme, isUser]);
+
   const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
   const bubbleSurfaceProps = isUser
     ? { 
@@ -332,17 +434,23 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </View>
         )}
         <View style={styles.messageContentRow}>
-          <Text
-            style={[
-              styles.messageText,
-              { color: isUser ? theme.onPrimary : theme.text, flex: 1 },
-              message.content?.length < 18 ? { textAlign: 'center' } : null,
-            ]}
-            selectable={true}
-            selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
-          >
-            {isUser ? sanitizeUserDisplayContent(message.content || '') : getAssistantDisplayContent()}
-          </Text>
+          {isUser || !Markdown ? (
+            <Text
+              style={[
+                styles.messageText,
+                { color: isUser ? theme.onPrimary : theme.text, flex: 1 },
+                message.content?.length < 18 ? { textAlign: 'center' } : null,
+              ]}
+              selectable={true}
+              selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
+            >
+              {isUser ? userContent : assistantContent}
+            </Text>
+          ) : (
+            <View style={{ flex: 1 }}>
+              <Markdown style={markdownStyles}>{assistantContent}</Markdown>
+            </View>
+          )}
           
           {isUser && isLastUserMessage && !isLoading && (
             <TouchableOpacity

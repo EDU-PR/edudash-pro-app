@@ -33,6 +33,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 
 // Local imports
 import { styles, COLORS, ORB_SIZE } from './VoiceOrb.styles';
@@ -97,12 +99,26 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   autoRestartAfterTTS = true,
 }, ref) => {
   const { theme } = useTheme();
+  const { profile } = useAuth();
+  const tenantId = profile?.organization_id || profile?.preschool_id || null;
   const [statusText, setStatusText] = useState('Starting...');
   const hasAutoStarted = useRef(false);
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en-ZA');
   const [lastDetectedLanguage, setLastDetectedLanguage] = useState<SupportedLanguage | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false); // Prevent double-processing
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [usingLiveSTT, setUsingLiveSTT] = useState(false);
+
+  const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
+  const LIVE_SILENCE_TIMEOUT_MS = 2200;
+  const LIVE_FINAL_FALLBACK_MS = 700;
+  const usingLiveSTTRef = useRef(false);
+  const liveSessionRef = useRef(0);
+  const liveFinalizedRef = useRef(false);
+  const lastPartialRef = useRef('');
+  const liveSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Ref to hold the latest transcribe function
   const transcribeRef = useRef<((uri: string) => Promise<void>) | null>(null);
@@ -113,8 +129,115 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, []);
   
   const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected);
-  const { transcribe, isTranscribing } = useVoiceSTT();
+  const { transcribe, isTranscribing } = useVoiceSTT({ preschoolId: tenantId });
   const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking } = useVoiceTTS();
+  const resetLiveSilenceTimerRef = useRef<(() => void) | null>(null);
+  const finalizeLiveRef = useRef<((text: string) => void) | null>(null);
+
+  useEffect(() => {
+    usingLiveSTTRef.current = usingLiveSTT;
+  }, [usingLiveSTT]);
+
+  const clearLiveTimers = useCallback(() => {
+    if (liveSilenceTimerRef.current) {
+      clearTimeout(liveSilenceTimerRef.current);
+      liveSilenceTimerRef.current = null;
+    }
+    if (liveFallbackTimerRef.current) {
+      clearTimeout(liveFallbackTimerRef.current);
+      liveFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clearLiveTimers();
+  }, [clearLiveTimers]);
+
+  const {
+    isAvailable: liveAvailable,
+    startListening: startLiveListening,
+    stopListening: stopLiveListening,
+    cancelListening: cancelLiveListening,
+    clearResults: clearLiveResults,
+  } = useOnDeviceVoice({
+    language: selectedLanguage,
+    onPartialResult: (text) => {
+      if (!usingLiveSTTRef.current) return;
+      lastPartialRef.current = text;
+      setLiveTranscript(text);
+      resetLiveSilenceTimerRef.current?.();
+    },
+    onFinalResult: (text) => {
+      if (!usingLiveSTTRef.current) return;
+      finalizeLiveRef.current?.(text);
+    },
+    onError: (errorMsg) => {
+      console.warn('[VoiceOrb] Live STT error:', errorMsg);
+      if (usingLiveSTTRef.current) {
+        setUsingLiveSTT(false);
+      }
+    },
+  });
+
+  const finalizeLiveTranscript = useCallback((text: string) => {
+    if (liveFinalizedRef.current) return;
+    liveFinalizedRef.current = true;
+    clearLiveTimers();
+    setUsingLiveSTT(false);
+    setIsProcessing(false);
+
+    const cleaned = (text || '').trim();
+    if (cleaned) {
+      setLastDetectedLanguage(selectedLanguage);
+      onTranscript(cleaned, selectedLanguage);
+      setStatusText('Tap to speak');
+      return;
+    }
+
+    const fallback = lastPartialRef.current.trim();
+    if (fallback) {
+      setLastDetectedLanguage(selectedLanguage);
+      onTranscript(fallback, selectedLanguage);
+      setStatusText('Tap to speak');
+      return;
+    }
+
+    setStatusText('No speech detected');
+    setTimeout(() => setStatusText('Tap to speak'), 2000);
+  }, [clearLiveTimers, onTranscript, selectedLanguage]);
+
+  useEffect(() => {
+    finalizeLiveRef.current = finalizeLiveTranscript;
+  }, [finalizeLiveTranscript]);
+
+  const scheduleLiveFallback = useCallback(() => {
+    if (liveFallbackTimerRef.current) {
+      clearTimeout(liveFallbackTimerRef.current);
+    }
+    const sessionId = liveSessionRef.current;
+    liveFallbackTimerRef.current = setTimeout(() => {
+      if (liveSessionRef.current !== sessionId || liveFinalizedRef.current) return;
+      finalizeLiveTranscript('');
+    }, LIVE_FINAL_FALLBACK_MS);
+  }, [finalizeLiveTranscript]);
+
+  const resetLiveSilenceTimer = useCallback(() => {
+    if (liveSilenceTimerRef.current) {
+      clearTimeout(liveSilenceTimerRef.current);
+    }
+    const sessionId = liveSessionRef.current;
+    liveSilenceTimerRef.current = setTimeout(() => {
+      if (liveSessionRef.current !== sessionId || liveFinalizedRef.current) return;
+      console.log('[VoiceOrb] 🔇 Live STT silence detected, stopping...');
+      stopLiveListening().catch(() => {});
+      onStopListening();
+      scheduleLiveFallback();
+    }, LIVE_SILENCE_TIMEOUT_MS);
+  }, [stopLiveListening, onStopListening, scheduleLiveFallback]);
+
+  useEffect(() => {
+    resetLiveSilenceTimerRef.current = resetLiveSilenceTimer;
+  }, [resetLiveSilenceTimer]);
 
   // Handle recording stop and transcribe
   const handleStopAndTranscribe = useCallback(async () => {
@@ -122,6 +245,18 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     setIsProcessing(true);
     
     try {
+      if (usingLiveSTTRef.current) {
+        setStatusText('Processing...');
+        try {
+          await stopLiveListening();
+        } catch (stopError) {
+          console.warn('[VoiceOrb] Live STT stop failed:', stopError);
+        }
+        onStopListening();
+        scheduleLiveFallback();
+        return;
+      }
+
       const uri = await recorderActions.stopRecording();
       onStopListening();
       
@@ -147,9 +282,11 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         setTimeout(() => setStatusText('Tap to speak'), 2000);
       }
     } finally {
-      setIsProcessing(false);
+      if (!usingLiveSTTRef.current) {
+        setIsProcessing(false);
+      }
     }
-  }, [recorderActions, onStopListening, transcribe, selectedLanguage, onTranscript, isProcessing]);
+  }, [recorderActions, onStopListening, transcribe, selectedLanguage, onTranscript, isProcessing, stopLiveListening, scheduleLiveFallback]);
   
   // Update the ref whenever handleStopAndTranscribe changes
   useEffect(() => {
@@ -158,10 +295,12 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   
   // Expose TTS methods via ref
   useImperativeHandle(ref, () => ({
-    speakText: async (text: string) => {
+    speakText: async (text: string, language?: SupportedLanguage) => {
       onTTSStart?.();
       try {
-        const ttsLanguage = lastDetectedLanguage || selectedLanguage;
+        // Priority: passed language > last detected > selected > default
+        const ttsLanguage = language || lastDetectedLanguage || selectedLanguage;
+        console.log('[VoiceOrb] Speaking with language:', ttsLanguage);
         await speak(text, ttsLanguage);
       } finally {
         onTTSEnd?.();
@@ -184,12 +323,19 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         recorderActions.stopRecording();
         onStopListening();
       }
+      if (usingLiveSTTRef.current) {
+        console.log('[VoiceOrb] 🔇 Stopping live STT - TTS starting (prevent feedback)');
+        cancelLiveListening().catch(() => {});
+        clearLiveTimers();
+        setUsingLiveSTT(false);
+        onStopListening();
+      }
       setStatusText('Speaking...');
       onTTSStart?.();
     } else {
       onTTSEnd?.();
     }
-  }, [ttsIsSpeaking, isSpeaking, recorderState.isRecording, recorderActions, onStopListening, onTTSStart, onTTSEnd]);
+  }, [ttsIsSpeaking, isSpeaking, recorderState.isRecording, recorderActions, onStopListening, onTTSStart, onTTSEnd, cancelLiveListening, clearLiveTimers]);
   
   // Auto-start listening when component mounts (only if not speaking)
   useEffect(() => {
@@ -303,11 +449,31 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       console.log('[VoiceOrb] 🚫 Blocking record start - TTS is playing (prevent feedback)');
       return;
     }
-    if (isMuted || isProcessing || recorderState.isRecording) {
+    if (isMuted || isProcessing || recorderState.isRecording || usingLiveSTTRef.current) {
       console.log('[VoiceOrb] Skipping start - muted:', isMuted, 'processing:', isProcessing, 'recording:', recorderState.isRecording);
       return;
     }
     console.log('[VoiceOrb] 🎤 Starting recording (TTS confirmed not playing)');
+
+    if (LIVE_TRANSCRIPTION_ENABLED && liveAvailable) {
+      liveSessionRef.current += 1;
+      liveFinalizedRef.current = false;
+      lastPartialRef.current = '';
+      setLiveTranscript('');
+      clearLiveTimers();
+      clearLiveResults();
+      setUsingLiveSTT(true);
+      try {
+        await startLiveListening();
+        onStartListening();
+        setStatusText('Listening...');
+        return;
+      } catch (liveError) {
+        console.warn('[VoiceOrb] Live STT start failed, falling back to audio:', liveError);
+        setUsingLiveSTT(false);
+      }
+    }
+
     const success = await recorderActions.startRecording();
     if (success) {
       onStartListening();
@@ -316,7 +482,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       setStatusText('Microphone permission denied');
       setTimeout(() => setStatusText('Tap to speak'), 2000);
     }
-  }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking]);
+  }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking, liveAvailable, startLiveListening, clearLiveResults, clearLiveTimers]);
   
   // Update ref for use in effects
   useEffect(() => {
@@ -339,7 +505,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       setTimeout(() => setStatusText('Tap to speak'), 1500);
       return;
     }
-    if (isListening || recorderState.isRecording) {
+    if (isListening || recorderState.isRecording || usingLiveSTTRef.current) {
       handleStopAndTranscribe();
     } else if (!isSpeaking && !ttsIsSpeaking) {
       handleStartRecording();
@@ -352,6 +518,12 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       recorderActions.stopRecording();
       onStopListening();
     }
+    if (usingLiveSTTRef.current) {
+      cancelLiveListening().catch(() => {});
+      clearLiveTimers();
+      setUsingLiveSTT(false);
+      onStopListening();
+    }
     stopSpeaking();
     setStatusText('Tap to speak');
   };
@@ -362,6 +534,8 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     : (isSpeaking || ttsIsSpeaking) 
       ? COLORS.speaking 
       : COLORS.violet;
+  const liveHasSpeech = liveTranscript.trim().length > 0;
+  const speechActive = usingLiveSTT ? liveHasSpeech : recorderState.hasSpeechStarted;
 
   return (
     <View style={styles.container}>
@@ -416,10 +590,18 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       </Text>
       
       {/* Speech indicator */}
-      {(isListening || recorderState.isRecording) && !isMuted && (
-        <Text style={[styles.speechIndicator, { color: recorderState.hasSpeechStarted ? COLORS.listening : theme.textTertiary }]}>
-          {recorderState.hasSpeechStarted ? '🎤 Hearing you...' : '🔇 Waiting for speech...'}
+      {(isListening || recorderState.isRecording || usingLiveSTT) && !isMuted && (
+        <Text style={[styles.speechIndicator, { color: speechActive ? COLORS.listening : theme.textTertiary }]}>
+          {speechActive ? '🎤 Hearing you...' : '🔇 Waiting for speech...'}
         </Text>
+      )}
+
+      {usingLiveSTT && liveHasSpeech && (
+        <View style={styles.liveTranscriptContainer}>
+          <Text style={[styles.liveTranscriptText, { color: theme.text }]} numberOfLines={4}>
+            {liveTranscript}
+          </Text>
+        </View>
       )}
       
       {/* Controls row - mute and language selector */}

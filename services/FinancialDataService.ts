@@ -123,11 +123,12 @@ export class FinancialDataService {
   ) {
     let query = assertSupabase()
       .from('student_fees')
-      .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at, students!inner(preschool_id, organization_id)')
-      .or(
-        `preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`,
-        { foreignTable: 'students' }
-      );
+      .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at, students!inner(id, preschool_id, organization_id)');
+
+    // Filter via joined students table to avoid relying on tenant columns in student_fees
+    query = query.or(
+      `students.preschool_id.eq.${preschoolId},students.organization_id.eq.${preschoolId}`
+    );
 
     if (options.useDueDate) {
       query = query.gte('due_date', options.from).lt('due_date', options.to);
@@ -804,11 +805,12 @@ export class FinancialDataService {
         });
 
         const feeMap = new Map<string, any>();
-        if (feeIds.size > 0) {
+        const feeIdList = Array.from(feeIds).filter((id) => typeof id === 'string' && isUuid(id));
+        if (feeIdList.length > 0) {
           const { data: feeRows, error: feeError } = await assertSupabase()
             .from('student_fees')
             .select('id, due_date, paid_date, amount, final_amount, amount_paid, status, fee_structures(name, fee_type, description)')
-            .in('id', Array.from(feeIds));
+            .in('id', feeIdList);
           if (feeError) {
             console.warn('[FinancialDataService] Failed to load fee metadata for payments:', feeError.message);
           } else {

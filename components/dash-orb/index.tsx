@@ -177,7 +177,7 @@ export default function DashOrb({
   const voiceRecorderResult = Platform.OS !== 'web' ? voiceRecorderHookResult : null;
   const voiceRecorderState = voiceRecorderResult ? voiceRecorderResult[0] : null;
   const voiceRecorderActions = voiceRecorderResult ? voiceRecorderResult[1] : null;
-  const voiceSTTHookResult = useVoiceSTT();
+  const voiceSTTHookResult = useVoiceSTT({ preschoolId: profile?.organization_id || profile?.preschool_id || null });
   const voiceSTT = Platform.OS !== 'web' ? voiceSTTHookResult : null;
   
   // Wake word detection

@@ -430,12 +430,28 @@ export class DashVoiceService {
       }
 
       // Invoke the new STT proxy with auto language detection
+      let tenantId: string | null = null;
+      try {
+        const { data: { session } } = await this.config.supabaseClient.auth.getSession();
+        const userMeta = (session?.user?.user_metadata || {}) as Record<string, any>;
+        const appMeta = (session?.user?.app_metadata || {}) as Record<string, any>;
+        tenantId =
+          userMeta.organization_id ||
+          userMeta.preschool_id ||
+          appMeta.organization_id ||
+          appMeta.preschool_id ||
+          null;
+      } catch (tenantError) {
+        console.warn('[DashVoice] Failed to resolve tenant id for STT:', tenantError);
+      }
+
       const { data, error: fnError } = await this.config.supabaseClient
         .functions
         .invoke('stt-proxy', {
           body: {
             storage_path: storagePath,
-            candidate_languages: ['af-ZA','zu-ZA','xh-ZA','nso-ZA','en-ZA','en-US']
+            candidate_languages: ['af-ZA','zu-ZA','xh-ZA','nso-ZA','en-ZA','en-US'],
+            ...(tenantId ? { preschool_id: tenantId, organization_id: tenantId } : {}),
           }
         });
       if (fnError) {

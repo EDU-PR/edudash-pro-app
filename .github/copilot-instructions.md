@@ -69,16 +69,16 @@ All functions use `Deno.serve()` pattern with CORS handling:
 # Install dependencies
 npm install
 
-# Start Expo dev server
+# Start Expo dev server (localhost only for Android port forwarding)
 npm start
 
-# Android emulator (with port forwarding)
+# Android emulator (with automatic port forwarding + app launch)
 npm run dev:android
 
 # iOS simulator
 npm run ios
 
-# Clear cache and restart
+# Clear cache and restart (fixes most build issues)
 npm run start:clear
 ```
 
@@ -139,11 +139,11 @@ npm run build:android:preview
 # Run tests
 npm test
 
-# Type checking
-npm run typecheck
+# Type checking (ALWAYS use with elevated memory)
+NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck
 
 # Strict type checking (for new code)
-npm run typecheck:strict
+NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck:strict
 
 # Lint with auto-fix
 npm run lint:fix
@@ -158,6 +158,8 @@ npm run check:console
 npm run check:file-sizes
 ```
 
+**CRITICAL:** Always run typecheck with `NODE_OPTIONS='--max_old_space_size=8192'` before committing. The codebase is large and will run out of memory with default Node settings.
+
 ## Project-Specific Conventions
 
 ### File Organization
@@ -165,6 +167,12 @@ npm run check:file-sizes
 - **Next.js components**: `/web/src/components/<domain>/<Component>.tsx`
 - **Services**: `/services/<ServiceName>.ts` (mobile-focused, ≤500 lines)
 - **Hooks**: `/hooks/use<HookName>.ts` (≤200 lines)
+  - **Modular hooks**: For complex features (e.g., Dash AI), split into subfolder with focused hooks:
+    - `hooks/dash-assistant/useDashConversation.ts` - Message state & streaming
+    - `hooks/dash-assistant/useDashTutorMode.ts` - Quiz logic & grading
+    - `hooks/dash-assistant/useDashVoice.ts` - Voice recording & TTS
+    - `hooks/dash-assistant/useDashAI.ts` - AI client & prompts
+    - Main orchestrator hook imports and composes these
 - **Context**: `/contexts/<Name>Context.tsx`
 - **Types**: `/lib/database.types.ts` (auto-generated), custom types in service files
 - **Utilities**: `/lib/utils/<util-name>.ts`, `/web/src/lib/utils/<util-name>.ts`
@@ -182,6 +190,39 @@ npm run check:file-sizes
 - **Streaming**: Use `onChunk` callback for SSE streaming on web
 - **Tool Calls**: Register in `services/dash-ai/DashToolRegistry.ts` with `claudeToolDefinition`
 - **Quota**: Enforced at Edge Function level based on user tier
+
+### Dash AI Architecture (Official Reference)
+**Core Components:**
+- **Orchestrator**: `services/AgentOrchestrator.ts` - Plan-Act-Reflect loop
+- **AI Client**: `services/dash-ai/DashAIClient.ts` - Unified API for Claude/OpenAI/Gemini
+- **Tool Registry**: `services/dash-ai/DashToolRegistry.ts` - All agent tools with risk levels
+- **Voice ORB**: `hooks/dash-assistant/useDashVoice.ts` - TTS/STT implementation
+- **Performance Doc**: `docs/features/DASH_AI_PERFORMANCE.md` - Required reading
+
+**Modular Hook Architecture:**
+```typescript
+// hooks/dash-assistant/useDashConversation.ts - Message state, streaming, persistence
+// hooks/dash-assistant/useDashTutorMode.ts - Quiz/practice mode, grading
+// hooks/dash-assistant/useDashVoice.ts - Voice recording, TTS, budget tracking
+// hooks/dash-assistant/useDashAI.ts - AI client initialization, model selection
+// Main orchestrator composes these focused hooks
+```
+
+**Voice Features (TTS/STT):**
+- Voice recording: 60s limit for free tier, unlimited for paid
+- Budget tracking: Cached locally, synced every 5 minutes
+- Audio format: M4A for iOS, WebM for Android
+- Storage: Always store paths, not signed URLs (see Supabase Storage section)
+- TTS: Azure Speech Service via `supabase/functions/tts-proxy/`
+
+**When implementing Dash AI features:**
+1. ✅ Check `docs/features/DASH_AI_PERFORMANCE.md` for patterns
+2. ✅ Follow modular hook architecture (≤200 lines per hook)
+3. ✅ Use debounced streaming (50ms batches)
+4. ✅ Cache system prompts to avoid rebuilding
+5. ✅ Lazy load AI clients on first use
+6. ✅ Use FlashList for message lists (1000+ items)
+7. ✅ Batch analytics events (30s or 10 events)
 
 ### Database Access
 - **Web (Next.js)**: Use `createClient()` from `@/lib/supabase/client` (singleton pattern)
@@ -220,12 +261,19 @@ if (!profile?.hasCapability('ai_lesson_generation')) {
 - **Logging**: Use `lib/logger.ts` for structured logging (never `console.log`)
 
 ### Code Quality Rules
-- **Fix unrelated errors**: If you encounter bugs/issues while working, fix them
-- **No console.log in production**: Use `logger` utilities
+- **Always typecheck before committing**: Run `NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck` to catch type errors
+- **Fix unrelated errors**: If you encounter bugs/issues while working, fix them immediately
+- **No console.log in production**: Use `logger` utilities (check with `npm run check:console`)
 - **Type safety**: Avoid `any`, use proper TypeScript types
-- **Component size limits**: See WARP.md section below
-- **Extract hooks**: Move complex state/effects to custom hooks
+- **Component size limits**: See WARP.md section below - strictly enforced
+- **Extract hooks**: Move complex state/effects to custom hooks (≤200 lines each)
 - **Service layer**: Isolate all API calls in service files
+- **Performance patterns**: See `docs/features/DASH_AI_PERFORMANCE.md` for optimization techniques:
+  - Debounce streaming updates (50ms batches)
+  - Cache system prompts to avoid rebuilding
+  - Use FlashList for virtualized lists (1000+ items)
+  - Lazy load heavy components and AI clients
+  - Batch analytics events (every 30s or 10 events)
 
 ## Integration Points
 
@@ -288,6 +336,89 @@ if (!profile?.hasCapability('ai_lesson_generation')) {
 ### Capabilities & Features
 - `lib/ai/capabilities.ts` - Mobile AI capabilities
 - `web/src/lib/ai/capabilities.ts` - Web AI capabilities
+- `docs/features/DASH_AI_PERFORMANCE.md` - Performance optimization guide
+
+## Development Best Practices
+
+### Supabase Storage
+**CRITICAL:** Always store storage paths, never signed URLs:
+```typescript
+// ✅ CORRECT - Store the path (permanent reference)
+await sendMessage({
+  voiceUrl: result.storagePath,  // e.g., "user-id/voice_123.m4a"
+});
+
+// ❌ WRONG - Signed URLs expire (typically 1 hour)
+await sendMessage({
+  voiceUrl: result.publicUrl,  // Will break after expiry!
+});
+
+// Generate signed URLs on-demand for playback
+const { data } = await supabase.storage
+  .from('bucket_name')
+  .createSignedUrl(storagePath, 3600);
+```
+
+### Hook Composition Pattern
+For complex features, split into focused hooks and compose:
+```typescript
+// hooks/dash-assistant/useDashConversation.ts (≤200 lines)
+export function useDashConversation() {
+  // Message state, streaming, persistence
+  return { messages, sendMessage, streamingContent };
+}
+
+// hooks/dash-assistant/useDashAI.ts (≤300 lines)
+export function useDashAI() {
+  // AI client, model selection, prompt building
+  return { callAI, selectModel, buildPrompt };
+}
+
+// Main orchestrator hook
+export function useDashAssistant() {
+  const conversation = useDashConversation();
+  const ai = useDashAI();
+  // Compose and coordinate
+}
+```
+
+### Alert Modals
+**NEVER use `Alert.alert`** - always use `AlertModal` or `useAlertModal` hook for consistent UX across platforms.
+
+### Documentation References
+**ALWAYS consult official documentation** when working with:
+- **Dash AI Features**: See `docs/features/DASH_AI_PERFORMANCE.md` for architecture, patterns, and optimization techniques
+- **Voice ORB (TTS/STT)**: Check `hooks/dash-assistant/useDashVoice.ts` and related voice components for implementation patterns
+- **AI Integration**: Refer to `services/dash-ai/` and `supabase/functions/ai-proxy/` for proper API usage
+- **Performance Patterns**: Follow established patterns in `DASH_AI_PERFORMANCE.md` before inventing new approaches
+
+### Database-First Problem Solving
+**CRITICAL PRINCIPLE:** If code requires a database column that doesn't exist and that column is semantically important:
+
+```typescript
+// ❌ WRONG - Working around missing column
+const userId = message.sender_id || message.user_id || message.created_by;
+
+// ✅ CORRECT - Add the missing column via migration
+// 1. Create migration: supabase migration new add_user_id_to_messages
+// 2. Add column with proper constraints and indexes
+// 3. Update code to use the correct column
+const userId = message.user_id;
+```
+
+**Why this matters:**
+- Missing columns indicate incomplete schema design
+- Code workarounds create technical debt
+- Proper columns enable database-level constraints and indexing
+- RLS policies require correct columns for security
+
+**Process:**
+1. Identify the missing column (e.g., `user_id`, `organization_id`, `status`)
+2. Create migration with proper data type, constraints, and indexes
+3. Lint SQL: `npm run lint:sql`
+4. Push migration: `supabase db push`
+5. Update code to use the new column
+6. Remove any workarounds or fallbacks
 
 
 ## WARP.md Standards (NON-NEGOTIABLE)

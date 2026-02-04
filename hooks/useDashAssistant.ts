@@ -1167,7 +1167,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         ...payload,
         is_correct: false,
         score: typeof payload.score === 'number' ? Math.min(payload.score, 40) : payload.score,
-        feedback: payload.feedback || 'Let's think about this - let’s try again.',
+        feedback: payload.feedback || "Let's think about this - let's try again.",
         follow_up_question: payload.follow_up_question || session.currentQuestion || 'Try that again.',
       };
     }
@@ -1337,7 +1337,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     return {
       is_correct: isCorrect,
       score: isCorrect ? 100 : 30,
-      feedback: isCorrect ? 'Correct.' : 'Let's think about this.',
+      feedback: isCorrect ? 'Correct.' : "Let's think about this.",
 
       correct_answer: expected || undefined,
       follow_up_question: undefined,
@@ -1362,7 +1362,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       incorrectStreak: params.incorrectStreak,
     });
 
-    const feedback = payload.feedback || 'Let's think about this - let’s work it out together.';
+    const feedback = payload.feedback || "Let's think about this - let's work it out together.";
 
     let explanation = payload.explanation || '';
     if (hintPack.steps && !explanation.includes(hintPack.steps)) {
@@ -1550,10 +1550,42 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         onError: (error: unknown) => {
           setIsSpeaking(false);
           setSpeakingMessageId(null);
+          const errorMessage = typeof error === 'string'
+            ? error
+            : (error as any)?.message || '';
+          const errorCode = (error as any)?.code || '';
+          const normalized = `${errorCode} ${errorMessage}`.toLowerCase();
+
           console.error('Speech error:', error);
+
+          let title = 'Voice Playback Error';
+          let messageText = 'We had trouble speaking that response. Try again or disable voice.';
+
+          if (normalized.includes('tts_free_tier_blocked')) {
+            title = 'Voice Limit Reached';
+            messageText = 'Your plan does not include voice playback. Upgrade to unlock Dash voice.';
+          } else if (
+            normalized.includes('auth_required') ||
+            normalized.includes('unauthorized') ||
+            normalized.includes('invalid token')
+          ) {
+            title = 'Voice Needs Login';
+            messageText = 'Voice playback requires an active session. Please sign in again.';
+          } else if (
+            normalized.includes('azure speech not configured') ||
+            normalized.includes('device_fallback') ||
+            normalized.includes('tts unavailable')
+          ) {
+            title = 'Voice Service Offline';
+            messageText = 'Azure TTS is not available right now. Check the Supabase `tts-proxy` function secrets (AZURE_SPEECH_KEY / AZURE_SPEECH_REGION) and redeploy.';
+          } else if (normalized.includes('network') || normalized.includes('fetch')) {
+            title = 'Voice Network Error';
+            messageText = 'Dash couldn’t reach the voice service. Check your connection and try again.';
+          }
+
           showAlert({
-            title: 'Voice Playback Error',
-            message: 'We had trouble speaking that response. Try again or disable voice.',
+            title,
+            message: messageText,
             type: 'warning',
             icon: 'volume-mute-outline',
             buttons: [

@@ -85,14 +85,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       };
     }
 
-    // 1.6. Block Voice recognition on web
-    if (moduleName === '@react-native-voice/voice') {
-      return {
-        filePath: require.resolve('./lib/stubs/voice-stub.js'),
-        type: 'sourceFile',
-      };
-    }
-
     // 2. Block native-only modules
     const nativeOnlyModules = [
       '@picovoice/porcupine-react-native',

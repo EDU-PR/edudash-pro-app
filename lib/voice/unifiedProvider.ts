@@ -4,18 +4,17 @@
  * Provides TWO voice recognition modes:
  * 
  * 1. SINGLE-USE (mic button in chat):
- *    - MOBILE: React Native Voice → Expo Speech Recognition fallback
+ *    - MOBILE: Expo Speech Recognition (managed workflow)
  *    - WEB: Deepgram + Claude (handled in web branch)
  *    - Use getSingleUseVoiceProvider()
  * 
  * 2. STREAMING (Interactive Voice Orb):
- *    - MOBILE: React Native Voice → Expo Speech Recognition fallback
+ *    - MOBILE: Expo Speech Recognition (managed workflow)
  *    - WEB: Deepgram + Claude (handled in web branch)
  *    - Use getStreamingVoiceProvider()
  * 
- * **Production Mode - With Fallbacks**:
- * - PRIMARY: @react-native-voice/voice (on-device, requires native linking)
- * - FALLBACK: expo-speech-recognition (managed workflow compatible)
+ * **Production Mode**:
+ * - PRIMARY: expo-speech-recognition (managed workflow compatible)
  * - If both fail, returns noop provider (text input only)
  * - No server/API costs for voice transcription
  * - Offline-capable (depends on device capabilities)
@@ -23,7 +22,6 @@
  */
 
 import { createClaudeVoiceSession, type ClaudeVoiceSession } from '@/lib/voice/claudeProvider';
-import { reactNativeVoiceProvider } from '@/lib/voice/reactNativeVoiceProvider';
 import { expoSpeech } from '@/lib/voice/expoProvider';
 import { Platform } from 'react-native';
 
@@ -70,7 +68,7 @@ class NoopSession implements VoiceSession {
 /**
  * Get voice provider for SINGLE-USE input (mic button in chat)
  * 
- * MOBILE: React Native Voice → Expo Speech Recognition fallback
+ * MOBILE: Expo Speech Recognition
  * 
  * WEB: Unchanged (handled in web branch)
  * 
@@ -84,26 +82,12 @@ export async function getSingleUseVoiceProvider(language?: string): Promise<Voic
     console.log('[UnifiedProvider] Getting SINGLE-USE provider:', { language, platform: Platform.OS });
   }
 
-  // MOBILE: Try React Native Voice first, then Expo Speech as fallback
+  // MOBILE: Expo Speech Recognition
   if (Platform.OS !== 'web') {
-    // Try React Native Voice first (native linking required)
-    try {
-      const rnVoiceAvailable = await reactNativeVoiceProvider.isAvailable();
-      if (rnVoiceAvailable) {
-        if (__DEV__) console.log('[UnifiedProvider] ✅ Using React Native Voice (primary)');
-        return reactNativeVoiceProvider;
-      } else {
-        if (__DEV__) console.warn('[UnifiedProvider] ⚠️ React Native Voice not available, trying Expo fallback');
-      }
-    } catch (e) {
-      if (__DEV__) console.error('[UnifiedProvider] React Native Voice error:', e);
-    }
-    
-    // Fallback to Expo Speech Recognition
     try {
       const expoAvailable = await expoSpeech.isAvailable();
       if (expoAvailable) {
-        if (__DEV__) console.log('[UnifiedProvider] ✅ Using Expo Speech Recognition (fallback)');
+        if (__DEV__) console.log('[UnifiedProvider] ✅ Using Expo Speech Recognition');
         return expoSpeech;
       } else {
         if (__DEV__) console.warn('[UnifiedProvider] ⚠️ Expo Speech Recognition not available');
@@ -162,7 +146,7 @@ export async function getSingleUseVoiceProvider(language?: string): Promise<Voic
 /**
  * Get voice provider for STREAMING conversational mode (Interactive Orb)
  * 
- * MOBILE: React Native Voice → Expo Speech Recognition fallback
+ * MOBILE: Expo Speech Recognition
  * 
  * WEB: Uses Deepgram + Claude (unchanged, handled in web branch)
  * 
@@ -177,26 +161,12 @@ export async function getStreamingVoiceProvider(language?: string): Promise<Voic
     console.log('[UnifiedProvider] Getting STREAMING provider:', { language, platform: Platform.OS });
   }
 
-  // MOBILE: Try React Native Voice first, then Expo Speech as fallback
+  // MOBILE: Expo Speech Recognition
   if (Platform.OS !== 'web') {
-    // Try React Native Voice first
-    try {
-      const rnVoiceAvailable = await reactNativeVoiceProvider.isAvailable();
-      if (rnVoiceAvailable) {
-        if (__DEV__) console.log('[UnifiedProvider] ✅ Using React Native Voice (streaming, primary)');
-        return reactNativeVoiceProvider;
-      } else {
-        if (__DEV__) console.warn('[UnifiedProvider] ⚠️ React Native Voice not available for streaming');
-      }
-    } catch (e) {
-      if (__DEV__) console.error('[UnifiedProvider] React Native Voice error:', e);
-    }
-    
-    // Fallback to Expo Speech Recognition
     try {
       const expoAvailable = await expoSpeech.isAvailable();
       if (expoAvailable) {
-        if (__DEV__) console.log('[UnifiedProvider] ✅ Using Expo Speech Recognition (streaming fallback)');
+        if (__DEV__) console.log('[UnifiedProvider] ✅ Using Expo Speech Recognition (streaming)');
         return expoSpeech;
       } else {
         if (__DEV__) console.warn('[UnifiedProvider] ⚠️ Expo Speech Recognition not available');

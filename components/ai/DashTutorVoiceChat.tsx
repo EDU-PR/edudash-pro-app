@@ -1,24 +1,26 @@
 /**
- * DashTutorVoiceChat - Full Screen Voice-First Tutor
+ * DashTutorVoiceChat - Voice Chat (Simple Voice-First Interface)
  *
- * Parent/Student focused full-screen chat with:
- * - Voice Orb for STT/TTS (faster, conversational)
+ * Lightweight voice-first chat for quick conversations:
+ * - Voice Orb for STT/TTS with language switching
  * - Streaming responses for quicker feedback
- * - Language-aware responses
+ * - Multilingual support (English, Afrikaans, isiZulu)
  * - Persistent chat history
+ * 
+ * Note: This is different from full "Dash Tutor" (homework helper with image upload)
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -41,7 +43,7 @@ if (!isWeb) {
 }
 
 type VoiceOrbRefType = {
-  speakText: (text: string) => Promise<void>;
+  speakText: (text: string, language?: SupportedLanguage) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   isSpeaking: boolean;
 };
@@ -55,6 +57,46 @@ const cleanForTTS = (text: string) =>
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/>\s/g, '')
     .trim();
+
+/**
+ * Remove any raw JSON artifacts that might have slipped through
+ * This is a safety net to prevent displaying technical data to users
+ */
+const cleanRawJSON = (text: string): string => {
+  // If text looks like pure JSON, try to extract the actual message
+  if (text.trim().startsWith('{') && text.includes('content_block_delta')) {
+    const lines = text.split('\n');
+    let extracted = '';
+    
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+          extracted += parsed.delta.text;
+        } else if (parsed.delta?.text) {
+          extracted += parsed.delta.text;
+        } else if (parsed.text) {
+          extracted += parsed.text;
+        } else if (parsed.content) {
+          extracted += parsed.content;
+        }
+      } catch {
+        // Not JSON, keep as is
+        if (!line.includes('content_block_delta') && !line.includes('"type"')) {
+          extracted += line + '\n';
+        }
+      }
+    }
+    
+    return extracted.trim() || text;
+  }
+  
+  // Remove any inline JSON artifacts
+  return text
+    .replace(/\{"type":"content_block_delta"[^}]*\}/g, '')
+    .replace(/\{"delta":\{"text":"[^"]*"\}\}/g, '')
+    .trim();
+};
 
 const findLanguageName = (code: SupportedLanguage | null) => {
   if (!code) return null;
@@ -76,7 +118,7 @@ export default function DashTutorVoiceChat() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage | null>(null);
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashListRef<ChatMessageData>>(null);
   const voiceOrbRef = useRef<VoiceOrbRefType>(null);
   const isVoiceModeRef = useRef(true);
   const isSpeakingRef = useRef(false);
@@ -146,11 +188,17 @@ export default function DashTutorVoiceChat() {
     saveChatHistory();
   }, [messages, isLoaded]);
 
+  const scrollToBottom = useCallback((animated = true) => {
+    // Use requestAnimationFrame for smoother, more reliable scrolling
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
   useEffect(() => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [messages]);
+    // Scroll immediately when messages change (including "Thinking..." indicator)
+    scrollToBottom(true);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
     if (!isVoiceMode) {
@@ -161,16 +209,28 @@ export default function DashTutorVoiceChat() {
 
   const buildTutorContext = useCallback(() => {
     const context: string[] = [];
-    context.push(
-      'Role: Parent/Student tutor. Use diagnose → teach → practice. Ask one short question at a time.',
-      'If a learner is wrong, provide a hint and the next step instead of just the answer.',
-      'Keep responses concise, interactive, and child-safe.'
-    );
+    
+    // Enhanced personality and teaching approach
+    context.push('You are Dash, an intelligent, friendly AI tutor for South African learners.');
+    context.push('\\n**Your Teaching Style:**');
+    context.push('- Patient and encouraging - celebrate small wins! 🎉');
+    context.push('- Break complex topics into simple, bite-sized explanations');
+    context.push('- Use the Socratic method - ask guiding questions instead of giving direct answers');
+    context.push('- Provide culturally relevant examples from South African life');
+    context.push('\\n**Guidelines:**');
+    context.push('- Keep responses concise (2-3 short paragraphs unless explaining complex concepts)');
+    context.push('- Use emojis sparingly to stay engaging 😊');
+    context.push('- If learner is wrong, give hints and guide them to the answer');
+    context.push("- Adapt language complexity to the learner's level");
+    context.push('- Ask one question at a time, wait for response');
+    context.push('- Encourage curiosity and critical thinking');
+    
     if (preferredLanguage) {
       const name = findLanguageName(preferredLanguage) || preferredLanguage;
-      context.push(`Preferred language: ${name} (${preferredLanguage}). Respond in ${name}.`);
+      context.push(`\\n**Language:** User prefers ${name}. Always respond in ${name}.`);
     }
-    return context.join('\n');
+    
+    return context.join('\\n');
   }, [preferredLanguage]);
 
   const speakResponse = useCallback(async (text: string) => {
@@ -180,13 +240,14 @@ export default function DashTutorVoiceChat() {
     if (!cleanText) return;
     try {
       setIsSpeaking(true);
-      await voiceOrbRef.current.speakText(cleanText);
+      // Pass preferred language for correct pronunciation (critical for language learning)
+      await voiceOrbRef.current.speakText(cleanText, preferredLanguage || undefined);
     } catch (error) {
       console.error('[DashTutorVoiceChat] TTS error:', error);
     } finally {
       setIsSpeaking(false);
     }
-  }, []);
+  }, [preferredLanguage]);
 
   const processSpeechQueue = useCallback(async () => {
     if (!isVoiceModeRef.current || isSpeakingRef.current) return;
@@ -314,16 +375,46 @@ export default function DashTutorVoiceChat() {
 
     if (!response.body) {
       const fallbackText = await response.text();
-      const cleaned = fallbackText.replace(/data:\s*/g, '').replace(/\[DONE\]/g, '').trim();
+      // Parse the fallback text to extract actual content, not raw JSON
+      let cleaned = fallbackText;
+      
+      // Remove SSE formatting
+      cleaned = cleaned.replace(/data:\s*/g, '').replace(/\[DONE\]/g, '');
+      
+      // Try to parse JSON chunks and extract text
+      const lines = cleaned.split('\n').filter(l => l.trim());
+      let extractedText = '';
+      
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+            extractedText += parsed.delta.text;
+          } else if (typeof parsed.content === 'string') {
+            extractedText += parsed.content;
+          } else if (typeof parsed.text === 'string') {
+            extractedText += parsed.text;
+          }
+        } catch {
+          // If not JSON, use as-is (but only if we haven't extracted anything yet)
+          if (!extractedText && !line.includes('content_block_delta')) {
+            extractedText = line;
+          }
+        }
+      }
+      
+      const finalText = extractedText.trim() || cleaned.trim();
+      const cleanedText = cleanRawJSON(finalText);
+      
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: cleaned, isStreaming: false }
+            ? { ...msg, content: cleanedText, isStreaming: false }
             : msg
         )
       );
-      if (isVoiceModeRef.current && cleaned) {
-        enqueueSpeech(cleaned);
+      if (isVoiceModeRef.current && cleanedText) {
+        enqueueSpeech(cleanedText);
       }
       return;
     }
@@ -332,16 +423,48 @@ export default function DashTutorVoiceChat() {
     const decoder = new TextDecoder();
     let fullResponse = '';
     let sentenceBuffer = '';
+    let pendingFlush: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleFlush = () => {
+      if (pendingFlush) return;
+      pendingFlush = setTimeout(() => {
+        pendingFlush = null;
+        const cleanedResponse = cleanRawJSON(fullResponse);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: cleanedResponse, isStreaming: false }
+              : msg
+          )
+        );
+      }, 50);
+    };
 
     const parseStreamDelta = (data: string) => {
       if (!data || data === '[DONE]') return '';
       try {
         const parsed = JSON.parse(data);
+        
+        // Skip tool use events
         if (parsed.type === 'tool_use' || parsed.tool_name) return '';
+        
+        // Handle content_block_delta format (Claude streaming)
+        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+          return parsed.delta.text;
+        }
+        
+        // Handle other delta formats
         if (typeof parsed.delta === 'string') return parsed.delta;
         if (parsed.delta && typeof parsed.delta.text === 'string') return parsed.delta.text;
+        
+        // Handle direct content/text
         if (typeof parsed.content === 'string') return parsed.content;
         if (typeof parsed.text === 'string') return parsed.text;
+        
+        // If we see raw content_block_delta in message, it means parsing failed earlier
+        // Return empty to avoid showing raw JSON
+        if (parsed.type === 'content_block_delta') return '';
+        
       } catch {
         return '';
       }
@@ -366,14 +489,7 @@ export default function DashTutorVoiceChat() {
 
           fullResponse += delta;
           sentenceBuffer += delta;
-
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? { ...msg, content: fullResponse, isStreaming: false }
-                : msg
-            )
-          );
+          scheduleFlush();
 
           const sentenceEnd = /[.!?]\s/.test(sentenceBuffer);
           if (sentenceEnd && isVoiceModeRef.current) {
@@ -390,16 +506,41 @@ export default function DashTutorVoiceChat() {
         enqueueSpeech(sentenceBuffer.trim());
       }
 
+      if (pendingFlush) {
+        clearTimeout(pendingFlush);
+        pendingFlush = null;
+      }
+      
+      const cleanedResponse = cleanRawJSON(fullResponse);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: fullResponse, isStreaming: false }
+            ? { ...msg, content: cleanedResponse, isStreaming: false }
             : msg
         )
       );
     } catch (error) {
       console.error('[DashTutorVoiceChat] Streaming error:', error);
-      throw error;
+      
+      // If fullResponse has content, save it even if stream failed
+      if (fullResponse.trim()) {
+        const cleanedResponse = cleanRawJSON(fullResponse);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: cleanedResponse, isStreaming: false }
+              : msg
+          )
+        );
+        
+        // Still try to speak if in voice mode
+        if (isVoiceModeRef.current && cleanedResponse) {
+          enqueueSpeech(cleanedResponse);
+        }
+      } else {
+        // No content received, show error
+        throw error;
+      }
     }
   };
 
@@ -445,10 +586,16 @@ export default function DashTutorVoiceChat() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
+      const userFriendlyMessage = errorMessage.includes('log in') 
+        ? '❌ Please log in to continue chatting with Dash.'
+        : errorMessage.includes('network') || errorMessage.includes('fetch')
+        ? '❌ Connection issue. Please check your internet and try again.'
+        : `❌ Oops! ${errorMessage}\n\nPlease try asking again, or rephrase your question.`;
+      
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: `❌ ${errorMessage}`, isStreaming: false }
+            ? { ...msg, content: userFriendlyMessage, isStreaming: false }
             : msg
         )
       );
@@ -482,10 +629,10 @@ export default function DashTutorVoiceChat() {
 
         <View style={styles.headerCenter}>
           <View style={[styles.headerIcon, { backgroundColor: theme.primary }]}>
-            <Ionicons name="sparkles" size={18} color="#fff" />
+            <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
           </View>
           <View>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>Dash Tutor</Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>Voice Chat</Text>
             <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
               {languageLabel ? `${statusLabel} • ${languageLabel}` : statusLabel}
             </Text>
@@ -504,18 +651,18 @@ export default function DashTutorVoiceChat() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
+      <FlashList
+        ref={listRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <ChatMessage message={item} />}
         style={styles.messagesContainer}
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-      >
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        <View style={{ height: 20 }} />
-      </ScrollView>
+        onContentSizeChange={() => scrollToBottom(true)}
+        ListFooterComponent={<View style={{ height: 20 }} />}
+      />
 
       {isVoiceMode && VoiceOrb && (
         <View style={[styles.voiceModeOverlay, { backgroundColor: theme.background + 'F5' }]}>

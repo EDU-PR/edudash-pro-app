@@ -1,7 +1,7 @@
 /**
  * DashVoiceInput - Real-Time Speech Recognition Component
  * 
- * Provides live voice-to-text input using @react-native-voice/voice
+ * Provides live voice-to-text input using expo-speech-recognition (via unified provider)
  * with support for South African languages and visual feedback.
  */
 

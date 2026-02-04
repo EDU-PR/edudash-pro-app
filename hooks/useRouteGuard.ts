@@ -92,7 +92,17 @@ export const useAuthGuard = () => {
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute) {
       // If profile is still loading, let AuthContext handle routing first
-      if (profileLoading || !profile) {
+      if (profileLoading) {
+        return;
+      }
+      // If profile is missing after loading, route to profile gate to avoid auth-route dead ends
+      if (!profile) {
+        if (!isProfilesGate && !hasNavigated.current) {
+          console.log('[AuthGuard] Authenticated without profile on auth route, redirecting to profiles-gate');
+          authDebug('guard.redirect', { from: pathname, to: '/profiles-gate' });
+          hasNavigated.current = true;
+          router.replace('/profiles-gate');
+        }
         return;
       }
       // Avoid redirecting with a stale profile from a different user

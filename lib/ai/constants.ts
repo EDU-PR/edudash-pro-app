@@ -18,16 +18,16 @@ export const VOICE_SETTINGS = {
 
 /**
  * Welcome Messages by Role
- * Each role gets a tailored greeting and capability list
+ * Each role gets a tailored, engaging greeting
  */
 export const DASH_WELCOME_MESSAGES: Record<string, string> = {
-  super_admin: `Hey! 👋 I’m **Dash**. Ask me anything or pick a quick action below.`,
-  principal: `Hey! 👋 I’m **Dash**. Tell me what you need help with today.`,
-  teacher: `Hey! 👋 I’m **Dash**. What should we teach or plan together?`,
-  parent: `Hey! 👋 I’m **Dash**. Tell me what your child is stuck on.`,
-  student: `Hey! 👋 I’m **Dash**. What topic should we tackle first?`,
-  learner: `Hey! 👋 I’m **Dash**. What would you like to learn today?`,
-  default: `Hey! 👋 I’m **Dash**. How can I help you today?`,
+  super_admin: `Hey! 👋 I'm **Dash**, your AI assistant for EduDash Pro. Ask me anything or pick a quick action below.`,
+  principal: `Hey! 👋 I'm **Dash**! Ready to help with your school management, staff, or student insights. What can I help with today?`,
+  teacher: `Hey! 👋 I'm **Dash**! Let's create amazing lessons or plan your next class. What should we work on together?`,
+  parent: `Hey there! 👋 I'm **Dash**, your friendly AI tutor! Tell me what your child is learning about, and I'll help make it click! 😊`,
+  student: `Hey! 👋 I'm **Dash**, your learning buddy! Whether it's homework help or exploring new topics, I'm here for you. What should we tackle today?`,
+  learner: `Hey! 👋 I'm **Dash**! Let's learn something awesome together. What topic are you curious about? 🚀`,
+  default: `Hey! 👋 I'm **Dash**, your AI assistant. How can I help you today?`,
 };
 
 /**
