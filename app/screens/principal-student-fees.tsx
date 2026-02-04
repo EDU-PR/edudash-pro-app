@@ -954,8 +954,8 @@ export default function StudentFeeManagementScreen() {
   };
 
   const openReceiptUrl = async (url: string) => {
-    const lower = url.toLowerCase();
-    if (lower.endsWith('.pdf')) {
+    const isPdf = /\.pdf(\?|$)/i.test(url);
+    if (isPdf) {
       router.push({ pathname: '/screens/pdf-viewer', params: { url, title: 'Receipt' } } as any);
       return;
     }

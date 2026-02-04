@@ -23,7 +23,7 @@ type PendingHomework = {
   due_date_offset_days: number | null;
   class_id: string | null;
   class?: { name?: string | null } | null;
-  teacher?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null;
+  teacher?: { first_name?: string | null; last_name?: string | null; email?: string | null; name?: string | null } | null;
   status: string | null;
 };
 
@@ -66,7 +66,7 @@ export default function PrincipalHomeworkApprovalsScreen() {
           class_id,
           status,
           class:classes(name),
-          teacher:profiles!homework_assignments_teacher_id_fkey(first_name,last_name,email)
+          teacher:users!homework_assignments_teacher_id_fkey(first_name,last_name,email,name)
         `)
         .eq('preschool_id', schoolId)
         .eq('is_published', false)
@@ -178,7 +178,7 @@ export default function PrincipalHomeworkApprovalsScreen() {
   const getTeacherLabel = (item: PendingHomework) => {
     const first = item.teacher?.first_name || '';
     const last = item.teacher?.last_name || '';
-    const name = `${first} ${last}`.trim();
+    const name = `${first} ${last}`.trim() || item.teacher?.name || '';
     return name || item.teacher?.email || 'Teacher';
   };
 

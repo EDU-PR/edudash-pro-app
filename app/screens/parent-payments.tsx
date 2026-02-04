@@ -155,8 +155,8 @@ export default function ParentPaymentsScreen() {
         return;
       }
 
-      const lowerUrl = receiptUrl.toLowerCase();
-      if (lowerUrl.endsWith('.pdf')) {
+      const isPdf = /\.pdf(\?|$)/i.test(receiptUrl);
+      if (isPdf) {
         router.push({ pathname: '/screens/pdf-viewer', params: { url: receiptUrl, title: 'Receipt' } });
         return;
       }

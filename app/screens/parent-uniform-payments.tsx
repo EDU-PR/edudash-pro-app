@@ -71,8 +71,8 @@ export default function ParentUniformPaymentsScreen() {
   );
 
   const openUrl = useCallback(async (url: string, title: string) => {
-    const lower = url.toLowerCase();
-    if (lower.endsWith('.pdf')) {
+    const isPdf = /\.pdf(\?|$)/i.test(url);
+    if (isPdf) {
       router.push({ pathname: '/screens/pdf-viewer', params: { url, title } });
       return;
     }
