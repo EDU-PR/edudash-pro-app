@@ -66,7 +66,7 @@ interface VoiceOrbProps {
   isSpeaking: boolean;
   onStartListening: () => void;
   onStopListening: () => void;
-  onTranscript: (text: string) => void;
+  onTranscript: (text: string, language?: SupportedLanguage) => void;
   onSpeakStart?: () => void;
   onSpeakEnd?: () => void;
   /** Called when TTS starts */
@@ -139,7 +139,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         if (detected === 'en-ZA' || detected === 'af-ZA' || detected === 'zu-ZA') {
           setLastDetectedLanguage(detected);
         }
-        onTranscript(result.text);
+        onTranscript(result.text, result.language as SupportedLanguage | undefined);
         setStatusText('Tap to speak');
       } else {
         setStatusText('No speech detected');

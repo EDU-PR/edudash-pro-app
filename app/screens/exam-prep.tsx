@@ -72,12 +72,12 @@ export default function ExamPrepScreen() {
       });
 
       // Navigate to Dash AI with the generated prompt
+      // Use initialMessage (not initialPrompt) to match DashAssistantScreen params
       router.push({
         pathname: '/screens/dash-assistant',
         params: {
-          initialPrompt: prompt,
-          title: displayTitle,
-          examMode: 'true',
+          initialMessage: prompt,
+          mode: 'exam',
         },
       });
     } catch (error) {

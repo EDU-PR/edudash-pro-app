@@ -421,7 +421,7 @@ export default function DashAIChat({
   /**
    * Handle voice input from VoiceOrb
    */
-  const handleVoiceInput = useCallback((transcript: string) => {
+  const handleVoiceInput = useCallback((transcript: string, _language?: string) => {
     if (transcript.trim()) {
       sendMessage(transcript);
     }

@@ -2,6 +2,9 @@
  * Jest setup file for global test configuration
  */
 
+// Expo global flag
+global.__DEV__ = true;
+
 // Mock expo-constants (ESM module that Jest can't transform)
 jest.mock('expo-constants', () => ({
   __esModule: true,
@@ -34,6 +37,94 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   multiSet: jest.fn(() => Promise.resolve()),
   multiRemove: jest.fn(() => Promise.resolve()),
 }));
+
+// Mock expo-audio (ESM module that Jest can't transform)
+jest.mock('expo-audio', () => ({
+  __esModule: true,
+  AudioModule: {
+    requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: true, status: 'granted' })),
+    setAudioModeAsync: jest.fn(async () => undefined),
+    getAvailableInputsAsync: jest.fn(async () => []),
+    getAvailableOutputsAsync: jest.fn(async () => []),
+  },
+  PermissionStatus: {
+    GRANTED: 'granted',
+    DENIED: 'denied',
+    UNDETERMINED: 'undetermined',
+  },
+}));
+
+// Mock expo-speech (ESM module that Jest can't transform)
+jest.mock('expo-speech', () => ({
+  __esModule: true,
+  speak: jest.fn(),
+  stop: jest.fn(),
+  isSpeakingAsync: jest.fn(async () => false),
+  getAvailableVoicesAsync: jest.fn(async () => []),
+}));
+
+// Mock expo-file-system legacy entry (ESM module that Jest can't transform)
+jest.mock('expo-file-system/legacy', () => ({
+  __esModule: true,
+  documentDirectory: 'file://',
+  cacheDirectory: 'file://',
+  getInfoAsync: jest.fn(async () => ({ exists: true, size: 0 })),
+  readAsStringAsync: jest.fn(async () => ''),
+  writeAsStringAsync: jest.fn(async () => undefined),
+  deleteAsync: jest.fn(async () => undefined),
+}));
+
+// Mock expo-router (JSX in node_modules that Jest can't transform)
+jest.mock('expo-router', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    router: {
+      push: jest.fn(),
+      replace: jest.fn(),
+      back: jest.fn(),
+      canDismiss: jest.fn(() => false),
+      dismissAll: jest.fn(),
+    },
+    usePathname: jest.fn(() => '/'),
+    useLocalSearchParams: jest.fn(() => ({})),
+    useSegments: jest.fn(() => []),
+    Link: ({ children }) => React.createElement(React.Fragment, null, children),
+    Stack: ({ children }) => React.createElement(React.Fragment, null, children),
+  };
+});
+
+// Mock sentry-expo (ESM module that Jest can't transform)
+jest.mock('sentry-expo', () => ({
+  __esModule: true,
+  init: jest.fn(),
+  captureException: jest.fn(),
+  setUser: jest.fn(),
+  Native: {
+    addBreadcrumb: jest.fn(),
+    setUser: jest.fn(),
+    captureException: jest.fn(),
+  },
+  Browser: {
+    addBreadcrumb: jest.fn(),
+    setUser: jest.fn(),
+  },
+}));
+
+// Mock posthog-react-native (avoids native svg/gesture deps in Jest)
+jest.mock('posthog-react-native', () => {
+  const PostHog = function PostHog() {
+    return {
+      capture: jest.fn(),
+      identify: jest.fn(),
+      reset: jest.fn(),
+    };
+  };
+  return {
+    __esModule: true,
+    default: PostHog,
+  };
+});
 
 // Suppress console errors/warnings in tests unless needed
 global.console = {

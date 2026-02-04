@@ -9,7 +9,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { shouldAllowFallback, trackFallbackUsage } from '@/lib/security-config';
-import { getCurrentSession } from '@/lib/sessionManager';
+import { getCurrentSession, clearStoredAuthData } from '@/lib/sessionManager';
 import type { UserProfile } from '@/lib/sessionManager';
 import { log, warn, debug, error as logError } from '@/lib/debug';
 
@@ -69,6 +69,22 @@ export async function fetchEnhancedUserProfile(
       } catch (e) {
         log('[Profile] getCurrentSession() failed:', e);
       }
+    }
+
+    // If stored session belongs to a different user, treat it as stale and continue.
+    if (storedSession?.user_id && userId && storedSession.user_id !== userId) {
+      debug('[Profile] Stored session mismatch, clearing stale auth cache', {
+        storedUserId: storedSession.user_id,
+        requestedUserId: userId,
+      });
+      try {
+        await clearStoredAuthData();
+      } catch (e) {
+        debug('[Profile] Failed to clear stored auth cache (non-fatal):', e);
+      }
+      storedSession = null;
+      sessionUserId = null;
+      session = null;
     }
     
     // Try Supabase in-memory session next (fast, no network)
@@ -210,6 +226,15 @@ export async function fetchEnhancedUserProfile(
     } else {
       profileError = rpcError;
       debug('RPC get_my_profile failed or returned null');
+      if (rpcError) {
+        debug('[Profile] get_my_profile error details', {
+          message: (rpcError as any)?.message,
+          code: (rpcError as any)?.code,
+          details: (rpcError as any)?.details,
+          hint: (rpcError as any)?.hint,
+          status: (rpcError as any)?.status,
+        });
+      }
 
       // Fallback 1: Try direct table read
       try {
@@ -528,26 +553,34 @@ async function resolveOrganization(
 
   if (!resolvedOrgId) {
     try {
-      const { data: latestMembership } = await assertSupabase()
-        .from('organization_members')
-        .select('organization_id, seat_status, invited_by, created_at, member_type')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const candidateUserIds = Array.from(new Set([
+        userId,
+        profileData?.id,
+        (profileData as any)?.auth_user_id,
+      ].filter(Boolean))) as string[];
 
-      if (latestMembership?.organization_id) {
-        resolvedOrgId = latestMembership.organization_id;
-        if (!orgMember) {
-          orgMember = {
-            organization_id: latestMembership.organization_id,
-            seat_status: latestMembership.seat_status || 'active',
-            invited_by: latestMembership.invited_by,
-            created_at: latestMembership.created_at,
-            member_type: latestMembership.member_type,
-          } as OrganizationMember;
+      if (candidateUserIds.length > 0) {
+        const { data: latestMembership } = await assertSupabase()
+          .from('organization_members')
+          .select('organization_id, seat_status, invited_by, created_at, member_type, user_id')
+          .in('user_id', candidateUserIds)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestMembership?.organization_id) {
+          resolvedOrgId = latestMembership.organization_id;
+          if (!orgMember) {
+            orgMember = {
+              organization_id: latestMembership.organization_id,
+              seat_status: latestMembership.seat_status || 'active',
+              invited_by: latestMembership.invited_by,
+              created_at: latestMembership.created_at,
+              member_type: latestMembership.member_type,
+            } as OrganizationMember;
+          }
+          debug('[Profile] Resolved organization from organization_members:', resolvedOrgId);
         }
-        debug('[Profile] Resolved organization from organization_members:', resolvedOrgId);
       }
     } catch (e) {
       debug('organization_members fallback lookup failed', e);

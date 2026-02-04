@@ -60,15 +60,15 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
   const getStatusText = (): string => {
     switch (loadingStatus) {
       case 'uploading':
-        return 'Uploading files...';
+        return 'Dash is uploading files...';
       case 'analyzing':
-        return 'Analyzing attachments...';
+        return 'Dash is analyzing...';
       case 'thinking':
-        return 'Thinking...';
+        return 'Dash AI is thinking...';
       case 'responding':
-        return 'Responding...';
+        return 'Dash is responding...';
       default:
-        return 'Processing...';
+        return 'Dash AI is thinking...';
     }
   };
   

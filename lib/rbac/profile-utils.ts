@@ -63,6 +63,7 @@ export interface OrganizationData {
  */
 export interface DatabaseProfile {
   id: string;
+  auth_user_id?: string;
   email: string;
   role: string;
   first_name?: string;

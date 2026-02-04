@@ -101,7 +101,7 @@ export const EXPENSE_CATEGORIES = [
   'Parent Meeting Refreshments',
   // Emergency & Miscellaneous
   'Emergency Expenses',
-  'Bank Charges',
+  'Bank Charges & Fees',
   'Petty Licensing Fees',
   'Subscriptions (small)',
   'Other',
