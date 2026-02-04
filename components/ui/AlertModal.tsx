@@ -88,8 +88,8 @@ export const AlertModal: React.FC<AlertModalProps> = ({
 
     if (isCancel) {
       return {
-        backgroundColor: theme.surface,
-        borderColor: theme.border,
+        backgroundColor: theme.error || '#DC2626',
+        borderColor: theme.error || '#DC2626',
       };
     }
     if (isDestructive) {
@@ -115,15 +115,14 @@ export const AlertModal: React.FC<AlertModalProps> = ({
     const isDestructive = button.style === 'destructive';
     const isPrimary = !isCancel && !isDestructive && index === buttons.length - 1;
 
-    if (isCancel) return theme.textSecondary;
-    if (isDestructive || isPrimary) return '#FFFFFF';
+    if (isCancel || isDestructive || isPrimary) return '#FFFFFF';
     return theme.text;
   };
 
-  // Sort buttons: cancel first, then others, destructive/primary last
+  // Sort buttons: cancel LAST (at bottom), others first
   const sortedButtons = [...buttons].sort((a, b) => {
-    if (a.style === 'cancel') return -1;
-    if (b.style === 'cancel') return 1;
+    if (a.style === 'cancel') return 1;
+    if (b.style === 'cancel') return -1;
     return 0;
   });
 

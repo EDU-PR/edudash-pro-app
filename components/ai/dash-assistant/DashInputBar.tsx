@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions } from 'react-native';
+import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { styles } from '../DashAssistant.styles';
@@ -85,17 +85,64 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             const progress = attachmentProgress?.get(attachment.id);
             const status = progress?.status || attachment.status || 'pending';
             const uploadProgress = progress?.progress ?? attachment.uploadProgress ?? 0;
+            const isImage = attachment.kind === 'image';
+            const imageUri = attachment.previewUri || attachment.uri;
             
             return (
               <View 
                 key={attachment.id}
-                style={[styles.attachmentChip,
+                style={[
+                  isImage ? styles.attachmentImageCard : styles.attachmentChip,
                   { 
                     backgroundColor: theme.surface,
                     borderColor: status === 'failed' ? theme.error : theme.border
                   }
                 ]}
               >
+              {/* Image preview (ChatGPT style) */}
+              {isImage && imageUri ? (
+                <View style={styles.attachmentImageWrapper}>
+                  <Image 
+                    source={{ uri: imageUri }}
+                    style={styles.attachmentImagePreview}
+                    resizeMode="cover"
+                  />
+                  {/* Overlay for status */}
+                  {status === 'uploading' && (
+                    <View style={[styles.attachmentImageOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                      <EduDashSpinner size="small" color="#FFFFFF" />
+                    </View>
+                  )}
+                  {status === 'uploaded' && (
+                    <View style={[styles.attachmentImageBadge, { backgroundColor: theme.success }]}>
+                      <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                    </View>
+                  )}
+                  {status === 'failed' && (
+                    <View style={[styles.attachmentImageOverlay, { backgroundColor: 'rgba(220, 38, 38, 0.8)' }]}>
+                      <Ionicons name="alert-circle" size={24} color="#FFFFFF" />
+                    </View>
+                  )}
+                  {/* Remove button */}
+                  {status !== 'uploading' && (
+                    <TouchableOpacity
+                      style={[styles.attachmentImageRemove, { backgroundColor: theme.error }]}
+                      onPress={() => onRemoveAttachment(attachment.id)}
+                      accessibilityLabel={`Remove ${attachment.name}`}
+                    >
+                      <Ionicons name="close" size={14} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
+                  {/* File size label */}
+                  <View style={[styles.attachmentImageSize, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+                    <Text style={styles.attachmentImageSizeText}>
+                      {formatFileSize(attachment.size)}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                /* File/document chip (original style) */
+                <>
               <View style={styles.attachmentChipContent}>
                 <Ionicons 
                   name={getFileIconName(attachment.kind)}
@@ -158,6 +205,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
                     ]} 
                   />
                 </View>
+              )}
+              </>
               )}
             </View>
             );
