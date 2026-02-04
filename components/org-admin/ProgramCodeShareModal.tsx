@@ -74,7 +74,7 @@ export function ProgramCodeShareModal({
       setProgramCode(code);
 
       // Create registration link with all program details encoded
-      const appUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+      const appUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
       const orgSlug = organization?.slug || organization?.id;
       
       // Include program info in the link for pre-filling registration

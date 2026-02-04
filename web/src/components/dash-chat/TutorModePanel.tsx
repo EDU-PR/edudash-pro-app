@@ -134,7 +134,7 @@ export function TutorModePanel({ onStart, learnerContext }: TutorModePanelProps)
     const ageLine = typeof ageYears === 'number' ? `Age: ${ageYears}.` : '';
     const schoolLine = learnerContext?.schoolType || learnerContext?.usageType ? `School type: ${learnerContext?.schoolType || learnerContext?.usageType}.` : '';
     const earlyRule = isEarlyLearner
-      ? 'Use play-based, gentle scaffolding. Avoid exam-prep language. Ask one simple question at a time.'
+      ? 'Use play-based, gentle scaffolding. Avoid exam-prep language. Speak directly to the learner, ask one simple question at a time, and offer interactive activities or games.'
       : 'Start with ONE short diagnostic question. Teach step-by-step. Ask one question at a time and wait for my response.';
 
     return [

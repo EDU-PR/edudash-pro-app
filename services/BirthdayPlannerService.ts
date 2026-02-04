@@ -98,6 +98,28 @@ const getDaysUntil = (date: Date): number => {
  * Birthday Planner Service
  */
 export class BirthdayPlannerService {
+  private static prefsTableState: 'unknown' | 'available' | 'missing' = 'unknown';
+
+  private static isPrefsTableMissing(error: any): boolean {
+    const status = error?.status ?? error?.statusCode;
+    const code = error?.code;
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      status === 404 ||
+      code === 'PGRST205' ||
+      message.includes('birthday_celebration_preferences')
+    );
+  }
+
+  private static markPrefsTableMissingOnce(error: any): boolean {
+    if (!this.isPrefsTableMissing(error)) return false;
+    if (this.prefsTableState !== 'missing') {
+      console.warn('[BirthdayPlannerService] birthday_celebration_preferences table missing - preferences disabled.');
+    }
+    this.prefsTableState = 'missing';
+    return true;
+  }
+
   /**
    * Get all upcoming birthdays for a preschool
    */
@@ -135,28 +157,35 @@ export class BirthdayPlannerService {
       const studentIds = (students || []).map(s => s.id);
       let preferencesMap = new Map<string, BirthdayCelebrationPreferences>();
       
-      if (studentIds.length > 0) {
-        const { data: preferences } = await supabase
+      if (studentIds.length > 0 && this.prefsTableState !== 'missing') {
+        const { data: preferences, error: prefError } = await supabase
           .from('birthday_celebration_preferences')
           .select('*')
           .in('student_id', studentIds);
         
-        (preferences || []).forEach((pref: any) => {
-          preferencesMap.set(pref.student_id, {
-            id: pref.id,
-            studentId: pref.student_id,
-            wantsSchoolCelebration: pref.wants_school_celebration ?? true,
-            allergies: pref.allergies || [],
-            dietaryRestrictions: pref.dietary_restrictions || [],
-            preferredTheme: pref.preferred_theme,
-            specialRequests: pref.special_requests,
-            parentBringingTreats: pref.parent_bringing_treats ?? false,
-            treatsDescription: pref.treats_description,
-            guestCount: pref.guest_count,
-            notifyClassmates: pref.notify_classmates ?? true,
-            updatedAt: pref.updated_at,
+        if (prefError) {
+          if (!this.markPrefsTableMissingOnce(prefError)) {
+            console.error('[BirthdayPlannerService] Error fetching preferences:', prefError);
+          }
+        } else {
+          this.prefsTableState = 'available';
+          (preferences || []).forEach((pref: any) => {
+            preferencesMap.set(pref.student_id, {
+              id: pref.id,
+              studentId: pref.student_id,
+              wantsSchoolCelebration: pref.wants_school_celebration ?? true,
+              allergies: pref.allergies || [],
+              dietaryRestrictions: pref.dietary_restrictions || [],
+              preferredTheme: pref.preferred_theme,
+              specialRequests: pref.special_requests,
+              parentBringingTreats: pref.parent_bringing_treats ?? false,
+              treatsDescription: pref.treats_description,
+              guestCount: pref.guest_count,
+              notifyClassmates: pref.notify_classmates ?? true,
+              updatedAt: pref.updated_at,
+            });
           });
-        });
+        }
       }
 
       // Process students into birthday entries
@@ -417,11 +446,23 @@ export class BirthdayPlannerService {
       if (error || !student?.date_of_birth) return null;
 
       // Get preferences
-      const { data: prefData } = await supabase
-        .from('birthday_celebration_preferences')
-        .select('*')
-        .eq('student_id', studentId)
-        .single();
+      let prefData: any = null;
+      if (this.prefsTableState !== 'missing') {
+        const { data, error: prefError } = await supabase
+          .from('birthday_celebration_preferences')
+          .select('*')
+          .eq('student_id', studentId)
+          .maybeSingle();
+        
+        if (prefError) {
+          if (!this.markPrefsTableMissingOnce(prefError)) {
+            console.error('[BirthdayPlannerService] Error fetching preferences:', prefError);
+          }
+        } else {
+          this.prefsTableState = 'available';
+          prefData = data;
+        }
+      }
 
       const birthDate = getThisYearsBirthday(student.date_of_birth);
       const daysUntil = getDaysUntil(birthDate);
@@ -471,13 +512,24 @@ export class BirthdayPlannerService {
     preferences: Partial<BirthdayCelebrationPreferences>
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      if (this.prefsTableState === 'missing') {
+        return { success: false, error: 'Birthday preferences are not available yet.' };
+      }
+
       const supabase = assertSupabase();
       
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('birthday_celebration_preferences')
         .select('id')
         .eq('student_id', studentId)
-        .single();
+        .maybeSingle();
+      
+      if (existingError) {
+        if (this.markPrefsTableMissingOnce(existingError)) {
+          return { success: false, error: 'Birthday preferences are not available yet.' };
+        }
+        throw existingError;
+      }
 
       const prefData = {
         student_id: studentId,
@@ -499,13 +551,23 @@ export class BirthdayPlannerService {
           .update(prefData)
           .eq('id', existing.id);
         
-        if (error) throw error;
+        if (error) {
+          if (this.markPrefsTableMissingOnce(error)) {
+            return { success: false, error: 'Birthday preferences are not available yet.' };
+          }
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from('birthday_celebration_preferences')
           .insert(prefData);
         
-        if (error) throw error;
+        if (error) {
+          if (this.markPrefsTableMissingOnce(error)) {
+            return { success: false, error: 'Birthday preferences are not available yet.' };
+          }
+          throw error;
+        }
       }
 
       return { success: true };

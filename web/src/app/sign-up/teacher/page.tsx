@@ -18,7 +18,16 @@ export default function TeacherSignUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [inviteSchool, setInviteSchool] = useState<{ id: string; name: string } | null>(null);
+  const [inviteSchool, setInviteSchool] = useState<{
+    id: string;
+    name: string;
+    logoUrl?: string | null;
+    city?: string | null;
+    province?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    website?: string | null;
+  } | null>(null);
   const [validatingInvite, setValidatingInvite] = useState(false);
 
   useEffect(() => {
@@ -38,7 +47,7 @@ export default function TeacherSignUpPage() {
     setValidatingInvite(true);
     supabase
       .rpc("validate_invitation_code", { p_code: trimmed })
-      .then((result: { data: unknown; error: { message?: string } | null }) => {
+      .then(async (result: { data: unknown; error: { message?: string } | null }) => {
         const { data, error: inviteError } = result;
         if (inviteError || !data) {
           setInviteSchool(null);
@@ -53,7 +62,43 @@ export default function TeacherSignUpPage() {
           const schoolNameValue = String((data as { school_name?: string }).school_name || "");
           const schoolId = String((data as { school_id?: string }).school_id || "");
           if (schoolNameValue && schoolId) {
-            setInviteSchool({ id: schoolId, name: schoolNameValue });
+            let enriched = { id: schoolId, name: schoolNameValue } as typeof inviteSchool;
+            try {
+              const { data: preschool } = await supabase
+                .from('preschools')
+                .select('name, logo_url, city, province, phone, contact_email, website_url')
+                .eq('id', schoolId)
+                .maybeSingle();
+              if (preschool) {
+                enriched = {
+                  id: schoolId,
+                  name: preschool.name || schoolNameValue,
+                  logoUrl: preschool.logo_url,
+                  city: preschool.city,
+                  province: preschool.province,
+                  phone: preschool.phone,
+                  email: preschool.contact_email,
+                  website: preschool.website_url,
+                };
+              } else {
+                const { data: org } = await supabase
+                  .from('organizations')
+                  .select('name, logo_url')
+                  .eq('id', schoolId)
+                  .maybeSingle();
+                if (org) {
+                  enriched = {
+                    id: schoolId,
+                    name: org.name || schoolNameValue,
+                    logoUrl: org.logo_url,
+                  };
+                }
+              }
+            } catch (err) {
+              console.warn("Failed to load school details:", err);
+            }
+
+            setInviteSchool(enriched);
             setSchoolName(schoolNameValue);
           }
         }
@@ -64,6 +109,21 @@ export default function TeacherSignUpPage() {
       })
       .finally(() => setValidatingInvite(false));
   }, [supabase, email]);
+
+  const formatInviteSchoolDetails = (info: typeof inviteSchool) => {
+    if (!info) return '';
+    const location = [info.city, info.province].filter(Boolean).join(', ');
+    const parts = [location, info.phone, info.email, info.website].filter(Boolean);
+    return parts.join(' • ');
+  };
+
+  const getInitials = (name: string) =>
+    name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('');
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +210,25 @@ export default function TeacherSignUpPage() {
             <h1 style={{ color: "#fff", fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Teacher Sign Up</h1>
             <p style={{ color: "#9CA3AF", fontSize: 14 }}>Create your teacher account and join a preschool</p>
           </div>
+
+          {inviteSchool && (
+            <div style={{ maxWidth: 520, margin: "0 auto 24px", padding: 16, borderRadius: 16, border: "1px solid #1f2937", background: "#0f172a", display: "flex", gap: 14, alignItems: "center" }}>
+              {inviteSchool.logoUrl ? (
+                <img src={inviteSchool.logoUrl} alt={inviteSchool.name} style={{ width: 56, height: 56, borderRadius: 16, objectFit: "cover" }} />
+              ) : (
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #00f5ff 0%, #0088cc 100%)", display: "flex", alignItems: "center", justifyContent: "center", color: "#001018", fontWeight: 700, fontSize: 18 }}>
+                  {getInitials(inviteSchool.name)}
+                </div>
+              )}
+              <div>
+                <p style={{ color: "#9CA3AF", fontSize: 12, textTransform: "uppercase", letterSpacing: 1, margin: 0 }}>Invited School</p>
+                <p style={{ color: "#fff", fontSize: 16, fontWeight: 600, margin: "4px 0 0" }}>{inviteSchool.name}</p>
+                {formatInviteSchoolDetails(inviteSchool) ? (
+                  <p style={{ color: "#94a3b8", fontSize: 12, margin: "6px 0 0" }}>{formatInviteSchoolDetails(inviteSchool)}</p>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: 500, margin: "0 auto" }}>
             <div>

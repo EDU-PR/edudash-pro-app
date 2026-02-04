@@ -8,7 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { buildTeacherInviteLink, TEACHER_INVITE_DEEP_LINK } from '@/lib/utils/teacherInviteLink';
 import { setPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
 
-const DEFAULT_WEB_URL = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+const DEFAULT_WEB_URL = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.edudashpro';
 
 export default function TeacherInviteLanding() {

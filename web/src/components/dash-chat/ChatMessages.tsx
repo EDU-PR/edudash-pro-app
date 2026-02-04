@@ -186,10 +186,21 @@ export function ChatMessages({
         ))}
 
         {/* Exam Builder Prompt */}
-        {messages.length > 0 && 
-         messages[messages.length - 1]?.role === 'assistant' &&
-         messages[messages.length - 1]?.content.toLowerCase().includes('exam builder') && 
-         onExamBuilderClick && (
+        {(() => {
+          const lastMessage = messages[messages.length - 1];
+          const grade = (examContext?.grade || '').toLowerCase();
+          const gradeMatch = grade.match(/grade_(\d+)/);
+          const gradeLevel = grade === 'grade_r' ? 0 : gradeMatch ? Number(gradeMatch[1]) : null;
+          const canLaunchExamBuilder = gradeLevel !== null && gradeLevel >= 4;
+
+          if (
+            messages.length > 0 &&
+            lastMessage?.role === 'assistant' &&
+            lastMessage?.content.toLowerCase().includes('exam builder') &&
+            onExamBuilderClick &&
+            canLaunchExamBuilder
+          ) {
+            return (
           <div style={{
             display: 'flex',
             justifyContent: 'center',
@@ -228,7 +239,10 @@ export function ChatMessages({
               <Sparkles size={16} />
             </button>
           </div>
-        )}
+            );
+          }
+          return null;
+        })()}
 
         {/* Typing Indicator - Animated */}
         {isTyping && (

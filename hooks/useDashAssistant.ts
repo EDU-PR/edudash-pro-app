@@ -644,15 +644,15 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const detectTutorIntent = useCallback((text: string): TutorMode | null => {
     const value = (text || '').toLowerCase();
     if (!value) return null;
-    if (/diagnostic/.test(value)) return 'diagnostic';
-    if (/(quiz|test\s+me|assessment|mock\s+test)/.test(value)) return 'quiz';
-    if (/(practice|worksheet|exercise|drill|one\s+practice\s+question)/.test(value)) return 'practice';
-    if (/(explain|teach\s+me|walk\s+me\s+through|step\s+by\s+step|mini\s+lesson|lesson|study\s+guidance|study\s+tips|study\s+plan|review|summarize)/.test(value)) {
-      return 'explain';
-    }
-    if (/(homework|question|problem|solve|answer|calculate|work\s+out|worksheet|assignment|stuck|confused|don'?t\s+understand)/.test(value)) {
-      return 'diagnostic';
-    }
+    
+    // Only activate tutor mode for EXPLICIT quiz/practice requests
+    // Help requests like "explain", "what should I do" should NOT trigger tutor mode
+    if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz|assessment|mock\s+test)/.test(value)) return 'quiz';
+    if (/(practice\s+question|drill\s+me|give\s+me\s+practice|worksheet\s+questions)/.test(value)) return 'practice';
+    
+    // Diagnostic ONLY for explicit "diagnose" keyword
+    if (/diagnose\s+me|diagnostic\s+test/.test(value)) return 'diagnostic';
+    
     return null;
   }, []);
 

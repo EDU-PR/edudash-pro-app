@@ -1,5 +1,5 @@
 const APP_SCHEME = 'edudashpro';
-const DEFAULT_WEB_URL = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+const DEFAULT_WEB_URL = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
 export const TEACHER_INVITE_DEEP_LINK = (token: string, email: string): string => {
   const safeToken = encodeURIComponent(token);
   const safeEmail = encodeURIComponent(email);

@@ -125,7 +125,7 @@ export class DashWhatsAppIntegration implements IDashWhatsAppIntegration {
    * Generate QR code for easy WhatsApp connection
    */
   public generateConnectionQRCode(invitedBy?: string): string {
-    const baseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+    const baseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
     const referralCode = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     
     const connectionData = {
@@ -622,7 +622,7 @@ export class DashWhatsAppIntegration implements IDashWhatsAppIntegration {
    * Create smart WhatsApp invite link
    */
   public createSmartInviteLink(inviterRole: string, schoolId: string): string {
-    const baseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app';
+    const baseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
     const inviteCode = `invite_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
     
     const inviteData = {
@@ -809,7 +809,7 @@ export class DashWhatsAppIntegration implements IDashWhatsAppIntegration {
    * Send dashboard access link
    */
   private async sendDashboardLink(phone: string, context?: any): Promise<void> {
-    const deepLink = `${process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.app'}/dashboard`;
+    const deepLink = `${process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za'}/dashboard`;
     
     await this.sendWhatsAppMessage(phone, {
       id: 'dashboard_link',
