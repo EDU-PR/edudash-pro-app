@@ -141,6 +141,15 @@ Deno.serve(async (req) => {
     const { short: language, bcp47 } = normalizeLanguage(languageRaw);
     const voiceId = String(body.voice_id || body.voiceId || body.voice || '').trim() || DEFAULT_VOICES[bcp47];
 
+    // Debug logging for language/voice selection
+    console.log('[TTS] Language detection:', {
+      raw: languageRaw,
+      normalized: language,
+      bcp47,
+      selectedVoice: voiceId,
+      textPreview: text.substring(0, 50),
+    });
+
     const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? 0);
     const pitchRaw = Number(body.pitch ?? 0);
     const speakingRate = clampNumber(speakingRateRaw, -50, 50);

@@ -9,7 +9,7 @@
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import * as Speech from 'expo-speech';
-import { useAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { assertSupabase } from '../../../lib/supabase';
 import { SupportedLanguage } from './useVoiceSTT';
 
@@ -29,34 +29,59 @@ export interface UseVoiceTTSReturn {
 export function useVoiceTTS(): UseVoiceTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const audioPlayer = useAudioPlayer();
+  const playerRef = useRef<AudioPlayer | null>(null);
   const stopRequestedRef = useRef(false);
+  const playbackIdRef = useRef(0);
+  const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPlaybackTimers = useCallback(() => {
+    if (playbackIntervalRef.current) {
+      clearInterval(playbackIntervalRef.current);
+      playbackIntervalRef.current = null;
+    }
+    if (playbackTimeoutRef.current) {
+      clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cleanupPlayer = useCallback((player?: AudioPlayer | null) => {
+    if (!player) return;
+    try {
+      player.pause();
+    } catch {
+      // ignore pause errors
+    }
+    try {
+      player.release();
+    } catch {
+      // ignore release errors
+    }
+    if (playerRef.current === player) {
+      playerRef.current = null;
+    }
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       Speech.stop();
-      // Only remove audioPlayer if it's actually an object with a remove method
-      if (audioPlayer && typeof audioPlayer === 'object' && 'remove' in audioPlayer) {
-        try {
-          audioPlayer.remove();
-        } catch {
-          // Silently ignore cleanup errors
-        }
-      }
+      clearPlaybackTimers();
+      cleanupPlayer(playerRef.current);
     };
-  }, [audioPlayer]);
+  }, [clearPlaybackTimers, cleanupPlayer]);
 
   const stopPlayback = useCallback(async () => {
     try {
       Speech.stop();
-      if (audioPlayer && typeof audioPlayer === 'object' && 'remove' in audioPlayer) {
-        audioPlayer.remove();
-      }
+      playbackIdRef.current += 1; // invalidate any pending intervals
+      clearPlaybackTimers();
+      cleanupPlayer(playerRef.current);
     } catch (err) {
       console.error('[VoiceTTS] Error stopping playback:', err);
     }
-  }, [audioPlayer]);
+  }, [clearPlaybackTimers, cleanupPlayer]);
 
   const stop = useCallback(async () => {
     stopRequestedRef.current = true;
@@ -66,42 +91,63 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
   const playAudioUrl = useCallback((audioUrl: string, timeoutMs: number): Promise<void> => {
     return new Promise<void>((resolve) => {
+      let settled = false;
       let hasStarted = false;
+      const playbackId = playbackIdRef.current + 1;
+      playbackIdRef.current = playbackId;
+
+      clearPlaybackTimers();
+      cleanupPlayer(playerRef.current);
+
+      const finalize = () => {
+        if (settled) return;
+        settled = true;
+        clearPlaybackTimers();
+        cleanupPlayer(playerRef.current);
+        resolve();
+      };
+
+      let player: AudioPlayer | null = null;
       try {
-        audioPlayer.replace(audioUrl);
-        audioPlayer.play();
+        player = createAudioPlayer(audioUrl);
+        playerRef.current = player;
+        player.play();
       } catch (err) {
         console.error('[VoiceTTS] Failed to start audio playback:', err);
-        resolve();
+        finalize();
         return;
       }
 
-      const checkPlayback = setInterval(() => {
-        if (audioPlayer.playing) {
+      playbackIntervalRef.current = setInterval(() => {
+        if (playbackIdRef.current !== playbackId) {
+          finalize();
+          return;
+        }
+        if (!player) {
+          finalize();
+          return;
+        }
+        let playing = false;
+        try {
+          playing = player.playing;
+        } catch (err) {
+          console.warn('[VoiceTTS] Playback status error, stopping:', err);
+          finalize();
+          return;
+        }
+        if (playing) {
           hasStarted = true;
         }
-        if (hasStarted && !audioPlayer.playing) {
-          clearInterval(checkPlayback);
-          try {
-            audioPlayer.remove();
-          } catch {
-            // ignore cleanup errors
-          }
-          resolve();
+        if (hasStarted && !playing) {
+          finalize();
         }
       }, 150);
 
-      setTimeout(() => {
-        clearInterval(checkPlayback);
-        try {
-          audioPlayer.remove();
-        } catch {
-          // ignore cleanup errors
-        }
-        resolve();
+      playbackTimeoutRef.current = setTimeout(() => {
+        finalize();
       }, timeoutMs);
     });
-  }, [audioPlayer]);
+  }, [clearPlaybackTimers, cleanupPlayer]);
 
   /**
    * Speak using Azure TTS (primary method)
@@ -120,6 +166,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       // Map language to short code (en-ZA -> en)
       const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
+      
+      console.log('[VoiceTTS] Sending TTS request:', {
+        language: language,
+        langCode: langCode,
+        textLength: cleanText.length,
+        textPreview: cleanText.substring(0, 50),
+      });
       
       const response = await fetch(
         `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/tts-proxy`,
@@ -206,7 +259,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }
       throw err instanceof Error ? err : new Error('TTS unavailable for this language');
     }
-  }, [audioPlayer]);
+  }, [playAudioUrl]);
 
   const splitIntoChunks = (text: string, maxLength: number): string[] => {
     const sentences: string[] = [];

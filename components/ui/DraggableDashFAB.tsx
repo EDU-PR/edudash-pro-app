@@ -14,8 +14,8 @@ import {
   Dimensions,
   Platform,
   View,
+  TouchableOpacity,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,10 +23,10 @@ import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const FAB_SIZE = 56;
+const FAB_SIZE = 62;
 const EDGE_PADDING = 16;
 const BOTTOM_NAV_HEIGHT = 70; // Height of bottom nav bar
 
@@ -85,7 +85,7 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
   
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         // Only respond to pan if moved more than 10 pixels
         const isDragging = Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10;
@@ -188,28 +188,31 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
       {...panResponder.panHandlers}
     >
       <View style={styles.fabWrapper}>
-        <LinearGradient
-          colors={['#6366F1', '#8B5CF6', '#EC4899']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradient}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={handlePress}
+          disabled={isDragging}
+          accessibilityRole="button"
+          accessibilityLabel="Open Dash Orb"
+          accessibilityHint="Open the Dash AI assistant"
         >
           <Animated.View
             style={[
-              styles.fab,
+              styles.orbShell,
               {
-                shadowColor: theme.primary || '#6366F1',
-                opacity: isDragging ? 0.8 : 1,
+                shadowColor: theme.primary || '#8b5cf6',
+                opacity: isDragging ? 0.85 : 1,
               },
             ]}
           >
-            <Ionicons 
-              name={isDragging ? 'move' : 'sparkles'} 
-              size={26} 
-              color="#FFFFFF" 
-            />
+            <CosmicOrb size={FAB_SIZE} isProcessing={false} isSpeaking={false} />
+            {isDragging && (
+              <View style={styles.dragOverlay}>
+                <View style={styles.dragDot} />
+              </View>
+            )}
           </Animated.View>
-        </LinearGradient>
+        </TouchableOpacity>
         
         {/* Drag indicator dot */}
         {isDragging && (
@@ -232,13 +235,7 @@ const styles = StyleSheet.create({
   fabWrapper: {
     position: 'relative',
   },
-  gradient: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    overflow: 'hidden',
-  },
-  fab: {
+  orbShell: {
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
@@ -253,6 +250,22 @@ const styles = StyleSheet.create({
         cursor: 'pointer',
       },
     }),
+  },
+  dragOverlay: {
+    position: 'absolute',
+    right: -6,
+    top: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   dragIndicator: {
     position: 'absolute',

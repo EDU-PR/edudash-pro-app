@@ -198,7 +198,7 @@ export async function getVoiceCapabilities(opts: CapabilityOptions = {}): Promis
   const capabilities: VoiceCapabilities = {
     language,
     isIndigenousSA: isIndigenous,
-    recordingAvailable: true, // Always available (@react-native-voice/voice)
+    recordingAvailable: true, // Available when expo-speech-recognition is supported
     streamingAvailable,
     streamingReasons,
     preferred: isIndigenous ? 'recording' : (streamingAvailable ? 'streaming' : 'recording'),

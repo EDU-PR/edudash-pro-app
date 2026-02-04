@@ -31,7 +31,11 @@ export interface UseVoiceSTTReturn {
   error: string | null;
 }
 
-export function useVoiceSTT(): UseVoiceSTTReturn {
+export interface UseVoiceSTTOptions {
+  preschoolId?: string | null;
+}
+
+export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +64,36 @@ export function useVoiceSTT(): UseVoiceSTTReturn {
         throw new Error('Not authenticated');
       }
       
+      const resolveTenantId = async (): Promise<string | null> => {
+        if (options.preschoolId) return options.preschoolId;
+        const userMeta = (session.user?.user_metadata || {}) as Record<string, any>;
+        const appMeta = (session.user?.app_metadata || {}) as Record<string, any>;
+        const metaCandidate =
+          userMeta.organization_id ||
+          userMeta.preschool_id ||
+          appMeta.organization_id ||
+          appMeta.preschool_id ||
+          null;
+        if (metaCandidate) return metaCandidate;
+
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('organization_id, preschool_id')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          return (data as any)?.organization_id || (data as any)?.preschool_id || null;
+        } catch (lookupError) {
+          console.warn('[VoiceSTT] Failed to resolve tenant id from profile lookup:', lookupError);
+          return null;
+        }
+      };
+
+      const tenantId = await resolveTenantId();
+      if (!tenantId) {
+        throw new Error('No school assigned to your account');
+      }
+
       // Read audio file as base64
       const response = await fetch(audioUri);
       const blob = await response.blob();
@@ -88,6 +122,8 @@ export function useVoiceSTT(): UseVoiceSTTReturn {
               language: lang,
               auto_detect: lang === 'auto',
               format: 'm4a',
+              preschool_id: tenantId,
+              organization_id: tenantId,
             }),
           }
         );
@@ -131,7 +167,7 @@ export function useVoiceSTT(): UseVoiceSTTReturn {
     } finally {
       setIsTranscribing(false);
     }
-  }, []);
+  }, [options.preschoolId]);
 
   return { transcribe, isTranscribing, error };
 }

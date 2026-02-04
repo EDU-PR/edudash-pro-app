@@ -5,10 +5,11 @@
  * Extracted from DashAssistant for WARP.md compliance.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Dimensions, Animated, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { AIModelInfo } from '@/lib/ai/models';
 
@@ -38,6 +39,9 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
   const selectedModelInfo = models.find(model => model.id === selectedModel) || models[0];
   const defaultCollapsed = useMemo(() => Dimensions.get('window').width < 380, []);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [toastLabel, setToastLabel] = useState('');
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -60,6 +64,14 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
     };
   }, [defaultCollapsed]);
 
+  useEffect(() => {
+    return () => {
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+      }
+    };
+  }, []);
+
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -68,8 +80,64 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
     });
   }, []);
 
+  const showSelectionToast = useCallback((label: string) => {
+    setToastLabel(label);
+    toastAnim.stopAnimation();
+    toastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(toastAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.delay(520),
+      Animated.timing(toastAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        setToastLabel('');
+      }
+    });
+  }, [toastAnim]);
+
+  const triggerHaptic = useCallback(() => {
+    if (Platform.OS === 'web') return;
+    Haptics.selectionAsync().catch(() => {});
+  }, []);
+
   return (
-    <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+    <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface, position: 'relative' }]}>
+      {toastLabel ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: 10,
+            opacity: toastAnim,
+            transform: [
+              {
+                translateY: toastAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-6, 0],
+                }),
+              },
+            ],
+            backgroundColor: theme.primary + '22',
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderWidth: 1,
+            borderColor: theme.primary,
+            maxWidth: 180,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="checkmark-circle" size={12} color={theme.primary} />
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 11, fontWeight: '700', color: theme.primary }}
+            >
+              Selected {toastLabel}
+            </Text>
+          </View>
+        </Animated.View>
+      ) : null}
       <View style={[styles.modelSelectorHeader, { marginBottom: collapsed ? 0 : 8 }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
@@ -112,7 +180,20 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
                   { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
                   isActive && { borderColor: theme.primary, backgroundColor: theme.primary + '22' },
                 ]}
-                onPress={() => setSelectedModel(model.id)}
+                onPress={() => {
+                  setSelectedModel(model.id);
+                  triggerHaptic();
+                  showSelectionToast(model.displayName);
+                  if (!collapsed) {
+                    if (collapseTimerRef.current) {
+                      clearTimeout(collapseTimerRef.current);
+                    }
+                    collapseTimerRef.current = setTimeout(() => {
+                      setCollapsed(true);
+                      AsyncStorage.setItem(MODEL_SELECTOR_KEY, 'true').catch(() => {});
+                    }, 380);
+                  }
+                }}
               >
                 <Text style={[styles.modelChipTitle, { color: isActive ? theme.primary : theme.text }]}>
                   {model.displayName}

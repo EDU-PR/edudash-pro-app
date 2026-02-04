@@ -62,21 +62,26 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
     try {
       const supabase = assertSupabase();
       
-      // Fetch from user_ai_usage (contains current_tier)
-      const { data: usageData, error: usageError } = await supabase
-        .from('user_ai_usage')
-        .select('current_tier, chat_messages_today, exams_generated_this_month, last_monthly_reset_at')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
+      // Fetch usage + tier in parallel to reduce latency
+      const [usageResult, tierResult] = await Promise.all([
+        supabase
+          .from('user_ai_usage')
+          .select('current_tier, chat_messages_today, exams_generated_this_month, last_monthly_reset_at')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        supabase
+          .from('user_ai_tiers')
+          .select('tier, expires_at, updated_at')
+          .eq('user_id', userId)
+          .maybeSingle(),
+      ]);
+
+      const usageData = usageResult.data;
+      const usageError = usageResult.error;
+      const tierData = tierResult.data;
+      const tierError = tierResult.error;
+
       if (usageError) throw usageError;
-      
-      // Also try to fetch from user_ai_tiers for more details
-      const { data: tierData, error: tierError } = await supabase
-        .from('user_ai_tiers')
-        .select('tier, expires_at, updated_at')
-        .eq('user_id', userId)
-        .maybeSingle();
       
       // Determine effective tier
       const effectiveTier = tierData?.tier || usageData?.current_tier || contextTier || 'free';
@@ -85,17 +90,17 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       // Valid tiers: free, trial, parent_starter, parent_plus, teacher_starter, teacher_pro, 
       // school_starter, school_premium, school_pro, school_enterprise
       const normalizedTier = effectiveTier.toLowerCase();
-      const { data: limitsData, error: tierError } = await supabase
+      const { data: limitsData, error: limitsError } = await supabase
         .from('ai_usage_tiers')
         .select('chat_messages_per_day, exams_per_month, explanations_per_month')
         .eq('tier_name', normalizedTier)
         .eq('is_active', true)
         .maybeSingle();
       
-      if (tierError) {
+      if (limitsError) {
         logger.warn('[RealtimeTier] Failed to fetch tier limits', { 
           tier: effectiveTier, 
-          error: tierError 
+          error: limitsError 
         });
       }
 

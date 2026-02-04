@@ -111,6 +111,20 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
+  liveTranscriptContainer: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    maxWidth: 280,
+  },
+  liveTranscriptText: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -97,6 +97,43 @@ export interface AnalyticsEvent {
   [key: string]: Record<string, any>;
 }
 
+type QueuedAnalyticsEvent = {
+  event: string;
+  properties: Record<string, any>;
+};
+
+const ANALYTICS_BATCH_INTERVAL_MS = 30000;
+const ANALYTICS_BATCH_SIZE = 10;
+const ANALYTICS_BATCHING_ENABLED = process.env.EXPO_PUBLIC_ANALYTICS_BATCHING_ENABLED !== 'false';
+
+const analyticsQueue: QueuedAnalyticsEvent[] = [];
+let analyticsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushAnalyticsQueue() {
+  const ph = getPostHog();
+  if (!ph || analyticsQueue.length === 0) return;
+
+  const batch = analyticsQueue.splice(0, analyticsQueue.length);
+  batch.forEach((item) => {
+    try {
+      ph.capture(item.event, item.properties);
+    } catch (error) {
+      if (__DEV__) {
+        console.debug('[Analytics] Failed to flush event:', item.event, error);
+      }
+    }
+  });
+}
+
+function scheduleAnalyticsFlush() {
+  if (!ANALYTICS_BATCHING_ENABLED) return;
+  if (analyticsFlushTimer) return;
+  analyticsFlushTimer = setTimeout(() => {
+    analyticsFlushTimer = null;
+    flushAnalyticsQueue();
+  }, ANALYTICS_BATCH_INTERVAL_MS);
+}
+
 /**
  * PII scrubbing patterns for analytics
  */
@@ -164,10 +201,19 @@ export function track<T extends keyof AnalyticsEvent>(
     
     const scrubbedProperties = scrubAnalyticsData(enrichedProperties);
     
-    // Track in PostHog
+    // Track in PostHog (batched if enabled)
     const ph = getPostHog();
     if (ph) {
-      ph.capture(String(event), scrubbedProperties);
+      if (ANALYTICS_BATCHING_ENABLED) {
+        analyticsQueue.push({ event: String(event), properties: scrubbedProperties });
+        if (analyticsQueue.length >= ANALYTICS_BATCH_SIZE) {
+          flushAnalyticsQueue();
+        } else {
+          scheduleAnalyticsFlush();
+        }
+      } else {
+        ph.capture(String(event), scrubbedProperties);
+      }
     }
     
     // Add to Sentry breadcrumbs for error context (with platform check)

@@ -15,12 +15,12 @@ let isSigningOut = false;
 let signOutStartTime = 0;
 let signOutSequence = 0;
 let activeSignOutId = 0;
-const STALE_SIGNOUT_THRESHOLD = 10000; // Consider sign-out stale after 10 seconds
+const STALE_SIGNOUT_THRESHOLD = 35000; // Consider sign-out stale after 35 seconds
 
 // Timeout constants for sign-out operations
 const TOKEN_DEACTIVATION_TIMEOUT = 6000; // 6 seconds
 const SIGNOUT_TIMEOUT = 8000; // 8 seconds
-const OVERALL_SIGNOUT_TIMEOUT = 15000; // 15 seconds max total
+const OVERALL_SIGNOUT_TIMEOUT = 30000; // 30 seconds max total
 const FORCE_SIGNOUT_DELAY = 5000; // Show force button after 5 seconds
 
 /**
@@ -44,6 +44,7 @@ export function isSignOutInProgress(): boolean {
       console.warn('[authActions] Sign-out appears stale, resetting flag');
       isSigningOut = false;
       signOutStartTime = 0;
+      activeSignOutId = 0;
       return false;
     }
   }
@@ -290,11 +291,13 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
       try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
     }
   } finally {
+    clearTimeout(overallTimeoutId);
     if (shouldExitApp) {
       // Delay reset to avoid auth guard flicker before app exits
       setTimeout(() => {
         isSigningOut = false;
         signOutStartTime = 0;
+        activeSignOutId = 0;
         console.log('[authActions] Sign-out flag reset after exit delay');
       }, 2500);
       return;
@@ -303,6 +306,7 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     // This allows immediate sign-in after sign-out completes
     isSigningOut = false;
     signOutStartTime = 0;
+    activeSignOutId = 0;
     console.log('[authActions] Sign-out flag reset, ready for new sign-in');
   }
 }

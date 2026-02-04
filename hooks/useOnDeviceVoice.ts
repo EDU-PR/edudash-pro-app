@@ -1,7 +1,7 @@
 /**
  * useOnDeviceVoice Hook
  * 
- * On-device speech recognition using @react-native-voice/voice
+ * On-device speech recognition using expo-speech-recognition (via unified provider)
  * Perfect for short text input (chat messages, search, etc.)
  * 
  * Benefits:
@@ -12,11 +12,8 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import Voice, {
-  SpeechResultsEvent,
-  SpeechErrorEvent,
-} from '@react-native-voice/voice';
 import * as Haptics from 'expo-haptics';
+import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
 
 export interface OnDeviceVoiceOptions {
   language?: string; // e.g., 'en-ZA', 'af-ZA', 'zu-ZA'
@@ -50,100 +47,36 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
   });
 
   const isListeningRef = useRef(false);
+  const sessionRef = useRef<VoiceSession | null>(null);
+  const providerRef = useRef<VoiceProvider | null>(null);
 
-  // Initialize Voice
+  // Initialize provider availability
   useEffect(() => {
-    // Check if Voice module is available
-    if (!Voice || typeof Voice.isAvailable !== 'function') {
-      console.warn('[useOnDeviceVoice] Voice module not available');
-      setState(prev => ({ ...prev, isAvailable: false }));
-      return;
-    }
-
-    try {
-      Voice.onSpeechStart = () => {
-        console.log('[useOnDeviceVoice] Speech started');
-        isListeningRef.current = true;
-        setState(prev => ({ 
-          ...prev, 
-          isListening: true, 
-          error: null,
-          partialText: '',
-          finalText: '' 
-        }));
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { /* Intentional: error handled */ });
-      };
-
-      Voice.onSpeechEnd = () => {
-        console.log('[useOnDeviceVoice] Speech ended');
-        isListeningRef.current = false;
-        setState(prev => ({ ...prev, isListening: false }));
-      };
-
-      Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-        console.log('[useOnDeviceVoice] Final results:', e.value);
-        if (e.value && e.value.length > 0) {
-          const text = e.value[0];
-          setState(prev => ({ ...prev, finalText: text, partialText: '' }));
-          onFinalResult?.(text);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { /* Intentional: error handled */ });
+    let mounted = true;
+    const initProvider = async () => {
+      try {
+        const provider = await getSingleUseVoiceProvider(language);
+        providerRef.current = provider;
+        const available = await provider.isAvailable();
+        if (!mounted) return;
+        setState(prev => ({ ...prev, isAvailable: available }));
+        if (!available) {
+          console.warn('[useOnDeviceVoice] Speech recognition not available');
         }
-      };
-
-      Voice.onSpeechPartialResults = (e: SpeechResultsEvent) => {
-        console.log('[useOnDeviceVoice] Partial results:', e.value);
-        if (e.value && e.value.length > 0) {
-          const text = e.value[0];
-          setState(prev => ({ ...prev, partialText: text }));
-          onPartialResult?.(text);
-        }
-      };
-
-      Voice.onSpeechError = (e: SpeechErrorEvent) => {
-        console.error('[useOnDeviceVoice] Speech error:', e.error);
-        const errorMsg = e.error?.message || 'Speech recognition error';
-        
-        // Ignore "No match" errors (user stopped before saying anything)
-        if (errorMsg.includes('No match') || errorMsg.includes('7/No match')) {
-          isListeningRef.current = false;
-          setState(prev => ({ ...prev, isListening: false }));
-          return;
-        }
-
-        isListeningRef.current = false;
-        setState(prev => ({ 
-          ...prev, 
-          isListening: false, 
-          error: errorMsg 
-        }));
-        onError?.(errorMsg);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { /* Intentional: error handled */ });
-      };
-
-      // Check if speech recognition is available
-      Voice.isAvailable()
-        .then((available: number) => {
-          setState(prev => ({ ...prev, isAvailable: available === 1 }));
-          if (available !== 1) {
-            console.warn('[useOnDeviceVoice] Speech recognition not available');
-          }
-        })
-        .catch((e: any) => {
-          console.error('[useOnDeviceVoice] Error checking availability:', e);
-          setState(prev => ({ ...prev, isAvailable: false }));
-        });
-    } catch (initError) {
-      console.error('[useOnDeviceVoice] Voice initialization error:', initError);
-      setState(prev => ({ ...prev, isAvailable: false }));
-      return;
-    }
-
-    return () => {
-      if (Voice && typeof Voice.destroy === 'function') {
-        Voice.destroy().then(Voice.removeAllListeners).catch(() => { /* Intentional: error handled */ });
+      } catch (initError) {
+        console.error('[useOnDeviceVoice] Voice initialization error:', initError);
+        if (mounted) setState(prev => ({ ...prev, isAvailable: false }));
       }
     };
-  }, [onPartialResult, onFinalResult, onError]);
+
+    initProvider();
+
+    return () => {
+      mounted = false;
+      sessionRef.current?.stop?.().catch(() => { /* Intentional: cleanup best-effort */ });
+      sessionRef.current = null;
+    };
+  }, [language]);
 
   const startListening = useCallback(async () => {
     if (!state.isAvailable) {
@@ -159,14 +92,45 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
 
     try {
       console.log('[useOnDeviceVoice] Starting speech recognition with language:', language);
-      
-      // Stop any existing recognition
-      try {
-        await Voice.stop();
-      } catch { /* Intentional: non-fatal */ }
 
-      // Start new recognition
-      await Voice.start(language);
+      const provider = providerRef.current ?? await getSingleUseVoiceProvider(language);
+      providerRef.current = provider;
+
+      const session = provider.createSession();
+      sessionRef.current = session;
+
+      const ok = await session.start({
+        language,
+        onPartial: (text) => {
+          setState(prev => ({ ...prev, partialText: text }));
+          onPartialResult?.(text);
+        },
+        onFinal: (text) => {
+          setState(prev => ({ ...prev, finalText: text, partialText: '' }));
+          onFinalResult?.(text);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { /* Intentional: error handled */ });
+        },
+        onError: (errorMsg) => {
+          isListeningRef.current = false;
+          setState(prev => ({ ...prev, isListening: false, error: errorMsg }));
+          onError?.(errorMsg);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { /* Intentional: error handled */ });
+        },
+      });
+
+      if (!ok) {
+        throw new Error('Speech recognition not available');
+      }
+
+      isListeningRef.current = true;
+      setState(prev => ({ 
+        ...prev, 
+        isListening: true, 
+        error: null,
+        partialText: '',
+        finalText: '' 
+      }));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { /* Intentional: error handled */ });
       console.log('[useOnDeviceVoice] ✅ Speech recognition started');
     } catch (error) {
       console.error('[useOnDeviceVoice] Failed to start:', error);
@@ -184,8 +148,10 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
 
     try {
       console.log('[useOnDeviceVoice] Stopping speech recognition');
-      await Voice.stop();
+      await sessionRef.current?.stop?.();
       console.log('[useOnDeviceVoice] ✅ Speech recognition stopped');
+      isListeningRef.current = false;
+      setState(prev => ({ ...prev, isListening: false }));
     } catch (error) {
       console.error('[useOnDeviceVoice] Failed to stop:', error);
     }
@@ -198,7 +164,7 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
 
     try {
       console.log('[useOnDeviceVoice] Canceling speech recognition');
-      await Voice.cancel();
+      await sessionRef.current?.stop?.();
       isListeningRef.current = false;
       setState(prev => ({ 
         ...prev, 

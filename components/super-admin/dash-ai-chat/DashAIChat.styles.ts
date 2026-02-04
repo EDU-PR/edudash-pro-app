@@ -47,12 +47,15 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 16,
     alignItems: 'flex-start',
+    width: '100%',
   },
   userMessageContainer: {
     justifyContent: 'flex-end',
+    alignSelf: 'flex-end',
   },
   assistantMessageContainer: {
     justifyContent: 'flex-start',
+    alignSelf: 'flex-start',
   },
   avatar: {
     width: 32,
@@ -72,9 +75,10 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   messageBubble: {
-    maxWidth: SCREEN_WIDTH * 0.90,
+    maxWidth: SCREEN_WIDTH * 0.78,
     padding: 12,
     borderRadius: 16,
+    flexShrink: 1,
   },
   userBubble: {
     borderBottomRightRadius: 4,
