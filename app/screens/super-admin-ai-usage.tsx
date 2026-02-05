@@ -54,6 +54,7 @@ export default function SuperAdminAIUsageScreen() {
   const [usageRows, setUsageRows] = useState<AiUsageRow[]>([]);
   const [imageRows, setImageRows] = useState<ImageUsageRow[]>([]);
   const [search, setSearch] = useState('');
+  const isAllowed = Boolean(profile && isSuperAdmin(profile.role));
 
   const loadUsage = useCallback(async (isRefresh = false) => {
     if (!isSuperAdmin(profile?.role)) {
@@ -88,24 +89,10 @@ export default function SuperAdminAIUsageScreen() {
   }, [profile?.role]);
 
   useEffect(() => {
-    if (isSuperAdmin(profile?.role)) {
+    if (isAllowed) {
       loadUsage();
     }
-  }, [loadUsage, profile?.role]);
-
-  if (!profile || !isSuperAdmin(profile.role)) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <ThemedStatusBar />
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.deniedContainer}>
-          <Text style={[styles.deniedText, { color: theme.textSecondary }]}>
-            Access Denied - Super Admin Only
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  }, [loadUsage, isAllowed]);
 
   const filteredUsage = useMemo(() => {
     if (!search.trim()) return usageRows;
@@ -139,6 +126,20 @@ export default function SuperAdminAIUsageScreen() {
     () => imageRows.reduce((sum, row) => sum + (row.uploads_today ?? 0), 0),
     [imageRows]
   );
+
+  if (!isAllowed) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <ThemedStatusBar />
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.deniedContainer}>
+          <Text style={[styles.deniedText, { color: theme.textSecondary }]}>
+            Access Denied - Super Admin Only
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (loading) {
     return (

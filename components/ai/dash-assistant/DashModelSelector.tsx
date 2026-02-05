@@ -34,9 +34,11 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
   styles,
   theme,
 }) => {
-  if (models.length === 0) return null;
-
-  const selectedModelInfo = models.find(model => model.id === selectedModel) || models[0];
+  const hasModels = models.length > 0;
+  const selectedModelInfo = useMemo(() => {
+    if (!hasModels) return null;
+    return models.find(model => model.id === selectedModel) || models[0];
+  }, [hasModels, models, selectedModel]);
   const defaultCollapsed = useMemo(() => Dimensions.get('window').width < 380, []);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [toastLabel, setToastLabel] = useState('');
@@ -99,6 +101,8 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
     if (Platform.OS === 'web') return;
     Haptics.selectionAsync().catch(() => {});
   }, []);
+
+  if (!hasModels || !selectedModelInfo) return null;
 
   return (
     <View style={[styles.modelSelector, { borderColor: theme.border, backgroundColor: theme.surface, position: 'relative' }]}>

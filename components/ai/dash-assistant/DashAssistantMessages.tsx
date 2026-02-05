@@ -84,6 +84,13 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
 
   const phaseOrder = ['Diagnose', 'Teach', 'Practice'];
   const phaseIndex = currentPhase ? phaseOrder.indexOf(currentPhase) : -1;
+  
+  // Only show phase indicator for parent/student/learner roles (tutoring context)
+  // Teachers/principals/admins don't need it - they're the educators, not students
+  const showPhaseIndicator = React.useMemo(() => {
+    const role = learnerContext?.role?.toLowerCase();
+    return !role || ['parent', 'student', 'learner'].includes(role);
+  }, [learnerContext?.role]);
 
   const renderEmptyState = () => (
     <TutorHome
@@ -148,7 +155,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
         }
       }}
       ListHeaderComponent={
-        messages.length > 0 ? (
+        messages.length > 0 && showPhaseIndicator ? (
           <View style={[styles.phaseRailContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={[styles.phaseRailTrack, { backgroundColor: theme.border }]} />
             {phaseOrder.map((phase, index) => {

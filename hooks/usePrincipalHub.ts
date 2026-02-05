@@ -68,6 +68,22 @@ export interface FinancialSummary {
   timestamp: string;
 }
 
+export interface UniformPaymentSummary {
+  totalPaid: number;
+  totalOutstanding: number;
+  paidCount: number;
+  pendingCount: number;
+  pendingUploads: number;
+  pendingUploadAmount: number;
+  recentPayments: Array<{
+    id: string;
+    studentName: string;
+    amount: number;
+    paidDate: string | null;
+    status: string | null;
+  }>;
+}
+
 export interface CapacityMetrics {
   capacity: number;
   current_enrollment: number;
@@ -108,6 +124,7 @@ export interface PrincipalHubData {
   pendingReportApprovals: number;
   pendingActivityApprovals: number;
   pendingHomeworkApprovals: number;
+  uniformPayments: UniformPaymentSummary | null;
   schoolId: string | null;
   schoolName: string;
 }
@@ -183,6 +200,7 @@ export const usePrincipalHub = () => {
     pendingReportApprovals: 0,
     pendingActivityApprovals: 0,
     pendingHomeworkApprovals: 0,
+    uniformPayments: null,
     schoolId: null,
     schoolName: t('dashboard.no_school_assigned_text')
   });
@@ -201,6 +219,8 @@ export const usePrincipalHub = () => {
       return `R${amount.toFixed(0)}`;
     }
   };
+
+  const isUniformLabel = (value?: string | null) => (value || '').toLowerCase().includes('uniform');
 
   const userId = user?.id ?? null;
 
@@ -520,6 +540,156 @@ export const usePrincipalHub = () => {
         pendingRegistrationPayments = pending.length;
       }
 
+      const getPaidAmount = (fee: any) => {
+        const paid = Number(fee?.amount_paid || 0);
+        if (paid > 0) return paid;
+        const finalAmount = Number(fee?.final_amount || fee?.amount || 0);
+        return String(fee?.status) === 'paid' ? finalAmount : 0;
+      };
+
+      let uniformStructureIds: string[] = [];
+
+      const uniformSummary: UniformPaymentSummary = {
+        totalPaid: 0,
+        totalOutstanding: 0,
+        paidCount: 0,
+        pendingCount: 0,
+        pendingUploads: 0,
+        pendingUploadAmount: 0,
+        recentPayments: [],
+      };
+
+      try {
+        const { data: uniformStructures } = await assertSupabase()
+          .from('fee_structures')
+          .select('id, fee_type, name, description')
+          .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`);
+
+        uniformStructureIds = (uniformStructures || [])
+          .filter((row: any) =>
+            isUniformLabel(row?.fee_type) ||
+            isUniformLabel(row?.name) ||
+            isUniformLabel(row?.description)
+          )
+          .map((row: any) => row.id)
+          .filter(Boolean);
+
+        if (uniformStructureIds.length > 0) {
+          const { data: uniformFees } = await assertSupabase()
+            .from('student_fees')
+            .select(
+              'id, amount, final_amount, amount_paid, amount_outstanding, status, due_date, paid_date, updated_at, student:students!student_fees_student_id_fkey(first_name,last_name,student_id, preschool_id, organization_id)'
+            )
+            .in('fee_structure_id', uniformStructureIds)
+            .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`, { foreignTable: 'students' });
+
+          const fees = (uniformFees || []) as any[];
+          const paidAmountByFee = (fee: any) => getPaidAmount(fee);
+          const paidFees = fees.filter((fee) => paidAmountByFee(fee) > 0 || String(fee?.status) === 'paid');
+          const paidFeeIds = new Set<string>(paidFees.map((fee) => fee.id).filter(Boolean));
+
+          uniformSummary.totalPaid = paidFees.reduce((sum, fee) => sum + paidAmountByFee(fee), 0);
+          uniformSummary.totalOutstanding = fees.reduce((sum, fee) => {
+            const outstanding = Number(fee?.amount_outstanding || 0);
+            return sum + (String(fee?.status) === 'paid' ? 0 : Math.max(outstanding, 0));
+          }, 0);
+          uniformSummary.paidCount = paidFees.length;
+          uniformSummary.pendingCount = Math.max(fees.length - paidFees.length, 0);
+
+          const recentPayments = [...paidFees]
+            .sort((a, b) => {
+              const aDate = new Date(a.paid_date || a.updated_at || a.due_date || 0).getTime();
+              const bDate = new Date(b.paid_date || b.updated_at || b.due_date || 0).getTime();
+              return bDate - aDate;
+            })
+            .slice(0, 5)
+            .map((fee) => ({
+              id: fee.id,
+              studentName: `${fee?.student?.first_name || ''} ${fee?.student?.last_name || ''}`.trim() || 'Student',
+              amount: paidAmountByFee(fee),
+              paidDate: fee.paid_date || fee.updated_at || fee.due_date || null,
+              status: fee.status || null,
+            }));
+          uniformSummary.recentPayments = recentPayments;
+
+          try {
+            const { data: uniformPayments } = await assertSupabase()
+              .from('payments')
+              .select('id, amount, status, description, metadata, created_at, fee_ids')
+              .eq('preschool_id', preschoolId)
+              .in('status', ['completed', 'approved']);
+
+            const extraPayments = (uniformPayments || []).filter((payment: any) => {
+              const metadata = payment?.metadata || {};
+              const labels = [
+                payment?.description,
+                metadata?.payment_purpose,
+                metadata?.payment_context,
+                metadata?.fee_type,
+              ];
+              const hasUniformLabel = labels.some((value) => isUniformLabel(value));
+              if (!hasUniformLabel) return false;
+              const feeIds = Array.isArray(payment?.fee_ids) ? payment.fee_ids : [];
+              const overlaps = feeIds.some((id: string) => paidFeeIds.has(id));
+              return !overlaps;
+            });
+
+            if (extraPayments.length > 0) {
+              uniformSummary.totalPaid += extraPayments.reduce(
+                (sum: number, payment: any) => sum + (Number(payment?.amount) || 0),
+                0
+              );
+              uniformSummary.paidCount += extraPayments.length;
+
+              const extraRecent = extraPayments
+                .map((payment: any) => ({
+                  id: payment.id,
+                  studentName: 'Student',
+                  amount: Number(payment?.amount) || 0,
+                  paidDate: payment?.metadata?.payment_date || payment?.created_at || null,
+                  status: payment?.status || null,
+                }))
+                .sort((a, b) => {
+                  const aDate = new Date(a.paidDate || 0).getTime();
+                  const bDate = new Date(b.paidDate || 0).getTime();
+                  return bDate - aDate;
+                })
+                .slice(0, 5);
+
+              const mergedRecent = [...uniformSummary.recentPayments, ...extraRecent]
+                .sort((a, b) => new Date(b.paidDate || 0).getTime() - new Date(a.paidDate || 0).getTime())
+                .slice(0, 5);
+              uniformSummary.recentPayments = mergedRecent;
+            }
+          } catch (e) {
+            logger.warn('[PrincipalHub] Uniform payments fallback failed:', e);
+          }
+        }
+
+        const { data: uniformUploads } = await assertSupabase()
+          .from('pop_uploads')
+          .select('id, status, payment_amount, payment_reference, title, description')
+          .eq('preschool_id', preschoolId)
+          .eq('upload_type', 'proof_of_payment');
+
+        const uniformPopUploads = (uniformUploads || []).filter((upload: any) =>
+          isUniformLabel(upload?.description) ||
+          isUniformLabel(upload?.title) ||
+          isUniformLabel(upload?.payment_reference)
+        );
+
+        const pendingUploads = uniformPopUploads.filter(
+          (upload: any) => String(upload?.status) !== 'approved'
+        );
+        uniformSummary.pendingUploads = pendingUploads.length;
+        uniformSummary.pendingUploadAmount = pendingUploads.reduce(
+          (sum: number, upload: any) => sum + (Number(upload?.payment_amount) || 0),
+          0
+        );
+      } catch (e) {
+        logger.warn('[PrincipalHub] Uniform payment summary failed:', e);
+      }
+
       const combinedPendingPayments =
         pendingPaymentsCount + pendingRegistrationPayments + pendingPOPUploadsCount;
       
@@ -722,36 +892,39 @@ export const usePrincipalHub = () => {
       
       const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 
-      const getPaidAmount = (fee: any) => {
-        const paid = Number(fee?.amount_paid || 0);
-        if (paid > 0) return paid;
-        const finalAmount = Number(fee?.final_amount || fee?.amount || 0);
-        return String(fee?.status) === 'paid' ? finalAmount : 0;
-      };
-
       const currentRangeStart = formatDateStr(currentMonthStart);
       const currentRangeEnd = formatDateStr(nextMonthStart);
 
-      const [currentFeesDueRes, currentFeesFallbackRes] = await Promise.all([
-        assertSupabase()
+      const buildFeesQuery = () => {
+        let query = assertSupabase()
           .from('student_fees')
-          .select('amount, final_amount, amount_paid, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
+          .select(
+            'amount, final_amount, amount_paid, status, due_date, created_at, fee_structure_id, students!inner(id, preschool_id, organization_id)'
+          );
+
+        query = query.or(
+          `preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`,
+          { foreignTable: 'students' }
+        );
+
+        return query;
+      };
+
+      const [currentFeesDueRes, currentFeesFallbackRes] = await Promise.all([
+        buildFeesQuery()
           .gte('due_date', currentRangeStart)
           .lt('due_date', currentRangeEnd),
-        assertSupabase()
-          .from('student_fees')
-          .select('amount, final_amount, amount_paid, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
+        buildFeesQuery()
           .is('due_date', null)
           .gte('created_at', currentMonthStart.toISOString())
           .lt('created_at', nextMonthStart.toISOString()),
       ]);
 
+      const uniformStructureIdSet = new Set(uniformStructureIds);
       const currentMonthFees = [
         ...(currentFeesDueRes.data || []),
         ...(currentFeesFallbackRes.data || []),
-      ];
+      ].filter((fee: any) => !uniformStructureIdSet.has(fee?.fee_structure_id));
 
       // Fetch previous month for comparison (Date handles year rollover automatically)
       const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -761,16 +934,10 @@ export const usePrincipalHub = () => {
       const prevRangeEnd = formatDateStr(prevMonthEnd);
 
       const [previousFeesDueRes, previousFeesFallbackRes] = await Promise.all([
-        assertSupabase()
-          .from('student_fees')
-          .select('amount, final_amount, amount_paid, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
+        buildFeesQuery()
           .gte('due_date', prevRangeStart)
           .lt('due_date', prevRangeEnd),
-        assertSupabase()
-          .from('student_fees')
-          .select('amount, final_amount, amount_paid, status, due_date, created_at')
-          .eq('preschool_id', preschoolId)
+        buildFeesQuery()
           .is('due_date', null)
           .gte('created_at', prevMonthStart.toISOString())
           .lt('created_at', prevMonthEnd.toISOString()),
@@ -779,7 +946,7 @@ export const usePrincipalHub = () => {
       const previousMonthFees = [
         ...(previousFeesDueRes.data || []),
         ...(previousFeesFallbackRes.data || []),
-      ];
+      ].filter((fee: any) => !uniformStructureIdSet.has(fee?.fee_structure_id));
 
       // Calculate real revenue (paid fees due in the month)
       const currentMonthRevenue = currentMonthFees.reduce((sum: number, fee: any) => {
@@ -960,6 +1127,7 @@ export const usePrincipalHub = () => {
           pendingReportApprovals: pendingReportsCount,
           pendingActivityApprovals: pendingActivityApprovalsCount,
           pendingHomeworkApprovals: pendingHomeworkApprovalsCount,
+          uniformPayments: uniformSummary,
           schoolId: preschoolId,
           schoolName
         });

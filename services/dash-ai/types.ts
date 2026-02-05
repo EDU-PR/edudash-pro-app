@@ -108,6 +108,8 @@ export interface DashMessage {
 
     /** Tool results attached to this message (LLM function/tool calls) */
     tool_results?: any;
+    tool_name?: string;
+    tool_result?: any;
   };
 }
 

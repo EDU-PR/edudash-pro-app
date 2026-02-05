@@ -743,6 +743,84 @@ class EducationalPDFServiceImpl {
     `;
   }
 
+  /**
+   * Convert lightweight Markdown into simple HTML for PDF rendering.
+   * Keeps output safe by escaping HTML before applying formatting.
+   */
+  private markdownToHtml(raw: string): string {
+    const escaped = (raw || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    const formatInline = (text: string) =>
+      text
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.+?)__/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/_(.+?)_/g, '<em>$1</em>');
+
+    const lines = escaped.split(/\r?\n/);
+    let html = '';
+    let listType: 'ul' | 'ol' | null = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (listType) {
+          html += `</${listType}>`;
+          listType = null;
+        }
+        continue;
+      }
+
+      const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      const ulMatch = trimmed.match(/^[-*•]\s+(.*)$/);
+
+      if (olMatch) {
+        if (listType !== 'ol') {
+          if (listType) html += `</${listType}>`;
+          html += '<ol>';
+          listType = 'ol';
+        }
+        html += `<li>${formatInline(olMatch[2])}</li>`;
+        continue;
+      }
+
+      if (ulMatch) {
+        if (listType !== 'ul') {
+          if (listType) html += `</${listType}>`;
+          html += '<ul>';
+          listType = 'ul';
+        }
+        html += `<li>${formatInline(ulMatch[1])}</li>`;
+        continue;
+      }
+
+      if (listType) {
+        html += `</${listType}>`;
+        listType = null;
+      }
+
+      if (trimmed.startsWith('### ')) {
+        html += `<h3>${formatInline(trimmed.slice(4))}</h3>`;
+      } else if (trimmed.startsWith('## ')) {
+        html += `<h2>${formatInline(trimmed.slice(3))}</h2>`;
+      } else if (trimmed.startsWith('# ')) {
+        html += `<h1>${formatInline(trimmed.slice(2))}</h1>`;
+      } else {
+        html += `<p>${formatInline(trimmed)}</p>`;
+      }
+    }
+
+    if (listType) {
+      html += `</${listType}>`;
+    }
+
+    return html;
+  }
+
   // ====================================================================
   // PDF GENERATION AND SHARING
   // ====================================================================
@@ -751,13 +829,7 @@ class EducationalPDFServiceImpl {
    * Generate an ad-hoc text-based PDF (simple export)
    */
   public async generateTextPDF(title: string, body: string, opts?: TextPDFOptions): Promise<void> {
-    const safeBody = (body || '')
-      .split('\n')
-      .map(p => `<p>${p
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</p>`)
-      .join('\n');
+    const safeBody = this.markdownToHtml(body || '');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
       <style>
         @page { size: ${(opts?.paperSize || 'A4')} ${(opts?.orientation || 'portrait')}; margin: 20mm; }
@@ -765,6 +837,12 @@ class EducationalPDFServiceImpl {
         .title { font-size: 24px; font-weight: bold; color: #007AFF; margin-bottom: 10px; }
         .meta { color: #777; font-size: 12px; margin-bottom: 20px; }
         .content p { margin: 8px 0; }
+        .content h1 { font-size: 20px; margin: 12px 0 6px; color: #1f2937; }
+        .content h2 { font-size: 18px; margin: 10px 0 6px; color: #1f2937; }
+        .content h3 { font-size: 16px; margin: 8px 0 4px; color: #1f2937; }
+        .content ul, .content ol { margin: 6px 0 8px 18px; }
+        .content li { margin: 4px 0; }
+        .content code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
         .footer { margin-top: 30px; font-size: 12px; color: #999; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
       </style></head><body>
       <div class="title">${title}</div>
@@ -797,13 +875,7 @@ class EducationalPDFServiceImpl {
    * NOTE: This method does NOT open a share sheet; it only returns the URI
    */
   public async generateTextPDFUri(title: string, body: string, opts?: TextPDFOptions): Promise<{ uri: string; filename: string }> {
-    const safeBody = (body || '')
-      .split('\n')
-      .map(p => `<p>${p
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</p>`)
-      .join('\n');
+    const safeBody = this.markdownToHtml(body || '');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
       <style>
         @page { size: ${(opts?.paperSize || 'A4')} ${(opts?.orientation || 'portrait')}; margin: 20mm; }
@@ -811,6 +883,12 @@ class EducationalPDFServiceImpl {
         .title { font-size: 24px; font-weight: bold; color: #007AFF; margin-bottom: 10px; }
         .meta { color: #777; font-size: 12px; margin-bottom: 20px; }
         .content p { margin: 8px 0; }
+        .content h1 { font-size: 20px; margin: 12px 0 6px; color: #1f2937; }
+        .content h2 { font-size: 18px; margin: 10px 0 6px; color: #1f2937; }
+        .content h3 { font-size: 16px; margin: 8px 0 4px; color: #1f2937; }
+        .content ul, .content ol { margin: 6px 0 8px 18px; }
+        .content li { margin: 4px 0; }
+        .content code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
         .footer { margin-top: 30px; font-size: 12px; color: #999; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
       </style></head><body>
       <div class="title">${title}</div>

@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 
@@ -59,6 +60,7 @@ export default function ApplyPage() {
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop'>('desktop');
   const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -164,6 +166,15 @@ export default function ApplyPage() {
       setPlatform('android');
     } else {
       setPlatform('desktop');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('invite') || params.get('inviteCode') || params.get('code');
+    if (code && code.trim()) {
+      setInviteCode(code.trim().toUpperCase());
     }
   }, []);
 
@@ -350,7 +361,8 @@ export default function ApplyPage() {
 
   const openInApp = () => {
     if (!jobId) return;
-    const deepLink = `edudashpro:///apply/${encodeURIComponent(String(jobId))}`;
+    const inviteQuery = inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : '';
+    const deepLink = `edudashpro:///apply/${encodeURIComponent(String(jobId))}${inviteQuery}`;
     const handleVisibilityChange = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -365,213 +377,304 @@ export default function ApplyPage() {
     ? 'https://apps.apple.com/app/edudash-pro/id6478437234'
     : 'https://play.google.com/store/apps/details?id=com.edudashpro';
 
+  const teacherSignupLink = inviteCode
+    ? `/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}${jobId ? `&job=${encodeURIComponent(String(jobId))}` : ''}`
+    : `/sign-up/teacher${jobId ? `?job=${encodeURIComponent(String(jobId))}` : ''}`;
+
+  const showForm = !loading && Boolean(jobPosting) && !submitted;
+  const showEmptyState = !loading && !jobPosting;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-10 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 md:p-8 shadow-2xl">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900/60 border border-slate-700/60 flex items-center justify-center">
-              <img src="/favicon.png" alt="EduDash Pro" className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-widest text-cyan-300/80">EduDash Pro</p>
-              <p className="text-slate-300 text-sm">Hiring Hub Application</p>
-            </div>
-          </div>
+    <>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spline+Sans:wght@400;500;600&display=swap');
+        :root {
+          --dash-bg: #0a0d18;
+          --dash-panel: rgba(14, 20, 34, 0.86);
+          --dash-panel-strong: rgba(16, 24, 40, 0.96);
+          --dash-border: rgba(148, 163, 184, 0.16);
+          --dash-accent: #36f0ff;
+          --dash-accent-2: #4b7cff;
+          --dash-text: #e2e8f0;
+          --dash-muted: #94a3b8;
+          --font-heading: 'Space Grotesk', system-ui, sans-serif;
+          --font-body: 'Spline Sans', system-ui, sans-serif;
+        }
+        body {
+          background: var(--dash-bg);
+          color: var(--dash-text);
+          font-family: var(--font-body);
+        }
+      `}</style>
+      <div className="min-h-screen relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-32 -right-20 h-80 w-80 rounded-full bg-cyan-500/20 blur-[120px]" />
+          <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-blue-500/20 blur-[140px]" />
+          <div
+            className="absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.15), transparent 40%), radial-gradient(circle at 80% 10%, rgba(79, 70, 229, 0.18), transparent 45%)',
+            }}
+          />
+        </div>
 
-          {schoolInfo ? (
-            <div className="mb-6 flex items-center gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/50 p-4">
-              {schoolInfo.logoUrl ? (
-                <img src={schoolInfo.logoUrl} alt={schoolInfo.name} className="w-14 h-14 rounded-2xl object-cover" />
-              ) : (
-                <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-200 flex items-center justify-center text-lg font-semibold">
-                  {getInitials(schoolInfo.name)}
-                </div>
-              )}
-              <div>
-                <p className="text-xs uppercase tracking-widest text-slate-400">School</p>
-                <p className="text-white font-semibold text-lg">{schoolInfo.name}</p>
-                {formatSchoolDetails(schoolInfo) ? (
-                  <p className="text-slate-400 text-sm mt-1">{formatSchoolDetails(schoolInfo)}</p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mb-6">
-            <p className="text-xs uppercase tracking-widest text-cyan-300/80">{t('apply.headerTitle', { defaultValue: 'Apply for Position' })}</p>
-            <h1 className="text-3xl font-bold text-white">{jobPosting?.title || t('apply.screenTitle', { defaultValue: 'Apply for Job' })}</h1>
-            {jobPosting && (
-              <p className="text-slate-300 text-sm mt-2">
-                {formatEmploymentType(jobPosting.employment_type)} • {jobPosting.location || 'Location TBA'} • {formatSalaryRange(jobPosting)}
-              </p>
-            )}
-          </div>
-
-          {jobPosting && (
-            <div className="mb-8 rounded-2xl border border-slate-700/60 bg-slate-900/50 p-5">
-              <div className="flex flex-wrap items-center gap-3 mb-3">
-                <span className="px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-xs font-semibold">
-                  {formatEmploymentType(jobPosting.employment_type)}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-slate-700/60 text-slate-200 text-xs font-semibold">
-                  {jobPosting.location || 'Location TBA'}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold">
-                  {formatSalaryRange(jobPosting)}
-                </span>
-              </div>
-              <div className="text-sm text-slate-200 font-semibold mb-2">Job Snapshot</div>
-              <p className="text-sm text-slate-300 whitespace-pre-line">
-                {jobPosting.description}
-              </p>
-              {jobPosting.requirements && (
-                <div className="text-sm text-slate-300 mt-3">
-                  <span className="text-slate-100 font-semibold">Requirements:</span> {jobPosting.requirements}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-col sm:flex-row gap-3 mb-8">
-            <button
-              type="button"
-              onClick={openInApp}
-              className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-              Open in App
-            </button>
-            {platform !== 'desktop' && (
-              <a
-                href={getStoreUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-5 py-3 border border-slate-600 text-slate-200 hover:bg-slate-700 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                Download the App
-              </a>
-            )}
-          </div>
-
-          {loading && (
-            <div className="text-slate-300">{t('apply.loadingPosting', { defaultValue: 'Loading job posting...' })}</div>
-          )}
-
-          {!loading && !jobPosting && (
-            <div className="text-slate-300">{statusMessage || t('apply.notFoundDesc', { defaultValue: 'This job may have been removed or expired' })}</div>
-          )}
-
-          {!loading && jobPosting && !submitted && (
-            <form onSubmit={onSubmit} className="space-y-6">
-              <section className="space-y-3">
-                <h2 className="text-white font-semibold">{t('apply.schoolPosition', { defaultValue: 'School Position' })}</h2>
-                <p className="text-slate-300 text-sm whitespace-pre-line">{jobPosting.description}</p>
-                {jobPosting.requirements && (
-                  <div className="text-slate-300 text-sm whitespace-pre-line">
-                    <span className="font-semibold text-white">{t('apply.qualificationsTitle', { defaultValue: 'Qualifications' })}:</span> {jobPosting.requirements}
+        <div className="relative z-10 max-w-6xl mx-auto px-4 py-10 lg:py-14">
+          <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-6">
+            <div className="space-y-6">
+              <div className="rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-slate-900/70 border border-slate-700/60 flex items-center justify-center">
+                      <img src="/favicon.png" alt="EduDash Pro" className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/80">EduDash Pro</p>
+                      <p className="text-slate-300 text-sm">Hiring Hub Application</p>
+                    </div>
                   </div>
-                )}
-              </section>
-
-              <section className="space-y-4">
-                <h2 className="text-white font-semibold">{t('apply.personalInfo', { defaultValue: 'Personal Information' })}</h2>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder={t('apply.placeholder.firstName', { defaultValue: 'First Name' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
-                  <input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder={t('apply.placeholder.lastName', { defaultValue: 'Last Name' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
-                  <input
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder={t('apply.placeholder.email', { defaultValue: 'Email' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder={t('apply.phoneNumber', { defaultValue: 'Phone Number' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
-                  <input
-                    value={experienceYears}
-                    onChange={(e) => setExperienceYears(e.target.value)}
-                    placeholder={t('apply.yearsExperience', { defaultValue: 'Years of Experience' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
-                  <input
-                    value={qualifications}
-                    onChange={(e) => setQualifications(e.target.value)}
-                    placeholder={t('apply.educationOptionalLabel', { defaultValue: 'Education & Certifications (Optional)' })}
-                    className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                  />
                 </div>
-              </section>
 
-              <section className="space-y-4">
-                <h2 className="text-white font-semibold">{t('apply.resumeLabel', { defaultValue: 'Resume/CV' })}</h2>
-                <div className="border border-dashed border-slate-600 rounded-xl p-4 text-slate-300">
-                  <input
-                    type="file"
-                    accept={ALLOWED_MIME_TYPES.join(',')}
-                    onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-white hover:file:bg-cyan-600"
-                  />
-                  <p className="text-xs text-slate-400 mt-2">
-                    {t('apply.uploadHint', { defaultValue: 'PDF or Word document, max 50MB' })}
+                {schoolInfo ? (
+                  <div className="mb-6 flex items-center gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
+                    {schoolInfo.logoUrl ? (
+                      <img src={schoolInfo.logoUrl} alt={schoolInfo.name} className="w-14 h-14 rounded-2xl object-cover" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-200 flex items-center justify-center text-lg font-semibold">
+                        {getInitials(schoolInfo.name)}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs uppercase tracking-widest text-slate-400">School</p>
+                      <p className="text-white font-semibold text-lg">{schoolInfo.name}</p>
+                      {formatSchoolDetails(schoolInfo) ? (
+                        <p className="text-slate-400 text-sm mt-1">{formatSchoolDetails(schoolInfo)}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mb-6">
+                  <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/80">
+                    {t('apply.headerTitle', { defaultValue: 'Apply for Position' })}
                   </p>
-                  {resumeFile && (
-                    <p className="text-xs text-cyan-300 mt-2">Selected: {resumeFile.name}</p>
+                  <h1 className="text-3xl md:text-4xl font-bold text-white" style={{ fontFamily: 'var(--font-heading)' }}>
+                    {jobPosting?.title || t('apply.screenTitle', { defaultValue: 'Apply for Job' })}
+                  </h1>
+                  {jobPosting && (
+                    <p className="text-slate-300 text-sm mt-2">
+                      {formatEmploymentType(jobPosting.employment_type)} • {jobPosting.location || 'Location TBA'} • {formatSalaryRange(jobPosting)}
+                    </p>
                   )}
                 </div>
-              </section>
 
-              <section className="space-y-3">
-                <h2 className="text-white font-semibold">{t('apply.coverLetterOptional', { defaultValue: 'Cover Letter (Optional)' })}</h2>
-                <textarea
-                  value={coverLetter}
-                  onChange={(e) => setCoverLetter(e.target.value)}
-                  rows={5}
-                  className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                />
-              </section>
+                {inviteCode && (
+                  <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">Invite code detected</p>
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-100 text-xs font-semibold">
+                        {inviteCode}
+                      </span>
+                      <Link
+                        href={teacherSignupLink}
+                        className="px-4 py-2 rounded-full bg-emerald-400/20 text-emerald-100 text-xs font-semibold border border-emerald-400/40 hover:bg-emerald-400/30 transition"
+                      >
+                        Create Teacher Account
+                      </Link>
+                    </div>
+                  </div>
+                )}
 
-              {error && <div className="text-red-400 text-sm">{error}</div>}
+                {jobPosting && (
+                  <div className="rounded-2xl border border-slate-700/60 bg-slate-900/60 p-5">
+                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                      <span className="px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-xs font-semibold">
+                        {formatEmploymentType(jobPosting.employment_type)}
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-slate-700/60 text-slate-200 text-xs font-semibold">
+                        {jobPosting.location || 'Location TBA'}
+                      </span>
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold">
+                        {formatSalaryRange(jobPosting)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-slate-200 font-semibold mb-2">Job Snapshot</div>
+                    <p className="text-sm text-slate-300 whitespace-pre-line">
+                      {jobPosting.description}
+                    </p>
+                    {jobPosting.requirements && (
+                      <div className="text-sm text-slate-300 mt-3">
+                        <span className="text-slate-100 font-semibold">Requirements:</span> {jobPosting.requirements}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-4 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 disabled:opacity-60"
-              >
-                {submitting ? t('status.uploading', { defaultValue: 'Uploading...' }) : t('apply.submitCta', { defaultValue: 'Submit Application' })}
-              </button>
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={openInApp}
+                    className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Open in App
+                  </button>
+                  {platform !== 'desktop' && (
+                    <a
+                      href={getStoreUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:w-auto px-5 py-3 border border-slate-600 text-slate-200 hover:bg-slate-700 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                      Download the App
+                    </a>
+                  )}
+                </div>
 
-              <p className="text-xs text-slate-400 text-center">
-                {t('apply.privacyNotice', { defaultValue: 'Your information will only be shared with the hiring school.' })}
-              </p>
-            </form>
-          )}
+                {loading && (
+                  <div className="text-slate-300 mt-6">{t('apply.loadingPosting', { defaultValue: 'Loading job posting...' })}</div>
+                )}
 
-          {submitted && (
-            <div className="text-slate-200 text-center py-10">
-              <h2 className="text-2xl font-bold mb-4">{t('apply.submittedTitle', { defaultValue: 'Application Submitted!' })}</h2>
-              <p className="text-slate-300 whitespace-pre-line">
-                {t('apply.submittedDesc', { defaultValue: 'Your application has been received.' })}
-              </p>
+                {showEmptyState && (
+                  <div className="mt-6 rounded-2xl border border-slate-700/60 bg-slate-900/70 p-5 text-slate-300">
+                    <p className="text-sm">{statusMessage || t('apply.notFoundDesc', { defaultValue: 'This job may have been removed or expired' })}</p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={openInApp}
+                        className="px-4 py-2 rounded-full bg-cyan-500/20 text-cyan-100 text-xs font-semibold border border-cyan-400/40"
+                      >
+                        Open in App
+                      </button>
+                      <Link
+                        href={teacherSignupLink}
+                        className="px-4 py-2 rounded-full bg-slate-700/60 text-slate-200 text-xs font-semibold border border-slate-600/60"
+                      >
+                        Create Teacher Account
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+
+            <div className="rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel-strong)] p-6 shadow-2xl">
+              {showForm && (
+                <form onSubmit={onSubmit} className="space-y-6">
+                  <section className="space-y-3">
+                    <h2 className="text-white font-semibold">{t('apply.schoolPosition', { defaultValue: 'School Position' })}</h2>
+                    <p className="text-slate-300 text-sm whitespace-pre-line">{jobPosting?.description}</p>
+                    {jobPosting?.requirements && (
+                      <div className="text-slate-300 text-sm whitespace-pre-line">
+                        <span className="font-semibold text-white">{t('apply.qualificationsTitle', { defaultValue: 'Qualifications' })}:</span> {jobPosting.requirements}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="space-y-4">
+                    <h2 className="text-white font-semibold">{t('apply.personalInfo', { defaultValue: 'Personal Information' })}</h2>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <input
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder={t('apply.placeholder.firstName', { defaultValue: 'First Name' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                      <input
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder={t('apply.placeholder.lastName', { defaultValue: 'Last Name' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                      <input
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder={t('apply.placeholder.email', { defaultValue: 'Email' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                      <input
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder={t('apply.phoneNumber', { defaultValue: 'Phone Number' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                      <input
+                        value={experienceYears}
+                        onChange={(e) => setExperienceYears(e.target.value)}
+                        placeholder={t('apply.yearsExperience', { defaultValue: 'Years of Experience' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                      <input
+                        value={qualifications}
+                        onChange={(e) => setQualifications(e.target.value)}
+                        placeholder={t('apply.educationOptionalLabel', { defaultValue: 'Education & Certifications (Optional)' })}
+                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                      />
+                    </div>
+                  </section>
+
+                  <section className="space-y-4">
+                    <h2 className="text-white font-semibold">{t('apply.resumeLabel', { defaultValue: 'Resume/CV' })}</h2>
+                    <div className="border border-dashed border-slate-600 rounded-xl p-4 text-slate-300">
+                      <input
+                        type="file"
+                        accept={ALLOWED_MIME_TYPES.join(',')}
+                        onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                        className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-white hover:file:bg-cyan-600"
+                      />
+                      <p className="text-xs text-slate-400 mt-2">
+                        {t('apply.uploadHint', { defaultValue: 'PDF or Word document, max 50MB' })}
+                      </p>
+                      {resumeFile && (
+                        <p className="text-xs text-cyan-300 mt-2">Selected: {resumeFile.name}</p>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-white font-semibold">{t('apply.coverLetterOptional', { defaultValue: 'Cover Letter (Optional)' })}</h2>
+                    <textarea
+                      value={coverLetter}
+                      onChange={(e) => setCoverLetter(e.target.value)}
+                      rows={5}
+                      className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
+                    />
+                  </section>
+
+                  {error && <div className="text-red-400 text-sm">{error}</div>}
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-4 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 disabled:opacity-60"
+                  >
+                    {submitting ? t('status.uploading', { defaultValue: 'Uploading...' }) : t('apply.submitCta', { defaultValue: 'Submit Application' })}
+                  </button>
+
+                  <p className="text-xs text-slate-400 text-center">
+                    {t('apply.privacyNotice', { defaultValue: 'Your information will only be shared with the hiring school.' })}
+                  </p>
+                </form>
+              )}
+
+              {submitted && (
+                <div className="text-slate-200 text-center py-10">
+                  <h2 className="text-2xl font-bold mb-4">{t('apply.submittedTitle', { defaultValue: 'Application Submitted!' })}</h2>
+                  <p className="text-slate-300 whitespace-pre-line">
+                    {t('apply.submittedDesc', { defaultValue: 'Your application has been received.' })}
+                  </p>
+                </div>
+              )}
+
+              {!showForm && !submitted && !loading && jobPosting && (
+                <div className="text-slate-300 text-sm">We’re ready when you are. Start your application above.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

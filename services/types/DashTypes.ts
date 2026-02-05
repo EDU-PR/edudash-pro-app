@@ -77,6 +77,9 @@ export interface DashMessage {
       progress: number;
       next_steps: string[];
     };
+    tool_results?: any;
+    tool_name?: string;
+    tool_result?: any;
   };
 }
 

@@ -17,6 +17,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { router, useFocusEffect } from 'expo-router';
+import ClassPlacementService from '@/lib/services/ClassPlacementService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
@@ -84,6 +85,7 @@ export default function StudentManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [autoAssigning, setAutoAssigning] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     searchTerm: '',
     ageGroup: '',
@@ -348,6 +350,73 @@ export default function StudentManagementScreen() {
     await fetchData();
   };
 
+  const handleAutoAssignByDob = () => {
+    if (!orgId) {
+      Alert.alert('No school found', 'Please complete setup before auto-assigning students.');
+      return;
+    }
+
+    const candidates = students.filter(student => !student.class_id && Boolean(student.date_of_birth));
+    if (candidates.length === 0) {
+      Alert.alert('Nothing to assign', 'No students without a class and a valid date of birth.');
+      return;
+    }
+
+    Alert.alert(
+      'Auto-assign by DOB',
+      `Assign classes for ${candidates.length} student${candidates.length === 1 ? '' : 's'} based on date of birth? This will only fill missing class assignments.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Assign',
+          onPress: async () => {
+            setAutoAssigning(true);
+            let updated = 0;
+            let skipped = 0;
+            let failed = 0;
+
+            for (const student of candidates) {
+              try {
+                const suggestion = await ClassPlacementService.suggestClassForStudent({
+                  organizationId: orgId,
+                  dateOfBirth: student.date_of_birth,
+                });
+
+                if (!suggestion?.classId) {
+                  skipped += 1;
+                  continue;
+                }
+
+                const { error } = await assertSupabase()
+                  .from('students')
+                  .update({ class_id: suggestion.classId })
+                  .eq('id', student.id);
+
+                if (error) {
+                  console.warn('Auto-assign update failed', { studentId: student.id, error });
+                  failed += 1;
+                } else {
+                  updated += 1;
+                }
+              } catch (error) {
+                console.warn('Auto-assign failed', { studentId: student.id, error });
+                failed += 1;
+              }
+            }
+
+            await fetchData();
+            setAutoAssigning(false);
+
+            Alert.alert(
+              'Auto-assign complete',
+              `Assigned: ${updated}\nSkipped: ${skipped}\nFailed: ${failed}`
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleStudentPress = (student: Student) => {
     router.push(`/screens/student-detail?studentId=${student.id}`);
   };
@@ -444,21 +513,33 @@ export default function StudentManagementScreen() {
         </View>
       </View>
 
-      {/* Search */}
+      {/* Search + Actions */}
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('student_management.search_placeholder', { defaultValue: 'Search students...' })}
-          placeholderTextColor={theme.textSecondary}
-          value={filters.searchTerm}
-          onChangeText={(text) => setFilters({...filters, searchTerm: text})}
-        />
-        {filters.searchTerm ? (
-          <TouchableOpacity onPress={() => setFilters({...filters, searchTerm: ''})} style={styles.searchIcon}>
-            <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
-          </TouchableOpacity>
-        ) : null}
-        <Ionicons name="search-outline" size={20} color={theme.textSecondary} style={styles.searchIcon} />
+        <View style={styles.searchInputWrap}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('student_management.search_placeholder', { defaultValue: 'Search students...' })}
+            placeholderTextColor={theme.textSecondary}
+            value={filters.searchTerm}
+            onChangeText={(text) => setFilters({...filters, searchTerm: text})}
+          />
+          {filters.searchTerm ? (
+            <TouchableOpacity onPress={() => setFilters({...filters, searchTerm: ''})} style={styles.searchIcon}>
+              <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
+          <Ionicons name="search-outline" size={18} color={theme.textSecondary} style={styles.searchIcon} />
+        </View>
+        <TouchableOpacity
+          style={[styles.autoAssignButton, autoAssigning ? styles.autoAssignButtonDisabled : null]}
+          onPress={handleAutoAssignByDob}
+          disabled={autoAssigning}
+        >
+          <Ionicons name="sparkles-outline" size={16} color={theme.onPrimary} style={styles.autoAssignIcon} />
+          <Text style={styles.autoAssignButtonText}>
+            {autoAssigning ? 'Assigning...' : 'Auto-assign DOB'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Age Group Overview for Preschools */}
@@ -639,34 +720,34 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   header: {
     backgroundColor: theme.primary,
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: 44,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   backButton: {
-    marginRight: 16,
+    marginRight: 10,
   },
   headerContent: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: theme.onPrimary,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: theme.onPrimary + 'CC',
     marginTop: 2,
   },
   filterButton: {
-    padding: 8,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   statsRow: {
@@ -678,12 +759,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     flex: 1,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: theme.onPrimary,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.onPrimary + 'CC',
     marginTop: 4,
   },
@@ -691,23 +772,50 @@ const createStyles = (theme: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.surface,
-    margin: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
     shadowColor: theme.shadow || '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     color: theme.text,
+  },
+  autoAssignButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: theme.primary,
+  },
+  autoAssignIcon: {
+    marginRight: 6,
+  },
+  autoAssignButtonDisabled: {
+    opacity: 0.6,
+  },
+  autoAssignButtonText: {
+    color: theme.onPrimary,
+    fontSize: 11,
+    fontWeight: '600',
   },
   ageGroupOverview: {
     paddingHorizontal: 20,

@@ -5,12 +5,12 @@
  * @module app/screens/preschool-lesson-generator
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, TextInput, Share, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // Conditional import for markdown rendering on native
@@ -84,6 +84,10 @@ interface GeneratedContent {
 export default function PreschoolLessonGeneratorScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
+  const params = useLocalSearchParams();
+  const modeParam = Array.isArray(params?.mode) ? params.mode[0] : params?.mode;
+  const isQuickMode = modeParam === 'quick';
+  const quickDefaultsApplied = useRef(false);
   const palette = useMemo(() => ({
     bg: theme.background,
     text: theme.text,
@@ -236,6 +240,15 @@ export default function PreschoolLessonGeneratorScreen() {
   const selectedSubjectInfo = PRESCHOOL_SUBJECTS.find(s => s.id === selectedSubject);
   const selectedAgeGroupInfo = AGE_GROUPS.find(a => a.id === selectedAgeGroup);
 
+  useEffect(() => {
+    if (!isQuickMode || quickDefaultsApplied.current) return;
+    if (!selectedAgeGroup) setSelectedAgeGroup('preschool');
+    if (!selectedSubject) setSelectedSubject('letters');
+    setDuration('15');
+    setIncludeHomework(false);
+    quickDefaultsApplied.current = true;
+  }, [isQuickMode, selectedAgeGroup, selectedSubject]);
+
   const buildPrompt = useCallback(() => {
     const durationNum = parseInt(duration, 10) || 30;
     const subjectLabel = selectedSubjectInfo?.label.replace(/^[^\s]+\s/, '') || 'General';
@@ -243,8 +256,11 @@ export default function PreschoolLessonGeneratorScreen() {
     const ageRange = selectedAgeGroupInfo?.ageRange || '3-4';
     const topicStr = topic.trim() || 'age-appropriate activity';
     const isSTEMSubject = selectedSubject === 'ai' || selectedSubject === 'robotics' || selectedSubject === 'computer_literacy';
+    const quickModeNote = isQuickMode
+      ? '\n\n**QUICK LESSON MODE:** Create a low-prep, high-engagement lesson that fits within the time limit. Use minimal materials, clear transitions, and simple instructions.'
+      : '';
     
-    let prompt = `You are a highly experienced early childhood educator and curriculum specialist creating an engaging, developmentally appropriate preschool lesson plan. Your expertise spans child development, educational psychology, and hands-on learning methodologies.
+    let prompt = `You are a highly experienced early childhood educator and curriculum specialist creating an engaging, developmentally appropriate preschool lesson plan. Your expertise spans child development, educational psychology, and hands-on learning methodologies.${quickModeNote}
 
 **LESSON REQUIREMENTS:**
 - Topic: ${topicStr}
@@ -265,7 +281,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
     }
 
     return prompt;
-  }, [topic, selectedSubject, selectedAgeGroup, duration, language, includeInsights, includeHomework, selectedSubjectInfo, selectedAgeGroupInfo]);
+  }, [topic, selectedSubject, selectedAgeGroup, duration, language, includeInsights, includeHomework, selectedSubjectInfo, selectedAgeGroupInfo, isQuickMode]);
 
   const handleGenerate = useCallback(async () => {
     if (isQuotaExhausted) {
@@ -620,6 +636,14 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
           <Text style={styles.heroStat}>{usage.lesson_generation} this month</Text>
         </View>
       </LinearGradient>
+      {isQuickMode && (
+        <View style={[styles.quickModeBanner, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+          <Ionicons name="flash" size={16} color={theme.primary} />
+          <Text style={[styles.quickModeText, { color: theme.primary }]}>
+            Quick Lesson Mode • 15 min • Low prep
+          </Text>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -815,7 +839,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
             </View>
 
             {/* Content */}
-            <ScrollView style={styles.contentScroll} nestedScrollEnabled>
+            <ScrollView style={[styles.contentScroll, { backgroundColor: palette.surface }]} nestedScrollEnabled>
               {(() => {
                 const content = activeTab === 'lesson' ? generated.lesson :
                                activeTab === 'insights' ? generated.insights :
@@ -930,6 +954,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
+  quickModeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  quickModeText: { fontSize: 12, fontWeight: '700' },
   heroText: { color: '#FFF', fontWeight: '700', fontSize: 14, marginLeft: 6 },
   heroStats: { marginLeft: 'auto' },
   heroStat: { color: '#FFF', fontSize: 12, opacity: 0.9 },
