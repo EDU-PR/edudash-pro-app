@@ -199,12 +199,17 @@ export default [
     ignores: [
       'node_modules/',
       'dist/',
+      'build/',
       '.expo/',
+      '.cache/',
       'android/',
       'ios/',
       'scripts/',
-'docs/',
+      'docs/',
       'archive/',
+      '**/*.old.tsx',
+      '**/*.old.ts',
+      '**/*.old.js',
       '**/*.js', // Exclude all JS files, focus on TS/TSX
       '**/*.js.map',
       'babel.config.js',
