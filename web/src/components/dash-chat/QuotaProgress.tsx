@@ -128,7 +128,7 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
       const dbLimit = tierLimits?.chat_messages_per_month || ((tierLimits?.chat_messages_per_day || 10) * 30);
       // Apply realistic limits (handles cases where DB has placeholder values like 999999)
       const limit = getRealisticLimit(effectiveTier, dbLimit);
-      const used = usage?.chat_messages_this_month ?? usage?.chat_messages_today || 0;
+      const used = usage?.chat_messages_this_month ?? usage?.chat_messages_today ?? 0;
 
       setQuota({
         used,
