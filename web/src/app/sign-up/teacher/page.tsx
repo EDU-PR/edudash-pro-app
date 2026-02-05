@@ -23,11 +23,12 @@ export async function generateMetadata({
   searchParams: Record<string, string | string[] | undefined>;
 }): Promise<Metadata> {
   const inviteRaw = firstParam(searchParams.invite || searchParams.inviteCode || searchParams.code);
+  const jobRaw = firstParam(searchParams.job || searchParams.jobId);
   const fallbackTitle = 'Teacher Sign Up | EduDash Pro';
   const fallbackDescription = 'Create your teacher account and join a school on EduDash Pro.';
   const fallbackImage = resolveImageUrl();
 
-  if (!inviteRaw) {
+  if (!inviteRaw && !jobRaw) {
     return {
       title: fallbackTitle,
       description: fallbackDescription,
@@ -51,17 +52,37 @@ export async function generateMetadata({
 
   try {
     const supabase = await createClient();
-    const inviteCode = inviteRaw.trim();
-    const { data } = await supabase.rpc('validate_invitation_code', { p_code: inviteCode });
+    const inviteCode = inviteRaw?.trim() || '';
+    let schoolId = '';
+    let schoolName = '';
+    let jobLogo: string | null | undefined = null;
 
-    if (!data || typeof data !== 'object' || !(data as { valid?: boolean }).valid) {
-      throw new Error('Invite not valid');
+    if (jobRaw) {
+      const { data: job } = await supabase
+        .from('job_postings')
+        .select('logo_url, preschool_id')
+        .eq('id', jobRaw)
+        .maybeSingle();
+      if (job) {
+        jobLogo = job.logo_url;
+        schoolId = job.preschool_id || '';
+      }
     }
 
-    const schoolId = String((data as { school_id?: string }).school_id || '');
-    const schoolName = String((data as { school_name?: string }).school_name || '');
+    if (inviteCode) {
+      const { data } = await supabase.rpc('validate_invitation_code', { p_code: inviteCode });
 
-    let logoUrl: string | null | undefined = null;
+      if (!data || typeof data !== 'object' || !(data as { valid?: boolean }).valid) {
+        if (!jobRaw) {
+          throw new Error('Invite not valid');
+        }
+      } else {
+        schoolId = String((data as { school_id?: string }).school_id || schoolId || '');
+        schoolName = String((data as { school_name?: string }).school_name || '');
+      }
+    }
+
+    let logoUrl: string | null | undefined = jobLogo || null;
     if (schoolId) {
       const { data: preschool } = await supabase
         .from('preschools')
@@ -69,7 +90,12 @@ export async function generateMetadata({
         .eq('id', schoolId)
         .maybeSingle();
       if (preschool) {
-        logoUrl = preschool.logo_url;
+        if (preschool.logo_url) {
+          logoUrl = preschool.logo_url;
+        }
+        if (!schoolName && preschool.name) {
+          schoolName = preschool.name;
+        }
       } else {
         const { data: org } = await supabase
           .from('organizations')
@@ -77,7 +103,12 @@ export async function generateMetadata({
           .eq('id', schoolId)
           .maybeSingle();
         if (org) {
-          logoUrl = org.logo_url;
+          if (org.logo_url) {
+            logoUrl = org.logo_url;
+          }
+          if (!schoolName && org.name) {
+            schoolName = org.name;
+          }
         }
       }
     }
@@ -95,7 +126,7 @@ export async function generateMetadata({
       openGraph: {
         title,
         description,
-        url: `${BASE_URL}/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}`,
+        url: `${BASE_URL}/sign-up/teacher${inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : ''}${jobRaw ? `${inviteCode ? '&' : '?'}job=${encodeURIComponent(jobRaw)}` : ''}`,
         siteName: 'EduDash Pro',
         images: [{ url: imageUrl }],
         type: 'website',

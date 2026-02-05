@@ -61,7 +61,7 @@ export async function buildJobApplyMetadata(jobId: string): Promise<Metadata> {
     const supabase = await createClient();
     const { data: job } = await supabase
       .from('job_postings')
-      .select('title, description, location, employment_type, salary_range_min, salary_range_max, preschool_id')
+      .select('title, description, location, employment_type, salary_range_min, salary_range_max, preschool_id, logo_url')
       .eq('id', jobId)
       .maybeSingle();
 
@@ -105,7 +105,7 @@ export async function buildJobApplyMetadata(jobId: string): Promise<Metadata> {
         ? `${detailParts.join(' • ')}. Apply now via EduDash Pro.`
         : fallbackDescription;
 
-    const imageUrl = resolveImageUrl(schoolLogo);
+    const imageUrl = resolveImageUrl(job?.logo_url || schoolLogo);
     const url = `${BASE_URL}/apply/${jobId}`;
 
     return {

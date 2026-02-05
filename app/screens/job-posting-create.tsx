@@ -11,6 +11,11 @@ import { InviteCodeService } from '@/lib/services/inviteCodeService';
 import { EmploymentType } from '@/types/hiring';
 import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { base64ToUint8Array } from '@/lib/utils/base64';
+import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function JobPostingCreateScreen() {
@@ -34,6 +39,8 @@ export default function JobPostingCreateScreen() {
   const [shareInviteCode, setShareInviteCode] = useState<string | null>(null);
   const [shareMessage, setShareMessage] = useState('');
   const [broadcasting, setBroadcasting] = useState(false);
+  const [jobLogoUrl, setJobLogoUrl] = useState<string | null>(null);
+  const [jobLogoUploading, setJobLogoUploading] = useState(false);
   const [schoolInfo, setSchoolInfo] = useState<{
     name: string;
     logoUrl?: string | null;
@@ -133,8 +140,8 @@ export default function JobPostingCreateScreen() {
       ? `${appUrl}/apply/${jobPosting.id}?invite=${encodeURIComponent(inviteCode)}`
       : `${appUrl}/apply/${jobPosting.id}`;
     const teacherSignupLink = inviteCode
-      ? `${appUrl}/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}`
-      : `${appUrl}/sign-up/teacher`;
+      ? `${appUrl}/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}&job=${encodeURIComponent(jobPosting.id)}`
+      : `${appUrl}/sign-up/teacher?job=${encodeURIComponent(jobPosting.id)}`;
     const requirementsLine = jobRequirements ? `*Requirements:* ${jobRequirements}\n` : '';
     const inviteLine = inviteCode
       ? `*Invite Code:* ${inviteCode}\n*Teacher Sign Up:* ${teacherSignupLink}\n\n`
@@ -171,7 +178,7 @@ export default function JobPostingCreateScreen() {
           email: preschool.contact_email,
           website: preschool.website_url,
         });
-        setIncludeSchoolLogo(!!preschool.logo_url);
+        setIncludeSchoolLogo(Boolean(jobLogoUrl || preschool.logo_url));
         return;
       }
 
@@ -185,7 +192,7 @@ export default function JobPostingCreateScreen() {
           name: org.name,
           logoUrl: org.logo_url,
         });
-        setIncludeSchoolLogo(!!org.logo_url);
+        setIncludeSchoolLogo(Boolean(jobLogoUrl || org.logo_url));
         return;
       }
     } catch (error) {
@@ -196,8 +203,109 @@ export default function JobPostingCreateScreen() {
       setSchoolInfo({
         name: fallbackName,
       });
-      setIncludeSchoolLogo(false);
+      setIncludeSchoolLogo(Boolean(jobLogoUrl));
     }
+  };
+
+  const handlePickJobLogo = async () => {
+    try {
+      if (!preschoolId) {
+        Alert.alert('Error', 'Missing school information');
+        return;
+      }
+
+      const hasPermission = await ensureImageLibraryPermission();
+      if (!hasPermission) {
+        Alert.alert('Permission Required', 'Please grant photo library access to upload a logo');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      setJobLogoUploading(true);
+
+      const processed = await manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 512, height: 512 } }],
+        { compress: 0.85, format: SaveFormat.PNG }
+      );
+
+      const base64Data = await FileSystem.readAsStringAsync(processed.uri, { encoding: 'base64' });
+      const body = base64ToUint8Array(base64Data);
+
+      if (body.byteLength === 0) {
+        throw new Error('Failed to prepare logo for upload');
+      }
+
+      const bucket = 'school-assets';
+      const timestamp = Date.now();
+      const path = `${preschoolId}/job-postings/logo_${timestamp}.png`;
+
+      const { error: uploadError } = await assertSupabase().storage
+        .from(bucket)
+        .upload(path, body as any, { contentType: 'image/png', upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: publicData } = assertSupabase().storage.from(bucket).getPublicUrl(path);
+      const publicUrl = publicData?.publicUrl;
+      if (!publicUrl) {
+        throw new Error('Failed to generate logo URL');
+      }
+
+      setJobLogoUrl(publicUrl);
+      setIncludeSchoolLogo(true);
+
+      // Sync logo to branding so invoices/receipts pick it up
+      try {
+        await assertSupabase()
+          .from('school_branding')
+          .upsert({
+            preschool_id: preschoolId,
+            logo_url: publicUrl,
+          })
+          .select('id')
+          .single();
+      } catch (brandingErr) {
+        console.warn('Failed to sync school branding logo:', brandingErr);
+      }
+
+      // Keep organization/preschool logos aligned if possible
+      try {
+        await assertSupabase()
+          .from('organizations')
+          .update({ logo_url: publicUrl })
+          .eq('id', preschoolId);
+      } catch (orgErr) {
+        console.warn('Failed to update organization logo:', orgErr);
+      }
+
+      try {
+        await assertSupabase()
+          .from('preschools')
+          .update({ logo_url: publicUrl })
+          .eq('id', preschoolId);
+      } catch (schoolErr) {
+        console.warn('Failed to update preschool logo:', schoolErr);
+      }
+    } catch (error: any) {
+      Alert.alert('Logo Upload Failed', error.message || 'Failed to upload logo');
+    } finally {
+      setJobLogoUploading(false);
+    }
+  };
+
+  const handleClearJobLogo = () => {
+    setJobLogoUrl(null);
   };
 
   const openSharePreview = (jobPosting: any, inviteCode?: string | null) => {
@@ -311,6 +419,7 @@ export default function JobPostingCreateScreen() {
           title: title.trim(),
           description: description.trim(),
           requirements: requirements.trim() || undefined,
+          logo_url: jobLogoUrl || null,
           salary_range_min: minSalary,
           salary_range_max: maxSalary,
           location: location.trim() || undefined,
@@ -374,6 +483,40 @@ export default function JobPostingCreateScreen() {
             placeholder="e.g. Early Childhood Teacher"
             placeholderTextColor={theme.textSecondary}
           />
+        </View>
+
+        {/* Job Logo */}
+        <View style={styles.field}>
+          <Text style={styles.label}>School Logo for This Job (Optional)</Text>
+          <View style={styles.logoCard}>
+            {jobLogoUrl ? (
+              <Image source={{ uri: jobLogoUrl }} style={styles.logoPreview} />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <Ionicons name="image-outline" size={26} color={theme.textSecondary} />
+                <Text style={styles.logoPlaceholderText}>No logo uploaded</Text>
+              </View>
+            )}
+            <View style={styles.logoActions}>
+              <TouchableOpacity
+                style={[styles.logoButton, jobLogoUploading && styles.logoButtonDisabled]}
+                disabled={jobLogoUploading}
+                onPress={handlePickJobLogo}
+              >
+                <Text style={styles.logoButtonText}>
+                  {jobLogoUploading ? 'Uploading…' : jobLogoUrl ? 'Change Logo' : 'Upload Logo'}
+                </Text>
+              </TouchableOpacity>
+              {jobLogoUrl ? (
+                <TouchableOpacity style={styles.logoSecondaryButton} onPress={handleClearJobLogo}>
+                  <Text style={styles.logoSecondaryText}>Remove</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <Text style={styles.hint}>
+              If you skip this, we will use your school logo (or EduDash Pro if none exists).
+            </Text>
+          </View>
         </View>
 
         {/* Description */}
@@ -544,11 +687,11 @@ export default function JobPostingCreateScreen() {
             </View>
 
             <View style={styles.previewCard}>
-              {includeSchoolHeader && schoolInfo ? (
+              {includeSchoolHeader && (schoolInfo || jobLogoUrl) ? (
                 <View style={styles.schoolHeader}>
                   {includeSchoolLogo ? (
-                    schoolInfo.logoUrl ? (
-                      <Image source={{ uri: schoolInfo.logoUrl }} style={styles.schoolLogo} />
+                    (jobLogoUrl || schoolInfo?.logoUrl) ? (
+                      <Image source={{ uri: jobLogoUrl || schoolInfo?.logoUrl || undefined }} style={styles.schoolLogo} />
                     ) : (
                       <View style={styles.schoolLogoPlaceholder}>
                         <Text style={styles.schoolLogoText}>
@@ -558,7 +701,7 @@ export default function JobPostingCreateScreen() {
                     )
                   ) : null}
                   <View style={styles.schoolHeaderText}>
-                    <Text style={styles.schoolName}>{schoolInfo.name}</Text>
+                    <Text style={styles.schoolName}>{schoolInfo?.name || 'School'}</Text>
                     {includeSchoolDetails ? (
                       <Text style={styles.schoolDetails}>{formatSchoolDetails(schoolInfo) || 'School details unavailable'}</Text>
                     ) : null}
@@ -743,6 +886,65 @@ const createStyles = (theme: any) =>
       fontSize: 12,
       color: theme.textSecondary,
       marginTop: 4,
+    },
+    logoCard: {
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      padding: 12,
+    },
+    logoPreview: {
+      width: 84,
+      height: 84,
+      borderRadius: 16,
+      alignSelf: 'flex-start',
+      marginBottom: 12,
+    },
+    logoPlaceholder: {
+      width: 120,
+      height: 84,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    logoPlaceholderText: {
+      marginTop: 6,
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    logoActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 8,
+    },
+    logoButton: {
+      backgroundColor: theme.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+    },
+    logoButtonDisabled: {
+      opacity: 0.6,
+    },
+    logoButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    logoSecondaryButton: {
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    logoSecondaryText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
     },
     submitButton: {
       backgroundColor: theme.primary,

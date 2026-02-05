@@ -30,22 +30,46 @@ export default function TeacherSignUpClient() {
   } | null>(null);
   const [validatingInvite, setValidatingInvite] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobLogoUrl, setJobLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const code = params.get("invite") || params.get("inviteCode");
     const emailParam = params.get("email");
+    const jobParam = params.get("job") || params.get("jobId");
 
     if (emailParam && !email) {
       setEmail(emailParam.trim());
+    }
+
+    if (jobParam && !jobId) {
+      setJobId(jobParam.trim());
     }
 
     if (!code) return;
     const trimmed = code.trim();
     if (!trimmed) return;
     setInviteCode(trimmed.toUpperCase());
-  }, [email]);
+  }, [email, jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    supabase
+      .from('job_postings')
+      .select('logo_url')
+      .eq('id', jobId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.logo_url) {
+          setJobLogoUrl(data.logo_url);
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn('Failed to load job logo:', err);
+      });
+  }, [jobId, supabase]);
 
   useEffect(() => {
     const normalized = inviteCode.trim().toUpperCase().replace(/\s+/g, '');
@@ -228,7 +252,7 @@ export default function TeacherSignUpClient() {
     router.push('/sign-up/teacher/success');
   }
 
-  const headerLogo = inviteSchool?.logoUrl || '/favicon.png';
+  const headerLogo = inviteSchool?.logoUrl || jobLogoUrl || '/favicon.png';
 
   return (
     <>

@@ -47,6 +47,7 @@ export class HiringHubService {
         title: data.title,
         description: data.description,
         requirements: data.requirements || null,
+        logo_url: data.logo_url || null,
         salary_range_min: data.salary_range_min || null,
         salary_range_max: data.salary_range_max || null,
         location: data.location || null,

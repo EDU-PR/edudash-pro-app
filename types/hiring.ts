@@ -56,6 +56,7 @@ export interface JobPosting {
   title: string;
   description: string;
   requirements?: string | null;
+  logo_url?: string | null;
   salary_range_min?: number | null;
   salary_range_max?: number | null;
   location?: string | null;
@@ -165,6 +166,7 @@ export interface CreateJobPostingRequest {
   title: string;
   description: string;
   requirements?: string;
+  logo_url?: string | null;
   salary_range_min?: number;
   salary_range_max?: number;
   location?: string;
@@ -177,6 +179,7 @@ export interface UpdateJobPostingRequest {
   title?: string;
   description?: string;
   requirements?: string;
+  logo_url?: string | null;
   salary_range_min?: number;
   salary_range_max?: number;
   location?: string;
