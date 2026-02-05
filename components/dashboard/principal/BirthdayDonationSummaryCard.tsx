@@ -6,6 +6,7 @@ import { BirthdayDonationsService } from '@/features/birthday-donations/services
 import type { BirthdayDonationDay, BirthdayDonationMonthSummary } from '@/features/birthday-donations/types/birthdayDonations.types';
 import { useAuth } from '@/contexts/AuthContext';
 import { getOrganizationType } from '@/lib/tenant/compat';
+import { assertSupabase } from '@/lib/supabase';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BirthdayDonationSummaryCardProps {
@@ -32,6 +33,7 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
     daysWithBirthdays: 0,
   });
   const [todayBirthdaysCount, setTodayBirthdaysCount] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const monthRange = useMemo(() => {
@@ -53,9 +55,15 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
         BirthdayDonationsService.getMonthSummary(organizationId, monthRange.start, monthRange.end),
         BirthdayDonationsService.getTodayBirthdays(organizationId, todayString),
       ]);
+      const { count: studentCount } = await assertSupabase()
+        .from('students')
+        .select('id', { count: 'exact', head: true })
+        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .eq('is_active', true);
       setDaySummary(day);
       setMonthSummary(month);
       setTodayBirthdaysCount(Array.isArray(birthdays) ? birthdays.length : 0);
+      setTotalStudents(studentCount || 0);
     } finally {
       setLoading(false);
     }
@@ -100,7 +108,9 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
         <>
           <View style={styles.summaryRow}>
             <Text style={styles.label}>{t('dashboard.birthday_donations.today_label', { defaultValue: 'Today' })}</Text>
-            <Text style={styles.value}>R{receivedToday.toFixed(2)} / R{displayExpectedToday.toFixed(2)}</Text>
+            <Text style={styles.value}>
+              R{receivedToday.toFixed(2)} / R{(totalStudents * 25).toFixed(2)}
+            </Text>
           </View>
           {noBirthdaysToday ? (
             <Text style={styles.muted}>

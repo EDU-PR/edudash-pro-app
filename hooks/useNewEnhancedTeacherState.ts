@@ -52,8 +52,12 @@ export const useNewEnhancedTeacherState = () => {
     }
   };
 
-  // Check if user is from a preschool (no longer needed for routing - all preschool teachers use same route)
-  const isPreschool = Boolean(profile?.preschool_id);
+  // Check if user is from a preschool (used to tailor quick lesson actions)
+  const schoolType =
+    profile?.organization_membership?.school_type ||
+    (profile as any)?.school_type ||
+    (profile as any)?.usage_type;
+  const isPreschool = schoolType ? schoolType === 'preschool' : Boolean(profile?.preschool_id);
 
   /**
    * Navigate to a teacher route using centralized route config
@@ -135,6 +139,7 @@ export const useNewEnhancedTeacherState = () => {
     return TEACHER_QUICK_ACTIONS.map(actionKey => {
       if (actionKey === 'start_live_lesson' && !canLiveLessons) return null;
       if (actionKey === 'call_parent' && !(flags.voice_calls_enabled || flags.video_calls_enabled)) return null;
+      if (actionKey === 'quick_lesson' && !isPreschool) return null;
 
       const route = TEACHER_ROUTES[actionKey];
       if (!route) return null;

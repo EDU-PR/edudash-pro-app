@@ -11,6 +11,7 @@ export interface UserProfile {
   lastName?: string;
   role: 'parent' | 'teacher' | 'principal' | 'superadmin' | null;
   usageType?: 'preschool' | 'k12_school' | 'homeschool' | 'aftercare' | 'supplemental' | 'exploring' | 'independent';
+  schoolType?: string;
   preschoolId?: string;
   preschoolName?: string;
   preschoolSlug?: string;
@@ -96,12 +97,13 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       let preschoolName: string | undefined;
       let preschoolSlug: string | undefined;
       let schoolSubscriptionTier: string | undefined;
+      let schoolType: string | undefined;
 
       // Fetch preschool details if we have an ID, otherwise use "EduDash Pro Community"
       if (preschoolId) {
         const { data: preschoolData, error: preschoolError } = await supabase
           .from('preschools')
-          .select('name, subscription_tier')
+          .select('name, subscription_tier, school_type')
           .eq('id', preschoolId)
           .maybeSingle();
 
@@ -119,10 +121,12 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         preschoolName = preschoolData?.name;
         preschoolSlug = undefined; // slug column doesn't exist in schema
         schoolSubscriptionTier = preschoolData?.subscription_tier;
+        schoolType = preschoolData?.school_type || undefined;
       } else {
         // Standalone user - show friendly community name
         preschoolName = 'EduDash Pro Community';
         schoolSubscriptionTier = 'free'; // Default tier for standalone users
+        schoolType = profileData?.usage_type || undefined;
         console.log('🏘️ [useUserProfile] Displaying as: EduDash Pro Community (standalone user)');
       }
 
@@ -146,6 +150,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         lastName: profileData?.last_name,
         role: profileData?.role as any || null,
         usageType: profileData?.usage_type as any || undefined,
+        schoolType,
         preschoolId,
         preschoolName,
         preschoolSlug,

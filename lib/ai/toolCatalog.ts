@@ -4,7 +4,7 @@ export type DashToolShortcut = {
   name: string;
   label: string;
   description: string;
-  roles?: Array<'parent' | 'student' | 'teacher' | 'principal_admin' | 'super_admin'>;
+  roles?: Array<'parent' | 'student' | 'teacher' | 'principal' | 'principal_admin' | 'super_admin'>;
   category?: 'caps' | 'data' | 'communication' | 'navigation';
   params?: Record<string, any>;
 };
@@ -14,7 +14,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_schedule',
     label: 'Upcoming Schedule',
     description: 'Fetch upcoming events for the next week.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'data',
     params: { start_date: 'today', days: 7 },
   },
@@ -22,7 +22,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_assignments',
     label: 'Assignments Due',
     description: 'List upcoming assignments and due dates.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'data',
     params: { status: 'pending', days_ahead: 30 },
   },
@@ -30,7 +30,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'search_caps_curriculum',
     label: 'Search CAPS',
     description: 'Search CAPS curriculum by topic or keyword.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'caps',
     params: { query: '' },
   },
@@ -38,7 +38,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_caps_documents',
     label: 'CAPS Documents',
     description: 'Retrieve CAPS documents for a grade + subject.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'caps',
     params: { grade: '', subject: '' },
   },
@@ -46,7 +46,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_caps_subjects',
     label: 'CAPS Subjects',
     description: 'List CAPS subjects for a grade level.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'caps',
     params: { grade: '' },
   },
@@ -54,7 +54,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_member_list',
     label: 'Students List',
     description: 'List active students (staff only).',
-    roles: ['teacher', 'principal_admin', 'super_admin'],
+    roles: ['teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'data',
     params: { limit: 20 },
   },
@@ -62,14 +62,14 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'get_organization_stats',
     label: 'School Stats',
     description: 'Summarize student/teacher/class counts.',
-    roles: ['principal_admin', 'super_admin'],
+    roles: ['principal', 'principal_admin', 'super_admin'],
     category: 'data',
   },
   {
     name: 'compose_message',
     label: 'Compose Message',
     description: 'Draft a message to parents or teachers.',
-    roles: ['teacher', 'principal_admin', 'super_admin'],
+    roles: ['teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'communication',
     params: { subject: '', body: '', recipient: 'parent' },
   },
@@ -77,7 +77,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'export_pdf',
     label: 'Export PDF',
     description: 'Generate a PDF from the provided content.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'communication',
     params: { title: 'Notes', content: '' },
   },
@@ -85,7 +85,7 @@ export const DASH_TOOL_SHORTCUTS: DashToolShortcut[] = [
     name: 'open_document',
     label: 'Open Link',
     description: 'Open a URL, document ID, or screen route.',
-    roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'],
+    roles: ['parent', 'student', 'teacher', 'principal', 'principal_admin', 'super_admin'],
     category: 'navigation',
     params: { url: '' },
   },

@@ -129,7 +129,9 @@ export default function JobPostingCreateScreen() {
         : 'Employment Type TBA';
 
     const appUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
-    const applicationLink = `${appUrl}/apply/${jobPosting.id}`;
+    const applicationLink = inviteCode
+      ? `${appUrl}/apply/${jobPosting.id}?invite=${encodeURIComponent(inviteCode)}`
+      : `${appUrl}/apply/${jobPosting.id}`;
     const teacherSignupLink = inviteCode
       ? `${appUrl}/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}`
       : `${appUrl}/sign-up/teacher`;

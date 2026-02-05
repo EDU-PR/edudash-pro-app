@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
@@ -10,11 +10,13 @@ import { Sparkles, BookOpen, Clock, Users, Target, Lightbulb, Save, Wand2 } from
 
 export default function CreateLessonPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const quickDefaultsApplied = useRef(false);
   
   // Form state
   const [subject, setSubject] = useState('');
@@ -26,6 +28,9 @@ export default function CreateLessonPage() {
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
+  const isQuickMode = searchParams.get('mode') === 'quick';
+  const stemParam = searchParams.get('stem');
+  const isPreschool = profile?.usageType === 'preschool' || profile?.schoolType === 'preschool';
 
   useEffect(() => {
     const initAuth = async () => {
@@ -40,6 +45,26 @@ export default function CreateLessonPage() {
     initAuth();
   }, [router, supabase]);
 
+  useEffect(() => {
+    if (quickDefaultsApplied.current) return;
+    if (!profileLoading) {
+      if (stemParam && !subject) {
+        const stemMap: Record<string, string> = {
+          ai: 'AI & Technology',
+          robotics: 'Robotics',
+          computer_literacy: 'Computer Literacy',
+        };
+        setSubject(stemMap[stemParam] || stemParam);
+      }
+      if (isQuickMode) {
+        setDuration('15');
+        if (!subject) setSubject('General');
+        if (!objectives) setObjectives('Quick, engaging activity with minimal prep');
+      }
+      quickDefaultsApplied.current = true;
+    }
+  }, [isQuickMode, stemParam, profileLoading, subject, objectives]);
+
   const handleGenerateWithAI = async () => {
     if (!topic || !gradeLevel) {
       alert('Please fill in at least the topic and grade level');
@@ -49,15 +74,20 @@ export default function CreateLessonPage() {
     setGenerating(true);
     try {
       // Call AI Edge Function to generate lesson plan
+      const audienceLabel = isPreschool ? 'preschool/early childhood' : 'school';
+      const quickHint = isQuickMode
+        ? 'This is a QUICK, low-prep lesson. Use minimal materials, high engagement, and clear step-by-step guidance.'
+        : '';
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
         body: {
-          prompt: `Generate a comprehensive lesson plan for preschool/early education:
+          prompt: `Generate a ${isQuickMode ? 'quick, engaging' : 'comprehensive'} lesson plan for ${audienceLabel}:
           
 Subject: ${subject || 'General'}
 Topic: ${topic}
 Grade Level: ${gradeLevel}
 Duration: ${duration} minutes
 Learning Objectives: ${objectives || 'Age-appropriate learning goals'}
+${quickHint ? `\nQuick Lesson Guidance: ${quickHint}\n` : ''}
 
 Please provide:
 1. Lesson Title
@@ -166,6 +196,12 @@ Format the response in clear sections with practical, age-appropriate activities
               <p className="muted">Create engaging lesson plans with AI assistance</p>
             </div>
           </div>
+          {isQuickMode && (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-green-900/40 px-3 py-1 text-sm text-green-200">
+              <Wand2 className="h-4 w-4" />
+              Quick Lesson Mode • 15 minutes • Low prep
+            </div>
+          )}
         </div>
 
         <div className="section">
@@ -210,10 +246,21 @@ Format the response in clear sections with practical, age-appropriate activities
                     required
                   >
                     <option value="">Select grade level</option>
-                    <option value="Pre-K">Pre-K (3-4 years)</option>
-                    <option value="Kindergarten">Kindergarten (4-5 years)</option>
-                    <option value="Grade R">Grade R (5-6 years)</option>
-                    <option value="Grade 1">Grade 1 (6-7 years)</option>
+                    {isPreschool ? (
+                      <>
+                        <option value="Toddlers">Toddlers (1-2 years)</option>
+                        <option value="Preschool">Preschool (3-4 years)</option>
+                        <option value="Pre-K">Pre-K (4-5 years)</option>
+                        <option value="Grade R">Grade R (5-6 years)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Pre-K">Pre-K (3-4 years)</option>
+                        <option value="Kindergarten">Kindergarten (4-5 years)</option>
+                        <option value="Grade R">Grade R (5-6 years)</option>
+                        <option value="Grade 1">Grade 1 (6-7 years)</option>
+                      </>
+                    )}
                   </select>
                 </div>
 

@@ -30,6 +30,7 @@ import {
   Cpu,
   Laptop,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -54,6 +55,7 @@ export default function TeacherDashboard() {
   const userRole = profile?.role;
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Teacher';
   const subscriptionTier = profile?.subscription_tier || 'starter';
+  const isPreschool = profile?.usageType === 'preschool' || profile?.schoolType === 'preschool';
 
   // Initialize auth
   useEffect(() => {
@@ -191,6 +193,12 @@ export default function TeacherDashboard() {
       <div className="section">
         <div className="sectionTitle">Quick actions</div>
         <div className="grid2">
+          {isPreschool && (
+            <button className="qa" onClick={() => router.push('/dashboard/teacher/lessons/create?mode=quick')}>
+              <Wand2 className="icon20" />
+              <span>Quick Lesson (AI)</span>
+            </button>
+          )}
           <button className="qa" onClick={() => router.push('/dashboard/teacher/reports')}>
             <FileText className="icon20" />
             <span>Progress Reports</span>

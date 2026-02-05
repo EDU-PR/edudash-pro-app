@@ -112,6 +112,12 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
 
   const schoolName = profile?.organization_name || data.schoolName || t('dashboard.your_school', { defaultValue: 'Your School' });
   const userName = profile?.full_name || profile?.first_name || user?.user_metadata?.first_name || t('dashboard.principal', { defaultValue: 'Principal' });
+  const uniformSummary = data.uniformPayments;
+  const isYoungEagles = (schoolName || '').toLowerCase().includes('young eagles');
+  const showUniformSection = Boolean(
+    uniformSummary &&
+    (uniformSummary.paidCount > 0 || uniformSummary.pendingCount > 0 || uniformSummary.pendingUploads > 0 || isYoungEagles)
+  );
 
   const capacity = data.capacityMetrics?.capacity ?? 0;
   const utilization = data.capacityMetrics?.utilization_percentage ?? (capacity > 0 ? Math.round((totalStudents / capacity) * 100) : 0);
@@ -433,6 +439,57 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
           <MetricInline label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })} value={`${pendingPayments}`} theme={theme} />
           <MetricInline label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })} value={`${pendingApprovalsTotal}`} theme={theme} />
         </View>
+
+        {showUniformSection && (
+          <>
+            <SectionHeader
+              title={t('dashboard.uniform_collections', { defaultValue: 'Uniform Collections' })}
+              subtitle={
+                isYoungEagles
+                  ? t('dashboard.uniform_collections_note', { defaultValue: 'Young Eagles uniform payments are tracked separately from school revenue.' })
+                  : t('dashboard.uniform_collections_note', { defaultValue: 'Uniform payments are tracked separately from school revenue.' })
+              }
+              theme={theme}
+            />
+            <View style={styles.card}>
+              <MetricInline
+                label={t('dashboard.uniform_paid', { defaultValue: 'Paid (Uniforms)' })}
+                value={formatCurrency(uniformSummary?.totalPaid || 0)}
+                theme={theme}
+              />
+              <MetricInline
+                label={t('dashboard.uniform_outstanding', { defaultValue: 'Outstanding' })}
+                value={formatCurrency(uniformSummary?.totalOutstanding || 0)}
+                theme={theme}
+              />
+              <MetricInline
+                label={t('dashboard.uniform_pending_pops', { defaultValue: 'Pending POPs' })}
+                value={`${uniformSummary?.pendingUploads || 0}${
+                  uniformSummary?.pendingUploadAmount ? ` • ${formatCurrency(uniformSummary.pendingUploadAmount)}` : ''
+                }`}
+                theme={theme}
+              />
+              {uniformSummary?.recentPayments?.length ? (
+                <View style={styles.uniformList}>
+                  <Text style={styles.uniformListTitle}>
+                    {t('dashboard.uniform_recent', { defaultValue: 'Recent Uniform Payments' })}
+                  </Text>
+                  {uniformSummary.recentPayments.map((payment) => (
+                    <View key={payment.id} style={styles.uniformRow}>
+                      <View style={styles.uniformRowLeft}>
+                        <Text style={styles.uniformStudent}>{payment.studentName}</Text>
+                        <Text style={styles.uniformMeta}>
+                          {payment.paidDate ? new Date(payment.paidDate).toLocaleDateString('en-ZA') : '—'}
+                        </Text>
+                      </View>
+                      <Text style={styles.uniformAmount}>{formatCurrency(payment.amount)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </>
+        )}
 
         {/* Quick Actions */}
         <SectionHeader title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })} theme={theme} />
@@ -802,6 +859,23 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
     },
     progressLabel: { fontSize: 12, color: theme.textSecondary },
     progressValue: { fontSize: 12, color: theme.textSecondary },
+    uniformList: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    uniformListTitle: { fontSize: 12, fontWeight: '700', color: theme.textSecondary, marginBottom: 8 },
+    uniformRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 6,
+    },
+    uniformRowLeft: { flex: 1, marginRight: 12 },
+    uniformStudent: { fontSize: 13, fontWeight: '600', color: theme.text },
+    uniformMeta: { fontSize: 11, color: theme.textTertiary, marginTop: 2 },
+    uniformAmount: { fontSize: 13, fontWeight: '700', color: theme.text },
     loadingText: { textAlign: 'center', color: theme.textSecondary, marginTop: 8 },
     emptyText: { textAlign: 'center', color: theme.textSecondary, marginVertical: 8 },
   });

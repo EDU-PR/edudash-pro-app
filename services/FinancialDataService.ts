@@ -117,26 +117,34 @@ export interface FinanceOverviewData {
 }
 
 export class FinancialDataService {
-  private static buildStudentFeesQuery(
+  private static async fetchStudentFees(
     preschoolId: string,
     options: { from: string; to: string; useDueDate: boolean }
   ) {
-    let query = assertSupabase()
-      .from('student_fees')
-      .select('amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at, students!inner(id, preschool_id, organization_id)');
+    const buildQuery = () => {
+      let query = assertSupabase()
+        .from('student_fees')
+        .select('id, amount, final_amount, amount_paid, amount_outstanding, status, due_date, created_at, students!inner(id, preschool_id, organization_id)');
 
-    // Filter via joined students table to avoid relying on tenant columns in student_fees
-    query = query.or(
-      `students.preschool_id.eq.${preschoolId},students.organization_id.eq.${preschoolId}`
-    );
+      query = query.or(
+        `preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`,
+        { foreignTable: 'students' }
+      );
 
-    if (options.useDueDate) {
-      query = query.gte('due_date', options.from).lt('due_date', options.to);
-    } else {
-      query = query.is('due_date', null).gte('created_at', options.from).lt('created_at', options.to);
-    }
+      if (options.useDueDate) {
+        query = query.gte('due_date', options.from).lt('due_date', options.to);
+      } else {
+        query = query.is('due_date', null).gte('created_at', options.from).lt('created_at', options.to);
+      }
 
-    return query;
+      return query;
+    };
+
+    const result = await buildQuery();
+    const error = (result as any).error;
+    const data = ((result as any).data || []) as any[];
+
+    return { data, error };
   }
   /**
    * Get financial metrics for a preschool
@@ -154,12 +162,12 @@ export class FinancialDataService {
 
       // Prefer fee due-month accounting so advance payments land in the correct month
       const [feesDueRes, feesFallbackRes] = await Promise.all([
-        this.buildStudentFeesQuery(preschoolId, {
+        this.fetchStudentFees(preschoolId, {
           from: monthStart,
           to: nextMonthStart,
           useDueDate: true,
         }),
-        this.buildStudentFeesQuery(preschoolId, {
+        this.fetchStudentFees(preschoolId, {
           from: monthStartDate.toISOString(),
           to: nextMonthDate.toISOString(),
           useDueDate: false,
@@ -172,26 +180,45 @@ export class FinancialDataService {
           console.error('Error fetching fees for revenue:', feeError);
         }
 
-        // Fallback to payment-created date accounting if fee query fails
-        const { data: revenuePayments } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
-          assertSupabase()
-            .from('payments')
-            .select('amount')
-            .eq(column, preschoolId)
-            .in('status', ['completed', 'approved'])
-            .gte('created_at', monthStart)
-            .lt('created_at', nextMonthStart)
-        );
-        monthlyRevenue = revenuePayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+        // Fallback to payment-for-month accounting if fee query fails
+        const extendedStart = new Date(monthStartDate);
+        extendedStart.setMonth(extendedStart.getMonth() - 6);
+        const extendedEnd = new Date(nextMonthDate);
+        extendedEnd.setMonth(extendedEnd.getMonth() + 6);
 
-        const { data: outstandingPayments } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
+        const { data: fallbackPayments } = await withFinanceTenant<Array<any>>((column) =>
           assertSupabase()
             .from('payments')
-            .select('amount')
+            .select('amount, status, created_at, metadata')
             .eq(column, preschoolId)
-            .in('status', ['pending', 'proof_submitted', 'under_review'])
+            .gte('created_at', extendedStart.toISOString())
+            .lt('created_at', extendedEnd.toISOString())
         );
-        totalOutstanding = outstandingPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+
+        const getAccountingDate = (payment: any) => {
+          const metadata = payment?.metadata || {};
+          const value = metadata?.payment_for_month || metadata?.payment_date || payment?.created_at;
+          const date = value ? new Date(value) : null;
+          return date && !Number.isNaN(date.getTime()) ? date : null;
+        };
+
+        monthlyRevenue = (fallbackPayments || [])
+          .filter((payment) => {
+            const date = getAccountingDate(payment);
+            if (!date) return false;
+            return date >= monthStartDate && date < nextMonthDate &&
+              ['completed', 'approved'].includes(String(payment?.status));
+          })
+          .reduce((sum, p) => sum + (Number(p?.amount) || 0), 0);
+
+        totalOutstanding = (fallbackPayments || [])
+          .filter((payment) => {
+            const date = getAccountingDate(payment);
+            if (!date) return false;
+            return date >= monthStartDate && date < nextMonthDate &&
+              ['pending', 'proof_submitted', 'under_review'].includes(String(payment?.status));
+          })
+          .reduce((sum, p) => sum + (Number(p?.amount) || 0), 0);
       } else {
         const feeRows = [
           ...((feesDueRes as any).data || []),
@@ -295,12 +322,12 @@ export class FinancialDataService {
         let revenue = 0;
         try {
           const [feesDueRes, feesFallbackRes] = await Promise.all([
-            this.buildStudentFeesQuery(preschoolId, {
+            this.fetchStudentFees(preschoolId, {
               from: monthStart,
               to: nextMonthStart,
               useDueDate: true,
             }),
-            this.buildStudentFeesQuery(preschoolId, {
+            this.fetchStudentFees(preschoolId, {
               from: new Date(`${monthStart}T00:00:00`).toISOString(),
               to: new Date(`${nextMonthStart}T00:00:00`).toISOString(),
               useDueDate: false,
@@ -523,7 +550,7 @@ export class FinancialDataService {
       const rangeEndDateStr = `${monthWindows[monthWindows.length - 1]?.end.getFullYear()}-${String(monthWindows[monthWindows.length - 1]?.end.getMonth() + 1).padStart(2, '0')}-01`;
 
       const feesDuePromise = preschoolId
-        ? this.buildStudentFeesQuery(preschoolId, {
+        ? this.fetchStudentFees(preschoolId, {
             from: rangeStartDateStr,
             to: rangeEndDateStr,
             useDueDate: true,
@@ -535,7 +562,7 @@ export class FinancialDataService {
             .lt('due_date', rangeEndDateStr);
 
       const feesFallbackPromise = preschoolId
-        ? this.buildStudentFeesQuery(preschoolId, {
+        ? this.fetchStudentFees(preschoolId, {
             from: rangeStartIso,
             to: rangeEndIso,
             useDueDate: false,
@@ -640,6 +667,39 @@ export class FinancialDataService {
         if (monthIndex === null) return;
         revenueMonthly[monthIndex] += this.getPaidAmountForFee(fee);
       });
+
+      if (feesData.length === 0 && preschoolId) {
+        const extendedStart = new Date(monthWindows[0].start);
+        extendedStart.setMonth(extendedStart.getMonth() - 6);
+        const extendedEnd = new Date(monthWindows[monthWindows.length - 1].end);
+        extendedEnd.setMonth(extendedEnd.getMonth() + 6);
+
+        const { data: fallbackPayments } = await withFinanceTenant<Array<any>>((column) =>
+          assertSupabase()
+            .from('payments')
+            .select('amount, status, created_at, metadata')
+            .eq(column, preschoolId)
+            .gte('created_at', extendedStart.toISOString())
+            .lt('created_at', extendedEnd.toISOString())
+        );
+
+        const getAccountingDate = (payment: any) => {
+          const metadata = payment?.metadata || {};
+          const value = metadata?.payment_for_month || metadata?.payment_date || payment?.created_at;
+          const date = value ? new Date(value) : null;
+          return date && !Number.isNaN(date.getTime()) ? date : null;
+        };
+
+        (fallbackPayments || [])
+          .filter((payment) => ['completed', 'approved'].includes(String(payment?.status)))
+          .forEach((payment) => {
+            const date = getAccountingDate(payment);
+            if (!date) return;
+            const index = toMonthIndex(date.toISOString());
+            if (index === null) return;
+            revenueMonthly[index] += Number(payment?.amount) || 0;
+          });
+      }
 
       pettyCashData.forEach((expense) => {
         const monthIndex = toMonthIndex(expense.created_at);

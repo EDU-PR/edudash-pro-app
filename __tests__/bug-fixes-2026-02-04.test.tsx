@@ -140,7 +140,7 @@ describe('DashInputBar - Key Prop Fix', () => {
   });
 
   it('should render correct number of attachment chips', () => {
-    const { getAllByTestId } = render(
+    render(
       <DashInputBar
         inputRef={{ current: null }}
         inputText=""

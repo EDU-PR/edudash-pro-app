@@ -55,6 +55,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'primary',
     category: 'lessons',
   },
+  quick_lesson: {
+    path: '/screens/preschool-lesson-generator?mode=quick' as Href,
+    title: 'Quick Lesson',
+    titleKey: 'teacher.quick_lesson',
+    icon: 'flash',
+    color: '#22C55E',
+    category: 'lessons',
+  },
   create_activity: {
     path: '/screens/teacher-activity-builder' as Href,
     title: 'Create Activity',
@@ -203,6 +211,7 @@ export const getRoutesByCategory = (category: TeacherRoute['category']): Teacher
 export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'browse_lessons',
   'create_lesson',
+  'quick_lesson',
   'create_activity',
   'take_attendance',
   'start_live_lesson',
