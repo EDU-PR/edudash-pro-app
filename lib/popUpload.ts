@@ -6,7 +6,7 @@
 
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
-import { supabase } from './supabase';
+import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 import { decode } from 'base64-arraybuffer';
 
 // Upload types
@@ -274,6 +274,48 @@ export const uploadPOPFile = async (
     // Generate storage path
     const storagePath = generateStorageFilePath(uploadType, userId, studentId, originalFileName);
     const bucket = STORAGE_BUCKETS[uploadType];
+
+    // Prefer direct binary upload using FileSystem for mobile stability
+    // Skip if we only have a content:// URI (uploadAsync can be flaky with content URIs)
+    if (!uploadUri.startsWith('content://') && supabaseUrl && supabaseAnonKey) {
+      try {
+        const session = await supabase.auth.getSession();
+        const accessToken = session?.data?.session?.access_token;
+        if (accessToken) {
+          const uploadEndpoint = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
+          const uploadResponse = await FileSystem.uploadAsync(uploadEndpoint, uploadUri, {
+            httpMethod: 'POST',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              apikey: supabaseAnonKey,
+              'content-type': finalFileType,
+              'x-upsert': 'false',
+            },
+          });
+
+          if (uploadResponse.status >= 200 && uploadResponse.status < 300) {
+            console.log('POP file uploaded via binary upload:', storagePath);
+            return {
+              success: true,
+              filePath: storagePath,
+              fileName: originalFileName,
+              fileSize: finalFileSize,
+              fileType: finalFileType,
+            };
+          }
+
+          console.warn('Binary upload failed, falling back to standard upload:', {
+            status: uploadResponse.status,
+            body: uploadResponse.body?.slice(0, 200),
+          });
+        } else {
+          console.warn('No access token available for binary upload, falling back.');
+        }
+      } catch (binaryUploadError) {
+        console.warn('Binary upload path failed, falling back:', binaryUploadError);
+      }
+    }
     
     // Read file as base64 for upload
     // Note: Using 'base64' string literal instead of FileSystem.EncodingType.Base64

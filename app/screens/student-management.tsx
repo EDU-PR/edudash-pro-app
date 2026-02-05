@@ -215,13 +215,15 @@ export default function StudentManagementScreen() {
         const ageInfo = calculateAgeInfo(student.date_of_birth);
         const ageGroup = findAgeGroup(ageInfo.age_months, ageGroupsData || []);
         const parentId = student.parent_id || student.guardian_id;
+        const className = student.classes?.name || undefined;
         
         return {
           ...student,
           age_months: ageInfo.age_months,
           age_years: ageInfo.age_years,
-          age_group_name: ageGroup?.name,
-          class_name: student.classes?.name,
+          // If DOB doesn't map to an age group, fall back to the assigned class name
+          age_group_name: ageGroup?.name || className,
+          class_name: className,
           parent_name: parentId ? parentMap[parentId] : undefined,
         };
       });

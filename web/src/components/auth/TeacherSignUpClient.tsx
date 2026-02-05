@@ -61,9 +61,9 @@ export default function TeacherSignUpClient() {
       .select('logo_url')
       .eq('id', jobId)
       .maybeSingle()
-      .then(({ data }) => {
-        if (data?.logo_url) {
-          setJobLogoUrl(data.logo_url);
+      .then((result: { data: { logo_url?: string | null } | null }) => {
+        if (result.data?.logo_url) {
+          setJobLogoUrl(result.data.logo_url);
         }
       })
       .catch((err: unknown) => {
