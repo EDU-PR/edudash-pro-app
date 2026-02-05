@@ -23,12 +23,13 @@ describe('Capability System', () => {
   describe('hasCapability', () => {
     it('should return true for capabilities available in tier', () => {
       expect(hasCapability('free', 'chat.basic')).toBe(true);
+      expect(hasCapability('free', 'multimodal.vision')).toBe(true);
       expect(hasCapability('starter', 'chat.streaming')).toBe(true);
       expect(hasCapability('premium', 'multimodal.vision')).toBe(true);
     });
 
     it('should return false for capabilities not available in tier', () => {
-      expect(hasCapability('free', 'multimodal.vision')).toBe(false);
+      expect(hasCapability('free', 'multimodal.documents')).toBe(false);
       expect(hasCapability('starter', 'agent.autonomous')).toBe(false);
       expect(hasCapability('starter', 'homework.grade.advanced')).toBe(false);
     });
@@ -67,7 +68,7 @@ describe('Capability System', () => {
     it('should return correct minimum tier for capability', () => {
       expect(getRequiredTier('chat.basic')).toBe('free');
       expect(getRequiredTier('chat.streaming')).toBe('starter');
-      expect(getRequiredTier('multimodal.vision')).toBe('starter');
+      expect(getRequiredTier('multimodal.vision')).toBe('free');
       expect(getRequiredTier('agent.autonomous')).toBe('premium');
     });
 
@@ -104,7 +105,7 @@ describe('Capability System', () => {
       expect(exclusivePremium).toContain('multimodal.ocr'); // OCR is premium-only
       expect(exclusivePremium).toContain('chat.thinking');
       expect(exclusivePremium).not.toContain('chat.streaming'); // From starter
-      expect(exclusivePremium).not.toContain('multimodal.vision'); // From starter
+      expect(exclusivePremium).not.toContain('multimodal.vision'); // From free
     });
   });
 
@@ -198,7 +199,7 @@ describe('Capability System', () => {
 
     it('should throw FeatureGatedError for unavailable capability', () => {
       expect(() => {
-        assertCapability('free', 'multimodal.vision');
+        assertCapability('free', 'multimodal.documents');
       }).toThrow(FeatureGatedError);
       
       expect(() => {
@@ -208,14 +209,14 @@ describe('Capability System', () => {
 
     it('should include correct tier information in error', () => {
       try {
-        assertCapability('free', 'multimodal.vision');
+        assertCapability('free', 'multimodal.documents');
         fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(FeatureGatedError);
         if (error instanceof FeatureGatedError) {
           expect(error.currentTier).toBe('free');
-          expect(error.requiredTier).toBe('starter');  // Vision is available from starter tier
-          expect(error.capability).toBe('multimodal.vision');
+          expect(error.requiredTier).toBe('starter');  // Documents are available from starter tier
+          expect(error.capability).toBe('multimodal.documents');
         }
       }
     });
@@ -224,7 +225,7 @@ describe('Capability System', () => {
       const customMessage = 'Custom error message';
       
       try {
-        assertCapability('free', 'multimodal.vision', customMessage);
+        assertCapability('free', 'multimodal.documents', customMessage);
         fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(FeatureGatedError);
@@ -247,7 +248,7 @@ describe('Capability System', () => {
       
       expect(result['chat.basic']).toBe(true);
       expect(result['chat.streaming']).toBe(true);
-      expect(result['multimodal.vision']).toBe(true);  // Vision is available in starter tier
+      expect(result['multimodal.vision']).toBe(true);  // Vision is available in free tier
     });
 
     it('should handle empty array', () => {
@@ -260,7 +261,7 @@ describe('Capability System', () => {
       
       const freeResult = checkCapabilities('free', capabilities);
       expect(freeResult['chat.basic']).toBe(true);
-      expect(freeResult['multimodal.vision']).toBe(false);
+      expect(freeResult['multimodal.vision']).toBe(true);
       
       const premiumResult = checkCapabilities('premium', capabilities);
       expect(premiumResult['chat.basic']).toBe(true);
@@ -324,8 +325,8 @@ describe('Capability System', () => {
     });
 
     it('should have vision features in starter and above', () => {
-      expect(CAPABILITY_MATRIX.free).not.toContain('multimodal.vision');
-      expect(CAPABILITY_MATRIX.starter).toContain('multimodal.vision');  // Vision is available from starter
+      expect(CAPABILITY_MATRIX.free).toContain('multimodal.vision');
+      expect(CAPABILITY_MATRIX.starter).toContain('multimodal.vision');  // Vision is available from free
       expect(CAPABILITY_MATRIX.premium).toContain('multimodal.vision');
       expect(CAPABILITY_MATRIX.enterprise).toContain('multimodal.vision');
     });
@@ -349,7 +350,7 @@ describe('Capability System', () => {
       
       // Get required tier for upgrade prompt
       const requiredTier = getRequiredTier(requiredCapability);
-      expect(requiredTier).toBe('starter');  // Vision is available from starter tier
+      expect(requiredTier).toBe('free');  // Vision is available from free tier
       
       // Since starter has vision, let's test with a capability they don't have
       const premiumOnlyCapability: DashCapability = 'chat.thinking';
@@ -369,7 +370,7 @@ describe('Capability System', () => {
       const newFeatures = getExclusiveCapabilities(targetTier);
       expect(newFeatures.length).toBeGreaterThan(0);
       expect(newFeatures).toContain('chat.thinking');  // Premium-exclusive feature
-      expect(newFeatures).not.toContain('multimodal.vision');  // Vision is in starter
+      expect(newFeatures).not.toContain('multimodal.vision');  // Vision is in free
     });
 
     it('should support batch capability checking for UI', () => {

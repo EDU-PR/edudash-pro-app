@@ -131,6 +131,14 @@ export default function SuperAdminDashboardScreen() {
       color: '#10b981',
     },
     {
+      id: 'ai-usage',
+      title: 'AI Usage',
+      description: 'Monthly chat + daily image usage',
+      icon: 'stats-chart',
+      route: '/screens/super-admin-ai-usage',
+      color: '#f59e0b',
+    },
+    {
       id: 'content-moderation',
       title: 'Content Moderation',
       description: 'Review and moderate user content',

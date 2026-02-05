@@ -33,6 +33,7 @@ import type { DashMessage } from '@/services/dash-ai/types';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
+import { DashToolsModal } from '@/components/ai/DashToolsModal';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
@@ -45,6 +46,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
+import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
+import { ToolRegistry } from '@/services/AgentTools';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: screenWidth } = Dimensions.get('window');
@@ -84,6 +87,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const insets = useSafeAreaInsets();
   const { tierStatus, refresh: refreshTier } = useRealtimeTier();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
@@ -111,13 +115,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       hideSub.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (wasLoadingRef.current && !isLoading) {
-      refreshTier?.();
-    }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading, refreshTier]);
 
   useEffect(() => {
     let mounted = true;
@@ -157,11 +154,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     } catch {}
     DeviceEventEmitter.emit('dash:wake_word_toggle', next);
   }, [wakeWordEnabled]);
-
-  const handleNewChat = useCallback(async () => {
-    await stopSpeaking();
-    await startNewConversation();
-  }, [startNewConversation, stopSpeaking]);
 
   // Use custom hook for all business logic
   const {
@@ -209,11 +201,31 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     stopVoiceRecording,
     handleRemoveAttachment,
     extractFollowUps,
+    runTool,
     tier,
     subReady,
   } = useDashAssistant({ conversationId, initialMessage, onClose });
   const { can, ready: capsReady } = useCapability();
   const isTypingActive = isLoading || !!loadingStatus;
+
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) {
+      refreshTier?.();
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading, refreshTier]);
+
+  const handleNewChat = useCallback(async () => {
+    await stopSpeaking();
+    await startNewConversation();
+  }, [startNewConversation, stopSpeaking]);
+
+  const handleRunTool = useCallback(
+    async (toolName: string, params: Record<string, any>) => {
+      await runTool(toolName, params);
+    },
+    [runTool]
+  );
 
   const safeModels = Array.isArray(availableModels) ? availableModels : [];
   const selectedModelInfo = useMemo(
@@ -232,6 +244,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const orgType = getOrganizationType(profile);
   const isPreschool = orgType === 'preschool';
   const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
+  const toolShortcuts = useMemo(() => {
+    const shortcuts = getDashToolShortcutsForRole(profile?.role || null);
+    return shortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
+  }, [profile?.role]);
 
   const contextChips = useMemo(() => {
     if (!learnerContext) return [];
@@ -263,8 +279,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
   const usageLabel = tierStatus
     ? (isParentOrStudent
-        ? `${roleCopy.title} • ${remaining === null ? 'Unlimited' : `${remaining} left today`}`
-        : `${tierStatus.tierDisplayName} • ${remaining === null ? 'Unlimited' : `${remaining} left today`}`)
+        ? `${roleCopy.title} • ${remaining === null ? 'Unlimited' : `${remaining} left this month`}`
+        : `${tierStatus.tierDisplayName} • ${remaining === null ? 'Unlimited' : `${remaining} left this month`}`)
     : '';
   const [lastSavedLessonId, setLastSavedLessonId] = useState<string | null>(null);
   const latestAssistantMessage = useMemo(() => {
@@ -696,13 +712,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 
     const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
     const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
-    const backgroundBase = isDark
+    const backgroundBase: [string, string, string] = isDark
       ? ['#0B1020', '#0F172A', theme.background]
       : ['#F7FAFF', '#EEF2FF', '#F8FAFC'];
-    const glowA = isDark
+    const glowA: [string, string, string] = isDark
       ? ['rgba(14,165,233,0.32)', 'rgba(59,130,246,0.05)', 'transparent']
       : ['rgba(14,165,233,0.35)', 'rgba(34,211,238,0.12)', 'transparent'];
-    const glowB = isDark
+    const glowB: [string, string, string] = isDark
       ? ['rgba(16,185,129,0.25)', 'rgba(99,102,241,0.06)', 'transparent']
       : ['rgba(16,185,129,0.3)', 'rgba(59,130,246,0.08)', 'transparent'];
     return (
@@ -881,6 +897,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onMicPress={handleInputMicPress}
           onTakePhoto={handleTakePhoto}
           onAttachFile={handleAttachFile}
+          onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
           onRemoveAttachment={handleRemoveAttachment}
           onQuickAction={(text) => sendMessage(text)}
           bottomInset={insets.bottom}
@@ -898,6 +915,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           icon={alertState.icon as any}
           buttons={alertState.buttons}
           onClose={hideAlert}
+        />
+        <DashToolsModal
+          visible={showToolsModal}
+          onClose={() => setShowToolsModal(false)}
+          tools={toolShortcuts}
+          getToolSchema={(toolName) => ToolRegistry.getTool(toolName)?.parameters}
+          onRunTool={handleRunTool}
         />
         </View>
       </KeyboardAvoidingView>

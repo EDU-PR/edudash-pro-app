@@ -28,7 +28,7 @@ const isMissingFinanceTenantColumn = (error: any): boolean =>
   isMissingFinanceColumnError(error, 'school_id');
 
 async function withFinanceTenant<T>(
-  buildQuery: (column: FinanceTenantColumn) => Promise<{ data: T | null; error: any; count?: number | null }>
+  buildQuery: (column: FinanceTenantColumn) => PromiseLike<{ data: T | null; error: any; count?: number | null }>
 ): Promise<{ data: T | null; error: any; count?: number | null; column: FinanceTenantColumn }> {
   const primary = await buildQuery(PRIMARY_FINANCE_COLUMN);
   if (primary?.error && isMissingFinanceColumnError(primary.error, PRIMARY_FINANCE_COLUMN)) {
@@ -173,7 +173,7 @@ export class FinancialDataService {
         }
 
         // Fallback to payment-created date accounting if fee query fails
-        const { data: revenuePayments } = await withFinanceTenant((column) =>
+        const { data: revenuePayments } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
           assertSupabase()
             .from('payments')
             .select('amount')
@@ -184,7 +184,7 @@ export class FinancialDataService {
         );
         monthlyRevenue = revenuePayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
 
-        const { data: outstandingPayments } = await withFinanceTenant((column) =>
+        const { data: outstandingPayments } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
           assertSupabase()
             .from('payments')
             .select('amount')
@@ -221,7 +221,7 @@ export class FinancialDataService {
 
       // Include other expense sources from financial_transactions (completed/approved) for current month
       try {
-        const { data: otherExpTx } = await withFinanceTenant((column) =>
+        const { data: otherExpTx } = await withFinanceTenant<Array<{ amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
           assertSupabase()
             .from('financial_transactions')
             .select('amount, type, status, created_at')
@@ -308,7 +308,7 @@ export class FinancialDataService {
           ]);
 
           if ((feesDueRes as any).error || (feesFallbackRes as any).error) {
-            const { data: monthlyRevenue } = await withFinanceTenant((column) =>
+            const { data: monthlyRevenue } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
               assertSupabase()
                 .from('payments')
                 .select('amount')
@@ -326,7 +326,7 @@ export class FinancialDataService {
             revenue = feeRows.reduce((sum, fee) => sum + this.getPaidAmountForFee(fee), 0);
           }
         } catch {
-          const { data: monthlyRevenue } = await withFinanceTenant((column) =>
+          const { data: monthlyRevenue } = await withFinanceTenant<Array<{ amount: number | null }>>((column) =>
             assertSupabase()
               .from('payments')
               .select('amount')
@@ -353,7 +353,7 @@ export class FinancialDataService {
         const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
         let otherExp = 0;
         try {
-          const { data: monthOther } = await withFinanceTenant((column) =>
+          const { data: monthOther } = await withFinanceTenant<Array<{ amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
             assertSupabase()
               .from('financial_transactions')
               .select('amount, type, status, created_at')
@@ -400,7 +400,7 @@ export class FinancialDataService {
       const transactions: UnifiedTransaction[] = [];
 
       // Get recent payments
-      const { data: payments, error: paymentsError } = await withFinanceTenant((column) =>
+      const { data: payments, error: paymentsError } = await withFinanceTenant<Array<any>>((column) =>
         assertSupabase()
           .from('payments')
           .select(`
@@ -737,7 +737,7 @@ export class FinancialDataService {
       // Get payments within date range
       // Use LEFT JOIN (no !inner) so payments without students still return
       const { data: payments, error: paymentsError } = preschoolId
-        ? await withFinanceTenant((column) =>
+        ? await withFinanceTenant<Array<any>>((column) =>
             assertSupabase()
               .from('payments')
               .select(`

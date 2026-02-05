@@ -18,7 +18,7 @@ export type VoiceChatPrefs = {
 
 const DEFAULT_CHAT_PREFS: VoiceChatPrefs = {
   defaultLock: false,
-  autoSpeak: false,
+  autoSpeak: true,
   autoSilenceMs: 7000,
   listenCapMs: 15000,
   voiceEnabled: true,

@@ -106,9 +106,9 @@ export default function PrincipalDashChatPage() {
                 <Sparkles size={22} color="white" aria-hidden="true" />
               </div>
               <div>
-                <h1 className="m-0 text-lg font-bold">Dash AI Assistant</h1>
+                <h1 className="m-0 text-lg font-bold">Dash School AI</h1>
                 <p className="m-0 text-xs text-gray-400">
-                  Principal Dashboard • AI-Powered Support
+                  School Management & Planning Assistant
                 </p>
               </div>
             </div>
@@ -212,9 +212,9 @@ export default function PrincipalDashChatPage() {
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center mb-2">
                     <Sparkles size={32} aria-hidden="true" />
                   </div>
-                  <h2 className="text-xl font-bold m-0">Welcome to Dash AI</h2>
+                  <h2 className="text-xl font-bold m-0">Welcome to Dash School AI</h2>
                   <p className="text-sm text-gray-400 m-0 mb-2">
-                    Ask about school management, curriculum planning, student analytics, or create AI-powered assessments.
+                    Your intelligent partner for school management, ECD planning, curriculum design, and staff coordination.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button

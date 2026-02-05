@@ -5,10 +5,11 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAlert } from '@/components/ui/StyledAlert';
 import { QuickActionCard } from '../shared/QuickActionCard';
 import { CollapsibleSection } from '../shared/CollapsibleSection';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
@@ -43,6 +44,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const alert = useAlert();
   const styles = createStyles(theme);
   const flags = getFeatureFlagsSync();
   const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
@@ -243,7 +245,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
           router.push('/screens/pop-review' as any);
         } catch (error) {
           console.error('[PrincipalQuickActions] Failed to navigate to pop-review:', error);
-          Alert.alert('Navigation Error', 'Could not open payment reviews. Please try again.');
+          alert.show(
+            'Navigation Error',
+            'Could not open payment reviews. Please try again.',
+            [{ text: 'Close', style: 'cancel' }],
+            { type: 'error' }
+          );
         }
         break;
       case 'teacher-approval':
@@ -305,23 +312,29 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'curriculum-themes':
         // TODO: Create screen - for now show coming soon
-        Alert.alert(
+        alert.show(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.curriculum_themes_coming_soon', { defaultValue: 'Curriculum Themes management is coming in the next update.' })
+          t('ecd.curriculum_themes_coming_soon', { defaultValue: 'Curriculum Themes management is coming in the next update.' }),
+          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+          { type: 'info' }
         );
         break;
       case 'lesson-templates':
         // TODO: Create screen - for now show coming soon
-        Alert.alert(
+        alert.show(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.lesson_templates_coming_soon', { defaultValue: 'Lesson Templates are coming in the next update.' })
+          t('ecd.lesson_templates_coming_soon', { defaultValue: 'Lesson Templates are coming in the next update.' }),
+          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+          { type: 'info' }
         );
         break;
       case 'weekly-plans':
         // TODO: Create screen - for now show coming soon
-        Alert.alert(
+        alert.show(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.weekly_plans_coming_soon', { defaultValue: 'Weekly Plans management is coming in the next update.' })
+          t('ecd.weekly_plans_coming_soon', { defaultValue: 'Weekly Plans management is coming in the next update.' }),
+          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+          { type: 'info' }
         );
         break;
       case 'birthday-chart':
@@ -334,9 +347,11 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/dash-studio');
         break;
       default:
-        Alert.alert(
+        alert.show(
           t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('common.feature_in_development', { defaultValue: 'This feature is currently in development.' })
+          t('common.feature_in_development', { defaultValue: 'This feature is coming soon.' }),
+          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+          { type: 'info' }
         );
     }
   };

@@ -7,9 +7,9 @@ import type { Tier } from '../capabilities';
 
 describe('uiGating', () => {
   describe('canAttach', () => {
-    it('denies image/doc attachments for free tier', () => {
+    it('denies document attachments for free tier', () => {
       const t: Tier = 'free';
-      expect(canAttach(t, ['image']).ok).toBe(false);
+      expect(canAttach(t, ['image']).ok).toBe(true);
       expect(canAttach(t, ['pdf']).ok).toBe(false);
     });
 
@@ -18,8 +18,8 @@ describe('uiGating', () => {
       expect(canSearchHistory('premium')).toBe(true);
     });
 
-    it('allows images only with starter and above', () => {
-      expect(canAttach('free', ['image']).ok).toBe(false);
+    it('allows images on free tier with daily limits', () => {
+      expect(canAttach('free', ['image']).ok).toBe(true);
       expect(canAttach('starter', ['image']).ok).toBe(true);
       expect(canAttach('premium', ['image']).ok).toBe(true);
     });
@@ -35,7 +35,7 @@ describe('uiGating', () => {
       expect(res.ok).toBe(true);
       const res2 = canAttach('free', ['image', 'pdf']);
       expect(res2.ok).toBe(false);
-      expect(res2.missing).toEqual(expect.arrayContaining(['multimodal.vision', 'multimodal.documents']));
+      expect(res2.missing).toEqual(expect.arrayContaining(['multimodal.documents']));
     });
   });
 });

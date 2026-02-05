@@ -88,29 +88,20 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      const provider = await getSingleUseVoiceProvider({
-        preferredProvider: 'expo',
-        locale: 'en-ZA',
-        continuous: true,
-        interim: true,
-      });
+      const provider = await getSingleUseVoiceProvider('en-ZA');
 
       voiceProviderRef.current = provider;
       voiceInputStartAtRef.current = Date.now();
 
-      const session = provider.createSession({
-        onTranscriptUpdate: (transcript) => {
-          setPartialTranscript(transcript.text || '');
+      const session = provider.createSession();
+      await session.start({
+        language: 'en-ZA',
+        onPartial: (text) => {
+          setPartialTranscript(text || '');
         },
-        onError: (error) => {
-          console.error('[Voice] Error:', error);
+        onFinal: async (text) => {
           setIsRecording(false);
-          setPartialTranscript('');
-          voiceSessionRef.current = null;
-        },
-        onEnd: async (finalTranscript) => {
-          setIsRecording(false);
-          const formatted = formatTranscript(finalTranscript.text || '');
+          const formatted = formatTranscript(text || '');
           setPartialTranscript(formatted);
           
           // Track usage for free tier
@@ -123,10 +114,15 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
           voiceSessionRef.current = null;
           voiceInputStartAtRef.current = null;
         },
+        onError: (error) => {
+          console.error('[Voice] Error:', error);
+          setIsRecording(false);
+          setPartialTranscript('');
+          voiceSessionRef.current = null;
+        },
       });
 
       voiceSessionRef.current = session;
-      await session.start();
       setIsRecording(true);
       setPartialTranscript('');
       

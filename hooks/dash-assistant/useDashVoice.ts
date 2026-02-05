@@ -29,6 +29,7 @@ export interface UseDashVoiceReturn {
   voiceEnabled: boolean;
   autoSpeakResponses: boolean;
   voiceBudgetMs: number;
+  partialTranscript: string;
   
   // Actions
   startRecording: () => Promise<void>;
@@ -56,11 +57,13 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [autoSpeakResponses, setAutoSpeakResponses] = useState(false);
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState(true);
   const [voiceBudgetMs, setVoiceBudgetMs] = useState(FREE_VOICE_BUDGET_MS);
+  const [partialTranscript, setPartialTranscript] = useState('');
   
   const voiceSessionRef = useRef<VoiceSession | null>(null);
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
+  const finalTranscriptRef = useRef<string | null>(null);
 
   /**
    * Check if user has voice budget
@@ -71,12 +74,12 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
     // Paid tiers have unlimited voice
     if (tier && tier !== 'free') return true;
     
-    const hasBudget = await hasVoiceBudget(userId, estimatedDurationMs);
+    const hasBudget = await hasVoiceBudget(estimatedDurationMs);
     if (!hasBudget) {
-      const remaining = await loadVoiceBudget(userId);
+      const remaining = await loadVoiceBudget();
       Alert.alert(
         'Voice Budget Exceeded',
-        `You have ${formatTimeRemaining(remaining)} of free voice time remaining today. Upgrade for unlimited voice.`,
+        `You have ${formatTimeRemaining(remaining.remainingMs)} of free voice time remaining today. Upgrade for unlimited voice.`,
         [
           { text: 'OK', style: 'cancel' },
           { text: 'Upgrade', onPress: () => logger.info('Voice upgrade requested') },
@@ -92,8 +95,8 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
    */
   const refreshVoiceBudget = useCallback(async () => {
     if (!userId) return;
-    const budget = await loadVoiceBudget(userId);
-    setVoiceBudgetMs(budget);
+    const budget = await loadVoiceBudget();
+    setVoiceBudgetMs(budget.remainingMs);
   }, [userId]);
 
   /**
@@ -129,8 +132,21 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
       const provider = await getSingleUseVoiceProvider();
       voiceProviderRef.current = provider;
       
-      const session = await provider.startRecording();
+      const session = provider.createSession();
       voiceSessionRef.current = session;
+      finalTranscriptRef.current = null;
+      await session.start({
+        language: 'en-ZA',
+        onPartial: (text) => {
+          if (text) setPartialTranscript(text);
+        },
+        onFinal: (text) => {
+          finalTranscriptRef.current = text || null;
+        },
+        onError: (error) => {
+          logger.error('[DashVoice] Recording error', { error });
+        },
+      });
       
       setIsRecording(true);
       if (Platform.OS !== 'web') {
@@ -155,7 +171,7 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
     
     try {
       const startTime = Date.now();
-      const result = await voiceProviderRef.current.stopRecording(voiceSessionRef.current);
+      await voiceSessionRef.current.stop();
       const duration = Date.now() - startTime;
       
       if (Platform.OS !== 'web') {
@@ -164,7 +180,7 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
       
       // Track usage for free tier
       if (userId && tier === 'free') {
-        await trackVoiceUsage(userId, duration);
+        await trackVoiceUsage(duration);
         await refreshVoiceBudget();
       }
       
@@ -173,8 +189,8 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
       voiceProviderRef.current = null;
       setIsRecording(false);
       
-      if (result.transcript) {
-        const formatted = formatTranscript(result.transcript);
+      if (finalTranscriptRef.current) {
+        const formatted = formatTranscript(finalTranscriptRef.current);
         logger.info('[DashVoice] Recording stopped', { transcript: formatted, duration });
         return formatted;
       }
@@ -223,6 +239,7 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
     voiceEnabled,
     autoSpeakResponses,
     voiceBudgetMs,
+    partialTranscript,
     startRecording,
     stopRecording,
     speak,

@@ -65,6 +65,7 @@ interface ChatModalProps {
   wakeWordEnabled?: boolean;
   onToggleWakeWord?: () => void;
   onOpenSettings?: () => void;
+  onOpenTools?: () => void;
   onAttachFile?: () => void;
   onTakePhoto?: () => void;
   attachmentCount?: number;
@@ -105,6 +106,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   wakeWordEnabled = false,
   onToggleWakeWord,
   onOpenSettings,
+  onOpenTools,
   onAttachFile,
   onTakePhoto,
   attachmentCount = 0,
@@ -396,7 +398,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.background }]}>
               <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
               <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
-                {tierStatus.tierDisplayName} • {remaining === null ? 'Unlimited' : `${remaining} left today`}
+                {tierStatus.tierDisplayName} • {remaining === null ? 'Unlimited' : `${remaining} left this month`}
               </Text>
               {tierStatus.quotaLimit > 0 && (
                 <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
@@ -688,6 +690,20 @@ export const ChatModal: React.FC<ChatModalProps> = ({
 
             <View style={[styles.inputWrapper, { backgroundColor: theme.background, borderColor: theme.border }]}>
               <View style={styles.inputAccessoryLeft}>
+                {onOpenTools && (
+                  <TouchableOpacity
+                    style={styles.inputIconButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      onOpenTools();
+                    }}
+                    disabled={isProcessing}
+                    accessibilityLabel="Open tools"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="construct-outline" size={18} color={theme.textSecondary} />
+                  </TouchableOpacity>
+                )}
                 {onAttachFile && (
                   <TouchableOpacity
                     style={styles.inputIconButton}

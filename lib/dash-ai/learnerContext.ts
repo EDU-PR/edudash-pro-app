@@ -12,6 +12,8 @@ export interface LearnerContext {
   schoolType?: string | null;
   role?: string | null;
   childName?: string | null;
+  learnerName?: string | null;
+  subject?: string | null;
   subjects?: string[] | null;
 }
 

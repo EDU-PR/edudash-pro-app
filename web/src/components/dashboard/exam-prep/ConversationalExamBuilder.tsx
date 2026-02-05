@@ -481,11 +481,28 @@ export function ConversationalExamBuilder({
 
 Include ${marksForSection} marks worth of questions focused on ${focus}. Aim for ${range[0]}-${range[1]} questions in this section.
 
-Use the generate_caps_exam tool with this exact structure:
-- grade: "${gradeLabel}"
-- subject: "${subject}"  
-- sections: [one section with ${range[0]}-${range[1]} questions]
-- total_marks: ${marksForSection}`;
+Return **JSON only** in this exact structure (no markdown, no extra text):
+{
+  "grade": "${gradeLabel}",
+  "subject": "${subject}",
+  "total_marks": ${marksForSection},
+  "sections": [
+    {
+      "title": "SECTION ${sectionLabel}",
+      "questions": [
+        {
+          "number": "1",
+          "text": "...",
+          "type": "multiple_choice|short_answer|calculation",
+          "marks": 1,
+          "options": ["A", "B", "C", "D"],
+          "correctAnswer": "A",
+          "explanation": "..."
+        }
+      ]
+    }
+  ]
+}`;
   };
 
   const getSectionSpec = (section: string) => {
@@ -506,7 +523,8 @@ Use the generate_caps_exam tool with this exact structure:
       for (const result of data.tool_results) {
         try {
           console.log('[extractSectionFromResponse] Processing result:', result);
-          const parsed = typeof result.content === 'string' ? JSON.parse(result.content) : result.content;
+          const raw = (result as any)?.content ?? (result as any)?.output ?? result;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
           console.log('[extractSectionFromResponse] Parsed content:', parsed);
           
           if (parsed.success && parsed.data?.sections) {
@@ -551,6 +569,33 @@ Use the generate_caps_exam tool with this exact structure:
         } catch (e) {
           console.error('[extractSectionFromResponse] Parse error:', e);
         }
+      }
+    }
+
+    // Fallback: try parsing AI content if tool_results missing
+    if (data?.content && typeof data.content === 'string') {
+      try {
+        const parsed = JSON.parse(data.content);
+        if (parsed?.sections && Array.isArray(parsed.sections)) {
+          const section = parsed.sections[0];
+          return {
+            id: `section-${sectionLabel}`,
+            title: section.title || `SECTION ${sectionLabel}`,
+            questions: section.questions.map((q: any, i: number) => ({
+              id: q.id || `q-${sectionLabel}-${i}`,
+              number: q.number || String(i + 1),
+              text: q.text,
+              type: q.type || 'short_answer',
+              marks: q.marks || 1,
+              options: q.options,
+              correctAnswer: q.correctAnswer || q.correct_answer,
+              explanation: q.explanation,
+            })),
+            status: 'draft' as const,
+          };
+        }
+      } catch (e) {
+        console.error('[extractSectionFromResponse] Failed to parse content JSON:', e);
       }
     }
     

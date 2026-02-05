@@ -17,6 +17,16 @@ import type {
 
 const EDGE_FUNCTION_URL = process.env.EXPO_PUBLIC_SUPABASE_URL + '/functions/v1/tts-proxy';
 
+const normalizeRoleForVoicePrefs = (role?: string | null): string => {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (['super_admin', 'superadmin', 'super-admin', 'platform_admin'].includes(normalized)) return 'superadmin';
+  if (['principal', 'principal_admin', 'admin'].includes(normalized)) return 'principal';
+  if (['teacher', 'instructor', 'facilitator', 'trainer', 'coach'].includes(normalized)) return 'teacher';
+  if (['parent', 'guardian', 'sponsor'].includes(normalized)) return 'parent';
+  if (['student', 'learner'].includes(normalized)) return 'student';
+  return 'parent';
+};
+
 class VoiceServiceClient {
   /**
    * Synthesize speech from text
@@ -154,7 +164,7 @@ class VoiceServiceClient {
       // Get preschool_id and role from session JWT
       const preschoolId = (session.user as any)?.user_metadata?.preschool_id || 
                          (session as any)?.preschool_id;
-      const role = (session.user as any)?.user_metadata?.role || 'parent';
+      const role = normalizeRoleForVoicePrefs((session.user as any)?.user_metadata?.role);
 
       if (!preschoolId) {
         console.warn('[VoiceService] No preschool_id found in session, skipping server save');

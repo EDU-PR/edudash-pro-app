@@ -24,7 +24,8 @@ export function useExamDetection(messages: DashMessage[]) {
    * Check if message contains an exam
    */
   const detectExamInMessage = useCallback((message: DashMessage): DetectedExam | null => {
-    if (message.role !== 'assistant' || !message.content) {
+    const role = message.type === 'task_result' ? 'assistant' : message.type;
+    if (role !== 'assistant' || !message.content) {
       return null;
     }
 
@@ -95,7 +96,8 @@ export function useExamDetection(messages: DashMessage[]) {
     // Check most recent assistant message first
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
-      if (message.role === 'assistant') {
+      const role = message.type === 'task_result' ? 'assistant' : message.type;
+      if (role === 'assistant') {
         const detected = detectExamInMessage(message);
         if (detected) {
           setDetectedExam(detected);

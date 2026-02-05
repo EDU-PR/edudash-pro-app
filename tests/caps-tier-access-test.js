@@ -24,7 +24,7 @@ const TIER_QUOTAS = {
   free: { 
     lesson_generation: 5, 
     grading_assistance: 5, 
-    homework_help: 15, 
+    homework_help: 300, 
     transcription: 60 
   },
   starter: { 
@@ -52,6 +52,7 @@ const CAPABILITIES = {
   free: [
     'chat.basic',
     'memory.lite', 
+    'multimodal.vision',
     'lessons.basic',
     'insights.basic',
   ],

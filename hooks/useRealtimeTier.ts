@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { getQuotaStatus } from '@/lib/ai/api';
+import { logger } from '@/lib/logger';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -66,7 +67,7 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       const [usageResult, tierResult] = await Promise.all([
         supabase
           .from('user_ai_usage')
-          .select('current_tier, chat_messages_today, exams_generated_this_month, last_monthly_reset_at')
+          .select('current_tier, chat_messages_today, chat_messages_this_month, exams_generated_this_month, last_monthly_reset_at')
           .eq('user_id', userId)
           .maybeSingle(),
         supabase
@@ -92,7 +93,7 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       const normalizedTier = effectiveTier.toLowerCase();
       const { data: limitsData, error: limitsError } = await supabase
         .from('ai_usage_tiers')
-        .select('chat_messages_per_day, exams_per_month, explanations_per_month')
+        .select('chat_messages_per_day, chat_messages_per_month, exams_per_month, explanations_per_month')
         .eq('tier_name', normalizedTier)
         .eq('is_active', true)
         .maybeSingle();
@@ -104,8 +105,9 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
         });
       }
 
-      let quotaLimit = limitsData?.chat_messages_per_day || 10;
-      let quotaUsed = usageData?.chat_messages_today || 0;
+      const dailyLimit = limitsData?.chat_messages_per_day || 10;
+      let quotaLimit = limitsData?.chat_messages_per_month || (dailyLimit * 30);
+      let quotaUsed = (usageData?.chat_messages_this_month ?? usageData?.chat_messages_today) || 0;
 
       // Prefer authoritative quota from Edge Function (ai-usage) when available
       try {
