@@ -13,6 +13,7 @@ export interface QuotaUsage {
   exams_generated_this_month: number;
   explanations_requested_this_month: number;
   chat_messages_today: number;
+  chat_messages_this_month?: number;
   current_tier: string;
   last_monthly_reset_at: string;
   last_daily_reset_at: string;

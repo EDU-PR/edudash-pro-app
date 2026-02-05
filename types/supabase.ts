@@ -3137,6 +3137,7 @@ export type Database = {
         Row: {
           advanced_features: boolean | null
           chat_messages_per_day: number
+          chat_messages_per_month: number
           created_at: string | null
           exams_per_month: number
           explanations_per_month: number
@@ -3150,6 +3151,7 @@ export type Database = {
         Insert: {
           advanced_features?: boolean | null
           chat_messages_per_day: number
+          chat_messages_per_month?: number
           created_at?: string | null
           exams_per_month: number
           explanations_per_month: number
@@ -3163,6 +3165,7 @@ export type Database = {
         Update: {
           advanced_features?: boolean | null
           chat_messages_per_day?: number
+          chat_messages_per_month?: number
           created_at?: string | null
           exams_per_month?: number
           explanations_per_month?: number
@@ -28870,6 +28873,7 @@ export type Database = {
       user_ai_usage: {
         Row: {
           chat_messages_today: number | null
+          chat_messages_this_month: number | null
           created_at: string | null
           current_tier: Database["public"]["Enums"]["tier_name_aligned"] | null
           exams_generated_this_month: number | null
@@ -28885,6 +28889,7 @@ export type Database = {
         }
         Insert: {
           chat_messages_today?: number | null
+          chat_messages_this_month?: number | null
           created_at?: string | null
           current_tier?: Database["public"]["Enums"]["tier_name_aligned"] | null
           exams_generated_this_month?: number | null
@@ -28900,6 +28905,7 @@ export type Database = {
         }
         Update: {
           chat_messages_today?: number | null
+          chat_messages_this_month?: number | null
           created_at?: string | null
           current_tier?: Database["public"]["Enums"]["tier_name_aligned"] | null
           exams_generated_this_month?: number | null

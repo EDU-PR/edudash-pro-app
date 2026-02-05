@@ -837,15 +837,20 @@ export async function signInWithSession(
     }));
 
     const SIGN_IN_TIMEOUT_MS = 15000;
-    const racePromise = Promise.race([
+    type SignInRaceResult =
+      | { kind: 'signIn'; result: { data: { session: Session | null; user: User | null }; error: any } }
+      | { kind: 'session'; session: Session | null }
+      | { kind: 'timeout' };
+
+    const racePromise: Promise<SignInRaceResult> = Promise.race([
       signInPromise.then((result) => ({ kind: 'signIn' as const, result })),
       waitForSessionOrAuth(SIGN_IN_TIMEOUT_MS + 5000).then((session) => ({ kind: 'session' as const, session })),
     ]);
 
-    const raceResult = await withTimeout(
+    const raceResult = await withTimeout<SignInRaceResult>(
       racePromise,
       SIGN_IN_TIMEOUT_MS,
-      { kind: 'timeout' as const }
+      { kind: 'timeout' }
     );
 
     if (raceResult.kind === 'session' && raceResult.session?.user) {

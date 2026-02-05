@@ -14,7 +14,7 @@
  * Connects to superadmin-ai Edge Function for secure API access.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Animated,
   Easing,
@@ -34,10 +34,12 @@ import { getWelcomeMessage } from '../../lib/ai/constants';
 import { styles } from './DashOrb.styles';
 import { ChatModal, ChatMessage } from './ChatModal';
 import { QuickAction } from './QuickActions';
+import { DashToolsModal } from '@/components/ai/DashToolsModal';
 import { useVoiceTTS } from '../super-admin/voice-orb/useVoiceTTS';
 import { useVoiceRecorder } from '../super-admin/voice-orb/useVoiceRecorder';
 import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
+import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 import { useWakeWord } from '../../hooks/useWakeWord';
 import { CosmicOrb } from './CosmicOrb';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
@@ -46,6 +48,10 @@ import { isSuperAdmin } from '../../lib/roleUtils';
 import { calculateAge } from '../../lib/date-utils';
 import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
+import { ToolRegistry } from '@/services/AgentTools';
+import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
+import { formatToolResultMessage } from '@/lib/ai/toolUtils';
+import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 
 let AsyncStorage: any = null;
 try {
@@ -107,6 +113,7 @@ export default function DashOrb({
   
   const [isExpanded, setIsExpanded] = useState(!!autoOpen);
   const [inputText, setInputText] = useState('');
+  const [, setLiveTranscript] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
@@ -124,9 +131,13 @@ export default function DashOrb({
   const [isEditing, setIsEditing] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [showUpgradeBubble, setShowUpgradeBubble] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
   const upgradeAnim = useRef(new Animated.Value(0)).current;
   const upgradeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
+  const onDeviceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isListeningForCommandRef = useRef(false);
+  const handleSendRef = useRef<(text: string) => Promise<void>>(async () => {});
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
     if (!lang) return null;
@@ -162,6 +173,37 @@ export default function DashOrb({
         return null;
     }
   };
+
+  useEffect(() => {
+    isListeningForCommandRef.current = isListeningForCommand;
+  }, [isListeningForCommand]);
+
+  const toolShortcuts = useMemo(() => {
+    const shortcuts = getDashToolShortcutsForRole(normalizedRole);
+    return shortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
+  }, [normalizedRole]);
+
+  const autoToolShortcuts = useMemo(() => {
+    return toolShortcuts.filter((tool) =>
+      tool.category === 'caps' ||
+      tool.category === 'data' ||
+      tool.category === 'navigation' ||
+      (tool.category === 'communication' && tool.name === 'export_pdf')
+    );
+  }, [toolShortcuts]);
+
+  const plannerTools = useMemo(() => {
+    return autoToolShortcuts
+      .map((tool) => {
+        const registryTool = ToolRegistry.getTool(tool.name);
+        return {
+          name: tool.name,
+          description: tool.description || registryTool?.description || tool.label,
+          parameters: registryTool?.parameters,
+        };
+      })
+      .filter((tool) => !!tool.name);
+  }, [autoToolShortcuts]);
   
   // Rate limiter for commands (10 requests per minute)
   const rateLimiter = useRef(new RateLimiter(10, 60000)).current;
@@ -179,6 +221,41 @@ export default function DashOrb({
   const voiceRecorderActions = voiceRecorderResult ? voiceRecorderResult[1] : null;
   const voiceSTTHookResult = useVoiceSTT({ preschoolId: profile?.organization_id || profile?.preschool_id || null });
   const voiceSTT = Platform.OS !== 'web' ? voiceSTTHookResult : null;
+  const onDeviceVoice = useOnDeviceVoice({
+    language: normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA',
+    onPartialResult: (text) => {
+      if (!isListeningForCommandRef.current) return;
+      setLiveTranscript(text);
+      setInputText(text);
+    },
+    onFinalResult: async (text) => {
+      if (!text || !text.trim()) return;
+      if (onDeviceTimeoutRef.current) {
+        clearTimeout(onDeviceTimeoutRef.current);
+        onDeviceTimeoutRef.current = null;
+      }
+      setLiveTranscript('');
+      setInputText('');
+      setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
+      setIsListeningForCommand(false);
+      const language = normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA';
+      const formatted = formatTranscript(text, language);
+      await handleSendRef.current(formatted);
+    },
+    onError: (errorMsg) => {
+      console.warn('[DashOrb] On-device voice error:', errorMsg);
+      if (onDeviceTimeoutRef.current) {
+        clearTimeout(onDeviceTimeoutRef.current);
+        onDeviceTimeoutRef.current = null;
+      }
+      setLiveTranscript('');
+      if (isListeningForCommandRef.current) {
+        setIsListeningForCommand(false);
+        setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
+        toast.info('Voice input unavailable. Tap mic to try again.');
+      }
+    },
+  });
   
   // Wake word detection
   const wakeWord = useWakeWord({
@@ -620,6 +697,31 @@ export default function DashOrb({
       timestamp: new Date(),
     }]);
 
+    const canUseOnDevice = Platform.OS !== 'web' && onDeviceVoice.isAvailable;
+    if (canUseOnDevice) {
+      try {
+        setIsListeningForCommand(true);
+        setLiveTranscript('');
+        setInputText('');
+        onDeviceVoice.clearResults();
+        await onDeviceVoice.startListening();
+
+        if (onDeviceTimeoutRef.current) {
+          clearTimeout(onDeviceTimeoutRef.current);
+        }
+        onDeviceTimeoutRef.current = setTimeout(() => {
+          onDeviceVoice.stopListening();
+          setLiveTranscript('');
+          setInputText('');
+          setIsListeningForCommand(false);
+          setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
+        }, 10000);
+        return;
+      } catch (err) {
+        console.warn('[DashOrb] On-device voice failed, falling back to server STT:', err);
+      }
+    }
+
     try {
       // Start recording using the actions from the hook tuple
       if (voiceRecorderActions && voiceSTT) {
@@ -682,9 +784,19 @@ export default function DashOrb({
     // Manual voice input (push-to-talk)
     if (isListeningForCommand) {
       // Stop listening
+      if (onDeviceTimeoutRef.current) {
+        clearTimeout(onDeviceTimeoutRef.current);
+        onDeviceTimeoutRef.current = null;
+      }
+      if (onDeviceVoice.isListening) {
+        await onDeviceVoice.stopListening();
+      }
       if (voiceRecorderState?.isRecording) {
         await voiceRecorderActions?.stopRecording();
       }
+      setLiveTranscript('');
+      setInputText('');
+      setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
       setIsListeningForCommand(false);
     } else {
       // Start listening
@@ -723,6 +835,10 @@ export default function DashOrb({
     }
     await processCommand(trimmed);
   };
+
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const processCommand = async (
     command: string,
@@ -771,29 +887,44 @@ export default function DashOrb({
     setInputText('');
     setIsProcessing(true);
     setShowQuickActions(false);
-    
-    const thinkingId = `thinking-${Date.now()}`;
+
+    // Add user message immediately
     setMessages((prev) => {
       const base = options?.baseMessages ?? prev;
       const next = [...base];
       if (!options?.skipUserMessage) {
         next.push(userMessage);
       }
-      next.push({
+      return next;
+    });
+
+    // Auto tool call (low-risk only)
+    let toolContextEntry: { role: 'assistant'; content: string } | null = null;
+    if (!options?.skipUserMessage) {
+      const autoTool = await runAutoToolIfNeeded(sanitized);
+      if (autoTool?.toolChatMessage?.content) {
+        toolContextEntry = { role: 'assistant', content: autoTool.toolChatMessage.content };
+      }
+    }
+
+    const thinkingId = `thinking-${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
         id: thinkingId,
         role: 'assistant',
         content: '',
         timestamp: new Date(),
         isLoading: true,
         toolCalls: detectToolsNeeded(command),
-      });
-      return next;
-    });
+      },
+    ]);
 
     try {
-      const history = options?.historyOverride ?? (options?.baseMessages ?? messages)
+      const baseHistory = options?.historyOverride ?? (options?.baseMessages ?? messages)
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }));
+      const history = toolContextEntry ? [...baseHistory, toolContextEntry] : baseHistory;
 
       // Process the command
       const result = await executeCommand(command, history);
@@ -874,6 +1005,90 @@ export default function DashOrb({
     }
     
     return tools.length > 0 ? tools : [{ name: 'ai_analysis', status: 'pending' }];
+  };
+
+  const handleRunTool = async (toolName: string, params: Record<string, any>) => {
+    const tool = ToolRegistry.getTool(toolName);
+    const label = toolShortcuts.find((item) => item.name === toolName)?.label || toolName;
+
+    if (!tool) {
+      const errorMsg = `Tool "${toolName}" not found.`;
+      setMessages((prev) => [
+        ...prev,
+        { id: `tool_err_${Date.now()}`, role: 'assistant', content: errorMsg, timestamp: new Date() },
+      ]);
+      return;
+    }
+
+    let supabaseClient: any = null;
+    try {
+      supabaseClient = assertSupabase();
+    } catch {}
+
+    const context = {
+      profile,
+      user,
+      supabase: supabaseClient,
+    };
+
+    const result = await ToolRegistry.execute(toolName, params, context);
+    const message = formatToolResultMessage(label, result);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'assistant',
+        content: message,
+        timestamp: new Date(),
+      },
+    ]);
+  };
+
+  const runAutoToolIfNeeded = async (userText: string) => {
+    if (!shouldAttemptToolPlan(userText)) return null;
+    if (plannerTools.length === 0) return null;
+
+    let supabaseClient: any = null;
+    try {
+      supabaseClient = assertSupabase();
+    } catch {
+      return null;
+    }
+
+    const plan = await planToolCall({
+      supabaseClient,
+      role: normalizedRole || 'parent',
+      message: userText,
+      tools: plannerTools,
+    });
+
+    if (!plan?.tool) return null;
+    const toolName = plan.tool;
+
+    const execution = await ToolRegistry.execute(toolName, plan.parameters || {}, {
+      profile,
+      user,
+      supabase: supabaseClient,
+    });
+
+    const label = autoToolShortcuts.find((tool) => tool.name === toolName)?.label || toolName;
+    const toolMessage = formatToolResultMessage(label, execution);
+
+    const toolChatMessage: ChatMessage = {
+      id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      role: 'assistant',
+      content: toolMessage,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, toolChatMessage]);
+
+    return {
+      toolName,
+      execution,
+      toolChatMessage,
+    };
   };
 
   /**
@@ -1348,6 +1563,7 @@ export default function DashOrb({
           }
         }}
         onOpenSettings={() => router.push('/screens/dash-ai-settings' as any)}
+        onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
         onAttachFile={handleOrbAttach}
         onTakePhoto={handleOrbCamera}
         attachmentCount={0}
@@ -1434,6 +1650,13 @@ export default function DashOrb({
           setIsEditing(false);
           setEditingMessageId(null);
         }}
+      />
+      <DashToolsModal
+        visible={showToolsModal}
+        onClose={() => setShowToolsModal(false)}
+        tools={toolShortcuts}
+        getToolSchema={(toolName) => ToolRegistry.getTool(toolName)?.parameters}
+        onRunTool={handleRunTool}
       />
     </>
   );

@@ -9,7 +9,7 @@ export type Tier = 'free' | 'parent_starter' | 'parent_plus' | 'private_teacher'
 export type QuotaMap = Record<AIQuotaFeature, number>
 
 const DEFAULT_MONTHLY_QUOTAS: Record<Tier, QuotaMap> = {
-  free: { lesson_generation: 5, grading_assistance: 5, homework_help: 15, transcription: 60 }, // ~30 minutes of voice
+  free: { lesson_generation: 5, grading_assistance: 5, homework_help: 300, transcription: 60 }, // ~30 minutes of voice
   parent_starter: { lesson_generation: 0, grading_assistance: 0, homework_help: 30, transcription: 120 }, // ~60 minutes
   parent_plus: { lesson_generation: 0, grading_assistance: 0, homework_help: 100, transcription: 300 }, // ~2.5 hours
   private_teacher: { lesson_generation: 20, grading_assistance: 20, homework_help: 100, transcription: 600 }, // ~5 hours
@@ -362,4 +362,3 @@ export async function getTeacherSpecificQuota(feature: AIQuotaFeature): Promise<
     return null
   }
 }
-

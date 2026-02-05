@@ -38,7 +38,7 @@ export const TIER_HIERARCHY: Record<SubscriptionTier, number> = {
 
 // Monthly quota limits by tier (number of AI requests)
 export const TIER_QUOTAS: Record<SubscriptionTier, { ai_requests: number; priority_support: boolean; rpm_limit: number }> = {
-  'free': { ai_requests: 50, priority_support: false, rpm_limit: 5 },
+  'free': { ai_requests: 300, priority_support: false, rpm_limit: 5 },
   'starter': { ai_requests: 500, priority_support: false, rpm_limit: 15 },
   'premium': { ai_requests: 2500, priority_support: true, rpm_limit: 30 },
   'enterprise': { ai_requests: -1, priority_support: true, rpm_limit: 60 }, // -1 = unlimited

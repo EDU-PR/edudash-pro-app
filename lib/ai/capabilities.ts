@@ -132,6 +132,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'chat.basic',
     // Memory
     'memory.lite',
+    // Multimodal (limited via daily budget)
+    'multimodal.vision',
     // Voice (limited)
     'voice.input',
     'voice.output',

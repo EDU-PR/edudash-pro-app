@@ -210,7 +210,17 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     handleClose();
   }, [selectedItems, onSelectMedia, handleClose]);
 
-  const actionCards = [
+  type ActionCard = {
+    id: string;
+    icon: string;
+    title: string;
+    subtitle: string;
+    gradient: [string, string];
+    onPress: () => void;
+    enabled: boolean;
+  };
+
+  const actionCards: ActionCard[] = [
     {
       id: 'camera',
       icon: 'camera',
@@ -238,7 +248,9 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       onPress: handlePickDocuments,
       enabled: allowedTypes.includes('document'),
     },
-  ].filter((card) => card.enabled);
+  ];
+
+  const enabledCards = actionCards.filter((card) => card.enabled);
 
   return (
     <Modal
@@ -302,7 +314,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           >
             {/* Action Cards */}
             <View style={styles.cardsContainer}>
-              {actionCards.map((card) => (
+              {enabledCards.map((card) => (
                 <TouchableOpacity
                   key={card.id}
                   style={styles.card}

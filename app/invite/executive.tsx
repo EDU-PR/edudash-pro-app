@@ -3,13 +3,14 @@
  * Handles deep links for executive/office position invites
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const POSITION_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ export default function ExecutiveInviteScreen() {
   const { code } = useLocalSearchParams<{ code?: string }>();
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const alert = useAlert();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [loading, setLoading] = useState(true);
@@ -155,13 +157,19 @@ export default function ExecutiveInviteScreen() {
         router.replace('/');
       }, 500);
       
-      Alert.alert(
+      alert.show(
         'Congratulations!',
         `You are now the ${positionLabel} of ${inviteDetails.organizations?.name || 'the organization'}!`,
-        [{ text: 'OK' }]
+        [{ text: 'Close', style: 'cancel' }],
+        { type: 'success' }
       );
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to accept position');
+      alert.show(
+        'Error',
+        e?.message || 'Failed to accept position',
+        [{ text: 'Close', style: 'cancel' }],
+        { type: 'error' }
+      );
     } finally {
       setAccepting(false);
     }

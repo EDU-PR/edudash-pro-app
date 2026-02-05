@@ -20,12 +20,25 @@ export class TeacherDataService {
       // Use profiles table (not deprecated users table)
       const { data: teacherProfile, error: teacherError } = await assertSupabase()
         .from('profiles')
-        .select('id, preschool_id')
+        .select('id, auth_user_id, preschool_id, organization_id')
         .eq('id', teacherUserId)
         .maybeSingle()
 
       if (teacherError || !teacherProfile) {
         return { success: false, error: 'Teacher not found' }
+      }
+      const tenantId = teacherProfile.preschool_id || teacherProfile.organization_id || null;
+      if (!tenantId) {
+        return { success: false, error: 'Teacher is not linked to a school' }
+      }
+      const authUserId = teacherProfile.auth_user_id || teacherProfile.id;
+      const { data: legacyUser, error: legacyError } = await assertSupabase()
+        .from('users')
+        .select('id')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      if (legacyError || !legacyUser?.id) {
+        return { success: false, error: 'Teacher user record is missing. Please sync users table.' }
       }
 
       const title = params.title || 'Lesson Assignment'
@@ -41,8 +54,8 @@ export class TeacherDataService {
           title,
           description: params.description || null,
           instructions: params.description || null,
-          teacher_id: teacherProfile.id,
-          preschool_id: teacherProfile.preschool_id,
+          teacher_id: legacyUser.id,
+          preschool_id: tenantId,
           class_id: params.classId || null,
           due_date_offset_days: dueOffset,
           due_date: dueDate.toISOString().split('T')[0],
@@ -83,11 +96,15 @@ export class TeacherDataService {
 
       const rows = targets.map((sid) => ({
         homework_assignment_id: assignment.id,
+        assignment_id: assignment.id,
         student_id: sid,
+        preschool_id: tenantId,
         submission_text: null,
-        attachment_urls: [],
+        file_urls: [],
+        content_metadata: {},
+        content_type: 'text',
         submitted_at: null,
-        status: 'assigned',
+        status: 'draft',
       }))
 
       const { error: insErr } = await assertSupabase().from('homework_submissions').insert(rows as any)

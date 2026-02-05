@@ -201,9 +201,9 @@ export const TIER_QUOTAS: Record<CapabilityTier, TierQuotas> = {
   free: {
     lesson_generation: 5,
     grading_assistance: 5,
-    homework_help: 15,
+    homework_help: 300,
     transcription: 60,
-    claude_messages: 10,
+    claude_messages: 300,
     rpm_limit: 5,
     tts_enabled: false,
     agentic_enabled: false,

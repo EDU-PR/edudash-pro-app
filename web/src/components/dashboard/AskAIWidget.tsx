@@ -177,22 +177,23 @@ export function AskAIWidget({
         if (data?.tool_results && Array.isArray(data.tool_results)) {
           for (const toolResult of data.tool_results) {
             try {
+              const rawContent = (toolResult as any)?.content ?? (toolResult as any)?.output ?? toolResult;
               // Check if content is an error message first
-              if (typeof toolResult.content === 'string') {
+              if (typeof rawContent === 'string') {
                 // Try to parse as JSON, but handle errors gracefully
-                if (toolResult.content.startsWith('Error:') || toolResult.content.startsWith('{') === false) {
-                  console.error('[DashAI] Tool execution failed:', toolResult.content);
+                if (rawContent.startsWith('Error:') || rawContent.startsWith('{') === false) {
+                  console.error('[DashAI] Tool execution failed:', rawContent);
                   setMessages(prev => [...prev, {
                     role: 'assistant',
-                    text: `❌ Exam generation failed: ${toolResult.content}\n\nPlease try again with different parameters.`,
+                    text: `❌ Exam generation failed: ${rawContent}\n\nPlease try again with different parameters.`,
                   }]);
                   continue;
                 }
               }
               
-              const resultData = typeof toolResult.content === 'string' 
-                ? JSON.parse(toolResult.content)
-                : toolResult.content;
+              const resultData = typeof rawContent === 'string' 
+                ? JSON.parse(rawContent)
+                : rawContent;
               
               if (resultData.success && resultData.data?.sections) {
                 examSetRef.current = true;
@@ -281,9 +282,10 @@ export function AskAIWidget({
       }
       
       // Handle tool execution (non-interactive mode)
-      if (data?.tool_use && data?.tool_results) {
+      if (data?.tool_results && Array.isArray(data.tool_results) && data.tool_results.length > 0) {
         let toolResults;
-        const resultContent = data.tool_results[0]?.content;
+        const toolUse = data?.tool_use?.[0] || data.tool_results[0];
+        const resultContent = data.tool_results[0]?.content ?? data.tool_results[0]?.output;
         
         // Try to parse as JSON, but handle error strings gracefully
         if (typeof resultContent === 'string') {
@@ -306,10 +308,10 @@ export function AskAIWidget({
           ...m,
           { 
             role: 'tool', 
-            text: `🔧 ${data.tool_use[0]?.name}`,
+            text: `🔧 ${toolUse?.name || 'tool'}`,
             tool: {
-              name: data.tool_use[0]?.name,
-              input: data.tool_use[0]?.input,
+              name: toolUse?.name,
+              input: toolUse?.input,
               results: toolResults
             }
           }

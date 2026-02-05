@@ -57,7 +57,7 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
    */
   const addMessage = useCallback((message: DashMessage) => {
     setMessages(prev => [...prev, message]);
-    logger.debug('[DashConversation] Message added', { id: message.id, role: message.role });
+    logger.debug('[DashConversation] Message added', { id: message.id, type: message.type });
   }, []);
 
   /**
@@ -125,9 +125,9 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
     const finalContent = streamBufferRef.current;
     const message: DashMessage = {
       id: streamingMessageId,
-      role: 'assistant',
+      type: 'assistant',
       content: finalContent,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
     };
     
     addMessage(message);
@@ -145,10 +145,22 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
    */
   const loadConversation = useCallback(async (conversationId: string) => {
     try {
-      const snapshot = await getConversationSnapshot(conversationId, userId);
+      if (!userId) return;
+      const snapshot = await getConversationSnapshot(userId, conversationId);
       if (snapshot) {
-        setConversation(snapshot.conversation);
-        setMessages(snapshot.messages);
+        setConversation({
+          id: snapshot.conversationId,
+          title: 'Conversation',
+          messages: [],
+          created_at: snapshot.updatedAt,
+          updated_at: snapshot.updatedAt,
+        });
+        setMessages(snapshot.messages.map((msg) => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp,
+        })));
         logger.info('[DashConversation] Loaded', { conversationId, messageCount: snapshot.messages.length });
       }
     } catch (error) {
@@ -164,9 +176,14 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
     
     try {
       await saveConversationSnapshot(
+        userId,
         conversation.id,
-        { conversation, messages },
-        userId
+        messages.map((msg) => ({
+          id: msg.id,
+          type: msg.type === 'task_result' ? 'assistant' : msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp,
+        }))
       );
       logger.debug('[DashConversation] Saved', { id: conversation.id, messageCount: messages.length });
     } catch (error) {
@@ -178,13 +195,13 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
    * Create new conversation
    */
   const createNewConversation = useCallback((title?: string): DashConversation => {
+    const now = Date.now();
     const newConversation: DashConversation = {
       id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       title: title || 'New Conversation',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      userId: userId || '',
-      metadata: {},
+      messages: [],
+      created_at: now,
+      updated_at: now,
     };
     
     setConversation(newConversation);

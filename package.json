@@ -1,6 +1,6 @@
 {
   "name": "edudash-pro",
-  "version": "1.0.2",
+  "version": "1.0.26",
   "main": "index.js",
   "engines": {
     "node": "20.x",
@@ -100,8 +100,8 @@
     "build:dev": "node scripts/eas-wrapper.mjs build --platform android --profile development",
     "build:dev:apk": "node scripts/eas-wrapper.mjs build --platform android --profile development-apk",
     "build:dev:local": "node scripts/eas-wrapper.mjs build --platform android --profile development-apk --local",
-    "build:playstore": "node scripts/bump-android-version.mjs && EAS_PROJECT_ID=playstore node scripts/eas-wrapper.mjs build --platform android --profile playstore",
-    "build:playstore:nobump": "EAS_PROJECT_ID=playstore node scripts/eas-wrapper.mjs build --platform android --profile playstore",
+    "build:playstore": "node scripts/bump-android-version.mjs && EAS_NO_PROJECT_PROMPT=1 node scripts/eas-wrapper.mjs build --platform android --profile playstore --non-interactive",
+    "build:playstore:nobump": "EAS_NO_PROJECT_PROMPT=1 node scripts/eas-wrapper.mjs build --platform android --profile playstore --non-interactive",
     "eas:project:list": "node scripts/eas-project.mjs list",
     "eas:project:current": "node scripts/eas-project.mjs current",
     "eas:project:use": "node scripts/eas-project.mjs use",

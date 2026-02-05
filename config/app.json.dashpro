@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "edudashpro",
     "owner": "dashpro",
-    "version": "1.0.2",
-    "runtimeVersion": "1.0.2",
+    "version": "1.0.26",
+    "runtimeVersion": "1.0.26",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -51,7 +51,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 3
+      "versionCode": 31
     },
     "plugins": [
       "expo-router",

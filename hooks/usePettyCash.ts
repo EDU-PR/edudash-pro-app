@@ -17,7 +17,7 @@ export interface PettyCashTransaction {
   amount: number;
   description: string;
   category: string;
-  type: 'expense' | 'replenishment';
+  type: 'expense' | 'replenishment' | 'adjustment';
   receipt_number?: string;
   reference_number?: string;
   created_at: string;

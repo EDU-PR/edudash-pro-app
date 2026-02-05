@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { signOutEverywhere } from '@/lib/auth/signOut';
 import Link from 'next/link';
-import { Settings, BookMarked, LogOut, Loader2, FileText } from 'lucide-react';
+import { Settings, BookMarked, LogOut, Loader2, FileText, Activity } from 'lucide-react';
 import RegistrationNotifications from '@/components/admin/RegistrationNotifications';
 
 export default function AdminLayout({
@@ -145,6 +145,13 @@ export default function AdminLayout({
                 >
                   <BookMarked className="w-5 h-5" />
                   <span>CAPS Mapping</span>
+                </Link>
+                <Link
+                  href="/admin/ai-usage"
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <Activity className="w-5 h-5" />
+                  <span>AI Usage</span>
                 </Link>
               </div>
             </div>

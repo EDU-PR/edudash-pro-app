@@ -8,7 +8,7 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { Platform, Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
@@ -147,9 +147,10 @@ export async function takePhoto(): Promise<DashAttachment[]> {
     // Launch camera
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      allowsEditing: true,
-      aspect: [4, 3],
+      quality: 0.7,
+      allowsEditing: false,
+      exif: false,
+      base64: false,
     });
 
     // Handle cancellation gracefully
@@ -162,7 +163,12 @@ export async function takePhoto(): Promise<DashAttachment[]> {
 
     for (const asset of result.assets) {
       // Get file info to check size
-      const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+      let fileInfo = { exists: false, size: 0 } as { exists: boolean; size?: number };
+      try {
+        fileInfo = await FileSystem.getInfoAsync(asset.uri);
+      } catch (infoError) {
+        console.warn('[Camera] Failed to read file info, continuing without size check:', infoError);
+      }
       
       if (fileInfo.exists && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
         Alert.alert(

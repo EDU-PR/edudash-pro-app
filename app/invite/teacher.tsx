@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAlert } from '@/components/ui/StyledAlert';
 import { buildTeacherInviteLink, TEACHER_INVITE_DEEP_LINK } from '@/lib/utils/teacherInviteLink';
 import { setPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
 
@@ -16,6 +17,7 @@ export default function TeacherInviteLanding() {
   const params = useLocalSearchParams<{ token?: string; email?: string }>();
   const token = typeof params?.token === 'string' ? params.token : '';
   const email = typeof params?.email === 'string' ? params.email : '';
+  const alert = useAlert();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const inviteLink = token && email ? buildTeacherInviteLink(token, email) : DEFAULT_WEB_URL;
@@ -75,12 +77,22 @@ export default function TeacherInviteLanding() {
   const handleCopyToken = async () => {
     if (!token) return;
     await Clipboard.setStringAsync(token);
-    Alert.alert('Copied', 'Invite token copied to clipboard.');
+    alert.show(
+      'Copied',
+      'Invite token copied to clipboard.',
+      [{ text: 'Close', style: 'cancel' }],
+      { type: 'success' }
+    );
   };
 
   const handleCopyLink = async () => {
     await Clipboard.setStringAsync(inviteLink);
-    Alert.alert('Copied', 'Invite link copied to clipboard.');
+    alert.show(
+      'Copied',
+      'Invite link copied to clipboard.',
+      [{ text: 'Close', style: 'cancel' }],
+      { type: 'success' }
+    );
   };
 
   return (

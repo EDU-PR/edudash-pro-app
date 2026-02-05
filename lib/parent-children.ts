@@ -37,6 +37,7 @@ export interface ChildBasicInfo {
   grade_level?: string | null;
   class_id: string | null;
   preschool_id: string | null;
+  organization_id?: string | null;
   is_active: boolean;
   parent_id: string | null;
   guardian_id: string | null;
@@ -107,7 +108,7 @@ export async function fetchParentChildren(
       .from('students')
       .select(`
         id, student_id, first_name, last_name, enrollment_date, date_of_birth, age_group_id, age_group_ref, grade, grade_level, class_id,
-        preschool_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
+        preschool_id, organization_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
         age_group:age_groups!students_age_group_id_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
         age_group_ref_data:age_groups!students_age_group_ref_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
         classes!students_class_id_fkey(id, name, grade_level)
@@ -145,7 +146,7 @@ export async function fetchParentChildren(
         .from('students')
         .select(`
           id, student_id, first_name, last_name, enrollment_date, date_of_birth, age_group_id, age_group_ref, grade, grade_level, class_id,
-          preschool_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
+          preschool_id, organization_id, is_active, parent_id, guardian_id, avatar_url, registration_fee_amount, registration_fee_paid, payment_verified,
           age_group:age_groups!students_age_group_id_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
           age_group_ref_data:age_groups!students_age_group_ref_fkey(id, name, age_min, age_max, min_age_months, max_age_months),
           classes!students_class_id_fkey(id, name, grade_level)

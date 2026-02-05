@@ -18,7 +18,7 @@ import type { AIQuotaFeature } from './limits';
 function getBaseQuotasByTier(tier: string): Record<AIQuotaFeature, number> {
   switch (tier.toLowerCase()) {
     case 'free':
-      return { lesson_generation: 5, grading_assistance: 5, homework_help: 15, transcription: 60 };
+      return { lesson_generation: 5, grading_assistance: 5, homework_help: 300, transcription: 60 };
     case 'parent_starter':
       return { lesson_generation: 0, grading_assistance: 0, homework_help: 30, transcription: 120 };
     case 'parent_plus':
@@ -30,7 +30,7 @@ function getBaseQuotasByTier(tier: string): Record<AIQuotaFeature, number> {
     case 'enterprise':
       return { lesson_generation: 5000, grading_assistance: 10000, homework_help: 30000, transcription: 36000 };
     default:
-      return { lesson_generation: 5, grading_assistance: 5, homework_help: 15, transcription: 60 };
+      return { lesson_generation: 5, grading_assistance: 5, homework_help: 300, transcription: 60 };
   }
 }
 

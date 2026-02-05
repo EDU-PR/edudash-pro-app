@@ -5,12 +5,12 @@
  */
 
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAlert } from '@/components/ui/StyledAlert';
 import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
@@ -25,6 +25,7 @@ export const useNewEnhancedTeacherState = () => {
   const { user, profile } = useAuth();
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const alert = useAlert();
   const { tier } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -64,19 +65,25 @@ export const useNewEnhancedTeacherState = () => {
     const routeConfig = TEACHER_ROUTES[action as keyof typeof TEACHER_ROUTES];
     
     if (!routeConfig) {
-      Alert.alert(t('common.coming_soon'), t('dashboard.feature_coming_soon'));
+      alert.show(
+        t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+        t('dashboard.feature_coming_soon', { defaultValue: 'This feature is coming soon.' }),
+        [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+        { type: 'info' }
+      );
       return;
     }
     
     // Check premium requirement
     if (routeConfig.requiresPremium && tier === 'free') {
-      Alert.alert(
+      alert.show(
         t('subscription.premium_required', { defaultValue: 'Premium Required' }),
         t('subscription.upgrade_for_feature', { defaultValue: 'Upgrade your plan to access this feature.' }),
         [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('subscription.upgrade'), onPress: () => router.push('/pricing') }
-        ]
+          { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+          { text: t('subscription.upgrade', { defaultValue: 'Upgrade' }), onPress: () => router.push('/pricing') },
+        ],
+        { type: 'warning' }
       );
       return;
     }

@@ -1581,7 +1581,7 @@ function TeacherMessagesPage() {
                   <Sparkles size={14} className="text-[#a78bfa]" />
                 </div>
                 <p className="text-[13px] text-[var(--muted)] mt-0.5 truncate">
-                  AI assistant for lesson planning & grading
+                  Your AI teaching assistant for planning & grading
                 </p>
               </div>
             </div>
@@ -1895,7 +1895,7 @@ function TeacherMessagesPage() {
                       </p>
                       <p style={{ color: 'var(--muted)', fontSize: '14px', lineHeight: '1.5' }}>
                         {isDashAISelected 
-                          ? 'I can help with lesson plans, activity ideas, parent communication, and more! 🎓'
+                          ? 'I can help with lesson planning, assessment creation, grading, differentiation strategies, and parent communication! 🎓'
                           : 'Send your first message to connect with this parent'}
                       </p>
                     </div>

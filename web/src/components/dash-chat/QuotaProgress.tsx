@@ -113,7 +113,7 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
       // Get the tier limits directly from ai_usage_tiers
       const { data: tierLimits } = await supabase
         .from('ai_usage_tiers')
-        .select('chat_messages_per_day, exams_per_month, explanations_per_month')
+        .select('chat_messages_per_day, chat_messages_per_month, exams_per_month, explanations_per_month')
         .eq('tier_name', effectiveTier)
         .eq('is_active', true)
         .single();
@@ -121,14 +121,14 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
       // Get current usage
       const { data: usage } = await supabase
         .from('user_ai_usage')
-        .select('chat_messages_today')
+        .select('chat_messages_today, chat_messages_this_month')
         .eq('user_id', userId)
         .single();
 
-      const dbLimit = tierLimits?.chat_messages_per_day || 10;
+      const dbLimit = tierLimits?.chat_messages_per_month || ((tierLimits?.chat_messages_per_day || 10) * 30);
       // Apply realistic limits (handles cases where DB has placeholder values like 999999)
       const limit = getRealisticLimit(effectiveTier, dbLimit);
-      const used = usage?.chat_messages_today || 0;
+      const used = usage?.chat_messages_this_month ?? usage?.chat_messages_today || 0;
 
       setQuota({
         used,

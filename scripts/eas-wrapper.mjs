@@ -18,6 +18,7 @@ const { EAS_PROJECTS, resolveEasProjectConfig } = projectMap.default || projectM
 
 const args = process.argv.slice(2);
 const isBuild = args[0] === 'build';
+const profile = getProfileArg(args);
 const isNonInteractive =
   args.includes('--non-interactive') ||
   process.env.CI === 'true' ||
@@ -29,7 +30,11 @@ const currentConfig = getCurrentConfig({ byId, projects: EAS_PROJECTS, resolver:
 
 let selectedConfig = null;
 
-if (isBuild && !isNonInteractive) {
+const forcedConfig = isBuild ? getForcedConfig(profile, EAS_PROJECTS, byId) : null;
+
+if (forcedConfig) {
+  selectedConfig = forcedConfig;
+} else if (isBuild && !isNonInteractive) {
   selectedConfig = await promptForProject({ list, byId, currentConfig, projects: EAS_PROJECTS });
 }
 
@@ -39,7 +44,10 @@ if (selectedConfig) {
   env.EAS_PROJECT_OWNER = selectedConfig.owner;
   env.EAS_PROJECT_SLUG = selectedConfig.slug;
   writeEnvFile(selectedConfig);
-  console.log(`[eas-wrapper] Using EAS project: ${selectedConfig.owner}/${selectedConfig.slug} (${selectedConfig.id})`);
+  const modeLabel = forcedConfig ? 'forced' : 'selected';
+  console.log(
+    `[eas-wrapper] Using EAS project (${modeLabel}): ${selectedConfig.owner}/${selectedConfig.slug} (${selectedConfig.id})`
+  );
 }
 
 const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
@@ -66,6 +74,31 @@ function buildProjectList(projects) {
   }
 
   return { list: unique, byId: byIdMap };
+}
+
+function getProfileArg(argv) {
+  const index = argv.findIndex((arg) => arg === '--profile' || arg.startsWith('--profile='));
+  if (index === -1) return '';
+  const token = argv[index];
+  if (token.includes('=')) {
+    return token.split('=')[1] || '';
+  }
+  return argv[index + 1] || '';
+}
+
+function getForcedConfig(profileName, projects, byId) {
+  if (!profileName) return null;
+  const normalized = profileName.trim().toLowerCase();
+  const forceMap = {
+    playstore: 'playstore',
+    'playstore-apk': 'playstore',
+    'production-apk': 'playstore',
+  };
+  const alias = forceMap[normalized];
+  if (!alias) return null;
+  if (projects[alias]) return projects[alias];
+  if (byId.has(alias)) return byId.get(alias).config;
+  return null;
 }
 
 function getCurrentConfig({ byId, projects, resolver }) {

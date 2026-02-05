@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { styles } from '../DashAssistant.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashAttachment } from '@/services/dash-ai/types';
+import type { AttachmentProgress } from '@/hooks/useDashAttachments';
 import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
@@ -28,7 +29,7 @@ interface DashInputBarProps {
   setInputText: (text: string) => void;
   enterToSend?: boolean;
   selectedAttachments: DashAttachment[];
-  attachmentProgress?: Map<string, { id: string; progress: number; status: 'uploading' | 'uploaded' | 'failed' }>;
+  attachmentProgress?: Map<string, AttachmentProgress>;
   learnerContext?: LearnerContext | null;
   isLoading: boolean;
   isUploading: boolean;
@@ -42,6 +43,7 @@ interface DashInputBarProps {
   onMicPress: () => void;
   onTakePhoto: () => void;
   onAttachFile: () => void;
+  onOpenTools?: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onQuickAction?: (text: string) => void;
 }
@@ -66,6 +68,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onMicPress,
   onTakePhoto,
   onAttachFile,
+  onOpenTools,
   onRemoveAttachment,
   onQuickAction,
 }) => {
@@ -289,6 +292,26 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         {/* Input wrapper */}
         <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
           <View style={styles.inputAccessoryLeft}>
+            {onOpenTools && (
+              <TouchableOpacity
+                style={styles.inputIconButton}
+                onPress={async () => {
+                  try {
+                    await Haptics.selectionAsync();
+                  } catch {}
+                  onOpenTools();
+                }}
+                disabled={isLoading || isUploading}
+                accessibilityLabel="Open tools"
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="construct-outline"
+                  size={20}
+                  color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
             {/* Attach files button (inside input like WhatsApp) */}
             <TouchableOpacity
               style={styles.inputIconButton}

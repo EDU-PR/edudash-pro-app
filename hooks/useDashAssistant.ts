@@ -42,13 +42,17 @@ import { useAIModelSelection } from '@/hooks/useAIModelSelection';
 import { useCapability } from '@/hooks/useCapability';
 import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
 import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
-import { useDashAttachments } from '@/hooks/useDashAttachments';
+import { useDashAttachments, type AttachmentProgress } from '@/hooks/useDashAttachments';
 import {
   getConversationSnapshot,
   saveConversationSnapshot,
   getLastActiveConversationId,
   setLastActiveConversationId,
 } from '@/services/conversationPersistence';
+import { ToolRegistry } from '@/services/AgentTools';
+import { formatToolResultMessage } from '@/lib/ai/toolUtils';
+import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
+import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 
 // Extracted utilities
 import { 
@@ -120,6 +124,7 @@ interface UseDashAssistantReturn {
   contextualHelp: boolean;
   selectedAttachments: DashAttachment[];
   isUploading: boolean;
+  attachmentProgress: Map<string, AttachmentProgress>;
   isNearBottom: boolean;
   setIsNearBottom: (value: boolean) => void;
   unreadCount: number;
@@ -158,6 +163,7 @@ interface UseDashAssistantReturn {
   handleInputMicPress: () => Promise<void>;
   stopVoiceRecording: () => Promise<void>;
   startNewConversation: () => Promise<void>;
+  runTool: (toolName: string, params: Record<string, any>) => Promise<void>;
   
   // Helpers
   extractFollowUps: (text: string) => string[];
@@ -212,15 +218,6 @@ type TutorPayload = {
   steps?: string;
 };
 
-type LearnerContext = {
-  learnerName?: string | null;
-  grade?: string | null;
-  ageYears?: number | null;
-  ageBand?: string | null;
-  schoolType?: string | null;
-  role?: string | null;
-};
-
 const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 
@@ -230,6 +227,33 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
   const { can, ready: capsReady } = useCapability();
+
+  const toolShortcuts = useMemo(() => {
+    const shortcuts = getDashToolShortcutsForRole(profile?.role || null);
+    return shortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
+  }, [profile?.role]);
+
+  const autoToolShortcuts = useMemo(() => {
+    return toolShortcuts.filter((tool) =>
+      tool.category === 'caps' ||
+      tool.category === 'data' ||
+      tool.category === 'navigation' ||
+      (tool.category === 'communication' && tool.name === 'export_pdf')
+    );
+  }, [toolShortcuts]);
+
+  const plannerTools = useMemo(() => {
+    return autoToolShortcuts
+      .map((tool) => {
+        const registryTool = ToolRegistry.getTool(tool.name);
+        return {
+          name: tool.name,
+          description: tool.description || registryTool?.description || tool.label,
+          parameters: registryTool?.parameters,
+        };
+      })
+      .filter((tool) => !!tool.name);
+  }, [autoToolShortcuts]);
   
   // State
   const [messages, setMessages] = useState<DashMessage[]>([]);
@@ -244,7 +268,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [isInitialized, setIsInitialized] = useState(false);
   const [enterToSend, setEnterToSend] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [autoSpeakResponses, setAutoSpeakResponses] = useState(false);
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -313,18 +337,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     setAlertState(prev => ({ ...prev, visible: false }));
   }, []);
   
-  // Initialize attachments hook
-  const dashAttachments = useDashAttachments({
-    conversation,
-    onShowAlert: showAlert,
-  });
-  
   // Refs
   const flashListRef = useRef<any>(null);
   const inputRef = useRef<any>(null);
   const voiceSessionRef = useRef<VoiceSession | null>(null);
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
   const voiceInputStartAtRef = useRef<number | null>(null);
+  const lastSpeakStartRef = useRef<number>(0);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
   const isProcessingRef = useRef(false);
@@ -352,6 +371,17 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   const isFreeTier = (tier || 'free').toLowerCase().includes('free');
   const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
+  const canUseImages = capsReady ? can('multimodal.vision') : true;
+  const canUseDocuments = capsReady ? can('multimodal.documents') : true;
+
+  // Initialize attachments hook
+  const dashAttachments = useDashAttachments({
+    conversation,
+    onShowAlert: showAlert,
+    canUseImages,
+    canUseDocuments,
+    isFreeTier,
+  });
 
   // Load voice budget on mount and when tier changes
   const refreshVoiceBudget = useCallback(async () => {
@@ -606,13 +636,32 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       scrollTimeoutRef.current = null;
     }
 
-    scrollTimeoutRef.current = setTimeout(() => {
+    const performScroll = () => {
+      const list = flashListRef.current;
+      if (!list) return;
+
       try {
+        if (typeof list.scrollToEnd === 'function') {
+          list.scrollToEnd({ animated });
+        }
+        if (typeof list.scrollToOffset === 'function') {
+          list.scrollToOffset({ offset: 999999, animated: false });
+        }
         const lastIndex = Math.max(0, (messages?.length || 1) - 1);
-        flashListRef.current?.scrollToIndex({ index: lastIndex, animated });
+        if (typeof list.scrollToIndex === 'function') {
+          list.scrollToIndex({ index: lastIndex, animated, viewPosition: 1 });
+        }
       } catch (e) {
-        console.debug('[useDashAssistant] scrollToIndex failed:', e);
+        console.debug('[useDashAssistant] scrollToBottom failed:', e);
       }
+    };
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      requestAnimationFrame(() => {
+        performScroll();
+        // Second pass to catch late layout (large images/markdown)
+        setTimeout(() => performScroll(), animated ? 250 : 0);
+      });
     }, delay);
   }, [messages?.length]);
 
@@ -785,7 +834,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     ].filter(Boolean);
 
     // Use intelligent prompt builder for enhanced AI capabilities
-    const messageHistory = messages.map(msg => ({ role: msg.role, content: msg.content || '' }));
+    const messageHistory = messages.map(msg => ({
+      role: msg.type === 'task_result' ? 'assistant' : msg.type,
+      content: msg.content || '',
+    }));
     const hour = new Date().getHours();
     const timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night' = 
       hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
@@ -946,7 +998,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
       return {
         id: msg.id,
-        type: msg.type,
+        type: msg.type === 'task_result' ? 'assistant' : msg.type,
         content: msg.content,
         timestamp: msg.timestamp,
         meta: Object.keys(meta).length > 0 ? meta : undefined,
@@ -1435,7 +1487,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         getChatUIPrefs(),
       ]);
       setVoiceEnabled(voiceChatPrefs.voiceEnabled ?? true);
-      setAutoSpeakResponses(voiceChatPrefs.autoSpeak ?? false);
+      setAutoSpeakResponses(voiceChatPrefs.autoSpeak ?? true);
       setShowTypingIndicator(chatUiPrefs.showTypingIndicator ?? true);
       setAutoSuggestQuestions(chatUiPrefs.autoSuggestQuestions ?? true);
       setContextualHelp(chatUiPrefs.contextualHelp ?? true);
@@ -1520,12 +1572,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       return;
     }
 
+    const now = Date.now();
+    const sinceLastStart = now - (lastSpeakStartRef.current || 0);
+
     if (speakingMessageId === message.id) {
+      // If this is a rapid duplicate call, ignore it instead of stopping playback.
+      if (sinceLastStart < 600) {
+        return;
+      }
       await stopSpeaking();
       return;
     }
 
     if (isSpeaking && speakingMessageId) {
+      // Avoid thrashing if a new speak request arrives immediately after start.
+      if (sinceLastStart < 600) {
+        return;
+      }
       await stopSpeaking();
     }
 
@@ -1536,6 +1599,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
       setIsSpeaking(true);
       setSpeakingMessageId(message.id);
+      lastSpeakStartRef.current = now;
       
       await dashInstance.speakResponse(message, {
         onStart: () => {},
@@ -1646,7 +1710,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const attachmentContextOverride = buildAttachmentContextInternal(uploadedAttachments);
       
       // Check if we should add celebration or greeting
-      const messageHistory = messages.map(msg => ({ role: msg.role, content: msg.content || '' }));
+      const messageHistory = messages.map(msg => ({
+        role: msg.type === 'task_result' ? 'assistant' : msg.type,
+        content: msg.content || '',
+      }));
       const needsCelebration = shouldCelebrate(messageHistory);
       const isFirstMessage = messages.length === 0;
       
@@ -1708,7 +1775,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           learnerContext: learnerContextRef.current || learnerContext,
         });
       }
-      const mergedContextOverride = [baseContextOverride, tutorContextOverride, attachmentContextOverride, celebrationHint]
+      const mergedContextBase = [baseContextOverride, tutorContextOverride, attachmentContextOverride, celebrationHint]
         .filter(Boolean)
         .join('\n\n') || null;
 
@@ -1721,6 +1788,56 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
       };
       setMessages(prev => [...prev, localUserMessage]);
+
+      // Auto tool execution for low-risk tools (CAPS/data/navigation/PDF)
+      let autoToolContext: string | null = null;
+      if (shouldAttemptToolPlan(outgoingText) && plannerTools.length > 0) {
+        try {
+          let supabaseClient: any = null;
+          try {
+            supabaseClient = assertSupabase();
+          } catch {}
+
+          if (supabaseClient) {
+            const plan = await planToolCall({
+              supabaseClient,
+              role: String(profile?.role || 'parent').toLowerCase() || 'parent',
+              message: outgoingText,
+              tools: plannerTools,
+            });
+
+            if (plan?.tool) {
+              const execution = await ToolRegistry.execute(plan.tool, plan.parameters || {}, {
+                profile,
+                user,
+                supabase: supabaseClient,
+              });
+              const label = autoToolShortcuts.find((tool) => tool.name === plan.tool)?.label || plan.tool;
+              const toolMessageContent = formatToolResultMessage(label, execution);
+
+              const toolMessage: DashMessage = {
+                id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                type: 'assistant',
+                content: toolMessageContent,
+                timestamp: Date.now(),
+                metadata: {
+                  tool_name: plan.tool,
+                  tool_result: execution,
+                },
+              };
+
+              setMessages(prev => [...prev, toolMessage]);
+              autoToolContext = toolMessageContent;
+            }
+          }
+        } catch (toolErr) {
+          console.warn('[useDashAssistant] Auto tool failed:', toolErr);
+        }
+      }
+
+      const mergedContextOverride = [mergedContextBase, autoToolContext ? `TOOL RESULT:\n${autoToolContext}` : null]
+        .filter(Boolean)
+        .join('\n\n') || null;
       const envStreamingEnabled = 
         process.env.EXPO_PUBLIC_AI_STREAMING_ENABLED === 'true' || 
         process.env.EXPO_PUBLIC_ENABLE_AI_STREAMING === 'true';
@@ -2109,6 +2226,29 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, [sendMessageInternal]);
 
+  const stopVoiceRecording = useCallback(async () => {
+    if (!voiceSessionRef.current) {
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      await voiceSessionRef.current.stop();
+    } catch (error) {
+      console.error('[useDashAssistant] Failed to stop voice session:', error);
+    }
+
+    if (isFreeTier && voiceInputStartAtRef.current) {
+      const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
+      await consumeVoiceBudget(deltaMs);
+      voiceInputStartAtRef.current = null;
+    }
+
+    setIsRecording(false);
+    setPartialTranscript('');
+    voiceSessionRef.current = null;
+  }, [consumeVoiceBudget, isFreeTier]);
+
   // Public send message
   const sendMessage = useCallback(async (text: string = inputText.trim()) => {
     // If voice capture is active, stop listening before sending.
@@ -2192,29 +2332,6 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
   // Attachment handlers
   // Attachment functions delegated to dashAttachments hook
-
-  const stopVoiceRecording = useCallback(async () => {
-    if (!voiceSessionRef.current) {
-      setIsRecording(false);
-      return;
-    }
-
-    try {
-      await voiceSessionRef.current.stop();
-    } catch (error) {
-      console.error('[useDashAssistant] Failed to stop voice session:', error);
-    }
-
-    if (isFreeTier && voiceInputStartAtRef.current) {
-      const deltaMs = Math.max(0, Date.now() - voiceInputStartAtRef.current);
-      await consumeVoiceBudget(deltaMs);
-      voiceInputStartAtRef.current = null;
-    }
-
-    setIsRecording(false);
-    setPartialTranscript('');
-    voiceSessionRef.current = null;
-  }, [consumeVoiceBudget, isFreeTier]);
 
   // Handle voice input mic press - START/STOP toggle
   const handleInputMicPress = useCallback(async () => {
@@ -2486,6 +2603,61 @@ You can also use text input to chat with Dash.`;
       });
     }
   }, [dashInstance, dashAttachments, isRecording, showAlert, stopVoiceRecording, persistConversationSnapshot]);
+
+  const runTool = useCallback(
+    async (toolName: string, params: Record<string, any>) => {
+      const tool = ToolRegistry.getTool(toolName);
+      const label = tool?.name || toolName;
+
+      if (!tool) {
+        showAlert({
+          title: 'Tool Not Found',
+          message: `The tool "${toolName}" is not available right now.`,
+          type: 'warning',
+          icon: 'alert-circle-outline',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        return;
+      }
+
+      let supabaseClient: any = null;
+      try {
+        supabaseClient = assertSupabase();
+      } catch {}
+
+      const context = {
+        profile,
+        user,
+        supabase: supabaseClient,
+      };
+
+      const execution = await ToolRegistry.execute(toolName, params, context);
+      const content = formatToolResultMessage(label, execution);
+
+      const toolMessage: DashMessage = {
+        id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'assistant',
+        content,
+        timestamp: Date.now(),
+        metadata: {
+          tool_name: toolName,
+          tool_result: execution,
+        },
+      };
+
+      setMessages((prev) => [...prev, toolMessage]);
+
+      const convId = dashInstance?.getCurrentConversationId?.();
+      if (dashInstance && convId) {
+        try {
+          await dashInstance.addMessageToConversation(convId, toolMessage);
+        } catch (error) {
+          console.warn('[useDashAssistant] Failed to persist tool message:', error);
+        }
+      }
+    },
+    [dashInstance, profile, user, showAlert]
+  );
 
   // Initialize Dash AI
   useEffect(() => {
@@ -2766,6 +2938,7 @@ You can also use text input to chat with Dash.`;
     handleInputMicPress,
     stopVoiceRecording,
     startNewConversation,
+    runTool,
     
     // Helpers
     extractFollowUps,

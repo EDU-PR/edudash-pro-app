@@ -10,7 +10,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { Alert } from 'react-native';
 import type { DashMessage } from '@/services/dash-ai/types';
-import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
+import type { DashAIClient } from '@/services/dash-ai/DashAIClient';
 import type { AIModelId } from '@/lib/ai/models';
 import { useAIModelSelection } from '@/hooks/useAIModelSelection';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
@@ -39,8 +39,8 @@ export interface UseDashAIReturn {
   checkQuota: (feature: AIQuotaFeature) => Promise<boolean>;
   
   // Instance
-  dashInstance: IDashAIAssistant | null;
-  initializeDash: () => Promise<void>;
+  dashInstance: DashAIClient | null;
+  initializeDash: () => Promise<DashAIClient | null>;
 }
 
 interface UseDashAIOptions {
@@ -55,9 +55,9 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
   
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<'uploading' | 'analyzing' | 'thinking' | 'responding' | null>(null);
-  const [dashInstance, setDashInstance] = useState<IDashAIAssistant | null>(null);
+  const [dashInstance, setDashInstance] = useState<DashAIClient | null>(null);
   
-  const { selectedModel, setSelectedModel, models } = useAIModelSelection();
+  const { selectedModel, setSelectedModel } = useAIModelSelection();
   
   // Memoize system prompt to avoid rebuilding on every render
   const systemPromptCache = useRef<Map<string, string>>(new Map());
@@ -70,14 +70,14 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
       userId,
       role: profile?.role,
       grade: context?.grade,
-      subject: context?.subject,
+      subject: context?.subject || context?.subjects?.[0],
     });
     
     if (systemPromptCache.current.has(cacheKey)) {
       return systemPromptCache.current.get(cacheKey)!;
     }
     
-    const prompt = buildIntelligentSystemPrompt(profile, context);
+    const prompt = buildIntelligentSystemPrompt({ learner: context });
     systemPromptCache.current.set(cacheKey, prompt);
     
     // Limit cache size to 10 entries
@@ -96,18 +96,11 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
     if (!userId || !profile) return false;
     
     try {
-      const hasQuota = await checkAIQuota({
-        userId,
-        feature,
-        tier: tier || 'free',
-        organizationId: profile.organization_id,
-      });
-      
-      if (!hasQuota) {
-        showQuotaExceededAlert(feature);
+      const quotaCheck = await checkAIQuota(feature, userId);
+      if (!quotaCheck.allowed) {
+        showQuotaExceededAlert(feature, quotaCheck.quotaInfo);
       }
-      
-      return hasQuota;
+      return quotaCheck.allowed;
     } catch (error) {
       logger.error('[DashAI] Quota check failed', { error });
       return false;
@@ -117,8 +110,8 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
   /**
    * Initialize Dash AI instance (lazy loaded)
    */
-  const initializeDash = useCallback(async () => {
-    if (dashInstance) return;
+  const initializeDash = useCallback(async (): Promise<DashAIClient | null> => {
+    if (dashInstance) return dashInstance;
     
     try {
       // Lazy import AI client to reduce initial bundle size
@@ -133,9 +126,11 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
       
       setDashInstance(instance);
       logger.info('[DashAI] Instance initialized');
+      return instance;
     } catch (error) {
       logger.error('[DashAI] Failed to initialize', { error });
       Alert.alert('Error', 'Failed to initialize AI assistant. Please try again.');
+      return null;
     }
   }, [dashInstance, profile]);
 
@@ -150,13 +145,11 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
       onStream?: (chunk: string) => void;
     }
   ): Promise<string | null> => {
-    if (!dashInstance) {
-      await initializeDash();
-      if (!dashInstance) return null;
-    }
+    const instance = dashInstance || (await initializeDash());
+    if (!instance) return null;
     
     // Check quota
-    const hasQuota = await checkQuota('chat');
+    const hasQuota = await checkQuota('homework_help');
     if (!hasQuota) return null;
     
     setIsLoading(true);

@@ -22,8 +22,9 @@ type PendingHomework = {
   due_date: string | null;
   due_date_offset_days: number | null;
   class_id: string | null;
+  teacher_id?: string | null;
   class?: { name?: string | null } | null;
-  teacher?: { first_name?: string | null; last_name?: string | null; email?: string | null; name?: string | null } | null;
+  teacher?: { email?: string | null; name?: string | null } | null;
   status: string | null;
 };
 
@@ -64,16 +65,41 @@ export default function PrincipalHomeworkApprovalsScreen() {
           due_date,
           due_date_offset_days,
           class_id,
+          teacher_id,
           status,
-          class:classes(name),
-          teacher:users!homework_assignments_teacher_id_fkey(first_name,last_name,email,name)
+          class:classes(name)
         `)
         .eq('preschool_id', schoolId)
         .eq('is_published', false)
         .eq('status', 'draft')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setItems((data || []) as PendingHomework[]);
+
+      const rows = (data || []) as PendingHomework[];
+      const teacherIds = Array.from(new Set(rows.map((row) => row.teacher_id).filter(Boolean))) as string[];
+      let teacherMap = new Map<string, PendingHomework['teacher']>();
+
+      if (teacherIds.length > 0) {
+        const { data: teachers, error: teachersError } = await assertSupabase()
+          .from('user_profiles_with_tier')
+          .select('id, name, email')
+          .in('id', teacherIds);
+        if (!teachersError && teachers) {
+          teacherMap = new Map(
+            teachers.map((teacher) => [
+              teacher.id as string,
+              { name: teacher.name ?? null, email: teacher.email ?? null },
+            ])
+          );
+        }
+      }
+
+      setItems(
+        rows.map((row) => ({
+          ...row,
+          teacher: row.teacher_id ? teacherMap.get(row.teacher_id) || row.teacher : row.teacher,
+        }))
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load approvals.';
       showAlert({ title: 'Unable to load', message, buttons: [{ text: 'OK' }] });
@@ -176,10 +202,7 @@ export default function PrincipalHomeworkApprovalsScreen() {
   };
 
   const getTeacherLabel = (item: PendingHomework) => {
-    const first = item.teacher?.first_name || '';
-    const last = item.teacher?.last_name || '';
-    const name = `${first} ${last}`.trim() || item.teacher?.name || '';
-    return name || item.teacher?.email || 'Teacher';
+    return item.teacher?.name || item.teacher?.email || 'Teacher';
   };
 
   return (

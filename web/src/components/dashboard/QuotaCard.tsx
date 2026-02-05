@@ -12,7 +12,7 @@ interface QuotaCardProps {
 interface TierLimits {
   exams_per_month: number;
   explanations_per_month: number;
-  chat_messages_per_day: number;
+  chat_messages_per_month: number;
 }
 
 // Tier limits from database configuration (aligned with tier_name_aligned enum)
@@ -20,52 +20,52 @@ const TIER_LIMITS: Record<string, TierLimits> = {
   free: {
     exams_per_month: 70, // 10 per week × 7 days/week × 4 weeks ≈ 70/month
     explanations_per_month: 1500, // 50 per day × 30 days
-    chat_messages_per_day: 100,
+    chat_messages_per_month: 300,
   },
   trial: {
     exams_per_month: 10,
     explanations_per_month: 20,
-    chat_messages_per_day: 50,
+    chat_messages_per_month: 1500,
   },
   parent_starter: {
     exams_per_month: 30,
     explanations_per_month: 100,
-    chat_messages_per_day: 200,
+    chat_messages_per_month: 6000,
   },
   parent_plus: {
     exams_per_month: 100,
     explanations_per_month: 500,
-    chat_messages_per_day: 1000,
+    chat_messages_per_month: 30000,
   },
   teacher_starter: {
     exams_per_month: 50,
     explanations_per_month: 200,
-    chat_messages_per_day: 300,
+    chat_messages_per_month: 9000,
   },
   teacher_pro: {
     exams_per_month: 200,
     explanations_per_month: 1000,
-    chat_messages_per_day: 2000,
+    chat_messages_per_month: 60000,
   },
   school_starter: {
     exams_per_month: 500,
     explanations_per_month: 2000,
-    chat_messages_per_day: 5000,
+    chat_messages_per_month: 150000,
   },
   school_premium: {
     exams_per_month: 2000,
     explanations_per_month: 10000,
-    chat_messages_per_day: 20000,
+    chat_messages_per_month: 600000,
   },
   school_pro: {
     exams_per_month: 999999,
     explanations_per_month: 999999,
-    chat_messages_per_day: 999999,
+    chat_messages_per_month: 999999,
   },
   school_enterprise: {
     exams_per_month: 999999,
     explanations_per_month: 999999,
-    chat_messages_per_day: 999999,
+    chat_messages_per_month: 999999,
   },
 };
 
@@ -220,7 +220,7 @@ export function QuotaCard({ userId }: QuotaCardProps) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <MessageSquare size={16} style={{ color: '#10b981' }} />
-            <span>{freeLimits.chat_messages_per_day} chat messages per day</span>
+            <span>{freeLimits.chat_messages_per_month} chat messages per month</span>
           </div>
         </div>
         
@@ -292,9 +292,9 @@ export function QuotaCard({ userId }: QuotaCardProps) {
     {
       icon: MessageSquare,
       label: 'Chat Messages',
-      used: usage.chat_messages_today,
-      limit: limits.chat_messages_per_day,
-      period: 'today',
+      used: usage.chat_messages_this_month ?? usage.chat_messages_today,
+      limit: limits.chat_messages_per_month,
+      period: 'this month',
       color: '#10b981',
     },
   ];

@@ -189,10 +189,21 @@ export default function DashTutorVoiceChat() {
   }, [messages, isLoaded]);
 
   const scrollToBottom = useCallback((animated = true) => {
-    // Use requestAnimationFrame for smoother, more reliable scrolling
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated });
-    });
+    // Multiple strategies for reliable scrolling
+    setTimeout(() => {
+      requestAnimationFrame(() => {
+        // Try native FlashList scrollToEnd
+        listRef.current?.scrollToEnd({ animated });
+        
+        // Fallback: scroll to a very large offset to ensure we hit the bottom
+        setTimeout(() => {
+          listRef.current?.scrollToOffset({
+            offset: 999999,
+            animated: false,
+          });
+        }, animated ? 300 : 0);
+      });
+    }, 50);
   }, []);
 
   useEffect(() => {
@@ -228,6 +239,11 @@ export default function DashTutorVoiceChat() {
     if (preferredLanguage) {
       const name = findLanguageName(preferredLanguage) || preferredLanguage;
       context.push(`\\n**Language:** User prefers ${name}. Always respond in ${name}.`);
+      context.push('\\n**CRITICAL for Voice/Audio:**');
+      context.push('- NEVER add English pronunciation guides like "(tot-SEENS)" or phonetic spellings');
+      context.push('- Write words naturally in the target language only');
+      context.push('- The text-to-speech system will handle pronunciation correctly');
+      context.push('- Example: Write "Totsiens" NOT "Totsiens (tot-SEENS)"');
     }
     
     return context.join('\\n');
@@ -238,10 +254,20 @@ export default function DashTutorVoiceChat() {
     if (!voiceOrbRef.current) return;
     const cleanText = cleanForTTS(text);
     if (!cleanText) return;
+    
+    console.log('[DashTutorVoiceChat] 🔊 Speaking response:', {
+      isVoiceMode: isVoiceModeRef.current,
+      hasVoiceOrb: !!voiceOrbRef.current,
+      preferredLanguage: preferredLanguage,
+      textLength: cleanText.length,
+      textPreview: cleanText.substring(0, 50),
+    });
+    
     try {
       setIsSpeaking(true);
       // Pass preferred language for correct pronunciation (critical for language learning)
       await voiceOrbRef.current.speakText(cleanText, preferredLanguage || undefined);
+      console.log('[DashTutorVoiceChat] ✅ TTS completed');
     } catch (error) {
       console.error('[DashTutorVoiceChat] TTS error:', error);
     } finally {

@@ -492,6 +492,7 @@ export interface DashAttachment {
   storagePath: string;    // Path in bucket
   kind: DashAttachmentKind;
   status: DashAttachmentStatus;
+  uri?: string;           // Local or remote URI (UI previews, uploads)
   previewUri?: string;    // Thumbnail or preview URL
   pageCount?: number;     // For PDFs
   textBytes?: number;     // Extracted text size

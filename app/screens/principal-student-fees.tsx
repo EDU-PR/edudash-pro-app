@@ -50,6 +50,7 @@ interface StudentFee {
   waived_reason?: string;
   waived_at?: string;
   waived_by?: string;
+  paid_date?: string | null;
 }
 
 interface ClassOption {
