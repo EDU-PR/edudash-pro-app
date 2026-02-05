@@ -8,6 +8,8 @@ import { storage } from './storage';
 const expoConfig = Constants.expoConfig?.extra || {};
 const url = expoConfig.EXPO_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const anon = expoConfig.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+export const supabaseUrl = url;
+export const supabaseAnonKey = anon;
 
 // Debug logging to diagnose environment variable loading
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
