@@ -135,6 +135,9 @@ export function useTeacherManagement(
     if (profile?.organization_id) {
       return profile.organization_id as string;
     }
+    if ((profile as any)?.preschool_id) {
+      return (profile as any).preschool_id as string;
+    }
     return user?.user_metadata?.preschool_id || null;
   }, [profile, user]);
 
