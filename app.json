@@ -3,8 +3,8 @@
     "name": "EduDashPro",
     "slug": "edupro-final",
     "owner": "dash-t",
-    "version": "1.0.28",
-    "runtimeVersion": "1.0.26",
+    "version": "1.0.29",
+    "runtimeVersion": "1.0.23",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -73,7 +73,7 @@
       "blockedPermissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "versionCode": 33,
+      "versionCode": 35,
       "intentFilters": [
         {
           "action": "VIEW",
