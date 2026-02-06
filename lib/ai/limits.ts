@@ -2,18 +2,30 @@ import { assertSupabase } from '@/lib/supabase'
 import { getCombinedUsage, type AIUsageRecord } from '@/lib/ai/usage'
 import { getOrgType, canUseAllocation, type OrgType } from '@/lib/subscriptionRules'
 import { getDefaultModels } from '@/lib/ai/models'
+import {
+  type CapabilityTier,
+  getCapabilityTier,
+  normalizeTierName,
+} from '@/lib/tiers'
 
 export type AIQuotaFeature = 'lesson_generation' | 'grading_assistance' | 'homework_help' | 'transcription'
-export type Tier = 'free' | 'parent_starter' | 'parent_plus' | 'private_teacher' | 'pro' | 'enterprise'
+
+/**
+ * Tier type for quota enforcement.
+ * Re-exported from the canonical tier system in `@/lib/tiers`.
+ */
+export type Tier = CapabilityTier
 
 export type QuotaMap = Record<AIQuotaFeature, number>
 
-const DEFAULT_MONTHLY_QUOTAS: Record<Tier, QuotaMap> = {
-  free: { lesson_generation: 5, grading_assistance: 5, homework_help: 300, transcription: 60 }, // ~30 minutes of voice
-  parent_starter: { lesson_generation: 0, grading_assistance: 0, homework_help: 30, transcription: 120 }, // ~60 minutes
-  parent_plus: { lesson_generation: 0, grading_assistance: 0, homework_help: 100, transcription: 300 }, // ~2.5 hours
-  private_teacher: { lesson_generation: 20, grading_assistance: 20, homework_help: 100, transcription: 600 }, // ~5 hours
-  pro: { lesson_generation: 50, grading_assistance: 100, homework_help: 300, transcription: 1800 }, // ~15 hours
+/**
+ * Default monthly quotas keyed by CapabilityTier.
+ * Aligned with TIER_QUOTAS in `@/lib/tiers` for the shared fields.
+ */
+const DEFAULT_MONTHLY_QUOTAS: Record<CapabilityTier, QuotaMap> = {
+  free: { lesson_generation: 5, grading_assistance: 5, homework_help: 300, transcription: 60 },       // ~30 minutes of voice
+  starter: { lesson_generation: 10, grading_assistance: 10, homework_help: 30, transcription: 120 },   // ~60 minutes
+  premium: { lesson_generation: 50, grading_assistance: 100, homework_help: 100, transcription: 300 },  // ~2.5 hours
   enterprise: { lesson_generation: 5000, grading_assistance: 10000, homework_help: 30000, transcription: 36000 }, // ~300 hours
 }
 
@@ -27,7 +39,7 @@ export type EffectiveLimits = {
   canOrgAllocate: boolean
 }
 
-async function getUserTier(): Promise<Tier> {
+async function getUserTier(): Promise<CapabilityTier> {
   try {
     const client = assertSupabase()
     const { data } = await client.auth.getUser()
@@ -35,7 +47,7 @@ async function getUserTier(): Promise<Tier> {
     
     // First try user_metadata (fastest)
     const metaTier = String((data?.user?.user_metadata as any)?.subscription_tier || '').toLowerCase()
-    const normalizedMetaTier = normalizeTierString(metaTier)
+    const normalizedMetaTier = getCapabilityTier(normalizeTierName(metaTier))
     if (normalizedMetaTier !== 'free') {
       return normalizedMetaTier
     }
@@ -49,7 +61,7 @@ async function getUserTier(): Promise<Tier> {
         .maybeSingle()
       
       if (profile?.subscription_tier) {
-        const profileTier = normalizeTierString(String(profile.subscription_tier).toLowerCase())
+        const profileTier = getCapabilityTier(normalizeTierName(String(profile.subscription_tier).toLowerCase()))
         if (profileTier !== 'free') {
           return profileTier
         }
@@ -65,7 +77,7 @@ async function getUserTier(): Promise<Tier> {
           .maybeSingle()
         
         if (school?.subscription_tier) {
-          return normalizeTierString(String(school.subscription_tier).toLowerCase())
+          return getCapabilityTier(normalizeTierName(String(school.subscription_tier).toLowerCase()))
         }
       }
     }
@@ -74,37 +86,6 @@ async function getUserTier(): Promise<Tier> {
   } catch (err) {
     console.warn('[getUserTier] Error fetching tier:', err)
     return 'free'
-  }
-}
-
-/**
- * Normalize tier string to valid Tier type
- */
-function normalizeTierString(tier: string): Tier {
-  switch (tier) {
-    case 'pro':
-    case 'school_pro':
-      return 'pro'
-    case 'enterprise':
-    case 'school_enterprise':
-      return 'enterprise'
-    case 'parent_starter':
-    case 'parent-starter':
-      return 'parent_starter'
-    case 'parent_plus':
-    case 'parent-plus':
-      return 'parent_plus'
-    case 'private_teacher':
-    case 'private-teacher':
-      return 'private_teacher'
-    case 'school_premium':
-    case 'premium':
-      return 'pro' // Map school_premium to 'pro' tier for quota purposes
-    case 'school_starter':
-    case 'starter':
-      return 'free' // school_starter gets free tier quotas (can be adjusted)
-    default:
-      return 'free'
   }
 }
 

@@ -122,11 +122,15 @@ async function buildFallbackProfileFromSession(
     // Fallback: if profiles.id != auth uid, try auth_user_id column
     if (!dbProfile?.id) {
       try {
-        const { data: altProfile } = await assertSupabase()
-          .from('profiles')
-          .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
+        const altResult: any = await Promise.race([
+          assertSupabase()
+            .from('profiles')
+            .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
+            .eq('auth_user_id', user.id)
+            .maybeSingle(),
+          new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+        ]);
+        const altProfile = altResult?.data ?? altResult ?? null;
         if (altProfile?.id) {
           dbProfile = altProfile;
         }
@@ -199,6 +203,8 @@ async function buildFallbackProfileFromSession(
     `${firstName} ${lastName}`.trim() ||
     undefined;
   // Best-effort: if org is missing, try to resolve from organization_members
+  // All queries have 2s timeouts to prevent sign-in hang
+  const FALLBACK_QUERY_TIMEOUT = 2000;
   if (!organizationId) {
     try {
       const candidateUserIds = new Set<string>();
@@ -206,11 +212,11 @@ async function buildFallbackProfileFromSession(
 
       // If profiles.id differs from auth uid, include it as a lookup key.
       try {
-        const { data: profileRow } = await assertSupabase()
-          .from('profiles')
-          .select('id')
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
+        const profileRowResult: any = await Promise.race([
+          assertSupabase().from('profiles').select('id').eq('auth_user_id', user.id).maybeSingle(),
+          new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
+        ]);
+        const profileRow = profileRowResult?.data ?? profileRowResult;
         if (profileRow?.id) {
           candidateUserIds.add(profileRow.id);
         }
@@ -218,30 +224,19 @@ async function buildFallbackProfileFromSession(
         // non-fatal
       }
 
-      const { data: membership } = await assertSupabase()
-        .from('organization_members')
-        .select('organization_id')
-        .in('user_id', Array.from(candidateUserIds))
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const membershipResult: any = await Promise.race([
+        assertSupabase()
+          .from('organization_members')
+          .select('organization_id')
+          .in('user_id', Array.from(candidateUserIds))
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
+      ]);
+      const membership = membershipResult?.data ?? membershipResult;
       if (membership?.organization_id) {
         organizationId = membership.organization_id;
-        try {
-          const { data: preschool } = await assertSupabase()
-            .from('preschools')
-            .select('name')
-            .eq('id', organizationId)
-            .maybeSingle();
-          const { data: org } = await assertSupabase()
-            .from('organizations')
-            .select('name')
-            .eq('id', organizationId)
-            .maybeSingle();
-          organizationName = organizationName || preschool?.name || org?.name;
-        } catch {
-          // non-fatal
-        }
       }
     } catch {
       // non-fatal
@@ -251,19 +246,19 @@ async function buildFallbackProfileFromSession(
   // Best-effort: if org ID exists but org name is missing, resolve from DB
   if (organizationId && !organizationName) {
     try {
-      const { data: preschool } = await assertSupabase()
-        .from('preschools')
-        .select('name')
-        .eq('id', organizationId)
-        .maybeSingle();
+      const preschoolResult: any = await Promise.race([
+        assertSupabase().from('preschools').select('name').eq('id', organizationId).maybeSingle(),
+        new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
+      ]);
+      const preschool = preschoolResult?.data ?? preschoolResult;
       if (preschool?.name) {
         organizationName = preschool.name;
       } else {
-        const { data: org } = await assertSupabase()
-          .from('organizations')
-          .select('name')
-          .eq('id', organizationId)
-          .maybeSingle();
+        const orgResult: any = await Promise.race([
+          assertSupabase().from('organizations').select('name').eq('id', organizationId).maybeSingle(),
+          new Promise((resolve) => setTimeout(() => resolve(null), FALLBACK_QUERY_TIMEOUT)),
+        ]);
+        const org = orgResult?.data ?? orgResult;
         if (org?.name) {
           organizationName = org.name;
         }
@@ -363,6 +358,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (fallbackErr) {
           console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+        }
+      }
+      // EMERGENCY: If everything else failed, build from whatever user info we have
+      if (!enhancedProfile) {
+        console.warn('[AuthContext] fetchProfile: ALL resolution failed — building emergency profile');
+        try {
+          const { data: { user: authUser } } = await assertSupabase().auth.getUser();
+          const u = authUser || { id: userId } as any;
+          const meta = (u.user_metadata || {}) as Record<string, any>;
+          const appMeta = (u.app_metadata || {}) as Record<string, any>;
+          enhancedProfile = toEnhancedProfile({
+            id: userId,
+            email: u.email || '',
+            role: meta.role || appMeta.role || 'parent',
+            first_name: meta.first_name || meta.given_name || '',
+            last_name: meta.last_name || meta.family_name || '',
+            full_name: meta.full_name || meta.name || '',
+            organization_id: meta.organization_id || meta.preschool_id || null,
+            organization_name: meta.organization_name || null,
+            seat_status: 'active',
+            capabilities: [],
+          });
+        } catch (emergencyErr) {
+          console.warn('[AuthContext] Emergency profile build failed:', emergencyErr);
         }
       }
       setProfile(enhancedProfile);
@@ -497,7 +516,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const { data: { user: authUser } } = await assertSupabase().auth.getUser();
             if (authUser?.id === userId) {
-              enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
+              const FALLBACK_TIMEOUT_MS = 5000;
+              enhancedProfile = await Promise.race([
+                buildFallbackProfileFromSession(authUser, profile),
+                new Promise<null>((resolve) => setTimeout(() => {
+                  console.warn('[AuthContext] buildFallbackProfileFromSession timed out after 5s (boot)');
+                  resolve(null);
+                }, FALLBACK_TIMEOUT_MS)),
+              ]) as EnhancedUserProfile | null;
             }
           } catch (fallbackErr) {
             console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
@@ -513,6 +539,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (storedErr) {
             console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+          }
+        }
+        // EMERGENCY: Build minimal profile from auth user metadata so user is never stranded
+        if (!enhancedProfile) {
+          console.warn('[AuthContext] fetchProfileLocal: ALL resolution failed — building emergency profile for', userId);
+          try {
+            const { data: { user: authUser } } = await assertSupabase().auth.getUser();
+            const u = authUser || { id: userId } as any;
+            const meta = (u.user_metadata || {}) as Record<string, any>;
+            const appMeta = (u.app_metadata || {}) as Record<string, any>;
+            enhancedProfile = toEnhancedProfile({
+              id: userId,
+              email: u.email || '',
+              role: meta.role || appMeta.role || 'parent',
+              first_name: meta.first_name || meta.given_name || '',
+              last_name: meta.last_name || meta.family_name || '',
+              full_name: meta.full_name || meta.name || '',
+              organization_id: meta.organization_id || meta.preschool_id || null,
+              organization_name: meta.organization_name || null,
+              seat_status: 'active',
+              capabilities: [],
+            });
+          } catch (emergencyErr) {
+            console.warn('[AuthContext] Emergency profile build in fetchProfileLocal failed:', emergencyErr);
           }
         }
         if (mounted) {
@@ -770,6 +820,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             let enhancedProfile: EnhancedUserProfile | null = null;
             let usedFallback = false;
             let profileSource: 'rpc' | 'stored' | 'fallback' = 'rpc';
+            let needsOrgNameRefresh = false;
 
             if (mounted) {
               setProfileLoading(true);
@@ -797,9 +848,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // outdated role (e.g. role changed from parent → teacher in DB).
               if (!enhancedProfile) {
                 try {
-                  enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
-                  profileSource = 'fallback';
-                  authDebug('profile.fallback', { userId: s.user.id });
+                  const FALLBACK_TIMEOUT_MS = 5000;
+                  const fallbackResult = await Promise.race([
+                    buildFallbackProfileFromSession(s.user, safeExistingProfile),
+                    new Promise<null>((resolve) => setTimeout(() => {
+                      console.warn('[AuthContext] buildFallbackProfileFromSession timed out after 5s');
+                      resolve(null);
+                    }, FALLBACK_TIMEOUT_MS)),
+                  ]);
+                  if (fallbackResult) {
+                    enhancedProfile = fallbackResult;
+                    profileSource = 'fallback';
+                    authDebug('profile.fallback', { userId: s.user.id });
+                  }
                 } catch (fallbackErr) {
                   console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
                   enhancedProfile = null;
@@ -820,6 +881,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
+              // EMERGENCY FALLBACK: If ALL profile resolution paths failed,
+              // create a minimal profile from the Supabase user object so
+              // routeAfterLogin still fires and the user is never stranded
+              // on the sign-in screen.
+              if (!enhancedProfile && s.user) {
+                console.warn('[AuthContext] ALL profile resolution failed — creating emergency minimal profile from user metadata');
+                const userMeta = (s.user.user_metadata || {}) as Record<string, any>;
+                const appMeta = (s.user.app_metadata || {}) as Record<string, any>;
+                const emergencyRole = (userMeta.role || appMeta.role || 'parent') as string;
+                const emergencyProfile = {
+                  id: s.user.id,
+                  email: s.user.email || '',
+                  role: emergencyRole,
+                  first_name: userMeta.first_name || userMeta.given_name || '',
+                  last_name: userMeta.last_name || userMeta.family_name || '',
+                  full_name: userMeta.full_name || userMeta.name || '',
+                  organization_id: userMeta.organization_id || userMeta.preschool_id || null,
+                  organization_name: userMeta.organization_name || null,
+                  seat_status: 'active',
+                  capabilities: [],
+                };
+                enhancedProfile = toEnhancedProfile(emergencyProfile);
+                profileSource = 'fallback';
+                usedFallback = true;
+              }
+
               usedFallback = profileSource !== 'rpc';
 
               if (mounted && enhancedProfile) {
@@ -831,6 +918,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     organization_name: enhancedProfile.organization_name,
                     preschool_id: (enhancedProfile as any)?.preschool_id,
                     membership: enhancedProfile.organization_membership,
+                  });
+                }
+
+                const resolvedOrgName =
+                  enhancedProfile.organization_name ||
+                  enhancedProfile.organization_membership?.organization_name ||
+                  '';
+                needsOrgNameRefresh =
+                  !resolvedOrgName ||
+                  String(resolvedOrgName).trim().length === 0 ||
+                  String(resolvedOrgName).trim().toLowerCase() === 'unknown';
+                if (needsOrgNameRefresh) {
+                  logger.warn('[AuthContext] Organization name missing after sign-in', {
+                    user_id: s.user.id,
+                    organization_id: enhancedProfile.organization_id,
+                    profile_source: profileSource,
                   });
                 }
                 
@@ -856,6 +959,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // If we set profileLoading=false first, useAuthGuard sees profile loaded + user on auth route
               // and fires its own simpler navigation, racing with routeAfterLogin below.
               // By routing first, we ensure the correct route is used (determineUserRoute has full SOA/K12 logic).
+              
+              // SAFETY NET: If enhancedProfile is STILL null (e.g. catch block ran),
+              // build an absolute-minimum profile so the user is never stranded.
+              if (!enhancedProfile && mounted && s?.user) {
+                console.warn('[AuthContext][FINALLY] enhancedProfile is null — building last-resort profile');
+                try {
+                  const meta = (s.user.user_metadata || {}) as Record<string, any>;
+                  const appMeta = (s.user.app_metadata || {}) as Record<string, any>;
+                  enhancedProfile = toEnhancedProfile({
+                    id: s.user.id,
+                    email: s.user.email || '',
+                    role: meta.role || appMeta.role || 'parent',
+                    first_name: meta.first_name || '',
+                    last_name: meta.last_name || '',
+                    full_name: meta.full_name || meta.name || '',
+                    organization_id: meta.organization_id || meta.preschool_id || null,
+                    organization_name: null,
+                    seat_status: 'active',
+                    capabilities: [],
+                  });
+                  if (enhancedProfile) {
+                    setProfile(enhancedProfile);
+                    setPermissions(createPermissionChecker(enhancedProfile));
+                  }
+                } catch {
+                  console.error('[AuthContext][FINALLY] Last-resort profile build failed');
+                }
+              }
+              
               if (mounted && enhancedProfile) {
                 // Check if this is a password recovery session
                 const globalRecoveryFlag = isPasswordRecoveryInProgress();
@@ -904,6 +1036,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
               if (mounted) {
                 setProfileLoading(false);
+              }
+
+              // Force a profile refresh shortly after login if org name is missing.
+              // This helps resolve "My School" headers caused by timing or RPC fallbacks.
+              if (mounted && needsOrgNameRefresh && s?.user?.id) {
+                const refreshUserId = s.user.id;
+                setTimeout(async () => {
+                  if (!mounted || lastUserIdRef.current !== refreshUserId) return;
+                  setProfileLoading(true);
+                  try {
+                    const refreshed = await fetchEnhancedUserProfile(refreshUserId, s);
+                    if (refreshed && mounted && lastUserIdRef.current === refreshUserId) {
+                      setProfile(refreshed);
+                      setPermissions(createPermissionChecker(refreshed));
+                      const refreshedOrgName =
+                        refreshed.organization_name ||
+                        refreshed.organization_membership?.organization_name ||
+                        '';
+                      if (!refreshedOrgName || String(refreshedOrgName).trim().toLowerCase() === 'unknown') {
+                        logger.warn('[AuthContext] Org name still missing after forced refresh', {
+                          user_id: refreshUserId,
+                          organization_id: refreshed.organization_id,
+                        });
+                      } else {
+                        logger.info('[AuthContext] Org name resolved after forced refresh', {
+                          user_id: refreshUserId,
+                          organization_id: refreshed.organization_id,
+                          organization_name: refreshedOrgName,
+                        });
+                      }
+                    }
+                  } catch (refreshErr) {
+                    logger.warn('[AuthContext] Forced profile refresh failed', refreshErr);
+                  } finally {
+                    if (mounted) {
+                      setProfileLoading(false);
+                    }
+                  }
+                }, 1500);
               }
             }
 

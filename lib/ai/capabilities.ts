@@ -15,11 +15,13 @@
  * - [ ] Quota tracking per capability (e.g., API calls/month)
  */
 
+import type { CapabilityTier } from '@/lib/tiers';
+
 /**
- * Available subscription tiers in ascending order of features
- * Matches database subscription_tier enum
+ * Available subscription tiers in ascending order of features.
+ * Re-exported from the canonical tier system in `@/lib/tiers`.
  */
-export type Tier = 'free' | 'starter' | 'premium' | 'enterprise';
+export type Tier = CapabilityTier;
 
 /**
  * Granular capability identifiers for feature gating

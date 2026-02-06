@@ -71,6 +71,16 @@ import { checkAndRefreshTokenIfNeeded, registerPushDevice } from '../lib/notific
 
 patchNativeEventEmitterModules();
 
+// Stable screen options — memoized outside component to prevent new object references
+// on every render (which triggers Stack internal setState → re-render → infinite loop).
+const STACK_SCREEN_OPTIONS = {
+  headerShown: false as const,
+  presentation: 'card' as const,
+  animationTypeForReplace: 'push' as const,
+  contentStyle: { backgroundColor: 'transparent' },
+};
+const CONTENT_CONTAINER_STYLE = { paddingBottom: 0 };
+
 // Inner component with access to AuthContext
 function LayoutContent() {
   const pathname = usePathname();
@@ -180,15 +190,8 @@ function LayoutContent() {
       {Platform.OS !== 'web' && <DashWakeWordListener />}
       
       {/* Main content area - leave space for bottom nav */}
-      <View style={[styles.contentContainer, { paddingBottom: 0 }]}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            presentation: 'card',
-            animationTypeForReplace: 'push',
-            contentStyle: { backgroundColor: 'transparent' },
-          }}
-        >
+      <View style={[styles.contentContainer, CONTENT_CONTAINER_STYLE]}>
+        <Stack screenOptions={STACK_SCREEN_OPTIONS}>
           {/* Let Expo Router auto-discover screens */}
         </Stack>
       </View>

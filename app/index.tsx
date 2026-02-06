@@ -23,7 +23,7 @@ const defaultTheme = {
  * - Authenticated users: Redirect to appropriate dashboard
  */
 export default function Index() {
-  const { session, user, profile, loading } = useAuth();
+  const { session, user, profile, loading, profileLoading } = useAuth();
   // Safe theme access with fallback
   let theme = defaultTheme;
   try {
@@ -41,6 +41,11 @@ export default function Index() {
     
     // Prevent duplicate navigation
     if (hasNavigatedRef.current) return;
+    
+    // If AuthContext is still resolving the profile after sign-in,
+    // let it handle routing via SIGNED_IN handler — don't compete.
+    // This prevents Index + AuthContext from both calling routeAfterLogin.
+    if (session && user && !profile && profileLoading) return;
     
     // Native app: Always skip landing page
     if (isNative) {
@@ -132,7 +137,7 @@ export default function Index() {
       }
     }
     // Web + not authenticated: Show landing page (default render)
-  }, [session, user, profile, loading, isNative]);
+  }, [session, user, profile, loading, isNative, profileLoading]);
 
   // Native: Show loading indicator while redirecting (NEVER show landing page)
   if (isNative) {

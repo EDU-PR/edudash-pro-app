@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { calculateAge } from '@/lib/date-utils';
@@ -150,22 +151,7 @@ export default function K12ParentDashboardScreen() {
   const isStarterTier = tierLower === 'parent_starter' || tierLower === 'starter';
   const showGreetingUpgrade = tierLower === 'free' || isStarterTier;
 
-  const normalizeTierForCapabilities = (value?: string | null): Tier => {
-    const raw = String(value || 'free').toLowerCase().replace(/-/g, '_');
-    if (raw === 'trial') return 'starter';
-    if (raw === 'parent_starter' || raw === 'teacher_starter' || raw === 'school_starter' || raw === 'starter' || raw === 'basic') {
-      return 'starter';
-    }
-    if (raw === 'parent_plus' || raw === 'teacher_pro' || raw === 'school_premium' || raw === 'school_pro' || raw === 'premium' || raw === 'pro') {
-      return 'premium';
-    }
-    if (raw === 'school_enterprise' || raw === 'enterprise') {
-      return 'enterprise';
-    }
-    return 'free';
-  };
-
-  const tierForCaps = normalizeTierForCapabilities(tier);
+  const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
   const canShowExamPrep = hasExamEligibleChild;
   const canUseExamPrep = flags.exam_prep_enabled && hasCapability(tierForCaps, 'exam.practice') && canShowExamPrep;
   const requiredExamTier = getRequiredTier('exam.practice');

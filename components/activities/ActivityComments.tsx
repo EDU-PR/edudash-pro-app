@@ -10,11 +10,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ActivityCommentsProps {
@@ -37,6 +38,7 @@ interface Comment {
 
 export function ActivityComments({ activityId, theme, isTeacher = false }: ActivityCommentsProps) {
   const { user } = useAuth();
+  const alert = useAlert();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,7 +107,7 @@ export function ActivityComments({ activityId, theme, isTeacher = false }: Activ
     if (!newComment.trim() || !user?.id) return;
 
     if (newComment.length > 500) {
-      Alert.alert('Comment too long', 'Please keep comments under 500 characters');
+      alert.showWarning('Comment too long', 'Please keep comments under 500 characters');
       return;
     }
 
@@ -139,34 +141,39 @@ export function ActivityComments({ activityId, theme, isTeacher = false }: Activ
       setNewComment('');
     } catch (error) {
       console.error('[ActivityComments] Error posting comment:', error);
-      Alert.alert('Error', 'Failed to post comment');
+      alert.showError('Error', 'Failed to post comment');
     } finally {
       setPosting(false);
     }
   };
 
   const deleteComment = async (commentId: string) => {
-    Alert.alert('Delete Comment', 'Are you sure you want to delete this comment?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const supabase = assertSupabase();
-            const { error } = await supabase
-              .from('activity_comments')
-              .delete()
-              .eq('id', commentId);
+    alert.show(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const supabase = assertSupabase();
+              const { error } = await supabase
+                .from('activity_comments')
+                .delete()
+                .eq('id', commentId);
 
-            if (error) throw error;
-          } catch (error) {
-            console.error('[ActivityComments] Error deleting comment:', error);
-            Alert.alert('Error', 'Failed to delete comment');
-          }
+              if (error) throw error;
+            } catch (error) {
+              console.error('[ActivityComments] Error deleting comment:', error);
+              alert.showError('Error', 'Failed to delete comment');
+            }
+          },
         },
-      },
-    ]);
+      ],
+      { type: 'confirm' }
+    );
   };
 
   const editComment = (comment: Comment) => {
@@ -185,7 +192,7 @@ export function ActivityComments({ activityId, theme, isTeacher = false }: Activ
       if (error) throw error;
     } catch (error) {
       console.error('[ActivityComments] Error toggling approval:', error);
-      Alert.alert('Error', 'Failed to update comment status');
+      alert.showError('Error', 'Failed to update comment status');
     }
   };
 

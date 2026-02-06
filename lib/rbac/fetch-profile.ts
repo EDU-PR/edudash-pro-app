@@ -362,7 +362,17 @@ export async function fetchEnhancedUserProfile(
       email: profile.email,
       finalOrgId,
       source: orgIdSource,
+      organizationName: org?.name || null,
     });
+    if (!org?.name) {
+      warn('[Profile] Organization name unresolved after resolution', {
+        userId: profile.id,
+        resolvedOrgId,
+        profileOrganizationId: (profile as any)?.organization_id,
+        profilePreschoolId: (profile as any)?.preschool_id,
+        memberOrganizationId: orgMember?.organization_id || null,
+      });
+    }
 
     // Create base profile
     const baseProfile: UserProfile = {

@@ -421,6 +421,149 @@ function buildSseStream(content: string): ReadableStream<Uint8Array> {
   });
 }
 
+/**
+ * Call Anthropic with native SSE streaming.
+ * Returns a TransformStream that pipes Anthropic's SSE events to the client
+ * in a normalised format, and also collects usage/content for post-call logging.
+ */
+function callAnthropicStreaming(
+  messages: Array<JsonRecord>,
+  requestedModel: string | null | undefined,
+  allowedOverride: string[] | undefined,
+  isSuperAdmin: boolean,
+): { stream: ReadableStream<Uint8Array>; meta: Promise<ProviderResponse> } {
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured.');
+
+  const allowed = allowedOverride || parseAllowedModels('ANTHROPIC_ALLOWED_MODELS', DEFAULT_ANTHROPIC_ALLOWED_MODELS);
+  const fallbackModel = DEFAULT_ANTHROPIC_ALLOWED_MODELS[0];
+  const superAdminAllowed = parseAllowedModels('SUPERADMIN_ANTHROPIC_MODELS', DEFAULT_SUPERADMIN_ALLOWED_MODELS);
+  const selectionAllowed = isSuperAdmin ? superAdminAllowed : allowed;
+  const selection = pickAllowedModel(requestedModel || Deno.env.get('ANTHROPIC_MODEL'), selectionAllowed, selectionAllowed[0] || fallbackModel);
+  if (selection.usedFallback) console.warn('[ai-proxy] Anthropic streaming model fallback:', selection.reason);
+  const model = selection.model;
+
+  const systemPrompt = messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT;
+  const encoder = new TextEncoder();
+
+  // Mutable collectors for post-call logging (resolved via metaPromise)
+  let fullContent = '';
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let modelUsed = model;
+  let resolveMetaPromise: (v: ProviderResponse) => void;
+  let rejectMetaPromise: (e: Error) => void;
+  const metaPromise = new Promise<ProviderResponse>((res, rej) => {
+    resolveMetaPromise = res;
+    rejectMetaPromise = rej;
+  });
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            temperature: 0.4,
+            stream: true,
+            messages: messages.filter((m) => m.role !== 'system'),
+            system: systemPrompt,
+          }),
+        });
+
+        if (!response.ok || !response.body) {
+          const errText = await response.text();
+          const errEvent = { type: 'error', error: errText };
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(errEvent)}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+          rejectMetaPromise!(new Error(`Anthropic streaming error: ${response.status} ${errText}`));
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue; // Skip comments & empty lines
+            if (!trimmed.startsWith('data: ')) continue;
+
+            const jsonStr = trimmed.slice(6);
+            if (jsonStr === '[DONE]') continue;
+
+            try {
+              const event = JSON.parse(jsonStr) as JsonRecord;
+              const eventType = event.type as string;
+
+              if (eventType === 'message_start') {
+                const msg = event.message as JsonRecord | undefined;
+                modelUsed = (msg?.model as string) || model;
+                const usage = msg?.usage as JsonRecord | undefined;
+                tokensIn = (usage?.input_tokens as number) || 0;
+              } else if (eventType === 'content_block_delta') {
+                const delta = event.delta as JsonRecord | undefined;
+                const text = (delta?.text as string) || '';
+                if (text) {
+                  fullContent += text;
+                  // Forward to client
+                  const clientEvent = {
+                    type: 'content_block_delta',
+                    delta: { text },
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(clientEvent)}\n\n`));
+                }
+              } else if (eventType === 'message_delta') {
+                const usage = (event as JsonRecord).usage as JsonRecord | undefined;
+                tokensOut = (usage?.output_tokens as number) || 0;
+              }
+              // Skip ping, content_block_start, content_block_stop events
+            } catch {
+              // Skip malformed JSON lines
+            }
+          }
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+        resolveMetaPromise!({
+          content: fullContent,
+          model: modelUsed,
+          usage: { tokens_in: tokensIn, tokens_out: tokensOut },
+        });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errMsg })}\n\n`));
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch { /* controller already closed */ }
+        rejectMetaPromise!(err instanceof Error ? err : new Error(errMsg));
+      }
+    },
+  });
+
+  return { stream, meta: metaPromise };
+}
+
 async function callOpenAI(
   messages: Array<JsonRecord>,
   enableTools: boolean,
@@ -898,6 +1041,61 @@ serve(async (req) => {
     const requestedIsOpenAI = requestedModel ? openaiAllowed.includes(requestedModel) : false;
     const requestedIsAnthropic = requestedModel ? anthropicAllowed.includes(requestedModel) : false;
     const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;
+
+    // ── TRUE STREAMING (Anthropic only, non-tool calls) ──────────────
+    // When the client wants streaming AND we're using Anthropic AND tools are disabled,
+    // use native Anthropic SSE streaming for real-time token delivery.
+    // Tool calls require the full response for follow-up, so they use the post-hoc path.
+    const canTrueStream = wantsStream && hasAnthropic && !enableTools && !shouldPreferOpenAI;
+    if (canTrueStream) {
+      try {
+        const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
+        const { stream, meta } = callAnthropicStreaming(
+          messages,
+          requestedModel,
+          allowedOverride,
+          isSuperAdmin,
+        );
+
+        // Fire-and-forget: log usage after stream completes
+        meta.then(async (providerResponse) => {
+          try {
+            await supabase.rpc('record_ai_usage', {
+              p_user_id: userData.user.id,
+              p_feature_used: normalizeServiceType(payload.service_type),
+              p_model_used: providerResponse.model || 'anthropic',
+              p_tokens_used: (providerResponse.usage?.tokens_in || 0) + (providerResponse.usage?.tokens_out || 0),
+              p_request_tokens: providerResponse.usage?.tokens_in || 0,
+              p_response_tokens: providerResponse.usage?.tokens_out || 0,
+              p_success: true,
+              p_metadata: {
+                scope: payload.scope,
+                organization_id: profile.organization_id || profile.preschool_id || null,
+                streaming: true,
+                request_metadata: payload.metadata || {},
+              },
+            });
+          } catch (usageErr) {
+            console.warn('[ai-proxy] Streaming usage recording failed (non-fatal):', usageErr);
+          }
+        }).catch((streamErr) => {
+          console.warn('[ai-proxy] Streaming meta error (non-fatal):', streamErr);
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        });
+      } catch (streamError) {
+        console.warn('[ai-proxy] True streaming failed, falling back to post-hoc:', streamError);
+        // Fall through to non-streaming path below
+      }
+    }
 
     let providerResponse: ProviderResponse;
     const primaryProvider: 'anthropic' | 'openai' = isSuperAdmin
