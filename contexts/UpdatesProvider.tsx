@@ -149,7 +149,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         content: {
           title: 'Update Ready',
           body: 'Tap to restart and apply the latest version',
-          data: { type: 'update_ready' },
+          data: { type: 'update_ready', forceShow: true },
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
         },
