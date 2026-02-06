@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react';
 import { usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
+import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
 
 /**
@@ -45,9 +46,10 @@ export const useAuthGuard = () => {
       hasNavigated.current = false;
       return;
     }
-    // Don't redirect while loading
+    // Don't redirect while auth is still loading
     if (loading) {
-      hasNavigated.current = false;
+      // NOTE: Do NOT reset hasNavigated here — loading can flip true→false
+      // during the auth flow, and resetting the guard allows duplicate navigation.
       return;
     }
     
@@ -93,6 +95,11 @@ export const useAuthGuard = () => {
     if (user && isAuthRoute) {
       // If profile is still loading, let AuthContext handle routing first
       if (profileLoading) {
+        return;
+      }
+      // If AuthContext's routeAfterLogin already has an active navigation lock,
+      // don't compete — it's already handling the routing.
+      if (isNavigationLocked(user.id)) {
         return;
       }
       // If profile is missing after loading, route to profile gate to avoid auth-route dead ends
@@ -158,9 +165,8 @@ export const useAuthGuard = () => {
       }
     }
     
-    // Reset navigation flag when pathname changes
-    return () => {
-      hasNavigated.current = false;
-    };
+    // NOTE: Do NOT reset hasNavigated in cleanup — it resets on user change (line above).
+    // Resetting on every re-run caused an infinite re-render loop because:
+    // setProfileLoading(false) → effect re-runs → cleanup resets hasNavigated → navigates → pathname changes → loop
   }, [pathname, user, loading, profile?.role, profile?.id, profileLoading, signingOut]);
 };

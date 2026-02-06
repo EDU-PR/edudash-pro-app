@@ -20,6 +20,7 @@ import {
   FREE_VOICE_BUDGET_MS,
 } from '@/lib/dash-ai/voiceBudget';
 import { logger } from '@/lib/logger';
+import { DashVoiceController, type VoiceSettings } from '@/services/modules/DashVoiceController';
 
 export interface UseDashVoiceReturn {
   // State
@@ -64,6 +65,15 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
   const voiceSessionRef = useRef<VoiceSession | null>(null);
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
   const finalTranscriptRef = useRef<string | null>(null);
+  const ttsControllerRef = useRef<DashVoiceController | null>(null);
+
+  /** Lazy-init the TTS controller (singleton per hook instance) */
+  const getTTSController = useCallback((): DashVoiceController => {
+    if (!ttsControllerRef.current) {
+      ttsControllerRef.current = new DashVoiceController();
+    }
+    return ttsControllerRef.current;
+  }, []);
 
   /**
    * Check if user has voice budget
@@ -204,33 +214,73 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
   }, [userId, tier, refreshVoiceBudget]);
 
   /**
-   * Speak text using TTS
+   * Speak text using Azure TTS via tts-proxy Edge Function
    */
   const speak = useCallback(async (text: string, messageId?: string) => {
     if (!voiceEnabled) return;
     
-    // TODO: Implement TTS using expo-speech or native TTS
     setSpeakingMessageId(messageId || null);
     setIsSpeaking(true);
     
-    logger.info('[DashVoice] Speaking', { messageId, textLength: text.length });
+    logger.info('[DashVoice] Speaking via Azure TTS', { messageId, textLength: text.length });
     
-    // Placeholder - implement actual TTS
-    setTimeout(() => {
+    try {
+      const controller = getTTSController();
+      // Build a minimal DashMessage for the controller
+      const message = {
+        id: messageId || `tts-${Date.now()}`,
+        type: 'assistant' as const,
+        content: text,
+        timestamp: new Date(),
+        metadata: {},
+      };
+      const voiceSettings: VoiceSettings = {
+        rate: 0,
+        pitch: 0,
+        language: 'en',
+      };
+      
+      await controller.speakResponse(message as any, voiceSettings, {
+        onStart: () => {
+          setIsSpeaking(true);
+        },
+        onDone: () => {
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+        },
+        onStopped: () => {
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+        },
+        onError: (error) => {
+          logger.error('[DashVoice] TTS error', { error });
+          setIsSpeaking(false);
+          setSpeakingMessageId(null);
+        },
+      });
+    } catch (error) {
+      logger.error('[DashVoice] speak() failed', { error });
       setIsSpeaking(false);
       setSpeakingMessageId(null);
-    }, 2000);
-  }, [voiceEnabled]);
+    }
+  }, [voiceEnabled, getTTSController]);
 
   /**
-   * Stop TTS
+   * Stop TTS playback
    */
   const stopSpeaking = useCallback(() => {
-    // TODO: Implement TTS stop
+    try {
+      const controller = getTTSController();
+      controller.stopSpeaking().catch((err) => {
+        logger.error('[DashVoice] stopSpeaking failed', { error: err });
+      });
+    } catch {
+      // Non-fatal
+    }
     setIsSpeaking(false);
     setSpeakingMessageId(null);
     logger.info('[DashVoice] Speaking stopped');
-  }, []);
+  }, [getTTSController]);
 
   return {
     isRecording,

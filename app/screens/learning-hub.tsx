@@ -12,6 +12,7 @@ import { ChildSwitcher } from '@/components/dashboard/parent';
 import { getLearningHubUsage, incrementLearningHubUsage, type LearningHubUsage } from '@/lib/learningHubUsage';
 import { incrementUsage } from '@/lib/ai/usage';
 
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type TierKey = 'free' | 'starter' | 'plus';
 
@@ -43,10 +44,11 @@ const TIER_LIMITS: Record<TierKey, { lessons: number; activities: number; aiHint
   plus: { lessons: Number.POSITIVE_INFINITY, activities: Number.POSITIVE_INFINITY, aiHints: Number.POSITIVE_INFINITY },
 };
 
+/** Map canonical CapabilityTier to local TierKey for learning-hub gating */
 const normalizeTier = (tierRaw?: string | null): TierKey => {
-  const raw = String(tierRaw || 'free').toLowerCase();
-  if (raw.includes('plus')) return 'plus';
-  if (raw.includes('starter')) return 'starter';
+  const capTier = getCapabilityTier(normalizeTierName(tierRaw || 'free'));
+  if (capTier === 'premium' || capTier === 'enterprise') return 'plus';
+  if (capTier === 'starter') return 'starter';
   return 'free';
 };
 

@@ -9,7 +9,6 @@
 
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'react-native';
 import { SeatService } from '@/lib/services/seatService';
 import { 
   SeatLimits, 
@@ -18,6 +17,7 @@ import {
   AssignSeatParams,
   RevokeSeatParams
 } from '@/lib/types/seats';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 // Query keys for cache management
 export const SEAT_QUERY_KEYS = {
@@ -30,6 +30,7 @@ export const SEAT_QUERY_KEYS = {
  */
 export function useSeatLimits() {
   const queryClient = useQueryClient();
+  const alert = useAlert();
 
   // Fetch current seat limits
   const limitsQuery = useQuery({
@@ -58,9 +59,9 @@ export function useSeatLimits() {
       queryClient.invalidateQueries({ queryKey: SEAT_QUERY_KEYS.seats });
       
       if (data.status === 'assigned') {
-        Alert.alert('Success', 'Teacher seat assigned successfully!');
+        alert.showSuccess('Success', 'Teacher seat assigned successfully!');
       } else if (data.status === 'already_assigned') {
-        Alert.alert('Info', 'Teacher already has an active seat.');
+        alert.show('Info', 'Teacher already has an active seat.', [{ text: 'OK' }], { type: 'info' });
       }
     },
     onError: (error: SeatManagementError) => {
@@ -88,7 +89,7 @@ export function useSeatLimits() {
           message = error.message || 'An unexpected error occurred.';
       }
       
-      Alert.alert(title, message);
+      alert.showError(title, message);
       console.error('Seat assignment error:', error);
     },
   });
@@ -102,9 +103,9 @@ export function useSeatLimits() {
       queryClient.invalidateQueries({ queryKey: SEAT_QUERY_KEYS.seats });
       
       if (data.status === 'revoked') {
-        Alert.alert('Success', 'Teacher seat revoked successfully!');
+        alert.showSuccess('Success', 'Teacher seat revoked successfully!');
       } else if (data.status === 'no_active_seat') {
-        Alert.alert('Info', 'Teacher does not have an active seat.');
+        alert.show('Info', 'Teacher does not have an active seat.', [{ text: 'OK' }], { type: 'info' });
       }
     },
     onError: (error: SeatManagementError) => {
@@ -124,7 +125,7 @@ export function useSeatLimits() {
           message = error.message || 'An unexpected error occurred.';
       }
       
-      Alert.alert(title, message);
+      alert.showError(title, message);
       console.error('Seat revocation error:', error);
     },
   });

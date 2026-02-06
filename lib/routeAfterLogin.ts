@@ -46,7 +46,7 @@ function isK12SchoolType(value: string | null | undefined): boolean {
   return K12_SCHOOL_TYPES.has(String(value).toLowerCase());
 }
 
-function isNavigationLocked(userId: string): boolean {
+export function isNavigationLocked(userId: string): boolean {
   const lockTime = navigationLocks.get(userId);
   // #region agent log
   debugLog('[DEBUG_AGENT] NavLock-CHECK', JSON.stringify({userId,hasLock:!!lockTime,lockAge:lockTime?Date.now()-lockTime:null,lockCount:navigationLocks.size,timestamp:Date.now()}));

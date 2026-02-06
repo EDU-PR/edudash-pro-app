@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, Alert, StyleSheet, Platform } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +11,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface PaymentUploadModalProps {
@@ -44,6 +45,7 @@ export function PaymentUploadModal({
   paymentPurpose = '',
   theme,
 }: PaymentUploadModalProps) {
+  const alert = useAlert();
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [paymentReference, setPaymentReference] = useState(initialReference);
   const [paymentAmount, setPaymentAmount] = useState(initialAmount);
@@ -65,7 +67,11 @@ export function PaymentUploadModal({
   const paymentDateValue = today.toISOString().split('T')[0];
   const lowerPurpose = (paymentPurpose || '').toLowerCase();
   const isUniformPayment = (feeId || '').startsWith('uniform:') || lowerPurpose.includes('uniform');
-  const autoPaymentForMonth = resolveMonthStart(paymentForDate) ?? new Date(today.getFullYear(), today.getMonth(), 1);
+  // Memoize to avoid creating a new Date on every render (which would trigger useEffect loops)
+  const autoPaymentForMonth = React.useMemo(
+    () => resolveMonthStart(paymentForDate) ?? new Date(today.getFullYear(), today.getMonth(), 1),
+    [paymentForDate]
+  );
   const autoMonthLabel = autoPaymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
   const paymentForLabel = paymentForMonth
     ? paymentForMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
@@ -74,20 +80,25 @@ export function PaymentUploadModal({
   const showPaymentForField = !isUniformPayment;
   const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment);
 
+  // Track previous visible state to only reset fields on open transition (false → true),
+  // not on every re-render while modal is open (which caused infinite setState loops).
+  const prevVisibleRef = React.useRef(false);
   React.useEffect(() => {
-    if (visible) {
+    if (visible && !prevVisibleRef.current) {
+      // Modal just opened — reset fields to initial values
       setPaymentReference(initialReference);
       setPaymentAmount(initialAmount);
       const resolvedMonth = resolveMonthStart(paymentForDate);
       setPaymentForMonth(isUniformPayment ? (resolvedMonth ?? autoPaymentForMonth) : resolvedMonth);
     }
+    prevVisibleRef.current = visible;
   }, [visible, initialReference, initialAmount, paymentForDate, isUniformPayment, autoPaymentForMonth]);
 
   const handleImagePicker = async () => {
     try {
       const hasPermission = await ensureImageLibraryPermission();
       if (!hasPermission) {
-        Alert.alert('Permission Required', 'Camera roll permission is required.');
+        alert.showWarning('Permission Required', 'Camera roll permission is required.');
         return;
       }
       
@@ -107,7 +118,7 @@ export function PaymentUploadModal({
         });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to select image');
+      alert.showError('Error', 'Failed to select image');
     }
   };
 
@@ -128,13 +139,13 @@ export function PaymentUploadModal({
         });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to select document');
+      alert.showError('Error', 'Failed to select document');
     }
   };
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedChildId || !userId) {
-      Alert.alert('Error', 'Please select a file first');
+      alert.showError('Error', 'Please select a file first');
       return;
     }
     const effectivePaymentForMonth = paymentForMonth ?? (isUniformPayment ? autoPaymentForMonth : null);
@@ -142,7 +153,7 @@ export function PaymentUploadModal({
       setPaymentForMonth(effectivePaymentForMonth);
     }
     if (!effectivePaymentForMonth) {
-      Alert.alert('Select Month', 'Please choose the month you are paying for.');
+      alert.showWarning('Select Month', 'Please choose the month you are paying for.');
       return;
     }
 
@@ -177,17 +188,14 @@ export function PaymentUploadModal({
         const createdDate = new Date(pendingPOP.created_at).toLocaleDateString();
         
         // Show confirmation dialog for pending - can override
-        Alert.alert(
+        alert.show(
           'Pending Upload Found',
           `You already have a pending proof of payment uploaded on ${createdDate}${pendingPOP.payment_amount ? ` for R${pendingPOP.payment_amount}` : ''}.\n\nWait for it to be reviewed before uploading another.`,
           [
             { text: 'Cancel', style: 'cancel', onPress: () => setUploading(false) },
-            { 
-              text: 'Upload Anyway', 
-              style: 'destructive',
-              onPress: () => proceedWithUpload(),
-            },
-          ]
+            { text: 'Upload Anyway', style: 'destructive', onPress: () => proceedWithUpload() },
+          ],
+          { type: 'warning' }
         );
         return;
       }
@@ -196,17 +204,18 @@ export function PaymentUploadModal({
       const recentApproved = existingPOPs?.find(p => p.status === 'approved');
       if (recentApproved) {
         const createdDate = new Date(recentApproved.created_at).toLocaleDateString();
-        Alert.alert(
+        alert.show(
           'Recent Upload Approved',
           `Your proof of payment from ${createdDate}${recentApproved.payment_amount ? ` for R${recentApproved.payment_amount}` : ''} was already approved.\n\nYou don't need to upload again unless you made a new payment.`,
-          [{ text: 'OK', onPress: () => setUploading(false) }]
+          [{ text: 'OK', onPress: () => setUploading(false) }],
+          { type: 'info' }
         );
         return;
       }
 
       await proceedWithUpload();
     } catch (error: any) {
-      Alert.alert('Upload Failed', error.message || 'Failed to upload proof of payment');
+      alert.showError('Upload Failed', error.message || 'Failed to upload proof of payment');
       setUploading(false);
     }
   };
@@ -321,7 +330,7 @@ export function PaymentUploadModal({
         onSuccess();
       }, 1000);
     } catch (error: any) {
-      Alert.alert('Upload Failed', error.message || 'Failed to upload proof of payment');
+      alert.showError('Upload Failed', error.message || 'Failed to upload proof of payment');
     } finally {
       setUploading(false);
     }

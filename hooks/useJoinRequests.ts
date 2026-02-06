@@ -10,7 +10,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { InviteService, JoinRequest, JoinRequestType } from '@/services/InviteService';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
-import { Alert } from 'react-native';
+import { useAlert } from '@/components/ui/StyledAlert';
 
 // Query keys for cache management
 export const joinRequestKeys = {
@@ -214,22 +214,23 @@ export function useJoinRequestActions(organizationId?: string) {
   const queryClient = useQueryClient();
   const approveRequest = useApproveJoinRequest();
   const rejectRequest = useRejectJoinRequest();
+  const alert = useAlert();
 
   const handleApprove = async (requestId: string, notes?: string) => {
     try {
       await approveRequest.mutateAsync({ requestId, notes });
-      Alert.alert('Success', 'Request approved successfully');
+      alert.showSuccess('Success', 'Request approved successfully');
     } catch (error) {
-      Alert.alert('Error', (error as Error).message || 'Failed to approve request');
+      alert.showError('Error', (error as Error).message || 'Failed to approve request');
     }
   };
 
   const handleReject = async (requestId: string, notes: string) => {
     try {
       await rejectRequest.mutateAsync({ requestId, notes });
-      Alert.alert('Success', 'Request rejected');
+      alert.showSuccess('Success', 'Request rejected');
     } catch (error) {
-      Alert.alert('Error', (error as Error).message || 'Failed to reject request');
+      alert.showError('Error', (error as Error).message || 'Failed to reject request');
     }
   };
 

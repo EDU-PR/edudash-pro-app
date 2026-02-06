@@ -16,8 +16,8 @@
  */
 
 /**
- * Available subscription tiers in ascending order of features
- * Matches database subscription_tier enum
+ * Available subscription tiers in ascending order of features.
+ * Must stay in sync with CapabilityTier in `/lib/tiers/index.ts` (mobile canonical source).
  */
 export type Tier = 'free' | 'starter' | 'premium' | 'enterprise';
 

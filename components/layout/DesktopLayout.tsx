@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
+import { useOrganizationBranding } from '@/contexts/OrganizationBrandingContext';
 import { Avatar } from '@/components/ui/Avatar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
@@ -76,7 +77,7 @@ const NAV_ITEMS: NavItem[] = [
  */
 export function DesktopLayout({ children, role, title, showBackButton }: DesktopLayoutProps) {
   const { theme } = useTheme();
-  const { user, profile } = useAuth();
+  const { user, profile, profileLoading } = useAuth();
   const permissions = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
@@ -84,6 +85,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const notificationCount = useNotificationBadgeCount();
+  const { organizationName: brandingOrgName, isLoading: brandingLoading } = useOrganizationBranding();
   
   // Use window dimensions for responsive behavior on web
   const { width: windowWidth } = useWindowDimensions();
@@ -111,16 +113,23 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
     (profile as any)?.preschool_name ||
     (profile as any)?.school_name ||
     '';
-  const rawTenantSlug =
+  const rawTenantName =
+    brandingOrgName ||
+    org?.organization_name ||
+    fallbackOrgName ||
     org?.organization_slug ||
     org?.tenant_slug ||
-    org?.slug ||
-    org?.organization_name ||
-    fallbackOrgName;
-  const normalizedTenantSlug = typeof rawTenantSlug === 'string' ? rawTenantSlug : '';
-  const tenantSlug: string =
-    normalizedTenantSlug && normalizedTenantSlug.trim().toLowerCase() !== 'unknown'
-      ? normalizedTenantSlug
+    org?.slug;
+  const normalizedTenantName = typeof rawTenantName === 'string' ? rawTenantName : '';
+  const hasTenantName =
+    normalizedTenantName &&
+    normalizedTenantName.trim().length > 0 &&
+    normalizedTenantName.trim().toLowerCase() !== 'unknown';
+  const isOrgNameLoading = !hasTenantName && (brandingLoading || profileLoading);
+  const tenantSlug: string = hasTenantName
+    ? normalizedTenantName
+    : isOrgNameLoading
+      ? 'Loading...'
       : 'My School';
 
   // Mobile layout styles (computed here for mobile header)
