@@ -5,19 +5,21 @@
  * Displays an action button with icon, title, and optional subtitle.
  */
 
-import React from 'react';
-import { Text, TouchableOpacity, View, StyleSheet, Dimensions } from 'react-native';
+import React, { useMemo } from 'react';
+import { Text, TouchableOpacity, View, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import Feedback from '@/lib/feedback';
 
-const { width } = Dimensions.get('window');
-const isTablet = width > 768;
-const isSmallScreen = width < 380;
-const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
-const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-const containerWidth = width - (cardPadding * 2);
-const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+const getLayoutMetrics = (width: number) => {
+  const isTablet = width > 768;
+  const isSmallScreen = width < 380;
+  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
+  const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  const containerWidth = width - (cardPadding * 2);
+  const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+  return { isTablet, isSmallScreen, cardPadding, cardGap, containerWidth, cardWidth };
+};
 
 interface TeacherQuickActionCardProps {
   title: string;
@@ -37,7 +39,9 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
   disabled
 }) => {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const { width } = useWindowDimensions();
+  const layout = useMemo(() => getLayoutMetrics(width), [width]);
+  const styles = useMemo(() => getStyles(theme, layout), [theme, layout]);
 
   const handlePress = async () => {
     if (disabled) return;
@@ -62,7 +66,7 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
       <View style={[styles.actionIcon, { backgroundColor: color + '15' }]}>
         <Ionicons
           name={icon as any}
-          size={isSmallScreen ? 20 : 24}
+          size={layout.isSmallScreen ? 20 : 24}
           color={disabled ? theme.textSecondary : color}
         />
       </View>
@@ -76,17 +80,17 @@ export const TeacherQuickActionCard: React.FC<TeacherQuickActionCardProps> = ({
   );
 };
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => StyleSheet.create({
   actionCard: {
-    width: cardWidth,
+    width: layout.cardWidth,
     backgroundColor: theme.surface,
     borderRadius: 16,
-    padding: cardPadding,
+    padding: layout.cardPadding,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: cardGap / 2,
-    marginBottom: cardGap,
-    minHeight: isTablet ? 120 : isSmallScreen ? 90 : 100,
+    marginHorizontal: layout.cardGap / 2,
+    marginBottom: layout.cardGap,
+    minHeight: layout.isTablet ? 120 : layout.isSmallScreen ? 90 : 100,
     borderLeftWidth: 4,
     shadowColor: theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -98,15 +102,15 @@ const getStyles = (theme: any) => StyleSheet.create({
     opacity: 0.5,
   },
   actionIcon: {
-    width: isSmallScreen ? 48 : 56,
-    height: isSmallScreen ? 48 : 56,
-    borderRadius: isSmallScreen ? 24 : 28,
+    width: layout.isSmallScreen ? 48 : 56,
+    height: layout.isSmallScreen ? 48 : 56,
+    borderRadius: layout.isSmallScreen ? 24 : 28,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   actionTitle: {
-    fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
+    fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 14,
     fontWeight: '600',
     color: theme.text,
     textAlign: 'center',
@@ -116,7 +120,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
   },
   actionSubtitle: {
-    fontSize: isTablet ? 14 : isSmallScreen ? 10 : 12,
+    fontSize: layout.isTablet ? 14 : layout.isSmallScreen ? 10 : 12,
     color: theme.textSecondary,
     textAlign: 'center',
   },

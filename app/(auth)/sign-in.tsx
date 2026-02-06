@@ -207,9 +207,10 @@ console.log('[SignIn] Component rendering, theme:', theme);
         const skipParam =
           searchParams?.fresh === '1' ||
           searchParams?.signedOut === '1' ||
-          searchParams?.skipBiometric === '1';
+          searchParams?.skipBiometric === '1' ||
+          searchParams?.switch === '1';
         if (skipParam) {
-          console.log('[SignIn] Skipping biometric auto prompt (fresh sign-out)');
+          console.log('[SignIn] Skipping biometric auto prompt (fresh sign-out or account switch)');
           return;
         }
 

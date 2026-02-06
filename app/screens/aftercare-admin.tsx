@@ -345,7 +345,7 @@ export default function AfterCareAdminScreen() {
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Aftercare Registrations</Text>
-            <Text style={styles.headerSubtitle}>EduDash Pro Community School</Text>
+            <Text style={styles.headerSubtitle}>{profile?.organization_name || 'My School'}</Text>
           </View>
         </View>
         

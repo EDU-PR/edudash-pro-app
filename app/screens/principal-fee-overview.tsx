@@ -79,6 +79,15 @@ interface ExpenseSummary {
   missingReceiptCount: number;
 }
 
+interface UniformPaymentSummary {
+  totalPaid: number;
+  totalPending: number;
+  paidCount: number;
+  pendingCount: number;
+  totalRequests: number;
+  submittedRequests: number;
+}
+
 interface FeeBreakdownRow {
   key: string;
   name: string;
@@ -114,6 +123,7 @@ export default function PrincipalFeeOverviewScreen() {
     net: number;
     completionRate: number;
   } | null>(null);
+  const [uniformSummary, setUniformSummary] = useState<UniformPaymentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -588,6 +598,66 @@ export default function PrincipalFeeOverviewScreen() {
         net: income - expenses,
         completionRate,
       });
+
+      // Uniform payment summary
+      const isUniformLabel = (value?: string | null) => (value || '').toLowerCase().includes('uniform');
+      try {
+        const [{ data: uniformRequests }, { data: uniformPops }, { data: uniformPayments }] = await Promise.all([
+          supabase
+            .from('uniform_requests')
+            .select('id, student_id')
+            .eq('preschool_id', organizationId),
+          supabase
+            .from('pop_uploads')
+            .select('id, payment_amount, status, description, title')
+            .eq('preschool_id', organizationId)
+            .eq('upload_type', 'proof_of_payment'),
+          supabase
+            .from('payments')
+            .select('id, amount, status, description, metadata')
+            .eq('preschool_id', organizationId),
+        ]);
+
+        const uPops = (uniformPops || []).filter((p: any) => isUniformLabel(p?.description) || isUniformLabel(p?.title));
+        const uPayments = (uniformPayments || []).filter((p: any) =>
+          isUniformLabel(p?.description) ||
+          isUniformLabel(p?.metadata?.payment_purpose) ||
+          String(p?.metadata?.payment_context || '').toLowerCase() === 'uniform' ||
+          String(p?.metadata?.fee_type || '').toLowerCase() === 'uniform'
+        );
+
+        let uPaid = 0;
+        let uPending = 0;
+        let uPaidCount = 0;
+        let uPendingCount = 0;
+
+        uPops.forEach((p: any) => {
+          const amt = Number(p.payment_amount) || 0;
+          if (p.status === 'approved') { uPaid += amt; uPaidCount += 1; }
+          else { uPending += amt; uPendingCount += 1; }
+        });
+        uPayments.forEach((p: any) => {
+          const amt = Number(p.amount) || 0;
+          if (['completed', 'approved'].includes(String(p.status))) { uPaid += amt; uPaidCount += 1; }
+          else if (['pending', 'proof_submitted', 'under_review'].includes(String(p.status))) { uPending += amt; uPendingCount += 1; }
+        });
+
+        const totalRequeted = (uniformRequests || []).length;
+        const allStudentIds = new Set((studentsData || []).map((s: any) => s.id));
+        const submittedIds = new Set((uniformRequests || []).map((r: any) => r.student_id));
+
+        setUniformSummary({
+          totalPaid: uPaid,
+          totalPending: uPending,
+          paidCount: uPaidCount,
+          pendingCount: uPendingCount,
+          totalRequests: allStudentIds.size,
+          submittedRequests: submittedIds.size,
+        });
+      } catch (uniformErr) {
+        console.warn('[PrincipalFeeOverview] Uniform summary error:', uniformErr);
+        setUniformSummary(null);
+      }
     } catch (error) {
       console.error('[PrincipalFeeOverview] Error loading data:', error);
     }
@@ -856,7 +926,50 @@ export default function PrincipalFeeOverviewScreen() {
               </View>
             </View>
 
-            {/* Advance Payments */}
+            {/* Uniform Payments */}
+            {uniformSummary && (uniformSummary.paidCount > 0 || uniformSummary.pendingCount > 0 || uniformSummary.submittedRequests > 0) && (
+              <View style={styles.panelCard}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Uniform Payments</Text>
+                  <View style={styles.sectionActions}>
+                    <TouchableOpacity
+                      style={styles.expensesButton}
+                      onPress={() => router.push('/screens/principal-uniforms')}
+                    >
+                      <Ionicons name="shirt-outline" size={16} color={theme.primary} />
+                      <Text style={styles.expensesButtonText}>Manage Uniforms</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Uniform orders and payment status, tracked separately from school fees.
+                </Text>
+                <View style={styles.subStatsRow}>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="checkmark-circle" size={18} color={theme.success} />
+                    <Text style={[styles.subStatValue, { color: theme.success }]}>
+                      {formatCurrency(uniformSummary.totalPaid)}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Paid ({uniformSummary.paidCount})</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="time-outline" size={18} color={theme.warning} />
+                    <Text style={[styles.subStatValue, { color: theme.warning }]}>
+                      {formatCurrency(uniformSummary.totalPending)}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Pending ({uniformSummary.pendingCount})</Text>
+                  </View>
+                  <View style={styles.subStatCard}>
+                    <Ionicons name="shirt-outline" size={18} color={theme.primary} />
+                    <Text style={styles.subStatValue}>
+                      {uniformSummary.submittedRequests}/{uniformSummary.totalRequests}
+                    </Text>
+                    <Text style={styles.subStatLabel}>Orders Placed</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {timeFilter === 'month' && advancePayments && (
               <View style={styles.panelCard}>
                 <View style={styles.sectionHeaderRow}>

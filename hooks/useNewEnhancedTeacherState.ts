@@ -14,6 +14,7 @@ import { useAlert } from '@/components/ui/StyledAlert';
 import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { normalizePersonName } from '@/lib/utils/nameUtils';
 import { 
   TEACHER_ROUTES, 
   TEACHER_QUICK_ACTIONS, 
@@ -32,7 +33,12 @@ export const useNewEnhancedTeacherState = () => {
   // Get personalized greeting based on time of day
   const getGreeting = (): string => {
     const hour = new Date().getHours();
-    const teacherName = profile?.first_name || user?.user_metadata?.first_name || 'Teacher';
+    const normalizedName = normalizePersonName({
+      first: profile?.first_name || user?.user_metadata?.first_name,
+      last: profile?.last_name || user?.user_metadata?.last_name,
+      full: profile?.full_name || user?.user_metadata?.full_name,
+    });
+    const teacherName = normalizedName.shortName || 'Teacher';
     
     if (hour < 12) return t('dashboard.good_morning') + ', ' + teacherName;
     if (hour < 18) return t('dashboard.good_afternoon') + ', ' + teacherName;
@@ -150,6 +156,8 @@ export const useNewEnhancedTeacherState = () => {
         color: resolveRouteColor(route.color, theme),
         onPress: () => handleQuickAction(actionKey),
         disabled: route.requiresPremium && tier === 'free',
+        category: route.category,
+        id: actionKey,
       };
     }).filter(Boolean);
   };

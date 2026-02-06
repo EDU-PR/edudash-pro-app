@@ -12,6 +12,7 @@ import { TeacherInviteService } from '@/lib/services/teacherInviteService';
 import { TeacherDocumentsService, TeacherDocument, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 import { useSeatLimits, useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
+import { normalizePersonName } from '@/lib/utils/nameUtils';
 import type { AlertButton } from '@/components/ui/AlertModal';
 import type { 
   Teacher, 
@@ -235,34 +236,45 @@ export function useTeacherManagement(
       
       // Transform database data to match Teacher interface
       const transformedTeachersRaw: (Teacher | null)[] = (teachersData || []).map((dbTeacher: Record<string, unknown>) => {
-        // Try to get name from multiple sources: teachers.full_name, profiles, or email fallback
+        // Try to get name from multiple sources: profiles, teachers.full_name, or email fallback
         const teacherUserId = dbTeacher.user_id as string;
         const profileData = teacherUserId ? profileByUserId.get(teacherUserId) : null;
-        
+
         let firstName = '';
         let lastName = '';
-        let fullName = dbTeacher.full_name as string | null;
+        let fullName = '';
 
         // Priority 1: Use profile data if available (most reliable)
         if (profileData && (profileData.first_name || profileData.last_name)) {
-          firstName = profileData.first_name || '';
-          lastName = profileData.last_name || '';
-          fullName = `${firstName} ${lastName}`.trim();
+          const normalized = normalizePersonName({
+            first: profileData.first_name,
+            last: profileData.last_name,
+          });
+          firstName = normalized.firstName;
+          lastName = normalized.lastName;
+          fullName = normalized.fullName;
           console.log('[fetchTeachers] Using profile name for:', dbTeacher.email, '→', fullName);
         }
+
         // Priority 2: Use teachers.full_name if set
-        else if (fullName && fullName.trim()) {
-          const nameParts = fullName.trim().split(' ');
-          firstName = nameParts[0] || '';
-          lastName = nameParts.slice(1).join(' ') || '';
+        if (!fullName) {
+          const rawFullName = (dbTeacher.full_name as string | null) || '';
+          if (rawFullName.trim()) {
+            const normalized = normalizePersonName({ full: rawFullName });
+            firstName = normalized.firstName || firstName;
+            lastName = normalized.lastName || lastName;
+            fullName = normalized.fullName || fullName;
+          }
         }
+
         // Priority 3: Fallback to email username
-        else {
+        if (!fullName) {
           console.log('[fetchTeachers] full_name is null, using email fallback for:', dbTeacher.email);
           const emailName = (dbTeacher.email as string)?.split('@')[0] || 'Unknown';
-          firstName = emailName;
-          lastName = 'Teacher';
-          fullName = `${firstName} ${lastName}`;
+          const normalized = normalizePersonName({ full: emailName });
+          firstName = normalized.firstName || emailName;
+          lastName = normalized.lastName || '';
+          fullName = normalized.fullName || emailName;
         }
 
         // Convert document data from teachers table format to TeacherDocument format
@@ -348,7 +360,49 @@ export function useTeacherManagement(
 
       const transformedTeachers = transformedTeachersRaw.filter((teacher): teacher is Teacher => teacher !== null);
       console.log('✅ Valid teachers after filtering:', transformedTeachers.length);
-      setTeachers(transformedTeachers);
+
+      const buildTeacherKey = (teacher: Teacher) => {
+        return (
+          teacher.teacherUserId ||
+          teacher.authUserId ||
+          teacher.email?.toLowerCase() ||
+          teacher.id
+        );
+      };
+
+      const mergeTeachers = (primary: Teacher, secondary: Teacher): Teacher => {
+        const classes = Array.from(new Set([...(primary.classes || []), ...(secondary.classes || [])]));
+        const studentCount = Math.max(primary.studentCount || 0, secondary.studentCount || 0);
+        return {
+          ...primary,
+          teacherUserId: primary.teacherUserId || secondary.teacherUserId,
+          authUserId: primary.authUserId || secondary.authUserId,
+          firstName: primary.firstName || secondary.firstName,
+          lastName: primary.lastName || secondary.lastName,
+          email: primary.email || secondary.email,
+          phone: primary.phone || secondary.phone,
+          classes,
+          studentCount,
+        };
+      };
+
+      const dedupeTeachers = (list: Teacher[]) => {
+        const map = new Map<string, Teacher>();
+        list.forEach((teacher) => {
+          const key = buildTeacherKey(teacher);
+          const existing = map.get(key);
+          if (!existing) {
+            map.set(key, teacher);
+            return;
+          }
+          const merged = mergeTeachers(existing, teacher);
+          map.set(key, merged);
+        });
+        return Array.from(map.values());
+      };
+
+      const dedupedTeachers = dedupeTeachers(transformedTeachers);
+      setTeachers(dedupedTeachers);
     } catch (_error) {
       console.error('Failed to fetch teachers:', _error);
       safeAlert({

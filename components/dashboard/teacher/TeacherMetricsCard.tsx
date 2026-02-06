@@ -6,18 +6,20 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 
-const { width } = Dimensions.get('window');
-const isTablet = width > 768;
-const isSmallScreen = width < 380;
-const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
-const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-const containerWidth = width - (cardPadding * 2);
-const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+const getLayoutMetrics = (width: number) => {
+  const isTablet = width > 768;
+  const isSmallScreen = width < 380;
+  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
+  const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  const containerWidth = width - (cardPadding * 2);
+  const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+  return { isTablet, isSmallScreen, cardPadding, cardGap, containerWidth, cardWidth };
+};
 
 interface TeacherMetricsCardProps {
   title: string;
@@ -40,7 +42,9 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const styles = getStyles(theme);
+  const { width } = useWindowDimensions();
+  const layout = getLayoutMetrics(width || 0);
+  const styles = getStyles(theme, layout);
 
   return (
     <TouchableOpacity
@@ -48,7 +52,7 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
         styles.metricCard,
         size === 'large' && styles.metricCardLarge,
         size === 'small' && styles.metricCardSmall,
-        { marginHorizontal: cardGap / 2, marginBottom: cardGap, borderLeftColor: color, shadowColor: color }
+        { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap, borderLeftColor: color, shadowColor: color }
       ]}
       onPress={onPress}
       disabled={!onPress}
@@ -59,7 +63,7 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
           <View style={[styles.iconContainer, { backgroundColor: color + '15' }]}>
             <Ionicons
               name={icon as any}
-              size={isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)}
+              size={layout.isSmallScreen ? (size === 'large' ? 24 : 20) : (size === 'large' ? 28 : 24)}
               color={color}
             />
           </View>
@@ -113,12 +117,12 @@ export const getTrendText = (trend: string, t: any): string => {
   }
 };
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => StyleSheet.create({
   metricCard: {
-    width: cardWidth,
+    width: layout.cardWidth,
     backgroundColor: theme.surface,
     borderRadius: 16,
-    padding: cardPadding,
+    padding: layout.cardPadding,
     borderLeftWidth: 4,
     shadowColor: theme.shadow,
     shadowOffset: { width: 0, height: 2 },
@@ -127,10 +131,10 @@ const getStyles = (theme: any) => StyleSheet.create({
     elevation: 4,
   },
   metricCardLarge: {
-    width: containerWidth,
+    width: layout.containerWidth,
   },
   metricCardSmall: {
-    width: (containerWidth - cardGap) / 3,
+    width: (layout.containerWidth - layout.cardGap) / 3,
   },
   metricContent: {
     flex: 1,
@@ -142,9 +146,9 @@ const getStyles = (theme: any) => StyleSheet.create({
     marginBottom: 12,
   },
   iconContainer: {
-    width: isSmallScreen ? 40 : 48,
-    height: isSmallScreen ? 40 : 48,
-    borderRadius: isSmallScreen ? 20 : 24,
+    width: layout.isSmallScreen ? 40 : 48,
+    height: layout.isSmallScreen ? 40 : 48,
+    borderRadius: layout.isSmallScreen ? 20 : 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -156,14 +160,14 @@ const getStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
   },
   metricValue: {
-    fontSize: isTablet ? 28 : isSmallScreen ? 22 : 24,
+    fontSize: layout.isTablet ? 28 : layout.isSmallScreen ? 22 : 24,
     fontWeight: 'bold',
     color: theme.text,
     marginBottom: 4,
   },
   metricTitle: {
-    fontSize: isTablet ? 16 : isSmallScreen ? 12 : 14,
+    fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 14,
     color: theme.textSecondary,
-    lineHeight: isTablet ? 22 : isSmallScreen ? 16 : 18,
+    lineHeight: layout.isTablet ? 22 : layout.isSmallScreen ? 16 : 18,
   },
 });

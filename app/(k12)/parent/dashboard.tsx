@@ -51,7 +51,7 @@ export default function K12ParentDashboardScreen() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Get school and user info from profile
-  const communitySchoolName = t('dashboard.parent.community_school', { defaultValue: 'EduDash Pro Community School' });
+  const communitySchoolName = t('dashboard.parent.community_school', { defaultValue: 'My School' });
   const schoolName = (profile as any)?.organization_membership?.organization_name ||
                      (profile as any)?.organization_name ||
                      communitySchoolName;

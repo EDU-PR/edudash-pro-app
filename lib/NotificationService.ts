@@ -39,19 +39,27 @@ Notifications.setNotificationHandler({
     console.log('Notification received:', notification);
     
     const data = notification.request.content.data;
+    const type = data?.type as string | undefined;
     
     // Always show incoming call notifications (high priority)
-    const isIncomingCall = data?.type === 'incoming_call';
+    const isIncomingCall = type === 'incoming_call';
     
     // Show message notifications as banners (WhatsApp-style)
-    const isMessage = data?.type === 'message' || data?.type === 'chat';
+    const isMessage = type === 'message' || type === 'chat';
     
     // Show update notifications (important for OTA updates)
-    const isUpdate = data?.type === 'update_ready';
+    const isUpdate = type === 'update_ready';
+    
+    // Show educational & school activity notifications in foreground
+    const isSchoolActivity = [
+      'announcement', 'homework', 'assignment', 'attendance',
+      'reminder', 'progress', 'billing', 'invoice', 'admin',
+      'enrollment', 'event', 'report',
+    ].includes(type || '');
     
     // Determine if we should show the notification when app is in foreground
-    // Show calls, messages, updates, and forced notifications
-    const shouldShow = isIncomingCall || isMessage || isUpdate || data?.forceShow === true;
+    // Show calls, messages, updates, school activity, and forced notifications
+    const shouldShow = isIncomingCall || isMessage || isUpdate || isSchoolActivity || data?.forceShow === true;
     
     return {
       shouldShowAlert: shouldShow,
