@@ -283,7 +283,7 @@ export default function ParentRegistrationScreen() {
           // Store active organization in AsyncStorage
           await AsyncStorage.setItem(ACTIVE_ORG_KEY, JSON.stringify({
             id: selectedOrgId,
-            name: schoolData?.name || 'EduDash Pro Community School',
+            name: schoolData?.name || 'My School',
             type: 'preschool',
             userId: user.id,
           }));
@@ -292,7 +292,7 @@ export default function ParentRegistrationScreen() {
           
           Alert.alert(
             'Registration Successful!',
-            `Welcome to ${schoolData?.name || 'EduDash Pro'}! You can now add your children to your account.`,
+            `Welcome to ${schoolData?.name || 'the school'}! You can now add your children to your account.`,
             [{ text: 'OK' }]
           );
         } catch (orgError) {

@@ -57,8 +57,13 @@ export function TeacherCard({
   const inviteAccepted = normalizedInviteStatus === 'accepted';
   const inviteRevoked = normalizedInviteStatus === 'revoked';
   const inviteExpired = normalizedInviteStatus === 'expired';
-  const fullName = `${teacher.firstName} ${teacher.lastName}`;
+  const fullName = `${teacher.firstName} ${teacher.lastName}`.trim() || teacher.email;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const initials = [teacher.firstName, teacher.lastName]
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join('')
+    .slice(0, 2) || '?';
 
   // Debug logging for teacher card
   useEffect(() => {
@@ -83,7 +88,7 @@ export function TeacherCard({
       <View style={styles.teacherTopRow}>
         <View style={styles.teacherAvatar}>
           <Text style={styles.avatarText}>
-            {teacher.firstName.charAt(0)}{teacher.lastName.charAt(0)}
+            {initials}
           </Text>
         </View>
         <View style={styles.teacherInfo}>

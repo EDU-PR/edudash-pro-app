@@ -117,11 +117,14 @@ export function ProfileSwitcher({
           {
             text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
             style: 'default',
-            onPress: () =>
+            onPress: () => {
+              onClose();
               signOutAndRedirect({
                 clearBiometrics: false,
+                resetApp: false,
                 redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
-              }),
+              });
+            },
           },
         ],
       });
@@ -149,11 +152,14 @@ export function ProfileSwitcher({
             {
               text: t('account.sign_in_manually', { defaultValue: 'Sign in' }),
               style: 'default',
-              onPress: () =>
+              onPress: () => {
+                onClose();
                 signOutAndRedirect({
                   clearBiometrics: false,
+                  resetApp: false,
                   redirectTo: `/(auth)/sign-in?switch=1&email=${encodeURIComponent(account.email)}`,
-                }),
+                });
+              },
             },
           ],
         });
@@ -209,11 +215,14 @@ export function ProfileSwitcher({
             {
               text: t('common.ok', { defaultValue: 'OK' }),
               style: 'default',
-              onPress: () =>
+              onPress: () => {
+                onClose();
                 signOutAndRedirect({
                   clearBiometrics: false,
+                  resetApp: false,
                   redirectTo: '/(auth)/sign-in?switch=1',
-                }),
+                });
+              },
             },
           ],
         });
@@ -272,7 +281,7 @@ export function ProfileSwitcher({
   // Add new account (sign out and go to sign in)
   const handleAddAccount = useCallback(() => {
     onClose();
-    signOutAndRedirect({ clearBiometrics: false, redirectTo: '/(auth)/sign-in?switch=1' });
+    signOutAndRedirect({ clearBiometrics: false, resetApp: false, redirectTo: '/(auth)/sign-in?switch=1' });
   }, [onClose]);
 
   // Format last used date

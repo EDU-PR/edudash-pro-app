@@ -17,9 +17,11 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   RefreshControl,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useTeacherDashboard } from '@/hooks/useDashboardData';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,13 +38,20 @@ import { useTeacherStudents } from '@/hooks/useTeacherStudents';
 import { CollapsibleSection, StudentSummaryCard } from '@/components/dashboard/shared';
 import { router } from 'expo-router';
 
-const { width, height } = Dimensions.get('window');
-const isTablet = width > 768;
-const isSmallScreen = width < 380;
-const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
-const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-const containerWidth = width - (cardPadding * 2);
-const cardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
+type LayoutMetrics = {
+  isTablet: boolean;
+  isSmallScreen: boolean;
+  cardPadding: number;
+  cardGap: number;
+};
+
+const getLayoutMetrics = (width: number): LayoutMetrics => {
+  const isTablet = width > 768;
+  const isSmallScreen = width < 380;
+  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
+  const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  return { isTablet, isSmallScreen, cardPadding, cardGap };
+};
 
 // Helper to get tier badge color
 const getTierColor = (tier: string, theme: any): string => {
@@ -94,8 +103,10 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   const { theme } = useTheme();
   const { preferences: dashPrefs } = useDashboardPreferences();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const layout = useMemo(() => getLayoutMetrics(width), [width]);
   
-  const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
+  const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom, layout), [theme, insets.top, insets.bottom, layout]);
   
   // Clear any stuck dashboardSwitching flag on mount to prevent loading issues after hot reload
   useEffect(() => {
@@ -126,6 +137,60 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   const metrics = state.buildMetrics(dashboardData);
   const quickActions = state.buildQuickActions();
 
+  const highlightItems = useMemo(() => {
+    const classes = dashboardData?.myClasses || [];
+    const totalStudents = classes.reduce((sum: number, cls: any) => sum + (cls.studentCount || 0), 0);
+    const presentToday = classes.reduce((sum: number, cls: any) => sum + (cls.presentToday || 0), 0);
+    const attendanceRate = totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0;
+    const nextClass = classes[0];
+
+    return [
+      {
+        id: 'next_lesson',
+        label: t('teacher.next_lesson', { defaultValue: 'Next Lesson' }),
+        value: nextClass?.name || t('teacher.no_class', { defaultValue: 'No class yet' }),
+        sub: nextClass?.nextLesson || t('teacher.no_upcoming_lessons', { defaultValue: 'No upcoming lesson' }),
+        icon: 'time-outline' as const,
+        color: theme.primary,
+      },
+      {
+        id: 'attendance',
+        label: t('teacher.attendance_today', { defaultValue: 'Attendance' }),
+        value: `${attendanceRate}%`,
+        sub: totalStudents > 0 ? `${presentToday}/${totalStudents} ${t('teacher.present', { defaultValue: 'present' })}` : t('teacher.no_students', { defaultValue: 'No students yet' }),
+        icon: 'checkmark-circle-outline' as const,
+        color: theme.success,
+      },
+      {
+        id: 'pending_grading',
+        label: t('teacher.pending_grading', { defaultValue: 'Pending Grading' }),
+        value: String(dashboardData?.pendingGrading ?? 0),
+        sub: t('teacher.needs_review', { defaultValue: 'Needs review' }),
+        icon: 'document-text-outline' as const,
+        color: theme.warning,
+      },
+    ];
+  }, [dashboardData, t, theme]);
+
+  const groupedActions = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    quickActions.forEach((action: any) => {
+      if (!action) return;
+      const category = action.category || 'other';
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(action);
+    });
+    return groups;
+  }, [quickActions]);
+
+  const actionSections = useMemo(() => ([
+    { id: 'lessons', title: t('teacher.actions_lessons', { defaultValue: 'Lessons & Activities' }), icon: 'book-outline' },
+    { id: 'classroom', title: t('teacher.actions_classroom', { defaultValue: 'Classroom' }), icon: 'school-outline' },
+    { id: 'communication', title: t('teacher.actions_communication', { defaultValue: 'Communication' }), icon: 'chatbubbles-outline' },
+    { id: 'reports', title: t('teacher.actions_reports', { defaultValue: 'Reports' }), icon: 'bar-chart-outline' },
+    { id: 'ai', title: t('teacher.actions_ai', { defaultValue: 'AI Tools' }), icon: 'sparkles-outline' },
+  ]), [t]);
+
 
   if (loading && !dashboardData) {
     return (
@@ -152,7 +217,16 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
       >
         {/* Enhanced Header Card */}
         <View style={styles.headerCard}>
-          <View style={styles.headerGradient}>
+          <LinearGradient
+            colors={[
+              theme.primary + '22',
+              theme.secondary + '14',
+              theme.background,
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
+          >
             <View style={styles.headerContent}>
               <View style={styles.greetingRow}>
                 <Text style={styles.greetingEmoji}>👋</Text>
@@ -182,7 +256,35 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
                 </View>
               )}
             </View>
+          </LinearGradient>
+        </View>
+
+        {/* Today Highlights */}
+        <View style={styles.highlightsSection}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>
+              {t('teacher.today_overview', { defaultValue: 'Today' })}
+            </Text>
+            <Text style={styles.sectionHeaderHint}>
+              {t('teacher.today_overview_hint', { defaultValue: 'Quick status at a glance' })}
+            </Text>
           </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.highlightsRow}
+          >
+            {highlightItems.map((item) => (
+              <View key={item.id} style={styles.highlightCard}>
+                <View style={[styles.highlightIcon, { backgroundColor: item.color + '1A' }]}>
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+                <Text style={styles.highlightLabel}>{item.label}</Text>
+                <Text style={styles.highlightValue}>{item.value}</Text>
+                <Text style={styles.highlightSub}>{item.sub}</Text>
+              </View>
+            ))}
+          </ScrollView>
         </View>
 
         {/* Metrics Grid */}
@@ -216,19 +318,33 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
           icon="flash"
           hint={t('dashboard.hints.teacher_quick_actions', { defaultValue: 'Create lessons, homework, messages, and tasks fast.' })}
         >
-          <View style={styles.actionsGrid}>
-            {quickActions.map((action, index) => (
-              <TeacherQuickActionCard
-                key={index}
-                title={action.title}
-                icon={action.icon}
-                color={action.color}
-                onPress={action.onPress}
-                disabled={action.disabled}
-                subtitle={action.disabled ? t('dashboard.upgrade_required') : undefined}
-              />
-            ))}
-          </View>
+          {actionSections.map((section) => {
+            const actions = groupedActions[section.id] || [];
+            if (actions.length === 0) return null;
+            return (
+              <View key={section.id} style={styles.actionSection}>
+                <View style={styles.actionSectionHeader}>
+                  <View style={styles.actionSectionIcon}>
+                    <Ionicons name={section.icon as any} size={14} color={theme.textSecondary} />
+                  </View>
+                  <Text style={styles.actionSectionTitle}>{section.title}</Text>
+                </View>
+                <View style={styles.actionsGrid}>
+                  {actions.map((action: any) => (
+                    <TeacherQuickActionCard
+                      key={action.id || action.title}
+                      title={action.title}
+                      icon={action.icon}
+                      color={action.color}
+                      onPress={action.onPress}
+                      disabled={action.disabled}
+                      subtitle={action.disabled ? t('dashboard.upgrade_required') : undefined}
+                    />
+                  ))}
+                </View>
+              </View>
+            );
+          })}
         </CollapsibleSection>
 
         {/* Birthday Donations */}
@@ -281,7 +397,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
   );
 };
 
-const createStyles = (theme: any, _topInset: number, bottomInset: number) => StyleSheet.create({
+const createStyles = (theme: any, _topInset: number, bottomInset: number, layout: LayoutMetrics) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.background,
@@ -291,7 +407,7 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
   },
   scrollContent: {
     paddingTop: 20, // Fixed padding - DesktopLayout handles safe area for header
-    paddingHorizontal: cardPadding,
+    paddingHorizontal: layout.cardPadding,
     paddingBottom: 20, // Just scroll breathing room - BottomTabBar handles its own safe area
   },
   loadingContainer: {
@@ -324,11 +440,70 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     elevation: 6,
   },
   headerGradient: {
-    padding: isTablet ? 24 : 18,
-    backgroundColor: theme.primary + '10',
+    padding: layout.isTablet ? 24 : 18,
   },
   headerContent: {
     gap: 16,
+  },
+  highlightsSection: {
+    marginBottom: 24,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionHeaderTitle: {
+    fontSize: layout.isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  sectionHeaderHint: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  highlightsRow: {
+    paddingHorizontal: 2,
+  },
+  highlightCard: {
+    minWidth: layout.isSmallScreen ? 150 : 180,
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    padding: 12,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: theme.borderLight,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  highlightIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  highlightLabel: {
+    fontSize: 10,
+    color: theme.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  highlightValue: {
+    fontSize: layout.isTablet ? 18 : 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginTop: 4,
+  },
+  highlightSub: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
   },
   greetingRow: {
     flexDirection: 'row',
@@ -336,20 +511,20 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     gap: 12,
   },
   greetingEmoji: {
-    fontSize: isTablet ? 40 : 32,
+    fontSize: layout.isTablet ? 40 : 32,
     marginTop: 2,
   },
   greetingTextContainer: {
     flex: 1,
   },
   greeting: {
-    fontSize: isTablet ? 28 : isSmallScreen ? 22 : 24,
+    fontSize: layout.isTablet ? 28 : layout.isSmallScreen ? 22 : 24,
     fontWeight: '700',
     color: theme.text,
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: isTablet ? 16 : isSmallScreen ? 13 : 14,
+    fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 13 : 14,
     color: theme.textSecondary,
     fontWeight: '500',
   },
@@ -386,7 +561,7 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     marginBottom: 2,
   },
   schoolName: {
-    fontSize: isTablet ? 16 : 14,
+    fontSize: layout.isTablet ? 16 : 14,
     color: theme.text,
     fontWeight: '600',
   },
@@ -406,7 +581,7 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: isTablet ? 22 : isSmallScreen ? 18 : 20,
+    fontSize: layout.isTablet ? 22 : layout.isSmallScreen ? 18 : 20,
     fontWeight: '600',
     color: theme.text,
     marginBottom: 16,
@@ -424,14 +599,40 @@ const createStyles = (theme: any, _topInset: number, bottomInset: number) => Sty
     alignSelf: 'flex-start',
     marginBottom: 10,
   },
+  actionSection: {
+    marginBottom: 16,
+  },
+  actionSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  actionSectionIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.surfaceVariant,
+    borderWidth: 1,
+    borderColor: theme.borderLight,
+  },
+  actionSectionTitle: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -cardGap / 2,
+    marginHorizontal: -layout.cardGap / 2,
   },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -cardGap / 2,
+    marginHorizontal: -layout.cardGap / 2,
   },
 });

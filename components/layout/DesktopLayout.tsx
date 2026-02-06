@@ -121,7 +121,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
   const tenantSlug: string =
     normalizedTenantSlug && normalizedTenantSlug.trim().toLowerCase() !== 'unknown'
       ? normalizedTenantSlug
-      : 'EduDash Pro';
+      : 'My School';
 
   // Mobile layout styles (computed here for mobile header)
   const mobileStyles = React.useMemo(() => ({

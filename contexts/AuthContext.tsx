@@ -112,16 +112,45 @@ async function buildFallbackProfileFromSession(
       .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
       .eq('id', user.id)
       .maybeSingle();
-    dbProfile = await Promise.race([
+    const result: any = await Promise.race([
       profileQuery,
       new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
     ]);
+    // Supabase queries resolve to { data, error } — unwrap the data
+    dbProfile = result?.data ?? result ?? null;
+
+    // Fallback: if profiles.id != auth uid, try auth_user_id column
+    if (!dbProfile?.id) {
+      try {
+        const { data: altProfile } = await assertSupabase()
+          .from('profiles')
+          .select('id, email, role, first_name, last_name, full_name, preschool_id, organization_id, seat_status')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        if (altProfile?.id) {
+          dbProfile = altProfile;
+        }
+      } catch {
+        // non-fatal
+      }
+    }
   } catch {
     dbProfile = null;
   }
 
   const userMeta = (user.user_metadata || {}) as Record<string, any>;
   const appMeta = (user.app_metadata || {}) as Record<string, any>;
+
+  if (__DEV__) {
+    console.log('[AuthContext][DEV] buildFallbackProfileFromSession dbProfile:', {
+      hasData: !!dbProfile,
+      role: dbProfile?.role,
+      organization_id: dbProfile?.organization_id,
+      preschool_id: dbProfile?.preschool_id,
+      email: dbProfile?.email,
+    });
+  }
+
   const role = (dbProfile?.role || userMeta.role || appMeta.role || safeProfile?.role || 'parent') as any;
   const seatStatus =
     dbProfile?.seat_status ||
@@ -216,6 +245,31 @@ async function buildFallbackProfileFromSession(
       }
     } catch {
       // non-fatal
+    }
+  }
+
+  // Best-effort: if org ID exists but org name is missing, resolve from DB
+  if (organizationId && !organizationName) {
+    try {
+      const { data: preschool } = await assertSupabase()
+        .from('preschools')
+        .select('name')
+        .eq('id', organizationId)
+        .maybeSingle();
+      if (preschool?.name) {
+        organizationName = preschool.name;
+      } else {
+        const { data: org } = await assertSupabase()
+          .from('organizations')
+          .select('name')
+          .eq('id', organizationId)
+          .maybeSingle();
+        if (org?.name) {
+          organizationName = org.name;
+        }
+      }
+    } catch {
+      // non-fatal – org name will remain undefined
     }
   }
 
@@ -439,6 +493,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (!enhancedProfile) {
           console.warn('[AuthContext] Profile fetch returned null or timed out');
+          // Priority: fresh DB read before stale stored profile
+          try {
+            const { data: { user: authUser } } = await assertSupabase().auth.getUser();
+            if (authUser?.id === userId) {
+              enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
+            }
+          } catch (fallbackErr) {
+            console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+          }
+        }
+        if (!enhancedProfile) {
+          // Last resort: stored profile from previous session
           try {
             const { getStoredProfileForUser } = await import('@/lib/sessionManager');
             const storedProfile = await getStoredProfileForUser(userId);
@@ -447,16 +513,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (storedErr) {
             console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
-          }
-        }
-        if (!enhancedProfile) {
-          try {
-            const { data: { user: authUser } } = await assertSupabase().auth.getUser();
-            if (authUser?.id === userId) {
-              enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
-            }
-          } catch (fallbackErr) {
-            console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
           }
         }
         if (mounted) {
@@ -736,6 +792,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             try {
+              // Priority: fresh DB read (buildFallbackProfileFromSession does a quick 1.5s
+              // profiles table read) BEFORE stale stored profile. Stored profiles may have
+              // outdated role (e.g. role changed from parent → teacher in DB).
+              if (!enhancedProfile) {
+                try {
+                  enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
+                  profileSource = 'fallback';
+                  authDebug('profile.fallback', { userId: s.user.id });
+                } catch (fallbackErr) {
+                  console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+                  enhancedProfile = null;
+                }
+              }
+
+              // Last resort: use stored profile from previous session
               if (!enhancedProfile) {
                 try {
                   const { getStoredProfileForUser } = await import('@/lib/sessionManager');
@@ -746,17 +817,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   }
                 } catch (storedErr) {
                   console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
-                }
-              }
-
-              if (!enhancedProfile) {
-                try {
-                  enhancedProfile = await buildFallbackProfileFromSession(s.user, safeExistingProfile);
-                  profileSource = 'fallback';
-                  authDebug('profile.fallback', { userId: s.user.id });
-                } catch (fallbackErr) {
-                  console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
-                  enhancedProfile = null;
                 }
               }
 
@@ -792,47 +852,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (profileErr) {
               console.warn('[AuthContext] Sign-in profile resolution failed:', profileErr);
             } finally {
+              // CRITICAL: Route BEFORE setting profileLoading=false
+              // If we set profileLoading=false first, useAuthGuard sees profile loaded + user on auth route
+              // and fires its own simpler navigation, racing with routeAfterLogin below.
+              // By routing first, we ensure the correct route is used (determineUserRoute has full SOA/K12 logic).
+              if (mounted && enhancedProfile) {
+                // Check if this is a password recovery session
+                const globalRecoveryFlag = isPasswordRecoveryInProgress();
+                const recoverySentAt = (s.user as any).recovery_sent_at;
+                const isRecoverySession = recoverySentAt && 
+                  (Date.now() - new Date(recoverySentAt).getTime()) < 60 * 60 * 1000;
+                
+                let isOnResetPasswordPage = false;
+                try {
+                  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    isOnResetPasswordPage = window.location.pathname.includes('reset-password');
+                  }
+                } catch {
+                  // Ignore
+                }
+                
+                if (globalRecoveryFlag || isRecoverySession || isOnResetPasswordPage) {
+                  console.log('[AuthContext] Password recovery session detected, skipping auto-routing', {
+                    globalRecoveryFlag,
+                    isRecoverySession,
+                    isOnResetPasswordPage,
+                    recoverySentAt,
+                  });
+                  // #region agent log
+                  debugLog('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,globalRecoveryFlag,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
+                  // #endregion
+                } else {
+                  // Route user after successful sign in
+                  try {
+                    // #region agent log
+                    debugLog('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
+                    // #endregion
+                    await routeAfterLogin(s.user, enhancedProfile);
+                    // #region agent log
+                    debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
+                    // #endregion
+                    authDebug('routeAfterLogin.called', { userId: s.user.id });
+                  } catch (error) {
+                    console.error('Post-login routing failed:', error);
+                    // #region agent log
+                    debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
+                    // #endregion
+                  }
+                }
+              }
+
               if (mounted) {
                 setProfileLoading(false);
               }
             }
 
-            // Best-effort: update last_login_at via RPC for OAuth and external flows
-            try {
-              await assertSupabase().rpc('update_user_last_login');
-            } catch (e) {
-              logger.debug('update_user_last_login RPC failed (non-blocking)', e);
-            }
-
-            // Register or update push token (best-effort)
-            // Also checks if token needs refresh due to project ID or version changes
-            try {
-              const { registerPushDevice, checkAndRefreshTokenIfNeeded } = await import('@/lib/notifications');
-              
-              // First check if existing token needs refresh
-              const wasRefreshed = await checkAndRefreshTokenIfNeeded(assertSupabase(), s.user);
-              
-              if (!wasRefreshed) {
-                // Token didn't need refresh, do normal registration
-                const result = await registerPushDevice(assertSupabase(), s.user);
-                
-                // Log result for debugging (no sensitive data)
-                if (result.status === 'error') {
-                  logger.debug('Push registration failed:', result.reason);
-                } else if (result.status === 'denied') {
-                  logger.debug('Push permissions denied');
-                  // Could surface a non-blocking UI hint here in the future
-                } else if (result.status === 'registered') {
-                  logger.debug('Push registration successful');
-                }
-              } else {
-                logger.debug('Push token was refreshed due to version/project change');
-              }
-            } catch (e) {
-              logger.debug('Push registration exception:', e);
-            }
-            
-            // Identify in monitoring tools
+            // Best-effort monitoring (PostHog, Sentry, analytics)
             if (mounted) {
               try {
                 const ph = getPostHog();
@@ -860,60 +935,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 role: enhancedProfile?.role,
                 profile_source: profileSource,
               });
-
-              // Check if this is a password recovery session
-              // Multiple checks to ensure we don't route away from reset-password:
-              // 1. Global flag set by reset-password screen (most reliable)
-              // 2. recovery_sent_at exists and is recent (within 60 min)
-              // 3. Current URL contains 'reset-password' (fallback check)
-              const globalRecoveryFlag = isPasswordRecoveryInProgress();
-              const recoverySentAt = (s.user as any).recovery_sent_at;
-              const isRecoverySession = recoverySentAt && 
-                (Date.now() - new Date(recoverySentAt).getTime()) < 60 * 60 * 1000; // 60 minutes
-              
-              // Also check current URL path as a fallback (works on both web and native)
-              let isOnResetPasswordPage = false;
-              try {
-                if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                  isOnResetPasswordPage = window.location.pathname.includes('reset-password');
-                } else {
-                  // For native, check the navigation state (expo-router provides this)
-                  // We can't easily get the current route here, so rely on recovery_sent_at
-                }
-              } catch {
-                // Ignore URL check errors
-              }
-              
-              if (globalRecoveryFlag || isRecoverySession || isOnResetPasswordPage) {
-                console.log('[AuthContext] Password recovery session detected, skipping auto-routing', {
-                  globalRecoveryFlag,
-                  isRecoverySession,
-                  isOnResetPasswordPage,
-                  recoverySentAt,
-                });
-                // #region agent log
-                debugLog('[DEBUG_AGENT] RouteAfterLogin-SKIPPED-RECOVERY', JSON.stringify({userId:s.user.id,globalRecoveryFlag,recoverySentAt,isOnResetPasswordPage,timestamp:Date.now()}));
-                // #endregion
-                return; // Don't route - user is on reset-password screen
-              }
-
-              // Route user after successful sign in
-              try {
-                // #region agent log
-                debugLog('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
-                // #endregion
-                await routeAfterLogin(s.user, enhancedProfile);
-                // #region agent log
-                debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
-                // #endregion
-                authDebug('routeAfterLogin.called', { userId: s.user.id });
-              } catch (error) {
-                console.error('Post-login routing failed:', error);
-                // #region agent log
-                debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
-                // #endregion
-              }
             }
+
+            // Best-effort background operations (non-blocking, fire-and-forget)
+            // These MUST NOT block routing - they run after navigation has been initiated
+            const bgUserId = s.user.id;
+            const bgUser = s.user;
+            
+            // Update last_login_at (fire-and-forget)
+            // Note: .rpc() returns PostgrestBuilder (PromiseLike, no .catch), so wrap in Promise.resolve
+            Promise.resolve(assertSupabase().rpc('update_user_last_login')).catch((e) => {
+              logger.debug('update_user_last_login RPC failed (non-blocking)', e);
+            });
+
+            // Register/refresh push tokens (fire-and-forget)
+            (async () => {
+              try {
+                const { registerPushDevice, checkAndRefreshTokenIfNeeded } = await import('@/lib/notifications');
+                const wasRefreshed = await checkAndRefreshTokenIfNeeded(assertSupabase(), bgUser);
+                if (!wasRefreshed) {
+                  const result = await registerPushDevice(assertSupabase(), bgUser);
+                  if (result.status === 'error') {
+                    logger.debug('Push registration failed:', result.reason);
+                  } else if (result.status === 'denied') {
+                    logger.debug('Push permissions denied');
+                  } else if (result.status === 'registered') {
+                    logger.debug('Push registration successful');
+                  }
+                } else {
+                  logger.debug('Push token was refreshed due to version/project change');
+                }
+              } catch (e) {
+                logger.debug('Push registration exception:', e);
+              }
+            })();
 
             // If we used a fallback, refresh profile in the background
             if (usedFallback) {

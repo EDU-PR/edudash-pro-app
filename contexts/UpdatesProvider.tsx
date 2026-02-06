@@ -102,10 +102,10 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         // Send system notification instead of showing banner
         await sendUpdateNotification();
         
-        // Set app badge to show update available
+        // Set app badge to show update available (use BadgeCoordinator to avoid wiping other categories)
         if (Platform.OS !== 'web') {
           try {
-            await Notifications.setBadgeCountAsync(1);
+            await BadgeCoordinator.setCategory('updates', 1);
           } catch (badgeError) {
             logger.warn('[Updates] Failed to set badge count:', badgeError);
           }

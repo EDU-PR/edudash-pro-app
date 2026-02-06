@@ -78,7 +78,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
           role: profileData.role,
           usageType: profileData.usage_type,
           name: `${profileData.first_name} ${profileData.last_name}`,
-          community: 'EduDash Pro Community'
+          community: '(standalone user)'
         });
       } else {
         console.log('✅ [useUserProfile] School-linked user:', {
@@ -124,10 +124,10 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         schoolType = preschoolData?.school_type || undefined;
       } else {
         // Standalone user - show friendly community name
-        preschoolName = 'EduDash Pro Community';
+        preschoolName = 'My School';
         schoolSubscriptionTier = 'free'; // Default tier for standalone users
         schoolType = profileData?.usage_type || undefined;
-        console.log('🏘️ [useUserProfile] Displaying as: EduDash Pro Community (standalone user)');
+        console.log('🏘️ [useUserProfile] Displaying as: standalone user (no preschool linked)');
       }
 
       // Organization data - use organization_id when available, fallback to preschool

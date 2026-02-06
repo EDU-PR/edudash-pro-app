@@ -18,6 +18,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { usePrincipalHub } from '@/hooks/usePrincipalHub';
 import { useRecentStudents } from '@/hooks/useRecentStudents';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
+import { normalizePersonName } from '@/lib/utils/nameUtils';
 import { StudentSummaryCard } from '@/components/dashboard/shared';
 import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
@@ -111,7 +112,12 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   }, [refresh, refreshBirthdays, refreshStudents]);
 
   const schoolName = profile?.organization_name || data.schoolName || t('dashboard.your_school', { defaultValue: 'Your School' });
-  const userName = profile?.full_name || profile?.first_name || user?.user_metadata?.first_name || t('dashboard.principal', { defaultValue: 'Principal' });
+  const normalizedName = normalizePersonName({
+    first: profile?.first_name || user?.user_metadata?.first_name,
+    last: profile?.last_name || user?.user_metadata?.last_name,
+    full: profile?.full_name || user?.user_metadata?.full_name,
+  });
+  const userName = normalizedName.fullName || normalizedName.shortName || t('dashboard.principal', { defaultValue: 'Principal' });
   const uniformSummary = data.uniformPayments;
   const isYoungEagles = (schoolName || '').toLowerCase().includes('young eagles');
   const showUniformSection = Boolean(
