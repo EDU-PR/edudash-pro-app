@@ -526,8 +526,8 @@ export default function StudentDetailScreen() {
         amount: amount,
         status: 'completed',
         payment_method: paymentMethod,
-        notes: notes ? `Manual payment recorded by principal: ${notes}` : 'Manual payment recorded by principal',
-        recorded_by: user.id,
+        description: notes ? `Manual payment recorded by principal: ${notes}` : 'Manual payment recorded by principal',
+        created_by: user.id,
         created_at: new Date().toISOString(),
       });
 
