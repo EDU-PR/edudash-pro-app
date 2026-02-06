@@ -46,9 +46,12 @@ Notifications.setNotificationHandler({
     // Show message notifications as banners (WhatsApp-style)
     const isMessage = data?.type === 'message' || data?.type === 'chat';
     
+    // Show update notifications (important for OTA updates)
+    const isUpdate = data?.type === 'update_ready';
+    
     // Determine if we should show the notification when app is in foreground
-    // Show calls, messages, and forced notifications
-    const shouldShow = isIncomingCall || isMessage || data?.forceShow === true;
+    // Show calls, messages, updates, and forced notifications
+    const shouldShow = isIncomingCall || isMessage || isUpdate || data?.forceShow === true;
     
     return {
       shouldShowAlert: shouldShow,
