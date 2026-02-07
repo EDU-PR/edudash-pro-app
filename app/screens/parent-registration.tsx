@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,8 @@ import EnhancedRegistrationForm from '@/components/auth/EnhancedRegistrationForm
 import { EnhancedRegistration } from '@/types/auth-enhanced';
 import { assertSupabase } from '@/lib/supabase';
 import { routeAfterLogin, COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
+import { useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 const ACTIVE_ORG_KEY = '@active_organization';
 
@@ -16,6 +18,7 @@ export default function ParentRegistrationScreen() {
   const params = useLocalSearchParams();
   const [invitationCode, setInvitationCode] = useState<string | undefined>(params.invitationCode as string | undefined);
   const [organizationId, setOrganizationId] = useState<string | undefined>();
+  const { showAlert, AlertModalComponent } = useAlertModal();
 
   // Validate invitation code on mount if provided
   useEffect(() => {
@@ -26,46 +29,32 @@ export default function ParentRegistrationScreen() {
 
   const validateInvitationCode = async (code: string) => {
     try {
-      const { data, error } = await assertSupabase()
-        .from('school_invitation_codes')
-        .select('id, preschool_id, school_id, is_active, expires_at, max_uses, current_uses')
-        .eq('code', code.trim().toUpperCase())
-        .eq('invitation_type', 'parent')
-        .single();
+      const supabase = assertSupabase();
+      const { data, error } = await supabase.rpc('validate_invitation_code', {
+        p_code: code.trim().toUpperCase(),
+      });
 
       if (error || !data) {
-        Alert.alert('Invalid Code', 'The invitation code is not valid.');
+        showAlert({ title: 'Invalid Code', message: 'The invitation code is not valid.' });
         setInvitationCode(undefined);
         return;
       }
 
-      // Check if code is active
-      if (!data.is_active) {
-        Alert.alert('Inactive Code', 'This invitation code is no longer active.');
+      // Parse the JSON response from the RPC
+      const result = typeof data === 'string' ? JSON.parse(data) : data;
+
+      if (!result.valid) {
+        showAlert({ title: 'Invalid Code', message: result.message || 'The invitation code is not valid.' });
         setInvitationCode(undefined);
         return;
       }
 
-      // Check if code has expired
-      if (data.expires_at && new Date(data.expires_at) < new Date()) {
-        Alert.alert('Expired Code', 'This invitation code has expired.');
-        setInvitationCode(undefined);
-        return;
-      }
-
-      // Check if code has reached max uses
-      if (data.max_uses && data.current_uses && data.current_uses >= data.max_uses) {
-        Alert.alert('Code Limit Reached', 'This invitation code has reached its maximum number of uses.');
-        setInvitationCode(undefined);
-        return;
-      }
-
-      // Set organization ID from the code
-      setOrganizationId(data.preschool_id || data.school_id || undefined);
-      Alert.alert('Code Validated', 'Your invitation code has been validated successfully!');
+      // Set organization ID from the validated code
+      setOrganizationId(result.school_id || undefined);
+      showAlert({ title: 'Code Validated', message: 'Your invitation code has been validated successfully!' });
     } catch (error: any) {
-      console.error('Invitation code validation error:', error);
-      Alert.alert('Validation Error', 'Failed to validate invitation code.');
+      logger.error('[ParentRegistration] Invitation code validation error', { error });
+      showAlert({ title: 'Validation Error', message: 'Failed to validate invitation code.' });
       setInvitationCode(undefined);
     }
   };
@@ -80,7 +69,7 @@ export default function ParentRegistrationScreen() {
       
       // If not logged in, try to create a new account
       if (!user) {
-        console.log('[ParentRegistration] Creating new user account...');
+        logger.info('[ParentRegistration] Creating new user account...');
         
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: registration.email,
@@ -97,7 +86,7 @@ export default function ParentRegistrationScreen() {
         });
 
         if (authError) {
-          console.error('[ParentRegistration] Sign up error:', authError);
+          logger.error('[ParentRegistration] Sign up error:', authError);
           
           // Check various "already exists" error patterns
           const errorMsg = authError.message?.toLowerCase() || '';
@@ -110,35 +99,35 @@ export default function ParentRegistrationScreen() {
             
           if (isAlreadyRegistered) {
             // Try to sign in with the provided credentials
-            console.log('[ParentRegistration] User already exists, attempting sign in...');
+            logger.info('[ParentRegistration] User already exists, attempting sign in...');
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
               email: registration.email,
               password: registration.password,
             });
             
             if (signInError) {
-              console.error('[ParentRegistration] Sign in failed:', signInError);
-              Alert.alert(
-                'Account Exists',
-                'An account with this email already exists. Please sign in with your existing password to complete parent registration.',
-                [
+              logger.error('[ParentRegistration] Sign in failed', { error: signInError });
+              showAlert({
+                title: 'Account Exists',
+                message: 'An account with this email already exists. Please sign in with your existing password to complete parent registration.',
+                buttons: [
                   { text: 'Cancel', style: 'cancel' },
                   { 
                     text: 'Sign In', 
                     onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(registration.email)}&returnTo=/screens/parent-registration${invitationCode ? `?invitationCode=${invitationCode}` : ''}`)
                   }
-                ]
-              );
+                ],
+              });
               return;
             }
             
             // Sign in successful! Continue with parent registration
             if (signInData.user) {
-              console.log('[ParentRegistration] Sign in successful, continuing with parent registration');
+              logger.info('[ParentRegistration] Sign in successful, continuing with parent registration');
               user = signInData.user;
               isExistingUser = true;
             } else {
-              Alert.alert('Error', 'Sign in succeeded but no user returned. Please try again.');
+              showAlert({ title: 'Error', message: 'Sign in succeeded but no user returned. Please try again.' });
               return;
             }
           } else {
@@ -163,9 +152,9 @@ export default function ParentRegistrationScreen() {
                   p_name: fullName,
                   p_phone: registration.phone || null,
                 });
-                console.log('[ParentRegistration] Invitation code redeemed (pending email verification)');
+                logger.info('[ParentRegistration] Invitation code redeemed (pending email verification)');
               } catch (codeError) {
-                console.error('[ParentRegistration] Invitation code redemption error:', codeError);
+                logger.error('[ParentRegistration] Invitation code redemption error:', codeError);
               }
             }
             
@@ -179,7 +168,7 @@ export default function ParentRegistrationScreen() {
       } else {
         // User was already logged in
         isExistingUser = true;
-        console.log('[ParentRegistration] User already logged in:', user.email);
+        logger.info('[ParentRegistration] User already logged in:', user.email);
       }
 
       // Get invitation code from URL params or from the form
@@ -202,14 +191,13 @@ export default function ParentRegistrationScreen() {
             });
 
           if (redeemError) {
-            console.error('[ParentRegistration] Failed to redeem invitation code:', redeemError);
-            Alert.alert(
-              isExistingUser ? 'Linked to School' : 'Registration Successful',
-              isExistingUser 
+            logger.error('[ParentRegistration] Failed to redeem invitation code', { error: redeemError });
+            showAlert({
+              title: isExistingUser ? 'Linked to School' : 'Registration Successful',
+              message: isExistingUser 
                 ? 'We couldn\'t link you to the school automatically. You can try joining again using the invitation code.'
                 : 'Your account was created, but we couldn\'t link you to the school. You can join later using the invitation code.',
-              [{ text: 'OK' }]
-            );
+            });
           } else {
             // Successfully linked to school - set this school as active organization
             // This ensures the user sees the parent dashboard, not their other org's dashboard
@@ -240,28 +228,27 @@ export default function ParentRegistrationScreen() {
                   userId: user.id,
                 }));
                 
-                console.log('[ParentRegistration] Set active organization to preschool:', selectedOrgId);
+                logger.info('[ParentRegistration] Set active organization to preschool:', selectedOrgId);
               } catch (activeOrgError) {
-                console.error('[ParentRegistration] Failed to set active organization:', activeOrgError);
+                logger.error('[ParentRegistration] Failed to set active organization:', activeOrgError);
                 // Non-fatal - continue with navigation
               }
             }
             
-            Alert.alert(
-              'Success!',
-              isExistingUser 
+            showAlert({
+              title: 'Success!',
+              message: isExistingUser 
                 ? 'You have been linked to the school as a parent.'
                 : 'Your account has been created and linked to the school.',
-              [{ text: 'OK' }]
-            );
+            });
           }
         } catch (codeError) {
-          console.error('[ParentRegistration] Invitation code redemption error:', codeError);
+          logger.error('[ParentRegistration] Invitation code redemption error:', codeError);
         }
       } else if (user && selectedOrgId) {
         // Self-service registration (no invitation code) - set organization from form selection
         try {
-          console.log('[ParentRegistration] Self-service registration, setting organization:', selectedOrgId);
+          logger.info('[ParentRegistration] Self-service registration, setting organization:', selectedOrgId);
           
           // Get school name for display
           const { data: schoolData } = await supabase
@@ -288,28 +275,25 @@ export default function ParentRegistrationScreen() {
             userId: user.id,
           }));
           
-          console.log('[ParentRegistration] Set organization to:', schoolData?.name || selectedOrgId);
+          logger.info('[ParentRegistration] Set organization to:', schoolData?.name || selectedOrgId);
           
-          Alert.alert(
-            'Registration Successful!',
-            `Welcome to ${schoolData?.name || 'the school'}! You can now add your children to your account.`,
-            [{ text: 'OK' }]
-          );
+          showAlert({
+            title: 'Registration Successful!',
+            message: `Welcome to ${schoolData?.name || 'the school'}! You can now add your children to your account.`,
+          });
         } catch (orgError) {
-          console.error('[ParentRegistration] Failed to set organization:', orgError);
+          logger.error('[ParentRegistration] Failed to set organization:', orgError);
           // Non-fatal - account was still created
-          Alert.alert(
-            isExistingUser ? 'Account Updated' : 'Registration Successful',
-            'Your account has been created. You can add your children from the dashboard.',
-            [{ text: 'OK' }]
-          );
+          showAlert({
+            title: isExistingUser ? 'Account Updated' : 'Registration Successful',
+            message: 'Your account has been created. You can add your children from the dashboard.',
+          });
         }
       } else if (isExistingUser && !codeToUse) {
-        Alert.alert(
-          'Account Updated',
-          'Your account has been updated with parent information.',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Account Updated',
+          message: 'Your account has been updated with parent information.',
+        });
       }
 
       // Prefer centralized routing to avoid sending K-12/community schools
@@ -319,7 +303,7 @@ export default function ParentRegistrationScreen() {
           await routeAfterLogin(user);
           return;
         } catch (routeError) {
-          console.warn('[ParentRegistration] routeAfterLogin failed, using fallback:', routeError);
+          logger.warn('[ParentRegistration] routeAfterLogin failed, using fallback:', routeError);
         }
       }
 
@@ -336,13 +320,13 @@ export default function ParentRegistrationScreen() {
 
       router.replace('/screens/parent-dashboard');
     } catch (error: any) {
-      console.error('[ParentRegistration] Registration error:', error);
+      logger.error('[ParentRegistration] Registration error:', error);
       handleRegistrationError(error.message || 'Registration failed');
     }
   };
 
   const handleRegistrationError = (error: string) => {
-    console.error('Registration error:', error);
+    logger.error('[ParentRegistration] Registration error', error);
     // Error handling is done by the form component
   };
 
@@ -403,6 +387,7 @@ export default function ParentRegistrationScreen() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AlertModalComponent />
     </SafeAreaView>
   );
 }
