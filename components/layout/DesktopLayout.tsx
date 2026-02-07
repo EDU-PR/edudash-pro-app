@@ -93,7 +93,8 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
 
   // Determine user role from profile if not provided
   const userRole = role || (profile?.role as string) || 'parent';
-  const headerAvatarSize = userRole === 'principal' ? 44 : 32;
+  // Keep the header avatar consistent across dashboards.
+  const headerAvatarSize = 44;
   
   // Filter nav items by role
   const filteredNavItems = NAV_ITEMS.filter(item => 

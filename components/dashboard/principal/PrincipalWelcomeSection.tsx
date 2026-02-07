@@ -77,14 +77,27 @@ export const PrincipalWelcomeSection: React.FC<PrincipalWelcomeSectionProps> = (
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {t('dashboard.principal_command', { defaultValue: 'Principal Command' })}
               </Text>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {schoolName || t('dashboard.your_school', { defaultValue: 'Your School' })}
-              </Text>
+              <View style={styles.schoolRow}>
+                <Text style={styles.schoolName} numberOfLines={1}>
+                  {schoolName || t('dashboard.your_school', { defaultValue: 'Your School' })}
+                </Text>
+                {subscriptionReady ? (
+                  <TierBadge size="sm" showManageButton={false} />
+                ) : null}
+                {subscriptionReady ? (
+                  <TouchableOpacity
+                    style={styles.manageButton}
+                    onPress={() => router.push('/screens/subscription-upgrade-post')}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.manageButtonText}>
+                      {t('common.manage', { defaultValue: 'Manage' })}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           </View>
-          {subscriptionReady && (
-            <TierBadge size="md" showManageButton />
-          )}
         </View>
 
         <Text style={styles.greeting} numberOfLines={1}>
@@ -256,10 +269,38 @@ const createStyles = (theme: any) => StyleSheet.create({
     letterSpacing: 0.2,
   },
   headerSubtitle: {
+    // kept for backwards compatibility (older layouts); not currently rendered
     marginTop: 2,
     fontSize: 12,
     color: theme.onPrimary,
     opacity: 0.85,
+  },
+  schoolRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  schoolName: {
+    fontSize: isSmallScreen ? 14 : 15,
+    fontWeight: '800',
+    color: theme.onPrimary,
+    opacity: 0.95,
+    maxWidth: isSmallScreen ? 220 : 320,
+  },
+  manageButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  manageButtonText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.onPrimary,
   },
   greeting: {
     fontSize: isSmallScreen ? 18 : 20,
