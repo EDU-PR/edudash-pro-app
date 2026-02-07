@@ -222,9 +222,23 @@ export default function TeacherSignUpClient() {
           color: var(--text-primary);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           -webkit-font-smoothing: antialiased;
+          overflow-x: hidden;
+          max-width: 100vw;
         }
         input, textarea, select, button { font-family: inherit; }
         ::selection { background: rgba(129, 140, 248, 0.3); }
+
+        /* Consistent horizontal breathing room, including iOS safe-area insets */
+        .safe-x {
+          padding-left: max(18px, env(safe-area-inset-left));
+          padding-right: max(18px, env(safe-area-inset-right));
+        }
+        @media (min-width: 640px) {
+          .safe-x {
+            padding-left: max(24px, env(safe-area-inset-left));
+            padding-right: max(24px, env(safe-area-inset-right));
+          }
+        }
       `}</style>
 
       <div className="min-h-screen relative">
@@ -237,7 +251,7 @@ export default function TeacherSignUpClient() {
         <div className="relative z-10">
           {/* Header */}
           <header className="border-b border-[var(--border-subtle)] backdrop-blur-xl bg-[var(--bg-primary)]/80">
-            <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="max-w-lg mx-auto safe-x py-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
                   <img src="/favicon.png" alt="" className="w-5 h-5" />
@@ -250,8 +264,9 @@ export default function TeacherSignUpClient() {
             </div>
           </header>
 
-          <main className="max-w-lg mx-auto px-4 py-8 pb-20">
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] overflow-hidden">
+          <main className="max-w-lg mx-auto safe-x py-10 pb-24">
+            <div className="rounded-3xl bg-gradient-to-b from-indigo-500/25 via-indigo-500/8 to-purple-500/10 p-[1px] shadow-[0_40px_120px_-60px_rgba(0,0,0,0.9)]">
+              <div className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--bg-card)] overflow-hidden">
               {/* Header area */}
               <div className="px-6 pt-8 pb-6 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-indigo-500/20 flex items-center justify-center mx-auto mb-5 overflow-hidden">
@@ -399,6 +414,7 @@ export default function TeacherSignUpClient() {
                   <Link href="/privacy" className="text-indigo-400/60 hover:text-indigo-300 transition-colors">Privacy Policy</Link>
                 </p>
               </form>
+              </div>
             </div>
 
             {/* Bottom links */}
