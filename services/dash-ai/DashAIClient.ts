@@ -15,6 +15,8 @@
  * - React Native 0.79 WebSocket: https://reactnative.dev/docs/0.79/network#websocket-support
  */
 
+import { DashToolRegistry } from './DashToolRegistry';
+
 // Global declarations for React Native environment
 // Reference: https://reactnative.dev/docs/javascript-environment
 declare const __DEV__: boolean;
@@ -165,6 +167,18 @@ export class DashAIClient {
         (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
           ? (role === 'learner' ? 'student' : role)
           : 'teacher') as any;
+      
+      // Get client-side tool definitions for the AI to use
+      const userTier = (this.getUserProfile() as any)?.tier || 'free';
+      const claudeTools = DashToolRegistry.getClaudeTools(role, userTier);
+      const clientToolDefs = claudeTools.length > 0
+        ? claudeTools.map(t => ({
+            name: t.name,
+            description: t.description,
+            input_schema: t.input_schema as Record<string, unknown>,
+          }))
+        : undefined;
+      
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
           scope,
@@ -178,6 +192,7 @@ export class DashAIClient {
           },
           stream: false,
           enable_tools: ENABLE_TOOLS,
+          client_tools: clientToolDefs,
           metadata: {
             role: scope,
             model: params.model || undefined,
@@ -202,9 +217,49 @@ export class DashAIClient {
       // Handle response with potential tool use
       const assistantContent = data?.content || '';
       const toolResults = data?.tool_results || [];
+      const pendingToolCalls = data?.pending_tool_calls || [];
 
       if (__DEV__ && toolResults.length > 0) {
-        console.log('[DashAIClient] Tool calls executed:', toolResults.length);
+        console.log('[DashAIClient] Server-side tool calls executed:', toolResults.length);
+      }
+
+      // Execute client-side tools that the AI requested
+      if (pendingToolCalls.length > 0) {
+        if (__DEV__) {
+          console.log('[DashAIClient] Executing client-side tools:', pendingToolCalls.map((t: any) => t.name));
+        }
+        const profile = this.getUserProfile() as any;
+        const executionContext = {
+          userId: profile?.id || '',
+          role: role,
+          tier: profile?.tier || 'free',
+          organizationId: profile?.organization_id || profile?.preschool_id || '',
+          hasOrganization: !!(profile?.organization_id || profile?.preschool_id),
+          isGuest: !profile?.id,
+          supabaseClient: this.supabaseClient,
+        };
+        for (const toolCall of pendingToolCalls) {
+          try {
+            const result = await DashToolRegistry.executeTool(
+              toolCall.name,
+              toolCall.input || {},
+              executionContext
+            );
+            toolResults.push({
+              name: toolCall.name,
+              input: toolCall.input,
+              output: result.data || result.error || 'No output',
+              success: result.success,
+            });
+          } catch (toolError: any) {
+            toolResults.push({
+              name: toolCall.name,
+              input: toolCall.input,
+              output: `Tool execution error: ${toolError.message}`,
+              success: false,
+            });
+          }
+        }
       }
 
       if (!data?.success) {

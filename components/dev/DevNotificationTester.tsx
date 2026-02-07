@@ -46,7 +46,7 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
     if (!perms.granted) {
       const granted = await requestNotificationPermissions();
       if (granted) {
-        setPermissions({ granted: true, canAskAgain: true, status: 'granted' });
+        setPermissions({ granted: true, status: 'granted' });
       }
     }
   };

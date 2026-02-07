@@ -100,7 +100,15 @@ export default function PrincipalDashboardScreen() {
   }
 
   return (
-    <DesktopLayout role="principal">
+    <DesktopLayout
+      role="principal"
+      title={
+        profile?.organization_name ||
+        (profile as any)?.preschool_name ||
+        (profile as any)?.school_name ||
+        t('dashboard.your_school', { defaultValue: 'Your School' })
+      }
+    >
       <PrincipalDashboardWrapper />
     </DesktopLayout>
   );

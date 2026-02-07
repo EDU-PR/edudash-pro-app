@@ -72,8 +72,8 @@ export const PrincipalDoNowInbox: React.FC<PrincipalDoNowInboxProps> = ({ counts
       },
       {
         id: 'approvals' as const,
-        title: t('dashboard.do_now.approvals', { defaultValue: 'Approve learning items' }),
-        subtitle: t('dashboard.do_now.approvals_hint', { defaultValue: 'Reports, activities, and homework waiting' }),
+        title: t('dashboard.do_now.approvals', { defaultValue: 'Approvals' }),
+        subtitle: t('dashboard.do_now.approvals_hint', { defaultValue: 'Review POPs, petty cash, and other pending items' }),
         count: counts.pendingApprovals,
         icon: 'checkmark-circle',
         color: '#06B6D4',
@@ -319,4 +319,3 @@ const createStyles = (theme: any) =>
   });
 
 export default PrincipalDoNowInbox;
-
