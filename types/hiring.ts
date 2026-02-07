@@ -66,6 +66,8 @@ export interface JobPosting {
   created_at: string;
   updated_at: string;
   expires_at?: string | null;
+  age_group?: string | null;
+  whatsapp_number?: string | null;
 }
 
 export interface CandidateProfile {
@@ -173,6 +175,8 @@ export interface CreateJobPostingRequest {
   employment_type: EmploymentType;
   expires_at?: string;
   status?: JobPostingStatus;
+  age_group?: string;
+  whatsapp_number?: string;
 }
 
 export interface UpdateJobPostingRequest {
@@ -186,6 +190,8 @@ export interface UpdateJobPostingRequest {
   employment_type?: EmploymentType;
   expires_at?: string;
   status?: JobPostingStatus;
+  age_group?: string | null;
+  whatsapp_number?: string | null;
 }
 
 export interface CreateCandidateProfileRequest {

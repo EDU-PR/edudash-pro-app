@@ -42,6 +42,8 @@ export default function JobPostingCreateScreen() {
   const [location, setLocation] = useState('');
   const [employmentType, setEmploymentType] = useState<EmploymentType>(EmploymentType.FULL_TIME);
   const [expiresAt, setExpiresAt] = useState('');
+  const [ageGroup, setAgeGroup] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareJobPosting, setShareJobPosting] = useState<any | null>(null);
@@ -947,6 +949,8 @@ export default function JobPostingCreateScreen() {
           location: location.trim() || undefined,
           employment_type: employmentType,
           expires_at: expiresAt || undefined,
+          age_group: ageGroup.trim() || undefined,
+          whatsapp_number: whatsappNumber.trim() || undefined,
         },
         user.id
       );
@@ -1248,6 +1252,47 @@ export default function JobPostingCreateScreen() {
               <Picker.Item label="Temporary" value={EmploymentType.TEMPORARY} />
             </Picker>
           </View>
+        </View>
+
+        {/* Age Group */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Age Group</Text>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.surface }]}>
+            <Picker
+              selectedValue={ageGroup}
+              onValueChange={(value) => setAgeGroup(value)}
+              style={styles.picker}
+              dropdownIconColor={theme.text}
+            >
+              <Picker.Item label="Select age group (optional)" value="" />
+              <Picker.Item label="Babies (0–1 year)" value="0-1" />
+              <Picker.Item label="Toddlers (1–2 years)" value="1-2" />
+              <Picker.Item label="Toddlers (2–3 years)" value="2-3" />
+              <Picker.Item label="Preschool (3–4 years)" value="3-4" />
+              <Picker.Item label="Pre-K (4–5 years)" value="4-5" />
+              <Picker.Item label="Grade R (5–6 years)" value="Grade R" />
+              <Picker.Item label="Grade 1–3" value="Grade 1-3" />
+              <Picker.Item label="Grade 4–6" value="Grade 4-6" />
+              <Picker.Item label="Grade 7–9" value="Grade 7-9" />
+              <Picker.Item label="Grade 10–12" value="Grade 10-12" />
+              <Picker.Item label="Mixed / All Ages" value="Mixed" />
+            </Picker>
+          </View>
+          <Text style={styles.hint}>What age group will the teacher be working with?</Text>
+        </View>
+
+        {/* WhatsApp Number */}
+        <View style={styles.field}>
+          <Text style={styles.label}>WhatsApp Number</Text>
+          <TextInput
+            style={styles.input}
+            value={whatsappNumber}
+            onChangeText={setWhatsappNumber}
+            placeholder="e.g. +27 82 123 4567"
+            placeholderTextColor={theme.textSecondary}
+            keyboardType="phone-pad"
+          />
+          <Text style={styles.hint}>For quick communication with shortlisted candidates</Text>
         </View>
 
         {/* Expires At */}

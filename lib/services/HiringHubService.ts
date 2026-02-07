@@ -104,6 +104,8 @@ export class HiringHubService {
         employment_type: data.employment_type,
         status: data.status || JobPostingStatus.ACTIVE,
         expires_at: data.expires_at || null,
+        age_group: data.age_group || null,
+        whatsapp_number: data.whatsapp_number || null,
         created_by: createdBy,
       })
       .select()

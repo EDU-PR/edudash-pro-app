@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
-import { School, UserPlus, Search, Mail, Phone, Users, AlertCircle } from 'lucide-react';
+import { School, UserPlus, Search, Mail, Phone, Users, AlertCircle, Trash2, Clock, XCircle } from 'lucide-react';
 
 interface Teacher {
   id: string;
@@ -19,14 +19,27 @@ interface Teacher {
   student_count?: number;
 }
 
+interface Invite {
+  id: string;
+  code: string;
+  invitation_type: string;
+  is_active: boolean;
+  email?: string | null;
+  created_at: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 export default function TeachersPage() {
   const router = useRouter();
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [seatLimits, setSeatLimits] = useState<{ limit: number | null; used: number; available: number | null } | null>(null);
+  const [removingTeacherId, setRemovingTeacherId] = useState<string | null>(null);
+  const [deletingInviteId, setDeletingInviteId] = useState<string | null>(null);
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -84,6 +97,77 @@ export default function TeachersPage() {
 
     loadTeachers();
   }, [preschoolId]);
+
+  // Load invites
+  useEffect(() => {
+    if (!preschoolId) return;
+    const loadInvites = async () => {
+      try {
+        const { data } = await supabase
+          .from('school_invitation_codes')
+          .select('id, code, invitation_type, is_active, email, created_at, metadata')
+          .eq('preschool_id', preschoolId)
+          .eq('invitation_type', 'teacher')
+          .order('created_at', { ascending: false });
+        setInvites(data || []);
+      } catch {
+        setInvites([]);
+      }
+    };
+    loadInvites();
+  }, [preschoolId, supabase]);
+
+  const handleRemoveTeacher = async (teacher: Teacher) => {
+    const confirmed = confirm(`Remove ${teacher.first_name} ${teacher.last_name} from your school? This will revoke their access.`);
+    if (!confirmed) return;
+
+    setRemovingTeacherId(teacher.id);
+    try {
+      // Call the remove-teacher edge function
+      const { error } = await supabase.functions.invoke('remove-teacher', {
+        body: {
+          teacher_user_id: teacher.id,
+          organization_id: preschoolId,
+        },
+      });
+
+      if (error) {
+        // Fallback: set is_active = false directly 
+        const { error: directErr } = await supabase
+          .from('teachers')
+          .update({ is_active: false })
+          .eq('id', teacher.id)
+          .eq('preschool_id', preschoolId);
+        if (directErr) throw directErr;
+      }
+
+      setTeachers((prev) => prev.filter((t) => t.id !== teacher.id));
+      alert(`${teacher.first_name} ${teacher.last_name} has been removed.`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to remove teacher');
+    } finally {
+      setRemovingTeacherId(null);
+    }
+  };
+
+  const handleDeleteInvite = async (invite: Invite) => {
+    const confirmed = confirm(`Delete invite code ${invite.code}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingInviteId(invite.id);
+    try {
+      const { error } = await supabase
+        .from('school_invitation_codes')
+        .delete()
+        .eq('id', invite.id);
+      if (error) throw error;
+      setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete invite');
+    } finally {
+      setDeletingInviteId(null);
+    }
+  };
 
   const filteredTeachers = teachers.filter(teacher =>
     teacher.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -313,9 +397,76 @@ export default function TeachersPage() {
                       }
                     }}
                   >Revoke Seat</button>
+                  <button
+                    className="btn"
+                    style={{
+                      padding: '6px 10px', fontSize: 12,
+                      color: '#ef4444', borderColor: '#fecaca',
+                    }}
+                    disabled={removingTeacherId === teacher.id}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      handleRemoveTeacher(teacher);
+                    }}
+                  >
+                    <Trash2 size={13} style={{ marginRight: 4 }} />
+                    {removingTeacherId === teacher.id ? 'Removing...' : 'Remove'}
+                  </button>
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pending Invites Section */}
+        {invites.length > 0 && (
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Clock size={20} />
+              Pending Invites ({invites.length})
+            </h2>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {invites.map((invite) => (
+                <div key={invite.id} className="card" style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  borderLeft: `3px solid ${invite.is_active ? '#f59e0b' : '#94a3b8'}`,
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <code style={{
+                        padding: '2px 8px', borderRadius: 6, fontSize: 13, fontWeight: 700,
+                        background: 'var(--surface-2)', letterSpacing: '0.5px',
+                      }}>
+                        {invite.code}
+                      </code>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                        background: invite.is_active ? 'rgba(245,158,11,0.1)' : 'rgba(148,163,184,0.1)',
+                        color: invite.is_active ? '#f59e0b' : '#94a3b8',
+                      }}>
+                        {invite.is_active ? 'Active' : 'Used/Expired'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                      Created {new Date(invite.created_at).toLocaleDateString('en-ZA')}
+                      {invite.email && ` · ${invite.email}`}
+                    </div>
+                  </div>
+                  <button
+                    className="btn"
+                    style={{
+                      padding: '6px 10px', fontSize: 12,
+                      color: '#ef4444', borderColor: '#fecaca',
+                    }}
+                    disabled={deletingInviteId === invite.id}
+                    onClick={() => handleDeleteInvite(invite)}
+                  >
+                    <XCircle size={13} style={{ marginRight: 4 }} />
+                    {deletingInviteId === invite.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
