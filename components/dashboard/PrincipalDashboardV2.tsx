@@ -24,6 +24,7 @@ import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentL
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
 import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
 import { PrincipalDoNowInbox } from '@/components/dashboard/principal';
+import { PrincipalQuickActions } from '@/components/dashboard/principal';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
@@ -70,6 +71,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   });
 
   const [refreshing, setRefreshing] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const stats = data.stats;
 
@@ -112,6 +114,15 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     setRefreshing(false);
   }, [refresh, refreshBirthdays, refreshStudents]);
 
+  const toggleSection = useCallback((sectionId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }, []);
+
   const schoolName = profile?.organization_name || data.schoolName || t('dashboard.your_school', { defaultValue: 'Your School' });
   const normalizedName = normalizePersonName({
     first: profile?.first_name || user?.user_metadata?.first_name,
@@ -135,21 +146,6 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     if (amount >= 1000) return `R${(amount / 1000).toFixed(0)}k`;
     return `R${amount.toFixed(0)}`;
   };
-
-  const quickActions = [
-    { id: 'students', label: t('dashboard.manage_students', { defaultValue: 'Students' }), icon: 'school', route: '/screens/student-management', color: theme.primary },
-    { id: 'teachers', label: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }), icon: 'people', route: '/screens/teacher-management', color: theme.success },
-    { id: 'registrations', label: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', route: '/screens/principal-registrations', color: theme.warning },
-    { id: 'activity-approvals', label: t('dashboard.activity_approvals', { defaultValue: 'Activity Approvals' }), icon: 'checkmark-circle', route: '/screens/principal-activity-approvals', color: theme.info },
-    { id: 'homework-approvals', label: t('dashboard.homework_approvals', { defaultValue: 'Homework Approvals' }), icon: 'document-text', route: '/screens/principal-homework-approvals', color: theme.info },
-    { id: 'uniforms', label: t('dashboard.uniform_sizes', { defaultValue: 'Uniforms' }), icon: 'shirt-outline', route: '/screens/principal-uniforms', color: theme.info },
-    { id: 'parent-links', label: t('dashboard.parent_links', { defaultValue: 'Connect Parent' }), icon: 'link', route: '/screens/principal-parent-requests', color: theme.info },
-    { id: 'payments', label: t('dashboard.review_payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/principal-fee-overview', color: theme.info },
-    { id: 'log-expense', label: t('dashboard.log_expense', { defaultValue: 'Log Expense' }), icon: 'add-circle', route: '/screens/log-expense', color: '#6366F1' },
-    { id: 'fee-management', label: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', route: '/screens/admin/fee-management', color: theme.success },
-    { id: 'social-agent', label: t('dashboard.social_agent', { defaultValue: 'Social Agent' }), icon: 'logo-facebook', route: '/screens/principal-social-agent', color: '#1877F2' },
-    { id: 'dash-studio', label: t('dashboard.dash_studio', { defaultValue: 'Dash Studio' }), icon: 'sparkles', route: '/screens/dash-studio', color: theme.primary },
-  ];
 
   const needsAttention: NeedsAttentionItem[] = [
     {
@@ -490,23 +486,15 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
           </>
         )}
 
-        {/* Quick Actions */}
-        <SectionHeader title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })} theme={theme} />
-        <View style={styles.quickActionsGrid}>
-          {quickActions.map((action) => (
-            <TouchableOpacity
-              key={action.id}
-              style={styles.quickActionCard}
-              onPress={() => router.push(action.route as any)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
-                <Ionicons name={action.icon as any} size={20} color={action.color} />
-              </View>
-              <Text style={styles.quickActionLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Quick Actions (grouped) */}
+        <PrincipalQuickActions
+          stats={data.stats}
+          pendingRegistrationsCount={pendingRegistrations}
+          pendingPaymentsCount={pendingPayments}
+          pendingPOPUploadsCount={pendingPOPs}
+          collapsedSections={collapsedSections}
+          onToggleSection={toggleSection}
+        />
 
         {loading && (
           <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
@@ -826,30 +814,6 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
       paddingHorizontal: 16,
       marginTop: 8,
     },
-    quickActionsGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 12,
-      paddingHorizontal: 16,
-      marginTop: 8,
-    },
-    quickActionCard: {
-      width: '47%',
-      backgroundColor: theme.surface,
-      borderRadius: 14,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    quickActionIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 6,
-    },
-    quickActionLabel: { fontSize: 12, fontWeight: '600', color: theme.text },
     progressRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
