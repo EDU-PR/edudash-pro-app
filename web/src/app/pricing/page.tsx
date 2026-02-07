@@ -22,7 +22,7 @@ export default function PricingPage() {
   const [userName, setUserName] = useState<string | null>(null);
   const [showBackToHome, setShowBackToHome] = useState(false);
   const [customSeats, setCustomSeats] = useState(150);
-  const [customAiCost, setCustomAiCost] = useState(5);
+  const [customAiCostUsd, setCustomAiCostUsd] = useState(0.25);
   const [customBaseFee, setCustomBaseFee] = useState(0);
   const [customPerSeatFee, setCustomPerSeatFee] = useState(0);
   const [customSupport, setCustomSupport] = useState<'standard' | 'priority'>('standard');
@@ -309,7 +309,10 @@ export default function PricingPage() {
   ];
 
   const activePlans = userType === "parents" ? parentPlans : schoolPlans;
-  const aiBundle = Math.max(0, customSeats) * Math.max(0, customAiCost) * 5;
+  const envRate = Number(process.env.NEXT_PUBLIC_USD_TO_ZAR_RATE || 0);
+  const usdToZarRate = Number.isFinite(envRate) && envRate > 0 ? envRate : 18;
+  const aiCostZar = Math.max(0, customAiCostUsd) * usdToZarRate;
+  const aiBundle = Math.max(0, customSeats) * aiCostZar * 5;
   const baseFee = Math.max(0, customBaseFee);
   const perSeatFee = Math.max(0, customPerSeatFee);
   const totalEstimate = baseFee + perSeatFee * Math.max(0, customSeats) + aiBundle;
@@ -328,7 +331,9 @@ export default function PricingPage() {
         email: quoteEmail,
         organization: quoteOrg,
         seats: customSeats,
-        ai_cost_per_user: customAiCost,
+        ai_cost_per_user_usd: customAiCostUsd,
+        ai_cost_per_user_zar: aiCostZar,
+        usd_to_zar_rate: usdToZarRate,
         base_fee: customBaseFee,
         per_seat_fee: customPerSeatFee,
         support_level: customSupport,
@@ -736,14 +741,18 @@ export default function PricingPage() {
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "12px", color: "#9CA3AF", marginBottom: "6px" }}>AI cost per user (ZAR)</label>
+                <label style={{ display: "block", fontSize: "12px", color: "#9CA3AF", marginBottom: "6px" }}>AI cost per user (USD)</label>
                 <input
                   type="number"
                   min={0}
-                  value={customAiCost}
-                  onChange={(e) => setCustomAiCost(Number(e.target.value || 0))}
+                  step="0.01"
+                  value={customAiCostUsd}
+                  onChange={(e) => setCustomAiCostUsd(Number(e.target.value || 0))}
                   style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)", background: "#0b0b10", color: "#fff" }}
                 />
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "#6B7280" }}>
+                  Using global USD→ZAR rate: <strong>{usdToZarRate.toFixed(2)}</strong>
+                </div>
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "12px", color: "#9CA3AF", marginBottom: "6px" }}>Base platform fee (ZAR)</label>

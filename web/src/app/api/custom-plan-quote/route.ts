@@ -8,7 +8,9 @@ export async function POST(request: NextRequest) {
       email,
       organization,
       seats,
-      ai_cost_per_user,
+      ai_cost_per_user_usd,
+      ai_cost_per_user_zar,
+      usd_to_zar_rate,
       base_fee,
       per_seat_fee,
       support_level,
@@ -41,7 +43,9 @@ export async function POST(request: NextRequest) {
               <p><strong>Contact:</strong> ${email}</p>
               <p><strong>Organization:</strong> ${organization || 'N/A'}</p>
               <p><strong>Seats:</strong> ${seats ?? 'N/A'}</p>
-              <p><strong>AI cost per user (ZAR):</strong> ${ai_cost_per_user ?? 'N/A'}</p>
+              <p><strong>AI cost per user (USD):</strong> ${ai_cost_per_user_usd ?? 'N/A'}</p>
+              <p><strong>USD → ZAR rate:</strong> ${usd_to_zar_rate ?? 'N/A'}</p>
+              <p><strong>AI cost per user (ZAR):</strong> ${ai_cost_per_user_zar ?? 'N/A'}</p>
               <p><strong>Base fee (ZAR):</strong> ${base_fee ?? 'N/A'}</p>
               <p><strong>Per-seat fee (ZAR):</strong> ${per_seat_fee ?? 'N/A'}</p>
               <p><strong>Support level:</strong> ${support_level ?? 'N/A'}</p>

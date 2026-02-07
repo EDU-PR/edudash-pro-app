@@ -125,6 +125,7 @@ module.exports = ({ config }) => {
       EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
       EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       EXPO_PUBLIC_API_BASE: process.env.EXPO_PUBLIC_API_BASE,
+      EXPO_PUBLIC_USD_TO_ZAR_RATE: process.env.EXPO_PUBLIC_USD_TO_ZAR_RATE,
       DAILY_API_KEY: process.env.DAILY_API_KEY,
     },
   };

@@ -37,6 +37,9 @@ interface AppConfig {
 
   // Payments
   paymentsBridgeUrl: string;
+
+  // Currency
+  usdToZarRate: number;
 }
 
 class ConfigManager {
@@ -86,6 +89,9 @@ class ConfigManager {
 
       // Payments
       paymentsBridgeUrl: this.getOptional('EXPO_PUBLIC_PAYMENTS_BRIDGE_URL', ''),
+
+      // Currency
+      usdToZarRate: this.getNumber('EXPO_PUBLIC_USD_TO_ZAR_RATE', 18),
     };
   }
 
@@ -108,6 +114,15 @@ class ConfigManager {
     const value = process.env[key] || process.env[key.replace('EXPO_PUBLIC_', 'NEXT_PUBLIC_')];
     if (!value) return defaultValue;
     return value.toLowerCase() === 'true' || value === '1';
+  }
+
+  private getNumber(key: string, defaultValue: number): number {
+    const value = this.getOptional(key, String(defaultValue));
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+    return defaultValue;
   }
 
   private validateConfig(): void {
@@ -134,6 +149,10 @@ class ConfigManager {
     // Validate email
     if (this.config.fromEmail && !this.isValidEmail(this.config.fromEmail)) {
       errors.push('EXPO_PUBLIC_FROM_EMAIL must be a valid email address');
+    }
+
+    if (this.config.usdToZarRate <= 0) {
+      errors.push('EXPO_PUBLIC_USD_TO_ZAR_RATE must be greater than 0');
     }
 
     // Production-specific validations
@@ -191,6 +210,7 @@ class ConfigManager {
   get revenuecatAndroidKey(): string { return this.config.revenuecatAndroidKey; }
   get revenuecatIosKey(): string { return this.config.revenuecatIosKey; }
   get paymentsBridgeUrl(): string { return this.config.paymentsBridgeUrl; }
+  get usdToZarRate(): number { return this.config.usdToZarRate; }
 
   // Utility methods
   get isDevelopment(): boolean { return this.config.environment === 'development'; }

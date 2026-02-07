@@ -758,10 +758,13 @@ export class InvoiceService {
 
       const { data: branding, error } = await this.supabase
         .from('school_branding')
-        .upsert({
-          preschool_id: profile.preschool_id,
-          ...data,
-        })
+        .upsert(
+          {
+            preschool_id: profile.preschool_id,
+            ...data,
+          },
+          { onConflict: 'preschool_id' }
+        )
         .select('*')
         .single();
 

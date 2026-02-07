@@ -270,10 +270,13 @@ export default function JobPostingCreateScreen() {
       try {
         await assertSupabase()
           .from('school_branding')
-          .upsert({
-            preschool_id: preschoolId,
-            logo_url: publicUrl,
-          })
+          .upsert(
+            {
+              preschool_id: preschoolId,
+              logo_url: publicUrl,
+            },
+            { onConflict: 'preschool_id' }
+          )
           .select('id')
           .single();
       } catch (brandingErr) {
