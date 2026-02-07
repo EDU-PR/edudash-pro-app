@@ -23,8 +23,7 @@ import { StudentSummaryCard } from '@/components/dashboard/shared';
 import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
 import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
-import { PrincipalDoNowInbox } from '@/components/dashboard/principal';
-import { PrincipalQuickActions } from '@/components/dashboard/principal';
+import { PrincipalDoNowInbox, PrincipalGettingStartedCard, PrincipalQuickActions, PrincipalSchoolPulse } from '@/components/dashboard/principal';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
@@ -230,6 +229,11 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
         </View>
 
         {/* Do Now Inbox - first, for non-technical users */}
+        <View style={{ paddingHorizontal: 16 }}>
+          <PrincipalSchoolPulse stats={stats} />
+          <PrincipalGettingStartedCard stats={stats} />
+        </View>
+
         <PrincipalDoNowInbox
           counts={{
             pendingRegistrations,

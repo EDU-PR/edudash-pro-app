@@ -363,6 +363,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   coreGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     marginHorizontal: -cardGap / 2,
     marginBottom: 4,
   },
@@ -404,6 +405,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     marginHorizontal: -cardGap / 2,
   },
 });

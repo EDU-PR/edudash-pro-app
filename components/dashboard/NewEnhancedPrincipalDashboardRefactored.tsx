@@ -46,7 +46,9 @@ import {
   PrincipalMetricsSection,
   PrincipalQuickActions,
   PrincipalDoNowInbox,
-  PrincipalRecentActivity
+  PrincipalRecentActivity,
+  PrincipalSchoolPulse,
+  PrincipalGettingStartedCard
 } from './principal';
 import { CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
 
@@ -195,6 +197,12 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             tier={tier}
             subscriptionReady={subscriptionReady}
           />
+        </View>
+
+        {/* 1b. School Pulse + Guided Setup */}
+        <View style={styles.section}>
+          <PrincipalSchoolPulse stats={data.stats} />
+          <PrincipalGettingStartedCard stats={data.stats} />
         </View>
 
         {/* 2. Do Now Inbox - Prioritized tasks for non-technical principals */}
