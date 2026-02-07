@@ -184,24 +184,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       )}
       
       <View style={styles.composerRow}>
-        {/* Emoji button - hide when recording */}
-        {!isRecording && (
-          <TouchableOpacity 
-            style={styles.composerBtn}
-            onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-          >
-            <Ionicons 
-              name={showEmojiPicker ? 'close-outline' : 'happy-outline'} 
-              size={32} 
-              color="rgba(255,255,255,0.6)" 
-            />
-          </TouchableOpacity>
-        )}
-        
         {/* Input wrapper - hide when recording */}
         {!isRecording && (
           <>
             <View style={styles.inputWrapper}>
+              {/* Emoji toggle inside the input field */}
+              <TouchableOpacity
+                style={styles.inlineBtnLeft}
+                onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+                accessibilityLabel={showEmojiPicker ? 'Close emoji picker' : 'Open emoji picker'}
+              >
+                <Ionicons
+                  name={showEmojiPicker ? 'close-outline' : 'happy-outline'}
+                  size={22}
+                  color="rgba(255,255,255,0.65)"
+                />
+              </TouchableOpacity>
+
               <TextInput
                 style={styles.textInput}
                 placeholder={placeholder}
@@ -298,20 +297,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 6,
-    paddingTop: 14,
-    paddingBottom: 5,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   composerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 4,
-  },
-  composerBtn: {
-    width: 36,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
   inputWrapper: {
     flex: 1,
@@ -319,14 +312,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(30, 41, 59, 0.85)',
     borderRadius: 24,
-    paddingLeft: 14,
-    paddingRight: 8,
-    paddingVertical: 8,
-    minHeight: 50,
-    marginLeft: -4,
+    paddingLeft: 8,
+    paddingRight: 6,
+    paddingVertical: 6,
+    minHeight: 48,
     borderWidth: 1,
     borderColor: 'rgba(148, 163, 184, 0.2)',
-    bottom: -12,
   },
   textInput: {
     flex: 1,
@@ -335,19 +326,23 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     minHeight: 36,
     paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  inlineBtnLeft: {
+    padding: 8,
+    marginRight: 2,
   },
   inlineBtn: {
-    padding: 6,
-    marginLeft: 2,
+    padding: 8,
   },
   actionButton: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
   },
   gradientButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#021129ff',
@@ -355,7 +350,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 8,
     elevation: 6,
-    bottom: -12,
   },
   micButton: {
     borderWidth: 1.5,
@@ -370,7 +364,6 @@ const styles = StyleSheet.create({
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    bottom: -12,
   },
   recordingWrapper: {
     flex: 1,

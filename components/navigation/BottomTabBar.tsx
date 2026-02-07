@@ -568,9 +568,8 @@ export function BottomTabBar() {
     pathname.includes('teacher-registration') ||
     pathname.includes('/auth-callback') ||
     pathname.includes('/invite/') ||
-    pathname.includes('/parent-message-thread') ||
-    pathname.includes('/teacher-message-thread') ||
-    pathname.includes('/message-thread');
+    // Hide on any message thread view (parent/teacher/principal variants)
+    pathname.includes('message-thread');
 
   if (shouldHide) {
     return null;
