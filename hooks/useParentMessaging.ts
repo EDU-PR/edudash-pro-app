@@ -91,12 +91,15 @@ async function sendMessagePushNotification(params: {
 export interface MessageThread {
   id: string;
   preschool_id: string;
-  type: 'parent-teacher' | 'parent-principal' | 'general';
+  type: 'parent-teacher' | 'parent-principal' | 'parent-parent' | 'general' | 'class_group' | 'parent_group' | 'announcement';
   student_id: string | null;
   subject: string;
   created_by: string;
   last_message_at: string;
   is_archived: boolean;
+  is_group?: boolean;
+  group_name?: string;
+  group_type?: string;
   created_at: string;
   updated_at: string;
   // Joined data

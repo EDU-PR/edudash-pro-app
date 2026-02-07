@@ -54,13 +54,25 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
   const { theme } = useTheme();
   const { t } = useTranslation();
   
-  // Get the other participant (teacher/principal)
-  const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
-  const participantName = otherParticipant?.user_profile ? 
-    `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim() :
-    'Teacher';
+  const { user } = useAuth();
+  
+  // Handle group threads and parent-parent threads
+  const isGroup = thread.is_group || ['class_group', 'parent_group', 'announcement'].includes(thread.type);
+  const isParentDM = thread.type === 'parent-parent';
+  
+  // Get the other participant (teacher/principal/parent)
+  const otherParticipant = isParentDM
+    ? thread.participants?.find((p: any) => p.user_id !== user?.id)
+    : thread.participants?.find((p: any) => p.role !== 'parent');
+  const participantName = isGroup
+    ? ((thread as any).group_name || thread.subject || 'Group')
+    : otherParticipant?.user_profile
+      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+      : isParentDM ? 'Parent' : 'Teacher';
     
-  const participantRole = otherParticipant?.user_profile?.role || 'teacher';
+  const participantRole = isGroup
+    ? (thread.type === 'announcement' ? 'announcement' : 'group')
+    : otherParticipant?.user_profile?.role || (isParentDM ? 'parent' : 'teacher');
   
   // Student name for context
   const studentName = thread.student ? 
@@ -194,7 +206,11 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
     >
       <View style={styles.inner}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          {isGroup ? (
+            <Ionicons name="people" size={24} color={hasUnread ? theme.onPrimary : theme.primary} />
+          ) : (
+            <Text style={styles.avatarText}>{initials}</Text>
+          )}
         </View>
         
         <View style={styles.content}>
@@ -549,7 +565,7 @@ export default function ParentMessagesScreen() {
     },
     listContent: {
       paddingTop: 8,
-      paddingBottom: insets.bottom + 20,
+      paddingBottom: insets.bottom + 160,
     },
     fab: {
       position: 'absolute',
@@ -714,7 +730,14 @@ export default function ParentMessagesScreen() {
         }
       />
       
-      {/* Floating Action Button */}
+      {/* Floating Action Buttons */}
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: insets.bottom + 90 }]}
+        onPress={() => router.push('/screens/create-group')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="people-circle" size={26} color={theme.onPrimary} />
+      </TouchableOpacity>
       <TouchableOpacity 
         style={styles.fab}
         onPress={handleStartNewMessage}

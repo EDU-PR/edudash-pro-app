@@ -252,7 +252,7 @@ export default function PrincipalMessagesScreen() {
   }, []);
 
   const handleGroups = useCallback(() => {
-    router.push('/screens/group-management');
+    router.push('/screens/create-group');
   }, []);
 
   const filteredThreads = useMemo(() => {
