@@ -647,52 +647,38 @@ export default function JobPostingCreateScreen() {
 
       <Modal
         visible={shareModalVisible}
-        transparent
+        transparent={false}
         animationType="slide"
         onRequestClose={() => {
           setShareModalVisible(false);
           router.back();
         }}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.surface }]}>
-            <Text style={styles.modalTitle}>Job Posted 🎉</Text>
-            <Text style={styles.modalSubtitle}>Preview and share your WhatsApp message.</Text>
-
-            <View style={styles.toggleGroup}>
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>Show school header</Text>
-                <Switch
-                  value={includeSchoolHeader}
-                  onValueChange={setIncludeSchoolHeader}
-                  trackColor={{ false: theme.border, true: theme.primary }}
-                  thumbColor={includeSchoolHeader ? theme.onPrimary : theme.textSecondary}
-                />
-              </View>
-              {includeSchoolHeader && (
-                <>
-                  <View style={styles.toggleRow}>
-                    <Text style={styles.toggleLabel}>Include logo</Text>
-                    <Switch
-                      value={includeSchoolLogo}
-                      onValueChange={setIncludeSchoolLogo}
-                      trackColor={{ false: theme.border, true: theme.primary }}
-                      thumbColor={includeSchoolLogo ? theme.onPrimary : theme.textSecondary}
-                    />
-                  </View>
-                  <View style={styles.toggleRow}>
-                    <Text style={styles.toggleLabel}>Include details</Text>
-                    <Switch
-                      value={includeSchoolDetails}
-                      onValueChange={setIncludeSchoolDetails}
-                      trackColor={{ false: theme.border, true: theme.primary }}
-                      thumbColor={includeSchoolDetails ? theme.onPrimary : theme.textSecondary}
-                    />
-                  </View>
-                </>
-              )}
+        <SafeAreaView style={styles.shareScreenContainer} edges={['top', 'bottom']}>
+          {/* Share Screen Header */}
+          <View style={styles.shareHeader}>
+            <TouchableOpacity
+              style={styles.shareHeaderClose}
+              onPress={() => {
+                setShareModalVisible(false);
+                router.back();
+              }}
+            >
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+            <View style={styles.shareHeaderCenter}>
+              <Ionicons name="checkmark-circle" size={22} color="#22c55e" />
+              <Text style={styles.shareHeaderTitle}>Job Posted!</Text>
             </View>
+            <View style={{ width: 40 }} />
+          </View>
 
+          <ScrollView
+            style={styles.shareScrollView}
+            contentContainerStyle={styles.shareScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Job Preview Card */}
             <View style={styles.previewCard}>
               {includeSchoolHeader && (schoolInfo || jobLogoUrl) ? (
                 <View style={styles.schoolHeader}>
@@ -702,7 +688,7 @@ export default function JobPostingCreateScreen() {
                     ) : (
                       <View style={styles.schoolLogoPlaceholder}>
                         <Text style={styles.schoolLogoText}>
-                          {schoolInfo.name?.slice(0, 2).toUpperCase() || 'ED'}
+                          {schoolInfo?.name?.slice(0, 2).toUpperCase() || 'ED'}
                         </Text>
                       </View>
                     )
@@ -718,19 +704,40 @@ export default function JobPostingCreateScreen() {
 
               <View style={styles.previewBody}>
                 <Text style={styles.previewTitle}>{shareJobPosting?.title || title || 'Teaching Opportunity'}</Text>
-                <Text style={styles.previewMeta}>
-                  {formatEmploymentType(shareJobPosting?.employment_type || employmentType)} •{' '}
-                  {shareJobPosting?.location || location || 'Location TBA'} •{' '}
-                  {formatSalaryRange(shareJobPosting || {})}
-                </Text>
+                
+                {/* Job Meta Tags */}
+                <View style={styles.previewMetaRow}>
+                  <View style={styles.previewMetaTag}>
+                    <Ionicons name="briefcase-outline" size={13} color={theme.primary} />
+                    <Text style={styles.previewMetaTagText}>
+                      {formatEmploymentType(shareJobPosting?.employment_type || employmentType)}
+                    </Text>
+                  </View>
+                  <View style={styles.previewMetaTag}>
+                    <Ionicons name="location-outline" size={13} color={theme.primary} />
+                    <Text style={styles.previewMetaTagText}>
+                      {shareJobPosting?.location || location || 'Location TBA'}
+                    </Text>
+                  </View>
+                  <View style={styles.previewMetaTag}>
+                    <Ionicons name="cash-outline" size={13} color="#22c55e" />
+                    <Text style={[styles.previewMetaTagText, { color: '#22c55e' }]}>
+                      {formatSalaryRange(shareJobPosting || {})}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.previewDivider} />
+
                 <Text style={styles.previewSectionLabel}>Description</Text>
-                <Text style={styles.previewText} numberOfLines={4}>
+                <Text style={styles.previewText} numberOfLines={6}>
                   {shareJobPosting?.description || description || 'Description will appear here.'}
                 </Text>
+
                 {(shareJobPosting?.requirements || requirements) ? (
                   <>
                     <Text style={styles.previewSectionLabel}>Requirements</Text>
-                    <Text style={styles.previewText} numberOfLines={3}>
+                    <Text style={styles.previewText} numberOfLines={5}>
                       {shareJobPosting?.requirements || requirements}
                     </Text>
                   </>
@@ -738,70 +745,137 @@ export default function JobPostingCreateScreen() {
               </View>
             </View>
 
+            {/* Invite Code Section */}
             {shareInviteCode ? (
-              <View style={styles.inviteRow}>
-                <Text style={styles.inviteLabel}>Invite Code</Text>
-                <View style={styles.inviteCodeRow}>
-                  <Text style={styles.inviteValue}>{shareInviteCode}</Text>
-                  <TouchableOpacity style={styles.inlineButton} onPress={handleCopyInviteCode}>
-                    <Ionicons name="copy-outline" size={16} color={theme.text} />
+              <View style={styles.inviteCodeCard}>
+                <View style={styles.inviteCodeHeader}>
+                  <View style={styles.inviteCodeIconBg}>
+                    <Ionicons name="key" size={16} color="#6366f1" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inviteCodeLabel}>Teacher Invite Code</Text>
+                    <Text style={styles.inviteCodeValue}>{shareInviteCode}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.inviteCodeCopyBtn} onPress={handleCopyInviteCode}>
+                    <Ionicons name="copy-outline" size={18} color={theme.primary} />
+                    <Text style={styles.inviteCodeCopyText}>Copy</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             ) : null}
 
-            <Text style={styles.previewLabel}>WhatsApp Message</Text>
-            <TextInput
-              style={[styles.input, styles.messageInput]}
-              value={shareMessage}
-              onChangeText={setShareMessage}
-              placeholder="Message preview..."
-              placeholderTextColor={theme.textSecondary}
-              multiline
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.secondaryAction} onPress={handleCopyMessage}>
-                <Text style={styles.secondaryActionText}>Copy Message</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryAction} onPress={handleShareToWhatsApp}>
-                <Text style={styles.primaryActionText}>Share to WhatsApp</Text>
-              </TouchableOpacity>
+            {/* Branding Toggles */}
+            <View style={styles.toggleGroup}>
+              <Text style={styles.toggleGroupTitle}>Customise Preview</Text>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleLabelRow}>
+                  <Ionicons name="business-outline" size={16} color={theme.textSecondary} />
+                  <Text style={styles.toggleLabel}>School header</Text>
+                </View>
+                <Switch
+                  value={includeSchoolHeader}
+                  onValueChange={setIncludeSchoolHeader}
+                  trackColor={{ false: theme.border, true: theme.primary }}
+                  thumbColor={includeSchoolHeader ? '#fff' : theme.textSecondary}
+                />
+              </View>
+              {includeSchoolHeader && (
+                <>
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelRow}>
+                      <Ionicons name="image-outline" size={16} color={theme.textSecondary} />
+                      <Text style={styles.toggleLabel}>Logo</Text>
+                    </View>
+                    <Switch
+                      value={includeSchoolLogo}
+                      onValueChange={setIncludeSchoolLogo}
+                      trackColor={{ false: theme.border, true: theme.primary }}
+                      thumbColor={includeSchoolLogo ? '#fff' : theme.textSecondary}
+                    />
+                  </View>
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelRow}>
+                      <Ionicons name="information-circle-outline" size={16} color={theme.textSecondary} />
+                      <Text style={styles.toggleLabel}>Contact details</Text>
+                    </View>
+                    <Switch
+                      value={includeSchoolDetails}
+                      onValueChange={setIncludeSchoolDetails}
+                      trackColor={{ false: theme.border, true: theme.primary }}
+                      thumbColor={includeSchoolDetails ? '#fff' : theme.textSecondary}
+                    />
+                  </View>
+                </>
+              )}
             </View>
 
-            <TouchableOpacity
-              style={[styles.secondaryAction, styles.broadcastAction]}
-              disabled={broadcasting}
-              onPress={() => {
-                if (!shareJobPosting) return;
-                showAlert({
-                  title: 'Broadcast to all contacts?',
-                  message: 'This will send the message to your full WhatsApp contact list. Continue?',
-                  type: 'warning',
-                  buttons: [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Broadcast',
-                      style: 'destructive',
-                      onPress: async () => {
-                        setBroadcasting(true);
-                        const success = await handleWhatsAppBroadcast(shareJobPosting, shareMessage);
-                        setBroadcasting(false);
-                        if (success) {
-                          setShareModalVisible(false);
-                          router.back();
-                        }
-                      },
-                    },
-                  ],
-                });
-              }}
-            >
-              <Text style={styles.broadcastText}>
-                {broadcasting ? 'Broadcasting…' : 'Broadcast to All Contacts'}
-              </Text>
-            </TouchableOpacity>
+            {/* WhatsApp Message Preview */}
+            <View style={styles.messageSection}>
+              <View style={styles.messageSectionHeader}>
+                <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
+                <Text style={styles.messageSectionTitle}>WhatsApp Message</Text>
+              </View>
+              <TextInput
+                style={styles.messageInput}
+                value={shareMessage}
+                onChangeText={setShareMessage}
+                placeholder="Message preview..."
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
 
+            {/* Share Actions */}
+            <View style={styles.shareActionsSection}>
+              <TouchableOpacity style={styles.whatsappShareBtn} onPress={handleShareToWhatsApp}>
+                <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                <Text style={styles.whatsappShareText}>Share to WhatsApp</Text>
+              </TouchableOpacity>
+
+              <View style={styles.shareSecondaryRow}>
+                <TouchableOpacity style={styles.copyMessageBtn} onPress={handleCopyMessage}>
+                  <Ionicons name="copy-outline" size={18} color={theme.text} />
+                  <Text style={styles.copyMessageText}>Copy Message</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.broadcastBtn}
+                  disabled={broadcasting}
+                  onPress={() => {
+                    if (!shareJobPosting) return;
+                    showAlert({
+                      title: 'Broadcast to all contacts?',
+                      message: 'This will send the message to your full WhatsApp contact list. Continue?',
+                      type: 'warning',
+                      buttons: [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Broadcast',
+                          style: 'destructive',
+                          onPress: async () => {
+                            setBroadcasting(true);
+                            const success = await handleWhatsAppBroadcast(shareJobPosting, shareMessage);
+                            setBroadcasting(false);
+                            if (success) {
+                              setShareModalVisible(false);
+                              router.back();
+                            }
+                          },
+                        },
+                      ],
+                    });
+                  }}
+                >
+                  <Ionicons name="megaphone-outline" size={18} color="#f59e0b" />
+                  <Text style={styles.broadcastBtnText}>
+                    {broadcasting ? 'Sending…' : 'Broadcast'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Done / Footer */}
             <TouchableOpacity
               style={styles.doneButton}
               onPress={() => {
@@ -811,8 +885,10 @@ export default function JobPostingCreateScreen() {
             >
               <Text style={styles.doneButtonText}>Done</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+
+            <Text style={styles.shareFooterText}>Posted via EduDash Pro Hiring Hub</Text>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -969,108 +1045,68 @@ const createStyles = (theme: any) =>
       fontWeight: '700',
       color: '#FFFFFF',
     },
-    modalBackdrop: {
+    // ── Share Screen (full-screen modal) ──
+    shareScreenContainer: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: theme.background,
+    },
+    shareHeader: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-end',
-      padding: 16,
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
     },
-    modalCard: {
-      width: '100%',
-      borderRadius: 16,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-      gap: 12,
+    shareHeaderClose: {
+      padding: 8,
     },
-    modalTitle: {
+    shareHeaderCenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    shareHeaderTitle: {
       fontSize: 18,
       fontWeight: '700',
       color: theme.text,
     },
-    modalSubtitle: {
-      fontSize: 13,
-      color: theme.textSecondary,
+    shareScrollView: {
+      flex: 1,
     },
-    inviteRow: {
-      backgroundColor: theme.card,
-      borderRadius: 10,
-      padding: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
+    shareScrollContent: {
+      padding: 16,
+      paddingBottom: 40,
+      gap: 16,
     },
-    inviteLabel: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      marginBottom: 6,
-    },
-    inviteCodeRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    inviteValue: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    inlineButton: {
-      padding: 6,
-      borderRadius: 6,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.surface,
-    },
-    previewLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.textSecondary,
-    },
-    toggleGroup: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 12,
-      padding: 10,
-      backgroundColor: theme.card,
-      gap: 8,
-    },
-    toggleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    toggleLabel: {
-      fontSize: 13,
-      color: theme.text,
-      fontWeight: '600',
-    },
+    // Preview Card
     previewCard: {
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 14,
+      borderRadius: 16,
       overflow: 'hidden',
       backgroundColor: theme.surface,
     },
     schoolHeader: {
       flexDirection: 'row',
       gap: 12,
-      padding: 12,
+      padding: 14,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
       backgroundColor: theme.card,
       alignItems: 'center',
     },
     schoolLogo: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 48,
+      height: 48,
+      borderRadius: 12,
       backgroundColor: theme.surface,
     },
     schoolLogoPlaceholder: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 48,
+      height: 48,
+      borderRadius: 12,
       backgroundColor: theme.primary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1078,12 +1114,13 @@ const createStyles = (theme: any) =>
     schoolLogoText: {
       color: theme.onPrimary,
       fontWeight: '700',
+      fontSize: 16,
     },
     schoolHeaderText: {
       flex: 1,
     },
     schoolName: {
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '700',
       color: theme.text,
     },
@@ -1093,75 +1130,243 @@ const createStyles = (theme: any) =>
       marginTop: 2,
     },
     previewBody: {
-      padding: 12,
-      gap: 6,
+      padding: 16,
+      gap: 8,
     },
     previewTitle: {
-      fontSize: 16,
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    previewMetaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 4,
+    },
+    previewMetaTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.card,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    previewMetaTagText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    previewDivider: {
+      height: 1,
+      backgroundColor: theme.border,
+      marginVertical: 4,
+    },
+    previewSectionLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      marginTop: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    previewText: {
+      fontSize: 14,
+      color: theme.text,
+      lineHeight: 20,
+    },
+    // Invite Code Card
+    inviteCodeCard: {
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 14,
+    },
+    inviteCodeHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    inviteCodeIconBg: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: 'rgba(99, 102, 241, 0.15)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    inviteCodeLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    inviteCodeValue: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: theme.text,
+      letterSpacing: 1,
+      marginTop: 2,
+    },
+    inviteCodeCopyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    inviteCodeCopyText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.primary,
+    },
+    // Toggle Group
+    toggleGroup: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 14,
+      padding: 14,
+      backgroundColor: theme.card,
+      gap: 10,
+    },
+    toggleGroupTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 4,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    toggleLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    toggleLabel: {
+      fontSize: 14,
+      color: theme.text,
+      fontWeight: '600',
+    },
+    // Message Section
+    messageSection: {
+      backgroundColor: theme.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 14,
+      gap: 10,
+    },
+    messageSectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    messageSectionTitle: {
+      fontSize: 14,
       fontWeight: '700',
       color: theme.text,
     },
-    previewMeta: {
-      fontSize: 12,
-      color: theme.textSecondary,
-    },
-    previewSectionLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.textSecondary,
-      marginTop: 6,
-    },
-    previewText: {
-      fontSize: 13,
-      color: theme.text,
-      lineHeight: 18,
-    },
     messageInput: {
-      minHeight: 160,
-      textAlignVertical: 'top',
-    },
-    modalActions: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    secondaryAction: {
-      flex: 1,
+      backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
       borderRadius: 10,
-      paddingVertical: 10,
+      padding: 12,
+      fontSize: 13,
+      color: theme.text,
+      minHeight: 140,
+      textAlignVertical: 'top',
+      lineHeight: 19,
+    },
+    // Share Actions
+    shareActionsSection: {
+      gap: 10,
+    },
+    whatsappShareBtn: {
+      flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: '#25D366',
+      borderRadius: 14,
+      paddingVertical: 16,
+    },
+    whatsappShareText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    shareSecondaryRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    copyMessageBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      paddingVertical: 13,
       backgroundColor: theme.surface,
     },
-    secondaryActionText: {
+    copyMessageText: {
       color: theme.text,
-      fontWeight: '600',
+      fontWeight: '700',
+      fontSize: 14,
     },
-    primaryAction: {
+    broadcastBtn: {
       flex: 1,
-      backgroundColor: theme.primary,
-      borderRadius: 10,
-      paddingVertical: 10,
+      flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: '#f59e0b',
+      borderRadius: 12,
+      paddingVertical: 13,
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
     },
-    primaryActionText: {
-      color: theme.onPrimary,
+    broadcastBtnText: {
+      color: '#f59e0b',
       fontWeight: '700',
+      fontSize: 14,
     },
-    broadcastAction: {
-      backgroundColor: 'transparent',
-      borderStyle: 'dashed',
-    },
-    broadcastText: {
-      color: theme.error,
-      fontWeight: '700',
-    },
+    // Done Button
     doneButton: {
       alignItems: 'center',
-      paddingVertical: 10,
+      paddingVertical: 14,
+      backgroundColor: theme.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     doneButtonText: {
       color: theme.textSecondary,
-      fontWeight: '600',
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    shareFooterText: {
+      textAlign: 'center',
+      fontSize: 11,
+      color: theme.textSecondary,
+      marginTop: 4,
     },
   });

@@ -21,6 +21,7 @@ import HiringHubService from '@/lib/services/HiringHubService';
 import type { JobPosting, ApplicationWithDetails } from '@/types/hiring';
 import {
   ApplicationStatus,
+  JobPostingStatus,
   getApplicationStatusColor,
   getApplicationStatusLabel,
   formatSalaryRange,
@@ -241,7 +242,12 @@ function StatCard({ icon, value, label, color, theme }: { icon: keyof typeof Ion
 }
 
 function JobPostingCard({ job, theme }: { job: JobPosting; theme: any }) {
-  const statusColor = job.status === 'published' ? '#10B981' : job.status === 'draft' ? '#F59E0B' : '#6B7280';
+  const statusColor =
+    job.status === JobPostingStatus.ACTIVE
+      ? '#10B981'
+      : job.status === JobPostingStatus.DRAFT
+        ? '#F59E0B'
+        : '#6B7280';
   return (
     <TouchableOpacity
       style={{ width: 210, padding: 16, borderRadius: 14, marginRight: 12, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}
