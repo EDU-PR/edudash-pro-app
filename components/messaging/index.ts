@@ -12,3 +12,18 @@ export { MessageBubble } from './MessageBubble';
 export { TypingIndicator } from './TypingIndicator';
 export { ChatHeader } from './ChatHeader';
 export { MessageComposer } from './MessageComposer';
+
+// New components for messaging overhaul
+export { ForwardMessagePicker } from './ForwardMessagePicker';
+export { ChatSearchOverlay } from './ChatSearchOverlay';
+export { MediaGalleryView } from './MediaGalleryView';
+export { StarredMessagesView } from './StarredMessagesView';
+
+// Unique messaging upgrades
+export { ReactionBar, ReactionBubbles, REACTIONS } from './MessageReactions';
+export type { Reaction } from './MessageReactions';
+export { SmartQuickReplies } from './SmartQuickReplies';
+export { VoiceWaveform } from './VoiceWaveform';
+export { OnlineStatusDot, OnlineStatusBadge } from './OnlineStatusIndicator';
+export { MessageScheduler, ScheduledBadge } from './MessageScheduler';
+export { MessageHeader, MessagesListHeader } from './MessageHeader';

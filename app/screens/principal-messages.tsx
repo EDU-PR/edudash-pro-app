@@ -254,9 +254,36 @@ export default function PrincipalMessagesScreen() {
   }, [t, user?.id]);
 
   const handleSettings = useCallback(() => {
-    // TODO: Add messaging preferences for principals
     router.push('/screens/settings');
   }, []);
+
+  const handleMarkAllRead = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  // Dropdown menu items for the header
+  const headerMenuItems = useMemo(() => [
+    {
+      icon: 'megaphone-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('principal.sendAnnouncement', { defaultValue: 'Send Announcement' }),
+      onPress: () => router.push('/screens/principal-announcement'),
+    },
+    {
+      icon: 'notifications-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('principal.notificationSettings', { defaultValue: 'Notification Settings' }),
+      onPress: () => router.push('/screens/settings'),
+    },
+    {
+      icon: 'checkmark-done-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('principal.markAllRead', { defaultValue: 'Mark All as Read' }),
+      onPress: handleMarkAllRead,
+    },
+    {
+      icon: 'archive-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('principal.archivedChats', { defaultValue: 'Archived Chats' }),
+      onPress: handleSettings,
+    },
+  ], [t, handleMarkAllRead, handleSettings]);
 
   const handleAnnouncements = useCallback(() => {
     router.push('/screens/principal-announcement');
@@ -415,6 +442,40 @@ export default function PrincipalMessagesScreen() {
       fontSize: 14,
       fontWeight: '600',
     },
+    searchClear: {
+      padding: 4,
+      marginLeft: 4,
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 8,
+        },
+      }),
+    },
+    fabPrimary: {
+      backgroundColor: theme.primary,
+      bottom: insets.bottom + 20,
+    },
+    fabSecondary: {
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.primary,
+      bottom: insets.bottom + 90,
+    },
   });
 
   if (isLoading && !threads) {
@@ -422,8 +483,7 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
-          onSettings={handleSettings}
-          onNewMessage={() => router.push('/screens/principal-new-message')}
+          menuItems={headerMenuItems}
         />
         <View style={styles.loadingContainer}>
           {[...Array(6)].map((_, i) => (
@@ -432,6 +492,14 @@ export default function PrincipalMessagesScreen() {
             </View>
           ))}
         </View>
+        {/* FAB visible during loading */}
+        <TouchableOpacity
+          style={[styles.fab, styles.fabPrimary]}
+          onPress={() => router.push('/screens/principal-new-message')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color={theme.onPrimary} />
+        </TouchableOpacity>
       </View>
     );
   }
@@ -441,8 +509,7 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
-          onSettings={handleSettings}
-          onNewMessage={() => router.push('/screens/principal-new-message')}
+          menuItems={headerMenuItems}
         />
         <View style={styles.errorContainer}>
           <View style={styles.errorIcon}>
@@ -464,8 +531,7 @@ export default function PrincipalMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
-          onSettings={handleSettings}
-          onNewMessage={() => router.push('/screens/principal-new-message')}
+          menuItems={headerMenuItems}
         />
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
@@ -488,8 +554,7 @@ export default function PrincipalMessagesScreen() {
         <MessagesListHeader
           title={t('principal.messages', { defaultValue: 'Messages' })}
           subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
-          onSettings={handleSettings}
-          onNewMessage={() => router.push('/screens/principal-new-message')}
+          menuItems={headerMenuItems}
         />
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={16} color={theme.textSecondary} />
@@ -500,6 +565,11 @@ export default function PrincipalMessagesScreen() {
             onChangeText={setSearchQuery}
             style={styles.searchInput}
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity style={styles.searchClear} onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
@@ -512,6 +582,14 @@ export default function PrincipalMessagesScreen() {
             {t('principal.noSearchResultsDesc', { defaultValue: 'Try a different name or keyword.' })}
           </Text>
         </View>
+        {/* FAB */}
+        <TouchableOpacity
+          style={[styles.fab, styles.fabPrimary]}
+          onPress={() => router.push('/screens/principal-new-message')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color={theme.onPrimary} />
+        </TouchableOpacity>
       </View>
     );
   }
@@ -521,8 +599,7 @@ export default function PrincipalMessagesScreen() {
       <MessagesListHeader
         title={t('principal.messages', { defaultValue: 'Messages' })}
         subtitle={`${threads.length} ${threads.length === 1 ? 'conversation' : 'conversations'}`}
-        onSettings={handleSettings}
-        onNewMessage={() => router.push('/screens/principal-new-message')}
+        menuItems={headerMenuItems}
       />
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={16} color={theme.textSecondary} />
@@ -533,6 +610,11 @@ export default function PrincipalMessagesScreen() {
           onChangeText={setSearchQuery}
           style={styles.searchInput}
         />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity style={styles.searchClear} onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.quickActions}>
         <TouchableOpacity style={styles.quickActionCard} onPress={handleAnnouncements}>
@@ -566,6 +648,22 @@ export default function PrincipalMessagesScreen() {
           />
         }
       />
+      
+      {/* Floating Action Buttons */}
+      <TouchableOpacity
+        style={[styles.fab, styles.fabSecondary]}
+        onPress={handleGroups}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="people" size={24} color={theme.primary} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.fab, styles.fabPrimary]}
+        onPress={() => router.push('/screens/principal-new-message')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={28} color={theme.onPrimary} />
+      </TouchableOpacity>
     </View>
   );
 }

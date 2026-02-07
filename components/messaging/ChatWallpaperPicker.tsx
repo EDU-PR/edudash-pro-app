@@ -12,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 export interface WallpaperSelection {
   type: 'preset' | 'url';
   value: string;
@@ -89,6 +90,7 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
 }) => {
   const { theme, isDark } = useTheme();
   const [uploading, setUploading] = useState(false);
+  const [pendingWallpaperUri, setPendingWallpaperUri] = useState<string | null>(null);
 
   const handlePresetSelect = async (presetKey: string) => {
     const selection: WallpaperSelection = { type: 'preset', value: presetKey };
@@ -105,30 +107,20 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
         return;
       }
 
-      setUploading(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-        base64: true,
+  allowsEditing: true,
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        // Use base64 for local storage (avoids bucket complexity)
         const dataUrl = asset.base64 
           ? `data:image/jpeg;base64,${asset.base64}`
           : asset.uri;
-        
-        const selection: WallpaperSelection = { type: 'url', value: dataUrl };
-        await saveWallpaper(selection);
-        onSelect(selection);
-        onClose();
+        setPendingWallpaperUri(dataUrl);
       }
     } catch (e) {
-      console.error('Failed to upload wallpaper image:', e);
-    } finally {
-      setUploading(false);
+      console.error('Failed to pick wallpaper image:', e);
     }
   };
 
@@ -234,9 +226,10 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
     },
   });
 
-  if (!isOpen) return null;
+  if (!isOpen && !pendingWallpaperUri) return null;
 
   return (
+    <>
     <Modal
       visible={isOpen}
       transparent
@@ -313,6 +306,31 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
         </View>
       </TouchableOpacity>
     </Modal>
+
+    {/* Wallpaper confirm modal */}
+    <ImageConfirmModal
+      visible={!!pendingWallpaperUri}
+      imageUri={pendingWallpaperUri}
+      onConfirm={async (uri) => {
+        setUploading(true);
+        try {
+          const selection: WallpaperSelection = { type: 'url', value: uri };
+          await saveWallpaper(selection);
+          onSelect(selection);
+          onClose();
+        } catch (e) {
+          console.error('Failed to save wallpaper:', e);
+        } finally {
+          setUploading(false);
+          setPendingWallpaperUri(null);
+        }
+      }}
+      onCancel={() => setPendingWallpaperUri(null)}
+      title="Chat Wallpaper"
+      confirmLabel="Set Wallpaper"
+      loading={uploading}
+    />
+    </>
   );
 };
 

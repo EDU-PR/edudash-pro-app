@@ -20,6 +20,7 @@ import { EmptyStudentsState } from '@/components/ui/EmptyState';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
 import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
+import { derivePreschoolId, isPrincipalOrAbove } from '@/lib/roleUtils';
 
 // Alert modal state interface
 interface AlertState {
@@ -115,10 +116,9 @@ export default function StudentsDetailScreen() {
 
   // Get preschool ID from user context
   const getPreschoolId = useCallback((): string | null => {
-    if (profile?.organization_id) {
-      return profile.organization_id as string;
-    }
-    return user?.user_metadata?.preschool_id || null;
+    const profileOrgId = derivePreschoolId(profile as any);
+    if (profileOrgId) return profileOrgId;
+    return (user?.user_metadata as any)?.organization_id || (user?.user_metadata as any)?.preschool_id || null;
   }, [profile, user]);
 
   const loadStudents = async (forceRefresh = false) => {
@@ -139,7 +139,7 @@ if (!preschoolId) {
       // Try cache first
       if (!forceRefresh && user?.id) {
         setIsLoadingFromCache(true);
-        const identifier = userRole === 'principal_admin' 
+        const identifier = isPrincipalOrAbove(userRole)
           ? `${preschoolId}` 
           : `${preschoolId}_${user.id}`;
         
@@ -186,7 +186,7 @@ if (!preschoolId) {
           allergies,
           emergency_contact_name,
           emergency_contact_phone,
-          classes!students_class_id_fkey(name),
+          classes!students_class_id_fkey(name, teacher_id, teacher:profiles!classes_teacher_id_fkey(first_name, last_name)),
           parent:profiles!students_parent_id_fkey(first_name, last_name, email, phone),
           guardian:profiles!students_guardian_id_fkey(first_name, last_name, email, phone)
         `)
@@ -206,6 +206,36 @@ if (!preschoolId) {
       }
       
       console.log('✅ Real students fetched:', studentsData?.length || 0);
+      
+      // Fetch attendance rates in batch for all students
+      const studentIds = (studentsData || []).map((s: any) => s.id);
+      let attendanceMap: Record<string, { total: number; present: number; lastDate: string }> = {};
+      
+      if (studentIds.length > 0) {
+        // Get attendance for last 90 days
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        const sinceDate = ninetyDaysAgo.toISOString().slice(0, 10);
+        
+        const { data: attendanceData } = await assertSupabase()
+          .from('attendance')
+          .select('student_id, status, attendance_date')
+          .in('student_id', studentIds)
+          .gte('attendance_date', sinceDate)
+          .order('attendance_date', { ascending: false });
+        
+        if (attendanceData) {
+          for (const row of attendanceData) {
+            if (!attendanceMap[row.student_id]) {
+              attendanceMap[row.student_id] = { total: 0, present: 0, lastDate: row.attendance_date };
+            }
+            attendanceMap[row.student_id].total++;
+            if (row.status === 'present' || row.status === 'late') {
+              attendanceMap[row.student_id].present++;
+            }
+          }
+        }
+      }
       
       // Transform database data to match Student interface
       const transformedStudents: Student[] = (studentsData || []).map((dbStudent: any, index: number) => {
@@ -238,9 +268,13 @@ if (!preschoolId) {
           enrollmentDate: dbStudent.created_at?.split('T')[0] || '',
           status: (dbStudent.status || 'active') as 'active' | 'inactive' | 'pending',
           profilePhoto: dbStudent.avatar_url || undefined,
-          attendanceRate: 90, // TODO: Calculate from attendance_records
-          lastAttendance: new Date().toISOString(),
-          assignedTeacher: 'Not Assigned', // TODO: Get from class->teacher lookup
+          attendanceRate: attendanceMap[dbStudent.id]
+            ? Math.round((attendanceMap[dbStudent.id].present / attendanceMap[dbStudent.id].total) * 100)
+            : 0,
+          lastAttendance: attendanceMap[dbStudent.id]?.lastDate || '',
+          assignedTeacher: dbStudent.classes?.teacher
+            ? `${dbStudent.classes.teacher.first_name || ''} ${dbStudent.classes.teacher.last_name || ''}`.trim()
+            : 'Not Assigned',
           fees: {
             outstanding: 0,
             lastPayment: '',
@@ -253,24 +287,36 @@ if (!preschoolId) {
       
       // Filter based on user role and permissions (same logic as before)
       let filteredStudents = transformedStudents;
-      if (userRole === 'principal_admin') {
+      if (isPrincipalOrAbove(userRole)) {
         // Principals see all school students
         filteredStudents = transformedStudents;
       } else if (userRole === 'teacher') {
-        // Teachers see their assigned students (TODO: implement class assignment filter)
-        filteredStudents = transformedStudents;
+        // Teachers see students in their assigned classes
+        filteredStudents = transformedStudents.filter(student => {
+          const matchingDb = (studentsData || []).find((s: any) => s.id === student.id);
+          return matchingDb?.classes?.teacher_id === user?.id;
+        });
+        // If no class assignment found, show all (fallback)
+        if (filteredStudents.length === 0) filteredStudents = transformedStudents;
       } else {
-        // Parents see only their children (TODO: implement parent_id filter)
-        filteredStudents = transformedStudents.filter(student => 
-          student.guardianEmail === user?.email
-        );
+        // Parents see only their children via parent_id or guardian_id
+        filteredStudents = transformedStudents.filter(student => {
+          const matchingDb = (studentsData || []).find((s: any) => s.id === student.id);
+          return matchingDb?.parent_id === user?.id || matchingDb?.guardian_id === user?.id;
+        });
+        // Fallback to email matching if no parent_id/guardian_id link
+        if (filteredStudents.length === 0) {
+          filteredStudents = transformedStudents.filter(student => 
+            student.guardianEmail === user?.email
+          );
+        }
       }
       
       setStudents(filteredStudents);
 
       // Cache the fresh data
       if (user?.id) {
-        const identifier = userRole === 'principal_admin' 
+        const identifier = isPrincipalOrAbove(userRole)
           ? `${preschoolId}` 
           : `${preschoolId}_${user.id}`;
         
@@ -391,13 +437,13 @@ if (!preschoolId) {
   };
 
   const canManageStudent = (): boolean => {
-    return profile?.role === 'principal_admin';
+    return isPrincipalOrAbove(profile?.role);
   };
 
  
 const canEditStudent = (_student: Student): boolean => {
     const userRole = profile?.role || 'parent';
-    if (userRole === 'principal_admin') return true;
+    if (isPrincipalOrAbove(userRole)) return true;
     if (userRole === 'teacher') return true; // Teachers can edit basic info
     return false; // Parents can only view
   };
@@ -460,7 +506,7 @@ const canEditStudent = (_student: Student): boolean => {
       const preschoolId = getPreschoolId();
       if (user?.id && preschoolId) {
         const userRole = profile?.role || 'parent';
-        const identifier = userRole === 'principal_admin' 
+        const identifier = isPrincipalOrAbove(userRole)
           ? `${preschoolId}` 
           : `${preschoolId}_${user.id}`;
         await offlineCacheService.remove('student_data_', identifier);
@@ -527,7 +573,7 @@ const canEditStudent = (_student: Student): boolean => {
       const preschoolId = getPreschoolId();
       if (user?.id && preschoolId) {
         const userRole = profile?.role || 'parent';
-        const identifier = userRole === 'principal_admin' 
+        const identifier = isPrincipalOrAbove(userRole)
           ? `${preschoolId}` 
           : `${preschoolId}_${user.id}`;
         await offlineCacheService.remove('student_data_', identifier);

@@ -84,6 +84,12 @@ interface NotificationContext {
   upload_type?: string;
   payment_amount?: number;
   payment_reference?: string;
+  // Job applications
+  job_application_id?: string;
+  job_posting_id?: string;
+  job_title?: string;
+  candidate_name?: string;
+  candidate_email?: string;
   // Forms
   form_id?: string;
   form_title?: string;
@@ -142,6 +148,12 @@ interface NotificationRequest {
   upload_type?: string;
   payment_amount?: number;
   payment_reference?: string;
+  // Job applications
+  job_application_id?: string;
+  job_posting_id?: string;
+  job_title?: string;
+  candidate_name?: string;
+  candidate_email?: string;
   recipient_email?: string;
   recipient_emails?: string[];
   context?: Record<string, unknown>;
@@ -911,6 +923,24 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'high',
       channelId: 'billing'
+    },
+    new_job_application: {
+      title: '📋 New Job Application',
+      body: context.candidate_name && context.job_title
+        ? `${context.candidate_name} applied for ${context.job_title}`
+        : context.candidate_name
+          ? `${context.candidate_name} submitted an application`
+          : 'A new job application has been received',
+      data: {
+        type: 'hiring',
+        screen: 'hiring-hub',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
     }
   };
 
@@ -1331,6 +1361,51 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
             .eq('is_active', true);
           if (principals) {
             userIds.push(...principals.map((p: { id: string }) => p.id));
+          }
+        }
+      }
+      break;
+
+    // Job application notifications — notify principals at the posting's school
+    case 'new_job_application':
+      if (request.preschool_id) {
+        console.log(`[new_job_application] Looking up principals for preschool_id: ${request.preschool_id}`);
+        const { data: hiringPrincipals } = await supabase
+          .from('profiles')
+          .select('id, role')
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+          .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
+          .eq('is_active', true);
+        if (hiringPrincipals && hiringPrincipals.length > 0) {
+          console.log(`[new_job_application] Found ${hiringPrincipals.length} principals`);
+          userIds.push(...hiringPrincipals.map((p: { id: string }) => p.id));
+        } else {
+          // Fallback without is_active filter
+          const { data: allHiringPrincipals } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+            .in('role', ['principal', 'principal_admin', 'admin', 'super_admin']);
+          if (allHiringPrincipals && allHiringPrincipals.length > 0) {
+            userIds.push(...allHiringPrincipals.map((p: { id: string }) => p.id));
+          }
+        }
+      } else if (request.job_posting_id) {
+        // Resolve preschool_id from the job posting
+        const { data: posting } = await supabase
+          .from('job_postings')
+          .select('preschool_id')
+          .eq('id', request.job_posting_id)
+          .single();
+        if (posting?.preschool_id) {
+          const { data: postingPrincipals } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`preschool_id.eq.${posting.preschool_id},organization_id.eq.${posting.preschool_id}`)
+            .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
+            .eq('is_active', true);
+          if (postingPrincipals) {
+            userIds.push(...postingPrincipals.map((p: { id: string }) => p.id));
           }
         }
       }
@@ -1920,6 +1995,61 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
           }
         }
         break;
+      case 'new_job_application': {
+        // Enrich with job posting and candidate details
+        if (request.job_posting_id) {
+          const { data: jobPost } = await supabase
+            .from('job_postings')
+            .select('title, preschool_id')
+            .eq('id', request.job_posting_id)
+            .single();
+          if (jobPost) {
+            context.job_title = jobPost.title;
+            if (!request.preschool_id) request.preschool_id = jobPost.preschool_id;
+          }
+        }
+        if (request.job_application_id) {
+          const { data: appData } = await supabase
+            .from('job_applications')
+            .select('candidate_profile_id, job_posting_id')
+            .eq('id', request.job_application_id)
+            .single();
+          if (appData?.candidate_profile_id) {
+            const { data: candidate } = await supabase
+              .from('candidate_profiles')
+              .select('first_name, last_name, email')
+              .eq('id', appData.candidate_profile_id)
+              .single();
+            if (candidate) {
+              context.candidate_name = `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim();
+              context.candidate_email = candidate.email;
+            }
+          }
+          if (!request.job_posting_id && appData?.job_posting_id) {
+            const { data: jp } = await supabase
+              .from('job_postings')
+              .select('title, preschool_id')
+              .eq('id', appData.job_posting_id)
+              .single();
+            if (jp) {
+              context.job_title = jp.title;
+              if (!request.preschool_id) request.preschool_id = jp.preschool_id;
+            }
+          }
+        }
+        context.job_application_id = request.job_application_id;
+        context.job_posting_id = request.job_posting_id;
+        // Carry over any custom_payload overrides
+        context.candidate_name = (request.custom_payload?.candidate_name as string | undefined) ?? context.candidate_name;
+        context.candidate_email = (request.custom_payload?.candidate_email as string | undefined) ?? context.candidate_email;
+        context.job_title = (request.custom_payload?.job_title as string | undefined) ?? context.job_title;
+
+        if (!context.school_name && request.preschool_id) {
+          const { data: sch } = await supabase.from('preschools').select('name').eq('id', request.preschool_id).single();
+          if (sch) context.school_name = sch.name;
+        }
+        break;
+      }
       case 'parent_invite':
       case 'parent_linked':
       case 'birthday_donation_reminder':
@@ -2154,7 +2284,7 @@ function mapEventTypeToNotificationType(
 function getNotificationCategory(eventType: string): string {
   const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement', 'form_published'];
   const homeworkEvents = ['homework_assigned', 'homework_due', 'homework_graded', 'assignment_graded', 'homework_submitted'];
-  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked', 'pop_uploaded'];
+  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked', 'pop_uploaded', 'new_job_application'];
   
   if (schoolEvents.includes(eventType)) return 'school';
   if (homeworkEvents.includes(eventType)) return 'homework';
@@ -2676,6 +2806,18 @@ async function handleDatabaseTrigger(request: Request): Promise<Response> {
             upload_type: record.upload_type as string,
             payment_amount: record.payment_amount,
             payment_reference: record.payment_reference as string,
+            send_immediately: true,
+          };
+        }
+        break;
+
+      case 'job_applications':
+        if (type === 'INSERT') {
+          console.log('[db-trigger] job_applications INSERT detected, id:', record.id);
+          notificationRequest = {
+            event_type: 'new_job_application',
+            job_application_id: record.id as string,
+            job_posting_id: record.job_posting_id as string,
             send_immediately: true,
           };
         }

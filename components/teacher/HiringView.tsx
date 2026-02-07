@@ -254,15 +254,13 @@ export function HiringView({
           <Text style={styles.candidateName}>{item.email}</Text>
           <Text style={styles.candidateEmail}>Status: {item.status}</Text>
         </View>
-        {item.status === 'pending' && (
-          <TouchableOpacity
-            style={styles.revokeButton}
-            onPress={() => handleDeleteInvite(item.id, item.email)}
-          >
-            <Ionicons name="trash" size={18} color="#dc2626" />
-            <Text style={styles.revokeButtonText}>Delete Invite</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={styles.revokeButton}
+          onPress={() => handleDeleteInvite(item.id, item.email)}
+        >
+          <Ionicons name="trash" size={18} color="#dc2626" />
+          <Text style={styles.revokeButtonText}>Delete</Text>
+        </TouchableOpacity>
       </View>
       {item.status === 'pending' && (
         <View style={styles.inviteActionsRow}>

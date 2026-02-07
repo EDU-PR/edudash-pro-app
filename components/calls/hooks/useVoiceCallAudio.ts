@@ -146,7 +146,7 @@ export function useVoiceCallAudio({
       // Set audio mode - CRITICAL: shouldRouteThroughEarpiece controls speaker/earpiece
       await setAudioModeAsync({
         playsInSilentMode: true,
-        interruptionMode: 'doNotMix',
+        interruptionMode: 'duckOthers',
         allowsRecording: true,
         shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: !isSpeakerEnabled,
@@ -247,20 +247,21 @@ export function useVoiceCallAudio({
     }
   }, []);
 
-  // Continuous earpiece enforcement during ringing/connecting AND connected states
-  // NOTE: Android's default behavior is to play ringback tone on speaker initially
-  // This is standard Android behavior for outgoing calls. We enforce earpiece to override this.
-  // The periodic enforcement catches any automatic speaker switches during ringback playback.
-  // CRITICAL: Continue enforcement even after call connects to prevent speaker switching
+  // Earpiece enforcement during ringing/connecting states ONLY
+  // CRITICAL FIX: Do NOT run aggressive enforcement during 'connected' state!
+  // The 250ms enforcement loop was fighting with WebRTC's internal audio routing,
+  // causing both parties to not hear each other. During connected state, we let
+  // Daily.co/WebRTC manage the audio pipeline and only enforce once on connect.
+  //
+  // During connecting/ringing: enforce every 500ms to prevent speaker during ringback
+  // During connected: single enforcement on transition (handled in connected state effect)
   useEffect(() => {
     if (!InCallManager) return;
     
-    // Enforce earpiece during connecting, ringing, AND connected states if speaker is disabled
-    // This ensures earpiece stays enforced throughout the entire call lifecycle
+    // Only enforce during pre-connection states (NOT connected)
     const shouldEnforceEarpiece = (
       callState === 'connecting' || 
-      callState === 'ringing' || 
-      callState === 'connected'
+      callState === 'ringing'
     ) && !isSpeakerEnabled;
     
     if (shouldEnforceEarpiece) {
@@ -272,30 +273,24 @@ export function useVoiceCallAudio({
         console.warn('[VoiceCallAudio] Initial earpiece enforcement failed:', e);
       }
       
-      // Set up more aggressive periodic enforcement every 250ms
-      // This catches any automatic speaker switches more quickly
-      // Continue enforcement even after call connects to prevent Daily.co or system from switching to speaker
+      // Periodic enforcement only during ringing/connecting (NOT connected)
+      // 500ms is sufficient - 250ms was too aggressive and interfered with audio
       if (!earpieceEnforcerRef.current) {
-        console.log('[VoiceCallAudio] Starting continuous earpiece enforcement');
+        console.log('[VoiceCallAudio] Starting earpiece enforcement (pre-connect only)');
         earpieceEnforcerRef.current = setInterval(() => {
           try {
             InCallManager.setForceSpeakerphoneOn(false);
-            // Only log occasionally to reduce noise (every 2 seconds = 8 intervals)
-            const shouldLog = Math.random() < 0.125; // 12.5% chance = ~every 2 seconds
-            if (shouldLog) {
-              console.log('[VoiceCallAudio] Earpiece re-enforced (periodic)');
-            }
           } catch (e) {
             // Ignore errors during enforcement
           }
-        }, 250); // More frequent: 250ms instead of 500ms
+        }, 500);
       }
     } else {
-      // Clear the enforcer when speaker is enabled or call ends
+      // Clear the enforcer when state changes to connected, speaker is enabled, or call ends
       if (earpieceEnforcerRef.current) {
         clearInterval(earpieceEnforcerRef.current);
         earpieceEnforcerRef.current = null;
-        console.log('[VoiceCallAudio] Stopped continuous earpiece enforcement');
+        console.log('[VoiceCallAudio] Stopped earpiece enforcement loop');
       }
     }
     
@@ -320,10 +315,10 @@ export function useVoiceCallAudio({
         console.log('[VoiceCallAudio] Initializing audio for', isOwner ? 'caller' : 'callee');
         
         // CRITICAL: Set audio mode via expo-audio FIRST to establish earpiece routing
-        // This must happen BEFORE InCallManager.start() to prevent speaker initialization
+        // Use 'duckOthers' to allow WebRTC audio alongside our audio session
         await setAudioModeAsync({
           playsInSilentMode: true,
-          interruptionMode: 'doNotMix',
+          interruptionMode: 'duckOthers',
           allowsRecording: true,
           shouldPlayInBackground: true,
           // ANDROID SPECIFIC: Route through earpiece for phone-like experience
@@ -404,8 +399,10 @@ export function useVoiceCallAudio({
     initializeAudio();
   }, [callState, isOwner, setIsSpeakerEnabled, playCustomRingback, isSpeakerEnabled]);
 
-  // Stop ringback when call connects and enforce audio routing
-  // CRITICAL: Only apply speaker setting ONCE on connect to avoid overriding user toggles
+  // Stop ringback when call connects and configure audio for two-way communication
+  // CRITICAL FIX: Set audio mode to allow BOTH recording AND playback simultaneously.
+  // Previous code had multiple competing setAudioModeAsync calls and aggressive earpiece 
+  // enforcement that disrupted WebRTC's audio pipeline, causing users to not hear each other.
   useEffect(() => {
     if (callState === 'connected') {
       try {
@@ -418,57 +415,41 @@ export function useVoiceCallAudio({
           console.log('[VoiceCallAudio] Stopped ringback - call connected');
         }
         
-        // CRITICAL: Only apply speaker setting ONCE on initial connect
-        // This prevents overriding the user's speaker toggle after they change it
+        // CRITICAL: Only apply audio setup ONCE on initial connect
         if (!speakerAppliedOnConnectRef.current) {
           speakerAppliedOnConnectRef.current = true;
           
-          // CRITICAL: Re-set audio mode via expo-audio to enforce earpiece
-          // This helps override any changes Daily.co might have made
-          if (!isSpeakerEnabled) {
-            setAudioModeAsync({
-              playsInSilentMode: true,
-              interruptionMode: 'doNotMix',
-              allowsRecording: true,
-              shouldPlayInBackground: true,
-              shouldRouteThroughEarpiece: true,
-            }).catch(e => console.warn('[VoiceCallAudio] Failed to set audio mode on connect:', e));
-          }
+          // CRITICAL FIX: Set audio mode that enables BOTH mic input AND speaker output
+          // Use 'duckOthers' instead of 'doNotMix' to prevent blocking WebRTC audio
+          // This single call replaces the multiple competing setAudioModeAsync calls
+          setAudioModeAsync({
+            playsInSilentMode: true,
+            interruptionMode: 'duckOthers', // Allow WebRTC audio alongside our audio session
+            allowsRecording: true, // Required for microphone
+            shouldPlayInBackground: true,
+            shouldRouteThroughEarpiece: !isSpeakerEnabled,
+          }).then(() => {
+            console.log('[VoiceCallAudio] ✅ Audio mode configured for two-way communication');
+          }).catch(e => console.warn('[VoiceCallAudio] Failed to set audio mode on connect:', e));
           
-          // Enforce current speaker state (earpiece by default, unless user toggled)
-          // The continuous enforcement hook will maintain earpiece if not using speaker
+          // Single earpiece enforcement (no loop during connected state)
           if (InCallManager) {
             InCallManager.setForceSpeakerphoneOn(isSpeakerEnabled);
-            
-            // Screen control based on speaker state:
-            // - Earpiece: Allow proximity sensor to turn off screen when near ear
-            // - Speaker: Keep screen on (user is looking at it)
             InCallManager.setKeepScreenOn(isSpeakerEnabled);
           }
           
           console.log('[VoiceCallAudio] 📞 Call connected - audio routed to:', isSpeakerEnabled ? 'speaker' : 'earpiece');
-          console.log('[VoiceCallAudio] Screen keep-on:', isSpeakerEnabled ? 'enabled (speaker mode)' : 'disabled (proximity sensor enabled)');
           
           // Give haptic feedback to indicate call connected
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           
-          // Additional enforcement after a short delay to catch any routing changes from Daily.co
+          // One final enforcement after Daily.co stabilizes audio (no loop)
           if (!isSpeakerEnabled && InCallManager) {
             setTimeout(() => {
               try {
                 InCallManager.setForceSpeakerphoneOn(false);
                 InCallManager.setKeepScreenOn(false);
-                console.log('[VoiceCallAudio] Post-connect earpiece enforcement');
-              } catch (e) {
-                // Silent - continuous enforcement will handle it
-              }
-            }, 200);
-            
-            // Second enforcement after Daily.co fully initializes audio
-            setTimeout(() => {
-              try {
-                InCallManager.setForceSpeakerphoneOn(false);
-                console.log('[VoiceCallAudio] Secondary earpiece enforcement (500ms)');
+                console.log('[VoiceCallAudio] Post-connect earpiece set');
               } catch (e) {
                 // Silent
               }
@@ -511,7 +492,7 @@ export function useVoiceCallAudio({
       // Keep expo-audio routing in sync as a fallback
       setAudioModeAsync({
         playsInSilentMode: true,
-        interruptionMode: 'doNotMix',
+        interruptionMode: 'duckOthers',
         allowsRecording: true,
         shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: !newSpeakerState,

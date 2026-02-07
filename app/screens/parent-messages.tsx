@@ -3,14 +3,15 @@
  * Modern, clean messaging list with improved UX
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
+  Animated,
   Platform,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -443,19 +444,34 @@ export default function ParentMessagesScreen() {
     router.push('/screens/dash-assistant');
   }, []);
   
-  const handleSettings = useCallback(() => {
-    Alert.alert(
-      t('parent.messageSettings', { defaultValue: 'Message Settings' }),
-      t('parent.messageSettingsDesc', { defaultValue: 'Configure your messaging preferences' }),
-      [
-        { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-        { 
-          text: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }),
-          onPress: () => router.push('/screens/settings')
-        },
-      ]
-    );
-  }, [t]);
+  const handleMarkAllRead = useCallback(() => {
+    // Mark all threads as read — re-use the delivery hook logic
+    refetch();
+  }, [refetch]);
+
+  // Dropdown menu items for the header
+  const headerMenuItems = React.useMemo(() => [
+    {
+      icon: 'notifications-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }),
+      onPress: () => router.push('/screens/settings'),
+    },
+    {
+      icon: 'checkmark-done-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('parent.markAllRead', { defaultValue: 'Mark All as Read' }),
+      onPress: handleMarkAllRead,
+    },
+    {
+      icon: 'archive-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('parent.archivedChats', { defaultValue: 'Archived Chats' }),
+      onPress: () => router.push('/screens/settings'),
+    },
+    {
+      icon: 'star-outline' as keyof typeof Ionicons.glyphMap,
+      label: t('parent.starredMessages', { defaultValue: 'Starred Messages' }),
+      onPress: () => router.push('/screens/settings'),
+    },
+  ], [t, handleMarkAllRead]);
   
   // Filter threads by search
   const filteredThreads = React.useMemo(() => {
@@ -577,31 +593,69 @@ export default function ParentMessagesScreen() {
       fontWeight: '600',
       marginLeft: 8,
     },
+    // Search bar
+    searchContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: theme.background,
+    },
+    searchInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      height: 44,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    searchIcon: {
+      marginRight: 10,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.text,
+      paddingVertical: 0,
+    },
+    searchClear: {
+      padding: 4,
+      marginLeft: 4,
+    },
     listContent: {
       paddingTop: 8,
       paddingBottom: insets.bottom + 160,
     },
+    // Floating Action Button
     fab: {
       position: 'absolute',
       right: 20,
-      bottom: insets.bottom + 20,
       width: 60,
       height: 60,
       borderRadius: 30,
-      backgroundColor: theme.primary,
       alignItems: 'center',
       justifyContent: 'center',
       ...Platform.select({
         ios: {
-          shadowColor: theme.primary,
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.4,
+          shadowOpacity: 0.3,
           shadowRadius: 8,
         },
         android: {
           elevation: 8,
         },
       }),
+    },
+    fabPrimary: {
+      backgroundColor: theme.primary,
+      bottom: insets.bottom + 20,
+    },
+    fabSecondary: {
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.primary,
+      bottom: insets.bottom + 90,
     },
   });
   
@@ -611,8 +665,7 @@ export default function ParentMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
-          onNewMessage={handleStartNewMessage}
-          onSettings={handleSettings}
+          menuItems={headerMenuItems}
         />
         <View style={styles.loadingContainer}>
           {[1, 2, 3, 4].map(i => (
@@ -621,6 +674,14 @@ export default function ParentMessagesScreen() {
             </View>
           ))}
         </View>
+        {/* FAB visible even during loading */}
+        <TouchableOpacity
+          style={[styles.fab, styles.fabPrimary]}
+          onPress={handleStartNewMessage}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color={theme.onPrimary} />
+        </TouchableOpacity>
       </View>
     );
   }
@@ -634,8 +695,7 @@ export default function ParentMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
-          onNewMessage={handleStartNewMessage}
-          onSettings={handleSettings}
+          menuItems={headerMenuItems}
         />
         <View style={styles.errorContainer}>
           <View style={styles.errorIcon}>
@@ -668,8 +728,7 @@ export default function ParentMessagesScreen() {
       <View style={styles.container}>
         <MessagesListHeader
           title={t('parent.messages', { defaultValue: 'Messages' })}
-          onNewMessage={handleStartNewMessage}
-          onSettings={handleSettings}
+          menuItems={headerMenuItems}
         />
         {/* Still show Dash AI even when no messages */}
         {!isDashOrbUnlocked && (
@@ -709,9 +768,28 @@ export default function ParentMessagesScreen() {
       <MessagesListHeader
         title={t('parent.messages', { defaultValue: 'Messages' })}
         subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
-        onNewMessage={handleStartNewMessage}
-        onSettings={handleSettings}
+        menuItems={headerMenuItems}
       />
+      
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search" size={18} color={theme.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('parent.searchMessages', { defaultValue: 'Search conversations...' })}
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity style={styles.searchClear} onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
       
       <FlashList
         data={filteredThreads}
@@ -747,18 +825,18 @@ export default function ParentMessagesScreen() {
       
       {/* Floating Action Buttons */}
       <TouchableOpacity 
-        style={[styles.fab, { bottom: insets.bottom + 90 }]}
+        style={[styles.fab, styles.fabSecondary]}
         onPress={() => router.push('/screens/create-group')}
         activeOpacity={0.8}
       >
-        <Ionicons name="people-circle" size={26} color={theme.onPrimary} />
+        <Ionicons name="people" size={24} color={theme.primary} />
       </TouchableOpacity>
       <TouchableOpacity 
-        style={styles.fab}
+        style={[styles.fab, styles.fabPrimary]}
         onPress={handleStartNewMessage}
         activeOpacity={0.8}
       >
-        <Ionicons name="create" size={26} color={theme.onPrimary} />
+        <Ionicons name="add" size={28} color={theme.onPrimary} />
       </TouchableOpacity>
     </View>
   );

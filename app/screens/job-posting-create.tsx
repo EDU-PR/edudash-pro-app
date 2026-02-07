@@ -17,6 +17,7 @@ import { base64ToUint8Array } from '@/lib/utils/base64';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
 import ViewShot from 'react-native-view-shot';
@@ -48,6 +49,7 @@ export default function JobPostingCreateScreen() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [jobLogoUrl, setJobLogoUrl] = useState<string | null>(null);
   const [jobLogoUploading, setJobLogoUploading] = useState(false);
+  const [pendingLogoUri, setPendingLogoUri] = useState<string | null>(null);
   const [schoolInfo, setSchoolInfo] = useState<{
     name: string;
     logoUrl?: string | null;
@@ -566,6 +568,12 @@ export default function JobPostingCreateScreen() {
     return loc || null;
   }, [schoolInfo?.city, schoolInfo?.province]);
 
+  const canUseAISuggestions = useMemo(() => title.trim().length > 0, [title]);
+  const canPolishShareMessageWithAI = useMemo(
+    () => Boolean(shareJobPosting?.id) && shareMessage.trim().length > 0,
+    [shareJobPosting?.id, shareMessage]
+  );
+
   const handleAISuggest = useCallback(async () => {
     if (!title.trim()) {
       showAlert({
@@ -745,16 +753,22 @@ export default function JobPostingCreateScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
         quality: 0.9,
       });
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
-      setJobLogoUploading(true);
+      setPendingLogoUri(result.assets[0].uri);
+    } catch (error: any) {
+      showAlert({ title: 'Error', message: error.message || 'Failed to select image', type: 'error' });
+    }
+  };
 
+  const confirmLogoUpload = async (uri: string) => {
+    setJobLogoUploading(true);
+    try {
       const processed = await manipulateAsync(
-        result.assets[0].uri,
+        uri,
         [{ resize: { width: 512, height: 512 } }],
         { compress: 0.85, format: SaveFormat.PNG }
       );
@@ -774,58 +788,36 @@ export default function JobPostingCreateScreen() {
         .from(bucket)
         .upload(path, body as any, { contentType: 'image/png', upsert: true });
 
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
+      if (uploadError) throw new Error(uploadError.message);
 
       const { data: publicData } = assertSupabase().storage.from(bucket).getPublicUrl(path);
       const publicUrl = publicData?.publicUrl;
-      if (!publicUrl) {
-        throw new Error('Failed to generate logo URL');
-      }
+      if (!publicUrl) throw new Error('Failed to generate logo URL');
 
       setJobLogoUrl(publicUrl);
       setIncludeSchoolLogo(true);
 
-      // Sync logo to branding so invoices/receipts pick it up
+      // Sync logo to branding
       try {
         await assertSupabase()
           .from('school_branding')
-          .upsert(
-            {
-              preschool_id: preschoolId,
-              logo_url: publicUrl,
-            },
-            { onConflict: 'preschool_id' }
-          )
+          .upsert({ preschool_id: preschoolId, logo_url: publicUrl }, { onConflict: 'preschool_id' })
           .select('id')
           .single();
-      } catch (brandingErr) {
-        console.warn('Failed to sync school branding logo:', brandingErr);
-      }
-
-      // Keep organization/preschool logos aligned if possible
-      try {
-        await assertSupabase()
-          .from('organizations')
-          .update({ logo_url: publicUrl })
-          .eq('id', preschoolId);
-      } catch (orgErr) {
-        console.warn('Failed to update organization logo:', orgErr);
-      }
+      } catch (e) { console.warn('Failed to sync school branding logo:', e); }
 
       try {
-        await assertSupabase()
-          .from('preschools')
-          .update({ logo_url: publicUrl })
-          .eq('id', preschoolId);
-      } catch (schoolErr) {
-        console.warn('Failed to update preschool logo:', schoolErr);
-      }
+        await assertSupabase().from('organizations').update({ logo_url: publicUrl }).eq('id', preschoolId);
+      } catch (e) { console.warn('Failed to update organization logo:', e); }
+
+      try {
+        await assertSupabase().from('preschools').update({ logo_url: publicUrl }).eq('id', preschoolId);
+      } catch (e) { console.warn('Failed to update preschool logo:', e); }
     } catch (error: any) {
       showAlert({ title: 'Logo Upload Failed', message: error.message || 'Failed to upload logo', type: 'error' });
     } finally {
       setJobLogoUploading(false);
+      setPendingLogoUri(null);
     }
   };
 
@@ -1104,15 +1096,18 @@ export default function JobPostingCreateScreen() {
             Generate or improve your description and requirements using your school info and role type.
           </Text>
           <TouchableOpacity
-            style={[styles.aiPrimaryButton, aiBusy && styles.aiPrimaryButtonDisabled]}
+            style={[styles.aiPrimaryButton, (aiBusy || !canUseAISuggestions) && styles.aiPrimaryButtonDisabled]}
             onPress={handleAISuggest}
-            disabled={aiBusy}
+            disabled={aiBusy || !canUseAISuggestions}
           >
             {aiBusy ? <EduDashSpinner color="#FFFFFF" /> : <Ionicons name="sparkles" size={18} color="#FFFFFF" />}
             <Text style={styles.aiPrimaryButtonText}>
               {description.trim() || requirements.trim() ? 'Improve With AI' : 'Generate With AI'}
             </Text>
           </TouchableOpacity>
+          {!canUseAISuggestions ? (
+            <Text style={styles.sectionHint}>Add a job title to enable AI suggestions.</Text>
+          ) : null}
         </View>
 
         {/* Title */}
@@ -1654,8 +1649,8 @@ export default function JobPostingCreateScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.aiPolishChip, polishingShareMessage && styles.aiPolishChipDisabled]}
-                  disabled={polishingShareMessage}
+                  style={[styles.aiPolishChip, (polishingShareMessage || !canPolishShareMessageWithAI) && styles.aiPolishChipDisabled]}
+                  disabled={polishingShareMessage || !canPolishShareMessageWithAI}
                   onPress={handlePolishMessageWithAI}
                 >
                   {polishingShareMessage ? (
@@ -1666,6 +1661,9 @@ export default function JobPostingCreateScreen() {
                   <Text style={styles.aiPolishChipText}>AI Polish</Text>
                 </TouchableOpacity>
               </View>
+              {!canPolishShareMessageWithAI ? (
+                <Text style={styles.sectionHint}>Enter a message first to enable AI polish.</Text>
+              ) : null}
 
               {(aiWhatsAppShort || aiWhatsAppLong) && shareJobPosting?.id ? (
                 <View style={styles.aiMessageRow}>
@@ -1783,6 +1781,19 @@ export default function JobPostingCreateScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Logo confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingLogoUri}
+        imageUri={pendingLogoUri}
+        onConfirm={confirmLogoUpload}
+        onCancel={() => setPendingLogoUri(null)}
+        title="Job Logo"
+        confirmLabel="Set Logo"
+        showCrop
+        cropAspect={[1, 1]}
+        loading={jobLogoUploading}
+      />
     </SafeAreaView>
   );
 }

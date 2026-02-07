@@ -148,7 +148,7 @@ export async function takePhoto(): Promise<DashAttachment[]> {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
-      allowsEditing: false,
+      allowsEditing: true,
       exif: false,
       base64: false,
     });

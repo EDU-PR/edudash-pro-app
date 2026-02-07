@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, RefreshControl, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, RefreshControl, Modal, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -18,12 +18,16 @@ import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { router, useFocusEffect } from 'expo-router';
 import ClassPlacementService from '@/lib/services/ClassPlacementService';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
   id: string;
+  student_id?: string | null;
   first_name: string;
   last_name: string;
+  avatar_url?: string | null;
   date_of_birth: string | null;
   age_months: number;
   age_years: number;
@@ -63,6 +67,264 @@ interface FilterOptions {
   classId: string;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getStudentInitials(student: Pick<Student, 'first_name' | 'last_name'>): string {
+  return `${student.first_name?.[0] || ''}${student.last_name?.[0] || ''}`.toUpperCase() || 'ST';
+}
+
+function buildPrintableStudentIdCardsHtml(params: {
+  schoolName?: string | null;
+  schoolType?: string | null;
+  students: Student[];
+}): string {
+  const { schoolName, schoolType, students } = params;
+  const safeSchool = escapeHtml(schoolName?.trim() || 'EduDash Pro School');
+  const safeType = escapeHtml((schoolType || 'school').toUpperCase());
+  const generatedAt = new Date().toLocaleString();
+
+  const cards = students.map((student) => {
+    const fullName = escapeHtml(`${student.first_name} ${student.last_name}`.trim());
+    const studentCode = escapeHtml((student.student_id || student.id || '').toUpperCase().slice(0, 18));
+    const className = escapeHtml(student.class_name || student.age_group_name || 'Unassigned');
+    const parentName = escapeHtml(student.parent_name || 'Not linked');
+    const ageText = `${student.age_years}y`;
+    const initials = escapeHtml(getStudentInitials(student));
+    const avatarUrl = student.avatar_url ? escapeHtml(student.avatar_url) : '';
+    const status = escapeHtml((student.status || 'active').toUpperCase());
+
+    return `
+      <article class="card">
+        <div class="hole"></div>
+        <div class="ribbon"></div>
+        <header class="card-top">
+          <div class="school">${safeSchool}</div>
+          <div class="type">${safeType}</div>
+        </header>
+        <div class="body">
+          <div class="avatar-wrap">
+            ${
+              avatarUrl
+                ? `<img class="avatar" src="${avatarUrl}" alt="${fullName}" />`
+                : `<div class="avatar-fallback">${initials}</div>`
+            }
+          </div>
+          <div class="meta">
+            <div class="name">${fullName}</div>
+            <div class="row">ID: <strong>${studentCode || 'N/A'}</strong></div>
+            <div class="row">Class: <strong>${className}</strong></div>
+            <div class="row">Age: <strong>${escapeHtml(ageText)}</strong></div>
+            <div class="row">Guardian: <strong>${parentName}</strong></div>
+          </div>
+        </div>
+        <footer class="footer">
+          <span class="status">${status}</span>
+          <span class="serial">#${escapeHtml(student.id.slice(0, 8).toUpperCase())}</span>
+        </footer>
+      </article>
+    `;
+  }).join('');
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Student ID Cards</title>
+        <style>
+          :root {
+            --card-w: 85.6mm;
+            --card-h: 54mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            background: #eef3ff;
+            color: #0f172a;
+          }
+          .page {
+            padding: 10mm;
+          }
+          .page-header {
+            margin-bottom: 8mm;
+          }
+          .title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+          }
+          .subtitle {
+            color: #334155;
+            font-size: 12px;
+            margin-top: 4px;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+            gap: 6mm;
+          }
+          .card {
+            width: var(--card-w);
+            min-height: var(--card-h);
+            border-radius: 14px;
+            background: linear-gradient(135deg, #0b1730 0%, #1e3a8a 65%, #1d4ed8 100%);
+            color: #f8fafc;
+            padding: 10px 10px 8px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
+          }
+          .hole {
+            position: absolute;
+            right: 10px;
+            top: 9px;
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            border: 2px solid rgba(255,255,255,0.35);
+            background: rgba(2, 6, 23, 0.45);
+          }
+          .ribbon {
+            position: absolute;
+            right: -24px;
+            top: -16px;
+            width: 92px;
+            height: 92px;
+            border-radius: 999px;
+            background: radial-gradient(circle at center, rgba(250,204,21,0.24), rgba(250,204,21,0) 70%);
+          }
+          .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 8px;
+          }
+          .school {
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            max-width: 70%;
+          }
+          .type {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            background: rgba(59,130,246,0.35);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 999px;
+            padding: 2px 6px;
+            white-space: nowrap;
+          }
+          .body {
+            display: flex;
+            gap: 8px;
+          }
+          .avatar-wrap {
+            width: 56px;
+            min-width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.16);
+            border: 1px solid rgba(255,255,255,0.3);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          .avatar-fallback {
+            font-size: 18px;
+            font-weight: 800;
+            color: #e2e8f0;
+          }
+          .meta {
+            flex: 1;
+            min-width: 0;
+          }
+          .name {
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 3px;
+            line-height: 1.2;
+          }
+          .row {
+            font-size: 9.5px;
+            line-height: 1.25;
+            opacity: 0.95;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .footer {
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.28);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 9px;
+          }
+          .status {
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(5,150,105,0.25);
+          }
+          .serial {
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            opacity: 0.9;
+          }
+          @media print {
+            body {
+              background: #fff;
+            }
+            .page {
+              padding: 0;
+            }
+            .page-header {
+              margin: 0 0 6mm 0;
+            }
+            .title {
+              font-size: 16px;
+            }
+            .subtitle {
+              font-size: 10px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="page">
+          <header class="page-header">
+            <div class="title">Student ID Tags</div>
+            <div class="subtitle">${safeSchool} • ${students.length} cards • Generated ${escapeHtml(generatedAt)}</div>
+          </header>
+          <section class="grid">${cards}</section>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
 export default function StudentManagementScreen() {
   const { user, profile, profileLoading, loading: authLoading } = useAuth();
   const { theme } = useTheme();
@@ -72,8 +334,15 @@ export default function StudentManagementScreen() {
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
 
-  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  // Handle organization id from enhanced profile, membership fallback, and legacy metadata.
+  const orgId =
+    profile?.organization_id ||
+    (profile as any)?.preschool_id ||
+    (profile as any)?.organization_membership?.organization_id ||
+    (profile as any)?.organization_membership?.preschool_id ||
+    (user?.user_metadata as any)?.organization_id ||
+    (user?.user_metadata as any)?.preschool_id ||
+    null;
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = authLoading || profileLoading;
@@ -174,8 +443,10 @@ export default function StudentManagementScreen() {
         .from('students')
         .select(`
           id,
+          student_id,
           first_name,
           last_name,
+          avatar_url,
           date_of_birth,
           preschool_id,
           class_id,
@@ -219,6 +490,8 @@ export default function StudentManagementScreen() {
         
         return {
           ...student,
+          student_id: student.student_id || null,
+          avatar_url: student.avatar_url || null,
           age_months: ageInfo.age_months,
           age_years: ageInfo.age_years,
           // If DOB doesn't map to an age group, fall back to the assigned class name
@@ -351,6 +624,41 @@ export default function StudentManagementScreen() {
     setRefreshing(true);
     await fetchData();
   };
+
+  const handlePrintIdCards = useCallback(async () => {
+    if (filteredStudents.length === 0) {
+      Alert.alert('No students', 'There are no student cards to print.');
+      return;
+    }
+
+    try {
+      const html = buildPrintableStudentIdCardsHtml({
+        schoolName: schoolInfo?.name,
+        schoolType: schoolInfo?.school_type,
+        students: filteredStudents,
+      });
+
+      if (Platform.OS === 'web') {
+        await Print.printAsync({ html });
+        return;
+      }
+
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'Share Student ID Cards',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        await Print.printAsync({ html });
+      }
+    } catch (error) {
+      console.error('Failed to print student cards:', error);
+      Alert.alert('Print failed', 'Could not generate printable student cards.');
+    }
+  }, [filteredStudents, schoolInfo?.name, schoolInfo?.school_type]);
 
   const handleAutoAssignByDob = () => {
     if (!orgId) {
@@ -532,6 +840,9 @@ export default function StudentManagementScreen() {
           ) : null}
           <Ionicons name="search-outline" size={18} color={theme.textSecondary} style={styles.searchIcon} />
         </View>
+      </View>
+
+      <View style={styles.quickActionsRow}>
         <TouchableOpacity
           style={[styles.autoAssignButton, autoAssigning ? styles.autoAssignButtonDisabled : null]}
           onPress={handleAutoAssignByDob}
@@ -541,6 +852,13 @@ export default function StudentManagementScreen() {
           <Text style={styles.autoAssignButtonText}>
             {autoAssigning ? 'Assigning...' : 'Auto-assign DOB'}
           </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.printCardsButton}
+          onPress={handlePrintIdCards}
+        >
+          <Ionicons name="print-outline" size={16} color={theme.text} style={styles.autoAssignIcon} />
+          <Text style={styles.printCardsButtonText}>Print ID Cards</Text>
         </TouchableOpacity>
       </View>
 
@@ -603,56 +921,89 @@ export default function StudentManagementScreen() {
           </View>
         ) : (
           <View style={styles.studentsGrid}>
-            {filteredStudents.map((student) => (
-              <TouchableOpacity
-                key={student.id}
-                style={styles.studentCard}
-                onPress={() => handleStudentPress(student)}
-              >
-                <View style={styles.studentHeader}>
-                  <View style={[
-                    styles.studentAvatar,
-                    { backgroundColor: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') }
-                  ]}>
-                    <Text style={styles.studentInitials}>
-                      {student.first_name[0]}{student.last_name[0]}
-                    </Text>
-                  </View>
-                  <View style={styles.studentInfo}>
-                    <Text style={styles.studentName}>
-                      {student.first_name} {student.last_name}
-                    </Text>
-                    <Text style={styles.studentAge}>
-                      {formatAge(student.age_months, student.age_years, schoolInfo?.school_type || 'preschool')}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.studentDetails}>
-                  {student.age_group_name && (
-                    <View style={[
-                      styles.ageGroupBadge,
-                      { backgroundColor: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') + '20' }
-                    ]}>
-                      <Text style={[
-                        styles.ageGroupBadgeText,
-                        { color: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') }
-                      ]}>
-                        {student.age_group_name}
-                      </Text>
+            {filteredStudents.map((student) => {
+                const statusKey = String(student.status || 'active').toLowerCase();
+                const statusTone =
+                  statusKey === 'inactive'
+                    ? { bg: '#DC262622', border: '#DC262655', text: '#B91C1C' }
+                    : statusKey === 'pending'
+                    ? { bg: '#F59E0B22', border: '#F59E0B55', text: '#B45309' }
+                    : { bg: '#05966922', border: '#05966955', text: '#047857' };
+
+                return (
+                  <TouchableOpacity
+                    key={student.id}
+                    style={styles.studentCard}
+                    onPress={() => handleStudentPress(student)}
+                  >
+                    <View style={styles.idTagPunchHole} />
+                    <View style={styles.idTagGlow} />
+                    <View style={styles.studentHeader}>
+                      <View style={styles.studentAvatarShell}>
+                        {student.avatar_url ? (
+                          <Image source={{ uri: student.avatar_url }} style={styles.studentAvatarImage} />
+                        ) : (
+                          <View style={[
+                            styles.studentAvatar,
+                            { backgroundColor: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') }
+                          ]}>
+                            <Text style={styles.studentInitials}>
+                              {getStudentInitials(student)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.studentInfo}>
+                        <Text style={styles.studentName} numberOfLines={1}>
+                          {student.first_name} {student.last_name}
+                        </Text>
+                        <Text style={styles.studentAge}>
+                          {formatAge(student.age_months, student.age_years, schoolInfo?.school_type || 'preschool')}
+                        </Text>
+                      </View>
+                      <View style={styles.studentIdBadge}>
+                        <Text style={styles.studentIdBadgeText}>
+                          {(student.student_id || student.id).slice(0, 8).toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
-                  )}
-                  
-                  {student.class_name && (
-                    <Text style={styles.classInfo}>📚 {student.class_name}</Text>
-                  )}
-                  
-                  {student.parent_name && (
-                    <Text style={styles.parentInfo}>👨‍👩‍👧‍👦 {student.parent_name}</Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                    
+                    <View style={styles.studentDetails}>
+                      {student.age_group_name && (
+                        <View style={[
+                          styles.ageGroupBadge,
+                          { backgroundColor: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') + '20' }
+                        ]}>
+                          <Text style={[
+                            styles.ageGroupBadgeText,
+                            { color: getAgeGroupColor(student.age_group_name, schoolInfo?.school_type || 'preschool') }
+                          ]}>
+                            {student.age_group_name}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      {student.class_name && (
+                        <Text style={styles.classInfo}>📚 {student.class_name}</Text>
+                      )}
+                      
+                      {student.parent_name && (
+                        <Text style={styles.parentInfo}>👨‍👩‍👧‍👦 {student.parent_name}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.studentCardFooter}>
+                      <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
+                        <Text style={[styles.statusPillText, { color: statusTone.text }]}>
+                          {(student.status || 'active').toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={styles.cardSerialText}>#{student.id.slice(0, 8).toUpperCase()}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }
+            )}
           </View>
         )}
       </ScrollView>
@@ -776,7 +1127,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.surface,
     marginHorizontal: 16,
     marginTop: 12,
-    marginBottom: 8,
+    marginBottom: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
@@ -799,14 +1150,23 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 14,
     color: theme.text,
   },
+  quickActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
   autoAssignButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 10,
+    flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 10,
     borderRadius: 8,
     backgroundColor: theme.primary,
+    justifyContent: 'center',
+    minHeight: 40,
   },
   autoAssignIcon: {
     marginRight: 6,
@@ -816,7 +1176,25 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   autoAssignButtonText: {
     color: theme.onPrimary,
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  printCardsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    minHeight: 40,
+  },
+  printCardsButtonText: {
+    color: theme.text,
+    fontSize: 12,
     fontWeight: '600',
   },
   ageGroupOverview: {
@@ -859,27 +1237,67 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   studentCard: {
     backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.border + 'AA',
     shadowColor: theme.shadow || '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  idTagPunchHole: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: theme.text + '30',
+    backgroundColor: theme.background,
+    zIndex: 2,
+  },
+  idTagGlow: {
+    position: 'absolute',
+    right: -16,
+    top: -12,
+    width: 86,
+    height: 86,
+    borderRadius: 999,
+    backgroundColor: theme.primary + '1F',
   },
   studentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  studentAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  studentAvatarShell: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: theme.surfaceVariant || theme.primary + '18',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: theme.border + '88',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+  },
+  studentAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  studentAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   studentInitials: {
     color: '#fff',
@@ -899,8 +1317,24 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.textSecondary,
     marginTop: 2,
   },
+  studentIdBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.primary + '66',
+    backgroundColor: theme.primary + '12',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: 104,
+  },
+  studentIdBadgeText: {
+    color: theme.primary,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
   studentDetails: {
     gap: 8,
+    marginBottom: 10,
   },
   ageGroupBadge: {
     alignSelf: 'flex-start',
@@ -919,6 +1353,34 @@ const createStyles = (theme: any) => StyleSheet.create({
   parentInfo: {
     fontSize: 14,
     color: theme.textSecondary,
+  },
+  studentCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: theme.border + '80',
+    paddingTop: 8,
+  },
+  statusPill: {
+    borderRadius: 999,
+    backgroundColor: '#05966922',
+    borderWidth: 1,
+    borderColor: '#05966955',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  statusPillText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  cardSerialText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.textSecondary,
+    letterSpacing: 0.8,
   },
   emptyState: {
     alignItems: 'center',

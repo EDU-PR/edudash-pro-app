@@ -27,6 +27,7 @@ import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 // Extracted components
 import { TeacherCard } from '@/components/teacher/TeacherCard';
 import { HiringView } from '@/components/teacher/HiringView';
+import { ApplicationsView } from '@/components/teacher/ApplicationsView';
 import { PerformanceView } from '@/components/teacher/PerformanceView';
 import { PayrollView } from '@/components/teacher/PayrollView';
 import { TeacherProfileView } from '@/components/teacher/TeacherProfileView';
@@ -705,6 +706,7 @@ export default function TeacherManagement() {
     const tabs: { view: TeacherManagementView; label: string; icon: string }[] = [
       { view: 'overview', label: 'Overview', icon: 'grid-outline' },
       { view: 'hiring', label: 'Hiring', icon: 'person-add-outline' },
+      { view: 'applications', label: 'Applications', icon: 'document-text-outline' },
       { view: 'performance', label: 'Performance', icon: 'analytics-outline' },
       { view: 'payroll', label: 'Payroll', icon: 'card-outline' },
     ];
@@ -1283,12 +1285,33 @@ export default function TeacherManagement() {
           />
         )}
 
+        {currentView === 'applications' && (
+          <ApplicationsView
+            preschoolId={getPreschoolId()}
+            userId={user?.id}
+            theme={theme}
+            showAlert={showAlert}
+          />
+        )}
+
         {currentView === 'performance' && (
-          <PerformanceView teachers={filteredTeachers} theme={theme} />
+          <PerformanceView
+            teachers={filteredTeachers}
+            preschoolId={getPreschoolId()}
+            userId={user?.id}
+            theme={theme}
+            showAlert={showAlert}
+          />
         )}
 
         {currentView === 'payroll' && (
-          <PayrollView teachers={filteredTeachers} theme={theme} />
+          <PayrollView
+            teachers={filteredTeachers}
+            preschoolId={getPreschoolId()}
+            userId={user?.id}
+            theme={theme}
+            showAlert={showAlert}
+          />
         )}
 
         {currentView === 'profile' && selectedTeacher && (

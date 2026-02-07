@@ -349,7 +349,7 @@ export function WhatsAppStyleIncomingCall({
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <LinearGradient
-        colors={['#075E54', '#128C7E', '#25D366']}
+        colors={['#0A1628', '#0F3460', '#00B4D8']}
         style={styles.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
@@ -357,12 +357,12 @@ export function WhatsAppStyleIncomingCall({
         {/* Top Section - Call Type */}
         <View style={styles.topSection}>
           <View style={styles.encryptedBadge}>
-            <Ionicons name="lock-closed" size={12} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.encryptedText}>End-to-end encrypted</Text>
+            <Ionicons name="shield-checkmark" size={12} color="rgba(0,245,255,0.8)" />
+            <Text style={styles.encryptedText}>EduDash Pro • Secure Call</Text>
           </View>
           
           <Text style={styles.callTypeLabel}>
-            EduDash {callType === 'video' ? 'Video' : 'Voice'} Call
+            {callType === 'video' ? 'Video' : 'Voice'} Call
           </Text>
         </View>
 
@@ -521,15 +521,18 @@ const styles = StyleSheet.create({
   encryptedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,180,216,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,180,216,0.25)',
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
     marginBottom: 12,
   },
   encryptedText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(0,245,255,0.85)',
     fontSize: 12,
+    fontWeight: '500',
     marginLeft: 6,
   },
   callTypeLabel: {
@@ -554,16 +557,18 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(0,180,216,0.4)',
   },
   avatarContainer: {
     width: 140,
     height: 140,
     borderRadius: 70,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(0,180,216,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(0,245,255,0.3)',
   },
   avatarImage: {
     width: '100%',
@@ -574,7 +579,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0,180,216,0.2)',
   },
   avatarInitials: {
     color: '#fff',
@@ -619,7 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF3B30',
   },
   answerButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: '#00B4D8',
   },
   buttonLabel: {
     color: '#fff',

@@ -53,11 +53,20 @@ export default function AttendanceScreen() {
   };
 
   // RBAC Guard: Teachers, principals, and admins can access this screen
-  const isTeacher = permissions?.hasRole ? permissions.hasRole('teacher') : profile?.role === 'teacher'
-  const isPrincipal = permissions?.hasRole ? permissions.hasRole('principal') : (
-    profile?.role === 'principal' || profile?.role === 'principal_admin' ||
-    profile?.role === 'admin' || profile?.role === 'super_admin'
-  )
+  const normalizedRole = String(profile?.role || '').trim().toLowerCase()
+  const isTeacher = permissions?.hasRole
+    ? permissions.hasRole('teacher')
+    : normalizedRole === 'teacher'
+  const isPrincipal = permissions?.hasRoleOrHigher
+    ? permissions.hasRoleOrHigher('principal_admin')
+    : (
+      normalizedRole === 'principal' ||
+      normalizedRole === 'principal_admin' ||
+      normalizedRole === 'admin' ||
+      normalizedRole === 'super_admin' ||
+      normalizedRole === 'superadmin' ||
+      normalizedRole === 'platform_admin'
+    )
   const canAccessAttendance = isTeacher || isPrincipal
 
   // Redirect non-authorized users

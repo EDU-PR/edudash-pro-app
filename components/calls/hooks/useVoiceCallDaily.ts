@@ -697,28 +697,9 @@ export function useVoiceCallDaily({
           }, 300);
         });
 
-        // Android permissions
-        if (Platform.OS === 'android') {
-          try {
-            const { PermissionsAndroid } = require('react-native');
-            const granted = await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-              {
-                title: 'Microphone Permission',
-                message: 'This app needs access to your microphone for voice calls.',
-                buttonPositive: 'OK',
-              }
-            );
-            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-              throw new Error('Microphone permission denied');
-            }
-          } catch (permError) {
-            throw new Error('Microphone permission denied. Please enable it in settings.');
-          }
-        }
-
-        // Note: setSubscribeToTracksAutomatically must be called AFTER join
-        // We pass subscribeToTracksAutomatically: true in the join options instead
+        // Note: Mic permissions already handled by CallPrewarming prewarmCallSystem()
+        // and by startAudioOff: false in the join options below
+        
         console.log('[VoiceCallDaily] Preparing to join with auto-subscribe enabled...');
 
         // CRITICAL: Request streaming audio mode from AudioModeCoordinator
@@ -729,31 +710,15 @@ export function useVoiceCallDaily({
           audioSessionRef.current = await AudioModeCoordinator.requestAudioMode('streaming');
           console.log('[VoiceCallDaily] ✅ Audio session acquired:', audioSessionRef.current.id);
           
-          // CRITICAL: Re-enforce earpiece AFTER AudioModeCoordinator applies settings
-          // Wait a bit for audio routing to stabilize, then ensure InCallManager takes precedence
-          // Use multiple timeouts to catch any delayed audio routing changes
-          setTimeout(() => {
-            if (InCallManager) {
-              try {
-                InCallManager.setForceSpeakerphoneOn(false);
-                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator (200ms)');
-              } catch (err) {
-                console.warn('[VoiceCallDaily] Failed to re-enforce earpiece:', err);
-              }
+          // Single earpiece enforcement after AudioModeCoordinator
+          if (InCallManager) {
+            try {
+              InCallManager.setForceSpeakerphoneOn(false);
+              console.log('[VoiceCallDaily] ✅ Earpiece set after AudioModeCoordinator');
+            } catch (err) {
+              console.warn('[VoiceCallDaily] Failed earpiece enforcement:', err);
             }
-          }, 200);
-          
-          // Additional enforcement after longer delay to catch any delayed routing changes
-          setTimeout(() => {
-            if (InCallManager) {
-              try {
-                InCallManager.setForceSpeakerphoneOn(false);
-                console.log('[VoiceCallDaily] ✅ Re-enforced earpiece after AudioModeCoordinator (500ms)');
-              } catch (err) {
-                // Silent - this is a secondary enforcement
-              }
-            }
-          }, 500);
+          }
         } catch (audioModeError) {
           console.warn('[VoiceCallDaily] ⚠️ Failed to acquire audio mode (non-fatal):', audioModeError);
           // Fallback: try direct AudioModule call
@@ -763,8 +728,8 @@ export function useVoiceCallDaily({
               playsInSilentMode: true,
               shouldPlayInBackground: true,
               shouldRouteThroughEarpiece: true,
-              interruptionMode: 'doNotMix',
-              interruptionModeAndroid: 'doNotMix',
+              interruptionMode: 'duckOthers',
+              interruptionModeAndroid: 'duckOthers',
             });
             console.log('[VoiceCallDaily] ✅ Audio session activated via fallback');
           } catch (fallbackError) {
@@ -795,111 +760,54 @@ export function useVoiceCallDaily({
           console.warn('[VoiceCallDaily] Failed to disable video (non-fatal):', videoError);
         }
 
-        // CRITICAL: Re-enforce earpiece after Daily.co join
-        // Daily.co may change audio routing, so we need to enforce earpiece again
-        // Wait a bit for Daily.co to initialize audio, then enforce
-        setTimeout(() => {
-          if (InCallManager) {
-            try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              console.log('[VoiceCallDaily] ✅ Final earpiece enforcement after join');
-            } catch (err) {
-              console.warn('[VoiceCallDaily] Failed final earpiece enforcement:', err);
-            }
+        // Single earpiece enforcement after join (audio hook handles ongoing routing)
+        if (InCallManager) {
+          try {
+            InCallManager.setForceSpeakerphoneOn(false);
+            console.log('[VoiceCallDaily] ✅ Earpiece set after join');
+          } catch (err) {
+            console.warn('[VoiceCallDaily] Failed earpiece enforcement:', err);
           }
-        }, 300); // Wait 300ms for Daily.co audio to initialize
-
-        // Note: InCallManager is now managed by useVoiceCallAudio hook
-        // to prevent duplicate initialization and ringtone changes
-        // The useVoiceCallAudio hook handles earpiece enforcement when call connects
-        console.log('[VoiceCallDaily] Joined successfully, audio managed by useVoiceCallAudio');
+        }
         
-        // CRITICAL: Final earpiece enforcement after Daily.co join
-        // This ensures InCallManager settings take precedence over any audio mode changes
-        setTimeout(() => {
-          if (InCallManager) {
-            try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              console.log('[VoiceCallDaily] ✅ Final earpiece enforcement after join');
-            } catch (err) {
-              console.warn('[VoiceCallDaily] Failed final earpiece enforcement:', err);
-            }
-          }
-        }, 300);
+        console.log('[VoiceCallDaily] Joined successfully, audio managed by useVoiceCallAudio');
 
-        // Enable microphone with robust retry logic
+        // FAST mic enable: permissions already granted by prewarm/earlier request
+        // startAudioOff: false already requested mic, just verify and retry if needed
         let micEnabled = false;
         
         try {
-          // 1. Request microphone permissions on Android
-          if (Platform.OS === 'android') {
-            console.log('[VoiceCallDaily] Checking Android microphone permissions...');
-            const granted = await PermissionsAndroid.request(
-              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-              {
-                title: 'Microphone Permission',
-                message: 'EduDash Pro needs microphone access for voice calls',
-                buttonNeutral: 'Ask Me Later',
-                buttonNegative: 'Cancel',
-                buttonPositive: 'OK',
-              }
-            );
-            
-            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-              console.error('[VoiceCallDaily] ❌ Microphone permission denied');
-              setError('Microphone permission denied. Please enable it in settings.');
-              // Continue with call but mic will be off
-            } else {
-              console.log('[VoiceCallDaily] ✅ Microphone permission granted');
-            }
-          }
-          
-          // 2. Wait for Daily.co to be fully ready
-          await new Promise(resolve => setTimeout(resolve, 500));
-            
-          // 3. Verify Daily.co has loaded participants
-          const participants = daily.participants();
-          if (!participants || Object.keys(participants).length === 0) {
-            console.warn('[VoiceCallDaily] No participants yet, waiting longer...');
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          
-          // 4. Enable microphone with retry attempts
-          // Note: setInputDevicesAsync is NOT supported in React Native Daily SDK
-          // We use setLocalAudio(true) directly, which is the supported method
-          for (let attempt = 1; attempt <= 5; attempt++) {
+          // Quick mic enable with minimal retry (3 attempts × 150ms = 450ms max)
+          for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-              console.log(`[VoiceCallDaily] Microphone enable attempt ${attempt}/5`);
-              
-              // Use setLocalAudio - the React Native compatible method
-              // audioSource: true in join options already requested the mic
+              console.log(`[VoiceCallDaily] Mic enable attempt ${attempt}/3`);
               daily.setLocalAudio(true);
               
-              // Verify it worked
-              await new Promise(resolve => setTimeout(resolve, 200));
+              // Quick verify
+              await new Promise(resolve => setTimeout(resolve, 100));
               const localAudio = daily.localAudio();
               
               if (localAudio) {
                 micEnabled = true;
                 setIsAudioEnabled(true);
-                console.log('[VoiceCallDaily] ✅ Microphone enabled successfully');
+                console.log('[VoiceCallDaily] ✅ Microphone enabled');
                 break;
               } else {
-                console.warn(`[VoiceCallDaily] Attempt ${attempt} failed, mic still off`);
-                if (attempt < 5) {
-                  await new Promise(resolve => setTimeout(resolve, 300));
+                console.warn(`[VoiceCallDaily] Attempt ${attempt} - mic not yet active`);
+                if (attempt < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 150));
                 }
               }
             } catch (micError) {
               console.warn(`[VoiceCallDaily] Attempt ${attempt} error:`, micError);
-              if (attempt < 5) {
-                await new Promise(resolve => setTimeout(resolve, 300));
+              if (attempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 150));
               }
             }
           }
           
           if (!micEnabled) {
-            console.error('[VoiceCallDaily] ❌ Failed to enable microphone after 5 attempts');
+            console.error('[VoiceCallDaily] ❌ Failed to enable microphone after 3 attempts');
             setError('Could not enable microphone. Please check your device settings.');
           }
         } catch (audioError) {

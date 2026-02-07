@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Animated, Image, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MessageTicks } from './MessageTicks';
@@ -80,9 +80,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
       return 'sending';
     }
     
-    // Check if read by any recipient (double green ticks)
-    const isRead = msg.read_by && msg.read_by.length > 0;
-    if (isRead) return 'read';
+    // Check if read by any OTHER user (exclude sender's own ID)
+    // mark_thread_messages_as_read adds the reader's ID to read_by, which can
+    // include the sender if they call markRead on their own thread.
+    const readByOthers = (msg.read_by || []).filter((id: string) => id !== msg.sender_id);
+    if (readByOthers.length > 0) return 'read';
     
     // Check if delivered to recipient's device (double grey ticks)
     // delivered_at is set when recipient comes online and receives the message
@@ -132,6 +134,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
     <View style={[styles.container, isOwn ? styles.own : styles.other]}>
       {!isOwn && (
         <Text style={styles.name}>{name}</Text>
+      )}
+      {msg.forwarded_from_id && (
+        <View style={styles.forwardedLabel}>
+          <Ionicons name="arrow-redo" size={11} color="#94a3b8" />
+          <Text style={styles.forwardedText}>Forwarded</Text>
+        </View>
       )}
       <Pressable
         onPress={handleBubbleTap}
@@ -195,12 +203,38 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               {Math.floor(getVoiceNoteDuration(msg.content) / 1000)}s
             </Text>
           </View>
-        ) : (
-          <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
-            {msg.content}
-          </Text>
-        )}
+        ) : (() => {
+          // Check for image message: [image](url)
+          const imageMatch = msg.content?.match(/\[image\]\((.+?)\)/);
+          if (imageMatch) {
+            const imageUrl = imageMatch[1];
+            const screenWidth = Dimensions.get('window').width;
+            const maxW = Math.min(screenWidth * 0.6, 260);
+            return (
+              <View>
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={{ width: maxW, height: maxW * 0.75, borderRadius: 10 }}
+                  resizeMode="cover"
+                />
+                {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim() ? (
+                  <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 6 }]}>
+                    {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim()}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          }
+          return (
+            <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
+              {msg.content}
+            </Text>
+          );
+        })()}
         <View style={styles.footer}>
+          {msg.edited_at && (
+            <Text style={[styles.editedLabel, { color: isOwn ? 'rgba(255,255,255,0.5)' : '#64748b' }]}>edited</Text>
+          )}
           <Text style={[styles.time, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
             {formatTime(msg.created_at)}
           </Text>
@@ -244,8 +278,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 }, (prevProps, nextProps) => {
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
+         prevProps.msg.content === nextProps.msg.content &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
          prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
+         prevProps.msg.forwarded_from_id === nextProps.msg.forwarded_from_id &&
+         prevProps.msg.edited_at === nextProps.msg.edited_at &&
          JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
 });
 
@@ -414,5 +451,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94a3b8',
     fontWeight: '600',
+  },
+  forwardedLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 2,
+    marginLeft: 12,
+  },
+  forwardedText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: '#94a3b8',
+  },
+  editedLabel: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    marginRight: 2,
   },
 });

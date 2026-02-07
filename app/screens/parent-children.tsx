@@ -8,6 +8,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 import StudentAvatarService from '@/services/StudentAvatarService';
 import { fetchParentChildren } from '@/lib/parent-children';
 
@@ -19,6 +20,7 @@ export default function ParentChildrenScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingChildId, setUploadingChildId] = useState<string | null>(null);
+  const [pendingAvatar, setPendingAvatar] = useState<{ childId: string; uri: string } | null>(null);
   
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -82,6 +84,10 @@ export default function ParentChildrenScreen() {
     }
   };
 
+  const getChildInitials = (child: any) => {
+    return `${child.first_name?.[0] || ''}${child.last_name?.[0] || ''}`.toUpperCase() || 'ST';
+  };
+
   const handleAvatarUpload = useCallback(async (childId: string, source: 'camera' | 'library') => {
     try {
       const hasPermission = source === 'camera'
@@ -116,8 +122,22 @@ export default function ParentChildrenScreen() {
         return;
       }
 
+      // Show preview modal instead of uploading immediately
+      setPendingAvatar({ childId, uri: pickerResult.assets[0].uri });
+    } catch (error) {
+      console.error('Error picking child photo:', error);
+      Alert.alert('Error', 'Failed to select photo.');
+    }
+  }, []);
+
+  const confirmAvatarUpload = useCallback(async (uri: string) => {
+    if (!pendingAvatar) return;
+    const { childId } = pendingAvatar;
+    setPendingAvatar(null);
+
+    try {
       setUploadingChildId(childId);
-      const uploadResult = await StudentAvatarService.uploadStudentAvatar(childId, pickerResult.assets[0].uri);
+      const uploadResult = await StudentAvatarService.uploadStudentAvatar(childId, uri);
 
       if (uploadResult.success && uploadResult.publicUrl) {
         setChildren((prev) =>
@@ -135,7 +155,7 @@ export default function ParentChildrenScreen() {
     } finally {
       setUploadingChildId(null);
     }
-  }, []);
+  }, [pendingAvatar]);
 
   const showAvatarOptions = useCallback((childId: string) => {
     Alert.alert('Update Profile Photo', 'Choose an option', [
@@ -158,78 +178,145 @@ export default function ParentChildrenScreen() {
     },
     childCard: {
       backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 18,
+      padding: 14,
       marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.border + 'AA',
       shadowColor: theme.shadow,
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      elevation: 4,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    idTagPunchHole: {
+      position: 'absolute',
+      top: 10,
+      right: 12,
+      width: 14,
+      height: 14,
+      borderRadius: 999,
+      borderWidth: 2,
+      borderColor: theme.text + '30',
+      backgroundColor: theme.background,
+      zIndex: 2,
+    },
+    idTagGlow: {
+      position: 'absolute',
+      right: -16,
+      top: -12,
+      width: 84,
+      height: 84,
+      borderRadius: 999,
+      backgroundColor: theme.primary + '1F',
     },
     childHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       marginBottom: 12,
     },
-    avatar: {
+    avatarShell: {
       width: 60,
       height: 60,
-      borderRadius: 30,
+      borderRadius: 14,
+      overflow: 'hidden',
+      marginRight: 12,
+      borderWidth: 1,
+      borderColor: theme.border + '88',
+      backgroundColor: theme.surfaceVariant || theme.primary + '18',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatar: {
+      width: '100%',
+      height: '100%',
+      borderRadius: 14,
       backgroundColor: theme.primary + '20',
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: 12,
       position: 'relative',
       overflow: 'hidden',
     },
     avatarImage: {
-      width: 60,
-      height: 60,
-      borderRadius: 30,
+      width: '100%',
+      height: '100%',
+      borderRadius: 14,
     },
     avatarText: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.primary,
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.onPrimary || '#fff',
     },
     avatarUploadButton: {
       position: 'absolute',
-      bottom: -2,
-      right: -2,
+      bottom: 2,
+      right: 2,
       backgroundColor: theme.primary,
       borderRadius: 12,
       width: 24,
       height: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 2,
+      borderWidth: 1,
       borderColor: theme.surface,
     },
     childInfo: {
       flex: 1,
     },
     childName: {
-      fontSize: 18,
-      fontWeight: 'bold',
+      fontSize: 17,
+      fontWeight: '700',
       color: theme.text,
       marginBottom: 4,
     },
     childDetails: {
-      fontSize: 14,
+      fontSize: 13,
       color: theme.textSecondary,
+      marginBottom: 2,
     },
-    statusBadge: {
+    childIdBadge: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.primary + '66',
+      backgroundColor: theme.primary + '12',
       paddingHorizontal: 8,
       paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: theme.success + '20',
+      maxWidth: 104,
     },
-    statusText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.success,
-      textTransform: 'capitalize',
+    childIdBadgeText: {
+      color: theme.primary,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.6,
+    },
+    childFooter: {
+      marginTop: 10,
+      marginBottom: 10,
+      borderTopWidth: 1,
+      borderTopColor: theme.border + '80',
+      paddingTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    statusPill: {
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderWidth: 1,
+    },
+    statusPillText: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+    cardSerialText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      letterSpacing: 0.8,
     },
     childActions: {
       flexDirection: 'row',
@@ -351,7 +438,18 @@ export default function ParentChildrenScreen() {
           {children.length > 0 ? (
             <>
               {children.map((child) => {
-                const initials = `${child.first_name?.[0] || ''}${child.last_name?.[0] || ''}`.toUpperCase();
+                const initials = getChildInitials(child);
+                const statusKey = child?.is_active === false || child?.status === 'inactive'
+                  ? 'inactive'
+                  : child?.status === 'pending'
+                  ? 'pending'
+                  : 'active';
+                const statusTone =
+                  statusKey === 'inactive'
+                    ? { bg: '#DC262622', border: '#DC262655', text: '#B91C1C' }
+                    : statusKey === 'pending'
+                    ? { bg: '#F59E0B22', border: '#F59E0B55', text: '#B45309' }
+                    : { bg: '#05966922', border: '#05966955', text: '#047857' };
                 
                 return (
                   <TouchableOpacity
@@ -359,28 +457,32 @@ export default function ParentChildrenScreen() {
                     style={styles.childCard}
                     onPress={() => router.push(`/screens/student-detail?id=${child.id}` as any)}
                   >
+                    <View style={styles.idTagPunchHole} />
+                    <View style={styles.idTagGlow} />
                     <View style={styles.childHeader}>
-                      <View style={styles.avatar}>
-                        {child.avatar_url ? (
-                          <Image source={{ uri: child.avatar_url }} style={styles.avatarImage} />
-                        ) : (
-                          <Text style={styles.avatarText}>{initials}</Text>
-                        )}
-                        <TouchableOpacity
-                          style={styles.avatarUploadButton}
-                          onPress={() => showAvatarOptions(child.id)}
-                          disabled={uploadingChildId === child.id}
-                        >
-                          {uploadingChildId === child.id ? (
-                            <EduDashSpinner size="small" color={theme.onPrimary} />
+                      <View style={styles.avatarShell}>
+                        <View style={styles.avatar}>
+                          {child.avatar_url ? (
+                            <Image source={{ uri: child.avatar_url }} style={styles.avatarImage} />
                           ) : (
-                            <Ionicons name="camera" size={14} color={theme.onPrimary} />
+                            <Text style={styles.avatarText}>{initials}</Text>
                           )}
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.avatarUploadButton}
+                            onPress={() => showAvatarOptions(child.id)}
+                            disabled={uploadingChildId === child.id}
+                          >
+                            {uploadingChildId === child.id ? (
+                              <EduDashSpinner size="small" color={theme.onPrimary} />
+                            ) : (
+                              <Ionicons name="camera" size={14} color={theme.onPrimary} />
+                            )}
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       
                       <View style={styles.childInfo}>
-                        <Text style={styles.childName}>
+                        <Text style={styles.childName} numberOfLines={1}>
                           {child.first_name} {child.last_name}
                         </Text>
                         <Text style={styles.childDetails}>
@@ -390,10 +492,21 @@ export default function ParentChildrenScreen() {
                           Class: {child.classes?.name || 'Not assigned'}
                         </Text>
                       </View>
-                      
-                      <View style={styles.statusBadge}>
-                        <Text style={styles.statusText}>Active</Text>
+
+                      <View style={styles.childIdBadge}>
+                        <Text style={styles.childIdBadgeText}>
+                          {(child.student_id || child.id).slice(0, 8).toUpperCase()}
+                        </Text>
                       </View>
+                    </View>
+
+                    <View style={styles.childFooter}>
+                      <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
+                        <Text style={[styles.statusPillText, { color: statusTone.text }]}>
+                          {statusKey.toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={styles.cardSerialText}>#{child.id.slice(0, 8).toUpperCase()}</Text>
                     </View>
                     
                     <View style={styles.childActions}>
@@ -459,6 +572,20 @@ export default function ParentChildrenScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Image preview + confirm modal for child avatar */}
+      <ImageConfirmModal
+        visible={!!pendingAvatar}
+        imageUri={pendingAvatar?.uri || null}
+        title="Child Photo"
+        confirmLabel="Set Photo"
+        confirmIcon="checkmark-circle-outline"
+        showCrop
+        cropAspect={[1, 1]}
+        loading={!!uploadingChildId}
+        onConfirm={confirmAvatarUpload}
+        onCancel={() => setPendingAvatar(null)}
+      />
     </View>
   );
 }

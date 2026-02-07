@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,6 +15,7 @@ import { Message } from './types';
 import { CYAN_BORDER, CYAN_PRIMARY, CYAN_GLOW } from './theme';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 // Safe component imports
 let VoiceRecorder: React.FC<any> | null = null;
 let EmojiPicker: React.FC<any> | null = null;
@@ -40,6 +41,10 @@ interface MessageComposerProps {
   placeholder?: string;
   /** Called when user is typing (for typing indicators) */
   onTyping?: () => void;
+  /** When set, the composer switches to edit mode with this message's content */
+  editingMessage?: Message | null;
+  /** Called to cancel editing */
+  onCancelEdit?: () => void;
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
@@ -52,10 +57,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   disabled = false,
   placeholder = 'Message',
   onTyping,
+  editingMessage,
+  onCancelEdit,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ uri: string; mimeType: string } | null>(null);
+  const [sendingImage, setSendingImage] = useState(false);
   
   // Mic glow animation
   const micGlowAnim = useRef(new Animated.Value(0.1)).current;
@@ -71,13 +80,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     return () => glowLoop.stop();
   }, [micGlowAnim]);
 
+  // Edit mode: pre-fill text when editingMessage changes
+  useEffect(() => {
+    if (editingMessage) {
+      setText(editingMessage.content || '');
+    }
+  }, [editingMessage]);
+
+  const isEditing = !!editingMessage;
+
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
 
     setText('');
     setShowEmojiPicker(false);
-    onCancelReply?.();
+    if (!isEditing) {
+      onCancelReply?.();
+    }
 
     await onSend(content);
   };
@@ -120,17 +140,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         quality: 0.8,
         allowsEditing: true,
       });
-      
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         const mimeType = asset.mimeType || 'image/jpeg';
-        await onImageAttach(asset.uri, mimeType);
+        setPendingImage({ uri: asset.uri, mimeType });
       }
     } catch (error) {
       console.error('[MessageComposer] Camera error:', error);
       toast.error('Failed to take photo. Please try again.', 'Camera');
     }
-  }, [onImageAttach]);
+  }, []);
 
   // Handle gallery/attachment picker
   const handleAttachment = useCallback(async () => {
@@ -159,16 +178,39 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         const mimeType = asset.mimeType || 'image/jpeg';
-        await onImageAttach(asset.uri, mimeType);
+        setPendingImage({ uri: asset.uri, mimeType });
       }
     } catch (error) {
       console.error('[MessageComposer] Attachment error:', error);
       toast.error('Failed to pick image. Please try again.', 'Attachments');
     }
-  }, [onImageAttach]);
+  }, []);
+
+  const handleConfirmImage = useCallback(async (uri: string) => {
+    if (!onImageAttach || !pendingImage) return;
+    try {
+      setSendingImage(true);
+      await onImageAttach(uri, pendingImage.mimeType);
+    } finally {
+      setSendingImage(false);
+      setPendingImage(null);
+    }
+  }, [onImageAttach, pendingImage]);
 
   return (
     <View style={styles.container}>
+      {/* Image preview/confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingImage}
+        imageUri={pendingImage?.uri ?? null}
+        onConfirm={handleConfirmImage}
+        onCancel={() => setPendingImage(null)}
+        title="Send Photo"
+        confirmLabel="Send"
+        confirmIcon="send"
+        loading={sendingImage}
+      />
+
       {/* Emoji Picker */}
       {EmojiPicker && (
         <EmojiPicker 
@@ -179,8 +221,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       )}
       
       {/* Reply Preview */}
-      {replyingTo && (
+      {replyingTo && !isEditing && (
         <ReplyPreview message={replyingTo} onClose={() => onCancelReply?.()} />
+      )}
+      
+      {/* Edit Mode Banner */}
+      {isEditing && (
+        <View style={styles.editBanner}>
+          <Ionicons name="pencil" size={16} color="#6366f1" />
+          <View style={styles.editBannerText}>
+            <Text style={styles.editLabel}>Editing message</Text>
+            <Text style={styles.editContent} numberOfLines={1}>
+              {editingMessage?.content}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => { onCancelEdit?.(); setText(''); }} hitSlop={12}>
+            <Ionicons name="close" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
       )}
       
       <View style={styles.composerRow}>
@@ -374,5 +432,31 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: CYAN_GLOW,
+  },
+  editBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginHorizontal: 8,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#6366f1',
+    gap: 8,
+  },
+  editBannerText: {
+    flex: 1,
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  editContent: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginTop: 1,
   },
 });
