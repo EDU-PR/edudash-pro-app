@@ -204,6 +204,7 @@ export default function TeacherSignUpClient() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
+          color-scheme: dark;
           --bg-primary: #050810;
           --bg-card: #0c1021;
           --bg-card-elevated: #111631;
@@ -433,6 +434,8 @@ export default function TeacherSignUpClient() {
           font-size: 14px;
           color: var(--text-primary);
           transition: all 0.15s;
+          appearance: none;
+          -webkit-appearance: none;
         }
         .form-input::placeholder {
           color: var(--text-muted);
@@ -441,6 +444,21 @@ export default function TeacherSignUpClient() {
           outline: none;
           border-color: rgba(99, 102, 241, 0.4);
           box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+        }
+
+        /* Fix Chrome/iOS autofill forcing a white background on dark inputs */
+        .form-input:-webkit-autofill,
+        .form-input:-webkit-autofill:hover,
+        .form-input:-webkit-autofill:focus,
+        .form-input:-webkit-autofill:active {
+          -webkit-text-fill-color: var(--text-primary) !important;
+          caret-color: var(--text-primary);
+          box-shadow: 0 0 0px 1000px var(--bg-input) inset !important;
+          transition: background-color 9999s ease-in-out 0s;
+          border: 1px solid var(--border-subtle);
+        }
+        .form-input:autofill {
+          box-shadow: 0 0 0px 1000px var(--bg-input) inset !important;
         }
       `}</style>
     </>
