@@ -238,6 +238,7 @@ export class DashAIClient {
           isGuest: !profile?.id,
           supabaseClient: this.supabaseClient,
         };
+        const toolResultMessages: Array<{ role: string; content: string; tool_use_id?: string }> = [];
         for (const toolCall of pendingToolCalls) {
           try {
             const result = await DashToolRegistry.executeTool(
@@ -245,11 +246,17 @@ export class DashAIClient {
               toolCall.input || {},
               executionContext
             );
+            const output = result.data || result.error || 'No output';
             toolResults.push({
               name: toolCall.name,
               input: toolCall.input,
-              output: result.data || result.error || 'No output',
+              output,
               success: result.success,
+            });
+            toolResultMessages.push({
+              role: 'user',
+              content: `[Tool Result for ${toolCall.name}]: ${typeof output === 'string' ? output : JSON.stringify(output)}`,
+              tool_use_id: toolCall.id,
             });
           } catch (toolError: any) {
             toolResults.push({
@@ -258,6 +265,45 @@ export class DashAIClient {
               output: `Tool execution error: ${toolError.message}`,
               success: false,
             });
+            toolResultMessages.push({
+              role: 'user',
+              content: `[Tool Result for ${toolCall.name}]: Error - ${toolError.message}`,
+              tool_use_id: toolCall.id,
+            });
+          }
+        }
+
+        // Continuation: Send tool results back to AI for a follow-up response
+        if (toolResultMessages.length > 0) {
+          try {
+            const continuationMessages = [
+              ...(messagesArr.length > 0 ? messagesArr : [{ role: 'user', content: promptText }]),
+              { role: 'assistant', content: assistantContent || 'I used the following tools to help you.' },
+              ...toolResultMessages,
+            ];
+            const { data: followUp } = await this.supabaseClient.functions.invoke('ai-proxy', {
+              body: {
+                scope,
+                service_type: params.serviceType || 'chat_message',
+                payload: {
+                  context: mergedContext,
+                  messages: continuationMessages,
+                  model: params.model || undefined,
+                },
+                stream: false,
+                enable_tools: false, // Prevent infinite tool loops
+                metadata: { role: scope, continuation: true },
+              },
+            });
+            if (followUp?.content) {
+              return {
+                content: followUp.content,
+                metadata: { usage: followUp.usage, tool_results: toolResults },
+              };
+            }
+          } catch (contError) {
+            console.warn('[DashAIClient] Tool continuation call failed:', contError);
+            // Fall through to return original content + tool results
           }
         }
       }
@@ -405,6 +451,17 @@ export class DashAIClient {
         ? userRole
         : 'student'; // Use 'student' scope for students/learners, not 'teacher'
 
+      // Get client-side tool definitions for the AI to use
+      const userTier = (userProfile as any)?.tier || 'free';
+      const claudeTools = DashToolRegistry.getClaudeTools(userRole, userTier);
+      const clientToolDefs = claudeTools.length > 0
+        ? claudeTools.map(t => ({
+            name: t.name,
+            description: t.description,
+            input_schema: t.input_schema as Record<string, unknown>,
+          }))
+        : undefined;
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -421,6 +478,7 @@ export class DashAIClient {
           },
           stream: true,
           enable_tools: true,
+          client_tools: clientToolDefs,
           metadata: {
             role: userRole, // Use actual role, not default to teacher
             model: params.model || undefined,
@@ -432,9 +490,12 @@ export class DashAIClient {
         throw new Error(`Streaming failed: ${response.status}`);
       }
       
-      // React Native fetch doesn't support streaming ReadableStream
-      // Fall back to reading the entire response and parsing SSE format
-      if (!response.body || typeof response.body.getReader !== 'function') {
+      // React Native fetch may expose a ReadableStream but its implementation
+      // can be incomplete (RN 0.79+). Always use the full-text fallback on mobile
+      // to avoid partial-stream bugs. On web, use the streaming ReadableStream path.
+      const isReactNative = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+      const canStreamNatively = !isReactNative && response.body && typeof response.body.getReader === 'function';
+      if (!canStreamNatively) {
         console.warn('[DashAIClient] Streaming not supported in this environment, parsing SSE from full response');
         const sseText = await response.text();
         
@@ -512,7 +573,7 @@ export class DashAIClient {
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+            const data = line.slice(6).trim();
             if (data === '[DONE]') continue;
             
             try {
@@ -528,6 +589,29 @@ export class DashAIClient {
               }
             } catch (e) {
               console.warn('[DashAIClient] Failed to parse SSE chunk:', e);
+            }
+          }
+        }
+      }
+      
+      // Process any remaining data left in the buffer after the stream ends
+      if (buffer.trim()) {
+        const remainingLine = buffer.trim();
+        if (remainingLine.startsWith('data: ')) {
+          const data = remainingLine.slice(6).trim();
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                if (firstTokenTime === null) {
+                  firstTokenTime = Date.now();
+                }
+                tokenCount++;
+                accumulated += parsed.delta.text;
+                onChunk(parsed.delta.text);
+              }
+            } catch (e) {
+              console.warn('[DashAIClient] Failed to parse remaining SSE buffer:', e);
             }
           }
         }

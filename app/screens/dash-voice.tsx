@@ -107,7 +107,10 @@ export default function DashVoiceScreen() {
   }, [isListening, isSpeaking]);
 
   const quickActions = useMemo(() => getQuickActions(orgType, role), [orgType, role]);
-  const displayedText = streamingText || lastResponse;
+  // Final safety net: strip any SSE artifacts that leaked into streaming/response text
+  const rawDisplayed = streamingText || lastResponse;
+  const displayedText = rawDisplayed && /^\s*data:\s*(\[DONE\])?\s*$/i.test(rawDisplayed)
+    ? '' : rawDisplayed;
   const interactiveChoices = useMemo(
     () => (displayedText && !streamingText) ? detectInteractiveChoices(displayedText, orgType) : [],
     [displayedText, streamingText, orgType],
@@ -226,14 +229,24 @@ export default function DashVoiceScreen() {
       if (attachedImage) setAttachedImage(null);
 
       const req = createStreamingRequest(url, session.access_token, body,
-        (accumulated) => setStreamingText(accumulated),
+        (accumulated) => {
+          // Guard: never show raw SSE artifacts in the streaming display
+          if (accumulated && !/^\s*data:\s*(\[DONE\])?\s*$/i.test(accumulated)) {
+            setStreamingText(accumulated);
+          }
+        },
         (finalText) => {
           const cleaned = cleanRawJSON(finalText);
-          setLastResponse(cleaned);
+          // Guard: if nothing meaningful was returned, show a friendly fallback
+          const isSseArtifact = !cleaned || /^\s*(data:\s*\[DONE\]|data:\s*$)/i.test(cleaned);
+          const displayText = isSseArtifact
+            ? 'I couldn\'t get a response. Please try again.'
+            : cleaned;
+          setLastResponse(displayText);
           setStreamingText('');
           setIsProcessing(false);
           // Add assistant response to history + persist
-          if (cleaned) {
+          if (displayText && !isSseArtifact) {
             const withResponse = [...updatedHistory, { role: 'assistant' as const, content: cleaned }];
             conversationHistoryRef.current = withResponse;
             setConversationHistory(withResponse);

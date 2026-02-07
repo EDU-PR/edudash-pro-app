@@ -42,7 +42,7 @@ export function QuotaProgress({ userId, refreshTrigger }: QuotaProgressProps) {
     if (tierLower === 'premium') return 'school_premium';
     if (tierLower === 'pro') return 'school_pro';
     if (tierLower === 'enterprise') return 'school_enterprise';
-    if (tierLower === 'basic') return 'basic';
+    if (tierLower === 'basic') return 'school_starter';
     if (tierLower === 'free') return 'free';
     if (tierLower === 'trial') return 'trial';
     

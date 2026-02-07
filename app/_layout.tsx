@@ -24,6 +24,9 @@ if (__DEV__) {
 import { setupNotificationRouter } from '../lib/NotificationRouter';
 // Initialize notification handler (setNotificationHandler) so foreground notifications display
 import '../lib/NotificationService';
+// Initialize agentic tool registry on startup
+import { initializeTools } from '../services/dash-ai/tools';
+initializeTools();
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack, router, usePathname } from 'expo-router';

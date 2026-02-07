@@ -61,7 +61,7 @@ export default function PrincipalSignUpScreen() {
   // Step 2: School Details
   const [schoolName, setSchoolName] = useState('');
   const [schoolSlug, setSchoolSlug] = useState('');
-  const [planTier, setPlanTier] = useState('basic');
+  const [planTier, setPlanTier] = useState('school_starter');
   const [billingEmail, setBillingEmail] = useState('');
 
   // Step 3: Address

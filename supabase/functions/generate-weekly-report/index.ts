@@ -21,6 +21,25 @@ serve(async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Auth gate: verify JWT and ensure caller has access to the student
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const authSupabase = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error: authError } = await authSupabase.auth.getUser()
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const { studentId, weekStart, weekEnd } = await req.json()
 
@@ -44,6 +63,24 @@ serve(async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({ error: 'Student not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Verify caller is the student's parent or a teacher/principal at their school
+    const { data: callerProfile } = await supabase
+      .from('profiles')
+      .select('id, role, preschool_id')
+      .eq('auth_user_id', user!.id)
+      .single()
+
+    const isParent = callerProfile?.id === student.parent_id
+    const isSchoolStaff = callerProfile?.preschool_id && callerProfile.preschool_id === student.preschool_id &&
+      (callerProfile.role === 'teacher' || callerProfile.role === 'principal')
+
+    if (!isParent && !isSchoolStaff) {
+      return new Response(
+        JSON.stringify({ error: 'You do not have access to this student' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

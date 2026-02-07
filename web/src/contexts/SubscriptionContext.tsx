@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { assertSupabase } from '../lib/supabase/client';
 
-type Tier = 'free' | 'starter' | 'basic' | 'premium' | 'pro' | 'enterprise';
+type Tier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise' | 'school_starter' | 'school_premium' | 'school_pro' | 'school_enterprise' | 'parent_starter' | 'parent_plus' | 'teacher_starter' | 'teacher_pro';
 
 type Seats = { total: number; used: number } | null;
 
@@ -68,8 +68,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         const metaTier = (user?.user_metadata as any)?.subscription_tier as string | undefined;
         const isTrial = (user?.user_metadata as any)?.isTrial === true;
 
-        if (metaTier && ['free','starter','premium','enterprise'].includes(metaTier)) {
-          t = metaTier as Tier;
+        if (metaTier) {
+          const validTiers = ['free','starter','premium','enterprise','school_starter','school_premium','school_pro','school_enterprise','parent_starter','parent_plus','teacher_starter','teacher_pro','pro'];
+          if (validTiers.includes(metaTier)) {
+            t = metaTier as Tier;
+          }
           source = 'user';
 
           // If user is on trial, ensure they have at least starter tier benefits

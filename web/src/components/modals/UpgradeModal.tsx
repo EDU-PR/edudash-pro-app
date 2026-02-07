@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 export interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentTier: 'free' | 'trial' | 'basic' | 'premium' | 'school';
+  currentTier: 'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school';
   userId: string;
   userEmail: string;
   userName?: string;
@@ -158,8 +158,8 @@ export function UpgradeModal({
   // Filter tiers based on current tier
   const availableTiers = TIER_OPTIONS.filter((option) => {
     if (currentTier === 'free' || currentTier === 'trial') return true;
-    if (currentTier === 'basic') return option.tier === 'parent_plus';
-    return false; // Already on premium
+    if (currentTier === 'parent_starter') return option.tier === 'parent_plus';
+    return false; // Already on highest tier
   });
 
   if (availableTiers.length === 0) {

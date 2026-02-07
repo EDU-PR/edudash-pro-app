@@ -78,7 +78,7 @@ export function ExamInteractiveView({ exam, generationId, userId, onClose, onSub
   const [upgradeModalData, setUpgradeModalData] = useState<{ currentUsage: number; currentLimit: number } | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
-  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
+  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   
   const { saveProgress } = useExamSession(generationId || null);

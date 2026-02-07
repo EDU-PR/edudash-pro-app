@@ -34,7 +34,7 @@ export default function PrincipalAnalyticsScreen() {
   const { analytics, loading, refreshing, error, refresh } = usePrincipalAnalytics();
   
   // Check premium access
-  const isPremiumOrHigher = ['premium', 'pro', 'enterprise'].includes(String(tier || ''));
+  const isPremiumOrHigher = ['premium', 'school_premium', 'pro', 'school_pro', 'enterprise', 'school_enterprise'].includes(String(tier || ''));
 
   const styles = createStyles(theme, insets);
 

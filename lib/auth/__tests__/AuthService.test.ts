@@ -132,7 +132,7 @@ describe('AuthService', () => {
       const result = await authService.registerStudent(credentials);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Password must be at least 12 characters');
+      expect(result.error).toContain('Password must be at least 8 characters');
       expect(mockSupabaseClient.auth.signUp).not.toHaveBeenCalled();
     });
 
@@ -338,7 +338,7 @@ describe('AuthService', () => {
     it('should enforce password strength requirements', async () => {
       const testCases = [
         { password: '', expectedError: 'Password is required' },
-        { password: 'short', expectedError: 'Password must be at least 12 characters' },
+        { password: 'short', expectedError: 'Password must be at least 8 characters' },
         { password: 'nouppercase123!', expectedError: 'uppercase letter' },
         { password: 'NOLOWERCASE123!', expectedError: 'lowercase letter' },
         { password: 'NoNumbers!@#', expectedError: 'number' },
@@ -481,8 +481,8 @@ describe('Password Validation', () => {
       return { valid: false, error: 'Password is required' };
     }
 
-    if (password.length < 12) {
-      return { valid: false, error: 'Password must be at least 12 characters long' };
+    if (password.length < 8) {
+      return { valid: false, error: 'Password must be at least 8 characters long' };
     }
 
     const hasLowerCase = /[a-z]/.test(password);

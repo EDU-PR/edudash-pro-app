@@ -75,18 +75,25 @@ export const useCreatePOPUpload = () => {
       
       if (newUpload?.upload_type === 'proof_of_payment') {
         try {
-          await supabase.functions.invoke('notifications-dispatcher', {
-            body: {
-              event_type: 'pop_uploaded',
-              pop_upload_id: newUpload.id,
-              preschool_id: profile.preschool_id,
-              student_id: newUpload.student_id,
-              upload_type: newUpload.upload_type,
-              payment_amount: newUpload.payment_amount,
-              payment_reference: newUpload.payment_reference,
-              send_immediately: true,
-            },
+          const notifyPayload = {
+            event_type: 'pop_uploaded',
+            pop_upload_id: newUpload.id,
+            preschool_id: profile.preschool_id,
+            student_id: newUpload.student_id,
+            upload_type: newUpload.upload_type,
+            payment_amount: newUpload.payment_amount,
+            payment_reference: newUpload.payment_reference,
+            send_immediately: true,
+          };
+          logger.info('[POPUpload] Sending notification:', JSON.stringify(notifyPayload));
+          const { data: notifyData, error: notifyError } = await supabase.functions.invoke('notifications-dispatcher', {
+            body: notifyPayload,
           });
+          if (notifyError) {
+            logger.warn('POPUpload', 'Notification dispatch returned error:', notifyError);
+          } else {
+            logger.info('[POPUpload] Notification dispatch result:', JSON.stringify(notifyData));
+          }
         } catch (notifyError) {
           logger.warn('POPUpload', 'Failed to notify POP upload:', notifyError);
         }

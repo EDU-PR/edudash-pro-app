@@ -766,7 +766,7 @@ export default function StandaloneParentDashboard() {
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        currentTier={subscriptionTier === 'parent-starter' ? 'basic' : subscriptionTier === 'parent-plus' ? 'premium' : 'free'}
+        currentTier={subscriptionTier === 'parent-starter' ? 'parent_starter' : subscriptionTier === 'parent-plus' ? 'parent_plus' : 'free'}
         userId={userId || ''}
         userEmail={userEmail}
         userName={userName}

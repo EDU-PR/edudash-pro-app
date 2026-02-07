@@ -418,7 +418,22 @@ Deno.serve(async (req) => {
     return new Response('OK', { status: 200 });
     
   } catch (error) {
-    console.error('[payfast-webhook] Error:', error);
+    console.error('[payfast-webhook] CRITICAL Error:', error);
+    // Log to audit trail so we can investigate
+    try {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      await supabase.from('audit_logs').insert({
+        action: 'payfast_webhook_error',
+        entity_type: 'payment',
+        new_data: {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      });
+    } catch (_) { /* don't throw from error handler */ }
     // Return 200 to prevent PayFast retries for application errors
     // PayFast will retry on 4xx/5xx errors
     return new Response('OK', { status: 200 });

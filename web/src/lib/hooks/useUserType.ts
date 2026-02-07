@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 
 export type UserRole = 'parent' | 'teacher' | 'principal' | 'superadmin' | 'student' | null;
 export type UserType = 'standalone' | 'affiliated' | null;
-export type SubscriptionTier = 'free' | 'parent-starter' | 'parent-plus' | 'private-teacher' | 'pro' | 'starter' | 'premium' | 'enterprise';
+export type SubscriptionTier = 'free' | 'parent-starter' | 'parent-plus' | 'private-teacher' | 'school_starter' | 'school_premium' | 'school_pro' | 'school_enterprise' | 'teacher_starter' | 'teacher_pro';
 
 export interface UserProfile {
   id: string;
@@ -124,14 +124,18 @@ export function useUserType(): UseUserTypeReturn {
           tier = 'parent-plus';
         } else if (tierStr.includes('private-teacher') || tierStr === 'private_teacher') {
           tier = 'private-teacher';
-        } else if (tierStr === 'pro') {
-          tier = 'pro';
-        } else if (tierStr === 'starter') {
-          tier = 'starter';
-        } else if (tierStr === 'premium') {
-          tier = 'premium';
-        } else if (tierStr === 'enterprise') {
-          tier = 'enterprise';
+        } else if (tierStr === 'school_starter' || tierStr === 'starter') {
+          tier = 'school_starter';
+        } else if (tierStr === 'school_premium' || tierStr === 'premium') {
+          tier = 'school_premium';
+        } else if (tierStr === 'school_pro' || tierStr === 'pro') {
+          tier = 'school_pro';
+        } else if (tierStr === 'school_enterprise' || tierStr === 'enterprise') {
+          tier = 'school_enterprise';
+        } else if (tierStr === 'teacher_starter') {
+          tier = 'teacher_starter';
+        } else if (tierStr === 'teacher_pro') {
+          tier = 'teacher_pro';
         }
       }
 
