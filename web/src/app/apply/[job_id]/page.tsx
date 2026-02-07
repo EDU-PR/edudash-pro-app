@@ -30,6 +30,8 @@ type JobPosting = {
   status?: string | null;
   expires_at?: string | null;
   preschool_id?: string | null;
+  age_group?: string | null;
+  whatsapp_number?: string | null;
 };
 
 type SchoolInfo = {
@@ -547,6 +549,16 @@ export default function ApplyPage() {
                       border: '1px solid rgba(16,185,129,0.2)',
                     }}>
                       💰 {fmtSalary(jobPosting)}
+                    </span>
+                  )}
+                  {jobPosting.age_group && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
+                      background: 'rgba(168,85,247,0.08)', color: '#a855f7',
+                      border: '1px solid rgba(168,85,247,0.18)',
+                    }}>
+                      👶 {jobPosting.age_group}
                     </span>
                   )}
                 </div>
