@@ -662,9 +662,12 @@ function PlanCard({ plan, annual, selected, onSelect, onSubscribe, creating, sch
   const getPlanColor = () => {
     switch (plan.tier.toLowerCase()) {
       case 'free': return '#6b7280';
-      case 'starter': return '#3b82f6';
-      case 'premium': return '#8b5cf6';
-      case 'enterprise': return '#f59e0b';
+      case 'school_starter': case 'starter': return '#3b82f6';
+      case 'school_premium': case 'premium': return '#8b5cf6';
+      case 'school_pro': case 'pro': return '#f59e0b';
+      case 'school_enterprise': case 'enterprise': return '#f59e0b';
+      case 'parent_starter': return '#3b82f6';
+      case 'parent_plus': return '#8b5cf6';
       default: return '#00f5ff';
     }
   };

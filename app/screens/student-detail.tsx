@@ -143,18 +143,25 @@ export default function StudentDetailScreen() {
       const viewerProfileId = userProfile?.id || profile?.id || user.id;
 
       // Get student details with class info (simpler query - avoids nested FK issues)
+      // Note: We avoid stacking multiple `.or()` calls because Supabase will overwrite the prior OR filter.
       let studentQuery = assertSupabase()
         .from('students')
         .select(`
           *,
           classes!students_class_id_fkey(id, name, grade_level, teacher_id)
         `)
-        .eq('id', studentId)
-        .eq('preschool_id', schoolId);
+        .eq('id', studentId);
 
-      // Parent safeguard: only allow viewing linked children
-      if (isParent && viewerProfileId) {
-        studentQuery = studentQuery.or(`parent_id.eq.${viewerProfileId},guardian_id.eq.${viewerProfileId}`);
+      // Parent safeguard: only allow viewing linked children (supports legacy auth-user-id links too)
+      if (isParent) {
+        const parentFilterIds = Array.from(new Set([viewerProfileId, user.id].filter(Boolean)));
+        if (parentFilterIds.length > 0) {
+          const parentFilters = parentFilterIds.flatMap((id) => [`parent_id.eq.${id}`, `guardian_id.eq.${id}`]);
+          studentQuery = studentQuery.or(parentFilters.join(','));
+        }
+      } else {
+        // Non-parents: scope to the viewer's school (supports both org/preschool columns).
+        studentQuery = studentQuery.or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`);
       }
 
       const { data: studentData, error: studentError } = await studentQuery.single();
@@ -176,7 +183,7 @@ export default function StudentDetailScreen() {
         const { data: teacherData } = await assertSupabase()
           .from('profiles')
           .select('first_name, last_name')
-          .eq('id', studentData.classes.teacher_id)
+          .or(`id.eq.${studentData.classes.teacher_id},auth_user_id.eq.${studentData.classes.teacher_id}`)
           .single();
         if (teacherData) {
           teacherName = `${teacherData.first_name || ''} ${teacherData.last_name || ''}`.trim();
@@ -188,18 +195,43 @@ export default function StudentDetailScreen() {
       const contactMap: Record<string, { name?: string; email?: string; phone?: string }> = {};
 
       if (contactIds.length > 0) {
-        const { data: contactProfiles } = await assertSupabase()
+        const supabase = assertSupabase();
+        const { data: contactProfilesById } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, email, phone')
+          .select('id, auth_user_id, first_name, last_name, email, phone')
           .in('id', contactIds);
 
-        (contactProfiles || []).forEach((profile) => {
-          contactMap[profile.id] = {
-            name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-            email: profile.email || undefined,
-            phone: profile.phone || undefined,
+        (contactProfilesById || []).forEach((contactProfile) => {
+          const normalized = {
+            name: `${contactProfile.first_name || ''} ${contactProfile.last_name || ''}`.trim(),
+            email: contactProfile.email || undefined,
+            phone: contactProfile.phone || undefined,
           };
+          contactMap[contactProfile.id] = normalized;
+          if (contactProfile.auth_user_id) {
+            contactMap[contactProfile.auth_user_id] = normalized;
+          }
         });
+
+        const unresolvedIds = contactIds.filter((id) => !contactMap[id]);
+        if (unresolvedIds.length > 0) {
+          const { data: contactProfilesByAuth } = await supabase
+            .from('profiles')
+            .select('id, auth_user_id, first_name, last_name, email, phone')
+            .in('auth_user_id', unresolvedIds);
+
+          (contactProfilesByAuth || []).forEach((contactProfile) => {
+            const normalized = {
+              name: `${contactProfile.first_name || ''} ${contactProfile.last_name || ''}`.trim(),
+              email: contactProfile.email || undefined,
+              phone: contactProfile.phone || undefined,
+            };
+            contactMap[contactProfile.id] = normalized;
+            if (contactProfile.auth_user_id) {
+              contactMap[contactProfile.auth_user_id] = normalized;
+            }
+          });
+        }
       }
 
       const parentInfo = studentData.parent_id ? contactMap[studentData.parent_id] || {} : {};
@@ -297,7 +329,7 @@ export default function StudentDetailScreen() {
             teacher_id,
             max_capacity
           `)
-          .eq('preschool_id', schoolId)
+          .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
           .eq('active', true);
 
         // Get teacher names for each class

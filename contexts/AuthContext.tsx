@@ -45,7 +45,7 @@ const AuthContext = createContext<AuthContextValue>({
 
 const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 const debugLog = (...args: unknown[]) => {
-  if (debugEnabled) console.log(...args);
+  if (debugEnabled) logger.debug('AuthContext', ...args);
 };
 
 function toEnhancedProfile(p: any | null): EnhancedUserProfile | null {
@@ -130,7 +130,7 @@ async function persistProfileSnapshot(
       last_login_at: new Date().toISOString(),
     });
   } catch (error) {
-    console.warn('[AuthContext] Failed to persist profile snapshot:', error);
+    logger.warn('AuthContext', 'Failed to persist profile snapshot:', error);
   }
 }
 
@@ -180,7 +180,7 @@ async function buildFallbackProfileFromSession(
   const appMeta = (user.app_metadata || {}) as Record<string, any>;
 
   if (__DEV__) {
-    console.log('[AuthContext][DEV] buildFallbackProfileFromSession dbProfile:', {
+    logger.debug('AuthContext', 'buildFallbackProfileFromSession dbProfile:', {
       hasData: !!dbProfile,
       role: dbProfile?.role,
       organization_id: dbProfile?.organization_id,
@@ -390,7 +390,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(timeoutId);
       }
       if (!enhancedProfile) {
-        console.warn('[AuthContext] fetchProfile timed out or returned null');
+        logger.warn('AuthContext', 'fetchProfile timed out or returned null');
         try {
           const { getStoredProfileForUser } = await import('@/lib/sessionManager');
           const storedProfile = await getStoredProfileForUser(userId);
@@ -398,23 +398,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             enhancedProfile = toEnhancedProfile(storedProfile as any);
           }
         } catch (storedErr) {
-          console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+          logger.warn('AuthContext', 'Stored profile fallback failed:', storedErr);
         }
       }
       if (!enhancedProfile) {
-        console.warn('[AuthContext] Falling back to session metadata for profile');
+        logger.warn('AuthContext', 'Falling back to session metadata for profile');
         try {
           const { data: { user: authUser } } = await assertSupabase().auth.getUser();
           if (authUser?.id === userId) {
             enhancedProfile = await buildFallbackProfileFromSession(authUser, profile);
           }
         } catch (fallbackErr) {
-          console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+          logger.warn('AuthContext', 'Fallback profile build failed:', fallbackErr);
         }
       }
       // EMERGENCY: If everything else failed, build from whatever user info we have
       if (!enhancedProfile) {
-        console.warn('[AuthContext] fetchProfile: ALL resolution failed — building emergency profile');
+        logger.warn('AuthContext', 'fetchProfile: ALL resolution failed — building emergency profile');
         try {
           const { data: { user: authUser } } = await assertSupabase().auth.getUser();
           const u = authUser || { id: userId } as any;
@@ -433,7 +433,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             capabilities: [],
           });
         } catch (emergencyErr) {
-          console.warn('[AuthContext] Emergency profile build failed:', emergencyErr);
+          logger.warn('AuthContext', 'Emergency profile build failed:', emergencyErr);
         }
       }
       setProfile(enhancedProfile);
@@ -450,7 +450,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       return enhancedProfile;
     } catch (error) {
-      console.error('Failed to fetch user profile:', error);
+      logger.error('AuthContext', 'Failed to fetch user profile:', error);
       setProfile(null);
       setPermissions(createPermissionChecker(null));
       return null;
@@ -488,24 +488,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Simplified: Call Supabase signOut first (triggers auth listener), then clean up
   const handleSignOut = useCallback(async () => {
     try {
-      console.log('[AuthContext] Starting sign-out process...');
+      logger.debug('AuthContext', 'Starting sign-out process...');
       
       // CRITICAL: Clear all navigation locks FIRST to prevent stale locks
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[AuthContext] Navigation locks cleared');
+        logger.debug('AuthContext', 'Navigation locks cleared');
       } catch (lockErr) {
-        console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
+        logger.warn('AuthContext', 'Failed to clear navigation locks (non-fatal):', lockErr);
       }
       
       // Call sessionManager sign out - this clears storage and calls Supabase signOut
       // The onAuthStateChange listener will handle state clearing via SIGNED_OUT event
       try {
         await signOut();
-        console.log('[AuthContext] Supabase sign-out completed');
+        logger.debug('AuthContext', 'Supabase sign-out completed');
       } catch (signOutErr) {
-        console.warn('[AuthContext] Sign-out failed (continuing anyway):', signOutErr);
+        logger.warn('AuthContext', 'Sign-out failed (continuing anyway):', signOutErr);
       }
       
       // Clear state explicitly as backup (in case listener doesn't fire)
@@ -518,9 +518,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear TanStack Query cache
       try {
         queryClient.clear();
-        console.log('[AuthContext] Query cache cleared');
+        logger.debug('AuthContext', 'Query cache cleared');
       } catch (cacheErr) {
-        console.warn('[AuthContext] Query cache clear failed:', cacheErr);
+        logger.warn('AuthContext', 'Query cache clear failed:', cacheErr);
       }
       
       // Clear PostHog and Sentry (fire-and-forget)
@@ -529,10 +529,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try { Sentry.Native.setUser(null as any); } catch { /* non-fatal */ }
       });
       
-      console.log('[AuthContext] Sign-out completed - navigation handled by route guard');
+      logger.debug('AuthContext', 'Sign-out completed - navigation handled by route guard');
       
     } catch (error) {
-      console.error('[AuthContext] Sign out failed:', error);
+      logger.error('AuthContext', 'Sign out failed:', error);
       // Force clear state even on error
       setUser(null);
       setSession(null);
@@ -564,7 +564,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearTimeout(timeoutId);
         }
         if (!enhancedProfile) {
-          console.warn('[AuthContext] Profile fetch returned null or timed out');
+          logger.warn('AuthContext', 'Profile fetch returned null or timed out');
           // Priority: fresh DB read before stale stored profile
           try {
             const { data: { user: authUser } } = await assertSupabase().auth.getUser();
@@ -573,13 +573,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               enhancedProfile = await Promise.race([
                 buildFallbackProfileFromSession(authUser, profile),
                 new Promise<null>((resolve) => setTimeout(() => {
-                  console.warn('[AuthContext] buildFallbackProfileFromSession timed out after 5s (boot)');
+                  logger.warn('AuthContext', 'buildFallbackProfileFromSession timed out after 5s (boot)');
                   resolve(null);
                 }, FALLBACK_TIMEOUT_MS)),
               ]) as EnhancedUserProfile | null;
             }
           } catch (fallbackErr) {
-            console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+            logger.warn('AuthContext', 'Fallback profile build failed:', fallbackErr);
           }
         }
         if (!enhancedProfile) {
@@ -591,12 +591,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               enhancedProfile = toEnhancedProfile(storedProfile as any);
             }
           } catch (storedErr) {
-            console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+            logger.warn('AuthContext', 'Stored profile fallback failed:', storedErr);
           }
         }
         // EMERGENCY: Build minimal profile from auth user metadata so user is never stranded
         if (!enhancedProfile) {
-          console.warn('[AuthContext] fetchProfileLocal: ALL resolution failed — building emergency profile for', userId);
+          logger.warn('AuthContext', 'fetchProfileLocal: ALL resolution failed — building emergency profile for', userId);
           try {
             const { data: { user: authUser } } = await assertSupabase().auth.getUser();
             const u = authUser || { id: userId } as any;
@@ -615,7 +615,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               capabilities: [],
             });
           } catch (emergencyErr) {
-            console.warn('[AuthContext] Emergency profile build in fetchProfileLocal failed:', emergencyErr);
+            logger.warn('AuthContext', 'Emergency profile build in fetchProfileLocal failed:', emergencyErr);
           }
         }
         if (mounted) {
@@ -641,7 +641,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         return enhancedProfile;
       } catch (error) {
-        console.error('Failed to fetch user profile:', error);
+        logger.error('AuthContext', 'Failed to fetch user profile:', error);
         if (mounted) {
           setProfile(null);
           setPermissions(createPermissionChecker(null));
@@ -676,19 +676,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Debug session restoration
         debugLog('=== SESSION RESTORATION DEBUG ===');
-        console.log('Stored session exists:', !!storedSession);
-        console.log('Stored profile exists:', !!storedProfile);
+        logger.debug('AuthContext', 'Stored session exists:', !!storedSession);
+        logger.debug('AuthContext', 'Stored profile exists:', !!storedProfile);
         if (storedSession) {
-          console.log('Session user_id:', storedSession.user_id);
-          console.log('Session email:', storedSession.email);
-          console.log('Session expires_at:', new Date(storedSession.expires_at * 1000).toISOString());
+          logger.debug('AuthContext', 'Session user_id:', storedSession.user_id);
+          logger.debug('AuthContext', 'Session email:', storedSession.email);
+          logger.debug('AuthContext', 'Session expires_at:', new Date(storedSession.expires_at * 1000).toISOString());
         }
         if (storedProfile) {
-          console.log('Profile role:', storedProfile.role);
-          console.log('Profile org_id:', storedProfile.organization_id);
-          console.log('Profile email:', storedProfile.email);
+          logger.debug('AuthContext', 'Profile role:', storedProfile.role);
+          logger.debug('AuthContext', 'Profile org_id:', storedProfile.organization_id);
+          logger.debug('AuthContext', 'Profile email:', storedProfile.email);
         }
-        console.log('================================');
+        logger.debug('AuthContext', '================================');
         
         const canUseStoredProfile =
           !!storedSession &&
@@ -819,7 +819,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   }
                 }
               } catch (error) {
-                console.error('[Visibility] Mobile session refresh failed:', error);
+                logger.error('AuthContext', 'Mobile session refresh failed:', error);
               }
             },
             onVisibilityChange: (isVisible) => {
@@ -859,7 +859,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextUserId = s?.user?.id ?? null;
         const lastUserId = lastUserIdRef.current;
         if (event === 'SIGNED_IN' && lastUserId && nextUserId && lastUserId !== nextUserId) {
-          console.log('[AuthContext] Detected user switch, clearing cached profile and permissions');
+          logger.debug('AuthContext', 'Detected user switch, clearing cached profile and permissions');
           setProfile(null);
           setPermissions(createPermissionChecker(null));
           setProfileLoading(true);
@@ -913,7 +913,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               );
               enhancedProfile = await Promise.race([profilePromise, timeoutPromise]) as EnhancedUserProfile | null;
             } catch (error) {
-              console.warn('[AuthContext] Quick profile fetch failed:', error);
+              logger.warn('AuthContext', 'Quick profile fetch failed:', error);
               enhancedProfile = null;
             }
 
@@ -933,7 +933,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   const fallbackResult = await Promise.race([
                     buildFallbackProfileFromSession(s.user, safeExistingProfile),
                     new Promise<null>((resolve) => setTimeout(() => {
-                      console.warn('[AuthContext] buildFallbackProfileFromSession timed out after 5s');
+                      logger.warn('AuthContext', 'buildFallbackProfileFromSession timed out after 5s');
                       resolve(null);
                     }, FALLBACK_TIMEOUT_MS)),
                   ]);
@@ -943,7 +943,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     authDebug('profile.fallback', { userId: s.user.id });
                   }
                 } catch (fallbackErr) {
-                  console.warn('[AuthContext] Fallback profile build failed:', fallbackErr);
+                  logger.warn('AuthContext', 'Fallback profile build failed:', fallbackErr);
                   enhancedProfile = null;
                 }
               }
@@ -958,7 +958,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     profileSource = 'stored';
                   }
                 } catch (storedErr) {
-                  console.warn('[AuthContext] Stored profile fallback failed:', storedErr);
+                  logger.warn('AuthContext', 'Stored profile fallback failed:', storedErr);
                 }
               }
 
@@ -967,7 +967,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // routeAfterLogin still fires and the user is never stranded
               // on the sign-in screen.
               if (!enhancedProfile && s.user) {
-                console.warn('[AuthContext] ALL profile resolution failed — creating emergency minimal profile from user metadata');
+                logger.warn('AuthContext', 'ALL profile resolution failed — creating emergency minimal profile from user metadata');
                 const userMeta = (s.user.user_metadata || {}) as Record<string, any>;
                 const appMeta = (s.user.app_metadata || {}) as Record<string, any>;
                 const emergencyRole = (userMeta.role || appMeta.role || 'parent') as string;
@@ -995,7 +995,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setPermissions(createPermissionChecker(enhancedProfile));
                 void persistProfileSnapshot(enhancedProfile, s.user);
                 if (__DEV__) {
-                  console.log('[AuthContext][DEV] Resolved org after sign-in:', {
+                  logger.debug('AuthContext', 'Resolved org after sign-in:', {
                     organization_id: enhancedProfile.organization_id,
                     organization_name: enhancedProfile.organization_name,
                     preschool_id: (enhancedProfile as any)?.preschool_id,
@@ -1035,7 +1035,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 });
               }
             } catch (profileErr) {
-              console.warn('[AuthContext] Sign-in profile resolution failed:', profileErr);
+              logger.warn('AuthContext', 'Sign-in profile resolution failed:', profileErr);
             } finally {
               // CRITICAL: Route BEFORE setting profileLoading=false
               // If we set profileLoading=false first, useAuthGuard sees profile loaded + user on auth route
@@ -1045,7 +1045,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // SAFETY NET: If enhancedProfile is STILL null (e.g. catch block ran),
               // build an absolute-minimum profile so the user is never stranded.
               if (!enhancedProfile && mounted && s?.user) {
-                console.warn('[AuthContext][FINALLY] enhancedProfile is null — building last-resort profile');
+                logger.warn('AuthContext', 'enhancedProfile is null — building last-resort profile');
                 try {
                   const meta = (s.user.user_metadata || {}) as Record<string, any>;
                   const appMeta = (s.user.app_metadata || {}) as Record<string, any>;
@@ -1066,7 +1066,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setPermissions(createPermissionChecker(enhancedProfile));
                   }
                 } catch {
-                  console.error('[AuthContext][FINALLY] Last-resort profile build failed');
+                  logger.error('AuthContext', 'Last-resort profile build failed');
                 }
               }
               
@@ -1087,7 +1087,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
                 
                 if (globalRecoveryFlag || isRecoverySession || isOnResetPasswordPage) {
-                  console.log('[AuthContext] Password recovery session detected, skipping auto-routing', {
+                  logger.debug('AuthContext', 'Password recovery session detected, skipping auto-routing', {
                     globalRecoveryFlag,
                     isRecoverySession,
                     isOnResetPasswordPage,
@@ -1120,7 +1120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                       }).catch(() => {});
                     }).catch(() => {});
                   } catch (error) {
-                    console.error('Post-login routing failed:', error);
+                    logger.error('AuthContext', 'Post-login routing failed:', error);
                     // #region agent log
                     debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
                     // #endregion
@@ -1253,20 +1253,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         clearAllNavigationLocks();
                         void routeAfterLogin(s.user, freshProfile);
                       } catch (routeError) {
-                        console.warn('[AuthContext] Post-refresh routing failed:', routeError);
+                        logger.warn('AuthContext', 'Post-refresh routing failed:', routeError);
                       }
                     }
                   }
                 })
                 .catch((err) => {
-                  console.warn('[AuthContext] Background profile refresh failed:', err);
+                  logger.warn('AuthContext', 'Background profile refresh failed:', err);
                 });
             }
           }
 
           if (event === 'SIGNED_OUT' && mounted) {
             authDebug('auth.signed_out', { userId: s?.user?.id || user?.id });
-            console.log('[AuthContext] SIGNED_OUT event received, clearing all auth state');
+            logger.debug('AuthContext', 'SIGNED_OUT event received, clearing all auth state');
             setProfile(null);
             setPermissions(createPermissionChecker(null));
             setUser(null);
@@ -1301,10 +1301,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             
             // Don't navigate here - let useAuthGuard handle navigation
             // This prevents conflicting navigation calls
-            console.log('[AuthContext] Sign-out cleanup complete, navigation handled by useAuthGuard');
+            logger.debug('AuthContext', 'Sign-out cleanup complete, navigation handled by useAuthGuard');
           }
         } catch (error) {
-          console.error('Auth state change handler error:', error);
+          logger.error('AuthContext', 'Auth state change handler error:', error);
         }
       });
       unsub = listener;

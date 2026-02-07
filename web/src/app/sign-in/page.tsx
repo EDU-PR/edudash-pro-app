@@ -323,7 +323,7 @@ function SignInFormWithParams() {
             Looking to register a school? <Link href="/sign-up/principal" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</Link>
           </p>
           <p style={{ color: "#9CA3AF", fontSize: 14, marginTop: 10, lineHeight: 1.5 }}>
-            Looking to onboard an organization? <Link href="/sign-up/principal" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</Link>
+            Looking to onboard an organization? <Link href="/sign-up/organization" style={{ color: "#00f5ff", textDecoration: "underline", fontWeight: 600 }}>Click here</Link>
           </p>
         </div>
 

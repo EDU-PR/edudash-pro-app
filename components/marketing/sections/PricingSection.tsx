@@ -39,42 +39,34 @@ const fallbackPlans: UIPlan[] = [
     featured: false,
   },
   {
-    name: 'Starter',
-    price: 'R49',
-    period: 'per month',
-    features: ['Up to 100 students', '5 AI lessons/day', 'Progress tracking', 'No ads'],
-    cta: 'Start Free Trial',
-    featured: false,
-  },
-  {
-    name: 'Basic',
+    name: 'School Starter',
     price: 'R299',
     period: 'per month',
-    features: ['Up to 200 students', 'AI lesson generation', 'Analytics & insights', 'AI homework grading'],
+    features: ['Up to 150 students', '5 teachers', 'AI-powered insights', 'Parent portal', 'WhatsApp notifications'],
     cta: 'Start Free Trial',
     featured: false,
   },
   {
-    name: 'Premium',
-    price: 'R499',
+    name: 'School Premium',
+    price: 'R599',
     period: 'per month',
-    features: ['Up to 400 students', 'Unlimited AI lessons', 'Advanced analytics', 'Custom branding', 'Priority support'],
+    features: ['Up to 500 students', '15 teachers', 'Advanced reporting', 'Custom branding', 'Priority support'],
     cta: 'Start Free Trial',
-    featured: true, // Most popular
+    featured: true,
   },
   {
-    name: 'Pro',
-    price: 'R899',
+    name: 'School Pro',
+    price: 'R999',
     period: 'per month',
-    features: ['Up to 800 students', 'Advanced teacher management', 'AI-powered insights', 'Priority support'],
+    features: ['Up to 1000 students', '30 teachers', 'Dedicated account manager', 'Advanced AI features', 'Priority API access'],
     cta: 'Start Free Trial',
     featured: false,
   },
   {
-    name: 'Enterprise',
-    price: 'R1999',
-    period: 'per month',
-    features: ['Multi-school management', 'Enterprise security', 'Dedicated support', 'Custom integrations', 'SLA guarantee'],
+    name: 'School Enterprise',
+    price: 'Custom',
+    period: 'contact us',
+    features: ['Unlimited students', '100 teachers', 'Dedicated support', 'Custom integrations', 'SLA guarantee'],
     cta: 'Contact Sales',
     featured: false,
   },
@@ -102,7 +94,7 @@ export function PricingSection({ columns }: PricingSectionProps) {
             period: p.price_monthly && p.price_monthly > 0 ? 'per month' : 'contact us',
             features: Array.isArray(p.features) ? p.features : [],
             cta: p.price_monthly && p.price_monthly > 0 ? 'Start Free Trial' : 'Contact Sales',
-            featured: p.tier === 'pro' || p.tier === 'premium',
+            featured: p.tier === 'school_premium' || p.tier === 'school_pro' || p.tier === 'premium' || p.tier === 'pro',
           }));
         } else {
           // Fallback to direct table select if RPC is unavailable
@@ -119,7 +111,7 @@ export function PricingSection({ columns }: PricingSectionProps) {
               period: p.price_monthly && p.price_monthly > 0 ? 'per month' : 'contact us',
               features: Array.isArray(p.features) ? p.features : [],
               cta: p.price_monthly && p.price_monthly > 0 ? 'Start Free Trial' : 'Contact Sales',
-              featured: p.tier === 'pro' || p.tier === 'premium',
+              featured: p.tier === 'school_premium' || p.tier === 'school_pro' || p.tier === 'premium' || p.tier === 'pro',
             }));
           }
         }

@@ -684,7 +684,7 @@ export default function SettingsScreen() {
                     <View style={styles.settingContent}>
                       <Text style={styles.settingTitle}>Switch AI Tier</Text>
                       <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                        {['free', 'trial', 'basic', 'pro', 'enterprise'].map((tier) => (
+                        {['free', 'trial', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'].map((tier) => (
                           <TouchableOpacity
                             key={tier}
                             onPress={() => handleSwitchAITier(tier)}

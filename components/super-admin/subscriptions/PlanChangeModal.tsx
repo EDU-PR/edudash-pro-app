@@ -431,6 +431,11 @@ export default function PlanChangeModal({
     const tierLower = (tier || '').toLowerCase();
     const tierInfo: Record<string, { emoji: string; level: string; color: string }> = {
       'free': { emoji: '🆓', level: 'Free Tier', color: '#6b7280' },
+      'school_starter': { emoji: '🚀', level: 'School Starter', color: '#3b82f6' },
+      'school_premium': { emoji: '⭐', level: 'School Premium', color: '#8b5cf6' },
+      'school_pro': { emoji: '💎', level: 'School Pro', color: '#f59e0b' },
+      'school_enterprise': { emoji: '🏢', level: 'School Enterprise', color: '#ef4444' },
+      // Legacy names (backward compat)
       'starter': { emoji: '🚀', level: 'Starter', color: '#3b82f6' },
       'basic': { emoji: '📊', level: 'Basic', color: '#06b6d4' },
       'premium': { emoji: '⭐', level: 'Premium', color: '#8b5cf6' },

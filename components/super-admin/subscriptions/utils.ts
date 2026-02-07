@@ -20,7 +20,7 @@ export function getStatusColor(status: string): string {
 
 export const INITIAL_CREATE_FORM = {
   school_id: '',
-  plan_tier: 'basic',
+  plan_tier: 'school_starter',
   plan_id: '',
   billing_frequency: 'monthly',
   seats_total: '10',

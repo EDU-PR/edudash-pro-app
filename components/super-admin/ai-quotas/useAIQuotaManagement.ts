@@ -107,9 +107,10 @@ export function useAIQuotaManagement(options: UseAIQuotaManagementOptions = {}) 
       if (responseData.global_config) {
         setGlobalConfig({
           free_tier_limit: responseData.global_config.free_tier_limit,
-          basic_tier_limit: responseData.global_config.basic_tier_limit,
-          pro_tier_limit: responseData.global_config.pro_tier_limit,
-          enterprise_tier_limit: responseData.global_config.enterprise_tier_limit,
+          school_starter_tier_limit: responseData.global_config.school_starter_tier_limit ?? responseData.global_config.basic_tier_limit ?? 5000,
+          school_premium_tier_limit: responseData.global_config.school_premium_tier_limit ?? 15000,
+          school_pro_tier_limit: responseData.global_config.school_pro_tier_limit ?? responseData.global_config.pro_tier_limit ?? 25000,
+          school_enterprise_tier_limit: responseData.global_config.school_enterprise_tier_limit ?? responseData.global_config.enterprise_tier_limit ?? 100000,
           overage_rate: responseData.global_config.overage_rate,
           warning_thresholds: responseData.global_config.warning_thresholds,
           suspension_threshold: responseData.global_config.suspension_threshold,
@@ -369,9 +370,9 @@ export function useAIQuotaManagement(options: UseAIQuotaManagementOptions = {}) 
 
       track('superadmin_global_ai_config_updated', {
         free_tier_limit: globalConfig.free_tier_limit,
-        basic_tier_limit: globalConfig.basic_tier_limit,
-        pro_tier_limit: globalConfig.pro_tier_limit,
-        enterprise_tier_limit: globalConfig.enterprise_tier_limit,
+        school_starter_tier_limit: globalConfig.school_starter_tier_limit,
+        school_pro_tier_limit: globalConfig.school_pro_tier_limit,
+        school_enterprise_tier_limit: globalConfig.school_enterprise_tier_limit,
         overage_rate: globalConfig.overage_rate,
       });
 

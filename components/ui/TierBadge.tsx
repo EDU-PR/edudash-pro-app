@@ -18,14 +18,17 @@ function getTierMeta(t?: string) {
   // Normalize tier name (handle both underscore and dash formats)
   const tt = String(t || 'free').toLowerCase().replace(/_/g, '-')
   switch (tt) {
+    case 'school-starter':
     case 'starter':
-    case 'school-starter': 
+    case 'basic':
       return { label: 'Starter', color: '#059669' }
-    case 'premium':
     case 'school-premium':
-    case 'pro':
-    case 'school-pro':
+    case 'premium':
       return { label: 'Premium', color: '#7C3AED' }
+    case 'school-pro':
+    case 'pro':
+      return { label: 'Pro', color: '#2563EB' }
+    case 'school-enterprise':
     case 'enterprise': 
       return { label: 'Enterprise', color: '#DC2626' }
     case 'parent-starter': 

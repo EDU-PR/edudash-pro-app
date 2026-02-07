@@ -26,11 +26,18 @@ export function getUsageColor(percentage: number): string {
  */
 export function getPlanColor(plan: string): string {
   switch (plan) {
+    case 'school_enterprise':
     case 'enterprise':
       return '#7c3aed';
+    case 'school_pro':
     case 'pro':
       return '#059669';
+    case 'school_premium':
+    case 'premium':
+      return '#8b5cf6';
+    case 'school_starter':
     case 'basic':
+    case 'starter':
       return '#0ea5e9';
     case 'free':
       return '#6b7280';

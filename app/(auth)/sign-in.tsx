@@ -24,6 +24,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function SignIn() {
@@ -57,7 +58,7 @@ export default function SignIn() {
   // so loading stays true (spinner visible) until the route change.
   useEffect(() => {
     if (loading && user && !profileLoading) {
-      console.log('[SignIn] Auth user + profile resolved, clearing loading state');
+      logger.debug('SignIn', 'Auth user + profile resolved, clearing loading state');
       setLoading(false);
     }
   }, [loading, user, profileLoading]);
@@ -65,7 +66,7 @@ export default function SignIn() {
   // Pull-to-refresh handler - clears any stale state
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    console.log('[SignIn] Pull-to-refresh triggered');
+    logger.debug('SignIn', 'Pull-to-refresh triggered');
     
     try {
       // Clear any stale navigation locks
@@ -82,15 +83,15 @@ export default function SignIn() {
       // Small delay to show the refresh indicator
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      console.log('[SignIn] Refresh complete');
+      logger.debug('SignIn', 'Refresh complete');
     } catch (err) {
-      console.warn('[SignIn] Error during refresh:', err);
+      logger.warn('SignIn', 'Error during refresh:', err);
     } finally {
       setRefreshing(false);
     }
   }, []);
 
-console.log('[SignIn] Component rendering, theme:', theme);
+logger.debug('SignIn', 'Component rendering, theme:', theme);
 
   // Removed auth guard to allow users to explicitly access sign-in page
   // even if they have a stale session. This fixes the issue where
@@ -102,7 +103,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
     
     const w = globalThis as any;
     const onPopState = () => {
-      console.log('[SignIn] Browser back detected, re-enforcing sign-in page');
+      logger.debug('SignIn', 'Browser back detected, re-enforcing sign-in page');
       router.replace('/(auth)/sign-in');
     };
     
@@ -111,7 +112,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
   }, []);
 
   useEffect(() => {
-    console.log('[SignIn] Mounted');
+    logger.debug('SignIn', 'Mounted');
     
     // CRITICAL: Clear any stale navigation locks on mount to prevent sign-in freeze
     // This handles cases where locks weren't cleared during sign-out
@@ -119,32 +120,32 @@ console.log('[SignIn] Component rendering, theme:', theme);
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[SignIn] Cleared any stale navigation locks on mount');
+        logger.debug('SignIn', 'Cleared any stale navigation locks on mount');
       } catch (err) {
-        console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', err);
+        logger.warn('SignIn', 'Failed to clear navigation locks (non-fatal):', err);
       }
       
       // Also reset any stale sign-out state that could block new sign-ins
       try {
         const { resetSignOutState } = await import('@/lib/authActions');
         resetSignOutState();
-        console.log('[SignIn] Reset any stale sign-out state');
+        logger.debug('SignIn', 'Reset any stale sign-out state');
       } catch (err) {
-        console.warn('[SignIn] Failed to reset sign-out state (non-fatal):', err);
+        logger.warn('SignIn', 'Failed to reset sign-out state (non-fatal):', err);
       }
     };
     clearStaleLocks();
     
-    return () => console.log('[SignIn] Unmounted');
+    return () => logger.debug('SignIn', 'Unmounted');
   }, []);
 
   const onContainerLayout = (e: any) => {
     const { x, y, width, height } = e.nativeEvent.layout;
-    console.log('[SignIn] Container layout:', { x, y, width, height });
+    logger.debug('SignIn', 'Container layout:', { x, y, width, height });
   };
   const onCardLayout = (e: any) => {
     const { x, y, width, height } = e.nativeEvent.layout;
-    console.log('[SignIn] Card layout:', { x, y, width, height });
+    logger.debug('SignIn', 'Card layout:', { x, y, width, height });
   };
 
   // Prefill email when provided via deep link flows (email change, invites, etc.)
@@ -212,7 +213,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           searchParams?.skipBiometric === '1' ||
           searchParams?.switch === '1';
         if (skipParam) {
-          console.log('[SignIn] Skipping biometric auto prompt (fresh sign-out or account switch)');
+          logger.debug('SignIn', 'Skipping biometric auto prompt (fresh sign-out or account switch)');
           return;
         }
 
@@ -221,7 +222,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           const skipUntilRaw = await storage.getItem('auth_skip_biometrics_until');
           const skipUntil = skipUntilRaw ? Number(skipUntilRaw) : 0;
           if (skipUntil && Date.now() < skipUntil) {
-            console.log('[SignIn] Skipping biometric auto prompt (cooldown)');
+            logger.debug('SignIn', 'Skipping biometric auto prompt (cooldown)');
             return;
           }
         } catch {
@@ -231,28 +232,28 @@ console.log('[SignIn] Component rendering, theme:', theme);
         // Check if biometrics are enabled and available
         const isEnabled = await BiometricAuthService.isBiometricEnabled();
         if (!isEnabled) {
-          console.log('[SignIn] Biometrics not enabled, skipping auto-prompt');
+          logger.debug('SignIn', 'Biometrics not enabled, skipping auto-prompt');
           return;
         }
         
         const capabilities = await BiometricAuthService.checkCapabilities();
         if (!capabilities.isAvailable || !capabilities.isEnrolled) {
-          console.log('[SignIn] Biometrics not available or enrolled, skipping');
+          logger.debug('SignIn', 'Biometrics not available or enrolled, skipping');
           return;
         }
         
-        console.log('[SignIn] Attempting biometric sign-in...');
+        logger.debug('SignIn', 'Attempting biometric sign-in...');
         setBiometricLoading(true);
         
         // Use EnhancedBiometricAuth which properly handles session restoration
         const result = await EnhancedBiometricAuth.authenticateWithBiometric();
         
         if (result.success && result.sessionRestored) {
-          console.log('[SignIn] Biometric auth and session restore successful');
+          logger.debug('SignIn', 'Biometric auth and session restore successful');
           // AuthContext will detect the session and handle navigation
         } else if (result.success && !result.sessionRestored) {
           // Biometric succeeded but session couldn't be restored (expired tokens)
-          console.log('[SignIn] Biometric succeeded but session not restored:', result.error);
+          logger.debug('SignIn', 'Biometric succeeded but session not restored:', result.error);
           showAlert({
             title: t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
             message: result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password to re-enable biometric login.' }),
@@ -261,7 +262,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           });
         } else {
           // Biometric auth failed or was cancelled
-          console.log('[SignIn] Biometric auth failed:', result.error);
+          logger.debug('SignIn', 'Biometric auth failed:', result.error);
           // Don't show alert for user cancellation
           if (result.error && !result.error.includes('cancelled') && !result.error.includes('No biometric session')) {
             // Only show alert for unexpected errors, not for expected conditions
@@ -269,7 +270,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           }
         }
       } catch (error) {
-        console.error('[SignIn] Biometric sign-in error:', error);
+        logger.error('SignIn', 'Biometric sign-in error:', error);
         // Silently fail - user can still use email/password
       } finally {
         setBiometricLoading(false);
@@ -303,7 +304,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           }
         }
       } catch (error) {
-        console.error('Failed to load saved credentials:', error);
+        logger.error('SignIn', 'Failed to load saved credentials:', error);
       }
     };
     loadSavedCredentials();
@@ -328,7 +329,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
     await new Promise(resolve => setTimeout(resolve, 50));
     let signInSuccess = false;
     // #region agent log
-    console.log('[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
+    logger.debug('SignIn', '[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
     // #endregion
     
     try {
@@ -355,7 +356,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
         }
 
         // #region agent log
-        console.log('[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
+        logger.debug('SignIn', '[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
         // #endregion
         
         // Check if this is an "email not confirmed" error
@@ -400,7 +401,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
                       });
                     }
                   } catch (e: any) {
-                    console.error('[SignIn] Resend verification error:', e);
+                    logger.error('SignIn', 'Resend verification error:', e);
                     showAlert({
                       title: t('common.error', { defaultValue: 'Error' }),
                       message: e?.message || t('auth.sign_in.resend_failed', { defaultValue: 'Failed to resend verification email. Please try again.' }),
@@ -426,10 +427,10 @@ console.log('[SignIn] Component rendering, theme:', theme);
         return;
       }
 
-      console.log('Sign in successful:', email.trim());
+      logger.debug('SignIn', 'Sign in successful:', email.trim());
       signInSuccess = true;
       // #region agent log
-      console.log('[DEBUG_AGENT] SignIn-SUCCESS', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
+      logger.debug('SignIn', '[DEBUG_AGENT] SignIn-SUCCESS', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
       // #endregion
 
       // Save remember me preference and credentials (best-effort; do not block sign-in)
@@ -446,7 +447,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
           try { await secureStore.deleteItem(sanitizedKey); } catch { /* Intentional: non-fatal */ }
         }
       } catch (credErr) {
-        console.warn('Remember me save failed:', credErr);
+        logger.warn('SignIn', 'Remember me save failed:', credErr);
       }
 
       // NOTE: Do NOT call routeAfterLogin here!
@@ -460,9 +461,9 @@ console.log('[SignIn] Component rendering, theme:', theme);
         // Import synchronously if possible, otherwise await
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[SignIn] Cleared all navigation locks before sign-in');
+        logger.debug('SignIn', 'Cleared all navigation locks before sign-in');
       } catch (lockErr) {
-        console.warn('[SignIn] Failed to clear navigation locks (non-fatal):', lockErr);
+        logger.warn('SignIn', 'Failed to clear navigation locks (non-fatal):', lockErr);
         // Even if import fails, try to clear locks via direct access if possible
         try {
           // Force clear any module-level locks
@@ -481,14 +482,14 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // AuthContext finishes profile resolution and routes away (unmounts this component).
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
-      console.error('=== SIGN IN ERROR DEBUG ===');
-      console.error('Error object:', _error);
-      console.error('Error name:', _error?.name);
-      console.error('Error message:', _error?.message);
-      console.error('Error stack:', _error?.stack);
-      console.error('Error cause:', _error?.cause);
-      console.error('Error keys:', Object.keys(_error || {}));
-      console.error('========================');
+      logger.error('SignIn', '=== SIGN IN ERROR DEBUG ===');
+      logger.error('SignIn', 'Error object:', _error);
+      logger.error('SignIn', 'Error name:', _error?.name);
+      logger.error('SignIn', 'Error message:', _error?.message);
+      logger.error('SignIn', 'Error stack:', _error?.stack);
+      logger.error('SignIn', 'Error cause:', _error?.cause);
+      logger.error('SignIn', 'Error keys:', Object.keys(_error || {}));
+      logger.error('SignIn', '========================');
       
       const msg = _error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' });
       showAlert({
@@ -515,7 +516,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
         })
       });
 
-      console.log('[SignIn] Google OAuth redirect URL:', redirectTo);
+      logger.debug('SignIn', 'Google OAuth redirect URL:', redirectTo);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -533,13 +534,13 @@ console.log('[SignIn] Component rendering, theme:', theme);
       // On web, the page will redirect automatically
       // On mobile, open the OAuth URL in browser
       if (Platform.OS !== 'web' && data?.url) {
-        console.log('[SignIn] Opening OAuth URL in browser');
+        logger.debug('SignIn', 'Opening OAuth URL in browser');
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
           redirectTo
         );
         
-        console.log('[SignIn] Browser result:', result.type);
+        logger.debug('SignIn', 'Browser result:', result.type);
         
         if (result.type === 'success') {
           // The callback will be handled by the auth-callback page
@@ -549,7 +550,7 @@ console.log('[SignIn] Component rendering, theme:', theme);
         }
       }
     } catch (error: any) {
-      console.error('[SignIn] Google Sign-In Error:', error);
+      logger.error('SignIn', 'Google Sign-In Error:', error);
       showAlert({
         title: t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
         message: error.message || t('auth.oauth.config_error', { defaultValue: 'Failed to sign in with Google. Please try again.' }),
