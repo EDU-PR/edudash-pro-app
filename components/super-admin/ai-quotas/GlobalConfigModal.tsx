@@ -71,39 +71,52 @@ export function GlobalConfigModal({
             </View>
 
             <View style={styles.configItem}>
-              <Text style={styles.configLabel}>Basic Tier</Text>
+              <Text style={styles.configLabel}>School Starter Tier</Text>
               <TextInput
                 style={styles.configInput}
-                value={config.basic_tier_limit.toString()}
+                value={config.school_starter_tier_limit.toString()}
                 onChangeText={(text) => onConfigChange({ 
                   ...config, 
-                  basic_tier_limit: parseInt(text) || 0 
+                  school_starter_tier_limit: parseInt(text) || 0 
                 })}
                 keyboardType="numeric"
               />
             </View>
 
             <View style={styles.configItem}>
-              <Text style={styles.configLabel}>Pro Tier</Text>
+              <Text style={styles.configLabel}>School Premium Tier</Text>
               <TextInput
                 style={styles.configInput}
-                value={config.pro_tier_limit.toString()}
+                value={config.school_premium_tier_limit.toString()}
                 onChangeText={(text) => onConfigChange({ 
                   ...config, 
-                  pro_tier_limit: parseInt(text) || 0 
+                  school_premium_tier_limit: parseInt(text) || 0 
                 })}
                 keyboardType="numeric"
               />
             </View>
 
             <View style={styles.configItem}>
-              <Text style={styles.configLabel}>Enterprise Tier</Text>
+              <Text style={styles.configLabel}>School Pro Tier</Text>
               <TextInput
                 style={styles.configInput}
-                value={config.enterprise_tier_limit.toString()}
+                value={config.school_pro_tier_limit.toString()}
                 onChangeText={(text) => onConfigChange({ 
                   ...config, 
-                  enterprise_tier_limit: parseInt(text) || 0 
+                  school_pro_tier_limit: parseInt(text) || 0 
+                })}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <View style={styles.configItem}>
+              <Text style={styles.configLabel}>School Enterprise Tier</Text>
+              <TextInput
+                style={styles.configInput}
+                value={config.school_enterprise_tier_limit.toString()}
+                onChangeText={(text) => onConfigChange({ 
+                  ...config, 
+                  school_enterprise_tier_limit: parseInt(text) || 0 
                 })}
                 keyboardType="numeric"
               />

@@ -209,8 +209,8 @@ export default function MemberRegistrationScreen() {
           Alert.alert('Invalid Email', 'Please enter a valid email address (e.g., user@example.com)');
           return false;
         }
-        if (!formData.password || formData.password.length < 6) {
-          Alert.alert('Password Required', 'Please enter a password with at least 6 characters');
+        if (!formData.password || formData.password.length < 8) {
+          Alert.alert('Password Required', 'Please enter a password with at least 8 characters');
           return false;
         }
         if (formData.password !== formData.confirm_password) {

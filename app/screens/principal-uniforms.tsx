@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, Share } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +56,7 @@ interface StudentRow {
 
 interface DisplayRow {
   id: string;
+  studentId: string;
   childName: string;
   ageYears: number | null;
   tshirtSize: string;
@@ -65,6 +66,7 @@ interface DisplayRow {
   isReturning: boolean;
   sampleSupplied: boolean;
   studentCode: string;
+  parentId: string;
   parentName: string;
   parentEmail: string;
   parentPhone: string;
@@ -118,7 +120,7 @@ const isUniformPaymentRecord = (payment: any) =>
   String(payment?.metadata?.fee_type || '').toLowerCase() === 'uniform';
 
 export default function PrincipalUniformsScreen() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
@@ -135,6 +137,7 @@ export default function PrincipalUniformsScreen() {
   const [exporting, setExporting] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid'>(null);
   const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
     () => new Map()
   );
@@ -245,6 +248,7 @@ export default function PrincipalUniformsScreen() {
     const parentName = formatName(parentProfile?.first_name, parentProfile?.last_name) || parentProfile?.email || '';
     return {
       id: row.id,
+      studentId: row.student_id,
       childName: childName || 'Unnamed Child',
       ageYears: row.age_years,
       tshirtSize: row.tshirt_size,
@@ -254,6 +258,7 @@ export default function PrincipalUniformsScreen() {
       isReturning: Boolean(row.is_returning),
       sampleSupplied: Boolean(row.sample_supplied),
       studentCode: row.student?.student_id || student?.student_id || '',
+      parentId: parentProfile?.id || '',
       parentName,
       parentEmail: parentProfile?.email || '',
       parentPhone: parentProfile?.phone || '',
@@ -270,6 +275,7 @@ export default function PrincipalUniformsScreen() {
     const parentName = formatName(parentProfile?.first_name, parentProfile?.last_name) || parentProfile?.email || '';
     return {
       id: student.id,
+      studentId: student.id,
       childName: formatName(student.first_name, student.last_name) || 'Unnamed Child',
       ageYears: null,
       tshirtSize: '',
@@ -279,6 +285,7 @@ export default function PrincipalUniformsScreen() {
       isReturning: false,
       sampleSupplied: false,
       studentCode: student.student_id || '',
+      parentId: parentProfile?.id || '',
       parentName,
       parentEmail: parentProfile?.email || '',
       parentPhone: parentProfile?.phone || '',
@@ -292,6 +299,11 @@ export default function PrincipalUniformsScreen() {
 
   const submittedCount = submittedRows.length;
   const missingCount = missingRows.length;
+  const missingContactableCount = useMemo(() => missingRows.filter((row) => row.parentId).length, [missingRows]);
+  const unpaidContactableCount = useMemo(
+    () => submittedRows.filter((row) => row.paymentStatus === 'unpaid' && row.parentId).length,
+    [submittedRows]
+  );
 
   const displayRows: DisplayRow[] = useMemo(() => (
     statusFilter === 'submitted'
@@ -481,19 +493,288 @@ export default function PrincipalUniformsScreen() {
     return { label: 'Unpaid', bg: theme.error + '22', border: theme.error + '55', text: theme.error };
   }, [theme]);
 
-  const handleMessageParent = useCallback(async (row: DisplayRow) => {
-    const parentLabel = row.parentName || 'Parent';
-    const message = `Hi ${parentLabel}, please submit ${row.childName}'s uniform size, T-shirt/shorts quantities, and returning T-shirt number (if applicable) in the app. Thank you.`;
+  const getOrCreateParentPrincipalThread = useCallback(async (payload: { studentId: string; parentId: string; subject: string }) => {
+    if (!user?.id || !schoolId) return null;
+    const supabase = assertSupabase();
+
+    const { data } = await supabase
+      .from('message_threads')
+      .select('id, message_participants(user_id, role)')
+      .eq('preschool_id', schoolId)
+      .eq('type', 'parent-principal')
+      .eq('student_id', payload.studentId);
+
+    const threads = (data as any[] | null) || [];
+    const existing = threads.find((thread) => {
+      const participants = (thread.message_participants || []) as Array<{ user_id: string }>;
+      const ids = new Set(participants.map((p) => p.user_id));
+      return ids.has(payload.parentId) && ids.has(user.id);
+    });
+
+    if (existing?.id) return existing.id as string;
+
+    const { data: createdThread, error: threadError } = await supabase
+      .from('message_threads')
+      .insert({
+        preschool_id: schoolId,
+        created_by: user.id,
+        subject: payload.subject,
+        type: 'parent-principal',
+        student_id: payload.studentId,
+        last_message_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (threadError) throw threadError;
+    const threadId = createdThread?.id as string;
+
+    const { error: participantsError } = await supabase.from('message_participants').insert([
+      { thread_id: threadId, user_id: user.id, role: 'principal' },
+      { thread_id: threadId, user_id: payload.parentId, role: 'parent' },
+    ]);
+
+    if (participantsError) throw participantsError;
+    return threadId;
+  }, [schoolId, user?.id]);
+
+  const sendMessagePushNotification = useCallback(async (params: {
+    threadId: string;
+    messageId: string;
+    senderId: string;
+    senderName: string;
+    messageContent: string;
+    recipientIds: string[];
+  }) => {
+    const { threadId, messageId, senderId, senderName, messageContent, recipientIds } = params;
+    const recipientsExcludingSender = recipientIds.filter((id) => id && id !== senderId);
+    if (!recipientsExcludingSender.length) return;
+
     try {
-      await Share.share({ message });
-    } catch (e: any) {
+      const supabase = assertSupabase();
+      const { data: sessionResult } = await supabase.auth.getSession();
+      const accessToken = sessionResult?.session?.access_token;
+      if (!accessToken) return;
+
+      const truncatedBody = messageContent.length > 100
+        ? `${messageContent.substring(0, 97)}...`
+        : messageContent;
+
+      await supabase.functions.invoke('notifications-dispatcher', {
+        body: {
+          event_type: 'new_message',
+          user_ids: recipientsExcludingSender,
+          thread_id: threadId,
+          message_id: messageId,
+          send_immediately: true,
+          template_override: {
+            title: `💬 ${senderName}`,
+            body: truncatedBody,
+            data: {
+              type: 'message',
+              thread_id: threadId,
+              message_id: messageId,
+              sender_id: senderId,
+              sender_name: senderName,
+              screen: 'messages',
+            },
+          },
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+    } catch (err) {
+      // Notification failures should not block message sending.
+      console.warn('[PrincipalUniforms] Push notification failed:', err);
+    }
+  }, []);
+
+  const bulkMessageMissing = useCallback(async () => {
+    if (!user?.id || !schoolId) return;
+    if (bulkMessaging) return;
+
+    const targets = missingRows.filter((row) => row.parentId);
+    if (!targets.length) {
       showAlert({
-        title: 'Error',
-        message: e?.message || 'Unable to open sharing options.',
+        title: 'No Parents Found',
+        message: 'No missing uniform submissions have a linked parent contact.',
+        type: 'warning',
         buttons: [{ text: 'OK' }],
       });
+      return;
     }
-  }, [showAlert]);
+
+    showAlert({
+      title: 'Message Missing Sizes',
+      message: `Send an in-app message to ${targets.length} parent(s) who have not submitted uniform sizes yet?`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setBulkMessaging('missing');
+            const supabase = assertSupabase();
+            const senderName =
+              (profile as any)?.full_name ||
+              `${(profile as any)?.first_name || ''} ${(profile as any)?.last_name || ''}`.trim() ||
+              'School';
+
+            let sent = 0;
+            let failed = 0;
+
+            for (const row of targets) {
+              try {
+                const parentLabel = row.parentName || 'Parent';
+                const studentCodeLine = row.studentCode ? ` Student code: ${row.studentCode}.` : '';
+                const content = `Hi ${parentLabel}, please submit ${row.childName}'s uniform size and quantities in the app.${studentCodeLine} Thank you.`;
+                const subject = `Uniform Reminder • ${row.childName}`.trim();
+                const threadId = await getOrCreateParentPrincipalThread({
+                  studentId: row.studentId,
+                  parentId: row.parentId,
+                  subject,
+                });
+                if (!threadId) {
+                  failed++;
+                  continue;
+                }
+
+                const { data: messageData, error: messageError } = await supabase
+                  .from('messages')
+                  .insert({
+                    thread_id: threadId,
+                    sender_id: user.id,
+                    content,
+                    content_type: 'text',
+                  })
+                  .select('id, content')
+                  .single();
+                if (messageError) throw messageError;
+
+                await sendMessagePushNotification({
+                  threadId,
+                  messageId: messageData.id,
+                  senderId: user.id,
+                  senderName,
+                  messageContent: messageData.content,
+                  recipientIds: [row.parentId],
+                });
+
+                sent++;
+              } catch (err) {
+                console.warn('[PrincipalUniforms] Bulk message (missing) failed:', err);
+                failed++;
+              }
+            }
+
+            setBulkMessaging(null);
+            showAlert({
+              title: 'Bulk Message Complete',
+              message: failed
+                ? `Sent ${sent} message(s). Failed: ${failed}.`
+                : `Sent ${sent} message(s).`,
+              type: failed ? 'warning' : 'success',
+              buttons: [{ text: 'OK' }],
+            });
+          },
+        },
+      ],
+    });
+  }, [bulkMessaging, getOrCreateParentPrincipalThread, missingRows, profile, schoolId, sendMessagePushNotification, showAlert, user?.id]);
+
+  const bulkMessageUnpaid = useCallback(async () => {
+    if (!user?.id || !schoolId) return;
+    if (bulkMessaging) return;
+
+    const targets = submittedRows.filter((row) => row.paymentStatus === 'unpaid' && row.parentId);
+    if (!targets.length) {
+      showAlert({
+        title: 'No Unpaid Orders',
+        message: 'There are no unpaid uniform orders with a linked parent contact.',
+        type: 'info',
+        buttons: [{ text: 'OK' }],
+      });
+      return;
+    }
+
+    showAlert({
+      title: 'Message Unpaid Uniform Orders',
+      message: `Send an in-app payment reminder to ${targets.length} parent(s) with unpaid uniform orders?`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setBulkMessaging('unpaid');
+            const supabase = assertSupabase();
+            const senderName =
+              (profile as any)?.full_name ||
+              `${(profile as any)?.first_name || ''} ${(profile as any)?.last_name || ''}`.trim() ||
+              'School';
+
+            let sent = 0;
+            let failed = 0;
+
+            for (const row of targets) {
+              try {
+                const parentLabel = row.parentName || 'Parent';
+                const studentCodeLine = row.studentCode ? ` Student code: ${row.studentCode}.` : '';
+                const content = `Hi ${parentLabel}, please complete uniform payment (or upload proof of payment) for ${row.childName}'s uniform order in the app.${studentCodeLine} Thank you.`;
+                const subject = `Uniform Payment • ${row.childName}`.trim();
+                const threadId = await getOrCreateParentPrincipalThread({
+                  studentId: row.studentId,
+                  parentId: row.parentId,
+                  subject,
+                });
+                if (!threadId) {
+                  failed++;
+                  continue;
+                }
+
+                const { data: messageData, error: messageError } = await supabase
+                  .from('messages')
+                  .insert({
+                    thread_id: threadId,
+                    sender_id: user.id,
+                    content,
+                    content_type: 'text',
+                  })
+                  .select('id, content')
+                  .single();
+                if (messageError) throw messageError;
+
+                await sendMessagePushNotification({
+                  threadId,
+                  messageId: messageData.id,
+                  senderId: user.id,
+                  senderName,
+                  messageContent: messageData.content,
+                  recipientIds: [row.parentId],
+                });
+
+                sent++;
+              } catch (err) {
+                console.warn('[PrincipalUniforms] Bulk message (unpaid) failed:', err);
+                failed++;
+              }
+            }
+
+            setBulkMessaging(null);
+            showAlert({
+              title: 'Bulk Message Complete',
+              message: failed
+                ? `Sent ${sent} message(s). Failed: ${failed}.`
+                : `Sent ${sent} message(s).`,
+              type: failed ? 'warning' : 'success',
+              buttons: [{ text: 'OK' }],
+            });
+          },
+        },
+      ],
+    });
+  }, [bulkMessaging, getOrCreateParentPrincipalThread, profile, schoolId, showAlert, submittedRows, sendMessagePushNotification, user?.id]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -534,6 +815,26 @@ export default function PrincipalUniformsScreen() {
               <Ionicons name="alert-circle" size={14} color={theme.warning || '#f59e0b'} />
               <Text style={styles.countChipText}>{missingCount} missing</Text>
             </View>
+            <TouchableOpacity
+              style={[styles.bulkButton, { backgroundColor: theme.warning || '#f59e0b' }]}
+              onPress={bulkMessageMissing}
+              disabled={bulkMessaging !== null || missingContactableCount === 0}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#fff" />
+              <Text style={styles.bulkButtonText}>
+                {bulkMessaging === 'missing' ? 'Sending...' : `Message Missing (${missingContactableCount})`}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bulkButton, { backgroundColor: theme.error || '#ef4444' }]}
+              onPress={bulkMessageUnpaid}
+              disabled={bulkMessaging !== null || unpaidContactableCount === 0}
+            >
+              <Ionicons name="cash-outline" size={16} color="#fff" />
+              <Text style={styles.bulkButtonText}>
+                {bulkMessaging === 'unpaid' ? 'Sending...' : `Message Unpaid (${unpaidContactableCount})`}
+              </Text>
+            </TouchableOpacity>
             <View style={styles.controlsSpacer} />
             <TouchableOpacity
               style={[styles.toggleButton, showInsights && styles.toggleButtonActive]}
@@ -659,10 +960,6 @@ export default function PrincipalUniformsScreen() {
                         {item.parentName ? <Text style={styles.text}>Parent: {item.parentName}</Text> : null}
                         {item.parentEmail ? <Text style={styles.text}>Email: {item.parentEmail}</Text> : null}
                         {item.parentPhone ? <Text style={styles.text}>Phone: {item.parentPhone}</Text> : null}
-                        <TouchableOpacity style={styles.messageButton} onPress={() => handleMessageParent(item)}>
-                          <Ionicons name="chatbubble-ellipses-outline" size={16} color="#fff" />
-                          <Text style={styles.messageButtonText}>Message Parent</Text>
-                        </TouchableOpacity>
                       </>
                     ) : (
                       <Text style={styles.muted}>Parent not linked.</Text>
@@ -717,6 +1014,16 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderColor: theme?.border || '#1f2937',
   },
   countChipText: { color: theme?.text || '#fff', fontSize: 12, fontWeight: '600' },
+  bulkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  bulkButtonText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   controlsSpacer: { flexGrow: 1 },
   toggleButton: {
     flexDirection: 'row',

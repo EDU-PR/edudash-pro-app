@@ -313,8 +313,8 @@ export default function SettingsPage() {
       return;
     }
     
-    if (newPassword.length < 6) {
-      setPasswordError(t('settings.parent.errors.password_too_short', { defaultValue: 'Password must be at least 6 characters' }));
+    if (newPassword.length < 8) {
+      setPasswordError(t('settings.parent.errors.password_too_short', { defaultValue: 'Password must be at least 8 characters' }));
       return;
     }
     

@@ -260,11 +260,12 @@ export function RoleBasedHeader({
   // Tier chip
   const tierColor = ((): string => {
     const t = String(tier || '').toLowerCase();
-    if (t === 'starter') return '#059669';
-    if (t === 'basic') return '#10B981';
-    if (t === 'premium') return '#7C3AED';
-    if (t === 'pro') return '#2563EB';
-    if (t === 'enterprise') return '#DC2626';
+    if (t === 'school_starter' || t === 'starter' || t === 'basic') return '#059669';
+    if (t === 'school_premium' || t === 'premium') return '#7C3AED';
+    if (t === 'school_pro' || t === 'pro') return '#2563EB';
+    if (t === 'school_enterprise' || t === 'enterprise') return '#DC2626';
+    if (t === 'parent_starter') return '#06B6D4';
+    if (t === 'parent_plus') return '#22C55E';
     return '#6B7280';
   })();
   const tierLabel = ((): string => {

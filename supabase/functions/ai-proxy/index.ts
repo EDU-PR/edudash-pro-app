@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.214.0/http/server.ts';
 import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.48.1';
+import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -95,6 +96,25 @@ function normalizeServiceType(serviceType?: string): string {
   return serviceType;
 }
 
+// ── MAX TOKENS BY SERVICE TYPE ──────────────────────────────────────
+// Different service types need different token budgets
+const MAX_TOKENS_BY_SERVICE: Record<string, number> = {
+  chat_message: 2048,
+  lesson_generation: 4096,
+  homework_generation: 4096,
+  grading: 2048,
+  exam_generation: 4096,
+  agent_plan: 1024,
+  agent_reflection: 256,
+  web_search: 1024,
+  image_analysis: 2048,
+};
+const DEFAULT_MAX_TOKENS = 2048;
+
+function getMaxTokensForService(serviceType: string): number {
+  return MAX_TOKENS_BY_SERVICE[serviceType] || DEFAULT_MAX_TOKENS;
+}
+
 const WebSearchArgsSchema = z.object({
   query: z.string().min(2),
   recency: z.string().optional(),
@@ -103,11 +123,48 @@ const WebSearchArgsSchema = z.object({
 
 const DEFAULT_SYSTEM_PROMPT = `You are Dash, an AI tutor for parents and students.\n\nCORE BEHAVIOR:\n- Always teach step-by-step, ask one short question at a time, and wait for the learner’s response.\n- Never assume age, grade, language, or background knowledge. Ask for them if missing.\n- Never refuse to help or say you can’t help. If info is missing, ask. If tools are needed, use them.\n- Keep responses short and interactive.\n\nTUTOR FLOW:\nDiagnose → Teach → Practice → Check.\n\nWEB SEARCH TOOL:\nIf the user asks about information not in the curriculum/context, call the web_search tool to retrieve trustworthy sources.\n\nLANGUAGE:\nIf the user’s preferred language is unknown, ask which language they prefer (English, Afrikaans, isiZulu).`;
 
-const corsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': Deno.env.get('CORS_ALLOW_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// CORS headers are now managed by _shared/cors.ts — computed per-request in serve()
+// The `corsHeaders` variable is set once per request at the top of serve().
+
+// ── PII FILTERING ─────────────────────────────────────────────────────
+// Redact sensitive personal information before sending to AI providers
+const PII_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, replacement: '[EMAIL]' },
+  { pattern: /\b(?:\+27|0)[0-9]{9,10}\b/g, replacement: '[PHONE]' },
+  { pattern: /\b\d{2}[01]\d[0-3]\d\d{4}[01]\d{2}\b/g, replacement: '[SA_ID]' },
+  { pattern: /\b\d{13}\b/g, replacement: '[ID_NUMBER]' },
+  { pattern: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/g, replacement: '[CARD_NUMBER]' },
+];
+
+function redactPII(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  let redacted = text;
+  for (const { pattern, replacement } of PII_PATTERNS) {
+    redacted = redacted.replace(pattern, replacement);
+  }
+  return redacted;
+}
+
+function redactMessagesForProvider(messages: Array<JsonRecord>): Array<JsonRecord> {
+  return messages.map((msg) => {
+    const content = msg.content;
+    if (typeof content === 'string') {
+      return { ...msg, content: redactPII(content) };
+    }
+    if (Array.isArray(content)) {
+      return {
+        ...msg,
+        content: content.map((part: any) => {
+          if (part?.type === 'text' && typeof part.text === 'string') {
+            return { ...part, text: redactPII(part.text) };
+          }
+          return part;
+        }),
+      };
+    }
+    return msg;
+  });
+}
 
 function getEnv(name: string): string | null {
   const value = Deno.env.get(name);
@@ -499,6 +556,7 @@ function callAnthropicStreaming(
   requestedModel: string | null | undefined,
   allowedOverride: string[] | undefined,
   isSuperAdmin: boolean,
+  maxTokens: number = DEFAULT_MAX_TOKENS,
 ): { stream: ReadableStream<Uint8Array>; meta: Promise<ProviderResponse> } {
   const apiKey = getAnthropicApiKey();
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured.');
@@ -538,7 +596,7 @@ function callAnthropicStreaming(
           },
           body: JSON.stringify({
             model,
-            max_tokens: 1024,
+            max_tokens: maxTokens,
             temperature: 0.4,
             stream: true,
             messages: messages.filter((m) => m.role !== 'system'),
@@ -635,7 +693,8 @@ function callAnthropicStreaming(
 async function callOpenAI(
   messages: Array<JsonRecord>,
   enableTools: boolean,
-  requestedModel?: string | null
+  requestedModel?: string | null,
+  maxTokens: number = DEFAULT_MAX_TOKENS,
 ): Promise<ProviderResponse> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
@@ -654,6 +713,7 @@ async function callOpenAI(
     model,
     messages: normalizeOpenAIMessages(messages),
     temperature: 0.4,
+    max_tokens: maxTokens,
   };
 
   if (tools) {
@@ -791,7 +851,8 @@ async function callAnthropic(
   messages: Array<JsonRecord>,
   enableTools: boolean,
   requestedModel?: string | null,
-  allowedOverride?: string[]
+  allowedOverride?: string[],
+  maxTokens: number = DEFAULT_MAX_TOKENS,
 ): Promise<ProviderResponse> {
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
@@ -810,7 +871,7 @@ async function callAnthropic(
   const callAnthropicOnce = async (model: string) => {
     const body: JsonRecord = {
       model,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       temperature: 0.4,
       messages: messages.filter((m) => m.role !== 'system'),
       system: systemPrompt,
@@ -976,9 +1037,10 @@ async function callAnthropic(
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   try {
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      return handleCorsOptions(req);
     }
     if (req.method !== 'POST') {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
@@ -1049,8 +1111,14 @@ serve(async (req) => {
     }
 
     // Check if dev mode is enabled to bypass quota checks
-    const devModeBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' || 
-                          Deno.env.get('ENVIRONMENT') === 'development';
+    // SECURITY: Only allow bypass in explicit development environments, never in production
+    const environment = Deno.env.get('ENVIRONMENT') || 'production';
+    const devModeBypass = Deno.env.get('AI_QUOTA_BYPASS') === 'true' && 
+                          (environment === 'development' || environment === 'local');
+    
+    if (devModeBypass) {
+      console.warn('[ai-proxy] ⚠️ QUOTA BYPASS ACTIVE - Development mode only');
+    }
     
     if (!devModeBypass) {
       const quota = await supabase.rpc('check_ai_usage_limit', {
@@ -1074,13 +1142,17 @@ serve(async (req) => {
         }
       }
     } else {
-      console.log('[ai-proxy] Dev mode: quota check bypassed');
+      console.log('[ai-proxy] Dev mode: quota check bypassed (env:', environment, ')');
     }
 
     const wantsStream = payload.stream === true;
 
     const systemPrompt = buildSystemPrompt(payload.payload.context);
-    const messages = normalizeMessages(payload.payload, systemPrompt);
+    const rawMessages = normalizeMessages(payload.payload, systemPrompt);
+    // Redact PII before sending to AI providers
+    const messages = redactMessagesForProvider(rawMessages);
+    const serviceType = normalizeServiceType(payload.service_type);
+    const maxTokens = getMaxTokensForService(serviceType);
 
     const normalizedRequestedModel = normalizeRequestedModel(
       typeof payload.payload.model === 'string' ? payload.payload.model : null
@@ -1110,11 +1182,11 @@ serve(async (req) => {
     const requestedIsAnthropic = requestedModel ? anthropicAllowed.includes(requestedModel) : false;
     const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;
 
-    // ── TRUE STREAMING (Anthropic only, non-tool calls) ──────────────
-    // When the client wants streaming AND we're using Anthropic AND tools are disabled,
+    // ── TRUE STREAMING (Anthropic, including tool calls) ──────────────
+    // When the client wants streaming AND we're using Anthropic,
     // use native Anthropic SSE streaming for real-time token delivery.
-    // Tool calls require the full response for follow-up, so they use the post-hoc path.
-    const canTrueStream = wantsStream && hasAnthropic && !enableTools && !shouldPreferOpenAI;
+    // Tool use blocks are handled inline during streaming.
+    const canTrueStream = wantsStream && hasAnthropic && !shouldPreferOpenAI;
     if (canTrueStream) {
       try {
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
@@ -1123,6 +1195,7 @@ serve(async (req) => {
           requestedModel,
           allowedOverride,
           isSuperAdmin,
+          maxTokens,
         );
 
         // Fire-and-forget: log usage after stream completes
@@ -1179,10 +1252,10 @@ serve(async (req) => {
           ? pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model
           : requestedModel;
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
-        return await callAnthropic(messages, enableTools, model, allowedOverride);
+        return await callAnthropic(messages, enableTools, model, allowedOverride, maxTokens);
       }
       if (!hasOpenAI) throw new Error('OPENAI_API_KEY missing and OpenAI not configured.');
-      return await callOpenAI(messages, enableTools, requestedModel);
+      return await callOpenAI(messages, enableTools, requestedModel, maxTokens);
     };
 
     try {

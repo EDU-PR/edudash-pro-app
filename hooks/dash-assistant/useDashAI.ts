@@ -166,20 +166,26 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
         conversationId,
       });
       
-      // Call AI service
+      // Call AI service via DashAIClient
       const startTime = Date.now();
       let response = '';
       
-      // TODO: Implement actual AI call with streaming
-      // For now, return placeholder
-      response = 'AI response placeholder';
+      const result = await instance.callAIService({
+        content,
+        context: options?.context ? JSON.stringify(options.context) : undefined,
+        attachments: options?.attachments,
+        serviceType: 'chat_message',
+        model: selectedModel || undefined,
+        stream: !!options?.onStream,
+        onChunk: options?.onStream ? (chunk: string) => {
+          response += chunk;
+          options.onStream!(chunk);
+        } : undefined,
+      });
       
-      if (options?.onStream) {
-        // Simulate streaming for demo
-        for (const chunk of response.split(' ')) {
-          options.onStream(chunk + ' ');
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
+      // If non-streaming, get response from result
+      if (!options?.onStream) {
+        response = result?.content || '';
       }
       
       const duration = Date.now() - startTime;

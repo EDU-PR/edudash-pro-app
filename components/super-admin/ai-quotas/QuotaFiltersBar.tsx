@@ -14,7 +14,7 @@ interface QuotaFiltersBarProps {
   onFiltersChange: (filters: QuotaFilters) => void;
 }
 
-const PLAN_OPTIONS = ['all', 'free', 'basic', 'pro', 'enterprise'] as const;
+const PLAN_OPTIONS = ['all', 'free', 'school_starter', 'school_premium', 'school_pro', 'school_enterprise'] as const;
 const STATUS_OPTIONS = ['all', 'normal', 'over_limit', 'suspended'] as const;
 
 export function QuotaFiltersBar({ filters, onFiltersChange }: QuotaFiltersBarProps) {

@@ -31,13 +31,13 @@ const PROVINCES = [
   'Western Cape',
 ];
 
-// Plan tiers
+// Plan tiers - use canonical TierNameAligned names
 const PLAN_TIERS = [
-  { value: 'solo', label: 'Solo (1 Teacher)', description: 'Perfect for individual tutors' },
-  { value: 'basic', label: 'Basic (5 Teachers)', description: 'Small preschool or daycare' },
-  { value: 'standard', label: 'Standard (15 Teachers)', description: 'Medium-sized school' },
-  { value: 'pro', label: 'Pro (50 Teachers)', description: 'Large institution' },
-  { value: 'enterprise', label: 'Enterprise (Unlimited)', description: 'Multi-campus organizations' },
+  { value: 'free', label: 'Free (2 Teachers)', description: 'Getting started' },
+  { value: 'school_starter', label: 'School Starter (5 Teachers)', description: 'Small preschool or daycare' },
+  { value: 'school_premium', label: 'School Premium (15 Teachers)', description: 'Medium-sized school' },
+  { value: 'school_pro', label: 'School Pro (30 Teachers)', description: 'Large institution' },
+  { value: 'school_enterprise', label: 'School Enterprise (100 Teachers)', description: 'Multi-campus organizations' },
 ];
 
 export default function PrincipalSignUpScreen() {

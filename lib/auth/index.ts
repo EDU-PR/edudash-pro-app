@@ -21,13 +21,6 @@ export type {
   AuthState,
 } from './AuthService';
 
-// API layer for endpoint implementations
-export { AuthAPI, AuthResponseHelpers } from './AuthAPI';
-export type {
-  APIResponse,
-  AuthEndpointData,
-} from './AuthAPI';
-
 // React hooks for authentication
 export {
   useAuth,

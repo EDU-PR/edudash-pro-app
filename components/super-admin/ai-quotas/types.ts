@@ -10,7 +10,7 @@ export interface AIQuotaSettings {
   id: string;
   school_id: string;
   school_name: string;
-  plan_type: 'free' | 'basic' | 'pro' | 'enterprise';
+  plan_type: 'free' | 'school_starter' | 'school_premium' | 'school_pro' | 'school_enterprise';
   monthly_limit: number;
   current_usage: number;
   reset_date: string;
@@ -28,9 +28,10 @@ export interface AIQuotaSettings {
  */
 export interface GlobalQuotaConfig {
   free_tier_limit: number;
-  basic_tier_limit: number;
-  pro_tier_limit: number;
-  enterprise_tier_limit: number;
+  school_starter_tier_limit: number;
+  school_premium_tier_limit: number;
+  school_pro_tier_limit: number;
+  school_enterprise_tier_limit: number;
   overage_rate: number;
   warning_thresholds: number[];
   suspension_threshold: number;
@@ -65,7 +66,7 @@ export interface TopConsumingSchool {
  * Filter state for school list
  */
 export interface QuotaFilters {
-  plan: 'all' | 'free' | 'basic' | 'pro' | 'enterprise';
+  plan: 'all' | 'free' | 'school_starter' | 'school_premium' | 'school_pro' | 'school_enterprise';
   status: 'all' | 'normal' | 'over_limit' | 'suspended';
   search: string;
 }
@@ -75,9 +76,10 @@ export interface QuotaFilters {
  */
 export const DEFAULT_GLOBAL_CONFIG: GlobalQuotaConfig = {
   free_tier_limit: 1000,
-  basic_tier_limit: 5000,
-  pro_tier_limit: 25000,
-  enterprise_tier_limit: 100000,
+  school_starter_tier_limit: 5000,
+  school_premium_tier_limit: 15000,
+  school_pro_tier_limit: 25000,
+  school_enterprise_tier_limit: 100000,
   overage_rate: 0.002,
   warning_thresholds: [75, 90, 95],
   suspension_threshold: 120,

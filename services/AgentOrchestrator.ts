@@ -99,6 +99,12 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
       let toolCount = 0;
       
       while (steps < constraints.maxSteps && toolCount < constraints.maxTools) {
+        // Check if cancelled
+        if (!this.isRunning) {
+          console.warn(`[Agent] Run ${runId} was cancelled`);
+          break;
+        }
+        
         // Check timeout
         if (Date.now() - startTime > constraints.timeout) {
           console.warn(`[Agent] Timeout reached for run ${runId}`);
@@ -211,13 +217,17 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
     try {
       const supabase = assertSupabase();
       
-      const { data, error } = await supabase.functions.invoke('ai-gateway', {
+      const { data, error } = await supabase.functions.invoke('ai-proxy', {
         body: {
-          action: 'agent_plan',
-          messages,
-          tools: toolSpecs,
-          model: 'claude-3-haiku-20240307', // Fast model for agent loops
-          temperature: 0.3 // Lower temperature for more deterministic behavior
+          scope: 'admin',
+          service_type: 'agent_plan',
+          payload: {
+            messages,
+            model: 'claude-3-5-haiku-20241022', // Fast model for agent loops
+          },
+          enable_tools: true,
+          stream: false,
+          metadata: { source: 'agent_orchestrator', temperature: 0.3 }
         }
       });
 
@@ -273,15 +283,19 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
         2. What could be improved next time?
       `;
       
-      const { data } = await supabase.functions.invoke('ai-gateway', {
+      const { data } = await supabase.functions.invoke('ai-proxy', {
         body: {
-          action: 'chat',
-          messages: [
-            { role: 'system', content: 'You are Dash reflecting on task execution.' },
-            { role: 'user', content: reflectionPrompt }
-          ],
-          model: 'claude-3-haiku-20240307',
-          maxTokens: 100
+          scope: 'admin',
+          service_type: 'agent_reflection',
+          payload: {
+            messages: [
+              { role: 'system', content: 'You are Dash reflecting on task execution.' },
+              { role: 'user', content: reflectionPrompt }
+            ],
+            model: 'claude-3-5-haiku-20241022',
+          },
+          enable_tools: false,
+          stream: false,
         }
       });
       

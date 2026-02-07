@@ -525,8 +525,8 @@ export class AuthService {
       return { valid: false, error: 'Password is required' };
     }
 
-    if (password.length < 12) {
-      return { valid: false, error: 'Password must be at least 12 characters long' };
+    if (password.length < 8) {
+      return { valid: false, error: 'Password must be at least 8 characters long' };
     }
 
     // Check for required character types
@@ -575,7 +575,7 @@ export class AuthService {
       case 'User already registered':
         return 'An account with this email already exists. Try signing in instead.';
       case 'Password should be at least 6 characters':
-        return 'Password must be at least 12 characters long for security.';
+        return 'Password must be at least 8 characters long with uppercase, lowercase, number, and symbol.';
       default:
         return error.message || 'An unexpected error occurred. Please try again.';
     }
