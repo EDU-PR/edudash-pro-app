@@ -28,19 +28,31 @@ export function TTSSettings({ userId }: TTSSettingsProps) {
     fetchQuota();
   }, [checkQuota]);
 
-  const tierColors = {
+  const tierColors: Record<string, string> = {
     free: '#94a3b8',
     trial: '#3b82f6',
+    parent_starter: '#8b5cf6',
+    parent_plus: '#f59e0b',
     basic: '#8b5cf6',
     premium: '#f59e0b',
+    school_starter: '#10b981',
+    school_premium: '#10b981',
+    school_pro: '#059669',
+    school_enterprise: '#047857',
     school: '#10b981',
   };
 
-  const tierNames = {
+  const tierNames: Record<string, string> = {
     free: 'Free Plan',
     trial: 'Trial Plan',
+    parent_starter: 'Starter Plan',
+    parent_plus: 'Plus Plan',
     basic: 'Basic Plan',
     premium: 'Premium Plan',
+    school_starter: 'School Starter',
+    school_premium: 'School Premium',
+    school_pro: 'School Pro',
+    school_enterprise: 'Enterprise',
     school: 'School Plan',
   };
 
