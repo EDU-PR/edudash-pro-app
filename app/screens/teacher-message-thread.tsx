@@ -12,14 +12,14 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, KeyboardAvoidingView, ScrollView, ImageBackground, Keyboard, Vibration, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ImageBackground, Keyboard, Vibration, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { toast } from '@/components/ui/ToastProvider';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useCallSafe } from '@/components/calls/CallProvider';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 
 // Shared messaging components
 import {
@@ -30,7 +30,7 @@ import {
   getDateKey,
   getDateSeparatorLabel,
 } from '@/components/messaging';
-import { TypingIndicator } from '@/components/messaging/TypingIndicator';
+import { ChatHeader } from '@/components/messaging/ChatHeader';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -86,39 +86,6 @@ try {
   useTeacherMarkThreadRead = () => ({ mutate: () => {} });
 }
 
-// ==================== SUB-COMPONENTS ====================
-
-// Online Status Indicator
-const OnlineIndicator: React.FC<{ status?: 'online' | 'away' | 'offline' }> = ({ status = 'offline' }) => (
-  <View
-    style={[
-      onlineStyles.dot,
-      status === 'online' && onlineStyles.online,
-      status === 'away' && onlineStyles.away,
-    ]}
-  />
-);
-
-const onlineStyles = StyleSheet.create({
-  dot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#64748b',
-    borderWidth: 2,
-    borderColor: '#0f172a',
-  },
-  online: {
-    backgroundColor: '#22c55e',
-  },
-  away: {
-    backgroundColor: '#f59e0b',
-  },
-});
-
 // ==================== MAIN COMPONENT ====================
 
 export default function TeacherMessageThreadScreen() {
@@ -162,7 +129,8 @@ export default function TeacherMessageThreadScreen() {
   const [sending, setSending] = useState(false);
   const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
   
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashListRef<any> | null>(null);
+  const isAtBottomRef = useRef(true);
   
   // Data
   const { data: messages = [], isLoading, error, refetch } = useTeacherThreadMessages(threadId);
@@ -206,13 +174,16 @@ export default function TeacherMessageThreadScreen() {
   }, []);
   
   useEffect(() => {
-    if (messages.length) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    if (!messages.length) return;
+    if (!isAtBottomRef.current) return;
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
   }, [messages.length]);
   
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      // Keep the newest message visible when keyboard opens
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => { showSub.remove(); hideSub.remove(); };
@@ -226,6 +197,7 @@ export default function TeacherMessageThreadScreen() {
       await sendMessage({ threadId, content, senderId: user.id });
       refetch();
       clearTyping();
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch {
       toast.error('Failed to send message');
     } finally {
@@ -257,6 +229,7 @@ export default function TeacherMessageThreadScreen() {
         });
       }
       refetch();
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (error) {
       console.error('Voice send error:', error);
       toast.error('Failed to send voice message');
@@ -364,74 +337,96 @@ export default function TeacherMessageThreadScreen() {
   const bgSource = wallpaper?.uri ? { uri: wallpaper.uri } : undefined;
   const bgColor = wallpaper?.color || theme.background;
   
-  // Render messages with date separators
-  const renderMessages = useMemo(() => {
-    // Get all voice message IDs in order for continuous playback
-    const voiceMessageIds = messages
-      .filter((m: Message) => m.voice_url)
-      .map((m: Message) => m.id);
-    
-    let lastDateKey = '';
-    return messages.map((msg: Message) => {
-      const dateKey = getDateKey(msg.created_at);
-      const showDateSep = dateKey !== lastDateKey;
-      lastDateKey = dateKey;
-      
-      // Calculate voice message index for this message
-      const voiceIndex = msg.voice_url ? voiceMessageIds.indexOf(msg.id) : -1;
-      const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIds.length - 1;
-      const hasPreviousVoice = voiceIndex > 0;
-      
-      // Handler for when voice playback finishes - play next voice message
-      const handleVoiceFinished = msg.voice_url ? () => {
-        console.log('[TeacherThread] Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
-        if (hasNextVoice) {
-          const nextId = voiceMessageIds[voiceIndex + 1];
-          console.log('[TeacherThread] Auto-playing next voice message:', nextId);
-          setCurrentlyPlayingVoiceId(nextId);
-        } else {
-          console.log('[TeacherThread] No more voice messages to play');
-          setCurrentlyPlayingVoiceId(null);
-        }
-      } : undefined;
-      
-      // Handler for media control "next" button
-      const handlePlayNext = hasNextVoice ? () => {
-        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex + 1]);
-      } : undefined;
-      
-      // Handler for media control "previous" button
-      const handlePlayPrevious = hasPreviousVoice ? () => {
-        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex - 1]);
-      } : undefined;
-      
-      // Check if this voice message should auto-play
-      const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
-      
-      if (shouldAutoPlay) {
-        console.log('[TeacherThread] Auto-play enabled for message:', msg.id);
-      }
-      
-      return (
-        <React.Fragment key={msg.id}>
-          {showDateSep && <DateSeparator label={getDateSeparatorLabel(msg.created_at)} />}
-          <MessageBubble 
-            msg={msg} 
-            isOwn={msg.sender_id === user?.id} 
-            onLongPress={() => handleLongPress(msg)}
-            onPlaybackFinished={handleVoiceFinished}
-            onPlayNext={handlePlayNext}
-            onPlayPrevious={handlePlayPrevious}
-            hasNextVoice={hasNextVoice}
-            hasPreviousVoice={hasPreviousVoice}
-            autoPlayVoice={shouldAutoPlay}
-            otherParticipantIds={otherIds}
-            onReactionPress={handleReactionPress}
-          />
-        </React.Fragment>
-      );
+  type ChatRow =
+    | { type: 'date'; key: string; label: string }
+    | { type: 'message'; key: string; msg: Message };
+
+  const messagesAsc = useMemo(() => {
+    const sorted = [...messages].sort((a: any, b: any) => {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
-  }, [messages, user?.id, handleLongPress, otherIds, currentlyPlayingVoiceId, handleReactionPress]);
+    return sorted as Message[];
+  }, [messages]);
+
+  const voiceMessageIdsAsc = useMemo(() => {
+    return messagesAsc.filter((m) => m.voice_url).map((m) => m.id);
+  }, [messagesAsc]);
+
+  const rowsAsc = useMemo<ChatRow[]>(() => {
+    const rows: ChatRow[] = [];
+    let lastDateKey = '';
+
+    for (const msg of messagesAsc) {
+      const dateKey = getDateKey(msg.created_at);
+      if (dateKey !== lastDateKey) {
+        rows.push({
+          type: 'date',
+          key: `date-${dateKey}`,
+          label: getDateSeparatorLabel(msg.created_at),
+        });
+        lastDateKey = dateKey;
+      }
+      rows.push({ type: 'message', key: `msg-${msg.id}`, msg });
+    }
+
+    return rows;
+  }, [messagesAsc]);
+
+  const renderRow = useCallback(({ item }: { item: ChatRow }) => {
+    if (item.type === 'date') {
+      return <DateSeparator label={item.label} />;
+    }
+
+    const msg = item.msg;
+
+    const voiceIndex = msg.voice_url ? voiceMessageIdsAsc.indexOf(msg.id) : -1;
+    const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIdsAsc.length - 1;
+    const hasPreviousVoice = voiceIndex > 0;
+
+    const handleVoiceFinished = msg.voice_url
+      ? () => {
+          if (hasNextVoice) {
+            setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]);
+          } else {
+            setCurrentlyPlayingVoiceId(null);
+          }
+        }
+      : undefined;
+
+    const handlePlayNext = hasNextVoice
+      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1])
+      : undefined;
+
+    const handlePlayPrevious = hasPreviousVoice
+      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1])
+      : undefined;
+
+    const shouldAutoPlay = !!msg.voice_url && currentlyPlayingVoiceId === msg.id;
+
+    return (
+      <MessageBubble
+        msg={msg}
+        isOwn={msg.sender_id === user?.id}
+        onLongPress={() => handleLongPress(msg)}
+        onPlaybackFinished={handleVoiceFinished}
+        onPlayNext={handlePlayNext}
+        onPlayPrevious={handlePlayPrevious}
+        hasNextVoice={hasNextVoice}
+        hasPreviousVoice={hasPreviousVoice}
+        autoPlayVoice={shouldAutoPlay}
+        otherParticipantIds={otherIds}
+        onReactionPress={handleReactionPress}
+      />
+    );
+  }, [currentlyPlayingVoiceId, handleLongPress, handleReactionPress, otherIds, user?.id, voiceMessageIdsAsc]);
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Track "near bottom" so we only auto-scroll when the user is already at the latest messages.
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const paddingToBottom = 120;
+    isAtBottomRef.current =
+      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+  }, []);
   
   // Loading state
   if (isLoading) {
@@ -473,38 +468,18 @@ export default function TeacherMessageThreadScreen() {
   
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
-      {/* Header with online status and 3-dot menu */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        
-        <View style={styles.avatarContainer}>
-          <LinearGradient colors={['#3b82f6', '#6366f1']} style={styles.avatar}>
-            <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
-          </LinearGradient>
-          <OnlineIndicator status={onlineStatus} />
-        </View>
-        
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-          <Text style={styles.headerSubtitle}>
-            {isOtherTyping ? typingText : lastSeenText}
-          </Text>
-        </View>
-        
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerBtn} onPress={handleVoiceCall}>
-            <Ionicons name="call-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={handleVideoCall}>
-            <Ionicons name="videocam-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={() => setShowOptions(true)}>
-            <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ChatHeader
+        displayName={displayName}
+        isOnline={onlineStatus === 'online'}
+        lastSeenText={lastSeenText}
+        isLoading={isLoading}
+        isTyping={isOtherTyping}
+        typingText={typingText}
+        onVoiceCall={handleVoiceCall}
+        onVideoCall={handleVideoCall}
+        onOptionsPress={() => setShowOptions(true)}
+        recipientRole="parent"
+      />
       
       {/* Messages Container */}
       <View style={[
@@ -513,38 +488,44 @@ export default function TeacherMessageThreadScreen() {
       ]}>
         {bgSource ? (
           <ImageBackground source={bgSource} style={styles.messagesArea} resizeMode="cover">
-            <ScrollView
-              ref={scrollRef}
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
+            <FlashList
+              ref={listRef}
+              data={rowsAsc}
+              renderItem={renderRow}
+              keyExtractor={(item) => item.key}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-            >
-              {messages.length === 0 ? (
+              contentContainerStyle={styles.scrollContent}
+              ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
                   <Text style={styles.emptyTitle}>Start the Conversation</Text>
                   <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
                 </View>
-              ) : renderMessages}
-            </ScrollView>
+              }
+            />
           </ImageBackground>
         ) : (
-          <ScrollView
-            ref={scrollRef}
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
+          <FlashList
+            ref={listRef}
+            data={rowsAsc}
+            renderItem={renderRow}
+            keyExtractor={(item) => item.key}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-          >
-            {messages.length === 0 ? (
+            contentContainerStyle={styles.scrollContent}
+            ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
                 <Text style={styles.emptyTitle}>Start the Conversation</Text>
                 <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
               </View>
-            ) : renderMessages}
-          </ScrollView>
+            }
+          />
         )}
       </View>
       

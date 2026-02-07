@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform, KeyboardAvoidingView, ScrollView, Alert, ImageBackground, Keyboard, Vibration, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Platform, KeyboardAvoidingView, Alert, ImageBackground, Keyboard, Vibration, TouchableOpacity, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,7 @@ import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import { logger } from '@/lib/logger';
 import { useMessageActions } from '@/hooks/useMessageActions';
 import { useThreadOptions } from '@/hooks/useThreadOptions';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 
 // Shared messaging components
 import {
@@ -142,7 +143,8 @@ export default function ParentMessageThreadScreen() {
 
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashListRef<any> | null>(null);
+  const isAtBottomRef = useRef(true);
 
   // Typing indicator hook
   const { isOtherTyping, typingText, setTyping, clearTyping } = useTypingIndicator({
@@ -287,9 +289,9 @@ export default function ParentMessageThreadScreen() {
 
   // Auto-scroll to bottom
   useEffect(() => {
-    if (allMessages.length > 0) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }
+    if (!allMessages.length) return;
+    if (!isAtBottomRef.current) return;
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
   }, [allMessages.length]);
 
   // Display name
@@ -332,6 +334,7 @@ export default function ParentMessageThreadScreen() {
     try {
       await sendMessage({ threadId, content });
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentMessageThread', 'Send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
@@ -376,6 +379,7 @@ export default function ParentMessageThreadScreen() {
         await sendMessage({ threadId, content });
       }
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentThread', 'Voice send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
@@ -429,6 +433,7 @@ export default function ParentMessageThreadScreen() {
       
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.success('Photo sent');
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentThread', 'Image send failed:', err);
       setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
@@ -522,73 +527,87 @@ export default function ParentMessageThreadScreen() {
     callContext.startVideoCall(recipientId, recipientName);
   }, [callContext, recipientId, recipientName]);
 
-  // Render messages with date separators
-  const renderMessages = useMemo(() => {
-    // Get all voice message IDs in order for continuous playback
-    const voiceMessageIds = allMessages
-      .filter(m => m.voice_url)
-      .map(m => m.id);
-    
+  type ChatRow =
+    | { type: 'date'; key: string; label: string }
+    | { type: 'message'; key: string; msg: Message };
+
+  const voiceMessageIdsAsc = useMemo(() => {
+    return allMessages.filter((m) => m.voice_url).map((m) => m.id);
+  }, [allMessages]);
+
+  const rowsAsc = useMemo<ChatRow[]>(() => {
+    const rows: ChatRow[] = [];
     let lastDateKey = '';
-    return allMessages.map((msg, index) => {
+
+    for (const msg of allMessages) {
       const dateKey = getDateKey(msg.created_at);
-      const showDateSeparator = dateKey !== lastDateKey;
-      lastDateKey = dateKey;
-      
-      // Calculate voice message index for this message
-      const voiceIndex = msg.voice_url ? voiceMessageIds.indexOf(msg.id) : -1;
-      const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIds.length - 1;
-      const hasPreviousVoice = voiceIndex > 0;
-      
-      // Handler for when voice playback finishes - play next voice message
-      const handleVoiceFinished = msg.voice_url ? () => {
-        if (__DEV__) logger.debug('ParentThread', 'Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
-        if (hasNextVoice) {
-          const nextId = voiceMessageIds[voiceIndex + 1];
-          if (__DEV__) logger.debug('ParentThread', 'Auto-playing next voice message:', nextId);
-          setCurrentlyPlayingVoiceId(nextId);
-        } else {
-          if (__DEV__) logger.debug('ParentThread', 'No more voice messages to play');
-          setCurrentlyPlayingVoiceId(null);
-        }
-      } : undefined;
-      
-      // Handler for media control "next" button
-      const handlePlayNext = hasNextVoice ? () => {
-        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex + 1]);
-      } : undefined;
-      
-      // Handler for media control "previous" button
-      const handlePlayPrevious = hasPreviousVoice ? () => {
-        setCurrentlyPlayingVoiceId(voiceMessageIds[voiceIndex - 1]);
-      } : undefined;
-      
-      // Check if this voice message should auto-play (continuous playback)
-      const shouldAutoPlay = msg.voice_url && currentlyPlayingVoiceId === msg.id;
-      
-      if (shouldAutoPlay && __DEV__) {
-        logger.debug('ParentThread', 'Auto-play enabled for message:', msg.id);
+      if (dateKey !== lastDateKey) {
+        rows.push({
+          type: 'date',
+          key: `date-${dateKey}`,
+          label: getDateSeparatorLabel(msg.created_at),
+        });
+        lastDateKey = dateKey;
       }
-      
-      return (
-        <React.Fragment key={msg.id}>
-          {showDateSeparator && <DateSeparator label={getDateSeparatorLabel(msg.created_at)} />}
-          <MessageBubble 
-            msg={msg} 
-            isOwn={msg.sender_id === user?.id} 
-            onLongPress={() => handleMessageLongPress(msg)}
-            onPlaybackFinished={handleVoiceFinished}
-            onPlayNext={handlePlayNext}
-            onPlayPrevious={handlePlayPrevious}
-            hasNextVoice={hasNextVoice}
-            hasPreviousVoice={hasPreviousVoice}
-            autoPlayVoice={shouldAutoPlay}
-            onReactionPress={handleReactionPress}
-          />
-        </React.Fragment>
-      );
-    });
-  }, [allMessages, user?.id, handleMessageLongPress, currentlyPlayingVoiceId, handleReactionPress]);
+      rows.push({ type: 'message', key: `msg-${msg.id}`, msg });
+    }
+
+    return rows;
+  }, [allMessages]);
+
+  const renderRow = useCallback(({ item }: { item: ChatRow }) => {
+    if (item.type === 'date') {
+      return <DateSeparator label={item.label} />;
+    }
+
+    const msg = item.msg;
+    const voiceIndex = msg.voice_url ? voiceMessageIdsAsc.indexOf(msg.id) : -1;
+    const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIdsAsc.length - 1;
+    const hasPreviousVoice = voiceIndex > 0;
+
+    const handleVoiceFinished = msg.voice_url
+      ? () => {
+          if (__DEV__) logger.debug('ParentThread', 'Voice finished, hasNextVoice:', hasNextVoice, 'voiceIndex:', voiceIndex);
+          if (hasNextVoice) {
+            setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]);
+          } else {
+            setCurrentlyPlayingVoiceId(null);
+          }
+        }
+      : undefined;
+
+    const handlePlayNext = hasNextVoice
+      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1])
+      : undefined;
+
+    const handlePlayPrevious = hasPreviousVoice
+      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1])
+      : undefined;
+
+    const shouldAutoPlay = !!msg.voice_url && currentlyPlayingVoiceId === msg.id;
+
+    return (
+      <MessageBubble
+        msg={msg}
+        isOwn={msg.sender_id === user?.id}
+        onLongPress={() => handleMessageLongPress(msg)}
+        onPlaybackFinished={handleVoiceFinished}
+        onPlayNext={handlePlayNext}
+        onPlayPrevious={handlePlayPrevious}
+        hasNextVoice={hasNextVoice}
+        hasPreviousVoice={hasPreviousVoice}
+        autoPlayVoice={shouldAutoPlay}
+        onReactionPress={handleReactionPress}
+      />
+    );
+  }, [currentlyPlayingVoiceId, handleMessageLongPress, handleReactionPress, logger, user?.id, voiceMessageIdsAsc]);
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const paddingToBottom = 120;
+    isAtBottomRef.current =
+      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+  }, []);
 
   // No thread ID error state
   if (!threadId) {
@@ -643,13 +662,6 @@ export default function ParentMessageThreadScreen() {
         
         {/* Clipping container - messages hide at this boundary */}
         <View style={[styles.messagesClip, { marginBottom: 70 + insets.bottom }]}>
-          <ScrollView
-            ref={scrollRef}
-            style={styles.messages}
-            contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
           {loading ? (
             <View style={styles.center}>
               <EduDashSpinner size="large" color={theme.primary} />
@@ -672,9 +684,18 @@ export default function ParentMessageThreadScreen() {
               </Text>
             </View>
           ) : (
-            renderMessages
+            <FlashList
+              ref={listRef}
+              data={rowsAsc}
+              renderItem={renderRow}
+              keyExtractor={(item) => item.key}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
+            />
           )}
-          </ScrollView>
         </View>
       </View>
 
