@@ -93,6 +93,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
 
   // Determine user role from profile if not provided
   const userRole = role || (profile?.role as string) || 'parent';
+  const headerAvatarSize = userRole === 'principal' ? 44 : 32;
   
   // Filter nav items by role
   const filteredNavItems = NAV_ITEMS.filter(item => 
@@ -238,7 +239,7 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
               <Avatar
                 name={`${user?.user_metadata?.first_name || ''} ${user?.user_metadata?.last_name || ''}`.trim() || user?.email || 'User'}
                 imageUri={(profile as any)?.avatar_url || null}
-                size={32}
+                size={headerAvatarSize}
               />
             </TouchableOpacity>
           </View>

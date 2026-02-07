@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { usePrincipalHub } from '@/hooks/usePrincipalHub';
 import { useRecentStudents } from '@/hooks/useRecentStudents';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
@@ -24,6 +25,7 @@ import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentL
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
 import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
 import { PrincipalDoNowInbox, PrincipalGettingStartedCard, PrincipalQuickActions, PrincipalSchoolPulse } from '@/components/dashboard/principal';
+import TierBadge from '@/components/ui/TierBadge';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
@@ -44,6 +46,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const { user, profile } = useAuth();
+  const { ready: subscriptionReady } = useSubscription();
   const insets = useSafeAreaInsets();
 
   const {
@@ -214,18 +217,22 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>{greeting},</Text>
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.schoolName}>{schoolName}</Text>
-            <Text style={styles.updatedAt}>
-              {t('dashboard.updated_at', { defaultValue: 'Updated' })} {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <View style={styles.headerTopRow}>
+              <Text style={styles.greeting} numberOfLines={1}>
+                {greeting}, {userName}
+              </Text>
+              {subscriptionReady ? (
+                <TierBadge size="md" showManageButton />
+              ) : null}
+            </View>
+            <Text style={styles.schoolName} numberOfLines={1}>
+              {schoolName}
+            </Text>
+            <Text style={styles.updatedAt} numberOfLines={1}>
+              {t('dashboard.updated_at', { defaultValue: 'Updated' })}{' '}
+              {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
-          <TouchableOpacity style={styles.profileButton}>
-            <LinearGradient colors={[theme.primary, theme.primaryLight]} style={styles.profileGradient}>
-              <Text style={styles.profileInitial}>{userName?.charAt(0)?.toUpperCase() || 'P'}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
 
         {/* Do Now Inbox - first, for non-technical users */}
@@ -786,22 +793,18 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingBottom: 8,
+      paddingBottom: 6,
     },
     headerLeft: { flex: 1 },
-    greeting: { fontSize: 14, color: theme.textSecondary },
-    userName: { fontSize: 22, fontWeight: '700', color: theme.text },
-    schoolName: { fontSize: 14, color: theme.textSecondary, marginTop: 2 },
-    updatedAt: { fontSize: 12, color: theme.textTertiary, marginTop: 4 },
-    profileButton: { marginLeft: 12 },
-    profileGradient: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+    headerTopRow: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
     },
-    profileInitial: { color: theme.onPrimary, fontWeight: '700' },
+    greeting: { fontSize: 18, fontWeight: '800', color: theme.text },
+    schoolName: { fontSize: 13, color: theme.textSecondary, marginTop: 2 },
+    updatedAt: { fontSize: 11, color: theme.textTertiary, marginTop: 4 },
     card: {
       marginHorizontal: 16,
       marginTop: 12,

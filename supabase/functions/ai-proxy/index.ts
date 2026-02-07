@@ -21,6 +21,8 @@ type ProviderResponse = {
   };
   model?: string;
   tool_results?: ToolResult[];
+  /** Client-side tool calls that the AI requested but the server cannot execute */
+  pending_tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 };
 
 const DEFAULT_OPENAI_ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o'];
@@ -85,6 +87,11 @@ const RequestSchema = z.object({
   stream: z.boolean().optional(),
   enable_tools: z.boolean().optional().default(false),
   prefer_openai: z.boolean().optional().default(false),
+  client_tools: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    input_schema: z.record(z.unknown()),
+  })).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -382,9 +389,9 @@ async function duckDuckGoSearch(args: z.infer<typeof WebSearchArgsSchema>): Prom
   };
 }
 
-function buildOpenAITools(enableTools: boolean) {
+function buildOpenAITools(enableTools: boolean, clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>) {
   if (!enableTools) return undefined;
-  return [
+  const serverTools = [
     {
       type: 'function',
       function: {
@@ -402,11 +409,25 @@ function buildOpenAITools(enableTools: boolean) {
       },
     },
   ];
+  // Merge client-side tools into OpenAI format
+  if (clientTools && clientTools.length > 0) {
+    for (const ct of clientTools) {
+      serverTools.push({
+        type: 'function',
+        function: {
+          name: ct.name,
+          description: ct.description,
+          parameters: ct.input_schema as any,
+        },
+      });
+    }
+  }
+  return serverTools;
 }
 
-function buildAnthropicTools(enableTools: boolean) {
+function buildAnthropicTools(enableTools: boolean, clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>) {
   if (!enableTools) return undefined;
-  return [
+  const tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }> = [
     {
       name: 'web_search',
       description: 'Search the web for up-to-date or external information.',
@@ -421,6 +442,17 @@ function buildAnthropicTools(enableTools: boolean) {
       },
     },
   ];
+  // Merge client-side tools
+  if (clientTools && clientTools.length > 0) {
+    for (const ct of clientTools) {
+      tools.push({
+        name: ct.name,
+        description: ct.description,
+        input_schema: ct.input_schema,
+      });
+    }
+  }
+  return tools;
 }
 
 function normalizeMessages(payload: z.infer<typeof RequestSchema>['payload'], systemPrompt: string) {
@@ -695,6 +727,7 @@ async function callOpenAI(
   enableTools: boolean,
   requestedModel?: string | null,
   maxTokens: number = DEFAULT_MAX_TOKENS,
+  clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
 ): Promise<ProviderResponse> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
@@ -707,7 +740,7 @@ async function callOpenAI(
     console.warn('[ai-proxy] OpenAI model fallback:', selection.reason);
   }
   const model = selection.model;
-  const tools = buildOpenAITools(enableTools);
+  const tools = buildOpenAITools(enableTools, clientTools);
 
   const body: JsonRecord = {
     model,
@@ -853,6 +886,7 @@ async function callAnthropic(
   requestedModel?: string | null,
   allowedOverride?: string[],
   maxTokens: number = DEFAULT_MAX_TOKENS,
+  clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
 ): Promise<ProviderResponse> {
   const apiKey = getAnthropicApiKey();
   if (!apiKey) {
@@ -865,7 +899,7 @@ async function callAnthropic(
     console.warn('[ai-proxy] Anthropic model fallback:', selection.reason);
   }
   const preferredModel = selection.model;
-  const tools = buildAnthropicTools(enableTools);
+  const tools = buildAnthropicTools(enableTools, clientTools);
   const systemPrompt = messages.find((m) => m.role === 'system')?.content || DEFAULT_SYSTEM_PROMPT;
 
   const callAnthropicOnce = async (model: string) => {
@@ -962,8 +996,11 @@ async function callAnthropic(
   }
 
   if (enableTools && toolUses.length > 0) {
-    for (const toolUse of toolUses) {
-      if (toolUse.name !== 'web_search') continue;
+    // Separate server-side tools (web_search) from client-side tools
+    const serverToolUses = toolUses.filter(tu => tu.name === 'web_search');
+    const clientToolUses = toolUses.filter(tu => tu.name !== 'web_search');
+
+    for (const toolUse of serverToolUses) {
       const parsed = WebSearchArgsSchema.safeParse(toolUse.input || {});
       if (!parsed.success) continue;
 
@@ -1017,6 +1054,30 @@ async function callAnthropic(
         },
         model: followUpModel,
         tool_results: toolResults,
+      };
+    }
+
+    // If there are client-side tool calls that we can't execute server-side,
+    // return them as pending_tool_calls for the client to handle
+    if (clientToolUses.length > 0) {
+      const pendingCalls = clientToolUses.map(tu => ({
+        id: tu.id as string,
+        name: tu.name as string,
+        input: (tu.input || {}) as Record<string, unknown>,
+      }));
+      return {
+        content: contentText,
+        usage: {
+          tokens_in: typeof result.usage === 'object' && result.usage
+            ? (result.usage as JsonRecord).input_tokens as number | undefined
+            : undefined,
+          tokens_out: typeof result.usage === 'object' && result.usage
+            ? (result.usage as JsonRecord).output_tokens as number | undefined
+            : undefined,
+        },
+        model: modelUsed,
+        tool_results: toolResults,
+        pending_tool_calls: pendingCalls,
       };
     }
   }
@@ -1238,6 +1299,8 @@ serve(async (req) => {
       }
     }
 
+    const clientTools = payload.client_tools || undefined;
+
     let providerResponse: ProviderResponse;
     const primaryProvider: 'anthropic' | 'openai' = isSuperAdmin
       ? 'anthropic'
@@ -1252,10 +1315,10 @@ serve(async (req) => {
           ? pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model
           : requestedModel;
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
-        return await callAnthropic(messages, enableTools, model, allowedOverride, maxTokens);
+        return await callAnthropic(messages, enableTools, model, allowedOverride, maxTokens, clientTools);
       }
       if (!hasOpenAI) throw new Error('OPENAI_API_KEY missing and OpenAI not configured.');
-      return await callOpenAI(messages, enableTools, requestedModel, maxTokens);
+      return await callOpenAI(messages, enableTools, requestedModel, maxTokens, clientTools);
     };
 
     try {
@@ -1337,6 +1400,7 @@ serve(async (req) => {
       usage: providerResponse.usage,
       model: providerResponse.model,
       tool_results: providerResponse.tool_results || [],
+      pending_tool_calls: providerResponse.pending_tool_calls || [],
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

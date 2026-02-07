@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { Platform, Linking } from 'react-native';
 import { assertSupabase } from './supabase';
 import { getFCMToken, onFCMTokenRefresh } from './calls/CallHeadlessTask';
 
@@ -189,7 +190,7 @@ class NotificationService {
 
       // Get device info
       const deviceInfo = {
-        deviceId: await Device.osBuildIdAsync?.() || undefined,
+        deviceId: Device.osBuildId || undefined,
         deviceName: Device.deviceName || undefined,
         osVersion: Device.osVersion || undefined,
         appVersion,
@@ -560,7 +561,7 @@ class NotificationService {
           categoryIdentifier: notificationData.categoryId,
           priority: this.mapPriorityToExpo(notificationData.priority),
           sound: notificationData.sound === false ? false : (notificationData.sound || 'default'),
-          vibrate: notificationData.vibrate,
+          vibrate: Array.isArray(notificationData.vibrate) ? notificationData.vibrate : undefined,
           badge: notificationData.badge,
           color: notificationData.color || '#00f5ff',
         },
@@ -646,7 +647,11 @@ class NotificationService {
    */
   public async openSettings(): Promise<void> {
     try {
-      await Notifications.openSettingsAsync();
+      if (Platform.OS === 'ios') {
+        await Linking.openSettings();
+      } else {
+        await Linking.openSettings();
+      }
     } catch (error) {
       console.error('Failed to open notification settings:', error);
     }
@@ -687,13 +692,13 @@ class NotificationService {
   /**
    * Map priority to Expo priority format
    */
-  private mapPriorityToExpo(priority?: 'min' | 'low' | 'default' | 'high' | 'max'): Notifications.AndroidImportance {
+  private mapPriorityToExpo(priority?: 'min' | 'low' | 'default' | 'high' | 'max'): string {
     switch (priority) {
-      case 'min': return Notifications.AndroidImportance.MIN;
-      case 'low': return Notifications.AndroidImportance.LOW;
-      case 'high': return Notifications.AndroidImportance.HIGH;
-      case 'max': return Notifications.AndroidImportance.MAX;
-      default: return Notifications.AndroidImportance.DEFAULT;
+      case 'min': return 'min';
+      case 'low': return 'low';
+      case 'high': return 'high';
+      case 'max': return 'max';
+      default: return 'default';
     }
   }
 
