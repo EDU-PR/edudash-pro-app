@@ -45,6 +45,7 @@ import {
   PrincipalWelcomeSection,
   PrincipalMetricsSection,
   PrincipalQuickActions,
+  PrincipalDoNowInbox,
   PrincipalRecentActivity
 } from './principal';
 import { CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
@@ -194,6 +195,30 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             tier={tier}
             subscriptionReady={subscriptionReady}
           />
+        </View>
+
+        {/* 2. Do Now Inbox - Prioritized tasks for non-technical principals */}
+        <View style={styles.section}>
+          <CollapsibleSection 
+            title={t('dashboard.do_now.title', { defaultValue: 'Do Now' })} 
+            sectionId="do-now" 
+            icon="⚡"
+            hint={t('dashboard.do_now.subtitle', { defaultValue: 'Your next actions for today' })}
+            defaultCollapsed={collapsedSections.has('do-now')}
+            onToggle={toggleSection}
+          >
+            <PrincipalDoNowInbox
+              counts={{
+                pendingRegistrations: data.stats?.pendingRegistrations?.total ?? 0,
+                pendingPaymentProofs: data.stats?.pendingPOPUploads?.total ?? 0,
+                pendingUnpaidFees: data.stats?.pendingPayments?.total ?? 0,
+                pendingApprovals:
+                  (data.pendingReportApprovals ?? 0) +
+                  (data.pendingActivityApprovals ?? 0) +
+                  (data.pendingHomeworkApprovals ?? 0),
+              }}
+            />
+          </CollapsibleSection>
         </View>
 
         {/* 2. Quick Actions - Urgent tasks requiring attention */}

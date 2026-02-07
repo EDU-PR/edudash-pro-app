@@ -8,3 +8,4 @@ export { PrincipalWelcomeSection } from './PrincipalWelcomeSection';
 export { PrincipalMetricsSection } from './PrincipalMetricsSection';
 export { PrincipalQuickActions } from './PrincipalQuickActions';
 export { PrincipalRecentActivity } from './PrincipalRecentActivity';
+export { PrincipalDoNowInbox } from './PrincipalDoNowInbox';
