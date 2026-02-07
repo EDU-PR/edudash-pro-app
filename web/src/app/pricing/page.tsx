@@ -213,9 +213,8 @@ export default function PricingPage() {
     },
     {
       name: "Parent Starter",
-      price: 49.50,
-      originalPrice: 99.00,
-      priceAnnual: 475.00,
+      price: 99,
+      priceAnnual: 950,
       popular: true,
       features: [
         "30 AI Homework Helper/month",
@@ -228,9 +227,8 @@ export default function PricingPage() {
     },
     {
       name: "Parent Plus",
-      price: 99.50,
-      originalPrice: 199.00,
-      priceAnnual: 955.00,
+      price: 199,
+      priceAnnual: 1910,
       popular: false,
       features: [
         "100 AI Homework Helper/month",

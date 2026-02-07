@@ -15,16 +15,23 @@ export interface TTSQuota {
   allowed: boolean;
   remaining: number;
   limit: number;
-  tier: 'free' | 'trial' | 'basic' | 'premium' | 'school';
+  tier: 'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'school_starter' | 'school_premium' | 'school_pro' | 'school_enterprise';
 }
 
 // TTS Tier Limits (requests per day)
-const TTS_LIMITS = {
-  free: 3,        // 3 TTS per day
-  trial: 20,      // 20 TTS per day
-  basic: 50,      // 50 TTS per day
-  premium: 200,   // 200 TTS per day
-  school: 1000,   // 1000 TTS per day
+const TTS_LIMITS: Record<string, number> = {
+  free: 3,
+  trial: 20,
+  parent_starter: 50,
+  parent_plus: 200,
+  school_starter: 100,
+  school_premium: 500,
+  school_pro: 1000,
+  school_enterprise: 5000,
+  // Legacy fallbacks
+  basic: 50,
+  premium: 200,
+  school: 1000,
 };
 
 export function useTTS(userId?: string) {
@@ -33,7 +40,7 @@ export function useTTS(userId?: string) {
   const [isSupported] = useState(true); // Always supported via Azure
   const [error, setError] = useState<string | null>(null);
   const [quota, setQuota] = useState<TTSQuota | null>(null);
-  const [userTier, setUserTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
+  const [userTier, setUserTier] = useState<string>('free');
   const [voicePreference, setVoicePreference] = useState<'male' | 'female'>('female');
   
   const audioRef = useRef<HTMLAudioElement | null>(null);

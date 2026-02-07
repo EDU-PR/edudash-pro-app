@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, Linking, Platform, Switch, Image } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,6 @@ import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
-import { InviteCodeService } from '@/lib/services/inviteCodeService';
 import { EmploymentType } from '@/types/hiring';
 import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
@@ -18,6 +17,14 @@ import { base64ToUint8Array } from '@/lib/utils/base64';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { LinearGradient } from 'expo-linear-gradient';
+import QRCode from 'react-native-qrcode-svg';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { buildApplyLink, buildWhatsAppMessage, formatEmploymentType, formatSalaryRange, type ShareableJobPosting, type WhatsAppMessageVariant } from '@/lib/hiring/jobPostingShare';
+import { clearJobPostingDraft, isMeaningfulDraft, loadJobPostingDraft, saveJobPostingDraft, type JobPostingDraftV1 } from '@/lib/hiring/jobPostingDraft';
+import { DEFAULT_JOB_POSTING_TEMPLATES, loadSavedJobPostingTemplates, saveSavedJobPostingTemplates, type JobPostingTemplate, type SavedJobPostingTemplate } from '@/lib/hiring/jobPostingTemplates';
+import { JobPostingAIService, type JobPostingAISuggestions } from '@/lib/services/JobPostingAIService';
 export default function JobPostingCreateScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
@@ -37,7 +44,6 @@ export default function JobPostingCreateScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [shareJobPosting, setShareJobPosting] = useState<any | null>(null);
-  const [shareInviteCode, setShareInviteCode] = useState<string | null>(null);
   const [shareMessage, setShareMessage] = useState('');
   const [broadcasting, setBroadcasting] = useState(false);
   const [jobLogoUrl, setJobLogoUrl] = useState<string | null>(null);
@@ -54,6 +60,263 @@ export default function JobPostingCreateScreen() {
   const [includeSchoolHeader, setIncludeSchoolHeader] = useState(true);
   const [includeSchoolLogo, setIncludeSchoolLogo] = useState(true);
   const [includeSchoolDetails, setIncludeSchoolDetails] = useState(true);
+  const [shareVariant, setShareVariant] = useState<WhatsAppMessageVariant>('short');
+  const [polishingShareMessage, setPolishingShareMessage] = useState(false);
+  const [sharingPoster, setSharingPoster] = useState(false);
+
+  // Autosave draft
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftLastSavedAt, setDraftLastSavedAt] = useState<string | null>(null);
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftPromptedForKeyRef = useRef<string | null>(null);
+
+  // Templates
+  const [savedTemplates, setSavedTemplates] = useState<SavedJobPostingTemplate[]>([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [templateSaveModalVisible, setTemplateSaveModalVisible] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateCategory, setTemplateCategory] = useState<JobPostingTemplate['category']>('general');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // AI assist
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<JobPostingAISuggestions | null>(null);
+  const [aiUseSuggestedTitle, setAiUseSuggestedTitle] = useState(true);
+  const [aiWhatsAppShort, setAiWhatsAppShort] = useState<string | null>(null);
+  const [aiWhatsAppLong, setAiWhatsAppLong] = useState<string | null>(null);
+
+  // Share poster capture
+  const posterShotRef = useRef<ViewShot>(null);
+  const mountedRef = useRef(true);
+
+  const appWebBaseUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || process.env.EXPO_PUBLIC_WEB_URL || 'https://edudashpro.org.za';
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const draftParams = useMemo(() => {
+    if (!preschoolId || !user?.id) return null;
+    return { preschoolId: String(preschoolId), userId: String(user.id) };
+  }, [preschoolId, user?.id]);
+
+  const hasMeaningfulFormContent = useMemo(() => {
+    return isMeaningfulDraft({
+      title,
+      description,
+      requirements,
+      salary_min: salaryMin,
+      salary_max: salaryMax,
+      location,
+    });
+  }, [title, description, requirements, salaryMin, salaryMax, location]);
+
+  const buildCurrentDraft = useCallback((): JobPostingDraftV1 | null => {
+    if (!draftParams) return null;
+    return {
+      version: 1,
+      updated_at: new Date().toISOString(),
+      preschool_id: draftParams.preschoolId,
+      user_id: draftParams.userId,
+      title,
+      description,
+      requirements,
+      salary_min: salaryMin,
+      salary_max: salaryMax,
+      location,
+      employment_type: employmentType,
+      expires_at: expiresAt,
+      job_logo_url: jobLogoUrl,
+    };
+  }, [draftParams, description, employmentType, expiresAt, jobLogoUrl, location, requirements, salaryMax, salaryMin, title]);
+
+  const saveDraftNow = useCallback(async () => {
+    if (!draftParams) return;
+    const draft = buildCurrentDraft();
+    if (!draft) return;
+    try {
+      if (!isMeaningfulDraft(draft)) {
+        // Don't clear an existing stored draft before the user chooses "Resume" or "Discard".
+        if (draftLastSavedAt) {
+          await clearJobPostingDraft(draftParams);
+          if (mountedRef.current) setDraftLastSavedAt(null);
+        }
+        return;
+      }
+      await saveJobPostingDraft(draft);
+      if (mountedRef.current) setDraftLastSavedAt(draft.updated_at);
+    } catch (e) {
+      console.warn('Failed to autosave job posting draft:', e);
+    } finally {
+      if (mountedRef.current) setDraftSaving(false);
+    }
+  }, [buildCurrentDraft, draftLastSavedAt, draftParams]);
+
+  const clearDraftAndResetForm = useCallback(async () => {
+    if (!draftParams) return;
+    try {
+      await clearJobPostingDraft(draftParams);
+    } catch {
+      /* ignore */
+    }
+    setDraftLastSavedAt(null);
+    setTitle('');
+    setDescription('');
+    setRequirements('');
+    setSalaryMin('');
+    setSalaryMax('');
+    setLocation('');
+    setEmploymentType(EmploymentType.FULL_TIME);
+    setExpiresAt('');
+    setJobLogoUrl(null);
+  }, [draftParams]);
+
+  useEffect(() => {
+    if (!draftParams) {
+      setDraftLoaded(true);
+      return;
+    }
+
+    const key = `${draftParams.preschoolId}:${draftParams.userId}`;
+    if (draftPromptedForKeyRef.current === key) return;
+    draftPromptedForKeyRef.current = key;
+
+    let mounted = true;
+    const loadDraft = async () => {
+      try {
+        const draft = await loadJobPostingDraft(draftParams);
+        if (!mounted || !draft || !isMeaningfulDraft(draft)) {
+          return;
+        }
+
+        showAlert({
+          title: 'Resume Draft?',
+          message: `We found an autosaved draft from ${new Date(draft.updated_at).toLocaleString()}.`,
+          type: 'info',
+          buttons: [
+            {
+              text: 'Discard',
+              style: 'destructive',
+              onPress: () => {
+                void clearDraftAndResetForm();
+              },
+            },
+            {
+              text: 'Resume',
+              onPress: () => {
+                setTitle(draft.title || '');
+                setDescription(draft.description || '');
+                setRequirements(draft.requirements || '');
+                setSalaryMin(draft.salary_min || '');
+                setSalaryMax(draft.salary_max || '');
+                setLocation(draft.location || '');
+                setEmploymentType(draft.employment_type || EmploymentType.FULL_TIME);
+                setExpiresAt(draft.expires_at || '');
+                setJobLogoUrl(draft.job_logo_url || null);
+                setDraftLastSavedAt(draft.updated_at || null);
+              },
+            },
+          ],
+        });
+      } catch (e) {
+        console.warn('Failed to load job posting draft:', e);
+      }
+    };
+
+    void loadDraft().finally(() => {
+      if (mounted) setDraftLoaded(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [clearDraftAndResetForm, draftParams, showAlert]);
+
+  useEffect(() => {
+    if (!draftParams) {
+      setTemplatesLoaded(true);
+      return;
+    }
+
+    let mounted = true;
+    const loadTemplates = async () => {
+      try {
+        const templates = await loadSavedJobPostingTemplates(draftParams);
+        if (mounted) setSavedTemplates(templates);
+      } catch (e) {
+        console.warn('Failed to load job posting templates:', e);
+      } finally {
+        if (mounted) setTemplatesLoaded(true);
+      }
+    };
+
+    void loadTemplates();
+    return () => {
+      mounted = false;
+    };
+  }, [draftParams]);
+
+  useEffect(() => {
+    if (!draftLoaded || !draftParams) return;
+
+    const shouldPersist = hasMeaningfulFormContent || Boolean(draftLastSavedAt);
+    if (!shouldPersist) {
+      setDraftSaving(false);
+      return;
+    }
+
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+    }
+
+    // Debounced autosave to local storage
+    setDraftSaving(true);
+    draftSaveTimerRef.current = setTimeout(() => {
+      void saveDraftNow();
+    }, 850);
+
+    return () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current);
+      }
+    };
+  }, [
+    draftLoaded,
+    draftParams,
+    description,
+    draftLastSavedAt,
+    employmentType,
+    expiresAt,
+    hasMeaningfulFormContent,
+    jobLogoUrl,
+    location,
+    requirements,
+    salaryMax,
+    salaryMin,
+    saveDraftNow,
+    title,
+  ]);
+
+  useEffect(() => {
+    if (!draftParams) return;
+
+    const handleStateChange = (nextState: AppStateStatus) => {
+      if (nextState !== 'active') {
+        void saveDraftNow();
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleStateChange);
+    return () => {
+      sub.remove();
+      void saveDraftNow();
+    };
+  }, [draftParams, saveDraftNow]);
 
   const validateForm = (): boolean => {
     if (!title.trim()) {
@@ -88,25 +351,6 @@ export default function JobPostingCreateScreen() {
     return true;
   };
 
-  const formatEmploymentType = (rawValue: string) => {
-    const value = String(rawValue || '').toLowerCase();
-    if (value === 'full_time' || value === 'full-time') return 'Full-Time';
-    if (value === 'part_time' || value === 'part-time') return 'Part-Time';
-    if (value === 'contract') return 'Contract';
-    if (value === 'temporary') return 'Temporary';
-    return 'Employment Type TBA';
-  };
-
-  const formatSalaryRange = (jobPosting: any) => {
-    if (jobPosting.salary_range_min && jobPosting.salary_range_max) {
-      return `R${jobPosting.salary_range_min} - R${jobPosting.salary_range_max}`;
-    }
-    if (jobPosting.salary_range_min) {
-      return `From R${jobPosting.salary_range_min}`;
-    }
-    return 'Negotiable';
-  };
-
   const formatSchoolDetails = (info: typeof schoolInfo) => {
     if (!info) return '';
     const locationParts = [info.city, info.province].filter(Boolean).join(', ');
@@ -114,52 +358,7 @@ export default function JobPostingCreateScreen() {
     return detailParts.join(' • ');
   };
 
-  const buildWhatsAppMessage = (jobPosting: any, inviteCode?: string) => {
-    const jobTitle = jobPosting.title || title;
-    const jobLocation = jobPosting.location || location || 'Location TBA';
-    const jobRequirements = jobPosting.requirements || requirements || '';
-    const salaryRange =
-      jobPosting.salary_range_min && jobPosting.salary_range_max
-        ? `R${jobPosting.salary_range_min} - R${jobPosting.salary_range_max}`
-        : jobPosting.salary_range_min
-        ? `From R${jobPosting.salary_range_min}`
-        : 'Negotiable';
-    const employmentTypeRaw = String(jobPosting.employment_type || '').toLowerCase();
-    const employmentTypeDisplay =
-      employmentTypeRaw === 'full_time' || employmentTypeRaw === 'full-time'
-        ? 'Full-Time'
-        : employmentTypeRaw === 'part_time' || employmentTypeRaw === 'part-time'
-        ? 'Part-Time'
-        : employmentTypeRaw === 'contract'
-        ? 'Contract'
-        : employmentTypeRaw === 'temporary'
-        ? 'Temporary'
-        : 'Employment Type TBA';
-
-    const appUrl = process.env.EXPO_PUBLIC_APP_WEB_URL || 'https://edudashpro.org.za';
-    const applicationLink = inviteCode
-      ? `${appUrl}/apply/${jobPosting.id}?invite=${encodeURIComponent(inviteCode)}`
-      : `${appUrl}/apply/${jobPosting.id}`;
-    const teacherSignupLink = inviteCode
-      ? `${appUrl}/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}&job=${encodeURIComponent(jobPosting.id)}`
-      : `${appUrl}/sign-up/teacher?job=${encodeURIComponent(jobPosting.id)}`;
-    const requirementsLine = jobRequirements ? `*Requirements:* ${jobRequirements}\n` : '';
-    const inviteLine = inviteCode
-      ? `*Invite Code:* ${inviteCode}\n*Teacher Sign Up:* ${teacherSignupLink}\n\n`
-      : '';
-
-    return `🎓 *New Teaching Opportunity!*\n\n` +
-      `*Position:* ${jobTitle}\n` +
-      `*Type:* ${employmentTypeDisplay}\n` +
-      `*Location:* ${jobLocation}\n` +
-      `*Salary:* ${salaryRange}\n\n` +
-      requirementsLine +
-      inviteLine +
-      `📝 *Apply Now:* ${applicationLink}\n\n` +
-      `Posted via EduDash Pro Hiring Hub`;
-  };
-
-  const loadSchoolInfo = async () => {
+  const loadSchoolInfo = useCallback(async () => {
     if (!preschoolId) return;
     try {
       const supabase = assertSupabase();
@@ -206,7 +405,329 @@ export default function JobPostingCreateScreen() {
       });
       setIncludeSchoolLogo(Boolean(jobLogoUrl));
     }
-  };
+  }, [jobLogoUrl, preschoolId, profile]);
+
+  useEffect(() => {
+    void loadSchoolInfo();
+  }, [loadSchoolInfo]);
+
+  const savedTemplateIds = useMemo(() => new Set(savedTemplates.map((t) => t.id)), [savedTemplates]);
+
+  const allTemplates = useMemo(() => {
+    // Defaults first, then saved templates (saved can override if same id).
+    const byId = new Map<string, JobPostingTemplate | SavedJobPostingTemplate>();
+    DEFAULT_JOB_POSTING_TEMPLATES.forEach((t) => byId.set(t.id, t));
+    savedTemplates.forEach((t) => byId.set(t.id, t));
+    return Array.from(byId.values());
+  }, [savedTemplates]);
+
+  const applyTemplateToForm = useCallback(
+    (template: JobPostingTemplate, mode: 'replace' | 'fill_empty') => {
+      const fill = <T,>(prev: T, next: T, isEmpty: (v: T) => boolean) => (mode === 'replace' ? next : isEmpty(prev) ? next : prev);
+
+      setTitle((prev) => fill(prev, template.title, (v) => !String(v || '').trim()));
+      setDescription((prev) => fill(prev, template.description, (v) => !String(v || '').trim()));
+      setRequirements((prev) => fill(prev, template.requirements, (v) => !String(v || '').trim()));
+      setEmploymentType(template.employment_type);
+      setSalaryMin((prev) => fill(prev, template.salary_min || '', (v) => !String(v || '').trim()));
+      setSalaryMax((prev) => fill(prev, template.salary_max || '', (v) => !String(v || '').trim()));
+    },
+    []
+  );
+
+  const onPressTemplate = useCallback(
+    (template: JobPostingTemplate) => {
+      if (!hasMeaningfulFormContent) {
+        applyTemplateToForm(template, 'replace');
+        return;
+      }
+
+      showAlert({
+        title: 'Apply Template?',
+        message: 'This will update your current form fields.',
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Fill empty',
+            onPress: () => applyTemplateToForm(template, 'fill_empty'),
+          },
+          {
+            text: 'Replace',
+            style: 'destructive',
+            onPress: () => applyTemplateToForm(template, 'replace'),
+          },
+        ],
+      });
+    },
+    [applyTemplateToForm, hasMeaningfulFormContent, showAlert]
+  );
+
+  const deleteSavedTemplate = useCallback(
+    (templateId: string) => {
+      if (!draftParams) return;
+      showAlert({
+        title: 'Delete Template?',
+        message: 'This will remove the template from your saved list.',
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              const next = savedTemplates.filter((t) => t.id !== templateId);
+              setSavedTemplates(next);
+              void saveSavedJobPostingTemplates({ ...draftParams, templates: next });
+            },
+          },
+        ],
+      });
+    },
+    [draftParams, savedTemplates, showAlert]
+  );
+
+  const openSaveTemplateModal = useCallback(() => {
+    if (!title.trim() && !description.trim() && !requirements.trim()) {
+      showAlert({
+        title: 'Nothing to Save',
+        message: 'Add some details first, then save as a template.',
+        type: 'info',
+      });
+      return;
+    }
+    setTemplateName('');
+    setTemplateCategory('general');
+    setTemplateSaveModalVisible(true);
+  }, [description, requirements, showAlert, title]);
+
+  const handleSaveTemplate = useCallback(async () => {
+    if (!draftParams) {
+      showAlert({ title: 'Error', message: 'Missing school information', type: 'error' });
+      return;
+    }
+
+    const name = templateName.trim();
+    if (!name) {
+      showAlert({ title: 'Template Name Required', message: 'Please enter a template name.', type: 'warning' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const template: SavedJobPostingTemplate = {
+      id: `tpl_saved_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      category: templateCategory,
+      title: title.trim() || 'Untitled Job',
+      employment_type: employmentType,
+      description: description.trim() || '',
+      requirements: requirements.trim() || '',
+      salary_min: salaryMin.trim() || undefined,
+      salary_max: salaryMax.trim() || undefined,
+      created_at: now,
+      updated_at: now,
+    };
+
+    setSavingTemplate(true);
+    try {
+      const next = [template, ...savedTemplates];
+      setSavedTemplates(next);
+      await saveSavedJobPostingTemplates({ ...draftParams, templates: next });
+      setTemplateSaveModalVisible(false);
+      showAlert({ title: 'Saved', message: 'Template saved successfully.', type: 'success' });
+    } catch (e) {
+      console.warn('Failed to save job posting template:', e);
+      showAlert({ title: 'Save Failed', message: 'Could not save template. Please try again.', type: 'error' });
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [
+    description,
+    draftParams,
+    employmentType,
+    requirements,
+    salaryMax,
+    salaryMin,
+    savedTemplates,
+    showAlert,
+    templateCategory,
+    templateName,
+    title,
+  ]);
+
+  const salaryRangeTextForAI = useMemo(() => {
+    const min = salaryMin.trim() ? Number(salaryMin) : null;
+    const max = salaryMax.trim() ? Number(salaryMax) : null;
+    return formatSalaryRange(Number.isFinite(min) ? min : null, Number.isFinite(max) ? max : null);
+  }, [salaryMax, salaryMin]);
+
+  const schoolLocationForAI = useMemo(() => {
+    const loc = [schoolInfo?.city, schoolInfo?.province].filter(Boolean).join(', ');
+    return loc || null;
+  }, [schoolInfo?.city, schoolInfo?.province]);
+
+  const handleAISuggest = useCallback(async () => {
+    if (!title.trim()) {
+      showAlert({
+        title: 'Add a Job Title',
+        message: 'AI suggestions work best when you have a role title. Add a title or apply a template first.',
+        type: 'info',
+      });
+      return;
+    }
+
+    setAiBusy(true);
+    setAiUseSuggestedTitle(true);
+    try {
+      const suggestions = await JobPostingAIService.suggest({
+        schoolName: schoolInfo?.name,
+        schoolLocation: schoolLocationForAI,
+        orgType: 'preschool',
+        jobTitle: title.trim(),
+        employmentType: formatEmploymentType(String(employmentType)),
+        jobLocation: location.trim() || null,
+        salaryRange: salaryRangeTextForAI === 'Negotiable' ? null : salaryRangeTextForAI,
+        existingDescription: description.trim() || null,
+        existingRequirements: requirements.trim() || null,
+      });
+
+      setAiSuggestions(suggestions);
+      setAiWhatsAppShort(suggestions.whatsapp_short || null);
+      setAiWhatsAppLong(suggestions.whatsapp_long || null);
+      setAiModalVisible(true);
+    } catch (e: any) {
+      showAlert({
+        title: 'AI Failed',
+        message: e?.message || 'Could not generate AI suggestions right now. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setAiBusy(false);
+    }
+  }, [
+    description,
+    employmentType,
+    location,
+    requirements,
+    salaryRangeTextForAI,
+    schoolInfo?.name,
+    schoolLocationForAI,
+    showAlert,
+    title,
+  ]);
+
+  const applyAISuggestions = useCallback(
+    (mode: 'replace' | 'fill_empty') => {
+      if (!aiSuggestions) return;
+
+      const suggestedTitle = String(aiSuggestions.suggested_title || '').trim();
+      if (aiUseSuggestedTitle && suggestedTitle) {
+        setTitle((prev) => (mode === 'replace' || !prev.trim() ? suggestedTitle : prev));
+      }
+
+      setDescription((prev) => (mode === 'replace' || !prev.trim() ? aiSuggestions.description : prev));
+      setRequirements((prev) => (mode === 'replace' || !prev.trim() ? aiSuggestions.requirements : prev));
+
+      if (aiSuggestions.whatsapp_short) setAiWhatsAppShort(aiSuggestions.whatsapp_short);
+      if (aiSuggestions.whatsapp_long) setAiWhatsAppLong(aiSuggestions.whatsapp_long);
+
+      setAiModalVisible(false);
+      showAlert({ title: 'Applied', message: 'AI suggestions were applied to your posting.', type: 'success' });
+    },
+    [aiSuggestions, aiUseSuggestedTitle, showAlert]
+  );
+
+  const toShareableJobPosting = useCallback((jobPosting: any): ShareableJobPosting => {
+    return {
+      id: String(jobPosting?.id || ''),
+      title: jobPosting?.title ?? null,
+      description: jobPosting?.description ?? null,
+      requirements: jobPosting?.requirements ?? null,
+      location: jobPosting?.location ?? null,
+      employment_type: jobPosting?.employment_type ?? null,
+      salary_range_min: jobPosting?.salary_range_min ?? null,
+      salary_range_max: jobPosting?.salary_range_max ?? null,
+    };
+  }, []);
+
+  const attachApplyLink = useCallback(
+    (baseMessage: string, jobId: string) => {
+      const applyLink = buildApplyLink({ baseUrl: appWebBaseUrl, jobId });
+      let text = String(baseMessage || '').trim();
+      if (!text) {
+        return `📝 Apply online (no account required): ${applyLink}\n\nPosted via EduDash Pro Hiring Hub`;
+      }
+
+      // Support placeholders, and ensure we always include the real link.
+      text = text.replace(/\{\{\s*apply_link\s*\}\}/gi, applyLink).replace(/\[\s*apply_link\s*\]/gi, applyLink);
+      if (!text.includes(applyLink)) {
+        text = `${text}\n\n📝 Apply online (no account required): ${applyLink}`;
+      }
+      if (!/posted via/i.test(text)) {
+        text = `${text}\n\nPosted via EduDash Pro Hiring Hub`;
+      }
+      return text;
+    },
+    [appWebBaseUrl]
+  );
+
+  const buildShareMessageForVariant = useCallback(
+    (variant: WhatsAppMessageVariant, jobPosting: any) => {
+      const job = toShareableJobPosting(jobPosting);
+      return buildWhatsAppMessage({ variant, baseUrl: appWebBaseUrl, job, school: schoolInfo });
+    },
+    [appWebBaseUrl, schoolInfo, toShareableJobPosting]
+  );
+
+  const handleSharePoster = useCallback(async () => {
+    if (!shareJobPosting?.id) return;
+    if (Platform.OS === 'web') {
+      showAlert({ title: 'Not Available on Web', message: 'Poster sharing is only available on the mobile app.', type: 'info' });
+      return;
+    }
+
+    try {
+      setSharingPoster(true);
+      const uri = await posterShotRef.current?.capture?.();
+      if (!uri) throw new Error('Capture failed');
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          UTI: 'public.png',
+          dialogTitle: 'Share Job Poster',
+        });
+      } else {
+        showAlert({ title: 'Sharing Unavailable', message: 'Sharing is not available on this device.', type: 'warning' });
+      }
+    } catch (e) {
+      console.warn('Failed to share poster:', e);
+      showAlert({ title: 'Poster Failed', message: 'Could not generate/share the poster. Try sharing the message instead.', type: 'error' });
+    } finally {
+      setSharingPoster(false);
+    }
+  }, [shareJobPosting?.id, showAlert]);
+
+  const handlePolishMessageWithAI = useCallback(async () => {
+    if (!shareJobPosting?.id || !shareMessage.trim()) return;
+    try {
+      setPolishingShareMessage(true);
+      const polished = await JobPostingAIService.polishWhatsAppMessage({
+        baseMessage: shareMessage,
+        schoolName: schoolInfo?.name,
+        jobTitle: shareJobPosting?.title || title,
+      });
+      setShareMessage(attachApplyLink(polished, String(shareJobPosting.id)));
+    } catch (e: any) {
+      showAlert({
+        title: 'AI Failed',
+        message: e?.message || 'Could not polish the message right now. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setPolishingShareMessage(false);
+    }
+  }, [attachApplyLink, schoolInfo?.name, shareJobPosting?.id, shareJobPosting?.title, shareMessage, showAlert, title]);
 
   const handlePickJobLogo = async () => {
     try {
@@ -312,11 +833,12 @@ export default function JobPostingCreateScreen() {
     setJobLogoUrl(null);
   };
 
-  const openSharePreview = (jobPosting: any, inviteCode?: string | null) => {
-    const message = buildWhatsAppMessage(jobPosting, inviteCode || undefined);
+  const openSharePreview = (jobPosting: any) => {
+    const initialVariant: WhatsAppMessageVariant = 'short';
+    const message = buildShareMessageForVariant(initialVariant, jobPosting);
     setShareJobPosting(jobPosting);
-    setShareInviteCode(inviteCode || null);
     setShareMessage(message);
+    setShareVariant(initialVariant);
     setIncludeSchoolHeader(true);
     setIncludeSchoolDetails(true);
     setShareModalVisible(true);
@@ -341,21 +863,23 @@ export default function JobPostingCreateScreen() {
     }
   };
 
-  const handleCopyInviteCode = async () => {
-    if (!shareInviteCode) return;
-    await Clipboard.setStringAsync(shareInviteCode);
-    showAlert({ title: 'Copied', message: 'Invite code copied to clipboard.', type: 'success' });
-  };
-
   const handleCopyMessage = async () => {
     if (!shareMessage.trim()) return;
     await Clipboard.setStringAsync(shareMessage);
     showAlert({ title: 'Copied', message: 'WhatsApp message copied to clipboard.', type: 'success' });
   };
 
+  const handleCopyApplyLink = async () => {
+    if (!shareJobPosting?.id) return;
+    const link = buildApplyLink({ baseUrl: appWebBaseUrl, jobId: String(shareJobPosting.id) });
+    await Clipboard.setStringAsync(link);
+    showAlert({ title: 'Copied', message: 'Apply link copied to clipboard.', type: 'success' });
+  };
+
   const handleWhatsAppBroadcast = async (jobPosting: any, messageOverride?: string): Promise<boolean> => {
     try {
-      const whatsappMessage = messageOverride?.trim() || buildWhatsAppMessage(jobPosting, shareInviteCode || undefined);
+      const baseMessage = messageOverride?.trim() || buildShareMessageForVariant(shareVariant, jobPosting);
+      const whatsappMessage = attachApplyLink(baseMessage, String(jobPosting.id));
       if (!whatsappMessage.trim()) {
         throw new Error('Message is empty');
       }
@@ -435,26 +959,16 @@ export default function JobPostingCreateScreen() {
         user.id
       );
 
-      let inviteCode: string | null = null;
-      try {
-        const invite = await InviteCodeService.createInviteCode({
-          invitationType: 'teacher',
-          preschoolId,
-          organizationId: preschoolId,
-          organizationKind: 'preschool',
-          invitedBy: user.id,
-          description: `${title.trim()} teacher invite`,
-        });
-        inviteCode = invite.code;
-      } catch (inviteErr: any) {
-        console.warn('Invite code creation failed:', inviteErr);
+      if (draftParams) {
+        try {
+          await clearJobPostingDraft(draftParams);
+        } catch {
+          /* ignore */
+        }
+        setDraftLastSavedAt(null);
       }
 
-      if (inviteCode) {
-        openSharePreview(newJobPosting, inviteCode as string);
-      } else {
-        openSharePreview(newJobPosting, null);
-      }
+      openSharePreview(newJobPosting);
     } catch (error: any) {
       console.error('Error creating job posting:', error);
       showAlert({ title: 'Error', message: error.message || 'Failed to create job posting', type: 'error' });
@@ -478,6 +992,129 @@ export default function JobPostingCreateScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        {/* Draft + Templates + AI */}
+        {draftParams ? (
+          <View style={styles.draftBar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.draftBarTitle}>Autosave</Text>
+              <Text style={styles.draftBarSubtitle}>
+                {!draftLoaded
+                  ? 'Loading…'
+                  : draftSaving
+                  ? 'Saving…'
+                  : draftLastSavedAt
+                  ? `Saved ${new Date(draftLastSavedAt).toLocaleString()}`
+                  : 'No draft saved yet'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.draftBarButton}
+              onPress={() => {
+                showAlert({
+                  title: 'Clear Draft?',
+                  message: 'This will clear the saved draft and reset the form.',
+                  type: 'warning',
+                  buttons: [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Clear',
+                      style: 'destructive',
+                      onPress: () => {
+                        void clearDraftAndResetForm();
+                      },
+                    },
+                  ],
+                });
+              }}
+            >
+              <Ionicons name="trash-outline" size={18} color={theme.text} />
+              <Text style={styles.draftBarButtonText}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="layers-outline" size={18} color={theme.textSecondary} />
+              <Text style={styles.sectionTitle}>Templates</Text>
+            </View>
+            <TouchableOpacity style={styles.sectionHeaderButton} onPress={openSaveTemplateModal}>
+              <Ionicons name="bookmark-outline" size={16} color={theme.primary} />
+              <Text style={styles.sectionHeaderButtonText}>Save current</Text>
+            </TouchableOpacity>
+          </View>
+
+          {!templatesLoaded ? (
+            <Text style={styles.sectionHint}>Loading templates…</Text>
+          ) : (
+            <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.templatesRow}>
+                {allTemplates.map((t) => {
+                  const isSaved = savedTemplateIds.has(t.id);
+                  return (
+                    <TouchableOpacity key={t.id} style={styles.templateCard} activeOpacity={0.85} onPress={() => onPressTemplate(t)}>
+                      <View style={styles.templateCardTop}>
+                        <Text style={styles.templateName} numberOfLines={1}>
+                          {t.name}
+                        </Text>
+                        {isSaved ? (
+                          <TouchableOpacity
+                            style={styles.templateDeleteButton}
+                            onPress={() => deleteSavedTemplate(t.id)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Ionicons name="trash-outline" size={16} color={theme.textSecondary} />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                      <Text style={styles.templateMeta} numberOfLines={1}>
+                        {formatEmploymentType(String(t.employment_type))}
+                        {t.category ? ` • ${t.category.toUpperCase()}` : ''}
+                      </Text>
+                      <Text style={styles.templateTitle} numberOfLines={2}>
+                        {t.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.sectionHint}>Tap a template to start fast. Use “Save current” to reuse your best posts.</Text>
+            </>
+          )}
+        </View>
+
+        <View style={styles.aiCard}>
+          <LinearGradient
+            colors={[theme.primary + '22', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.aiCardBg}
+          />
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="sparkles-outline" size={18} color={theme.primary} />
+              <Text style={styles.sectionTitle}>AI Assist</Text>
+            </View>
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>Next-gen</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionHint}>
+            Generate or improve your description and requirements using your school info and role type.
+          </Text>
+          <TouchableOpacity
+            style={[styles.aiPrimaryButton, aiBusy && styles.aiPrimaryButtonDisabled]}
+            onPress={handleAISuggest}
+            disabled={aiBusy}
+          >
+            {aiBusy ? <EduDashSpinner color="#FFFFFF" /> : <Ionicons name="sparkles" size={18} color="#FFFFFF" />}
+            <Text style={styles.aiPrimaryButtonText}>
+              {description.trim() || requirements.trim() ? 'Improve With AI' : 'Generate With AI'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Title */}
         <View style={styles.field}>
           <Text style={styles.label}>
@@ -645,6 +1282,175 @@ export default function JobPostingCreateScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Save Template Modal */}
+      <Modal
+        visible={templateSaveModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTemplateSaveModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setTemplateSaveModalVisible(false)} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="bookmark" size={20} color={theme.primary} />
+              <Text style={styles.modalTitle}>Save as Template</Text>
+            </View>
+            <Text style={styles.modalSubtitle}>Reuse this job post in one tap.</Text>
+
+            <Text style={styles.modalLabel}>Template name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="e.g. ECD Teacher (Full-Time)"
+              placeholderTextColor={theme.textSecondary}
+            />
+
+            <Text style={styles.modalLabel}>Category</Text>
+            <View style={[styles.modalPickerContainer, { backgroundColor: theme.surface }]}>
+              <Picker
+                selectedValue={templateCategory}
+                onValueChange={(v) => setTemplateCategory(v as JobPostingTemplate['category'])}
+                style={styles.picker}
+                dropdownIconColor={theme.text}
+              >
+                <Picker.Item label="General" value="general" />
+                <Picker.Item label="ECD" value="ecd" />
+                <Picker.Item label="Assistant" value="assistant" />
+                <Picker.Item label="Aftercare" value="aftercare" />
+                <Picker.Item label="Admin" value="admin" />
+              </Picker>
+            </View>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setTemplateSaveModalVisible(false)}>
+                <Text style={styles.modalButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonPrimary, savingTemplate && styles.modalButtonDisabled]}
+                disabled={savingTemplate}
+                onPress={() => void handleSaveTemplate()}
+              >
+                {savingTemplate ? <EduDashSpinner size="small" color="#FFFFFF" /> : <Ionicons name="save-outline" size={18} color="#FFFFFF" />}
+                <Text style={styles.modalButtonPrimaryText}>{savingTemplate ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* AI Suggestions Modal */}
+      <Modal
+        visible={aiModalVisible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setAiModalVisible(false)}
+      >
+        <SafeAreaView style={styles.aiModalContainer} edges={['top', 'bottom']}>
+          <View style={styles.aiModalHeader}>
+            <TouchableOpacity style={styles.aiModalClose} onPress={() => setAiModalVisible(false)}>
+              <Ionicons name="close" size={24} color={theme.text} />
+            </TouchableOpacity>
+            <View style={styles.aiModalHeaderCenter}>
+              <Ionicons name="sparkles" size={20} color={theme.primary} />
+              <Text style={styles.aiModalTitle}>AI Suggestions</Text>
+            </View>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <ScrollView style={styles.aiModalScroll} contentContainerStyle={styles.aiModalContent} showsVerticalScrollIndicator={false}>
+            {aiSuggestions?.suggested_title ? (
+              <View style={styles.aiSuggestionCard}>
+                <View style={styles.aiSuggestionTopRow}>
+                  <Text style={styles.aiSuggestionLabel}>Suggested title</Text>
+                  <View style={styles.aiSwitchRow}>
+                    <Text style={styles.aiSwitchText}>Use</Text>
+                    <Switch
+                      value={aiUseSuggestedTitle}
+                      onValueChange={setAiUseSuggestedTitle}
+                      trackColor={{ false: theme.border, true: theme.primary }}
+                      thumbColor={aiUseSuggestedTitle ? '#fff' : theme.textSecondary}
+                    />
+                  </View>
+                </View>
+                <Text style={styles.aiSuggestionText}>{aiSuggestions.suggested_title}</Text>
+              </View>
+            ) : null}
+
+            {aiSuggestions?.highlights?.length ? (
+              <View style={styles.aiSuggestionCard}>
+                <Text style={styles.aiSuggestionLabel}>Highlights</Text>
+                {aiSuggestions.highlights.map((h, idx) => (
+                  <Text key={idx} style={styles.aiBulletText}>
+                    • {h}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.aiSuggestionCard}>
+              <Text style={styles.aiSuggestionLabel}>Description</Text>
+              <Text style={styles.aiSuggestionText}>{aiSuggestions?.description || ''}</Text>
+            </View>
+
+            <View style={styles.aiSuggestionCard}>
+              <Text style={styles.aiSuggestionLabel}>Requirements</Text>
+              <Text style={styles.aiSuggestionText}>{aiSuggestions?.requirements || ''}</Text>
+            </View>
+
+            {(aiSuggestions?.whatsapp_short || aiSuggestions?.whatsapp_long) ? (
+              <View style={styles.aiSuggestionCard}>
+                <Text style={styles.aiSuggestionLabel}>WhatsApp (no link)</Text>
+
+                {aiSuggestions?.whatsapp_short ? (
+                  <>
+                    <Text style={styles.aiSuggestionSubLabel}>Short</Text>
+                    <Text style={styles.aiSuggestionText}>{aiSuggestions.whatsapp_short}</Text>
+                    <TouchableOpacity
+                      style={styles.aiCopyBtn}
+                      onPress={async () => {
+                        await Clipboard.setStringAsync(aiSuggestions.whatsapp_short || '');
+                        showAlert({ title: 'Copied', message: 'AI short message copied.', type: 'success' });
+                      }}
+                    >
+                      <Ionicons name="copy-outline" size={16} color={theme.primary} />
+                      <Text style={styles.aiCopyBtnText}>Copy short</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+
+                {aiSuggestions?.whatsapp_long ? (
+                  <>
+                    <Text style={[styles.aiSuggestionSubLabel, { marginTop: 10 }]}>Long</Text>
+                    <Text style={styles.aiSuggestionText}>{aiSuggestions.whatsapp_long}</Text>
+                    <TouchableOpacity
+                      style={styles.aiCopyBtn}
+                      onPress={async () => {
+                        await Clipboard.setStringAsync(aiSuggestions.whatsapp_long || '');
+                        showAlert({ title: 'Copied', message: 'AI long message copied.', type: 'success' });
+                      }}
+                    >
+                      <Ionicons name="copy-outline" size={16} color={theme.primary} />
+                      <Text style={styles.aiCopyBtnText}>Copy long</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
+          </ScrollView>
+
+          <View style={styles.aiModalFooter}>
+            <TouchableOpacity style={styles.aiFooterBtnSecondary} onPress={() => applyAISuggestions('fill_empty')}>
+              <Text style={styles.aiFooterBtnSecondaryText}>Fill empty</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.aiFooterBtnPrimary} onPress={() => applyAISuggestions('replace')}>
+              <Text style={styles.aiFooterBtnPrimaryText}>Replace</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
       <Modal
         visible={shareModalVisible}
         transparent={false}
@@ -678,8 +1484,18 @@ export default function JobPostingCreateScreen() {
             contentContainerStyle={styles.shareScrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Job Preview Card */}
-            <View style={styles.previewCard}>
+            {/* Job Preview Card (also used as a shareable poster) */}
+            <ViewShot
+              ref={posterShotRef}
+              options={{ format: 'png', quality: 0.95, result: 'tmpfile' }}
+              style={styles.previewCard}
+            >
+              <LinearGradient
+                colors={[theme.primary + '22', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.previewGradient}
+              />
               {includeSchoolHeader && (schoolInfo || jobLogoUrl) ? (
                 <View style={styles.schoolHeader}>
                   {includeSchoolLogo ? (
@@ -722,7 +1538,7 @@ export default function JobPostingCreateScreen() {
                   <View style={styles.previewMetaTag}>
                     <Ionicons name="cash-outline" size={13} color="#22c55e" />
                     <Text style={[styles.previewMetaTagText, { color: '#22c55e' }]}>
-                      {formatSalaryRange(shareJobPosting || {})}
+                      {formatSalaryRange(shareJobPosting?.salary_range_min ?? null, shareJobPosting?.salary_range_max ?? null)}
                     </Text>
                   </View>
                 </View>
@@ -743,26 +1559,21 @@ export default function JobPostingCreateScreen() {
                   </>
                 ) : null}
               </View>
-            </View>
-
-            {/* Invite Code Section */}
-            {shareInviteCode ? (
-              <View style={styles.inviteCodeCard}>
-                <View style={styles.inviteCodeHeader}>
-                  <View style={styles.inviteCodeIconBg}>
-                    <Ionicons name="key" size={16} color="#6366f1" />
+              {shareJobPosting?.id ? (
+                <View style={styles.posterFooter}>
+                  <View style={styles.posterQr}>
+                    <QRCode value={buildApplyLink({ baseUrl: appWebBaseUrl, jobId: String(shareJobPosting.id) })} size={84} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inviteCodeLabel}>Teacher Invite Code</Text>
-                    <Text style={styles.inviteCodeValue}>{shareInviteCode}</Text>
+                  <View style={styles.posterFooterText}>
+                    <Text style={styles.posterFooterLabel}>Apply online</Text>
+                    <Text style={styles.posterFooterLink} numberOfLines={1}>
+                      {buildApplyLink({ baseUrl: appWebBaseUrl, jobId: String(shareJobPosting.id) }).replace(/^https?:\/\//i, '')}
+                    </Text>
+                    <Text style={styles.posterFooterHint}>No account required</Text>
                   </View>
-                  <TouchableOpacity style={styles.inviteCodeCopyBtn} onPress={handleCopyInviteCode}>
-                    <Ionicons name="copy-outline" size={18} color={theme.primary} />
-                    <Text style={styles.inviteCodeCopyText}>Copy</Text>
-                  </TouchableOpacity>
                 </View>
-              </View>
-            ) : null}
+              ) : null}
+            </ViewShot>
 
             {/* Branding Toggles */}
             <View style={styles.toggleGroup}>
@@ -815,6 +1626,70 @@ export default function JobPostingCreateScreen() {
                 <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
                 <Text style={styles.messageSectionTitle}>WhatsApp Message</Text>
               </View>
+
+              <View style={styles.messageControlsRow}>
+                <View style={styles.variantRow}>
+                  <TouchableOpacity
+                    style={[styles.variantChip, shareVariant === 'short' && styles.variantChipActive]}
+                    onPress={() => {
+                      if (!shareJobPosting) return;
+                      const v: WhatsAppMessageVariant = 'short';
+                      setShareVariant(v);
+                      setShareMessage(buildShareMessageForVariant(v, shareJobPosting));
+                    }}
+                  >
+                    <Text style={[styles.variantChipText, shareVariant === 'short' && styles.variantChipTextActive]}>Short</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.variantChip, shareVariant === 'detailed' && styles.variantChipActive]}
+                    onPress={() => {
+                      if (!shareJobPosting) return;
+                      const v: WhatsAppMessageVariant = 'detailed';
+                      setShareVariant(v);
+                      setShareMessage(buildShareMessageForVariant(v, shareJobPosting));
+                    }}
+                  >
+                    <Text style={[styles.variantChipText, shareVariant === 'detailed' && styles.variantChipTextActive]}>Detailed</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.aiPolishChip, polishingShareMessage && styles.aiPolishChipDisabled]}
+                  disabled={polishingShareMessage}
+                  onPress={handlePolishMessageWithAI}
+                >
+                  {polishingShareMessage ? (
+                    <EduDashSpinner size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+                  )}
+                  <Text style={styles.aiPolishChipText}>AI Polish</Text>
+                </TouchableOpacity>
+              </View>
+
+              {(aiWhatsAppShort || aiWhatsAppLong) && shareJobPosting?.id ? (
+                <View style={styles.aiMessageRow}>
+                  {aiWhatsAppShort ? (
+                    <TouchableOpacity
+                      style={styles.aiMessageChip}
+                      onPress={() => setShareMessage(attachApplyLink(aiWhatsAppShort, String(shareJobPosting.id)))}
+                    >
+                      <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+                      <Text style={styles.aiMessageChipText}>Use AI short</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {aiWhatsAppLong ? (
+                    <TouchableOpacity
+                      style={styles.aiMessageChip}
+                      onPress={() => setShareMessage(attachApplyLink(aiWhatsAppLong, String(shareJobPosting.id)))}
+                    >
+                      <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
+                      <Text style={styles.aiMessageChipText}>Use AI long</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
+
               <TextInput
                 style={styles.messageInput}
                 value={shareMessage}
@@ -837,6 +1712,26 @@ export default function JobPostingCreateScreen() {
                 <TouchableOpacity style={styles.copyMessageBtn} onPress={handleCopyMessage}>
                   <Ionicons name="copy-outline" size={18} color={theme.text} />
                   <Text style={styles.copyMessageText}>Copy Message</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.copyLinkBtn} onPress={handleCopyApplyLink}>
+                  <Ionicons name="link-outline" size={18} color={theme.text} />
+                  <Text style={styles.copyMessageText}>Copy Link</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.shareSecondaryRow}>
+                <TouchableOpacity
+                  style={[styles.posterBtn, sharingPoster && styles.posterBtnDisabled]}
+                  disabled={sharingPoster}
+                  onPress={handleSharePoster}
+                >
+                  {sharingPoster ? (
+                    <EduDashSpinner size="small" color={theme.primary} />
+                  ) : (
+                    <Ionicons name="image-outline" size={18} color={theme.primary} />
+                  )}
+                  <Text style={styles.posterBtnText}>{sharingPoster ? 'Preparing…' : 'Share Poster'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -868,9 +1763,7 @@ export default function JobPostingCreateScreen() {
                   }}
                 >
                   <Ionicons name="megaphone-outline" size={18} color="#f59e0b" />
-                  <Text style={styles.broadcastBtnText}>
-                    {broadcasting ? 'Sending…' : 'Broadcast'}
-                  </Text>
+                  <Text style={styles.broadcastBtnText}>{broadcasting ? 'Sending…' : 'Broadcast'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -923,6 +1816,175 @@ const createStyles = (theme: any) =>
     content: {
       padding: 16,
       paddingBottom: 32,
+    },
+    // ── Draft / Templates / AI ──
+    draftBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      marginBottom: 16,
+    },
+    draftBarTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.text,
+    },
+    draftBarSubtitle: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    draftBarButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    draftBarButtonText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    sectionCard: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 16,
+      backgroundColor: theme.surface,
+      padding: 14,
+      gap: 12,
+      marginBottom: 16,
+    },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: theme.text,
+    },
+    sectionHeaderButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+    },
+    sectionHeaderButtonText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.primary,
+    },
+    sectionHint: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 16,
+    },
+    templatesRow: {
+      paddingVertical: 2,
+      gap: 12,
+    },
+    templateCard: {
+      width: 220,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      padding: 12,
+      gap: 6,
+    },
+    templateCardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    templateName: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.text,
+    },
+    templateDeleteButton: {
+      padding: 2,
+    },
+    templateMeta: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.textSecondary,
+    },
+    templateTitle: {
+      fontSize: 13,
+      color: theme.text,
+      lineHeight: 18,
+    },
+    aiCard: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 16,
+      backgroundColor: theme.surface,
+      padding: 14,
+      gap: 12,
+      marginBottom: 16,
+      overflow: 'hidden',
+    },
+    aiCardBg: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    aiBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: theme.primary + '1A',
+      borderWidth: 1,
+      borderColor: theme.primary + '33',
+    },
+    aiBadgeText: {
+      fontSize: 11,
+      fontWeight: '900',
+      color: theme.primary,
+    },
+    aiPrimaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: theme.primary,
+      borderRadius: 14,
+      paddingVertical: 14,
+    },
+    aiPrimaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    aiPrimaryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '900',
     },
     field: {
       marginBottom: 24,
@@ -1045,6 +2107,238 @@ const createStyles = (theme: any) =>
       fontWeight: '700',
       color: '#FFFFFF',
     },
+    // ── Template Save Modal ──
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 18,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 520,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      padding: 16,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: theme.text,
+    },
+    modalSubtitle: {
+      marginTop: 8,
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 16,
+      marginBottom: 14,
+    },
+    modalLabel: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.textSecondary,
+      marginBottom: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    modalInput: {
+      backgroundColor: theme.card,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      padding: 12,
+      fontSize: 15,
+      color: theme.text,
+      marginBottom: 14,
+    },
+    modalPickerContainer: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      overflow: 'hidden',
+      marginBottom: 14,
+    },
+    modalButtonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButtonSecondary: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.card,
+      paddingVertical: 12,
+    },
+    modalButtonSecondaryText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.text,
+    },
+    modalButtonPrimary: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 14,
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+    },
+    modalButtonPrimaryText: {
+      fontSize: 14,
+      fontWeight: '900',
+      color: '#FFFFFF',
+    },
+    modalButtonDisabled: {
+      opacity: 0.6,
+    },
+    // ── AI Modal ──
+    aiModalContainer: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    aiModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    aiModalClose: {
+      padding: 8,
+    },
+    aiModalHeaderCenter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    aiModalTitle: {
+      fontSize: 18,
+      fontWeight: '900',
+      color: theme.text,
+    },
+    aiModalScroll: {
+      flex: 1,
+    },
+    aiModalContent: {
+      padding: 16,
+      paddingBottom: 24,
+      gap: 12,
+    },
+    aiSuggestionCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      padding: 14,
+      gap: 8,
+    },
+    aiSuggestionTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    aiSuggestionLabel: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    aiSuggestionSubLabel: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    aiSuggestionText: {
+      fontSize: 14,
+      color: theme.text,
+      lineHeight: 20,
+    },
+    aiBulletText: {
+      fontSize: 14,
+      color: theme.text,
+      lineHeight: 20,
+    },
+    aiSwitchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    aiSwitchText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.textSecondary,
+    },
+    aiCopyBtn: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.card,
+    },
+    aiCopyBtnText: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.primary,
+    },
+    aiModalFooter: {
+      flexDirection: 'row',
+      gap: 12,
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      backgroundColor: theme.background,
+    },
+    aiFooterBtnSecondary: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      paddingVertical: 14,
+    },
+    aiFooterBtnSecondaryText: {
+      fontSize: 14,
+      fontWeight: '900',
+      color: theme.text,
+    },
+    aiFooterBtnPrimary: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 14,
+      backgroundColor: theme.primary,
+      paddingVertical: 14,
+    },
+    aiFooterBtnPrimaryText: {
+      fontSize: 14,
+      fontWeight: '900',
+      color: '#FFFFFF',
+    },
     // ── Share Screen (full-screen modal) ──
     shareScreenContainer: {
       flex: 1,
@@ -1087,6 +2381,14 @@ const createStyles = (theme: any) =>
       borderRadius: 16,
       overflow: 'hidden',
       backgroundColor: theme.surface,
+      position: 'relative',
+    },
+    previewGradient: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
     },
     schoolHeader: {
       flexDirection: 'row',
@@ -1178,6 +2480,48 @@ const createStyles = (theme: any) =>
       fontSize: 14,
       color: theme.text,
       lineHeight: 20,
+    },
+    posterFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      backgroundColor: theme.card,
+    },
+    posterQr: {
+      width: 96,
+      height: 96,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    posterFooterText: {
+      flex: 1,
+      gap: 4,
+    },
+    posterFooterLabel: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: theme.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    posterFooterLink: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.text,
+    },
+    posterFooterHint: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 2,
     },
     // Invite Code Card
     inviteCodeCard: {
@@ -1281,6 +2625,76 @@ const createStyles = (theme: any) =>
       fontWeight: '700',
       color: theme.text,
     },
+    messageControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    variantRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    variantChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    variantChipActive: {
+      borderColor: theme.primary,
+      backgroundColor: theme.primary + '14',
+    },
+    variantChipText: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: theme.textSecondary,
+    },
+    variantChipTextActive: {
+      color: theme.primary,
+    },
+    aiPolishChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: theme.primary,
+    },
+    aiPolishChipDisabled: {
+      opacity: 0.65,
+    },
+    aiPolishChipText: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: '#FFFFFF',
+    },
+    aiMessageRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    aiMessageChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    aiMessageChipText: {
+      fontSize: 12,
+      fontWeight: '900',
+      color: theme.text,
+    },
     messageInput: {
       backgroundColor: theme.surface,
       borderWidth: 1,
@@ -1330,6 +2744,38 @@ const createStyles = (theme: any) =>
     copyMessageText: {
       color: theme.text,
       fontWeight: '700',
+      fontSize: 14,
+    },
+    copyLinkBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      paddingVertical: 13,
+      backgroundColor: theme.surface,
+    },
+    posterBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      borderRadius: 12,
+      paddingVertical: 13,
+      backgroundColor: theme.primary + '10',
+    },
+    posterBtnDisabled: {
+      opacity: 0.65,
+    },
+    posterBtnText: {
+      color: theme.primary,
+      fontWeight: '800',
       fontSize: 14,
     },
     broadcastBtn: {

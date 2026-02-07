@@ -2,7 +2,7 @@
 # Test voice-notes bucket upload directly
 
 USER_ID="136cf31c-b37c-45c0-9cf7-755bd1b9afbf"
-ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwMzc4MzgsImV4cCI6MjA2ODYxMzgzOH0.mjXejyRHPzEJfMlhW46TlYI0qw9mtoSRJZhGsCkuvd8"
+ANON_KEY="${EXPO_PUBLIC_SUPABASE_ANON_KEY:?Set EXPO_PUBLIC_SUPABASE_ANON_KEY in .env}"
 
 # Need user JWT - this is just a test placeholder
 echo "Testing voice-notes upload..."

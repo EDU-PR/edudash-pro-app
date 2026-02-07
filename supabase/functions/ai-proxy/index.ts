@@ -589,6 +589,8 @@ function callAnthropicStreaming(
   allowedOverride: string[] | undefined,
   isSuperAdmin: boolean,
   maxTokens: number = DEFAULT_MAX_TOKENS,
+  enableTools: boolean = false,
+  clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>,
 ): { stream: ReadableStream<Uint8Array>; meta: Promise<ProviderResponse> } {
   const apiKey = getAnthropicApiKey();
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured.');
@@ -609,6 +611,8 @@ function callAnthropicStreaming(
   let tokensIn = 0;
   let tokensOut = 0;
   let modelUsed = model;
+  const pendingToolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+  let currentToolInputJson = '';
   let resolveMetaPromise: (v: ProviderResponse) => void;
   let rejectMetaPromise: (e: Error) => void;
   const metaPromise = new Promise<ProviderResponse>((res, rej) => {
@@ -633,13 +637,23 @@ function callAnthropicStreaming(
             stream: true,
             messages: messages.filter((m) => m.role !== 'system'),
             system: systemPrompt,
+            ...(enableTools ? { tools: buildAnthropicTools(true, clientTools) } : {}),
           }),
         });
 
         if (!response.ok || !response.body) {
           const errText = await response.text();
+          // Send both an error event AND a content event with user-friendly message
+          // so the client always has displayable text
+          const userMessage = response.status === 529
+            ? 'The AI service is temporarily overloaded. Please try again in a moment.'
+            : response.status === 401 || response.status === 403
+              ? 'AI service authentication error. Please contact support.'
+              : `Sorry, the AI service returned an error (${response.status}). Please try again.`;
           const errEvent = { type: 'error', error: errText };
+          const contentEvent = { type: 'content_block_delta', delta: { text: userMessage } };
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(errEvent)}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(contentEvent)}\n\n`));
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
           rejectMetaPromise!(new Error(`Anthropic streaming error: ${response.status} ${errText}`));
@@ -677,26 +691,81 @@ function callAnthropicStreaming(
                 modelUsed = (msg?.model as string) || model;
                 const usage = msg?.usage as JsonRecord | undefined;
                 tokensIn = (usage?.input_tokens as number) || 0;
+              } else if (eventType === 'content_block_start') {
+                // Track tool_use content blocks
+                const contentBlock = event.content_block as JsonRecord | undefined;
+                if (contentBlock?.type === 'tool_use') {
+                  pendingToolCalls.push({
+                    id: contentBlock.id as string,
+                    name: contentBlock.name as string,
+                    input: {},
+                  });
+                  currentToolInputJson = '';
+                }
               } else if (eventType === 'content_block_delta') {
                 const delta = event.delta as JsonRecord | undefined;
-                const text = (delta?.text as string) || '';
-                if (text) {
-                  fullContent += text;
-                  // Forward to client
-                  const clientEvent = {
-                    type: 'content_block_delta',
-                    delta: { text },
-                  };
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(clientEvent)}\n\n`));
+                const deltaType = delta?.type as string | undefined;
+                if (deltaType === 'input_json_delta') {
+                  // Accumulate tool input JSON fragments
+                  currentToolInputJson += (delta?.partial_json as string) || '';
+                } else {
+                  const text = (delta?.text as string) || '';
+                  if (text) {
+                    fullContent += text;
+                    // Forward to client
+                    const clientEvent = {
+                      type: 'content_block_delta',
+                      delta: { text },
+                    };
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(clientEvent)}\n\n`));
+                  }
+                }
+              } else if (eventType === 'content_block_stop') {
+                // Finalize tool input when block ends
+                if (pendingToolCalls.length > 0 && currentToolInputJson) {
+                  const lastTool = pendingToolCalls[pendingToolCalls.length - 1];
+                  try {
+                    lastTool.input = JSON.parse(currentToolInputJson);
+                  } catch {
+                    lastTool.input = { raw: currentToolInputJson };
+                  }
+                  currentToolInputJson = '';
                 }
               } else if (eventType === 'message_delta') {
                 const usage = (event as JsonRecord).usage as JsonRecord | undefined;
                 tokensOut = (usage?.output_tokens as number) || 0;
               }
-              // Skip ping, content_block_start, content_block_stop events
+              // Skip ping events
             } catch {
               // Skip malformed JSON lines
             }
+          }
+        }
+
+        // If Claude responded with tool_use blocks, send them as pending_tool_calls for client execution
+        if (pendingToolCalls.length > 0) {
+          // Separate server-side tools (web_search) from client-side tools
+          const serverTools = pendingToolCalls.filter((t) => t.name === 'web_search');
+          const clientPendingTools = pendingToolCalls.filter((t) => t.name !== 'web_search');
+
+          // Execute web_search server-side if requested
+          for (const toolCall of serverTools) {
+            try {
+              const query = (toolCall.input as Record<string, unknown>).query as string || '';
+              const webResult = await performWebSearch(query);
+              const toolResultText = typeof webResult === 'string' ? webResult : JSON.stringify(webResult);
+              fullContent += `\n\n[Web Search: ${query}]\n${toolResultText}`;
+              const searchEvent = { type: 'content_block_delta', delta: { text: `\n\n${toolResultText}` } };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(searchEvent)}\n\n`));
+            } catch {
+              // Web search failed, continue
+            }
+          }
+
+          // Send client-side pending tool calls
+          if (clientPendingTools.length > 0) {
+            const toolCallsEvent = { type: 'pending_tool_calls', tool_calls: clientPendingTools };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(toolCallsEvent)}\n\n`));
           }
         }
 
@@ -710,7 +779,9 @@ function callAnthropicStreaming(
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         try {
+          const userMessage = 'Sorry, something went wrong while processing your request. Please try again.';
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errMsg })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { text: userMessage } })}\n\n`));
           controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           controller.close();
         } catch { /* controller already closed */ }
@@ -1251,12 +1322,17 @@ serve(async (req) => {
     if (canTrueStream) {
       try {
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
+        const clientToolDefs = enableTools && payload.client_tools?.length > 0
+          ? payload.client_tools as Array<{ name: string; description: string; input_schema: Record<string, unknown> }>
+          : undefined;
         const { stream, meta } = callAnthropicStreaming(
           messages,
           requestedModel,
           allowedOverride,
           isSuperAdmin,
           maxTokens,
+          enableTools,
+          clientToolDefs,
         );
 
         // Fire-and-forget: log usage after stream completes

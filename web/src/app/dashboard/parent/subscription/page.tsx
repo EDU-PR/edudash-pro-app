@@ -84,7 +84,7 @@ const TIER_INFO: Record<string, TierInfo> = {
   parent_starter: {
     name: 'parent_starter',
     displayName: 'Parent Starter',
-    price: 49.50,
+    price: 99,
     color: '#3b82f6',
     icon: Zap,
     features: [
@@ -99,7 +99,7 @@ const TIER_INFO: Record<string, TierInfo> = {
   parent_plus: {
     name: 'parent_plus',
     displayName: 'Parent Plus',
-    price: 99.50,
+    price: 199,
     color: '#8b5cf6',
     icon: Crown,
     features: [

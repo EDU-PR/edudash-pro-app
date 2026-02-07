@@ -15,9 +15,18 @@ export async function POST(req: NextRequest) {
     );
 
     // EduSitePro client for cross-database cleanup
+    const edusiteUrl = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL;
+    const edusiteKey = process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY;
+    if (!edusiteUrl || !edusiteKey) {
+      console.error('[Delete Student] Missing EDUSITE env vars');
+      return NextResponse.json(
+        { error: 'Server configuration error: missing EduSite credentials' },
+        { status: 500 }
+      );
+    }
     const edusiteSupabase = createClient(
-      process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co',
-      process.env.NEXT_PUBLIC_EDUSITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwcHV6aWJqbHhnZndydWp6ZnN6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3NDM3MzAsImV4cCI6MjA2OTMxOTczMH0.cDnWjHPTqVWpJZSMSCgJTojQJuuaW3VaI4U5Mzq0E8o',
+      edusiteUrl,
+      edusiteKey,
       {
         auth: {
           persistSession: false,

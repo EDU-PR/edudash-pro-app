@@ -61,7 +61,9 @@ export class StudentAvatarService {
         return { success: false, error: 'Unable to prepare image for upload' };
       }
 
-      const filename = `${STUDENT_AVATAR_FOLDER}/${studentId}_${Date.now()}.jpg`;
+      // Storage RLS for the `avatars` bucket allows inserts when the object name starts with auth.uid().
+      // Prefixing with the authenticated user's ID keeps student avatar uploads compliant with policies.
+      const filename = `${authData.user.id}/${STUDENT_AVATAR_FOLDER}/${studentId}_${Date.now()}.jpg`;
       const { error: uploadError } = await assertSupabase()
         .storage
         .from(BUCKET_NAME)

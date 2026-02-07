@@ -345,7 +345,7 @@ export function ExamPrepWidget({ onAskDashAI, guestMode = false, userId }: ExamP
   const [upgradeModalData, setUpgradeModalData] = useState<{ currentUsage: number; currentLimit: number } | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
-  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'basic' | 'premium' | 'school'>('free');
+  const [currentTier, setCurrentTier] = useState<'free' | 'trial' | 'parent_starter' | 'parent_plus' | 'premium' | 'school'>('free');
 
   const [customPrompt, setCustomPrompt] = useState('');
 

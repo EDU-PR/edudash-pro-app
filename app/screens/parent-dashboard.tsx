@@ -31,7 +31,7 @@ export default function ParentDashboardScreen() {
   const featuresEnabled = React.useMemo(() => [
     'homework_help',
     'language_switching',
-    ...(tier === 'pro' || tier === 'enterprise' ? ['advanced_analytics'] : []),
+    ...(tier === 'parent_plus' || tier === 'school_pro' || tier === 'school_enterprise' ? ['advanced_analytics'] : []),
     ...(tier === 'free' && Platform.OS === 'android' ? ['ads'] : []),
   ], [tier]);
 

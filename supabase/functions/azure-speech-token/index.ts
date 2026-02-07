@@ -3,7 +3,10 @@
  *
  * Returns a short-lived token for Azure Speech SDK usage on web.
  * Requires AZURE_SPEECH_KEY and AZURE_SPEECH_REGION secrets.
+ * Auth-gated: requires a valid Supabase JWT.
  */
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +32,21 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') {
     return jsonResponse(405, { error: 'Method not allowed' });
+  }
+
+  // Auth gate: verify JWT
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return jsonResponse(401, { error: 'Missing authorization header' });
+  }
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return jsonResponse(401, { error: 'Invalid or expired token' });
   }
 
   const speechKey = (Deno.env.get('AZURE_SPEECH_KEY') || '').trim();

@@ -1292,14 +1292,29 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
 
     case 'pop_uploaded':
       if (request.preschool_id) {
-        const { data: principals } = await supabase
+        console.log(`[pop_uploaded] Looking up principals for preschool_id: ${request.preschool_id}`);
+        const { data: principals, error: principalsError } = await supabase
           .from('profiles')
-          .select('id')
+          .select('id, role, preschool_id, organization_id, is_active')
           .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
           .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
           .eq('is_active', true);
-        if (principals) {
+        console.log(`[pop_uploaded] Query result: found=${principals?.length || 0}, error=${principalsError?.message || 'none'}`);
+        if (principals && principals.length > 0) {
+          console.log(`[pop_uploaded] Principal IDs: ${principals.map((p: any) => `${p.id} (${p.role})`).join(', ')}`);
           userIds.push(...principals.map((p: { id: string }) => p.id));
+        } else {
+          // Fallback: try without is_active filter in case column is NULL
+          console.log('[pop_uploaded] No active principals found, trying without is_active filter...');
+          const { data: allPrincipals } = await supabase
+            .from('profiles')
+            .select('id, role, is_active')
+            .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+            .in('role', ['principal', 'principal_admin', 'admin', 'super_admin']);
+          console.log(`[pop_uploaded] Without is_active filter: found=${allPrincipals?.length || 0}, is_active values: ${allPrincipals?.map((p: any) => p.is_active).join(', ')}`);
+          if (allPrincipals && allPrincipals.length > 0) {
+            userIds.push(...allPrincipals.map((p: { id: string }) => p.id));
+          }
         }
       } else if (request.pop_upload_id) {
         const { data: upload } = await supabase
@@ -2322,6 +2337,27 @@ async function dispatchNotification(request: Request): Promise<Response> {
     }
     console.log('Processing notification request:', notificationRequest);
 
+    // Deduplication: prevent double-send for pop_uploaded (both DB trigger and client may fire)
+    if (notificationRequest.event_type === 'pop_uploaded' && notificationRequest.pop_upload_id) {
+      const { data: existing } = await supabase
+        .from('push_notifications')
+        .select('id')
+        .eq('notification_type', 'pop_uploaded')
+        .eq('preschool_id', notificationRequest.preschool_id || '')
+        // Ensure we only dedupe the same POP upload (otherwise we'd suppress distinct uploads within the window).
+        .contains('data', { pop_upload_id: notificationRequest.pop_upload_id })
+        .gte('created_at', new Date(Date.now() - 60_000).toISOString()) // within last 60s
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        console.log(`[dedup] pop_uploaded already sent for pop_upload_id=${notificationRequest.pop_upload_id} within 60s, skipping`);
+        return new Response(
+          JSON.stringify({ success: true, message: 'Already sent (deduplicated)', recipients: 0 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Handle test notifications
     if (notificationRequest.test) {
       const targetUserId = notificationRequest.target_user_id;
@@ -2418,6 +2454,10 @@ async function dispatchNotification(request: Request): Promise<Response> {
     }
 
     const pushTokens = filteredUserIds.length > 0 ? await getPushTokensForUsers(filteredUserIds) : [];
+    console.log(`[dispatch] Event: ${notificationRequest.event_type}, UserIDs: ${filteredUserIds.length}, PushTokens: ${pushTokens.length}`);
+    if (pushTokens.length > 0) {
+      console.log(`[dispatch] Push tokens found for: ${pushTokens.map(t => t.user_id).join(', ')}`);
+    }
 
     const canSendWebPush = !!WEB_PUSH_URL;
 
@@ -2621,6 +2661,22 @@ async function handleDatabaseTrigger(request: Request): Promise<Response> {
             student_id: record.student_id as string,
             assignment_id: record.assignment_id as string,
             send_immediately: true
+          };
+        }
+        break;
+
+      case 'pop_uploads':
+        if (type === 'INSERT' && record.upload_type === 'proof_of_payment') {
+          console.log('[db-trigger] pop_uploads INSERT detected, id:', record.id);
+          notificationRequest = {
+            event_type: 'pop_uploaded',
+            pop_upload_id: record.id as string,
+            preschool_id: record.preschool_id as string,
+            student_id: record.student_id as string,
+            upload_type: record.upload_type as string,
+            payment_amount: record.payment_amount,
+            payment_reference: record.payment_reference as string,
+            send_immediately: true,
           };
         }
         break;

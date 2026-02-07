@@ -309,8 +309,14 @@ export function cleanForTTS(t: string): string {
 }
 
 export function cleanRawJSON(text: string): string {
-  if (!text.trim().startsWith('{')) return text;
-  const lines = text.split('\n');
+  // Strip SSE artifacts that should never reach the UI
+  const stripped = text
+    .replace(/^data:\s*\[DONE\]\s*$/gm, '')
+    .replace(/^data:\s*/gm, '')
+    .trim();
+  if (!stripped) return '';
+  if (!stripped.startsWith('{')) return stripped;
+  const lines = stripped.split('\n');
   let out = '';
   for (const l of lines) {
     try {
@@ -322,7 +328,7 @@ export function cleanRawJSON(text: string): string {
       if (!l.includes('content_block_delta')) out += l + '\n';
     }
   }
-  return out.trim() || text;
+  return out.trim() || stripped;
 }
 
 // ── TTS Chunking ─────────────────────────────────────────────────────
@@ -424,6 +430,7 @@ export function createStreamingRequest(
 
   let processedLen = 0;
   let accumulated = '';
+  let serverError = '';
 
   const processNewData = (newData: string) => {
     for (const line of newData.split('\n')) {
@@ -432,9 +439,17 @@ export function createStreamingRequest(
       if (payload === '[DONE]') continue;
       try {
         const parsed = JSON.parse(payload);
+        // Extract streaming content
         if (parsed.delta?.text) accumulated += parsed.delta.text;
+        else if (parsed.content) accumulated += parsed.content;
+        // Capture server-side error events so they reach the user
+        else if (parsed.type === 'error' && parsed.error) {
+          serverError = typeof parsed.error === 'string'
+            ? parsed.error
+            : JSON.stringify(parsed.error);
+        }
       } catch {
-        /* skip */
+        /* skip malformed JSON */
       }
     }
     if (accumulated) onChunk(accumulated);
@@ -450,19 +465,38 @@ export function createStreamingRequest(
   };
 
   xhr.onload = () => {
+    // Handle non-200 HTTP responses (auth errors, Edge Function failures)
+    if (xhr.status >= 400) {
+      let errMsg = `Request failed (${xhr.status})`;
+      try {
+        const errJson = JSON.parse(xhr.responseText);
+        errMsg = errJson.message || errJson.error || errMsg;
+      } catch { /* use default message */ }
+      onError(new Error(errMsg));
+      return;
+    }
+
     // Process any remaining data
     if (xhr.responseText) {
       const remaining = xhr.responseText.substring(processedLen);
       if (remaining) processNewData(remaining);
     }
 
-    // If no SSE data was captured, try JSON fallback
+    // If a server-side error was captured, surface it
+    if (!accumulated && serverError) {
+      onError(new Error(serverError));
+      return;
+    }
+
+    // If no SSE data was captured, try JSON fallback then SSE parse
     if (!accumulated && xhr.responseText) {
       try {
         const json = JSON.parse(xhr.responseText);
         accumulated = json.content || json.response || '';
       } catch {
-        accumulated = xhr.responseText;
+        // Try proper SSE parsing instead of using raw text
+        const sseParsed = parseSSEText(xhr.responseText);
+        accumulated = sseParsed || '';
       }
     }
 
