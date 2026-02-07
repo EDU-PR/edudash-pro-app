@@ -2715,6 +2715,62 @@ async function dispatchNotification(request: Request): Promise<Response> {
       await trackNotificationEvent(filteredUserIds, notificationRequest);
     }
 
+    // ── Applicant confirmation email (new_job_application only) ──────
+    if (notificationRequest.event_type === 'new_job_application' && context.candidate_email) {
+      try {
+        const appUrl = Deno.env.get('APP_URL') || 'https://app.edudashpro.com';
+        const supportEmail = Deno.env.get('SUPPORT_EMAIL') || 'support@edudashpro.org.za';
+        const candidateName = context.candidate_name || 'Applicant';
+        const jobTitle = context.job_title || 'the open position';
+        const schoolName = context.school_name || 'the school';
+
+        const confirmationHtml = renderEduDashProEmail({
+          title: 'Application Received',
+          preheader: `Your application for ${jobTitle} at ${schoolName} has been received`,
+          subtitle: `Hi ${candidateName}`,
+          bodyHtml: `
+            <p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.7;">
+              Thank you for applying for <strong>${jobTitle}</strong> at <strong>${schoolName}</strong>.
+              We have received your application and it is now being reviewed by the hiring team.
+            </p>
+            <p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.7;">
+              <strong>What happens next?</strong>
+            </p>
+            <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #334155; font-size: 14px; line-height: 1.7;">
+              <li>The school will review all applications</li>
+              <li>Shortlisted candidates will be contacted for an interview</li>
+              <li>You may be asked to provide additional documents or references</li>
+            </ul>
+            <p style="margin: 0 0 16px 0; color: #334155; font-size: 15px; line-height: 1.7;">
+              If you have any questions, feel free to reach out to us at
+              <a href="mailto:${supportEmail}" style="color: #6d28d9; text-decoration: none; font-weight: 600;">${supportEmail}</a>.
+            </p>
+            <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.6;">
+              We wish you the best of luck! 🍀
+            </p>
+          `,
+          cta: {
+            label: 'Visit EduDash Pro',
+            url: appUrl,
+          },
+          footerNote: 'You are receiving this email because you submitted a job application via EduDash Pro.',
+          supportEmail,
+        });
+
+        await sendEmailNotification(
+          [context.candidate_email],
+          `Application Received – ${jobTitle} at ${schoolName}`,
+          confirmationHtml,
+          `Hi ${candidateName}, thank you for applying for ${jobTitle} at ${schoolName}. Your application has been received and is being reviewed. Shortlisted candidates will be contacted for an interview. Good luck!`
+        );
+
+        console.log(`[new_job_application] Confirmation email sent to applicant: ${context.candidate_email}`);
+      } catch (confirmErr) {
+        // Never block the principal notification if applicant email fails
+        console.error('[new_job_application] Failed to send applicant confirmation email:', confirmErr);
+      }
+    }
+
     console.log(`Notification dispatched to ${pushTokens.length} devices and ${filteredUserIds.length} email recipients`);
 
     return new Response(
