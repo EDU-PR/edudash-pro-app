@@ -22,6 +22,8 @@ if (__DEV__) {
 
 // Initialize notification router for multi-account support
 import { setupNotificationRouter } from '../lib/NotificationRouter';
+// Initialize notification handler (setNotificationHandler) so foreground notifications display
+import '../lib/NotificationService';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack, router, usePathname } from 'expo-router';

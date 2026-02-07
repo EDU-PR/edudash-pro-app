@@ -37,7 +37,19 @@ export const DevNotificationTester: React.FC<{ onClose?: () => void }> = ({ onCl
 
   useEffect(() => {
     loadStatus();
+    // Auto-request permissions on mount so notifications work immediately
+    autoRequestPermissions();
   }, []);
+
+  const autoRequestPermissions = async () => {
+    const perms = await checkNotificationPermissions();
+    if (!perms.granted) {
+      const granted = await requestNotificationPermissions();
+      if (granted) {
+        setPermissions({ granted: true, canAskAgain: true, status: 'granted' });
+      }
+    }
+  };
 
   const loadStatus = async () => {
     const perms = await checkNotificationPermissions();
