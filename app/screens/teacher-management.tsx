@@ -828,38 +828,63 @@ export default function TeacherManagement() {
         <View style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowAddTeacherModal(false)} />
           <View style={[styles.actionSheet, { backgroundColor: theme?.card || '#1f2937', borderColor: theme?.border || '#334155' }]}>
-            <Text style={[styles.actionSheetTitle, { color: theme?.text || '#fff' }]}>👨‍🏫 Add New Teacher</Text>
+            <Text style={[styles.actionSheetTitle, { color: theme?.text || '#fff' }]}>Add New Teacher</Text>
             <Text style={[styles.actionSheetSubtitle, { color: theme?.textSecondary || '#9ca3af' }]}>
-              Choose how you&apos;d like to add a teacher to your school:
+              Choose how you'd like to add a teacher to your school
             </Text>
+
             <TouchableOpacity
-              style={styles.actionSheetOption}
+              style={styles.actionSheetCard}
               onPress={() => {
                 setShowAddTeacherModal(false);
                 setShowDirectAddModal(true);
               }}
             >
-              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Add Directly</Text>
+              <View style={[styles.actionSheetCardIcon, { backgroundColor: 'rgba(99, 102, 241, 0.12)' }]}>
+                <Ionicons name="person-add" size={20} color="#6366f1" />
+              </View>
+              <View style={styles.actionSheetCardInfo}>
+                <Text style={[styles.actionSheetCardTitle, { color: theme?.text || '#fff' }]}>Add Directly</Text>
+                <Text style={[styles.actionSheetCardDesc, { color: theme?.textSecondary || '#9ca3af' }]}>Create a teacher record immediately</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme?.textSecondary || '#9ca3af'} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={styles.actionSheetOption}
+              style={styles.actionSheetCard}
               onPress={() => {
                 setShowAddTeacherModal(false);
                 setShowInviteModal(true);
               }}
             >
-              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Invite by Email</Text>
+              <View style={[styles.actionSheetCardIcon, { backgroundColor: 'rgba(34, 197, 94, 0.12)' }]}>
+                <Ionicons name="mail" size={20} color="#22c55e" />
+              </View>
+              <View style={styles.actionSheetCardInfo}>
+                <Text style={[styles.actionSheetCardTitle, { color: theme?.text || '#fff' }]}>Invite by Email</Text>
+                <Text style={[styles.actionSheetCardDesc, { color: theme?.textSecondary || '#9ca3af' }]}>Send an invite link to a teacher</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme?.textSecondary || '#9ca3af'} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.actionSheetOption, styles.actionSheetOptionLast]}
+              style={styles.actionSheetCard}
               onPress={() => {
                 setShowAddTeacherModal(false);
                 router.push('/screens/job-posting-create');
               }}
             >
-              <Text style={[styles.actionSheetOptionText, { color: theme?.primary || '#6366F1' }]}>Post Job Opening</Text>
+              <View style={[styles.actionSheetCardIcon, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
+                <Ionicons name="megaphone" size={20} color="#f59e0b" />
+              </View>
+              <View style={styles.actionSheetCardInfo}>
+                <Text style={[styles.actionSheetCardTitle, { color: theme?.text || '#fff' }]}>Post Job Opening</Text>
+                <Text style={[styles.actionSheetCardDesc, { color: theme?.textSecondary || '#9ca3af' }]}>Share on WhatsApp & social media</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme?.textSecondary || '#9ca3af'} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionSheetCancel} onPress={() => setShowAddTeacherModal(false)}>
+
+            <TouchableOpacity style={styles.actionSheetCancelBtn} onPress={() => setShowAddTeacherModal(false)}>
               <Text style={[styles.actionSheetCancelText, { color: theme?.textSecondary || '#9ca3af' }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1604,7 +1629,7 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    gap: 12,
+    gap: 10,
   },
   actionSheetTitle: {
     fontWeight: '700',
@@ -1614,24 +1639,42 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     marginBottom: 6,
   },
-  actionSheetOption: {
-    paddingVertical: 10,
-    alignItems: 'flex-end',
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  actionSheetOptionLast: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  actionSheetOptionText: {
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  actionSheetCancel: {
+  actionSheetCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: theme?.surface || '#111827',
+    borderWidth: 1,
+    borderColor: theme?.border || '#1f2937',
+    gap: 12,
+  },
+  actionSheetCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionSheetCardInfo: {
+    flex: 1,
+  },
+  actionSheetCardTitle: {
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  actionSheetCardDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  actionSheetCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 4,
   },
   actionSheetCancelText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
   modalContent: {

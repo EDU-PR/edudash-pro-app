@@ -1,12 +1,12 @@
 /**
  * TeacherCard Component
  * 
- * Displays a teacher with seat management actions.
+ * Displays a teacher with seat management actions and a cleaner UI.
  * Extracted from app/screens/teacher-management.tsx per WARP.md standards.
  */
 
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import type { Teacher } from '@/types/teacher-management';
@@ -52,412 +52,369 @@ export function TeacherCard({
   const teacherHasSeat = useTeacherHasSeat(seatLookupId);
   const hasSeatUser = Boolean(teacher.teacherUserId);
   const normalizedInviteStatus = (inviteStatus || '').toLowerCase();
-  const hasInvite = Boolean(normalizedInviteStatus);
   const invitePending = normalizedInviteStatus === 'pending';
   const inviteAccepted = normalizedInviteStatus === 'accepted';
   const inviteRevoked = normalizedInviteStatus === 'revoked';
   const inviteExpired = normalizedInviteStatus === 'expired';
   const fullName = `${teacher.firstName} ${teacher.lastName}`.trim() || teacher.email;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const [showActions, setShowActions] = useState(false);
   const initials = [teacher.firstName, teacher.lastName]
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase())
     .join('')
     .slice(0, 2) || '?';
 
-  // Debug logging for teacher card
-  useEffect(() => {
-    console.log('[TeacherCard DEBUG]', {
-      teacherName: fullName,
-      teacherEmail: teacher.email,
-      teacherUserId: teacher.teacherUserId,
-      teacherHasSeat,
-      teacherData: {
-        id: teacher.id,
-        employeeId: teacher.employeeId,
-        status: teacher.status,
-      }
-    });
-  }, [teacher, teacherHasSeat, fullName]);
+  // Status info
+  const statusColor = getStatusColor(teacher.status);
+  const seatColor = !hasSeatUser
+    ? invitePending ? '#6366f1' : '#f59e0b'
+    : teacherHasSeat ? '#059669' : '#6b7280';
+  const seatIcon = !hasSeatUser
+    ? invitePending ? 'paper-plane' : 'time-outline'
+    : teacherHasSeat ? 'checkmark-circle' : 'ellipse-outline';
+  const seatLabel = !hasSeatUser
+    ? invitePending ? 'Invite sent' : inviteAccepted ? 'Accepted' : 'Invite needed'
+    : teacherHasSeat ? 'Seated' : 'No seat';
 
   return (
-    <TouchableOpacity
-      style={styles.teacherCard}
-      onPress={() => onPress(teacher)}
-    >
-      <View style={styles.teacherTopRow}>
-        <View style={styles.teacherAvatar}>
-          <Text style={styles.avatarText}>
-            {initials}
-          </Text>
-        </View>
-        <View style={styles.teacherInfo}>
-          <Text style={styles.teacherName}>{fullName}</Text>
-          <Text style={styles.teacherEmail}>{teacher.email}</Text>
-          <Text style={styles.teacherClasses}>
-            {teacher.classes.length > 0 ? `Classes: ${teacher.classes.join(', ')}` : 'No classes assigned'}
-          </Text>
-          <Text style={styles.teacherStudentCount}>
-            Students: {teacher.studentCount || 0}
-          </Text>
-          <View style={styles.seatStatusContainer}>
-            <Ionicons
-              name={
-                !hasSeatUser
-                  ? invitePending
-                    ? 'paper-plane'
-                    : 'time-outline'
-                  : teacherHasSeat
-                    ? 'checkmark-circle'
-                    : 'ellipse-outline'
-              }
-              size={14}
-              color={
-                !hasSeatUser
-                  ? invitePending
-                    ? '#6366f1'
-                    : '#f59e0b'
-                  : teacherHasSeat
-                    ? '#059669'
-                    : '#6b7280'
-              }
-            />
-            <Text
-              style={[
-                styles.seatStatusText,
-                {
-                  color:
-                    !hasSeatUser
-                      ? invitePending
-                        ? '#6366f1'
-                        : '#f59e0b'
-                      : teacherHasSeat
-                        ? '#059669'
-                        : '#6b7280',
-                },
-              ]}
-            >
-              {!hasSeatUser
-                ? invitePending
-                  ? 'Invite sent'
-                  : inviteAccepted
-                    ? 'Invite accepted'
-                    : 'Invite needed'
-                : teacherHasSeat
-                  ? 'Has teacher seat'
-                  : 'No teacher seat'}
-            </Text>
+    <View style={styles.cardContainer}>
+      {/* Main Card - Tappable */}
+      <TouchableOpacity
+        style={styles.teacherCard}
+        onPress={() => onPress(teacher)}
+        activeOpacity={0.7}
+      >
+        {/* Top Row: Avatar + Info + Quick Status */}
+        <View style={styles.topRow}>
+          <View style={[styles.avatar, { backgroundColor: statusColor }]}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-        </View>
-      </View>
 
-      <View style={styles.teacherActionsColumn}>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(teacher.status) }]}> 
-          <Text style={styles.statusText}>{teacher.status}</Text>
-        </View>
-        {!hasSeatUser && (
-          <View
-            style={[
-              styles.inviteBadge,
-              invitePending && styles.inviteBadgePending,
-              inviteAccepted && styles.inviteBadgeAccepted,
-              inviteRevoked && styles.inviteBadgeRevoked,
-              inviteExpired && styles.inviteBadgeExpired,
-            ]}
-          >
-            <Text style={styles.inviteBadgeText}>
-              {invitePending
-                ? 'Invite pending'
-                : inviteAccepted
-                  ? 'Invite accepted'
-                  : inviteRevoked
-                    ? 'Invite revoked'
-                    : inviteExpired
-                      ? 'Invite expired'
-                      : hasInvite
-                        ? `Invite ${normalizedInviteStatus}`
-                        : 'Invite needed'}
-            </Text>
-          </View>
-        )}
+          <View style={styles.infoSection}>
+            <View style={styles.nameRow}>
+              <Text style={styles.teacherName} numberOfLines={1}>{fullName}</Text>
+              <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            </View>
+            <Text style={styles.teacherEmail} numberOfLines={1}>{teacher.email}</Text>
 
-        <View style={styles.seatActionButtons}>
-          {!hasSeatUser ? (
-            <>
-              <TouchableOpacity
-                style={[styles.seatActionButton, styles.inviteButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onInvite?.(teacher);
-                }}
-                disabled={!onInvite}
-              >
-                <Ionicons name="paper-plane" size={16} color="#fff" />
-                <Text style={styles.seatActionText}>
-                  {invitePending ? 'Resend Invite' : 'Send Invite'}
+            {/* Meta Chips Row */}
+            <View style={styles.chipRow}>
+              {/* Seat Status Chip */}
+              <View style={[styles.chip, { borderColor: seatColor }]}>
+                <Ionicons name={seatIcon as any} size={11} color={seatColor} />
+                <Text style={[styles.chipText, { color: seatColor }]}>{seatLabel}</Text>
+              </View>
+
+              {/* Classes Chip */}
+              <View style={styles.chip}>
+                <Ionicons name="school-outline" size={11} color={theme?.textSecondary || '#6b7280'} />
+                <Text style={styles.chipText}>
+                  {teacher.classes.length > 0 ? `${teacher.classes.length} class${teacher.classes.length > 1 ? 'es' : ''}` : 'No classes'}
                 </Text>
-              </TouchableOpacity>
+              </View>
+
+              {/* Student Count Chip */}
+              {(teacher.studentCount || 0) > 0 && (
+                <View style={styles.chip}>
+                  <Ionicons name="people-outline" size={11} color={theme?.textSecondary || '#6b7280'} />
+                  <Text style={styles.chipText}>{teacher.studentCount}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Expand Actions Button */}
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowActions(!showActions);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={showActions ? 'chevron-up' : 'ellipsis-vertical'}
+              size={20}
+              color={theme?.textSecondary || '#6b7280'}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Expanded Actions Panel */}
+        {showActions && (
+          <View style={styles.actionsPanel}>
+            <View style={styles.actionsDivider} />
+
+            {/* Primary Actions Row */}
+            <View style={styles.actionsGrid}>
+              {/* View Profile */}
               <TouchableOpacity
-                style={[
-                  styles.seatActionButton,
-                  styles.copyInviteButton,
-                  (!inviteToken && !onCopyInviteLink) && styles.disabledButton,
-                ]}
+                style={[styles.actionBtn, styles.actionBtnProfile]}
                 onPress={(e) => {
                   e.stopPropagation();
-                  onCopyInviteLink?.(teacher);
+                  onPress(teacher);
                 }}
-                disabled={!onCopyInviteLink}
               >
-                <Ionicons name="link-outline" size={16} color="#fff" />
-                <Text style={styles.seatActionText}>Copy Link</Text>
+                <Ionicons name="person-outline" size={16} color="#6366f1" />
+                <Text style={[styles.actionBtnText, { color: '#6366f1' }]}>Profile</Text>
               </TouchableOpacity>
+
+              {/* Seat Management */}
+              {!hasSeatUser ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnInvite]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onInvite?.(teacher);
+                    }}
+                    disabled={!onInvite}
+                  >
+                    <Ionicons name="paper-plane-outline" size={16} color="#6366f1" />
+                    <Text style={[styles.actionBtnText, { color: '#6366f1' }]}>
+                      {invitePending ? 'Resend' : 'Invite'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionBtnCopy]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onCopyInviteLink?.(teacher);
+                    }}
+                    disabled={!onCopyInviteLink}
+                  >
+                    <Ionicons name="link-outline" size={16} color="#0ea5e9" />
+                    <Text style={[styles.actionBtnText, { color: '#0ea5e9' }]}>Link</Text>
+                  </TouchableOpacity>
+                </>
+              ) : teacherHasSeat ? (
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionBtnRevoke]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onRevokeSeat(teacher.teacherUserId, fullName);
+                  }}
+                  disabled={isRevoking || !hasSeatUser}
+                >
+                  <Ionicons name="remove-circle-outline" size={16} color="#f59e0b" />
+                  <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>Revoke Seat</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    styles.actionBtnAssign,
+                    (shouldDisableAssignment || !hasSeatUser) && styles.actionBtnDisabled,
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onAssignSeat(teacher.teacherUserId, fullName);
+                  }}
+                  disabled={isAssigning || shouldDisableAssignment || !hasSeatUser}
+                >
+                  <Ionicons
+                    name="add-circle-outline"
+                    size={16}
+                    color={shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#059669'}
+                  />
+                  <Text style={[styles.actionBtnText, {
+                    color: shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#059669'
+                  }]}>Assign Seat</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Delete Invite (if pending) */}
               {invitePending && inviteId && (
                 <TouchableOpacity
-                  style={[styles.seatActionButton, styles.deleteInviteButton]}
+                  style={[styles.actionBtn, styles.actionBtnDeleteInvite]}
                   onPress={(e) => {
                     e.stopPropagation();
                     onDeleteInvite?.(inviteId, teacher.email);
                   }}
                   disabled={!onDeleteInvite}
                 >
-                  <Ionicons name="trash-outline" size={16} color="#fff" />
-                  <Text style={styles.seatActionText}>Delete Invite</Text>
+                  <Ionicons name="close-circle-outline" size={16} color="#ef4444" />
+                  <Text style={[styles.actionBtnText, { color: '#ef4444' }]}>Cancel Invite</Text>
                 </TouchableOpacity>
               )}
-            </>
-          ) : teacherHasSeat ? (
-            <TouchableOpacity
-              style={[styles.seatActionButton, styles.revokeButton]}
-              onPress={(e) => {
-                e.stopPropagation();
-                console.log('[TeacherCard] Revoking seat from:', { 
-                  teacherId: teacher.id, 
-                  teacherName: fullName, 
-                  teacherUserId: teacher.teacherUserId 
-                });
-                onRevokeSeat(teacher.teacherUserId, fullName);
-              }}
-              disabled={isRevoking || !hasSeatUser}
-            >
-              <Ionicons name="remove-circle" size={16} color="#fca5a5" />
-              <Text style={styles.seatActionText}>Revoke Seat</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.seatActionButton,
-                styles.assignButton,
-                (shouldDisableAssignment || !hasSeatUser) && styles.disabledButton
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                console.log('[TeacherCard] Assigning seat to:', { 
-                  teacherId: teacher.id, 
-                  teacherName: fullName, 
-                  teacherUserId: teacher.teacherUserId 
-                });
-                onAssignSeat(teacher.teacherUserId, fullName);
-              }}
-              disabled={isAssigning || shouldDisableAssignment || !hasSeatUser}
-            >
-              <Ionicons
-                name="add-circle"
-                size={16}
-                color={shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#34d399'}
-              />
-              <Text style={styles.seatActionText}>Assign Seat</Text>
-            </TouchableOpacity>
-          )}
+            </View>
 
-          <TouchableOpacity
-            style={[styles.seatActionButton, styles.messageQuickAction]}
-            onPress={() => onPress(teacher)}
-          >
-            <Ionicons name="eye" size={16} color="#e2e8f0" />
-            <Text style={styles.seatActionText}>View Profile</Text>
-          </TouchableOpacity>
-
-          {onDeleteTeacher && (
-            <TouchableOpacity
-              style={[styles.seatActionButton, styles.deleteTeacherButton]}
-              onPress={(e) => {
-                e.stopPropagation();
-                onDeleteTeacher(teacher);
-              }}
-            >
-              <Ionicons name="trash-outline" size={16} color="#fff" />
-              <Text style={styles.seatActionText}>Remove Teacher</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+            {/* Danger Zone - Remove Teacher */}
+            {onDeleteTeacher && (
+              <TouchableOpacity
+                style={styles.removeTeacherBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDeleteTeacher(teacher);
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color="#dc2626" />
+                <Text style={styles.removeTeacherText}>Remove Teacher from School</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const createStyles = (theme?: ThemeColors) => StyleSheet.create({
+  cardContainer: {
+    marginBottom: 10,
+  },
   teacherCard: {
-    backgroundColor: theme?.cardBackground || 'white',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: theme?.shadow || '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: theme?.card || '#1a1a2e',
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
-    borderColor: theme?.border || '#f3f4f6',
+    borderColor: theme?.border || '#1f2937',
   },
-  teacherTopRow: {
+  topRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  teacherAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: theme?.primary || '#007AFF',
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   avatarText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
-  teacherInfo: {
+  infoSection: {
     flex: 1,
+    gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   teacherName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: theme?.text || '#111827',
-    marginBottom: 2,
+    color: theme?.text || '#f1f5f9',
+    flex: 1,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   teacherEmail: {
-    fontSize: 13,
-    color: theme?.textSecondary || '#6b7280',
-    marginBottom: 4,
-  },
-  teacherClasses: {
     fontSize: 12,
-    color: theme?.textSecondary || '#6b7280',
-    marginBottom: 2,
+    color: theme?.textSecondary || '#64748b',
+    marginTop: 1,
   },
-  teacherStudentCount: {
-    fontSize: 12,
-    color: theme?.textSecondary || '#6b7280',
-    marginBottom: 4,
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
   },
-  seatStatusContainer: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
-  },
-  seatStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  teacherActionsColumn: {
-    gap: 8,
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
+    gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: theme?.surface || '#111827',
+    borderWidth: 1,
+    borderColor: theme?.border || '#1f2937',
   },
-  statusText: {
-    color: 'white',
+  chipText: {
     fontSize: 11,
     fontWeight: '600',
-    textTransform: 'capitalize',
+    color: theme?.textSecondary || '#64748b',
   },
-  inviteBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: '#334155',
-    marginTop: 4,
+  moreButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: theme?.surface || '#111827',
   },
-  inviteBadgePending: {
-    backgroundColor: '#1d4ed8',
+  // ── Expanded Actions Panel ──
+  actionsPanel: {
+    marginTop: 10,
   },
-  inviteBadgeAccepted: {
-    backgroundColor: '#059669',
+  actionsDivider: {
+    height: 1,
+    backgroundColor: theme?.border || '#1f2937',
+    marginBottom: 10,
   },
-  inviteBadgeRevoked: {
-    backgroundColor: '#9f1239',
-  },
-  inviteBadgeExpired: {
-    backgroundColor: '#7c2d12',
-  },
-  inviteBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  seatActionButtons: {
+  actionsGrid: {
     flexDirection: 'row',
-    gap: 8,
-    marginLeft: 'auto',
     flexWrap: 'wrap',
+    gap: 8,
   },
-  seatActionButton: {
+  actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 95,
-    justifyContent: 'center',
-    gap: 4,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
     borderWidth: 1,
   },
-  assignButton: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
-  revokeButton: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
-  },
-  disabledButton: {
-    backgroundColor: '#e5e7eb',
-    borderColor: '#e5e7eb',
-    opacity: 0.6,
-  },
-  seatActionText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: 'white',
-  },
-  messageQuickAction: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  inviteButton: {
-    backgroundColor: '#6366f1',
+  actionBtnProfile: {
     borderColor: '#6366f1',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
   },
-  copyInviteButton: {
-    backgroundColor: '#0ea5e9',
+  actionBtnInvite: {
+    borderColor: '#6366f1',
+    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+  },
+  actionBtnCopy: {
     borderColor: '#0ea5e9',
+    backgroundColor: 'rgba(14, 165, 233, 0.08)',
   },
-  deleteInviteButton: {
-    backgroundColor: '#ef4444',
+  actionBtnRevoke: {
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+  },
+  actionBtnAssign: {
+    borderColor: '#059669',
+    backgroundColor: 'rgba(5, 150, 105, 0.08)',
+  },
+  actionBtnDeleteInvite: {
     borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
-  deleteTeacherButton: {
-    backgroundColor: '#b91c1c',
-    borderColor: '#b91c1c',
+  actionBtnDisabled: {
+    opacity: 0.4,
+    borderColor: '#6b7280',
+    backgroundColor: 'transparent',
+  },
+  // Remove Teacher Button
+  removeTeacherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#dc2626',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(220, 38, 38, 0.06)',
+  },
+  removeTeacherText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#dc2626',
   },
 });
 

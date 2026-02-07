@@ -153,13 +153,20 @@ export function TeacherProfileView({
         </View>
 
         {onDeleteTeacher && (
-          <View style={styles.removeRow}>
+          <View style={styles.dangerZone}>
+            <View style={styles.dangerZoneHeader}>
+              <Ionicons name="warning-outline" size={16} color="#dc2626" />
+              <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+            </View>
+            <Text style={styles.dangerZoneDesc}>
+              This will permanently remove {teacher.firstName || 'this teacher'} from your school, unassign their classes, and revoke their seat.
+            </Text>
             <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
+              style={styles.deleteButton}
               onPress={() => onDeleteTeacher(teacher)}
             >
-              <Ionicons name="trash-outline" size={16} color="#fff" />
-              <Text style={styles.actionButtonText}>Remove Teacher</Text>
+              <Ionicons name="trash-outline" size={16} color="#dc2626" />
+              <Text style={styles.deleteButtonText}>Remove Teacher from School</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -428,8 +435,48 @@ const createStyles = (theme?: ThemeColors) =>
     revokeButton: {
       backgroundColor: '#dc2626',
     },
+    // Danger Zone
+    dangerZone: {
+      marginTop: 16,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(220, 38, 38, 0.2)',
+    },
+    dangerZoneHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    dangerZoneTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#dc2626',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    dangerZoneDesc: {
+      fontSize: 12,
+      color: theme?.textSecondary || '#6b7280',
+      lineHeight: 17,
+      marginBottom: 10,
+    },
     deleteButton: {
-      backgroundColor: '#b91c1c',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#dc2626',
+      borderStyle: 'dashed',
+      backgroundColor: 'rgba(220, 38, 38, 0.06)',
+    },
+    deleteButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#dc2626',
     },
     actionButtonText: {
       color: 'white',
