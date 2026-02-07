@@ -80,7 +80,10 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
   const remainingToday = Math.max(displayExpectedToday - receivedToday, 0);
   const noBirthdaysToday = expectedToday <= 0;
 
-  const monthExpected = monthSummary.totalExpected;
+  // Principals typically expect the monthly goal to be "R25 per active student".
+  // Some backends compute expected based on birthday-days; keep the larger value so
+  // we don't understate the denominator (e.g. R25 instead of R1275 for 51 students).
+  const monthExpected = Math.max(monthSummary.totalExpected, totalStudents * 25);
   const monthReceived = monthSummary.totalReceived;
   const displayMonthExpected = Math.max(monthExpected, monthReceived);
   const monthPercentRaw = monthExpected > 0 ? Math.round((monthReceived / monthExpected) * 100) : 0;
@@ -109,7 +112,7 @@ export const BirthdayDonationSummaryCard: React.FC<BirthdayDonationSummaryCardPr
           <View style={styles.summaryRow}>
             <Text style={styles.label}>{t('dashboard.birthday_donations.today_label', { defaultValue: 'Today' })}</Text>
             <Text style={styles.value}>
-              R{receivedToday.toFixed(2)} / R{(totalStudents * 25).toFixed(2)}
+              R{receivedToday.toFixed(2)} / R{displayExpectedToday.toFixed(2)}
             </Text>
           </View>
           {noBirthdaysToday ? (

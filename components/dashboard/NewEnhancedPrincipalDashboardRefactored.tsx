@@ -194,8 +194,12 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         <View style={[styles.section, styles.firstSection, Platform.OS === 'web' && styles.firstSectionWeb]}>
           <PrincipalWelcomeSection
             userName={user?.user_metadata?.first_name}
+            schoolName={data.schoolName}
             tier={tier}
             subscriptionReady={subscriptionReady}
+            pendingRegistrations={data.stats?.pendingRegistrations?.total ?? 0}
+            pendingPayments={data.stats?.pendingPayments?.total ?? 0}
+            pendingPOPUploads={data.stats?.pendingPOPUploads?.total ?? 0}
           />
         </View>
 
