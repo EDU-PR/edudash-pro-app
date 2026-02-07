@@ -8,6 +8,7 @@ export function PWAUpdateChecker() {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') return;
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return;
     }
@@ -107,6 +108,7 @@ export function PWAUpdateChecker() {
     setUpdateAvailable(false);
   };
 
+  if (process.env.NODE_ENV !== 'production') return null;
   if (!updateAvailable) return null;
 
   return (

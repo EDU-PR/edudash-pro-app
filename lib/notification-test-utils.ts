@@ -28,6 +28,21 @@ export interface TestNotificationOptions {
  */
 export async function sendTestNotification(options: TestNotificationOptions): Promise<string> {
   try {
+    // Ensure Android notification channel exists
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#06b6d4',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+        enableLights: true,
+        bypassDnd: false,
+      });
+    }
+
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: options.title,
@@ -43,6 +58,7 @@ export async function sendTestNotification(options: TestNotificationOptions): Pr
           color: '#06b6d4', // Cyan accent
           priority: Notifications.AndroidNotificationPriority.HIGH,
           vibrationPattern: [0, 250, 250, 250],
+          channelId: 'default',
         }),
       },
       trigger: null, // Fire immediately
@@ -79,6 +95,7 @@ export async function sendScheduledNotification(
       trigger: {
         seconds: delaySeconds,
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        channelId: Platform.OS === 'android' ? 'default' : undefined,
       },
     });
     
@@ -135,7 +152,7 @@ export const NotificationPresets = {
   newMessage: () => sendTestNotification({
     title: '💬 New Message',
     body: 'Marion Makunyane sent you a message',
-    data: { type: 'message', threadId: 'test-123' },
+    data: { type: 'message', threadId: 'test-123', forceShow: true },
     badge: 1,
   }),
 
@@ -143,7 +160,7 @@ export const NotificationPresets = {
   homeworkAssigned: () => sendTestNotification({
     title: '📚 New Homework',
     body: 'Math worksheet has been assigned to Grade 1',
-    data: { type: 'homework', homeworkId: 'hw-456' },
+    data: { type: 'homework', homeworkId: 'hw-456', forceShow: true },
     badge: 1,
   }),
 
@@ -151,14 +168,15 @@ export const NotificationPresets = {
   homeworkGraded: () => sendTestNotification({
     title: '✅ Homework Graded',
     body: 'Your child\'s homework has been graded. Score: 85%',
-    data: { type: 'grade', submissionId: 'sub-789' },
+    data: { type: 'grade', submissionId: 'sub-789', forceShow: true },
+    badge: 1,
   }),
 
   // Report notification
   reportReady: () => sendTestNotification({
     title: '📊 Progress Report Ready',
     body: 'Your child\'s term progress report is now available',
-    data: { type: 'report', reportId: 'rpt-101' },
+    data: { type: 'report', reportId: 'rpt-101', forceShow: true },
     badge: 1,
   }),
 
@@ -166,21 +184,21 @@ export const NotificationPresets = {
   announcement: () => sendTestNotification({
     title: '📢 School Announcement',
     body: 'School will be closed tomorrow for Teacher\'s Day',
-    data: { type: 'announcement', announcementId: 'ann-202' },
+    data: { type: 'announcement', announcementId: 'ann-202', forceShow: true },
   }),
 
   // Reminder
   reminder: () => sendTestNotification({
     title: '⏰ Reminder',
     body: 'Don\'t forget: Parent meeting at 2PM today',
-    data: { type: 'reminder' },
+    data: { type: 'reminder', forceShow: true },
   }),
 
   // Payment
   paymentReminder: () => sendTestNotification({
     title: '💳 Payment Due',
     body: 'School fees payment due in 3 days',
-    data: { type: 'payment' },
+    data: { type: 'payment', forceShow: true },
     badge: 1,
   }),
 
@@ -188,21 +206,21 @@ export const NotificationPresets = {
   attendanceAlert: () => sendTestNotification({
     title: '🏫 Attendance Alert',
     body: 'Your child has been marked present today',
-    data: { type: 'attendance' },
+    data: { type: 'attendance', forceShow: true },
   }),
 
   // Event
   upcomingEvent: () => sendTestNotification({
     title: '🎉 Upcoming Event',
     body: 'Sports Day is in 2 days. Don\'t forget the permission slip!',
-    data: { type: 'event', eventId: 'evt-303' },
+    data: { type: 'event', eventId: 'evt-303', forceShow: true },
   }),
 
   // System
   systemUpdate: () => sendTestNotification({
     title: '🔄 App Update Available',
     body: 'A new version of EduDash Pro is available',
-    data: { type: 'system', action: 'update' },
+    data: { type: 'system', action: 'update', forceShow: true },
   }),
 };
 

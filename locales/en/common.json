@@ -423,6 +423,9 @@
   "dashboard": {
     "welcome_generic": "Welcome to EduDash Pro",
     "overview": "Overview",
+    "hints": {
+      "uniform_sizes": "View sizes and uniform notes per child."
+    },
     "parentDashboard": "Parent Dashboard",
     "accessDenied": "Access Denied",
     "mobileAppAccessRequired": "Mobile app access is required to use this feature. Please contact your administrator.",
@@ -2697,7 +2700,11 @@
     "placeholders": {
       "first_name": "Enter your first name",
       "last_name": "Enter your last name"
-    }
+    },
+    "change_password_title": "Change Password",
+    "change_password_subtitle": "Update your sign-in password",
+    "change_email_title": "Change Email",
+    "change_email_subtitle": "Update the email you use to sign in"
   },
   "actions": {
     "continue": "Continue",

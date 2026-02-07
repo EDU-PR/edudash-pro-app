@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
+import { renderEduDashProEmail } from "../_shared/edudashproEmail.ts";
 
 // Type definitions for Deno environment
 declare const Deno: {
@@ -2812,19 +2813,41 @@ async function sendEmailNotification(
 ): Promise<void> {
   try {
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-    const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'EduDash Pro <no-reply@edudashpro.org.za>';
+    const EMAIL_FROM = Deno.env.get('EMAIL_FROM') || 'EduDash Pro <support@edudashpro.org.za>';
+    const SUPPORT_EMAIL = Deno.env.get('SUPPORT_EMAIL') || 'support@edudashpro.org.za';
 
     if (!RESEND_API_KEY) {
       console.warn('RESEND_API_KEY not configured; skipping email send');
       return;
     }
 
+    const hasFullHtmlDoc = (content?: string) =>
+      !!content && (content.includes('<html') || content.includes('<!DOCTYPE'));
+
+    const baseHtml = html
+      ? html
+      : text
+        ? `<p>${String(text).replace(/\r?\n/g, '<br />')}</p>`
+        : '';
+
+    const wrappedHtml = baseHtml
+      ? hasFullHtmlDoc(baseHtml)
+        ? baseHtml
+        : renderEduDashProEmail({
+            title: subject,
+            preheader: subject,
+            bodyHtml: baseHtml,
+            supportEmail: SUPPORT_EMAIL,
+          })
+      : undefined;
+
     const payload = {
       from: EMAIL_FROM,
       to,
       subject,
-      html: html || undefined,
-      text: text || undefined
+      html: wrappedHtml,
+      text: text || undefined,
+      reply_to: SUPPORT_EMAIL,
     };
 
     const res = await fetch('https://api.resend.com/emails', {

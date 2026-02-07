@@ -245,18 +245,30 @@ export class DashAICore {
     DashAICore.instance = instance;
   }
 
+  private lastInitUserId: string | null = null;
+
   public async initialize(config?: { supabaseClient?: any; currentUser?: any }): Promise<void> {
-    // If already initialized and no new config provided, return existing promise or resolve immediately
-    if (this.isInitialized && !config) {
+    // Determine if config represents a meaningful change (different user).
+    // DashAICompat always passes config, so we must check content, not just presence.
+    const incomingUserId = config?.currentUser?.id ?? null;
+    const isNewUser = incomingUserId && incomingUserId !== this.lastInitUserId;
+
+    // If already initialized and the user hasn't changed, skip re-init
+    if (this.isInitialized && !isNewUser) {
       if (this.initializationPromise) {
         return this.initializationPromise;
       }
       return Promise.resolve();
     }
 
-    // If initialization is in progress, return the existing promise
-    if (this.initializationPromise && !config) {
+    // If initialization is in progress for the same user, return the existing promise
+    if (this.initializationPromise && !isNewUser) {
       return this.initializationPromise;
+    }
+
+    // Track which user we're initializing for
+    if (incomingUserId) {
+      this.lastInitUserId = incomingUserId;
     }
 
     // Start new initialization
@@ -268,14 +280,19 @@ export class DashAICore {
     console.log('[DashAICore] Initializing...');
 
     try {
-      // Re-initialize services if config provided (user change, etc.)
-      if (!this.voiceService || config) {
+      // Only re-create services if they don't exist yet.
+      // The guard in initialize() already ensures we only reach here
+      // when there's a genuine need (first init or user change).
+      if (!this.voiceService) {
         this.initializeServices(config);
-        this.isInitialized = false; // Reset flag if re-initializing
+      } else if (config?.currentUser) {
+        // User change: update config references but DON'T re-init audio
+        // (audio mode is user-independent)
+        this.initializeServices(config);
       }
 
-      // Skip if already initialized without new config
-      if (this.isInitialized && !config) {
+      // Skip if already initialized (shouldn't happen due to guard, but safety net)
+      if (this.isInitialized) {
         console.log('[DashAICore] Already initialized, skipping...');
         return;
       }

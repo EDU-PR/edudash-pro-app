@@ -18,6 +18,22 @@ import { Platform } from 'react-native';
 
 const STORAGE_KEY = 'edudash_badge_categories';
 
+async function setAndroidBadgeCount(total: number): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    // Best-effort: notifee supports launcher badges on some Android OEMs.
+    // Use dynamic require to avoid bundling issues on web.
+    const notifeeModule = require('@notifee/react-native');
+    const notifee = notifeeModule?.default ?? notifeeModule;
+    if (typeof notifee?.setBadgeCount === 'function') {
+      await notifee.setBadgeCount(total);
+    }
+  } catch (error) {
+    console.warn('[BadgeCoordinator] Android badge update skipped:', error);
+  }
+}
+
 // Badge categories - each component manages its own category
 export type BadgeCategory = 
   | 'messages'      // Unread messages (NotificationContext)
@@ -168,6 +184,7 @@ class BadgeCoordinatorClass {
         // Sync to system badge (app icon)
         if (Platform.OS !== 'web') {
           const total = this.getTotal();
+          await setAndroidBadgeCount(total);
           await Notifications.setBadgeCountAsync(total);
           console.log(`[BadgeCoordinator] System badge set to ${total}`);
         }
@@ -188,6 +205,7 @@ class BadgeCoordinatorClass {
   async forceSync(): Promise<void> {
     if (Platform.OS !== 'web') {
       const total = this.getTotal();
+      await setAndroidBadgeCount(total);
       await Notifications.setBadgeCountAsync(total);
       console.log(`[BadgeCoordinator] Force synced badge to ${total}`);
     }

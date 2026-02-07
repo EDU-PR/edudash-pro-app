@@ -398,11 +398,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Get school/organization info
       const schoolId = profile?.organization_id || profile?.preschool_id;
       
-      // For now, assume K-12 unless explicitly a preschool ID
-      // (organization_type column doesn't exist in profiles table)
-      const schoolType = schoolId && String(schoolId).toLowerCase().includes('preschool') 
-        ? 'preschool' 
-        : 'primary_school';
+      // Use organization_membership.school_type (reliable source)
+      const membershipSchoolType = (profile as any)?.organization_membership?.school_type;
+      const schoolType = membershipSchoolType || 'preschool';
       
       // Normalize school type to detect K-12 vs preschool/ECD
       const normalizedSchoolType = String(schoolType || '').toLowerCase();
@@ -1678,10 +1676,37 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         // Load chat/voice preferences
         await loadChatPrefs();
 
+        // Check for ORB session messages to carry over
+        let orbMessagesLoaded = false;
+        if (!hasExistingMessages && user?.id) {
+          try {
+            const orbKey = `dash:orb-session:${user.id}`;
+            const orbRaw = await AsyncStorage.getItem(orbKey);
+            if (orbRaw) {
+              const orbData = JSON.parse(orbRaw);
+              // Only use ORB messages if they're recent (last 30 min)
+              if (orbData?.messages?.length > 0 && (Date.now() - (orbData.updatedAt || 0)) < 30 * 60 * 1000) {
+                const orbMessages: DashMessage[] = orbData.messages.map((m: any, i: number) => ({
+                  id: `orb_${orbData.conversationId}_${i}`,
+                  type: m.role === 'user' ? 'user' : 'assistant',
+                  content: m.content,
+                  timestamp: (orbData.updatedAt || Date.now()) - ((orbData.messages.length - i) * 1000),
+                }));
+                setMessages(orbMessages);
+                orbMessagesLoaded = true;
+                // Clear the ORB session after loading
+                await AsyncStorage.removeItem(orbKey);
+              }
+            }
+          } catch (orbErr) {
+            console.warn('[useDashAssistant] Failed to load ORB session:', orbErr);
+          }
+        }
+
         // Send initial message or add greeting
         if (initialMessage && initialMessage.trim()) {
           sendMessage(initialMessage);
-        } else if (!hasExistingMessages) {
+        } else if (!hasExistingMessages && !orbMessagesLoaded) {
           const greeting: DashMessage = {
             id: `greeting_${Date.now()}`,
             type: 'assistant',

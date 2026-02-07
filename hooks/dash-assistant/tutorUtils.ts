@@ -5,9 +5,14 @@ export const detectTutorIntent = (text: string): TutorMode | null => {
   const value = (text || '').toLowerCase();
   if (!value) return null;
 
-  if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz|assessment|mock\s+test)/.test(value)) return 'quiz';
-  if (/(practice\s+question|drill\s+me|give\s+me\s+practice|worksheet\s+questions)/.test(value)) return 'practice';
-  if (/diagnose\s+me|diagnostic\s+test/.test(value)) return 'diagnostic';
+  // Quiz mode — formal assessment-style
+  if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz|assessment|mock\s+test|exam\s+prep|past\s+paper)/i.test(value)) return 'quiz';
+  // Practice mode — exercises, drills, worksheets
+  if (/(practice\s+question|drill\s+me|give\s+me\s+practice|worksheet|exercise|let.s\s+practice|homework\s+practice)/i.test(value)) return 'practice';
+  // Diagnostic mode — level assessment
+  if (/(diagnose\s+me|diagnostic\s+test|check\s+my\s+level|assess\s+me|what\s+grade\s+am\s+i)/i.test(value)) return 'diagnostic';
+  // Explain mode — teaching, homework help
+  if (/(explain|help\s+me\s+understand|teach\s+me|how\s+does|what\s+is|homework\s+help|can\s+you\s+explain)/i.test(value)) return 'explain';
 
   return null;
 };
@@ -93,20 +98,31 @@ export const buildTutorSystemContext = (
         '- Keep questions extremely short and concrete.',
         '- Avoid K-12 framing or advanced concepts.',
         '- Praise effort and keep tone warm and playful.',
+        '- Use fun comparisons: "How many apples? 🍎🍎🍎"',
       ].join('\n')
     : [
-        'K-12 MODE:',
-        '- Match the learner grade and keep the difficulty age-appropriate.',
+        'K-12 MODE (CAPS-ALIGNED):',
+        '- Follow the South African CAPS (Curriculum Assessment Policy Statements) curriculum.',
+        '- Match content to the specific grade level and CAPS learning outcomes.',
+        '- Use CAPS terminology: Learning Outcome, Assessment Standard, Content Area.',
+        '- Reference SA-specific content (Rand currency, SA geography, local examples).',
         '- Use clear step-by-step explanations with numbered points.',
         '- Break complex topics into simple, digestible parts.',
         '- Provide concrete examples to illustrate concepts.',
         '- Use bullet points and structured formatting for clarity.',
         '- When explaining, follow this structure:',
-        '  1. Simple introduction',
-        '  2. Key concepts with examples',
-        '  3. Step-by-step breakdown',
+        '  1. Simple introduction (connect to prior knowledge)',
+        '  2. Key concepts with real-world examples',
+        '  3. Step-by-step breakdown with worked examples',
         '  4. One diagnostic question to check understanding',
         '- Keep each section concise but comprehensive.',
+        '',
+        'CAPS SUBJECT FRAMEWORKS:',
+        '- Mathematics: Follow CAPS content areas (Numbers, Patterns, Space & Shape, Measurement, Data)',
+        '- English: Follow CAPS skills (Listening, Speaking, Reading, Writing, Language)',
+        '- Science: Follow CAPS strands (Life & Living, Energy & Change, Matter & Materials, Earth & Beyond)',
+        '- Social Sciences: Geography (SA provinces, climate) + History (SA heritage, key events)',
+        '- Life Skills: Personal & Social Wellbeing, Physical Education, Creative Arts',
       ].join('\n');
 
   const baseLines = [
@@ -121,6 +137,18 @@ export const buildTutorSystemContext = (
     learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
     levelGuidance,
     '',
+    'INTERACTIVE TEACHING TOOLS:',
+    '- For math: Show visual representations (use emoji grids for counting, simple ASCII diagrams for shapes)',
+    '- For reading: Highlight key vocabulary with **bold** and explain in context',
+    '- For science: Use cause-and-effect chains and simple diagrams',
+    '- Use progress encouragement: "Great work! You got 3/5 correct so far!"',
+    '- Adapt difficulty dynamically: if 2+ wrong in a row, simplify; if 3+ right, increase challenge',
+    '- When the learner is stuck, offer multiple scaffolding strategies:',
+    '  1. Visual hint (diagram, emoji representation)',
+    '  2. Worked example of a similar problem',
+    '  3. Break into micro-steps',
+    '  4. Real-world analogy',
+    '',
     'RESPONSE FORMATTING:',
     '- Be highly interactive: ask ONE short question at a time and wait.',
     '- If the learner is wrong, provide a hint plus a step-by-step scaffold before asking the next question.',
@@ -133,6 +161,13 @@ export const buildTutorSystemContext = (
     '  2. Key concepts breakdown with examples',
     '  3. Step-by-step solution or explanation',
     '  4. One check question to verify understanding',
+    '',
+    'VOICE-OPTIMIZED OUTPUT:',
+    '- Write naturally as if speaking to a learner face-to-face.',
+    '- Avoid parenthetical pronunciation guides like "(PRON-un-see-AY-shun)".',
+    '- NEVER use markdown formatting symbols when in voice mode.',
+    '- Use short, conversational sentences.',
+    '- Pause between concepts (use periods, not semicolons).',
     '',
     'Ask ONE question only and stop. Do not add extra questions or commentary.',
     'Keep responses very short (2-4 short lines max) unless explaining a concept.',

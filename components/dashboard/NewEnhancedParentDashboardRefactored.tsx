@@ -373,6 +373,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'payments':
         handlePaymentsPress();
         break;
+      case 'dev_notifications':
+        router.push('/screens/dev-notification-tester');
+        break;
       case 'learning_hub':
         router.push('/screens/learning-hub');
         break;
@@ -511,6 +514,16 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
     ];
 
+    if (__DEV__) {
+      actions.push({
+        id: 'dev_notifications',
+        title: 'Dev Notification Tester',
+        icon: 'notifications-outline',
+        color: '#06b6d4',
+        subtitle: 'Test push + badge',
+      });
+    }
+
     if (!isDashOrbUnlocked) {
       actions.push({
         id: 'dash_tutor',
@@ -616,6 +629,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       messages: 'communication',
       calls: 'communication',
       events: 'communication',
+      dev_notifications: 'communication',
       payments: 'payments',
       dash_tutor: 'ai',
       ai_homework_help: 'ai',

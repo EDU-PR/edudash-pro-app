@@ -4,11 +4,12 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { renderEduDashProEmail } from '../_shared/edudashproEmail.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
-const FROM_EMAIL = 'EduDash Pro <noreply@edudashpro.org.za>';
+const FROM_EMAIL = 'EduDash Pro <support@edudashpro.org.za>';
 const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';
 
@@ -27,113 +28,32 @@ interface PaymentVerifiedEmailRequest {
 }
 
 function generatePaymentVerifiedEmailHTML(data: PaymentVerifiedEmailRequest): string {
-  const currentYear = new Date().getFullYear();
   const amountText = data.payment_amount ? `R${data.payment_amount.toFixed(2)}` : 'your payment';
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payment Verified</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5;">
-  
-  <!-- Header -->
-  <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 20px; text-align: center;">
-    <h1 style="margin: 0; color: white; font-size: 28px;">🎓 EduDash Pro</h1>
-    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Community School Aftercare</p>
-  </div>
-  
-  <!-- Content -->
-  <div style="max-width: 600px; margin: 0 auto; padding: 30px 20px;">
-    
-    <!-- Success Card -->
-    <div style="background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      
-      <!-- Success Icon -->
-      <div style="text-align: center; margin-bottom: 20px;">
-        <div style="display: inline-block; background: #ecfdf5; border-radius: 50%; padding: 20px;">
-          <span style="font-size: 48px;">✅</span>
-        </div>
-      </div>
-      
-      <h2 style="margin: 0 0 15px 0; color: #065f46; font-size: 24px; text-align: center;">
-        Payment Verified!
-      </h2>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Dear <strong>${data.parent_name}</strong>,
-      </p>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Great news! We have verified ${amountText} for <strong>${data.child_name}</strong>'s aftercare registration at EduDash Pro Community School.
-      </p>
-      
-      <div style="background: #ecfdf5; border-left: 4px solid #10B981; padding: 15px; border-radius: 0 8px 8px 0; margin: 20px 0;">
-        <p style="margin: 0; color: #065f46; font-weight: 600;">
-          🎉 Your payment has been successfully verified and recorded.
-        </p>
-      </div>
-    </div>
-    
-    <!-- What's Next Card -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        📝 What Happens Next?
-      </h3>
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 15px 0;">
-        The school principal will now process your child's enrollment. You will receive another email with:
-      </p>
-      <ul style="color: #4a5568; line-height: 1.8; margin: 0; padding-left: 20px;">
-        <li>Your parent account login details</li>
-        <li>Access to the EduDash Pro parent portal</li>
-        <li>Important information about the aftercare schedule</li>
-        <li>Emergency contact procedures</li>
-      </ul>
-      
-      <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-top: 15px;">
-        <p style="margin: 0; color: #92400e; font-size: 14px;">
-          ⏰ <strong>Expected timeline:</strong> 1-2 business days
-        </p>
-      </div>
-    </div>
-    
-    <!-- WhatsApp Reminder -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        💬 Join Our Community
-      </h3>
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 15px 0;">
-        Haven't joined our WhatsApp group yet? Connect with other parents and stay updated!
-      </p>
-      <a href="${WHATSAPP_GROUP_LINK}" style="display: inline-block; background: #25D366; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-        Join WhatsApp Group →
-      </a>
-    </div>
-    
-    <!-- Support -->
-    <div style="text-align: center; padding: 20px;">
-      <p style="color: #718096; margin: 0 0 10px 0;">
-        Questions? We're here to help!
-      </p>
-      <a href="mailto:${SUPPORT_EMAIL}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-        ${SUPPORT_EMAIL}
-      </a>
-    </div>
-    
-  </div>
-  
-  <!-- Footer -->
-  <div style="text-align: center; padding: 30px 20px; background: #f8fafc;">
-    <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-      EduDash Pro Community School Aftercare<br>
-      © ${currentYear} EduDash Pro. All rights reserved.
-    </p>
-  </div>
-  
-</body>
-</html>`;
+  const bodyHtml = `
+<p>Hi ${data.parent_name},</p>
+<p>Good news! We verified ${amountText} for <strong>${data.child_name}</strong>'s aftercare registration.</p>
+<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:12px;padding:12px;margin:14px 0;">
+  <p style="margin:0;color:#166534;font-weight:600;">Payment verified and recorded.</p>
+</div>
+<p><strong>Next steps:</strong></p>
+<ul style="margin:0 0 0 18px;padding:0;color:#475569;">
+  <li>We finalize enrollment (1-2 business days).</li>
+  <li>You receive parent login details.</li>
+  <li>You'll get schedules and key updates.</li>
+</ul>
+<p>Join the WhatsApp group to stay connected.</p>
+  `.trim();
+
+  return renderEduDashProEmail({
+    title: 'Payment verified',
+    subtitle: 'Your aftercare registration is being finalized',
+    preheader: `Payment verified for ${data.child_name}`,
+    bodyHtml,
+    cta: { label: 'Join WhatsApp Group', url: WHATSAPP_GROUP_LINK },
+    secondaryCta: { label: 'Open EduDash Pro', url: 'https://www.edudashpro.org.za/sign-in' },
+    supportEmail: SUPPORT_EMAIL,
+  });
 }
 
 serve(async (req) => {

@@ -54,7 +54,8 @@ Notifications.setNotificationHandler({
     const isSchoolActivity = [
       'announcement', 'homework', 'assignment', 'attendance',
       'reminder', 'progress', 'billing', 'invoice', 'admin',
-      'enrollment', 'event', 'report',
+      'enrollment', 'event', 'report', 'grade', 'payment',
+      'fee', 'test', 'system',
     ].includes(type || '');
     
     // Determine if we should show the notification when app is in foreground

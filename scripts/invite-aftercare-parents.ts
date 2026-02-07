@@ -33,7 +33,8 @@ const REDIRECT_URL = 'https://www.edudashpro.org.za/landing?flow=password-set&re
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';
 
 // Email sender
-const FROM_EMAIL = 'EduDash Pro <noreply@edudashpro.org.za>';
+const FROM_EMAIL = 'EduDash Pro <support@edudashpro.org.za>';
+const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 
 interface AftercareParent {
   id: string;
@@ -57,86 +58,110 @@ interface InviteResult {
   welcomeEmailSent?: boolean;
 }
 
+function renderBrandedEmail(options: {
+  title: string;
+  subtitle?: string;
+  preheader?: string;
+  bodyHtml: string;
+  cta?: { label: string; url: string };
+  secondaryCta?: { label: string; url: string };
+}) {
+  const preheader = options.preheader || options.title;
+  const subtitle = options.subtitle
+    ? `<p style="margin:0 0 16px 0;color:#475569;font-size:15px;line-height:1.6;">${options.subtitle}</p>`
+    : '';
+  const ctaHtml = options.cta
+    ? `<div style="padding:8px 0 4px 0;">
+        <a href="${options.cta.url}" style="display:inline-block;background:#00c4d6;color:#001018;text-decoration:none;padding:14px 22px;border-radius:10px;font-weight:700;font-size:14px;">
+          ${options.cta.label}
+        </a>
+      </div>`
+    : '';
+  const secondaryCtaHtml = options.secondaryCta
+    ? `<div style="padding-top:6px;">
+        <a href="${options.secondaryCta.url}" style="color:#0ea5e9;text-decoration:none;font-weight:600;font-size:14px;">
+          ${options.secondaryCta.label}
+        </a>
+      </div>`
+    : '';
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>${options.title}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#eef2f7;color:#0f172a;">
+    <div style="display:none;font-size:1px;color:#eef2f7;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#eef2f7;padding:20px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 12px 40px rgba(15,23,42,0.08);">
+            <tr>
+              <td style="background:#0b1220;padding:24px 32px;">
+                <div style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:0.2px;">EduDash Pro</div>
+                <div style="margin-top:6px;color:#94a3b8;font-size:12px;letter-spacing:0.5px;">AI-powered education platform</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px;">
+                <h1 style="margin:0 0 8px 0;font-size:24px;font-weight:700;color:#0f172a;">${options.title}</h1>
+                ${subtitle}
+                <div style="color:#334155;font-size:15px;line-height:1.7;">${options.bodyHtml}</div>
+                ${ctaHtml}
+                ${secondaryCtaHtml}
+                <div style="margin-top:24px;padding:14px 16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+                  <p style="margin:0;color:#475569;font-size:13px;line-height:1.6;">
+                    Need help? Reply to this email or contact us at
+                    <a href="mailto:${SUPPORT_EMAIL}" style="color:#0ea5e9;text-decoration:none;font-weight:600;">${SUPPORT_EMAIL}</a>.
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#0f172a;padding:16px 24px;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#94a3b8;">© ${new Date().getFullYear()} EduDash Pro. All rights reserved.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
 /**
  * Generate the welcome email HTML with Google email request and WhatsApp link
  */
 function generateWelcomeEmailHTML(parentName: string, childName: string): string {
-  const currentYear = new Date().getFullYear();
-  
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to EduDash Pro Aftercare</title>
-</head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  
-  <!-- Header -->
-  <div style="text-align: center; padding: 30px 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px 12px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 28px;">🎓 EduDash Pro</h1>
-    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">Community School Aftercare</p>
-  </div>
-  
-  <!-- Main Content -->
-  <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 12px 12px;">
-    
-    <h2 style="color: #333; margin-top: 0;">Welcome, ${parentName}! 👋</h2>
-    
-    <p>Thank you for registering <strong>${childName}</strong> for our Aftercare program! We're excited to have your family join our community.</p>
-    
-    <p>You'll receive a separate email shortly with a link to <strong>set your password</strong> and access your parent dashboard.</p>
-    
-    <!-- Google Email Request Section -->
-    <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #2196f3;">
-      <h3 style="color: #1565c0; margin-top: 0;">📱 Get Early Access to Our Mobile App!</h3>
-      <p style="margin-bottom: 15px;">We're launching the EduDash Pro mobile app soon! To get <strong>early access</strong>, we need your <strong>Google email address</strong> (Gmail) for app testing.</p>
-      <p style="margin-bottom: 15px;"><strong>Why Google email?</strong> The app testing platform (Google Play) requires a Gmail address to send you the app before public release.</p>
-      <p style="margin-bottom: 0;">
-        <strong>Please reply to this email</strong> with your Google/Gmail address, or if you don't have one, let us know and we'll add you when the app goes public.
-      </p>
-    </div>
-    
-    <!-- WhatsApp Section -->
-    <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #4caf50;">
-      <h3 style="color: #2e7d32; margin-top: 0;">💬 Join Our WhatsApp Community!</h3>
-      <p style="margin-bottom: 15px;">Stay connected with other parents, get updates, and receive important announcements by joining our WhatsApp group:</p>
-      <a href="${WHATSAPP_GROUP_LINK}" style="display: inline-block; background: #25d366; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-        �� Join WhatsApp Group
-      </a>
-    </div>
-    
-    <!-- What's Next Section -->
-    <div style="background: white; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #e0e0e0;">
-      <h3 style="color: #333; margin-top: 0;">📋 What's Next?</h3>
-      <ol style="margin: 0; padding-left: 20px;">
-        <li style="margin-bottom: 10px;"><strong>Set your password</strong> using the link in the next email</li>
-        <li style="margin-bottom: 10px;"><strong>Reply with your Google email</strong> for early app access</li>
-        <li style="margin-bottom: 10px;"><strong>Join our WhatsApp group</strong> for community updates</li>
-        <li style="margin-bottom: 0;"><strong>Complete your payment</strong> if not already done</li>
-      </ol>
-    </div>
-    
-    <!-- Support -->
-    <p style="color: #666; font-size: 14px; margin-top: 30px;">
-      Questions? Reply to this email or contact us at <a href="mailto:support@edudashpro.org.za" style="color: #667eea;">support@edudashpro.org.za</a>
-    </p>
-    
-    <p style="margin-top: 30px;">
-      Warm regards,<br>
-      <strong>The EduDash Pro Team</strong> 🌟
-    </p>
-    
-  </div>
-  
-  <!-- Footer -->
-  <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
-    <p>EduDash Pro Community School Aftercare<br>
-    © ${currentYear} EduDash Pro. All rights reserved.</p>
-  </div>
-  
-</body>
-</html>`;
+  const bodyHtml = `
+<p>Hi ${parentName},</p>
+<p>Thank you for registering <strong>${childName}</strong> for our aftercare program. We're excited to have your family join our community.</p>
+<p>You will receive a separate email with a link to set your password and access your parent dashboard.</p>
+<div style="background:#e3f2fd;border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin:14px 0;">
+  <p style="margin:0;color:#1e40af;"><strong>Early access request:</strong> Reply with your Gmail address so we can add you to Google Play testing.</p>
+</div>
+<p>Stay connected by joining the WhatsApp community.</p>
+<p><strong>What’s next:</strong></p>
+<ul style="margin:0 0 0 18px;padding:0;color:#475569;">
+  <li>Set your password using the next email.</li>
+  <li>Reply with your Gmail address for early access.</li>
+  <li>Join the WhatsApp group for announcements.</li>
+  <li>Complete payment if not already done.</li>
+</ul>
+  `.trim();
+
+  return renderBrandedEmail({
+    title: 'Welcome to EduDash Pro Aftercare',
+    subtitle: `${childName} is registered`,
+    preheader: 'Set your password and join the community',
+    bodyHtml,
+    cta: { label: 'Join WhatsApp Group', url: WHATSAPP_GROUP_LINK },
+    secondaryCta: { label: 'Open EduDash Pro', url: 'https://www.edudashpro.org.za/sign-in' },
+  });
 }
 
 /**

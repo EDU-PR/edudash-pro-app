@@ -15,13 +15,14 @@
  * @module components/super-admin/voice-orb/VoiceOrb
  */
 
-import React, { useState, useMemo, useCallback, useEffect, useImperativeHandle, forwardRef, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useImperativeHandle, forwardRef, useRef, memo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -66,6 +67,8 @@ export interface VoiceOrbRef {
 interface VoiceOrbProps {
   isListening: boolean;
   isSpeaking: boolean;
+  /** Whether the parent screen is processing (waiting for AI response). Used for auto-restart. */
+  isParentProcessing?: boolean;
   onStartListening: () => void;
   onStopListening: () => void;
   onTranscript: (text: string, language?: SupportedLanguage) => void;
@@ -75,6 +78,10 @@ interface VoiceOrbProps {
   onTTSStart?: () => void;
   /** Called when TTS ends */
   onTTSEnd?: () => void;
+  /** Called when user changes language */
+  onLanguageChange?: (lang: SupportedLanguage) => void;
+  /** Externally set language (from parent language dropdown) */
+  language?: SupportedLanguage;
   /** Auto-start listening when component mounts (default: true) */
   autoStartListening?: boolean;
   /** Auto-restart listening after TTS ends (default: true) */
@@ -88,6 +95,7 @@ interface VoiceOrbProps {
 const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   isListening,
   isSpeaking,
+  isParentProcessing = false,
   onStartListening,
   onStopListening,
   onTranscript,
@@ -95,13 +103,15 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   onSpeakEnd,
   onTTSStart,
   onTTSEnd,
+  onLanguageChange,
+  language: externalLanguage,
   autoStartListening = true,
   autoRestartAfterTTS = true,
 }, ref) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const tenantId = profile?.organization_id || profile?.preschool_id || null;
-  const [statusText, setStatusText] = useState('Starting...');
+  const [statusText, setStatusText] = useState('Listening...');
   const hasAutoStarted = useRef(false);
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('en-ZA');
   const [lastDetectedLanguage, setLastDetectedLanguage] = useState<SupportedLanguage | null>(null);
@@ -109,6 +119,13 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const [isProcessing, setIsProcessing] = useState(false); // Prevent double-processing
   const [liveTranscript, setLiveTranscript] = useState('');
   const [usingLiveSTT, setUsingLiveSTT] = useState(false);
+
+  // Sync external language prop from parent (language dropdown)
+  useEffect(() => {
+    if (externalLanguage && externalLanguage !== selectedLanguage) {
+      setSelectedLanguage(externalLanguage);
+    }
+  }, [externalLanguage]);
 
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
   const LIVE_SILENCE_TIMEOUT_MS = 2200;
@@ -190,7 +207,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     if (cleaned) {
       setLastDetectedLanguage(selectedLanguage);
       onTranscript(cleaned, selectedLanguage);
-      setStatusText('Tap to speak');
+      setStatusText('Listening...');
       return;
     }
 
@@ -198,12 +215,12 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     if (fallback) {
       setLastDetectedLanguage(selectedLanguage);
       onTranscript(fallback, selectedLanguage);
-      setStatusText('Tap to speak');
+      setStatusText('Listening...');
       return;
     }
 
     setStatusText('No speech detected');
-    setTimeout(() => setStatusText('Tap to speak'), 2000);
+    setTimeout(() => setStatusText('Listening...'), 2000);
   }, [clearLiveTimers, onTranscript, selectedLanguage]);
 
   useEffect(() => {
@@ -262,7 +279,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       
       if (!uri) {
         setStatusText('No audio recorded');
-        setTimeout(() => setStatusText('Tap to speak'), 2000);
+        setTimeout(() => setStatusText('Listening...'), 2000);
         return;
       }
       
@@ -276,10 +293,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
           setLastDetectedLanguage(detected);
         }
         onTranscript(result.text, result.language as SupportedLanguage | undefined);
-        setStatusText('Tap to speak');
+        setStatusText('Listening...');
       } else {
         setStatusText('No speech detected');
-        setTimeout(() => setStatusText('Tap to speak'), 2000);
+        setTimeout(() => setStatusText('Listening...'), 2000);
       }
     } finally {
       if (!usingLiveSTTRef.current) {
@@ -374,6 +391,43 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     }
     prevIsSpeaking.current = isSpeaking;
   }, [isSpeaking, ttsIsSpeaking, autoRestartAfterTTS, isMuted, isProcessing]);
+
+  // Always-listening mode: auto-restart after transcription completes (silence/result)
+  // This makes the ORB behave like ChatGPT voice — always listening unless muted
+  const prevIsProcessingRef = useRef(isProcessing);
+  const prevIsParentProcessingRef = useRef(isParentProcessing);
+  useEffect(() => {
+    // Detect: was processing (transcribing), now idle, and not speaking
+    if (prevIsProcessingRef.current && !isProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS) {
+      // Only restart if we're not about to start speaking (give TTS a moment to kick in)
+      const timer = setTimeout(() => {
+        if (!isSpeaking && !ttsIsSpeaking && !isMuted && !recorderState.isRecording && !usingLiveSTTRef.current) {
+          console.log('[VoiceOrb] 🔄 Always-listening: auto-restart after transcription');
+          handleStartRecordingRef.current?.();
+        }
+      }, 600); // 600ms — fast whisper-flow restart, provider handles auto-restart internally
+      prevIsProcessingRef.current = isProcessing;
+      return () => clearTimeout(timer);
+    }
+    prevIsProcessingRef.current = isProcessing;
+  }, [isProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, recorderState.isRecording]);
+
+  // Always-listening mode: auto-restart after parent finishes processing (AI response + TTS done)
+  // This catches the case where the ORB's internal isProcessing ends quickly but the parent
+  // is still waiting for the AI response and TTS playback
+  useEffect(() => {
+    if (prevIsParentProcessingRef.current && !isParentProcessing && !isSpeaking && !ttsIsSpeaking && !isMuted && autoRestartAfterTTS) {
+      const timer = setTimeout(() => {
+        if (!isSpeaking && !ttsIsSpeaking && !isMuted && !recorderState.isRecording && !usingLiveSTTRef.current && !isParentProcessing) {
+          console.log('[VoiceOrb] 🔄 Always-listening: auto-restart after parent processing done');
+          handleStartRecordingRef.current?.();
+        }
+      }, 1000); // 1s delay after parent processing ends to let TTS finish
+      prevIsParentProcessingRef.current = isParentProcessing;
+      return () => clearTimeout(timer);
+    }
+    prevIsParentProcessingRef.current = isParentProcessing;
+  }, [isParentProcessing, isSpeaking, ttsIsSpeaking, isMuted, autoRestartAfterTTS, recorderState.isRecording]);
   
   // Ref for handleStartRecording to avoid circular dependency
   const handleStartRecordingRef = useRef<(() => Promise<void>) | null>(null);
@@ -392,12 +446,42 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const shootingStars = useMemo(() => generateShootingStars(3), []);
   const rings = useMemo(() => generateRings(), []);
 
+  // ── Voice amplitude reactive animation ──────────────────────────
+  // Track audio level for ORB scale reactivity
+  const voiceAmplitude = useSharedValue(1);
+  const prevAudioLevel = useRef(0);
+
+  useEffect(() => {
+    const level = recorderState.audioLevel;
+    if ((isListening || recorderState.isRecording || usingLiveSTT) && !isMuted) {
+      // Map dB level (-60..0) to scale factor (1.0..1.25)
+      const normalized = Math.max(0, Math.min(1, (level + 60) / 60));
+      const targetScale = 1 + normalized * 0.25;
+      voiceAmplitude.value = withTiming(targetScale, { duration: 100, easing: Easing.out(Easing.quad) });
+    } else {
+      voiceAmplitude.value = withTiming(1, { duration: 300 });
+    }
+    prevAudioLevel.current = level;
+  }, [recorderState.audioLevel, isListening, recorderState.isRecording, usingLiveSTT, isMuted]);
+
+  // Also react to live speech detection (on-device STT gives no dB, but we can pulse)
+  useEffect(() => {
+    if (usingLiveSTT && liveTranscript.trim().length > 0) {
+      // Pulse up when speech detected via live STT
+      voiceAmplitude.value = withTiming(1.18, { duration: 150 });
+      const timer = setTimeout(() => {
+        voiceAmplitude.value = withTiming(1.05, { duration: 200 });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [liveTranscript, usingLiveSTT]);
+
   // Animation effects based on state
   useEffect(() => {
     if (isListening) {
-      // Listening mode - gentle pulse
+      // Listening mode - gentle pulse (amplitude will modulate on top)
       corePulse.value = withRepeat(
-        withTiming(1.08, { duration: 800, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.05, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
         -1,
         true
       );
@@ -434,10 +518,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     };
   }, [isListening, isSpeaking, ttsIsSpeaking]);
 
-  // Animated styles
+  // Animated styles — multiply voice amplitude for reactive ORB
   const coreAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: coreScale.value * corePulse.value },
+      { scale: coreScale.value * corePulse.value * voiceAmplitude.value },
       { rotate: `${coreRotation.value}deg` },
     ],
   }));
@@ -480,7 +564,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       setStatusText('Listening...');
     } else {
       setStatusText('Microphone permission denied');
-      setTimeout(() => setStatusText('Tap to speak'), 2000);
+      setTimeout(() => setStatusText('Listening...'), 2000);
     }
   }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking, liveAvailable, startLiveListening, clearLiveResults, clearLiveTimers]);
   
@@ -495,14 +579,14 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     if (isSpeaking || ttsIsSpeaking) {
       console.log('[VoiceOrb] 🛑 User interrupted TTS - stopping speech');
       await stopSpeaking();
-      setStatusText('Interrupted - tap to speak');
+      setStatusText('Interrupted');
       // Don't auto-start after interrupt - let user tap again
       return;
     }
     
     if (isMuted) {
       setStatusText('Unmute to speak');
-      setTimeout(() => setStatusText('Tap to speak'), 1500);
+      setTimeout(() => setStatusText('Listening...'), 1500);
       return;
     }
     if (isListening || recorderState.isRecording || usingLiveSTTRef.current) {
@@ -525,7 +609,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       onStopListening();
     }
     stopSpeaking();
-    setStatusText('Tap to speak');
+    setStatusText('Listening...');
   };
 
   // Determine glow color based on state
@@ -584,17 +668,18 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         ))}
       </TouchableOpacity>
       
-      {/* Status text */}
-      <Text style={[styles.statusText, { color: isMuted ? '#ef4444' : theme.textSecondary }]}>
-        {isMuted ? '🔇 Muted' : isTranscribing ? 'Transcribing...' : statusText}
-      </Text>
-      
-      {/* Speech indicator */}
-      {(isListening || recorderState.isRecording || usingLiveSTT) && !isMuted && (
-        <Text style={[styles.speechIndicator, { color: speechActive ? COLORS.listening : theme.textTertiary }]}>
-          {speechActive ? '🎤 Hearing you...' : '🔇 Waiting for speech...'}
+      {/* Status text — only show when there's something meaningful */}
+      {(isMuted || isTranscribing || statusText === 'No speech detected' || statusText === 'Microphone permission denied') ? (
+        <Text style={[styles.statusText, { color: isMuted ? '#ef4444' : theme.textSecondary }]}>
+          {isMuted ? 'Muted' : isTranscribing ? 'Transcribing...' : statusText}
         </Text>
-      )}
+      ) : (isListening || recorderState.isRecording || usingLiveSTT) && !isMuted ? (
+        <Text style={[styles.statusText, { color: speechActive ? COLORS.listening : theme.textSecondary }]}>
+          {speechActive ? 'Hearing you...' : 'Listening...'}
+        </Text>
+      ) : (isSpeaking || ttsIsSpeaking) ? (
+        <Text style={[styles.statusText, { color: COLORS.speaking }]}>Speaking...</Text>
+      ) : null}
 
       {usingLiveSTT && liveHasSpeech && (
         <View style={styles.liveTranscriptContainer}>
@@ -604,60 +689,30 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         </View>
       )}
       
-      {/* Controls row - mute and language selector */}
-      {!isListening && !recorderState.isRecording && !isSpeaking && !ttsIsSpeaking && (
-        <View style={styles.controlsRow}>
-          {/* Mute toggle */}
-          <TouchableOpacity
-            onPress={() => setIsMuted(!isMuted)}
-            style={[
-              styles.muteButton,
-              {
-                borderColor: isMuted ? '#ef4444' : theme.border,
-                backgroundColor: isMuted ? '#ef444420' : 'transparent',
-              }
-            ]}
-          >
-            <Text style={[styles.muteButtonText, { color: isMuted ? '#ef4444' : theme.textSecondary }]}>
-              {isMuted ? '🔇' : '🔊'}
-            </Text>
-          </TouchableOpacity>
-          
-          {/* Language selector */}
-          <View style={styles.languageSelector}>
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <TouchableOpacity
-                key={lang.code}
-                onPress={() => setSelectedLanguage(lang.code)}
-                style={[
-                  styles.languageOption,
-                  selectedLanguage === lang.code && styles.languageOptionSelected,
-                  { 
-                    borderColor: selectedLanguage === lang.code ? COLORS.violet : theme.border,
-                    backgroundColor: selectedLanguage === lang.code ? `${COLORS.violet}20` : 'transparent',
-                  }
-                ]}
-              >
-                <Text style={[
-                  styles.languageText,
-                  { color: selectedLanguage === lang.code ? COLORS.violet : theme.textSecondary }
-                ]}>
-                  {lang.code === 'en-ZA' ? 'EN' : lang.code === 'af-ZA' ? 'AF' : 'ZU'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
-      
-      {/* Hint text */}
-      <Text style={[styles.hintText, { color: theme.textTertiary || theme.textSecondary }]}>
-        Long press to close
-      </Text>
+      {/* Mic mute/unmute button — always visible */}
+      <TouchableOpacity
+        onPress={() => setIsMuted(!isMuted)}
+        style={[
+          styles.muteButton,
+          {
+            borderColor: isMuted ? '#ef4444' : theme.border,
+            backgroundColor: isMuted ? '#ef444420' : 'transparent',
+            marginTop: 16,
+          }
+        ]}
+      >
+        <Ionicons
+          name={isMuted ? 'mic-off' : 'mic'}
+          size={22}
+          color={isMuted ? '#ef4444' : theme.textSecondary}
+        />
+      </TouchableOpacity>
     </View>
   );
 });
 
 VoiceOrb.displayName = 'VoiceOrb';
 
-export default VoiceOrb;
+const MemoizedVoiceOrb = memo(VoiceOrb);
+
+export default MemoizedVoiceOrb;

@@ -79,13 +79,101 @@ export function getOrganizationType(
     return organizationData.type as OrganizationType;
   }
   
+  // Try profile.organization_membership.school_type (most reliable source)
+  const membershipType = profile?.organization_membership?.school_type;
+  if (membershipType) {
+    return normalizeSchoolType(membershipType);
+  }
+  
   // Try profile metadata
   if (profile?.organization_type) {
     return profile.organization_type as OrganizationType;
   }
   
+  // Try profile.school_type
+  if (profile?.school_type) {
+    return normalizeSchoolType(profile.school_type);
+  }
+  
   // Default to preschool for backward compatibility
   return 'preschool';
+}
+
+/**
+ * Normalize school_type string to OrganizationType
+ */
+export function normalizeSchoolType(schoolType: string): OrganizationType {
+  const lower = String(schoolType || '').toLowerCase();
+  if (lower.includes('preschool') || lower.includes('ecd') || lower.includes('early') || lower.includes('daycare') || lower.includes('creche')) {
+    return 'preschool';
+  }
+  if (lower.includes('primary') || lower.includes('elementary')) {
+    return 'k12_school';
+  }
+  if (lower.includes('high') || lower.includes('secondary') || lower.includes('k12')) {
+    return 'k12_school';
+  }
+  if (lower.includes('university') || lower.includes('college') || lower.includes('tertiary')) {
+    return 'university';
+  }
+  if (lower.includes('corporate') || lower.includes('business')) {
+    return 'corporate';
+  }
+  if (lower.includes('sport')) {
+    return 'sports_club';
+  }
+  if (lower.includes('tutor')) {
+    return 'tutoring_center';
+  }
+  return 'preschool'; // safe default
+}
+
+/**
+ * Check if organization is a preschool/ECD type
+ */
+export function isPreschoolOrg(profile: any, organizationData?: any): boolean {
+  const orgType = getOrganizationType(profile, organizationData);
+  return orgType === 'preschool';
+}
+
+/**
+ * Get age bands appropriate for an organization type
+ */
+export function getAgeBandsForOrgType(orgType: OrganizationType): { id: string; label: string }[] {
+  switch (orgType) {
+    case 'preschool':
+      return [
+        { id: 'auto', label: 'Auto' },
+        { id: '3-5', label: '3–5' },
+        { id: '6-8', label: '6–8' },
+      ];
+    case 'k12_school':
+      return [
+        { id: 'auto', label: 'Auto' },
+        { id: '6-8', label: '6–8' },
+        { id: '9-12', label: '9–12' },
+        { id: '13-15', label: '13–15' },
+        { id: '16-18', label: '16–18' },
+      ];
+    case 'university':
+    case 'corporate':
+    case 'skills_development':
+    case 'training_center':
+      return [
+        { id: 'auto', label: 'Auto' },
+        { id: 'adult', label: 'Adult' },
+      ];
+    default:
+      return [
+        { id: 'auto', label: 'Auto' },
+        { id: '3-5', label: '3–5' },
+        { id: '6-8', label: '6–8' },
+        { id: '9-12', label: '9–12' },
+        { id: '13-15', label: '13–15' },
+        { id: '16-18', label: '16–18' },
+        { id: 'adult', label: 'Adult' },
+      ];
+  }
 }
 
 /**

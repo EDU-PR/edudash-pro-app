@@ -4,9 +4,10 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { renderEduDashProEmail } from '../_shared/edudashproEmail.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
-const FROM_EMAIL = 'EduDash Pro <noreply@edudashpro.org.za>';
+const FROM_EMAIL = 'EduDash Pro <support@edudashpro.org.za>';
 const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';
 const APP_URL = Deno.env.get('APP_URL') || 'https://edudashpro.org.za';
@@ -25,147 +26,34 @@ function generateWelcomeEmailHTML(
   passwordResetLink: string,
   email: string
 ): string {
-  const currentYear = new Date().getFullYear();
+  const bodyHtml = `
+<p>Hi ${parentName},</p>
+<p>Great news! <strong>${childName}</strong> has been enrolled in the EduDash Pro Community School aftercare program.</p>
+<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px;margin:14px 0;">
+  <p style="margin:0;color:#0369a1;font-weight:600;">Your account email: ${email}</p>
+</div>
+<p>Use the button below to set your password and access the parent portal.</p>
+<p><strong>What you can do:</strong></p>
+<ul style="margin:0 0 0 18px;padding:0;color:#475569;">
+  <li>View attendance and daily updates</li>
+  <li>Receive important announcements</li>
+  <li>Message teachers and staff</li>
+  <li>Track payments and invoices</li>
+  <li>Update emergency contacts</li>
+</ul>
+<p>Join the WhatsApp community for updates and reminders.</p>
+<p><strong>Do you have a Gmail address?</strong> Reply to this email so we can add you to Google Play testing for early app access.</p>
+  `.trim();
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to EduDash Pro</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5;">
-  
-  <!-- Header -->
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-    <h1 style="margin: 0; color: white; font-size: 28px;">🎓 Welcome to EduDash Pro!</h1>
-    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Community School Aftercare</p>
-  </div>
-  
-  <!-- Content -->
-  <div style="max-width: 600px; margin: 0 auto; padding: 30px 20px;">
-    
-    <!-- Welcome Card -->
-    <div style="background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      
-      <!-- Celebration Icon -->
-      <div style="text-align: center; margin-bottom: 20px;">
-        <span style="font-size: 64px;">🎉</span>
-      </div>
-      
-      <h2 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 24px; text-align: center;">
-        ${childName} is Enrolled!
-      </h2>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Dear <strong>${parentName}</strong>,
-      </p>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Congratulations! <strong>${childName}</strong> has been successfully enrolled in the EduDash Pro Community School 2026 Aftercare Program. We're thrilled to welcome your family to our community!
-      </p>
-      
-      <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0 8px 8px 0; margin: 20px 0;">
-        <p style="margin: 0; color: #1e40af;">
-          <strong>Your Account Email:</strong> ${email}
-        </p>
-      </div>
-    </div>
-    
-    <!-- Set Password Card -->
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 30px; margin-bottom: 20px; text-align: center;">
-      <h3 style="margin: 0 0 15px 0; color: white; font-size: 20px;">
-        🔐 Set Up Your Password
-      </h3>
-      <p style="color: rgba(255,255,255,0.9); line-height: 1.6; margin: 0 0 20px 0;">
-        Click the button below to set your password and access the parent portal.
-      </p>
-      <a href="${passwordResetLink}" style="display: inline-block; background: white; color: #667eea; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 16px;">
-        Set My Password →
-      </a>
-      <p style="color: rgba(255,255,255,0.7); font-size: 12px; margin: 15px 0 0 0;">
-        This link expires in 24 hours
-      </p>
-    </div>
-    
-    <!-- What You Can Do Card -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        📱 What You Can Do in the App
-      </h3>
-      <ul style="color: #4a5568; line-height: 1.8; margin: 0; padding-left: 20px;">
-        <li>View your child's attendance and daily updates</li>
-        <li>Receive important notifications and announcements</li>
-        <li>Communicate with teachers and staff</li>
-        <li>Access homework assignments and learning activities</li>
-        <li>Track payment history and invoices</li>
-        <li>Update emergency contact information</li>
-      </ul>
-    </div>
-    
-    <!-- Download App Card -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        📲 Download the App
-      </h3>
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 15px 0;">
-        Get the EduDash Pro app for the best experience:
-      </p>
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <a href="https://play.google.com/store/apps/details?id=com.edudashpro.app" style="display: inline-block; background: #1a1a2e; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-          📱 Google Play
-        </a>
-        <a href="${APP_URL}" style="display: inline-block; background: #f1f5f9; color: #475569; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 500;">
-          🌐 Web App
-        </a>
-      </div>
-    </div>
-    
-    <!-- WhatsApp Group -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        💬 Join Our WhatsApp Community
-      </h3>
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 15px 0;">
-        Connect with other parents and stay updated on all activities!
-      </p>
-      <a href="${WHATSAPP_GROUP_LINK}" style="display: inline-block; background: #25D366; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-        Join WhatsApp Group →
-      </a>
-    </div>
-    
-    <!-- Google Email Request -->
-    <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 16px; padding: 25px; margin-bottom: 20px;">
-      <h3 style="margin: 0 0 15px 0; color: #92400e; font-size: 18px;">
-        📧 Quick Request
-      </h3>
-      <p style="color: #78350f; line-height: 1.6; margin: 0 0 15px 0;">
-        <strong>Do you have a Gmail address?</strong> Reply to this email with your Google email address to get early access to our new app features through Google Play testing!
-      </p>
-    </div>
-    
-    <!-- Support -->
-    <div style="text-align: center; padding: 20px;">
-      <p style="color: #718096; margin: 0 0 10px 0;">
-        Questions? We're here to help!
-      </p>
-      <a href="mailto:${SUPPORT_EMAIL}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-        ${SUPPORT_EMAIL}
-      </a>
-    </div>
-    
-  </div>
-  
-  <!-- Footer -->
-  <div style="text-align: center; padding: 30px 20px; background: #f8fafc;">
-    <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-      EduDash Pro Community School Aftercare<br>
-      © ${currentYear} EduDash Pro. All rights reserved.
-    </p>
-  </div>
-  
-</body>
-</html>`;
+  return renderEduDashProEmail({
+    title: `${childName} is enrolled`,
+    subtitle: 'Welcome to EduDash Pro Aftercare',
+    preheader: 'Set your password to access your dashboard',
+    bodyHtml,
+    cta: { label: 'Set my password', url: passwordResetLink },
+    secondaryCta: { label: 'Join WhatsApp Group', url: WHATSAPP_GROUP_LINK },
+    supportEmail: SUPPORT_EMAIL,
+  });
 }
 
 /**

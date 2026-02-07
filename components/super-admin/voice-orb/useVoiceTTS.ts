@@ -321,60 +321,80 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Stop any current playback without cancelling this session
       await stopPlayback();
       
-      // IMPORTANT: TTS ONLY supports en, af, zu (South African languages with Azure voices)
-      // For ANY other language, TTS is completely disabled - no speech at all
+      // TTS supports en, af, zu (South African languages with Azure Neural voices)
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
       const baseLang = language.split('-')[0];
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
-        console.warn(`[VoiceTTS] Language ${language} not supported - TTS disabled. Only en, af, zu are supported.`);
+        console.warn(`[VoiceTTS] Language ${language} not supported - TTS disabled.`);
         setError('TTS not available for this language');
         setIsSpeaking(false);
-        return; // Exit early - no TTS for unsupported languages
+        return;
       }
       
       const effectiveLanguage: SupportedLanguage = language;
       
-      // Clean text for TTS - remove markdown, emojis, and special characters for natural speech
+      // Comprehensive text cleaning for natural TTS — strip markdown,
+      // emojis, icons, unicode symbols and normalise for Azure Neural.
       const cleanText = text
-        // First: Handle acronyms and special brand names for proper pronunciation
-        .replace(/EduDash Pro/gi, 'Edu Dash Pro')  // Spell out for natural speech
-        .replace(/\bAPI\b/g, 'A P I')              // Spell out API
-        .replace(/\bHTTP\b/g, 'H T T P')           // Spell out HTTP
-        .replace(/\bJSON\b/g, 'J S O N')           // Spell out JSON
-        .replace(/\bSQL\b/g, 'S Q L')              // Spell out SQL
-        .replace(/\bRLS\b/g, 'R L S')              // Spell out RLS (Row Level Security)
-        .replace(/\bRBAC\b/g, 'R B A C')           // Spell out RBAC
-        .replace(/\bSTEM\b/g, 'S T E M')           // Spell out STEM
-        .replace(/\bSTT\b/g, 'speech to text')    // Expand STT
-        .replace(/\bTTS\b/g, 'text to speech')    // Expand TTS
-        .replace(/\bAI\b/g, 'A I')                 // Spell out AI
-        // Normalize newlines and list formatting before stripping markdown
+        // Acronym expansion for natural speech
+        .replace(/EduDash Pro/gi, 'Edu Dash Pro')
+        .replace(/\bAPI\b/g, 'A P I')
+        .replace(/\bHTTP\b/g, 'H T T P')
+        .replace(/\bJSON\b/g, 'J S O N')
+        .replace(/\bSQL\b/g, 'S Q L')
+        .replace(/\bRLS\b/g, 'R L S')
+        .replace(/\bRBAC\b/g, 'R B A C')
+        .replace(/\bSTEM\b/g, 'stem')
+        .replace(/\bSTT\b/g, 'speech to text')
+        .replace(/\bTTS\b/g, 'text to speech')
+        .replace(/\bAI\b/g, 'A.I.')
+        .replace(/\bCAPS\b/g, 'caps')
+        // Normalise newlines and list bullets
         .replace(/\r\n/g, '\n')
-        .replace(/^\s*[-*•]\s*/gm, '')
+        .replace(/^\s*[-*\u2022\u25e6\u25aa\ufe0e\u00b7]\s*/gm, '')
         .replace(/^\s*\d+[.)]\s*/gm, '')
-        // Then: Remove markdown and formatting
-        .replace(/\*\*/g, '')           // Bold markers
-        .replace(/\*/g, '')             // Italic markers  
-        .replace(/`/g, '')              // Code markers
-        .replace(/#{1,6}\s/g, '')       // Headers
-        .replace(/>/g, '')              // Blockquotes
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // Links
-        // Remove punctuation that TTS reads awkwardly
-        .replace(/[“”"«»]/g, '')
-        .replace(/[‘’]/g, '')
+        // Code blocks + inline code
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]+`/g, '')
+        // Markdown formatting
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .replace(/`/g, '')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/>/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        // Comprehensive emoji/icon removal (unicode ranges)
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{2600}-\u{26FF}]/gu, '')
+        .replace(/[\u{2700}-\u{27BF}]/gu, '')
+        .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+        .replace(/[\u{200D}]/gu, '')
+        .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')
+        .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')
+        // Bracketed meta + tool indicators
+        .replace(/\[.*?\]/g, '')
+        .replace(/_Tools used:.*?_/gi, '')
+        .replace(/_.*?tokens used_/gi, '')
+        // Quotes/brackets that TTS reads awkwardly
+        .replace(/[\u201C\u201D\u201E\u00AB\u00BB\u2018\u2019]/g, '')
+        .replace(/["""'']/g, '')
         .replace(/[()[\]{}<>]/g, '')
-        .replace(/[•◦▪︎·]/g, '')
-        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emojis
-        .replace(/[\ud83d\udcca\ud83d\udc4b\ud83d\udd27\u2699\ufe0f\u2728\ud83c\udfaf\ud83d\udcc8\ud83d\udca1\ud83d\ude80\u26a1\ud83d\udd0d\ud83d\udcdd\u2705\u274c\u26a0\ufe0f]/g, '') // Common icons
-        .replace(/\[.*?\]/g, '')       // Bracketed text like [Tools used: ...]
-        .replace(/_Tools used:.*?_/gi, '') // Tool usage indicators
-        .replace(/_.*?tokens used_/gi, '') // Token usage indicators
-        .replace(/🔧\s*/g, '')         // Tool icon prefix
-        .replace(/📊\s*/g, '')         // Chart icon prefix
-        .replace(/\n+/g, '. ')          // Newlines become pauses
-        .replace(/\s{2,}/g, ' ')        // Collapse whitespace
-        .replace(/\.\s*\./g, '. ')      // Remove repeated dots
+        // Status labels
+        .replace(/\bCorrect answer:\s*/gi, '')
+        .replace(/\bNext question:\s*/gi, '')
+        .replace(/\bHint:\s*/gi, 'Hint. ')
+        .replace(/^\s*User:\s*/gmi, '')
+        .replace(/^\s*Assistant:\s*/gmi, '')
+        // SA language names for proper TTS pronunciation
+        .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
+        .replace(/\bi\s*s\s*i\s+xhosa\b/gi, 'isiXhosa')
+        .replace(/\bse\s+pedi\b/gi, 'Sepedi')
+        .replace(/\bse\s+sotho\b/gi, 'Sesotho')
+        // Collapse whitespace
+        .replace(/\n+/g, '. ')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\.\s*\./g, '. ')
         .trim();
       
       if (!cleanText) {
@@ -386,7 +406,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
       const chunks = splitIntoChunks(cleanText, 1200);
       
-      // Speak sequentially to avoid cutoff
+      // Speak chunks sequentially so speech never cuts off mid-sentence
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
         await speakWithAzure(chunk, effectiveLanguage);

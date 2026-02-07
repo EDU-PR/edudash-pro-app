@@ -285,29 +285,44 @@ export class DashVoiceController {
   }
   
   /**
-   * Normalize text for speech (remove markdown, fix awkward phrases)
+   * Normalize text for speech (remove markdown, emojis, icons, fix awkward phrases)
    */
   private normalizeTextForSpeech(text: string): string {
     let normalized = text
-      .replace(/```[\s\S]*?```/g, '') // Remove code blocks
-      .replace(/`[^`]+`/g, '') // Remove inline code
-      .replace(/\*\*([^*]+)\*\*/g, '$1') // Bold
-      .replace(/\*([^*]+)\*/g, '$1') // Italic
+      .replace(/```[\s\S]*?```/g, '')       // Remove code blocks
+      .replace(/`[^`]+`/g, '')               // Remove inline code
+      .replace(/\*\*([^*]+)\*\*/g, '$1')    // Bold
+      .replace(/\*([^*]+)\*/g, '$1')         // Italic
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links
-      .replace(/#{1,6}\s+/g, '') // Headers
-      .replace(/>\s+/g, '') // Blockquotes
-      .replace(/[-*+]\s+/g, '') // Lists
-      .replace(/\n{2,}/g, '. ') // Multi-newlines
-      .replace(/\n/g, ' ') // Single newlines
-      .replace(/[✅❌]/g, '') // Remove emoji status
-      .replace(/\bCorrect answer:\s*/gi, '') // Remove labels
+      .replace(/#{1,6}\s+/g, '')             // Headers
+      .replace(/>\s+/g, '')                  // Blockquotes
+      .replace(/^\s*[-*+•◦▪︎·]\s+/gm, '')  // List bullets
+      .replace(/^\s*\d+[.)]\s+/gm, '')       // Numbered lists
+      // Comprehensive emoji removal
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')
+      .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+      .replace(/[\u{200D}]/gu, '')
+      .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')
+      .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')
+      .replace(/[✅❌⚠️✨🎯📊💡🚀⚡🔍📝🔧📈👋🎤🔇🔊🌟⭐💫📖🎓📚💯❤️✔️✖️👍👎🤔😊🙂🤗🙏]/g, '')
+      // Bracketed meta info
+      .replace(/\[.*?\]/g, '')
+      .replace(/_Tools used:.*?_/gi, '')
+      .replace(/_.*?tokens used_/gi, '')
+      // Quotes and parens
+      .replace(/["""«»'']/g, '')
+      // Status labels that shouldn't be spoken
+      .replace(/\bCorrect answer:\s*/gi, '')
       .replace(/\bNext question:\s*/gi, '')
       .replace(/\bHint:\s*/gi, 'Hint. ')
-      // IMPROVEMENT: Remove "User:" and "Assistant:" prefixes that shouldn't be spoken
-      .replace(/^\s*User:\s*/gi, '') // Remove "User:" at start
-      .replace(/\bUser:\s*/gi, '') // Remove "User:" anywhere
-      .replace(/^\s*Assistant:\s*/gi, '') // Remove "Assistant:" at start
-      .replace(/\bAssistant:\s*/gi, '') // Remove "Assistant:" anywhere
+      .replace(/^\s*User:\s*/gi, '')
+      .replace(/\bUser:\s*/gi, '')
+      .replace(/^\s*Assistant:\s*/gi, '')
+      .replace(/\bAssistant:\s*/gi, '')
+      .replace(/\n{2,}/g, '. ')              // Multi-newlines
+      .replace(/\n/g, ' ')                   // Single newlines
       .trim();
     
     // Fix awkward age and quantity phrases

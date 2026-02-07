@@ -193,7 +193,7 @@
           "mode": "production",
           "androidMode": "default",
           "iosDisplayInForeground": true,
-          "defaultChannel": "incoming-calls"
+          "defaultChannel": "default"
         }
       ],
       [

@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { getAgeBandsForOrgType, normalizeSchoolType } from '@/lib/tenant/compat';
 
 interface TutorHomeProps {
   styles: any;
@@ -34,27 +35,14 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   const [collapsed, setCollapsed] = useState(Dimensions.get('window').width < 420);
 
   const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
-  const isPreschool = normalizedSchool.includes('preschool') ||
-    normalizedSchool.includes('ecd') ||
-    normalizedSchool.includes('early');
+  const orgType = normalizeSchoolType(normalizedSchool || 'preschool');
+  const isPreschool = orgType === 'preschool';
   const roleValue = (learnerContext?.role || '').toLowerCase();
   const isStaff = ['teacher', 'principal', 'admin', 'manager', 'staff'].includes(roleValue);
   const lockAgeBand = !!learnerContext?.ageBand && (learnerContext?.role === 'student' || learnerContext?.role === 'learner');
 
-  const ageChips = useMemo(() => ([
-    { id: 'auto', label: 'Auto' },
-    { id: '3-5', label: '3–5' },
-    { id: '6-8', label: '6–8' },
-    { id: '9-12', label: '9–12' },
-    { id: '13-15', label: '13–15' },
-    { id: '16-18', label: '16–18' },
-    { id: 'adult', label: 'Adult' },
-  ]), []);
-
-  const visibleAgeChips = useMemo(() => {
-    if (!isPreschool) return ageChips;
-    return ageChips.filter(chip => ['auto', '3-5', '6-8'].includes(chip.id));
-  }, [ageChips, isPreschool]);
+  // Dynamic age chips based on org type
+  const visibleAgeChips = useMemo(() => getAgeBandsForOrgType(orgType), [orgType]);
 
   useEffect(() => {
     let mounted = true;
@@ -106,7 +94,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     const loadAgeBand = async () => {
       try {
         const storedAge = await AsyncStorage.getItem('@dash_ai_age_band');
-        if (storedAge && ageChips.some((chip) => chip.id === storedAge)) {
+        if (storedAge && visibleAgeChips.some((chip) => chip.id === storedAge)) {
           if (mounted) setAgeBand(storedAge);
         }
       } catch {
@@ -119,7 +107,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
     return () => {
       mounted = false;
     };
-  }, [ageChips]);
+  }, [visibleAgeChips]);
 
   useEffect(() => {
     if (!learnerContext?.ageBand) return;
@@ -143,7 +131,7 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
   }, [ageBand, ageBandLoaded, onAgeBandChange, lockAgeBand, learnerContext?.ageBand]);
 
   const buildPrompt = (intent: string, topic?: string) => {
-    const ageLabel = ageChips.find((chip) => chip.id === ageBand)?.label || ageBand;
+    const ageLabel = visibleAgeChips.find((chip) => chip.id === ageBand)?.label || ageBand;
     const agePrefix = lockAgeBand || ageBand === 'auto' ? '' : `Age group: ${ageLabel}. `;
     const topicPrefix = topic ? `Topic: ${topic}. ` : '';
     return `${agePrefix}${topicPrefix}${intent}`;

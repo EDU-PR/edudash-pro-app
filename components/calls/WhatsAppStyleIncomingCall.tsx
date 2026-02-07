@@ -83,24 +83,20 @@ export function WhatsAppStyleIncomingCall({
   const ring3Anim = useRef(new Animated.Value(0)).current;
   const soundRef = useRef<AudioPlayer | null>(null);
   
-  // Track app state to hide UI when backgrounded
-  const [appState, setAppState] = React.useState(Platform.select({ default: 'active' }));
+  // Track app state via ref to avoid unnecessary re-renders.
+  // The component already returns null when !isVisible, so we only
+  // need this for the rare case where an incoming call arrives mid-background.
+  const shouldShowUIRef = React.useRef(true);
   const [shouldShowUI, setShouldShowUI] = React.useState(true);
   
-  // Hide incoming call UI when app is backgrounded
-  // The notification handles incoming call alerts in background
   useEffect(() => {
     const { AppState } = require('react-native');
     const subscription = AppState.addEventListener('change', (nextAppState: string) => {
-      setAppState(nextAppState);
-      
-      if (nextAppState === 'background') {
-        console.log('[IncomingCall] App backgrounded - hiding UI, notification will handle alert');
-        setShouldShowUI(false);
-      } else if (nextAppState === 'active') {
-        console.log('[IncomingCall] App active - showing UI');
-        setShouldShowUI(true);
-      }
+      const prev = shouldShowUIRef.current;
+      const next = nextAppState === 'active';
+      if (prev === next) return; // skip redundant updates
+      shouldShowUIRef.current = next;
+      setShouldShowUI(next);
     });
     
     return () => subscription.remove();

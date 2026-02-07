@@ -19,7 +19,8 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'EduDash Pro <noreply@edudashpro.org.za>',
+          from: 'EduDash Pro <support@edudashpro.org.za>',
+          reply_to: 'support@edudashpro.org.za',
           to: ['superadmin@edudashpro.org.za'],
           subject: `📱 New Early Access Signup: ${email}`,
           html: `

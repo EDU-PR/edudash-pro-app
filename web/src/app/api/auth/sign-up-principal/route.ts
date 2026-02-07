@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
         postal_code: postalCode,
         country: country || 'ZA',
         subscription_status: 'trialing', // Start with trial
-        trial_end_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14-day trial
+        trial_end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7-day trial
         status: 'active',
       })
       .select()

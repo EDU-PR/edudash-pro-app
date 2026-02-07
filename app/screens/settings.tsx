@@ -16,6 +16,12 @@ import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
+import {
+  NotificationPresets,
+  setBadgeCount,
+  checkNotificationPermissions,
+  requestNotificationPermissions,
+} from '@/lib/notification-test-utils';
 
 // Extracted section components
 import {
@@ -65,7 +71,7 @@ const useSafeUpdates = () => {
 export default function SettingsScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = useState(false);
@@ -300,6 +306,169 @@ export default function SettingsScreen() {
     }
   }, []);
 
+  const handleDevNotificationTest = useCallback(async () => {
+    try {
+      const perms = await checkNotificationPermissions();
+      let granted = perms.granted;
+
+      if (!granted && perms.canAskAgain) {
+        granted = await requestNotificationPermissions();
+      }
+
+      if (!granted) {
+        Alert.alert(
+          'Notifications Disabled',
+          'Enable notifications to run the dev test.',
+          [
+            { text: 'OK', style: 'default' },
+          ],
+        );
+        return;
+      }
+
+      await NotificationPresets.newMessage();
+      await setBadgeCount(3);
+
+      Alert.alert(
+        'Dev Test Sent',
+        'A test notification was scheduled and the badge was set to 3.',
+      );
+    } catch (err: any) {
+      console.error('[Dev][NotificationTest] Error:', err);
+      Alert.alert('Dev Test Failed', err?.message || 'Unknown error');
+    }
+  }, []);
+
+  // ── Dev: Reset AI Quota ──────────────────────────────────────────
+  const handleResetAIQuota = useCallback(async () => {
+    try {
+      const supabase = assertSupabase();
+      const userId = user?.id;
+      if (!userId) {
+        Alert.alert('Error', 'No user ID found');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('user_ai_usage')
+        .update({
+          exams_generated_this_month: 0,
+          explanations_requested_this_month: 0,
+          chat_messages_today: 0,
+          chat_messages_this_month: 0,
+          last_daily_reset_at: new Date().toISOString(),
+          last_monthly_reset_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'AI Quota Reset',
+        'All AI usage counters have been reset to 0. You can now test quota limits fresh.',
+      );
+    } catch (err: any) {
+      console.error('[Dev][ResetQuota] Error:', err);
+      Alert.alert('Reset Failed', err?.message || 'Unknown error');
+    }
+  }, [user?.id]);
+
+  // ── Dev: Simulate Quota Exhaustion ────────────────────────────────
+  const handleSimulateQuotaExhaustion = useCallback(async () => {
+    try {
+      const supabase = assertSupabase();
+      const userId = user?.id;
+      if (!userId) {
+        Alert.alert('Error', 'No user ID found');
+        return;
+      }
+
+      // Set usage to exactly the limit to trigger quota_exceeded on next request
+      const { error } = await supabase
+        .from('user_ai_usage')
+        .update({
+          exams_generated_this_month: 999,
+          explanations_requested_this_month: 999,
+          chat_messages_today: 999,
+          chat_messages_this_month: 9999,
+        })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Quota Exhausted (Simulated)',
+        'AI usage set to maximum. Any AI request should now return a 429 quota_exceeded error. Use "Reset AI Quota" to restore.',
+      );
+    } catch (err: any) {
+      console.error('[Dev][SimulateQuota] Error:', err);
+      Alert.alert('Simulation Failed', err?.message || 'Unknown error');
+    }
+  }, [user?.id]);
+
+  // ── Dev: Switch AI Tier ──────────────────────────────────────────
+  const handleSwitchAITier = useCallback(async (tier: string) => {
+    try {
+      const supabase = assertSupabase();
+      const userId = user?.id;
+      if (!userId) {
+        Alert.alert('Error', 'No user ID found');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('user_ai_usage')
+        .update({ current_tier: tier })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      Alert.alert('Tier Changed', `AI tier set to: ${tier}. Quota limits now reflect the ${tier} tier.`);
+    } catch (err: any) {
+      console.error('[Dev][SwitchTier] Error:', err);
+      Alert.alert('Tier Change Failed', err?.message || 'Unknown error');
+    }
+  }, [user?.id]);
+
+  const handleDevEmailTest = useCallback(async () => {
+    const role = profile?.role || '';
+    const allowed = ['principal', 'principal_admin', 'super_admin', 'superadmin', 'teacher'];
+    if (!allowed.includes(role)) {
+      Alert.alert('Dev Email Test', 'Only principals, teachers, or super admins can send test emails.');
+      return;
+    }
+
+    const recipient = profile?.email || user?.email;
+    if (!recipient) {
+      Alert.alert('Dev Email Test', 'No email found for the current user.');
+      return;
+    }
+
+    try {
+      const { data, error } = await assertSupabase().functions.invoke('send-email', {
+        body: {
+          to: recipient,
+          subject: 'EduDash Pro Test Email',
+          body: '<p>This is a dev-only test email from the EduDash Pro app.</p>',
+          confirmed: true,
+          use_branded_template: true,
+          preheader: 'Dev email test',
+          subtitle: 'Branded template preview',
+          cta: { label: 'Open EduDash Pro', url: 'https://www.edudashpro.org.za/sign-in' },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert('Dev Email Test', `Sent to ${recipient}${data?.message_id ? ` (id: ${data.message_id})` : ''}`);
+    } catch (err: any) {
+      console.error('[Dev][EmailTest] Error:', err);
+      Alert.alert('Dev Email Test Failed', err?.message || 'Failed to send test email.');
+    }
+  }, [profile, user]);
+
   const toggleBiometric = async () => {
     if (!biometricEnrolled) {
       Alert.alert(
@@ -399,6 +568,66 @@ export default function SettingsScreen() {
               <Text style={styles.sectionTitle}>Dev Tools</Text>
               <View style={styles.settingsCard}>
                 <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={() => router.push('/screens/dev-notification-tester')}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons
+                      name="notifications-outline"
+                      size={24}
+                      color={theme.primary}
+                      style={styles.settingIcon}
+                    />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Notification Tester</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Open dev-only notification tester
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={handleDevNotificationTest}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons
+                      name="flask-outline"
+                      size={24}
+                      color={theme.primary}
+                      style={styles.settingIcon}
+                    />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Run Notification Test</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Send a local test notification + badge
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={handleDevEmailTest}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={24}
+                      color={theme.primary}
+                      style={styles.settingIcon}
+                    />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Send Test Email</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Dev-only branded email test
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[styles.settingItem, styles.lastSettingItem]}
                   onPress={handleForgotPasswordTest}
                 >
@@ -418,6 +647,65 @@ export default function SettingsScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
                 </TouchableOpacity>
+              </View>
+
+              {/* AI Quota Dev Tools */}
+              <Text style={[styles.sectionTitle, { marginTop: 16 }]}>AI Quota Simulation</Text>
+              <View style={styles.settingsCard}>
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={handleResetAIQuota}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons name="refresh-circle-outline" size={24} color="#10B981" style={styles.settingIcon} />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Reset AI Quota</Text>
+                      <Text style={styles.settingSubtitle}>Reset all AI usage counters to 0</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.settingItem}
+                  onPress={handleSimulateQuotaExhaustion}
+                >
+                  <View style={styles.settingLeft}>
+                    <Ionicons name="warning-outline" size={24} color="#F59E0B" style={styles.settingIcon} />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Simulate Quota Exceeded</Text>
+                      <Text style={styles.settingSubtitle}>Max out all AI counters to test 429 responses</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                <View style={styles.settingItem}>
+                  <View style={styles.settingLeft}>
+                    <Ionicons name="swap-horizontal-outline" size={24} color={theme.primary} style={styles.settingIcon} />
+                    <View style={styles.settingContent}>
+                      <Text style={styles.settingTitle}>Switch AI Tier</Text>
+                      <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                        {['free', 'trial', 'basic', 'pro', 'enterprise'].map((tier) => (
+                          <TouchableOpacity
+                            key={tier}
+                            onPress={() => handleSwitchAITier(tier)}
+                            style={{
+                              paddingHorizontal: 12,
+                              paddingVertical: 6,
+                              borderRadius: 16,
+                              backgroundColor: theme.surface,
+                              borderWidth: 1,
+                              borderColor: theme.border,
+                            }}
+                          >
+                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600', textTransform: 'capitalize' }}>
+                              {tier}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </View>
               </View>
             </View>
           )}

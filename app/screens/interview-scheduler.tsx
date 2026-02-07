@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,13 +7,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import HiringHubService from '@/lib/services/HiringHubService';
-
+import { useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function InterviewSchedulerScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId: string }>();
   const { user } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, AlertModalComponent } = useAlertModal();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +42,7 @@ export default function InterviewSchedulerScreen() {
       setApplication(data);
     } catch (error: any) {
       console.error('Error loading application:', error);
-      Alert.alert('Error', error.message || 'Failed to load application');
+      showAlert({ title: 'Error', message: error.message || 'Failed to load application', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -98,13 +99,13 @@ export default function InterviewSchedulerScreen() {
     selectedDateTime.setHours(interviewTime.getHours(), interviewTime.getMinutes());
     
     if (selectedDateTime < new Date()) {
-      Alert.alert('Validation Error', 'Interview date and time must be in the future');
+      showAlert({ title: 'Validation Error', message: 'Interview date and time must be in the future', type: 'warning' });
       return false;
     }
 
     // Either meeting link OR location must be provided
     if (!meetingLink.trim() && !location.trim()) {
-      Alert.alert('Validation Error', 'Please provide either a meeting link or location');
+      showAlert({ title: 'Validation Error', message: 'Please provide either a meeting link or location', type: 'warning' });
       return false;
     }
 
@@ -132,14 +133,16 @@ export default function InterviewSchedulerScreen() {
         user.id
       );
 
-      Alert.alert(
-        'Success',
-        'Interview scheduled successfully. The candidate will receive an email notification.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      showAlert({
+        title: 'Success',
+        message: 'Interview scheduled successfully. The candidate will receive an email notification.',
+        type: 'success',
+        icon: 'checkmark-circle',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch (error: any) {
       console.error('Error scheduling interview:', error);
-      Alert.alert('Error', error.message || 'Failed to schedule interview');
+      showAlert({ title: 'Error', message: error.message || 'Failed to schedule interview', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -173,6 +176,7 @@ export default function InterviewSchedulerScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Schedule Interview', headerShown: false }} />
+      <AlertModalComponent />
 
       {/* Header */}
       <View style={styles.header}>

@@ -262,9 +262,12 @@ export class BiometricAuthService {
    */
   static async getSecurityState(): Promise<BiometricSecurityState> {
     try {
-      const stateData = await SecureStore.getItemAsync(
-        "biometric_security_state",
-      );
+      let stateData: string | null = null;
+      if (SecureStore) {
+        stateData = await SecureStore.getItemAsync("biometric_security_state");
+      } else {
+        stateData = await AsyncStorage.getItem("biometric_security_state");
+      }
       return stateData ? JSON.parse(stateData) : { failedAttempts: 0 };
     } catch (error) {
       logError("Error getting security state:", error);
@@ -278,13 +281,17 @@ export class BiometricAuthService {
   static async updateSecurityState(success: boolean): Promise<void> {
     try {
       const currentState = await this.getSecurityState();
+      const store = async (data: string) => {
+        if (SecureStore) {
+          await SecureStore.setItemAsync("biometric_security_state", data);
+        } else {
+          await AsyncStorage.setItem("biometric_security_state", data);
+        }
+      };
 
       if (success) {
         // Reset failed attempts on successful authentication
-        await SecureStore.setItemAsync(
-          "biometric_security_state",
-          JSON.stringify({ failedAttempts: 0 }),
-        );
+        await store(JSON.stringify({ failedAttempts: 0 }));
       } else {
         const newFailedAttempts = currentState.failedAttempts + 1;
         const newState: BiometricSecurityState = {
@@ -299,10 +306,7 @@ export class BiometricAuthService {
           ).toISOString();
         }
 
-        await SecureStore.setItemAsync(
-          "biometric_security_state",
-          JSON.stringify(newState),
-        );
+        await store(JSON.stringify(newState));
       }
     } catch (error) {
       logError("Error updating security state:", error);
@@ -604,20 +608,31 @@ export class BiometricAuthService {
    */
   static async disableBiometric(): Promise<void> {
     try {
-      // Remove from both SecureStore and AsyncStorage
-      await Promise.all([
-        SecureStore.deleteItemAsync(BIOMETRIC_STORAGE_KEY).catch(() => { /* Intentional: error handled */ }),
-        SecureStore.deleteItemAsync(BIOMETRIC_USER_KEY).catch(() => { /* Intentional: error handled */ }),
-        SecureStore.deleteItemAsync("biometric_security_state").catch(() => { /* Intentional: error handled */ }),
-        SecureStore.deleteItemAsync(BIOMETRIC_LOCK_SECRET_KEY).catch(() => { /* Intentional: error handled */ }),
-        SecureStore.deleteItemAsync(LAST_UNLOCKED_AT_KEY).catch(() => { /* Intentional: error handled */ }),
-        SecureStore.deleteItemAsync(LAST_USER_ID_KEY).catch(() => { /* Intentional: error handled */ }),
-        // Also remove stored refresh token used for session restoration
-        SecureStore.deleteItemAsync(BIOMETRIC_REFRESH_TOKEN_KEY).catch(() => { /* Intentional: error handled */ }),
-        AsyncStorage.removeItem(BIOMETRIC_STORAGE_KEY),
-        AsyncStorage.removeItem(BIOMETRIC_USER_KEY),
-        AsyncStorage.removeItem(BIOMETRIC_REFRESH_TOKEN_KEY),
-      ]);
+      const secureStoreKeys = [
+        BIOMETRIC_STORAGE_KEY,
+        BIOMETRIC_USER_KEY,
+        "biometric_security_state",
+        BIOMETRIC_LOCK_SECRET_KEY,
+        LAST_UNLOCKED_AT_KEY,
+        LAST_USER_ID_KEY,
+        BIOMETRIC_REFRESH_TOKEN_KEY,
+      ];
+      const asyncStorageKeys = [
+        BIOMETRIC_STORAGE_KEY,
+        BIOMETRIC_USER_KEY,
+        BIOMETRIC_REFRESH_TOKEN_KEY,
+      ];
+
+      const promises: Promise<any>[] = asyncStorageKeys.map((k) =>
+        AsyncStorage.removeItem(k)
+      );
+      if (SecureStore) {
+        secureStoreKeys.forEach((k) =>
+          promises.push(SecureStore.deleteItemAsync(k).catch(() => { /* Intentional: error handled */ }))
+        );
+      }
+
+      await Promise.all(promises);
     } catch (error) {
       console.error("Error disabling biometric authentication:", error);
     }
@@ -629,9 +644,12 @@ export class BiometricAuthService {
   static async getStoredBiometricData(): Promise<StoredBiometricData | null> {
     try {
       // Try SecureStore first, fallback to AsyncStorage for compatibility
-      let data = await SecureStore.getItemAsync(BIOMETRIC_USER_KEY).catch(
-        () => null,
-      );
+      let data: string | null = null;
+      if (SecureStore) {
+        data = await SecureStore.getItemAsync(BIOMETRIC_USER_KEY).catch(
+          () => null,
+        );
+      }
       if (!data) {
         data = await AsyncStorage.getItem(BIOMETRIC_USER_KEY);
       }
@@ -644,10 +662,12 @@ export class BiometricAuthService {
           parsedData.version = 1;
           parsedData.securityToken = await this.generateSecurityToken();
           // Save migrated data to SecureStore
-          await SecureStore.setItemAsync(
-            BIOMETRIC_USER_KEY,
-            JSON.stringify(parsedData),
-          );
+          if (SecureStore) {
+            await SecureStore.setItemAsync(
+              BIOMETRIC_USER_KEY,
+              JSON.stringify(parsedData),
+            );
+          }
         }
 
         return parsedData;

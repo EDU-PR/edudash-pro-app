@@ -206,6 +206,73 @@ function normalizeRequestedModel(raw?: string | null): string | null {
 }
 
 async function webSearchTool(args: z.infer<typeof WebSearchArgsSchema>): Promise<JsonRecord> {
+  // Try Brave Search API first (much better quality than DuckDuckGo Instant Answers)
+  const braveApiKey = getEnv('BRAVE_SEARCH_API_KEY');
+  if (braveApiKey) {
+    return braveSearch(args, braveApiKey);
+  }
+
+  // Fallback to DuckDuckGo Instant Answer API (no key required, lower quality)
+  return duckDuckGoSearch(args);
+}
+
+async function braveSearch(
+  args: z.infer<typeof WebSearchArgsSchema>,
+  apiKey: string,
+): Promise<JsonRecord> {
+  try {
+    const params = new URLSearchParams({
+      q: args.query,
+      count: '5',
+      text_decorations: 'false',
+      search_lang: 'en',
+    });
+    if (args.recency === 'day') params.set('freshness', 'pd');
+    else if (args.recency === 'week') params.set('freshness', 'pw');
+    else if (args.recency === 'month') params.set('freshness', 'pm');
+
+    const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`[webSearch] Brave API error: ${response.status}`);
+      return duckDuckGoSearch(args);
+    }
+
+    const data = (await response.json()) as JsonRecord;
+    const webResults = Array.isArray((data as any).web?.results) ? (data as any).web.results : [];
+
+    const results: Array<JsonRecord> = webResults.slice(0, 5).map((r: any) => ({
+      title: r.title || '',
+      url: r.url || '',
+      snippet: r.description || r.title || '',
+      source: 'brave',
+    }));
+
+    // Apply domain filter if specified
+    const filtered = args.domains && args.domains.length > 0
+      ? results.filter((r) => {
+          const urlStr = typeof r.url === 'string' ? r.url : '';
+          return args.domains!.some((domain) => urlStr.includes(domain));
+        })
+      : results;
+
+    const infobox = (data as any).infobox?.results?.[0];
+    const abstract = infobox?.long_desc || infobox?.description || undefined;
+
+    return { query: args.query, results: filtered, abstract, provider: 'brave' };
+  } catch (err) {
+    console.error('[webSearch] Brave search failed, falling back to DuckDuckGo:', err);
+    return duckDuckGoSearch(args);
+  }
+}
+
+async function duckDuckGoSearch(args: z.infer<typeof WebSearchArgsSchema>): Promise<JsonRecord> {
   const query = encodeURIComponent(args.query);
   const url = `https://api.duckduckgo.com/?q=${query}&format=json&no_html=1&no_redirect=1`;
   const response = await fetch(url);
@@ -254,6 +321,7 @@ async function webSearchTool(args: z.infer<typeof WebSearchArgsSchema>): Promise
     query: args.query,
     results: filtered.slice(0, 5),
     abstract: typeof data.AbstractText === 'string' ? data.AbstractText : undefined,
+    provider: 'duckduckgo',
   };
 }
 

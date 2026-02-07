@@ -5,6 +5,7 @@
  * to prevent loading states after tab switching/minimizing.
  */
 
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 
@@ -18,6 +19,8 @@ class VisibilityHandler {
   private options: VisibilityHandlerOptions;
   private refreshTimeout?: ReturnType<typeof setTimeout>;
   private lastVisibilityChange = Date.now();
+  private appStateSubscription: { remove: () => void } | null = null;
+  private lastAppState: AppStateStatus = AppState.currentState;
 
   constructor(options: VisibilityHandlerOptions = {}) {
     this.options = {
@@ -29,7 +32,13 @@ class VisibilityHandler {
   }
 
   private initialize() {
-    // Only initialize on web platforms
+    if (Platform.OS !== 'web') {
+      // Mobile: use AppState to detect foreground/background transitions
+      this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
+      return;
+    }
+
+    // Web: use document/window events
     if (typeof document === 'undefined' || typeof window === 'undefined') {
       return;
     }
@@ -44,6 +53,20 @@ class VisibilityHandler {
     // Handle browser back/forward navigation
     window.addEventListener('pageshow', this.handlePageShow);
   }
+
+  private handleAppStateChange = (nextAppState: AppStateStatus) => {
+    const wasBg = this.lastAppState === 'background' || this.lastAppState === 'inactive';
+    const isNowActive = nextAppState === 'active';
+
+    this.lastAppState = nextAppState;
+
+    this.options.onVisibilityChange?.(isNowActive);
+
+    // Only refresh when transitioning FROM background/inactive TO active
+    if (wasBg && isNowActive && this.options.onSessionRefresh) {
+      this.scheduleSessionRefresh();
+    }
+  };
 
   private handleVisibilityChange = () => {
     const isVisible = !document.hidden;
@@ -145,6 +168,12 @@ class VisibilityHandler {
   public destroy() {
     if (this.refreshTimeout) {
       clearTimeout(this.refreshTimeout);
+    }
+
+    // Clean up mobile AppState listener
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
     }
 
     if (typeof document !== 'undefined') {
