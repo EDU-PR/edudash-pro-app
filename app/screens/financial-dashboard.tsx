@@ -299,8 +299,15 @@ export default function FinanceDashboard() {
             () => router.push('/screens/pop-review')
           )}
           {renderActionRow(
-            t('finance_dashboard.record_expense', { defaultValue: 'Record an Expense' }),
-            t('finance_dashboard.record_expense_hint', { defaultValue: 'Petty cash and receipts' }),
+            t('finance_dashboard.log_expense', { defaultValue: 'Log an Expense' }),
+            t('finance_dashboard.log_expense_hint', { defaultValue: 'Salaries, rent, utilities, supplies' }),
+            'add-circle',
+            '#6366F1',
+            () => router.push('/screens/log-expense')
+          )}
+          {renderActionRow(
+            t('finance_dashboard.record_expense', { defaultValue: 'Petty Cash' }),
+            t('finance_dashboard.record_expense_hint', { defaultValue: 'Small daily expenses and receipts' }),
             'cash',
             theme?.success || '#059669',
             () => router.push('/screens/petty-cash')

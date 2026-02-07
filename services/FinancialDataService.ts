@@ -1285,4 +1285,137 @@ export class FinancialDataService {
         return status.charAt(0).toUpperCase() + status.slice(1);
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // EXPENSE LOGGING — Insert into financial_transactions
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Expense types supported by the financial_transactions table
+   */
+  static readonly EXPENSE_TYPES = [
+    { key: 'salary', label: 'Staff Salary', icon: 'people', color: '#6366F1' },
+    { key: 'operational_expense', label: 'Rent / Lease', icon: 'home', color: '#F59E0B' },
+    { key: 'expense', label: 'Utilities (Water, Electricity)', icon: 'flash', color: '#3B82F6' },
+    { key: 'purchase', label: 'Supplies / Equipment', icon: 'cart', color: '#10B981' },
+    { key: 'expense', label: 'Maintenance / Repairs', icon: 'construct', color: '#EF4444' },
+    { key: 'expense', label: 'Transport', icon: 'car', color: '#8B5CF6' },
+    { key: 'expense', label: 'Food / Catering', icon: 'restaurant', color: '#EC4899' },
+    { key: 'expense', label: 'Insurance', icon: 'shield-checkmark', color: '#14B8A6' },
+    { key: 'expense', label: 'Other', icon: 'ellipsis-horizontal-circle', color: '#6B7280' },
+  ] as const;
+
+  /**
+   * Log a new expense (salary, utility, rent, etc.) into financial_transactions
+   */
+  static async logExpense(params: {
+    preschoolId: string;
+    createdBy: string;
+    type: string;
+    amount: number;
+    description: string;
+    category?: string;
+    expenseCategoryId?: string;
+    vendorName?: string;
+    paymentMethod?: string;
+    paymentReference?: string;
+    receiptImagePath?: string;
+    metadata?: Record<string, any>;
+  }): Promise<{ id: string }> {
+    const supabase = assertSupabase();
+
+    const payload: Record<string, any> = {
+      preschool_id: params.preschoolId,
+      created_by: params.createdBy,
+      type: params.type,
+      amount: params.amount,
+      description: params.description,
+      status: 'completed', // Principal-logged expenses are auto-approved
+      vendor_name: params.vendorName || null,
+      payment_method: params.paymentMethod || null,
+      payment_reference: params.paymentReference || null,
+      receipt_image_path: params.receiptImagePath || null,
+      expense_category_id: params.expenseCategoryId || null,
+      metadata: {
+        ...(params.metadata || {}),
+        category_label: params.category || params.type,
+        logged_from: 'mobile_app',
+      },
+    };
+
+    const { data, error } = await supabase
+      .from('financial_transactions')
+      .insert(payload)
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[FinancialDataService] Failed to log expense:', error);
+      throw new Error(error.message || 'Failed to log expense');
+    }
+
+    return { id: (data as any).id };
+  }
+
+  /**
+   * Get expense categories for a preschool (from expense_categories table)
+   */
+  static async getExpenseCategories(preschoolId: string): Promise<Array<{
+    id: string;
+    name: string;
+    color: string;
+    icon: string;
+    monthlyBudget: number;
+  }>> {
+    const supabase = assertSupabase();
+
+    const { data, error } = await supabase
+      .from('expense_categories')
+      .select('id, name, color, icon, monthly_budget')
+      .eq('preschool_id', preschoolId)
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.warn('[FinancialDataService] Failed to load expense categories:', error.message);
+      return [];
+    }
+
+    return (data || []).map((cat: any) => ({
+      id: cat.id,
+      name: cat.name,
+      color: cat.color || '#6366F1',
+      icon: cat.icon || 'receipt',
+      monthlyBudget: Number(cat.monthly_budget) || 0,
+    }));
+  }
+
+  /**
+   * Get staff list for salary logging (teachers from this preschool)
+   */
+  static async getStaffForSalary(preschoolId: string): Promise<Array<{
+    id: string;
+    name: string;
+    role: string;
+  }>> {
+    const supabase = assertSupabase();
+
+    const { data, error } = await supabase
+      .from('teachers')
+      .select('id, first_name, last_name, subject_specialization')
+      .eq('preschool_id', preschoolId)
+      .eq('is_active', true)
+      .order('first_name');
+
+    if (error) {
+      console.warn('[FinancialDataService] Failed to load staff:', error.message);
+      return [];
+    }
+
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      name: `${t.first_name} ${t.last_name}`.trim(),
+      role: t.subject_specialization || 'Teacher',
+    }));
+  }
 }

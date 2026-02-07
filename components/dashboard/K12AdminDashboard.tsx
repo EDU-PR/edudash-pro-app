@@ -202,6 +202,13 @@ export function K12AdminDashboard() {
         onPress: () => router.push('/screens/announcements'),
       },
       {
+        id: 'social-agent',
+        title: 'Social Agent',
+        icon: 'logo-facebook',
+        color: '#1877F2',
+        onPress: () => router.push('/screens/principal-social-agent'),
+      },
+      {
         id: 'calendar',
         title: 'Calendar',
         icon: 'calendar-outline',

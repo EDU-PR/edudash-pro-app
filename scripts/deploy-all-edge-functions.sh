@@ -100,6 +100,11 @@ UTILITY_FUNCTIONS=(
     "cost-aggregator"
     "service-health-monitor"
     "principal-hub-api"
+    "social-facebook-connect"
+    "social-agent-generate"
+    "social-facebook-publish"
+    "social-agent-daily-cron"
+    "social-publisher-cron"
 )
 
 # Combine all functions

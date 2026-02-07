@@ -219,6 +219,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       color: '#10B981',
     },
     {
+      id: 'log-expense',
+      title: t('dashboard.log_expense', { defaultValue: 'Log Expense' }),
+      icon: 'add-circle',
+      color: '#6366F1',
+    },
+    {
       id: 'dash-studio',
       title: t('dashboard.dash_studio', { defaultValue: 'Dash Studio' }),
       icon: 'sparkles',
@@ -342,6 +348,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'fee-management':
         router.push('/screens/principal-fee-overview');
+        break;
+      case 'log-expense':
+        router.push('/screens/log-expense');
         break;
       case 'dash-studio':
         router.push('/screens/dash-studio');

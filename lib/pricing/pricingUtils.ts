@@ -53,7 +53,7 @@ export const getTierConfig = (tier: string, isParent: boolean = false): TierConf
       descriptionKey: 'pricing.tier.free.desc',
       defaultFeatures: isParent 
         ? ['Homework Helper (10/month)', 'Child progress tracking', 'Teacher messaging']
-        : ['Basic dashboard', 'Student management', 'Parent communication'],
+        : ['Up to 2 teachers', 'Up to 50 students', 'Basic dashboard', 'Parent communication'],
       recommended: false,
       color: ['#00f5ff', '#0080ff'],
     },
@@ -83,9 +83,68 @@ export const getTierConfig = (tier: string, isParent: boolean = false): TierConf
       recommended: false,
       color: ['#ff0080', '#8000ff'],
     },
+    'school-starter': {
+      description: 'Essential features for growing schools',
+      descriptionKey: 'pricing.tier.school_starter.desc',
+      defaultFeatures: [
+        'Up to 5 teachers',
+        '150 students',
+        'AI-powered insights',
+        'Parent portal',
+        'WhatsApp notifications',
+        'Email support'
+      ],
+      recommended: true,
+      color: ['#8000ff', '#ff0080'],
+    },
+    'school-premium': {
+      description: 'Professional features for established schools',
+      descriptionKey: 'pricing.tier.school_premium.desc',
+      defaultFeatures: [
+        'Up to 15 teachers',
+        '500 students',
+        'Advanced reporting',
+        'Priority support',
+        'Custom branding',
+        'API access',
+        'Advanced analytics'
+      ],
+      recommended: false,
+      color: ['#ff0080', '#8000ff'],
+    },
+    'school-pro': {
+      description: 'Advanced solution for large schools',
+      descriptionKey: 'pricing.tier.school_pro.desc',
+      defaultFeatures: [
+        'Up to 30 teachers',
+        '1000 students',
+        'Everything in Premium',
+        'Dedicated account manager',
+        'Advanced AI features',
+        'Priority API access'
+      ],
+      recommended: false,
+      color: ['#ff8000', '#ff0080'],
+    },
+    'school-enterprise': {
+      description: 'Complete solution for large organizations',
+      descriptionKey: 'pricing.tier.school_enterprise.desc',
+      defaultFeatures: [
+        'Up to 100 teachers',
+        'Unlimited students',
+        'Dedicated success manager',
+        'SLA guarantee',
+        'White-label solution',
+        'Custom integrations',
+        '24/7 priority support'
+      ],
+      recommended: false,
+      color: ['#ff8000', '#ff0080'],
+    },
+    // Legacy keys (for un-migrated DB records that still use old names)
     starter: {
       description: 'Essential features for growing schools',
-      descriptionKey: 'pricing.tier.starter.desc',
+      descriptionKey: 'pricing.tier.school_starter.desc',
       defaultFeatures: [
         'Up to 5 teachers',
         '150 students',
@@ -99,7 +158,7 @@ export const getTierConfig = (tier: string, isParent: boolean = false): TierConf
     },
     premium: {
       description: 'Professional features for established schools',
-      descriptionKey: 'pricing.tier.premium.desc',
+      descriptionKey: 'pricing.tier.school_premium.desc',
       defaultFeatures: [
         'Up to 15 teachers',
         '500 students',
@@ -114,7 +173,7 @@ export const getTierConfig = (tier: string, isParent: boolean = false): TierConf
     },
     enterprise: {
       description: 'Complete solution for large organizations',
-      descriptionKey: 'pricing.tier.enterprise.desc',
+      descriptionKey: 'pricing.tier.school_enterprise.desc',
       defaultFeatures: [
         'Up to 100 teachers',
         'Unlimited students',

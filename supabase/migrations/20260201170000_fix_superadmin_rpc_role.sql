@@ -184,7 +184,13 @@ BEGIN
       'plan_type', COALESCE(sp.tier, 'free'),
       'monthly_limit', COALESCE(
         CASE sp.tier
+          WHEN 'school_starter' THEN 5000
+          WHEN 'school_premium' THEN 15000
+          WHEN 'school_pro' THEN 25000
+          WHEN 'school_enterprise' THEN 100000
+          -- Legacy names (for un-migrated rows)
           WHEN 'basic' THEN 5000
+          WHEN 'premium' THEN 15000
           WHEN 'pro' THEN 25000
           WHEN 'enterprise' THEN 100000
           ELSE 1000
