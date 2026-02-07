@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { selectFeeStructureForChild, type FeeStructureCandidate } from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
+import { notifyRegistrationApproved, notifyRegistrationRejected } from '@/lib/notify';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import type { PostgrestError } from '@supabase/supabase-js';
 
@@ -583,19 +584,33 @@ export default function RegistrationDetailScreen() {
 
       if (updateError) throw updateError;
 
-      // Notify parent
+      // Notify parent via push + email
       try {
-        if (regData.parent_id) {
-          await supabase.functions.invoke('notifications-dispatcher', {
-            body: {
-              event_type: 'child_registration_approved',
-              user_ids: [regData.parent_id],
-              parent_id: regData.parent_id,
-              registration_id: registration.id,
-              preschool_id: regData.preschool_id,
-              student_id: newStudent.id,
-              child_name: `${registration.student_first_name} ${registration.student_last_name}`,
-            },
+        const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+        const guardianEmail = regData.parent?.email || registration.guardian_email;
+        const guardianName = registration.guardian_name;
+
+        // Fetch school name for the notification
+        let schoolName = 'your school';
+        try {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', regData.preschool_id)
+            .single();
+          if (school?.name) schoolName = school.name;
+        } catch { /* use fallback */ }
+
+        if (guardianEmail) {
+          await notifyRegistrationApproved({
+            parentId: regData.parent_id,
+            guardianEmail,
+            guardianName,
+            childName,
+            schoolName,
+            registrationId: registration.id,
+            studentId: newStudent.id,
+            preschoolId: regData.preschool_id,
           });
         }
       } catch (notifErr) {
@@ -604,7 +619,7 @@ export default function RegistrationDetailScreen() {
 
       showAlert(
         'Success',
-        '✅ Registration approved!\n\n👶 Student profile created\n👤 Linked to parent\n📱 Parent notified',
+        '✅ Registration approved!\n\n👶 Student profile created\n👤 Linked to parent\n📧 Parent notified via email & push',
         'success',
         [{ text: 'OK', onPress: () => router.back() }]
       );
@@ -794,25 +809,44 @@ export default function RegistrationDetailScreen() {
       console.warn('[RegistrationDetail] sync-registration-to-edudash failed:', syncErr);
     }
 
-    if (parentId) {
-      try {
-        await supabase.functions.invoke('notifications-dispatcher', {
-          body: {
-            event_type: 'child_registration_approved',
-            user_ids: [parentId],
-            registration_id: registration.id,
-            student_id: newStudent.id,
-            child_name: `${registration.student_first_name} ${registration.student_last_name}`,
-          },
-        });
-      } catch (notifErr) {
-        console.warn('Failed to send approval notification:', notifErr);
+    // Notify guardian via push + email
+    try {
+      const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+      const guardianEmail = registration.guardian_email;
+      const guardianName = registration.guardian_name;
+
+      // Fetch school name for the notification
+      let schoolName = registration.organization_name || 'your school';
+      if (schoolName === 'your school') {
+        try {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', registration.organization_id)
+            .single();
+          if (school?.name) schoolName = school.name;
+        } catch { /* use fallback */ }
       }
+
+      if (guardianEmail) {
+        await notifyRegistrationApproved({
+          parentId: parentId,
+          guardianEmail,
+          guardianName,
+          childName,
+          schoolName,
+          registrationId: registration.id,
+          studentId: newStudent.id,
+          preschoolId: registration.organization_id,
+        });
+      }
+    } catch (notifErr) {
+      console.warn('Failed to send approval notification:', notifErr);
     }
 
     showAlert(
       'Success',
-      `✅ Registration approved!\n\n👶 Student profile created (${studentIdCode})\n${parentId ? '👤 Linked to parent\n📱 Parent notified' : '⚠️ Parent account not found - they need to register'}`,
+      `✅ Registration approved!\n\n👶 Student profile created (${studentIdCode})\n${parentId ? '👤 Linked to parent\n📧 Parent notified via email & push' : '📧 Email notification sent to guardian'}`,
       'success',
       [{ text: 'OK', onPress: () => router.back() }]
     );
@@ -888,7 +922,41 @@ export default function RegistrationDetailScreen() {
 
       if (error) throw error;
 
-      showAlert('Rejected', 'Registration has been rejected.', 'info', [
+      // Notify guardian about the rejection via push + email
+      try {
+        const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+        const guardianEmail = registration.guardian_email;
+        const guardianName = registration.guardian_name;
+
+        let schoolName = registration.organization_name || 'your school';
+        if (schoolName === 'your school') {
+          try {
+            const { data: school } = await supabase
+              .from('preschools')
+              .select('name')
+              .eq('id', registration.organization_id)
+              .single();
+            if (school?.name) schoolName = school.name;
+          } catch { /* use fallback */ }
+        }
+
+        if (guardianEmail) {
+          await notifyRegistrationRejected({
+            parentId: registration.parent_id,
+            guardianEmail,
+            guardianName,
+            childName,
+            schoolName,
+            registrationId: registration.id,
+            rejectionReason: reason,
+            preschoolId: registration.organization_id,
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send rejection notification:', notifErr);
+      }
+
+      showAlert('Rejected', 'Registration has been rejected. The guardian has been notified.', 'info', [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (err: any) {

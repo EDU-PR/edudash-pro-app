@@ -27,6 +27,56 @@ import type {
 import { ApplicationStatus, JobPostingStatus } from '@/types/hiring';
 
 export class HiringHubService {
+  private static mapApplicationWithDetails(app: any): ApplicationWithDetails {
+    const firstName = typeof app?.candidate_profile?.first_name === 'string'
+      ? app.candidate_profile.first_name
+      : '';
+    const lastName = typeof app?.candidate_profile?.last_name === 'string'
+      ? app.candidate_profile.last_name
+      : '';
+    const fullName = `${firstName} ${lastName}`.trim();
+    const fallbackCandidateName = app?.candidate_profile_id
+      ? `Candidate ${String(app.candidate_profile_id).slice(0, 6).toUpperCase()}`
+      : 'Candidate';
+
+    return {
+      ...app,
+      candidate_name: fullName || fallbackCandidateName,
+      candidate_email: app?.candidate_profile?.email || '',
+      candidate_phone: app?.candidate_profile?.phone || undefined,
+      candidate_experience_years: app?.candidate_profile?.experience_years || 0,
+      job_title: app?.job_posting?.title || 'Unknown Position',
+      has_resume: !!app?.resume_file_path,
+    };
+  }
+
+  private static isUsersTablePermissionError(error: unknown): boolean {
+    const payload = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+    const text = `${payload.message || ''} ${payload.details || ''} ${payload.hint || ''}`.toLowerCase();
+    return text.includes('permission denied for table users');
+  }
+
+  private static async getApplicationsForSchoolWithoutCandidateJoin(
+    preschoolId: string
+  ): Promise<ApplicationWithDetails[]> {
+    const supabase = assertSupabase();
+    const { data, error } = await supabase
+      .from('job_applications')
+      .select(`
+        *,
+        job_posting:job_postings!inner(*)
+      `)
+      .eq('job_posting.preschool_id', preschoolId)
+      .order('applied_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching fallback school applications:', error);
+      throw new Error(`Failed to fetch applications: ${error.message}`);
+    }
+
+    return (data || []).map((app: any) => this.mapApplicationWithDetails(app));
+  }
+
   // =====================================================
   // JOB POSTINGS
   // =====================================================
@@ -253,20 +303,7 @@ export class HiringHubService {
       throw new Error(`Failed to fetch applications: ${error.message}`);
     }
 
-    // Transform to ApplicationWithDetails
-    const applications: ApplicationWithDetails[] = (data || []).map((app: any) => ({
-      ...app,
-      candidate_name: app.candidate_profile
-        ? `${app.candidate_profile.first_name} ${app.candidate_profile.last_name}`
-        : 'Unknown',
-      candidate_email: app.candidate_profile?.email || '',
-      candidate_phone: app.candidate_profile?.phone || undefined,
-      candidate_experience_years: app.candidate_profile?.experience_years || 0,
-      job_title: '', // Will be populated if needed
-      has_resume: !!app.resume_file_path,
-    }));
-
-    return applications;
+    return (data || []).map((app: any) => this.mapApplicationWithDetails(app));
   }
 
   /**
@@ -288,23 +325,17 @@ export class HiringHubService {
       .order('applied_at', { ascending: false });
 
     if (error) {
+      if (this.isUsersTablePermissionError(error)) {
+        console.warn(
+          '[HiringHubService] Falling back to job_applications query without candidate_profiles join due to users-table permission policy.'
+        );
+        return this.getApplicationsForSchoolWithoutCandidateJoin(preschoolId);
+      }
       console.error('Error fetching school applications:', error);
       throw new Error(`Failed to fetch applications: ${error.message}`);
     }
 
-    const applications: ApplicationWithDetails[] = (data || []).map((app: any) => ({
-      ...app,
-      candidate_name: app.candidate_profile
-        ? `${app.candidate_profile.first_name} ${app.candidate_profile.last_name}`
-        : 'Unknown',
-      candidate_email: app.candidate_profile?.email || '',
-      candidate_phone: app.candidate_profile?.phone || undefined,
-      candidate_experience_years: app.candidate_profile?.experience_years || 0,
-      job_title: app.job_posting?.title || 'Unknown Position',
-      has_resume: !!app.resume_file_path,
-    }));
-
-    return applications;
+    return (data || []).map((app: any) => this.mapApplicationWithDetails(app));
   }
 
   /**
@@ -356,18 +387,42 @@ export class HiringHubService {
       if (error.code === 'PGRST116') {
         return null;
       }
+
+      if (this.isUsersTablePermissionError(error)) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('job_applications')
+          .select(`
+            *,
+            job_posting:job_postings(*)
+          `)
+          .eq('id', id)
+          .single();
+
+        if (fallbackError) {
+          if (fallbackError.code === 'PGRST116') {
+            return null;
+          }
+          console.error('Error fetching application (fallback):', fallbackError);
+          throw new Error(`Failed to fetch application: ${fallbackError.message}`);
+        }
+
+        const fallback = this.mapApplicationWithDetails(fallbackData);
+        return {
+          ...fallback,
+          resume_url: fallback.resume_file_path
+            ? (await this.getResumeUrl(fallback.resume_file_path))
+            : undefined,
+          created_at: fallback.applied_at,
+        };
+      }
+
       console.error('Error fetching application:', error);
       throw new Error(`Failed to fetch application: ${error.message}`);
     }
 
     // Transform data to include helpful fields
     const application = {
-      ...data,
-      candidate_name: data.candidate_profile
-        ? `${data.candidate_profile.first_name} ${data.candidate_profile.last_name}`
-        : 'Unknown',
-      candidate_email: data.candidate_profile?.email || '',
-      candidate_phone: data.candidate_profile?.phone || undefined,
+      ...this.mapApplicationWithDetails(data),
       resume_url: data.resume_file_path
         ? (await this.getResumeUrl(data.resume_file_path))
         : undefined,

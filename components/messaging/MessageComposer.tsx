@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { toast } from '@/components/ui/ToastProvider';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { ReplyPreview } from './ReplyPreview';
@@ -46,6 +47,52 @@ interface MessageComposerProps {
   /** Called to cancel editing */
   onCancelEdit?: () => void;
 }
+
+const COMPOSER_IMAGE_ASPECT: [number, number] = [4, 3];
+
+const getImageDimensions = (uri: string): Promise<{ width: number; height: number }> =>
+  new Promise((resolve, reject) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      (error) => reject(error),
+    );
+  });
+
+const centerCropToAspect = async (uri: string, aspect: [number, number]): Promise<string> => {
+  try {
+    const { width, height } = await getImageDimensions(uri);
+    if (!width || !height) return uri;
+
+    const targetRatio = aspect[0] / aspect[1];
+    const currentRatio = width / height;
+
+    let cropWidth = width;
+    let cropHeight = height;
+
+    if (currentRatio > targetRatio) {
+      cropWidth = Math.max(1, Math.round(height * targetRatio));
+    } else if (currentRatio < targetRatio) {
+      cropHeight = Math.max(1, Math.round(width / targetRatio));
+    } else {
+      return uri;
+    }
+
+    const originX = Math.max(0, Math.round((width - cropWidth) / 2));
+    const originY = Math.max(0, Math.round((height - cropHeight) / 2));
+
+    const result = await manipulateAsync(
+      uri,
+      [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }],
+      { compress: 0.9, format: SaveFormat.JPEG },
+    );
+
+    return result.uri || uri;
+  } catch (error) {
+    console.warn('[MessageComposer] Aspect crop fallback:', error);
+    return uri;
+  }
+};
 
 export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   onSend,
@@ -138,7 +185,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
-        allowsEditing: true,
+        allowsEditing: false,
       });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
@@ -172,6 +219,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
+        allowsEditing: false,
         allowsMultipleSelection: false,
       });
       
@@ -190,7 +238,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     if (!onImageAttach || !pendingImage) return;
     try {
       setSendingImage(true);
-      await onImageAttach(uri, pendingImage.mimeType);
+      const croppedUri = await centerCropToAspect(uri, COMPOSER_IMAGE_ASPECT);
+      await onImageAttach(croppedUri, pendingImage.mimeType);
     } finally {
       setSendingImage(false);
       setPendingImage(null);
@@ -208,6 +257,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         title="Send Photo"
         confirmLabel="Send"
         confirmIcon="send"
+        showCrop
+        cropAspect={COMPOSER_IMAGE_ASPECT}
         loading={sendingImage}
       />
 

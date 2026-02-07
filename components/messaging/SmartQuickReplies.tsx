@@ -17,7 +17,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -34,6 +33,32 @@ interface SmartQuickRepliesProps {
   onSelectReply: (text: string) => void;
   /** Hide the component */
   visible?: boolean;
+  /** Apply wallpaper-aware glass styling */
+  wallpaperMode?: boolean;
+  /** Accent color used for chip icon/border */
+  accentColor?: string;
+  /** Optional explicit surface background */
+  surfaceColor?: string;
+  /** Wallpaper rendering mode for stronger contrast tuning */
+  wallpaperVariant?: 'image' | 'gradient' | 'solid';
+}
+
+function withOpacity(color: string, alpha: number): string {
+  if (color.startsWith('#')) {
+    const hex = color.slice(1);
+    const normalized = hex.length === 3
+      ? hex.split('').map((c) => c + c).join('')
+      : hex;
+
+    if (normalized.length === 6) {
+      const r = parseInt(normalized.slice(0, 2), 16);
+      const g = parseInt(normalized.slice(2, 4), 16);
+      const b = parseInt(normalized.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+  }
+
+  return color;
 }
 
 /**
@@ -127,7 +152,15 @@ function generateSuggestions(message?: string): QuickReplyChip[] {
   ];
 }
 
-export function SmartQuickReplies({ lastReceivedMessage, onSelectReply, visible = true }: SmartQuickRepliesProps) {
+export function SmartQuickReplies({
+  lastReceivedMessage,
+  onSelectReply,
+  visible = true,
+  wallpaperMode = false,
+  accentColor,
+  surfaceColor,
+  wallpaperVariant = 'gradient',
+}: SmartQuickRepliesProps) {
   const { theme } = useTheme();
 
   const suggestions = useMemo(
@@ -137,17 +170,32 @@ export function SmartQuickReplies({ lastReceivedMessage, onSelectReply, visible 
 
   if (!visible || suggestions.length === 0) return null;
 
+  const accent = accentColor || theme.primary;
+  const isImageWallpaper = wallpaperMode && wallpaperVariant === 'image';
+  const resolvedSurface =
+    surfaceColor ||
+    (wallpaperMode
+      ? (isImageWallpaper ? 'rgba(15, 23, 42, 0.94)' : withOpacity(accent, 0.24))
+      : theme.surface);
+  const resolvedLabelColor = wallpaperMode ? '#e2e8f0' : theme.textSecondary;
+  const resolvedChipBg = wallpaperMode
+    ? (isImageWallpaper ? 'rgba(15, 23, 42, 0.72)' : withOpacity(accent, 0.28))
+    : withOpacity(accent, 0.12);
+  const resolvedChipBorder = wallpaperMode ? withOpacity(accent, 0.5) : withOpacity(accent, 0.3);
+  const resolvedChipText = wallpaperMode ? '#f8fafc' : accent;
+  const resolvedIconColor = wallpaperMode ? '#f8fafc' : accent;
+
   const styles = StyleSheet.create({
     container: {
       paddingVertical: 8,
       paddingHorizontal: 12,
       borderTopWidth: 1,
-      borderTopColor: theme.border,
-      backgroundColor: theme.surface,
+      borderTopColor: wallpaperMode ? 'rgba(148, 163, 184, 0.28)' : theme.border,
+      backgroundColor: resolvedSurface,
     },
     label: {
       fontSize: 11,
-      color: theme.textSecondary,
+      color: resolvedLabelColor,
       fontWeight: '600',
       textTransform: 'uppercase',
       letterSpacing: 0.5,
@@ -161,17 +209,17 @@ export function SmartQuickReplies({ lastReceivedMessage, onSelectReply, visible 
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.primary + '12',
+      backgroundColor: resolvedChipBg,
       borderRadius: 20,
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderWidth: 1,
-      borderColor: theme.primary + '30',
+      borderColor: resolvedChipBorder,
       gap: 6,
     },
     chipText: {
       fontSize: 14,
-      color: theme.primary,
+      color: resolvedChipText,
       fontWeight: '500',
     },
   });
@@ -192,7 +240,7 @@ export function SmartQuickReplies({ lastReceivedMessage, onSelectReply, visible 
             onPress={() => onSelectReply(chip.text)}
             activeOpacity={0.6}
           >
-            {chip.icon && <Ionicons name={chip.icon} size={16} color={theme.primary} />}
+            {chip.icon && <Ionicons name={chip.icon} size={16} color={resolvedIconColor} />}
             <Text style={styles.chipText}>{chip.text}</Text>
           </TouchableOpacity>
         ))}

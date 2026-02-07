@@ -1,6 +1,11 @@
 -- Migration: Create server-side function and pg_cron job for disappearing messages
 -- Safely cleans up expired messages based on thread's disappear_after_seconds setting
 
+-- ─── Enable pg_cron extension ────────────────────────────────────
+-- On Supabase, pg_cron runs in the 'postgres' database on the 'cron' schema.
+-- CREATE EXTENSION is idempotent with IF NOT EXISTS.
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+
 -- ─── Create the cleanup function ─────────────────────────────────
 CREATE OR REPLACE FUNCTION public.cleanup_disappearing_messages()
 RETURNS INTEGER
