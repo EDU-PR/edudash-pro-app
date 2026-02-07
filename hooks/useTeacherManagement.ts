@@ -363,9 +363,9 @@ export function useTeacherManagement(
 
       const buildTeacherKey = (teacher: Teacher) => {
         return (
+          teacher.email?.toLowerCase() ||
           teacher.teacherUserId ||
           teacher.authUserId ||
-          teacher.email?.toLowerCase() ||
           teacher.id
         );
       };

@@ -9,3 +9,5 @@ export { PrincipalMetricsSection } from './PrincipalMetricsSection';
 export { PrincipalQuickActions } from './PrincipalQuickActions';
 export { PrincipalRecentActivity } from './PrincipalRecentActivity';
 export { PrincipalDoNowInbox } from './PrincipalDoNowInbox';
+export { PrincipalSchoolPulse } from './PrincipalSchoolPulse';
+export { PrincipalGettingStartedCard } from './PrincipalGettingStartedCard';
