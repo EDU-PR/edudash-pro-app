@@ -252,16 +252,18 @@ export function getAIQuotaLimits(tier: SubscriptionTier) {
         examPrep: 100,
         grading: 25,
       };
-    case 'pro':
+    case 'teacher_pro':
       return {
         homeworkHelp: 500,
         lessonGeneration: 200,
         examPrep: 200,
         grading: 100,
       };
-    case 'starter':
-    case 'premium':
-    case 'enterprise':
+    case 'teacher_starter':
+    case 'school_starter':
+    case 'school_premium':
+    case 'school_pro':
+    case 'school_enterprise':
       return {
         homeworkHelp: -1, // unlimited
         lessonGeneration: -1,
