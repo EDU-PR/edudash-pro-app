@@ -23,6 +23,7 @@ import { StudentSummaryCard } from '@/components/dashboard/shared';
 import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
 import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
+import { PrincipalDoNowInbox } from '@/components/dashboard/principal';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
@@ -232,6 +233,16 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Do Now Inbox - first, for non-technical users */}
+        <PrincipalDoNowInbox
+          counts={{
+            pendingRegistrations,
+            pendingPaymentProofs: pendingPOPs,
+            pendingUnpaidFees: pendingPayments,
+            pendingApprovals: pendingApprovalsTotal,
+          }}
+        />
+
         {/* Today's Operations */}
         <SectionHeader
           title={t('dashboard.today_operations', { defaultValue: "Today's Operations" })}
@@ -263,26 +274,6 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             color={theme.error}
             theme={theme}
           />
-        </View>
-
-        {/* Needs Attention */}
-        <SectionHeader
-          title={t('dashboard.needs_attention', { defaultValue: 'Needs Attention' })}
-          subtitle={t('dashboard.action_items_hint', { defaultValue: 'Priority tasks awaiting action' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          {needsAttention.map((item) => (
-            <TriageRow
-              key={item.id}
-              title={`${item.value} • ${item.title}`}
-              actionLabel={item.action}
-              icon={item.icon}
-              tone={item.tone}
-              onPress={() => router.push(item.route as any)}
-              theme={theme}
-            />
-          ))}
         </View>
 
         {/* Admissions & Payments */}
