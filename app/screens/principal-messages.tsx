@@ -7,13 +7,13 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
   Platform,
   TextInput,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -533,7 +533,7 @@ export default function PrincipalMessagesScreen() {
           <Text style={styles.quickActionText}>Create Groups</Text>
         </TouchableOpacity>
       </View>
-      <FlatList
+      <FlashList
         data={filteredThreads}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
