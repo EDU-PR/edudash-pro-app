@@ -643,25 +643,25 @@ export default function ParentMessageThreadScreen() {
         onOptionsPress={() => setShowOptionsMenu(true)}
       />
 
-      {/* Messages area with wallpaper */}
-      <View style={[styles.wallpaperContainer, { marginBottom: keyboardHeight }]}>
+      {/* Full-screen wallpaper (covers behind messages + composer) */}
+      <View style={styles.wallpaperContainer}>
         {currentWallpaper?.type === 'url' ? (
-          <ImageBackground 
-            source={{ uri: currentWallpaper.value }} 
-            style={StyleSheet.absoluteFillObject} 
+          <ImageBackground
+            source={{ uri: currentWallpaper.value }}
+            style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
           >
             <View style={styles.wallpaperOverlay} />
           </ImageBackground>
         ) : (
-          <LinearGradient 
-            colors={getWallpaperGradient()} 
-            style={StyleSheet.absoluteFillObject} 
+          <LinearGradient
+            colors={getWallpaperGradient()}
+            style={StyleSheet.absoluteFillObject}
           />
         )}
         
         {/* Clipping container - messages hide at this boundary */}
-        <View style={[styles.messagesClip, { marginBottom: 70 + insets.bottom }]}>
+        <View style={styles.messagesClip}>
           {loading ? (
             <View style={styles.center}>
               <EduDashSpinner size="large" color={theme.primary} />
@@ -693,9 +693,22 @@ export default function ParentMessageThreadScreen() {
               scrollEventThrottle={16}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
+              contentContainerStyle={[
+                styles.messagesContent,
+                {
+                  // Reserve space for the floating composer so the last message doesn't sit behind it.
+                  paddingBottom: 120 + (Platform.OS === 'ios' ? insets.bottom : 12),
+                },
+              ]}
             />
           )}
+
+          {/* Fade messages out before they reach the composer area */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(15,23,42,0)', 'rgba(15,23,42,0.45)', 'rgba(15,23,42,0.92)']}
+            style={styles.messagesBottomFade}
+          />
         </View>
       </View>
 
@@ -720,10 +733,17 @@ export default function ParentMessageThreadScreen() {
       <View style={[
         styles.composerArea,
         { 
-          bottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 4) + keyboardHeight : Math.max(insets.bottom, 12) + keyboardHeight,
-          paddingBottom: Platform.OS === 'ios' ? 4 : insets.bottom + 2,
+          // Push the composer as low as possible now that the bottom nav is hidden on threads.
+          // Keep safe-area inside the composer container so it doesn't overlap the home indicator.
+          bottom: keyboardHeight,
+          paddingBottom: Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2),
         }
       ]}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(15,23,42,0)', 'rgba(15,23,42,0.7)', 'rgba(15,23,42,0.95)']}
+          style={styles.composerBackdrop}
+        />
         <MessageComposer
           onSend={handleSend}
           onVoiceRecording={handleVoiceRecording}
@@ -813,6 +833,13 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
+  messagesBottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 140,
+  },
   messages: { 
     flex: 1,
   },
@@ -869,6 +896,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 100,
+  },
+  composerBackdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 120,
   },
   typingIndicatorContainer: {
     position: 'absolute',
