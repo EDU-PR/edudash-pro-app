@@ -98,7 +98,7 @@ class FinancialAnalyticsService {
       const { data: revenueData } = await supabase
         .from('payments')
         .select('amount, created_at, status')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', dateRange.start)
         .lte('created_at', dateRange.end)
         .eq('status', 'completed');
@@ -107,7 +107,7 @@ class FinancialAnalyticsService {
       const { data: expenseData } = await supabase
         .from('expenses')
         .select('amount, created_at, category')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', dateRange.start)
         .lte('created_at', dateRange.end);
 
@@ -115,7 +115,7 @@ class FinancialAnalyticsService {
       const { data: outstandingData } = await supabase
         .from('student_fees')
         .select('amount_due, amount_paid')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .eq('status', 'pending');
 
       const monthlyRevenue = revenueData?.reduce((sum, payment) => sum + payment.amount, 0) || 0;
@@ -128,7 +128,7 @@ class FinancialAnalyticsService {
       const { data: previousRevenueData } = await supabase
         .from('payments')
         .select('amount')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', previousDateRange.start)
         .lte('created_at', previousDateRange.end)
         .eq('status', 'completed');
@@ -168,7 +168,7 @@ class FinancialAnalyticsService {
       const { data: historicalData } = await supabase
         .from('payments')
         .select('amount, created_at')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', twelveMonthsAgo.toISOString())
         .eq('status', 'completed')
         .order('created_at');
@@ -478,21 +478,21 @@ class PerformanceAnalyticsService {
 const { data: gradesData } = await assertSupabase()
         .from('student_grades')
         .select('grade_value, subject')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()); // Last 90 days
 
       // Fetch teacher ratings
 const { data: teacherRatings } = await assertSupabase()
         .from('teacher_evaluations')
         .select('rating, evaluation_type')
-        .eq('school_id', schoolId)
+        .eq('preschool_id', schoolId)
         .gte('created_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
 
       // Fetch enrollment data
 const { data: enrollmentData } = await assertSupabase()
         .from('students')
         .select('created_at, status')
-        .eq('school_id', schoolId);
+        .eq('preschool_id', schoolId);
 
       const academicPerformance = this.calculateAcademicPerformance(gradesData || []);
       const teacherPerformance = this.calculateTeacherPerformance(teacherRatings || []);
@@ -648,7 +648,7 @@ class StudentAnalyticsService {
 const { data: studentsData } = await assertSupabase()
         .from('students')
         .select('created_at, date_of_birth, gender, grade_level, special_needs, status')
-        .eq('school_id', schoolId);
+        .eq('preschool_id', schoolId);
 
       if (!studentsData || studentsData.length === 0) {
         return this.getEmptyStudentAnalytics();
@@ -754,7 +754,7 @@ class TeacherAnalyticsService {
 const { data: teachersData } = await assertSupabase()
         .from('teachers')
         .select('created_at, years_experience, qualification_level, performance_rating, status, date_left')
-        .eq('school_id', schoolId);
+        .eq('preschool_id', schoolId);
 
       if (!teachersData || teachersData.length === 0) {
         return this.getEmptyTeacherAnalytics();

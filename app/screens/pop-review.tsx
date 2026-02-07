@@ -102,7 +102,7 @@ export default function POPReviewScreen() {
   const [receiptGenerating, setReceiptGenerating] = useState(false);
   const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
 
-  const organizationId = profile?.preschool_id || profile?.organization_id;
+  const organizationId = profile?.organization_id || profile?.preschool_id;
 
   // Fetch POP uploads
   const fetchUploads = useCallback(async () => {
@@ -134,17 +134,25 @@ export default function POPReviewScreen() {
         console.error('Error fetching POP uploads:', fetchError);
         setError(fetchError.message);
       } else {
-        // Fetch uploader profiles separately to avoid FK constraint issues
-        const uploadsWithProfiles = await Promise.all((data || []).map(async (upload) => {
-          if (upload.uploaded_by) {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('first_name, last_name, email')
-              .eq('id', upload.uploaded_by)
-              .single();
-            return { ...upload, uploader: profileData };
-          }
-          return upload;
+        // Batch-fetch uploader profiles to avoid N+1 queries
+        const uploaderIds = [...new Set(
+          (data || []).map((u) => u.uploaded_by).filter(Boolean) as string[]
+        )];
+
+        let profileMap: Record<string, { first_name: string; last_name: string; email: string }> = {};
+        if (uploaderIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name, email')
+            .in('id', uploaderIds);
+          (profiles || []).forEach((p) => {
+            profileMap[p.id] = { first_name: p.first_name, last_name: p.last_name, email: p.email };
+          });
+        }
+
+        const uploadsWithProfiles = (data || []).map((upload) => ({
+          ...upload,
+          uploader: upload.uploaded_by ? (profileMap[upload.uploaded_by] || null) : null,
         }));
         setUploads(uploadsWithProfiles);
         setError(null);
