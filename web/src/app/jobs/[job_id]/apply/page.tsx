@@ -12,22 +12,24 @@ const getParam = (value?: string | string[]) => {
 export async function generateMetadata({
   params,
 }: {
-  params: { job_id: string };
+  params: Promise<{ job_id: string }>;
 }): Promise<Metadata> {
-  return buildJobApplyMetadata(params.job_id);
+  const { job_id } = await params;
+  return buildJobApplyMetadata(job_id);
 }
 
-export default function JobApplyRedirect({
+export default async function JobApplyRedirect({
   params,
   searchParams,
 }: {
-  params: { job_id: string };
-  searchParams: SearchParams;
+  params: Promise<{ job_id: string }>;
+  searchParams: Promise<SearchParams>;
 }) {
-  const jobId = params.job_id;
+  const { job_id: jobId } = await params;
+  const resolvedSearchParams = await searchParams;
   const query = new URLSearchParams();
 
-  Object.entries(searchParams || {}).forEach(([key, value]) => {
+  Object.entries(resolvedSearchParams || {}).forEach(([key, value]) => {
     const v = getParam(value);
     if (v) query.set(key, v);
   });

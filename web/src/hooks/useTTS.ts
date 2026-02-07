@@ -111,14 +111,14 @@ export function useTTS(userId?: string) {
         allowed: remaining > 0,
         remaining,
         limit,
-        tier: userTier,
+        tier: userTier as TTSQuota['tier'],
       };
 
       setQuota(quotaResult);
       return quotaResult;
     } catch (err) {
       console.error('[TTS] Quota check failed:', err);
-      return { allowed: false, remaining: 0, limit: 0, tier: userTier };
+      return { allowed: false, remaining: 0, limit: 0, tier: userTier as TTSQuota['tier'] };
     }
   }, [userId, userTier, supabase]);
 
