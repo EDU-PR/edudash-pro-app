@@ -20,10 +20,12 @@ const firstParam = (value?: string | string[]) => {
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  // Next 16+ passes `searchParams` as a Promise (sync dynamic APIs).
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
-  const inviteRaw = firstParam(searchParams.invite || searchParams.inviteCode || searchParams.code);
-  const jobRaw = firstParam(searchParams.job || searchParams.jobId);
+  const sp = await searchParams;
+  const inviteRaw = firstParam(sp.invite || sp.inviteCode || sp.code);
+  const jobRaw = firstParam(sp.job || sp.jobId);
   const fallbackTitle = 'Teacher Sign Up | EduDash Pro';
   const fallbackDescription = 'Create your teacher account and join a school on EduDash Pro.';
   const fallbackImage = resolveImageUrl();
