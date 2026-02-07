@@ -4,8 +4,8 @@
  * Memoized to prevent flash on new messages
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MessageTicks } from './MessageTicks';
@@ -47,6 +47,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   onReactionPress,
 }) => {
   const name = getSenderName(msg.sender);
+
+  // Quick reactions state (double-tap to toggle)
+  const [showQuickReactions, setShowQuickReactions] = useState(false);
+  const lastTapRef = useRef<number>(0);
+  const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+
+  const handleBubbleTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // Double-tap → toggle quick reaction bar
+      setShowQuickReactions((prev) => !prev);
+    }
+    lastTapRef.current = now;
+  }, []);
+
+  const handleQuickReaction = useCallback(
+    (emoji: string) => {
+      setShowQuickReactions(false);
+      onReactionPress?.(msg.id, emoji);
+    },
+    [msg.id, onReactionPress],
+  );
 
   // Determine message status for ticks
   const getMessageStatus = (): MessageStatus => {
@@ -112,9 +134,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
         <Text style={styles.name}>{name}</Text>
       )}
       <Pressable
+        onPress={handleBubbleTap}
         onLongPress={onLongPress}
         delayLongPress={300}
       >
+        {/* Quick Reaction Bar - appears on double-tap */}
+        {showQuickReactions && (
+          <View style={[
+            styles.quickReactionBar,
+            isOwn ? styles.quickReactionBarOwn : styles.quickReactionBarOther,
+          ]}>
+            {QUICK_EMOJIS.map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                style={styles.quickReactionBtn}
+                onPress={() => handleQuickReaction(emoji)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.quickReactionEmoji}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         <LinearGradient
           colors={isOwn ? ['#3b82f6', '#2563eb'] : ['#1e293b', '#0f172a']}
           start={{ x: 0, y: 0 }}
@@ -297,6 +338,40 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 11 },
   ticksContainer: { marginLeft: 2 },
+  quickReactionBar: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15, 23, 42, 0.97)',
+    borderRadius: 24,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginBottom: 6,
+    gap: 2,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  quickReactionBarOwn: {
+    alignSelf: 'flex-end',
+  },
+  quickReactionBarOther: {
+    alignSelf: 'flex-start',
+    marginLeft: 4,
+  },
+  quickReactionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickReactionEmoji: {
+    fontSize: 20,
+  },
   reactionsBelowBubble: {
     flexDirection: 'row',
     flexWrap: 'wrap',

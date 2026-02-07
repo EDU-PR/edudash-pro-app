@@ -571,17 +571,15 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = (props) => {
 
 const styles = StyleSheet.create({
   container: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
-    // Match the input wrapper offset
-    bottom: -12,
   },
   micButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: PURPLE_PRIMARY,
@@ -608,8 +606,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(139, 92, 246, 0.4)',
     gap: 10,
-    // Match the input wrapper offset
-    bottom: -12,
     marginLeft: -4,
     shadowColor: PURPLE_PRIMARY,
     shadowOffset: { width: 0, height: 2 },

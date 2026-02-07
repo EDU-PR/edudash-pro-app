@@ -21,7 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
-import { useParentThreads, MessageThread, MessageParticipant } from '@/hooks/useParentMessaging';
+import { useParentThreads, useMarkAllDelivered, MessageThread, MessageParticipant } from '@/hooks/useParentMessaging';
+import { useConversationListTyping } from '@/hooks/useConversationListTyping';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
 
@@ -46,9 +47,10 @@ interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
   currentUserId?: string | null;
+  typingText?: string | null;
 }
 
-const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, currentUserId }) => {
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, currentUserId, typingText }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -188,10 +190,12 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, cur
             <Text style={styles.subtitle} numberOfLines={1}>{studentName}</Text>
           )}
           <View style={styles.messageRow}>
-            <Text style={styles.messagePreview} numberOfLines={1}>
-              {thread.last_message
-                ? getMessageDisplayText(thread.last_message.content)
-                : t('principal.noMessagesYet', { defaultValue: 'No messages yet' })}
+            <Text style={[styles.messagePreview, typingText ? { color: theme.primary, fontStyle: 'italic' } : undefined]} numberOfLines={1}>
+              {typingText
+                ? typingText
+                : thread.last_message
+                  ? getMessageDisplayText(thread.last_message.content)
+                  : t('principal.noMessagesYet', { defaultValue: 'No messages yet' })}
             </Text>
             {hasUnread && (
               <View style={styles.unreadBadge}>
@@ -220,6 +224,13 @@ export default function PrincipalMessagesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
+
+  // Mark all incoming messages as delivered when conversation list is viewed
+  useMarkAllDelivered(threads);
+
+  // Subscribe to typing indicators across all threads
+  const threadIds = useMemo(() => (threads ?? []).map((t) => t.id), [threads]);
+  const typingMap = useConversationListTyping(threadIds, user?.id ?? null);
 
   useFocusEffect(
     useCallback(() => {
@@ -541,6 +552,7 @@ export default function PrincipalMessagesScreen() {
             thread={item}
             onPress={() => handleThreadPress(item)}
             currentUserId={user?.id}
+            typingText={typingMap[item.id]}
           />
         )}
         contentContainerStyle={styles.listContent}

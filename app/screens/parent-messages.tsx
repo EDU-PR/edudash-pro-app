@@ -20,7 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
-import { useParentThreads, MessageThread } from '@/hooks/useParentMessaging';
+import { useParentThreads, useMarkAllDelivered, MessageThread } from '@/hooks/useParentMessaging';
+import { useConversationListTyping } from '@/hooks/useConversationListTyping';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 import { getMessageDisplayText } from '@/lib/utils/messageContent';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,9 +49,11 @@ const formatMessageTime = (timestamp: string): string => {
 interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
+  /** If someone is currently typing in this thread, display this text */
+  typingText?: string | null;
 }
 
-const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) => {
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, typingText }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   
@@ -233,7 +236,11 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
           </View>
           
           <View style={styles.bottomRow}>
-            {thread.last_message ? (
+            {typingText ? (
+              <Text style={[styles.messagePreview, { color: theme.primary, fontStyle: 'italic' }]} numberOfLines={1}>
+                {typingText}
+              </Text>
+            ) : thread.last_message ? (
               <Text style={styles.messagePreview} numberOfLines={1}>
                 {getMessageDisplayText(thread.last_message.content)}
               </Text>
@@ -396,6 +403,13 @@ export default function ParentMessagesScreen() {
   ].includes(tierLower);
   
   const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
+
+  // Mark all incoming messages as delivered when conversation list is viewed
+  useMarkAllDelivered(threads);
+
+  // Subscribe to typing indicators across all threads
+  const threadIds = React.useMemo(() => (threads ?? []).map((t) => t.id), [threads]);
+  const typingMap = useConversationListTyping(threadIds, profile?.id ?? null);
   
   // Refetch threads when screen gains focus to update unread badges
   useFocusEffect(
@@ -706,6 +720,7 @@ export default function ParentMessagesScreen() {
           <ThreadItem
             thread={item}
             onPress={() => handleThreadPress(item)}
+            typingText={typingMap[item.id]}
           />
         )}
         ListHeaderComponent={

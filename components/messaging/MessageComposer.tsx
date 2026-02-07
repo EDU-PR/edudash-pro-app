@@ -360,8 +360,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   micContainer: {
-    width: 52,
-    height: 52,
+    width: 46,
+    height: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -370,9 +370,9 @@ const styles = StyleSheet.create({
   },
   micGlow: {
     position: 'absolute',
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: CYAN_GLOW,
   },
 });

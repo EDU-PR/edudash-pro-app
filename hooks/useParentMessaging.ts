@@ -532,8 +532,8 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
           if (payload.new.sender_id !== user?.id && AppState.currentState === 'active') {
             try {
               await assertSupabase().rpc('mark_messages_delivered', {
-                thread_id: threadId,
-                user_id: user?.id,
+                p_thread_id: threadId,
+                p_user_id: user?.id,
               });
               logger.debug('ParentMessagesRealtime', '✅ Marked messages as delivered (background thread)');
             } catch (deliverError) {
@@ -853,4 +853,47 @@ export const useUnreadMessageCount = () => {
     enabled: !!user?.id,
     staleTime: 1000 * 60, // 1 minute
   });
+};
+
+/**
+ * Hook to mark ALL incoming messages as delivered when conversation list is viewed.
+ * This ensures that senders see double-grey ticks (delivered) even when the
+ * recipient hasn't opened the specific thread yet.
+ * 
+ * Should be used in conversation list screens (parent-messages, principal-messages).
+ */
+export const useMarkAllDelivered = (threads: MessageThread[] | undefined) => {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id || !threads || threads.length === 0) return;
+
+    const markDelivered = async () => {
+      try {
+        const client = assertSupabase();
+        const threadIds = threads.map((t) => t.id);
+
+        // Bulk-update all messages sent TO this user (not BY this user) that haven't
+        // been marked as delivered yet, across ALL their threads.
+        const { error, count } = await client
+          .from('messages')
+          .update({ delivered_at: new Date().toISOString() })
+          .in('thread_id', threadIds)
+          .neq('sender_id', user.id)
+          .is('delivered_at', null)
+          .is('deleted_at', null)
+          .select('id', { count: 'exact', head: true });
+
+        if (error) {
+          logger.warn('useMarkAllDelivered', 'Bulk delivery update failed:', error.message);
+        } else if (count && count > 0) {
+          logger.debug('useMarkAllDelivered', `✅ Marked ${count} messages as delivered across ${threadIds.length} threads`);
+        }
+      } catch (err) {
+        logger.warn('useMarkAllDelivered', 'Failed to mark messages as delivered:', err);
+      }
+    };
+
+    markDelivered();
+  }, [user?.id, threads?.length]); // Re-run when threads list changes
 };
