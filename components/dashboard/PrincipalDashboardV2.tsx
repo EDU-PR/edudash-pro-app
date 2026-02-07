@@ -220,13 +220,24 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
               <Text style={styles.greeting} numberOfLines={1}>
                 {greeting}, {userName}
               </Text>
+            </View>
+            <View style={styles.headerMetaRow}>
+              <Text style={styles.schoolName} numberOfLines={1}>
+                {schoolName}
+              </Text>
               {subscriptionReady ? (
-                <TierBadge size="md" showManageButton />
+                <TierBadge size="sm" showManageButton={false} />
+              ) : null}
+              {subscriptionReady ? (
+                <TouchableOpacity
+                  style={styles.manageButton}
+                  onPress={() => router.push('/screens/subscription-upgrade-post')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.manageButtonText}>Manage</Text>
+                </TouchableOpacity>
               ) : null}
             </View>
-            <Text style={styles.schoolName} numberOfLines={1}>
-              {schoolName}
-            </Text>
             <Text style={styles.updatedAt} numberOfLines={1}>
               {t('dashboard.updated_at', { defaultValue: 'Updated' })}{' '}
               {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -802,7 +813,27 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
       gap: 10,
     },
     greeting: { fontSize: 18, fontWeight: '800', color: theme.text },
-    schoolName: { fontSize: 13, color: theme.textSecondary, marginTop: 2 },
+    headerMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 4,
+    },
+    schoolName: { fontSize: 14, fontWeight: '800', color: theme.textSecondary },
+    manageButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    manageButtonText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: theme.primary,
+    },
     updatedAt: { fontSize: 11, color: theme.textTertiary, marginTop: 4 },
     card: {
       marginHorizontal: 16,
