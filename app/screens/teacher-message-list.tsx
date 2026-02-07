@@ -684,6 +684,15 @@ export default function TeacherMessageListScreen() {
         }
       />
       
+      {/* Group FAB */}
+      <TouchableOpacity 
+        style={[styles.fab, { bottom: insets.bottom + 90 }]}
+        onPress={() => router.push('/screens/create-group')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="people-circle" size={24} color={theme.onPrimary} />
+      </TouchableOpacity>
+      
       {/* Compose FAB */}
       <TouchableOpacity 
         style={styles.fab}
