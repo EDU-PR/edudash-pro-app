@@ -3,7 +3,7 @@
  * 
  * Reusable modal shown after image selection (gallery or camera).
  * Displays a preview of the selected image with:
- *   - Optional "Crop" button to re-open the system editor
+ *   - Optional "Crop" button to center-crop using the configured aspect ratio
  *   - A configurable confirm button ("Set Photo", "Upload", "Send", etc.)
  *   - A cancel / close button
  *
@@ -33,7 +33,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { ImageCropEditor } from './ImageCropEditor';
 
 // Safe spinner import
 let EduDashSpinner: React.FC<any> = ({ size, color }: any) => null;
@@ -80,28 +80,21 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
   confirmIcon = 'checkmark-circle-outline',
 }) => {
   const [currentUri, setCurrentUri] = React.useState<string | null>(imageUri);
+  const [showCropEditor, setShowCropEditor] = React.useState(false);
 
   // Sync external imageUri changes
   React.useEffect(() => {
     setCurrentUri(imageUri);
   }, [imageUri]);
 
-  const handleCrop = useCallback(async () => {
-    if (!currentUri) return;
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: cropAspect,
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets?.[0]?.uri) {
-        setCurrentUri(result.assets[0].uri);
-      }
-    } catch {
-      // Silently fail – keep current image
-    }
-  }, [currentUri, cropAspect]);
+  const handleCrop = useCallback(() => {
+    setShowCropEditor(true);
+  }, []);
+
+  const handleCropDone = useCallback((croppedUri: string) => {
+    setCurrentUri(croppedUri);
+    setShowCropEditor(false);
+  }, []);
 
   const handleConfirm = useCallback(() => {
     if (currentUri) {
@@ -147,7 +140,7 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
                 activeOpacity={0.7}
               >
                 <Ionicons name="crop-outline" size={20} color="#3b82f6" />
-                <Text style={styles.cropText}>Edit</Text>
+                <Text style={styles.cropText}>Crop</Text>
               </TouchableOpacity>
             )}
 
@@ -169,6 +162,15 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
           </View>
         </View>
       </View>
+      
+      {/* Interactive crop editor */}
+      <ImageCropEditor
+        visible={showCropEditor}
+        imageUri={currentUri}
+        aspectRatio={cropAspect}
+        onDone={handleCropDone}
+        onCancel={() => setShowCropEditor(false)}
+      />
     </Modal>
   );
 };
