@@ -237,6 +237,16 @@ if (!preschoolId) {
         }
       }
       
+      const getClassRecord = (classesValue: any): any => {
+        if (Array.isArray(classesValue)) return classesValue[0] || null;
+        return classesValue || null;
+      };
+
+      const getTeacherRecord = (teacherValue: any): any => {
+        if (Array.isArray(teacherValue)) return teacherValue[0] || null;
+        return teacherValue || null;
+      };
+
       // Transform database data to match Student interface
       const transformedStudents: Student[] = (studentsData || []).map((dbStudent: any, index: number) => {
         // Get parent/guardian info - prefer parent, fallback to guardian
@@ -247,8 +257,11 @@ if (!preschoolId) {
         const guardianPhone = parentInfo?.phone || dbStudent.emergency_contact_phone || 'Not provided';
         const guardianEmail = parentInfo?.email || 'Not provided';
         
+        const classRecord = getClassRecord(dbStudent.classes);
+        const teacherRecord = getTeacherRecord(classRecord?.teacher);
+
         // Get class name
-        const className = dbStudent.classes?.name || null;
+        const className = classRecord?.name || null;
         
         const gradeLevel = dbStudent.grade_level || className || 'Not Assigned';
         return {
@@ -272,8 +285,8 @@ if (!preschoolId) {
             ? Math.round((attendanceMap[dbStudent.id].present / attendanceMap[dbStudent.id].total) * 100)
             : 0,
           lastAttendance: attendanceMap[dbStudent.id]?.lastDate || '',
-          assignedTeacher: dbStudent.classes?.teacher
-            ? `${dbStudent.classes.teacher.first_name || ''} ${dbStudent.classes.teacher.last_name || ''}`.trim()
+          assignedTeacher: teacherRecord
+            ? `${teacherRecord.first_name || ''} ${teacherRecord.last_name || ''}`.trim()
             : 'Not Assigned',
           fees: {
             outstanding: 0,
@@ -294,7 +307,8 @@ if (!preschoolId) {
         // Teachers see students in their assigned classes
         filteredStudents = transformedStudents.filter(student => {
           const matchingDb = (studentsData || []).find((s: any) => s.id === student.id);
-          return matchingDb?.classes?.teacher_id === user?.id;
+          const classRecord = getClassRecord(matchingDb?.classes);
+          return classRecord?.teacher_id === user?.id;
         });
         // If no class assignment found, show all (fallback)
         if (filteredStudents.length === 0) filteredStudents = transformedStudents;

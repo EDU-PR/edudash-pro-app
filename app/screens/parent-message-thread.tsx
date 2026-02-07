@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Platform, KeyboardAvoidingView, Alert, ImageBackground, Keyboard, Vibration, TouchableOpacity, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, Text, StyleSheet, Platform, KeyboardAvoidingView, Alert, ImageBackground, Keyboard, Vibration, TouchableOpacity, NativeScrollEvent, NativeSyntheticEvent, LayoutChangeEvent } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +36,6 @@ import {
   ChatSearchOverlay,
   MediaGalleryView,
   StarredMessagesView,
-  SmartQuickReplies,
 } from '@/components/messaging';
 import { MessageScheduler } from '@/components/messaging/MessageScheduler';
 
@@ -87,6 +86,16 @@ const defaultTheme = {
   border: 'rgba(148, 163, 184, 0.15)',
   error: '#ef4444',
   elevated: '#1e293b',
+};
+
+const COMPOSER_OVERLAY_HEIGHT = 84;
+const WALLPAPER_ACCENTS: Record<string, string> = {
+  'purple-glow': '#a78bfa',
+  midnight: '#60a5fa',
+  'ocean-deep': '#38bdf8',
+  'forest-night': '#4ade80',
+  'sunset-warm': '#fb923c',
+  'dark-slate': '#93c5fd',
 };
 
 try {
@@ -162,6 +171,8 @@ export default function ParentMessageThreadScreen() {
   const [sending, setSending] = useState(false);
   const [optimisticMsgs, setOptimisticMsgs] = useState<Message[]>([]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_HEIGHT);
+
   
   // Wallpaper state
   const [currentWallpaper, setCurrentWallpaper] = useState<{ type: string; value: string } | null>(null);
@@ -660,6 +671,25 @@ export default function ParentMessageThreadScreen() {
     setShowScrollFab(false);
   }, []);
 
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    if (nextHeight > 0 && Math.abs(nextHeight - composerHeight) > 1) {
+      setComposerHeight(nextHeight);
+    }
+  }, [composerHeight]);
+
+  const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
+  const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
+  const messageViewportInset =
+    keyboardHeight +
+    composerBottomInset +
+    safeComposerHeight;
+  const messageBottomReserve = 24;
+  const wallpaperAccent =
+    currentWallpaper?.type === 'preset'
+      ? (WALLPAPER_ACCENTS[currentWallpaper.value] || '#93c5fd')
+      : '#93c5fd';
+
   // No thread ID error state
   if (!threadId) {
     return (
@@ -715,7 +745,7 @@ export default function ParentMessageThreadScreen() {
         </View>
 
         {/* Messages area - clips messages at boundary */}
-        <View style={styles.messagesClip}>
+        <View style={[styles.messagesClip, { marginBottom: messageViewportInset }]}>
           {loading ? (
             <View style={styles.center}>
               <EduDashSpinner size="large" color={theme.primary} />
@@ -750,8 +780,8 @@ export default function ParentMessageThreadScreen() {
               contentContainerStyle={[
                 styles.messagesContent,
                 {
-                  // Just enough space so the last bubble clears the composer
-                  paddingBottom: 56 + (Platform.OS === 'ios' ? insets.bottom : 4),
+                  // Keep the final bubble clear of quick replies + composer overlays.
+                  paddingBottom: messageBottomReserve,
                 },
               ]}
             />
@@ -770,7 +800,11 @@ export default function ParentMessageThreadScreen() {
           <TouchableOpacity
             style={[
               styles.scrollToBottomFab,
-              { bottom: 80 + keyboardHeight + (Platform.OS === 'ios' ? insets.bottom : 8) },
+              {
+                bottom:
+                  messageViewportInset +
+                  8,
+              },
             ]}
             onPress={scrollToBottom}
             activeOpacity={0.8}
@@ -784,9 +818,9 @@ export default function ParentMessageThreadScreen() {
           <View style={[
             styles.typingIndicatorContainer,
             { 
-              bottom: Platform.OS === 'ios' 
-                ? Math.max(insets.bottom, 4) + keyboardHeight + 70 
-                : Math.max(insets.bottom, 12) + keyboardHeight + 70,
+              bottom:
+                messageViewportInset +
+                4,
             }
           ]}>
             <View style={styles.typingIndicatorBubble}>
@@ -796,31 +830,16 @@ export default function ParentMessageThreadScreen() {
           </View>
         )}
 
-        {/* Smart Quick Replies — contextual suggestions above composer */}
-        <View style={[
-          { 
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: keyboardHeight + (Platform.OS === 'ios' ? insets.bottom + 60 : Math.max(insets.bottom, 2) + 60),
-            zIndex: 5,
-          }
-        ]}>
-          <SmartQuickReplies
-            lastReceivedMessage={lastReceivedMessage}
-            onSelectReply={(text) => handleSend(text)}
-            visible={!editingMessage && !replyingTo && !sending}
-          />
-        </View>
-
         {/* Floating Composer - glass effect lets wallpaper show through */}
         <View style={[
           styles.composerArea,
           { 
             bottom: keyboardHeight,
-            paddingBottom: Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2),
+            paddingBottom: composerBottomInset,
           }
-        ]}>
+        ]}
+          onLayout={handleComposerLayout}
+        >
           <View style={styles.composerGlass} />
           <MessageComposer
             onSend={editingMessage ? confirmEdit : handleSend}
@@ -955,13 +974,14 @@ const styles = StyleSheet.create({
   messagesClip: {
     flex: 1,
     overflow: 'hidden',
+    zIndex: 1,
   },
   messagesBottomFade: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 32,
+    height: 56,
   },
   messages: { 
     flex: 1,
@@ -1019,12 +1039,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 100,
+    elevation: 30,
   },
   composerGlass: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+    borderTopColor: 'rgba(148, 163, 184, 0.22)',
   },
   scrollToBottomFab: {
     position: 'absolute',

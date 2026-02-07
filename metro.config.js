@@ -45,8 +45,17 @@ config.resolver.sourceExts = config.resolver.sourceExts.filter(ext => ext !== 'p
 config.resolver.platforms = ['ios', 'android', 'web'];
 config.resolver.resolverMainFields = ['react-native', 'browser', 'main'];
 
-// Exclude debug/test/mock files from production bundle
-const exclusionList = require('metro-config/src/defaults/exclusionList');
+// Exclude debug/test/mock files from production bundle.
+// Metro >=0.83 blocks direct imports from `metro-config/src/*` and requires
+// `metro-config/private/*`. Keep a fallback for older Metro versions.
+let exclusionList;
+try {
+  const exclusionListModule = require('metro-config/private/defaults/exclusionList');
+  exclusionList = exclusionListModule.default || exclusionListModule;
+} catch {
+  const exclusionListModule = require('metro-config/src/defaults/exclusionList');
+  exclusionList = exclusionListModule.default || exclusionListModule;
+}
 config.resolver.blockList = exclusionList([
   /\/(scripts\/.*test.*|scripts\/.*debug.*|utils\/.*test.*|utils\/.*debug.*|.*mock.*)\//,
   /\/components\/debug\//,

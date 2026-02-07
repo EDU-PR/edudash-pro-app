@@ -101,6 +101,49 @@ export function useMessageActions({
     [user?.id, refetch]
   );
 
+  const handleQuickReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!user?.id) return;
+
+      try {
+        const client = assertSupabase();
+
+        const { data: existingReaction, error: existingError } = await client
+          .from('message_reactions')
+          .select('id')
+          .eq('message_id', messageId)
+          .eq('user_id', user.id)
+          .eq('emoji', emoji)
+          .maybeSingle();
+
+        if (existingError && existingError.code !== 'PGRST116') {
+          throw existingError;
+        }
+
+        await client
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', messageId)
+          .eq('user_id', user.id);
+
+        if (!existingReaction?.id) {
+          const { error: insertError } = await client.from('message_reactions').insert({
+            message_id: messageId,
+            user_id: user.id,
+            emoji,
+          });
+          if (insertError) throw insertError;
+        }
+
+        refetch();
+      } catch (err) {
+        logger.error('MessageActions', 'Error toggling quick reaction:', err);
+        toast.error('Failed to update reaction');
+      }
+    },
+    [user?.id, refetch]
+  );
+
   // ─── Reply ───────────────────────────────────────────────────────────
 
   const handleReply = useCallback(() => {
@@ -353,6 +396,7 @@ export function useMessageActions({
     // Original actions (now fully implemented)
     handleReact,
     handleReactionPress,
+    handleQuickReaction,
     handleReply,
     handleCopy,
     handleForward,

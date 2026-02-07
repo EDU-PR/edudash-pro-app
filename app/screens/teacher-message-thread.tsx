@@ -12,10 +12,11 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ImageBackground, Keyboard, Vibration, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ImageBackground, Keyboard, Vibration, NativeScrollEvent, NativeSyntheticEvent, LayoutChangeEvent } from 'react-native';
 import { toast } from '@/components/ui/ToastProvider';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallSafe } from '@/components/calls/CallProvider';
@@ -27,6 +28,7 @@ import {
   DateSeparator,
   MessageBubble,
   MessageComposer,
+  SmartQuickReplies,
   getDateKey,
   getDateSeparatorLabel,
 } from '@/components/messaging';
@@ -48,6 +50,7 @@ let ChatWallpaperPicker: React.FC<any> | null = null;
 let MessageActionsMenu: React.FC<any> | null = null;
 let ThreadOptionsMenu: React.FC<any> | null = null;
 let getStoredWallpaper: (() => Promise<any>) | null = null;
+let WALLPAPER_PRESETS: any[] = [];
 
 // Voice storage service
 let uploadVoiceNote: ((uri: string, duration: number, conversationId?: string) => Promise<{ publicUrl: string; storagePath: string }>) | null = null;
@@ -57,6 +60,7 @@ try {
   const m = require('@/components/messaging/ChatWallpaperPicker');
   ChatWallpaperPicker = m.ChatWallpaperPicker;
   getStoredWallpaper = m.getStoredWallpaper;
+  WALLPAPER_PRESETS = m.WALLPAPER_PRESETS || [];
 } catch {}
 try { MessageActionsMenu = require('@/components/messaging/MessageActionsMenu').MessageActionsMenu; } catch {}
 try { ThreadOptionsMenu = require('@/components/messaging/ThreadOptionsMenu').ThreadOptionsMenu; } catch {}
@@ -69,6 +73,17 @@ const defaultTheme = {
   textSecondary: '#94a3b8',
   border: 'rgba(148, 163, 184, 0.15)',
   error: '#ef4444',
+};
+
+const COMPOSER_OVERLAY_HEIGHT = 84;
+const QUICK_REPLIES_OVERLAY_HEIGHT = 86;
+const WALLPAPER_ACCENTS: Record<string, string> = {
+  'purple-glow': '#a78bfa',
+  midnight: '#60a5fa',
+  'ocean-deep': '#38bdf8',
+  'forest-night': '#4ade80',
+  'sunset-warm': '#fb923c',
+  'dark-slate': '#93c5fd',
 };
 
 try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
@@ -128,6 +143,8 @@ export default function TeacherMessageThreadScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sending, setSending] = useState(false);
   const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_HEIGHT);
+  const [quickRepliesHeight, setQuickRepliesHeight] = useState(QUICK_REPLIES_OVERLAY_HEIGHT);
   
   const listRef = useRef<FlashListRef<any> | null>(null);
   const isAtBottomRef = useRef(true);
@@ -308,7 +325,7 @@ export default function TeacherMessageThreadScreen() {
       toast.error('Failed to remove reaction');
     }
   }, [user?.id, refetch]);
-  
+
   const handleVoiceCall = useCallback(() => {
     if (!callContext) {
       toast.warn('Voice calling is not available', 'Voice Call');
@@ -334,8 +351,18 @@ export default function TeacherMessageThreadScreen() {
   }, [callContext, parentId, displayName]);
   
   // Wallpaper/background
-  const bgSource = wallpaper?.uri ? { uri: wallpaper.uri } : undefined;
+  const bgSource =
+    wallpaper?.type === 'url'
+      ? { uri: wallpaper.value }
+      : (wallpaper?.uri ? { uri: wallpaper.uri } : undefined);
   const bgColor = wallpaper?.color || theme.background;
+  const getWallpaperGradient = useCallback((): [string, string, ...string[]] => {
+    if (!wallpaper || wallpaper.type !== 'preset') {
+      return ['#0f172a', '#1e1b4b', '#0f172a'];
+    }
+    const preset = WALLPAPER_PRESETS.find((p: any) => p.key === wallpaper.value);
+    return preset?.colors || ['#0f172a', '#1e1b4b', '#0f172a'];
+  }, [wallpaper]);
   
   type ChatRow =
     | { type: 'date'; key: string; label: string }
@@ -427,6 +454,52 @@ export default function TeacherMessageThreadScreen() {
     isAtBottomRef.current =
       layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
   }, []);
+
+  const lastReceivedMessage = useMemo(() => {
+    const received = messagesAsc
+      .filter((m) => m.sender_id !== user?.id && m.content && typeof m.content === 'string')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return received[0]?.content;
+  }, [messagesAsc, user?.id]);
+
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    if (nextHeight > 0 && Math.abs(nextHeight - composerHeight) > 1) {
+      setComposerHeight(nextHeight);
+    }
+  }, [composerHeight]);
+
+  const handleQuickRepliesLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    if (nextHeight > 0 && Math.abs(nextHeight - quickRepliesHeight) > 1) {
+      setQuickRepliesHeight(nextHeight);
+    }
+  }, [quickRepliesHeight]);
+
+  const quickRepliesVisible = !!lastReceivedMessage && !replyTo && !sending && !isPending;
+  const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
+  const composerKeyboardOffset =
+    keyboardHeight > 0 ? keyboardHeight - (Platform.OS === 'ios' ? insets.bottom : 0) + 8 : 0;
+  const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
+  const safeQuickRepliesHeight = quickRepliesVisible
+    ? Math.max(quickRepliesHeight, QUICK_REPLIES_OVERLAY_HEIGHT)
+    : 0;
+  const quickRepliesBottom =
+    composerKeyboardOffset +
+    composerBottomInset +
+    safeComposerHeight -
+    2;
+  const messageViewportInset =
+    composerKeyboardOffset +
+    composerBottomInset +
+    safeComposerHeight +
+    safeQuickRepliesHeight;
+  const messageBottomReserve = 24;
+  const wallpaperAccent =
+    wallpaper?.type === 'preset' ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
+  const quickRepliesSurface =
+    bgSource ? 'rgba(15, 23, 42, 0.94)' : 'rgba(15, 23, 42, 0.9)';
+  const wallpaperVariant = bgSource ? 'image' : 'gradient';
   
   // Loading state
   if (isLoading) {
@@ -482,10 +555,7 @@ export default function TeacherMessageThreadScreen() {
       />
       
       {/* Messages Container */}
-      <View style={[
-        styles.messagesWrapper, 
-        { marginBottom: keyboardHeight > 0 ? keyboardHeight + 70 - (Platform.OS === 'ios' ? insets.bottom : 0) : 70 + insets.bottom }
-      ]}>
+      <View style={[styles.messagesWrapper, { marginBottom: messageViewportInset }]}>
         {bgSource ? (
           <ImageBackground source={bgSource} style={styles.messagesArea} resizeMode="cover">
             <FlashList
@@ -497,7 +567,10 @@ export default function TeacherMessageThreadScreen() {
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: messageBottomReserve },
+              ]}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
@@ -507,6 +580,30 @@ export default function TeacherMessageThreadScreen() {
               }
             />
           </ImageBackground>
+        ) : wallpaper?.type === 'preset' ? (
+          <LinearGradient colors={getWallpaperGradient()} style={styles.messagesArea}>
+            <FlashList
+              ref={listRef}
+              data={rowsAsc}
+              renderItem={renderRow}
+              keyExtractor={(item) => item.key}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: messageBottomReserve },
+              ]}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
+                  <Text style={styles.emptyTitle}>Start the Conversation</Text>
+                  <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
+                </View>
+              }
+            />
+          </LinearGradient>
         ) : (
           <FlashList
             ref={listRef}
@@ -517,7 +614,10 @@ export default function TeacherMessageThreadScreen() {
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: messageBottomReserve },
+            ]}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
@@ -528,19 +628,44 @@ export default function TeacherMessageThreadScreen() {
           />
         )}
       </View>
+
+      {/* Smart Quick Replies */}
+      <View
+        pointerEvents={quickRepliesVisible ? 'auto' : 'none'}
+        onLayout={handleQuickRepliesLayout}
+        style={[
+          styles.quickRepliesArea,
+          {
+            bottom: quickRepliesBottom,
+            opacity: quickRepliesVisible ? 1 : 0,
+          },
+        ]}
+      >
+        <SmartQuickReplies
+          lastReceivedMessage={lastReceivedMessage}
+          onSelectReply={handleSend}
+          visible={quickRepliesVisible}
+          wallpaperMode
+          accentColor={wallpaperAccent}
+          surfaceColor={quickRepliesSurface}
+          wallpaperVariant={wallpaperVariant}
+        />
+      </View>
       
       {/* Floating Composer */}
       <View style={[
         styles.composerKeyboard,
-        { bottom: keyboardHeight > 0 ? keyboardHeight - (Platform.OS === 'ios' ? insets.bottom : 0) + 8 : 0 }
+        { bottom: composerKeyboardOffset }
       ]}>
         <View style={[
           styles.composerArea,
           { 
-            paddingBottom: keyboardHeight > 0 ? 8 : (Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : insets.bottom + 8),
-            backgroundColor: bgSource ? 'rgba(15, 23, 42, 0.55)' : 'transparent',
+            paddingBottom: keyboardHeight > 0 ? 8 : composerBottomInset,
+            backgroundColor: bgSource ? 'rgba(15, 23, 42, 0.97)' : theme.background,
           }
-        ]}>
+        ]}
+          onLayout={handleComposerLayout}
+        >
           <MessageComposer
             onSend={handleSend}
             onVoiceRecording={handleVoiceRecording}
@@ -609,10 +734,9 @@ export default function TeacherMessageThreadScreen() {
       {/* Wallpaper Picker */}
       {ChatWallpaperPicker && (
         <ChatWallpaperPicker
-          visible={showWallpaper}
+          isOpen={showWallpaper}
           onClose={() => setShowWallpaper(false)}
           onSelect={(w: any) => { setWallpaper(w); setShowWallpaper(false); }}
-          currentWallpaper={wallpaper}
         />
       )}
     </View>
@@ -698,6 +822,7 @@ const styles = StyleSheet.create({
   messagesWrapper: {
     flex: 1,
     overflow: 'hidden',
+    zIndex: 1,
   },
   messagesArea: {
     flex: 1,
@@ -707,7 +832,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 12,
-    paddingBottom: 56,
+    paddingBottom: 16,
   },
   emptyState: {
     flex: 1,
@@ -733,9 +858,20 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 100,
+    elevation: 30,
   },
   composerArea: {
     paddingHorizontal: 0,
     paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.18)',
+  },
+  quickRepliesArea: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 90,
+    elevation: 24,
   },
 });

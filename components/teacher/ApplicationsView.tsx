@@ -51,25 +51,43 @@ export function ApplicationsView({
 }: ApplicationsViewProps) {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ApplicationStatus | 'all'>('all');
+  const hasNotifiedErrorRef = React.useRef(false);
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   const fetchApplications = useCallback(async () => {
     if (!preschoolId) {
       setApplications([]);
+      setLoadError(null);
       setLoading(false);
       return;
     }
     try {
       setLoading(true);
+      setLoadError(null);
       const data = await HiringHubService.getApplicationsForSchool(preschoolId);
       setApplications(data);
+      hasNotifiedErrorRef.current = false;
     } catch (err) {
       console.error('[ApplicationsView] fetch error:', err);
+      const rawMessage = err instanceof Error ? err.message : 'Failed to load applications.';
+      const friendlyMessage = rawMessage.toLowerCase().includes('permission denied for table users')
+        ? 'Applications are temporarily unavailable due to a database policy issue.'
+        : rawMessage;
+      setLoadError(friendlyMessage);
+      if (!hasNotifiedErrorRef.current) {
+        showAlert({
+          title: 'Applications Unavailable',
+          message: friendlyMessage,
+          type: 'warning',
+        });
+        hasNotifiedErrorRef.current = true;
+      }
     } finally {
       setLoading(false);
     }
-  }, [preschoolId]);
+  }, [preschoolId, showAlert]);
 
   useEffect(() => {
     fetchApplications();
@@ -258,6 +276,12 @@ export function ApplicationsView({
           {applications.length} application{applications.length !== 1 ? 's' : ''}
         </Text>
       </View>
+      {loadError ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="warning-outline" size={16} color="#B45309" />
+          <Text style={styles.errorBannerText}>{loadError}</Text>
+        </View>
+      ) : null}
 
       {/* Filter chips */}
       <View style={styles.filterRow}>
@@ -314,6 +338,24 @@ const createStyles = (theme?: ThemeColors) =>
     },
     sectionTitle: { fontSize: 18, fontWeight: '700', color: theme?.text || '#111827' },
     sectionSubtitle: { fontSize: 14, color: theme?.textSecondary || '#6b7280' },
+    errorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: '#F59E0B',
+      backgroundColor: '#FEF3C7',
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginBottom: 10,
+    },
+    errorBannerText: {
+      flex: 1,
+      color: '#92400E',
+      fontSize: 12,
+      fontWeight: '600',
+    },
     filterRow: {
       flexDirection: 'row',
       gap: 8,

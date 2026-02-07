@@ -29,6 +29,8 @@ interface Student {
   first_name: string;
   last_name: string;
   class_id: string | null;
+  registration_fee_amount?: number | null;
+  registration_fee_paid?: boolean | null;
   class_name?: string;
   parent_name?: string;
   parent_id?: string | null;
@@ -90,6 +92,20 @@ interface ParentProfileRow {
 
 type ModalType = 'waive' | 'adjust' | 'change_class' | null;
 
+const isRegistrationFeeEntry = (
+  feeType?: string | null,
+  name?: string | null,
+  description?: string | null,
+): boolean => {
+  const text = `${feeType ?? ''} ${name ?? ''} ${description ?? ''}`.toLowerCase();
+  return (
+    text.includes('registration') ||
+    text.includes('admission') ||
+    text.includes('enrol') ||
+    text.includes('enroll')
+  );
+};
+
 export default function StudentFeeManagementScreen() {
   const router = useRouter();
   const { studentId } = useLocalSearchParams<{ studentId?: string }>();
@@ -149,6 +165,9 @@ export default function StudentFeeManagementScreen() {
   
   // Form state for class change
   const [newClassId, setNewClassId] = useState<string>('');
+  const [classRegistrationFee, setClassRegistrationFee] = useState('');
+  const [classFeeHint, setClassFeeHint] = useState('');
+  const [loadingSuggestedFee, setLoadingSuggestedFee] = useState(false);
 
   const organizationId = profile?.organization_id || (profile as any)?.preschool_id;
   const [feeBootstrapAttempted, setFeeBootstrapAttempted] = useState(false);
@@ -170,7 +189,7 @@ export default function StudentFeeManagementScreen() {
       const { data, error } = await supabase
         .from('students')
         .select(`
-          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth,
+          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth, registration_fee_amount, registration_fee_paid,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
         `)
@@ -187,6 +206,8 @@ export default function StudentFeeManagementScreen() {
         first_name: data.first_name,
         last_name: data.last_name,
         class_id: data.class_id,
+        registration_fee_amount: data.registration_fee_amount != null ? Number(data.registration_fee_amount) : null,
+        registration_fee_paid: data.registration_fee_paid,
         class_name: classData?.name,
         parent_name: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
         parent_id: data.parent_id,
@@ -452,6 +473,79 @@ export default function StudentFeeManagementScreen() {
     setRefreshing(false);
   }, [loadStudent, loadFees]);
 
+  const resolveSuggestedRegistrationFee = useCallback(async (className?: string | null) => {
+    if (!organizationId) return null;
+
+    try {
+      const supabase = assertSupabase();
+      const { data, error } = await supabase
+        .from('fee_structures')
+        .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+        .eq('preschool_id', organizationId)
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const registrationFees = (data || []).filter((fee: FeeStructureRow) =>
+        isRegistrationFeeEntry(fee.fee_type, fee.name, fee.description)
+      );
+
+      if (!registrationFees.length) return null;
+
+      const classNeedle = className?.trim().toLowerCase();
+      if (classNeedle) {
+        const explicitMatch = registrationFees.find((fee) => {
+          const feeText = [
+            fee.name,
+            fee.description,
+            ...(fee.grade_levels || []),
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          return feeText.includes(classNeedle);
+        });
+
+        if (explicitMatch) {
+          return Number(explicitMatch.amount);
+        }
+      }
+
+      const selectedFee = selectFeeStructureForChild(registrationFees as FeeStructureRow[], {
+        dateOfBirth: studentRef.current?.date_of_birth,
+        enrollmentDate: studentRef.current?.enrollment_date,
+        ageGroupLabel: className || undefined,
+        gradeLevel: className || undefined,
+      });
+
+      return selectedFee ? Number(selectedFee.amount) : Number(registrationFees[0].amount);
+    } catch (error) {
+      console.warn('[StudentFeeManagement] Failed to resolve suggested registration fee:', error);
+      return null;
+    }
+  }, [organizationId]);
+
+  const prefillRegistrationFeeForClass = useCallback(async (classId: string) => {
+    const selectedClass = classes.find((cls) => cls.id === classId);
+    if (!selectedClass) return;
+
+    setLoadingSuggestedFee(true);
+    try {
+      const suggestedAmount = await resolveSuggestedRegistrationFee(selectedClass.name);
+
+      if (suggestedAmount != null && Number.isFinite(suggestedAmount)) {
+        setClassRegistrationFee(suggestedAmount.toFixed(2));
+        setClassFeeHint(`Suggested fee for ${selectedClass.name} loaded from active registration fee setup.`);
+      } else {
+        setClassFeeHint(`No class-linked registration fee found for ${selectedClass.name}. Enter the correct amount manually.`);
+      }
+    } finally {
+      setLoadingSuggestedFee(false);
+    }
+  }, [classes, resolveSuggestedRegistrationFee]);
+
   const handleGenerateFees = useCallback(async () => {
     if (!student) return;
     setGeneratingFees(true);
@@ -571,6 +665,24 @@ export default function StudentFeeManagementScreen() {
       } catch {
         // Ignore if table doesn't exist
       }
+
+      if (isRegistrationFeeEntry(selectedFee.fee_type, selectedFee.description)) {
+        const { error: registrationFeeError } = await supabase
+          .from('students')
+          .update({
+            registration_fee_amount: amount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', selectedFee.student_id);
+
+        if (registrationFeeError) {
+          console.warn('[StudentFeeManagement] Failed to sync registration fee amount:', registrationFeeError);
+        } else {
+          setStudent((prev) => (
+            prev ? { ...prev, registration_fee_amount: amount } : prev
+          ));
+        }
+      }
       
       showAlert('Fee Adjusted', `Fee amount updated to R${amount.toFixed(2)}.`, 'success');
       
@@ -589,6 +701,22 @@ export default function StudentFeeManagementScreen() {
   // Change class
   const handleChangeClass = async () => {
     if (!student || !newClassId) return;
+
+    const parsedFee = Number.parseFloat(classRegistrationFee);
+    if (Number.isNaN(parsedFee) || parsedFee < 0) {
+      showAlert('Invalid Amount', 'Please enter a valid registration fee amount.', 'warning');
+      return;
+    }
+
+    const normalizedFee = Number(parsedFee.toFixed(2));
+    const currentFee = Number(student.registration_fee_amount || 0);
+    const hasClassChange = newClassId !== student.class_id;
+    const hasFeeChange = Math.abs(normalizedFee - currentFee) >= 0.01;
+
+    if (!hasClassChange && !hasFeeChange) {
+      showAlert('No Changes', 'Class and registration fee are unchanged.', 'info');
+      return;
+    }
     
     setSaving(true);
     try {
@@ -598,6 +726,7 @@ export default function StudentFeeManagementScreen() {
         .from('students')
         .update({
           class_id: newClassId,
+          registration_fee_amount: normalizedFee,
           updated_at: new Date().toISOString(),
         })
         .eq('id', student.id);
@@ -605,11 +734,18 @@ export default function StudentFeeManagementScreen() {
       if (error) throw error;
       
       const newClass = classes.find(c => c.id === newClassId);
-      showAlert('Class Changed', `Student moved to ${newClass?.name || 'new class'}.`, 'success');
+      showAlert(
+        'Student Updated',
+        `Class set to ${newClass?.name || 'new class'} and registration fee updated to R${normalizedFee.toFixed(2)}.`,
+        'success'
+      );
       
       setModalType(null);
       setNewClassId('');
-      loadStudent();
+      setClassRegistrationFee('');
+      setClassFeeHint('');
+      const refreshedStudent = await loadStudent();
+      await loadFees(refreshedStudent);
     } catch (error: any) {
       showAlert('Error', error.message || 'Failed to change class.', 'error');
     } finally {
@@ -1115,6 +1251,20 @@ export default function StudentFeeManagementScreen() {
   }, [fees, student?.enrollment_date, getEnrollmentMonthStart]);
 
   const hasParent = Boolean(student?.parent_id || student?.parent_name);
+  const parsedClassRegistrationFee = Number.parseFloat(classRegistrationFee);
+  const hasValidClassRegistrationFee =
+    !Number.isNaN(parsedClassRegistrationFee) && parsedClassRegistrationFee >= 0;
+  const currentRegistrationFeeAmount = Number(student?.registration_fee_amount || 0);
+  const hasClassSelectionChange = Boolean(newClassId) && newClassId !== student?.class_id;
+  const hasRegistrationFeeChange =
+    hasValidClassRegistrationFee &&
+    Math.abs(parsedClassRegistrationFee - currentRegistrationFeeAmount) >= 0.01;
+  const canSubmitClassCorrection =
+    Boolean(newClassId) &&
+    hasValidClassRegistrationFee &&
+    (hasClassSelectionChange || hasRegistrationFeeChange) &&
+    !saving &&
+    !loadingSuggestedFee;
 
   const styles = useMemo(() => createStyles(theme, isDark, insets), [theme, isDark, insets]);
 
@@ -1234,6 +1384,8 @@ export default function StudentFeeManagementScreen() {
             style={styles.changeClassButton}
             onPress={() => {
               setNewClassId(student.class_id || '');
+              setClassRegistrationFee(Number(student.registration_fee_amount || 0).toFixed(2));
+              setClassFeeHint('Update class and registration fee together to fix parent-facing amount mismatches.');
               setModalType('change_class');
             }}
           >
@@ -1605,7 +1757,7 @@ export default function StudentFeeManagementScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Change Class</Text>
+              <Text style={styles.modalTitle}>Fix Class & Registration Fee</Text>
               <TouchableOpacity onPress={() => setModalType(null)}>
                 <Ionicons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
@@ -1623,7 +1775,11 @@ export default function StudentFeeManagementScreen() {
                     styles.classOption,
                     newClassId === cls.id && styles.classOptionSelected,
                   ]}
-                  onPress={() => setNewClassId(cls.id)}
+                  onPress={() => {
+                    setNewClassId(cls.id);
+                    setClassFeeHint('');
+                    void prefillRegistrationFeeForClass(cls.id);
+                  }}
                 >
                   <Text style={[
                     styles.classOptionText,
@@ -1637,19 +1793,40 @@ export default function StudentFeeManagementScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Registration Fee Shown to Parent (R)</Text>
+              <TextInput
+                style={styles.input}
+                value={classRegistrationFee}
+                onChangeText={(value) => {
+                  setClassRegistrationFee(value.replace(/[^0-9.]/g, ''));
+                  setClassFeeHint('');
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={theme.textSecondary}
+              />
+              {loadingSuggestedFee && (
+                <Text style={styles.classFeeHintText}>Finding suggested fee for selected class...</Text>
+              )}
+              {!loadingSuggestedFee && !!classFeeHint && (
+                <Text style={styles.classFeeHintText}>{classFeeHint}</Text>
+              )}
+            </View>
             
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                (!newClassId || newClassId === student?.class_id || saving) && styles.submitButtonDisabled,
+                !canSubmitClassCorrection && styles.submitButtonDisabled,
               ]}
               onPress={handleChangeClass}
-              disabled={!newClassId || newClassId === student?.class_id || saving}
+              disabled={!canSubmitClassCorrection}
             >
               {saving ? (
                 <EduDashSpinner size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Change Class</Text>
+                <Text style={styles.submitButtonText}>Save Corrections</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -2054,6 +2231,11 @@ const createStyles = (theme: any, isDark: boolean, insets: any) => StyleSheet.cr
   },
   inputGroup: {
     marginBottom: 16,
+  },
+  classFeeHintText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: theme.textSecondary,
   },
   inputLabel: {
     fontSize: 14,

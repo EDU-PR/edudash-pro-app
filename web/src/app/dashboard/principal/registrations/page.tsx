@@ -270,6 +270,36 @@ export default function PrincipalRegistrationsPage() {
         alert('✅ Registration approved!\n\n✉️ Welcome email sent to parent\n👤 Parent account created\n👶 Student profile created');
       }
 
+      // Send approval notification (email + push) to guardian
+      try {
+        const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+        const guardianEmail = registration.guardian_email || registration.parent_email;
+        const schoolName = registration.organization_name || profile?.preschool_name || 'your school';
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.edudashpro.com';
+
+        if (guardianEmail) {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'child_registration_approved',
+              recipient_email: guardianEmail,
+              registration_id: registration.id,
+              child_name: childName,
+              school_name: schoolName,
+              preschool_id: registration.organization_id,
+              include_email: true,
+              email_template_override: {
+                subject: `✅ ${childName}'s Registration Approved — ${schoolName}`,
+                html: `<div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.7"><h2 style="color:#16a34a">✅ Registration Approved</h2><p>Dear ${registration.guardian_name || 'Parent'},</p><p><strong>${childName}</strong>'s registration at <strong>${schoolName}</strong> has been approved!</p><p>Here's what happens next:</p><ul><li>Your child has been enrolled and is now active on the school system.</li><li>Track attendance, homework, and school updates from the EduDash Pro app.</li><li>Your child's teacher will be in touch with class details.</li></ul><p style="margin:24px 0"><a href="${appUrl}" style="display:inline-block;background:#6d28d9;color:#fff;padding:14px 24px;border-radius:10px;text-decoration:none;font-weight:700">Open EduDash Pro</a></p><p style="font-size:13px;color:#64748b">If you haven't downloaded the app yet, search for <strong>EduDash Pro</strong> on the App Store or Google Play.</p><p>Welcome to ${schoolName}! 🎉</p></div>`,
+                text: `${childName}'s registration at ${schoolName} has been approved! Open EduDash Pro to get started: ${appUrl}`,
+              },
+            },
+          });
+          console.log('[Approve] ✉️ Notification sent to', guardianEmail);
+        }
+      } catch (notifErr) {
+        console.warn('[Approve] Failed to send approval notification:', notifErr);
+      }
+
       await fetchRegistrations();
     } catch (error) {
       console.error('[Approve] Error:', error);
@@ -466,8 +496,37 @@ export default function PrincipalRegistrationsPage() {
 
       if (error) throw error;
 
+      // Send rejection notification (email + push) to guardian
+      try {
+        const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
+        const guardianEmail = registration.guardian_email || registration.parent_email;
+        const schoolName = registration.organization_name || profile?.preschool_name || 'your school';
+
+        if (guardianEmail) {
+          await supabase.functions.invoke('notifications-dispatcher', {
+            body: {
+              event_type: 'child_registration_rejected',
+              recipient_email: guardianEmail,
+              registration_id: registration.id,
+              child_name: childName,
+              school_name: schoolName,
+              rejection_reason: reason,
+              preschool_id: registration.organization_id,
+              include_email: true,
+              email_template_override: {
+                subject: `Registration Update — ${childName} at ${schoolName}`,
+                html: `<div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.7"><h2 style="color:#dc2626">Registration Update</h2><p>Dear ${registration.guardian_name || 'Parent'},</p><p>We regret to inform you that <strong>${childName}</strong>'s registration at <strong>${schoolName}</strong> was not approved at this time.</p>${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}<p>If you believe this is an error or have questions, please contact the school directly.</p><p style="font-size:13px;color:#64748b;margin-top:16px">This is an automated message from EduDash Pro.</p></div>`,
+                text: `${childName}'s registration at ${schoolName} was not approved. ${reason ? 'Reason: ' + reason : ''} Please contact the school for more information.`,
+              },
+            },
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send rejection notification:', notifErr);
+      }
+
       await fetchRegistrations();
-      alert('Registration rejected.');
+      alert('Registration rejected. The guardian has been notified.');
     } catch (error) {
       console.error('Error rejecting registration:', error);
       alert('Failed to reject registration. Please try again.');

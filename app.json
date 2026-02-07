@@ -73,7 +73,7 @@
       "blockedPermissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "versionCode": 31,
+      "versionCode": 36,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -127,21 +127,6 @@
             {
               "scheme": "https",
               "host": "edudashpro.org.za",
-              "pathPrefix": "/invite"
-            },
-            {
-              "scheme": "https",
-              "host": "app.edudashpro.org.za",
-              "pathPrefix": "/invite"
-            },
-            {
-              "scheme": "https",
-              "host": "www.edudashpro.app",
-              "pathPrefix": "/invite"
-            },
-            {
-              "scheme": "https",
-              "host": "edudashpro.app",
               "pathPrefix": "/invite"
             }
           ],

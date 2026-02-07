@@ -109,7 +109,9 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-  allowsEditing: true,
+        allowsEditing: true,
+        aspect: [9, 16],
+        quality: 0.85,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -328,6 +330,8 @@ export const ChatWallpaperPicker: React.FC<ChatWallpaperPickerProps> = ({
       onCancel={() => setPendingWallpaperUri(null)}
       title="Chat Wallpaper"
       confirmLabel="Set Wallpaper"
+      showCrop
+      cropAspect={[9, 16]}
       loading={uploading}
     />
     </>
