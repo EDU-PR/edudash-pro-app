@@ -11,6 +11,45 @@
 import * as Notifications from 'expo-notifications';
 import { Platform, Alert } from 'react-native';
 
+// Track whether we've set up the notification handler for testing
+let handlerEnsured = false;
+
+/**
+ * Ensure a notification handler is registered so foreground notifications
+ * actually display in the status bar and as banners.
+ * Without this, Expo silently suppresses all foreground notifications.
+ */
+function ensureNotificationHandler(): void {
+  if (handlerEnsured) return;
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
+    }),
+  });
+  handlerEnsured = true;
+  console.log('[Test Notification] Handler ensured — foreground notifications will display');
+}
+
+/**
+ * Auto-request notification permissions if not yet granted.
+ * Required on Android 13+ (API 33) for POST_NOTIFICATIONS.
+ */
+async function ensurePermissions(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status === 'granted') return true;
+  const { status: newStatus } = await Notifications.requestPermissionsAsync();
+  if (newStatus !== 'granted') {
+    console.warn('[Test Notification] Permission denied — notifications will not display');
+    return false;
+  }
+  return true;
+}
+
 export interface TestNotificationOptions {
   title: string;
   body: string;
@@ -28,6 +67,12 @@ export interface TestNotificationOptions {
  */
 export async function sendTestNotification(options: TestNotificationOptions): Promise<string> {
   try {
+    // Ensure handler is set up (foreground notifications require this)
+    ensureNotificationHandler();
+    
+    // Auto-request permissions (required on Android 13+)
+    await ensurePermissions();
+
     // Ensure Android notification channel exists
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -47,21 +92,26 @@ export async function sendTestNotification(options: TestNotificationOptions): Pr
       content: {
         title: options.title,
         body: options.body,
-        data: options.data || {},
+        data: { ...(options.data || {}), forceShow: true },
         badge: options.badge,
         sound: options.sound !== false, // default true
-        sticky: options.sticky,
+        sticky: options.sticky ?? true, // Persist in notification tray
         subtitle: options.subtitle,
         categoryIdentifier: options.categoryId,
+        autoDismiss: false, // Keep in status bar until user dismisses
         // Android specific
         ...(Platform.OS === 'android' && {
           color: '#06b6d4', // Cyan accent
-          priority: Notifications.AndroidNotificationPriority.HIGH,
+          priority: Notifications.AndroidNotificationPriority.MAX,
           vibrationPattern: [0, 250, 250, 250],
           channelId: 'default',
         }),
       },
-      trigger: null, // Fire immediately
+      // Use 1-second delay on Android for reliable status bar display;
+      // trigger: null fires in-process and can be silently consumed
+      trigger: Platform.OS === 'android'
+        ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, channelId: 'default' }
+        : null,
     });
     
     console.log('[Test Notification] Sent:', notificationId);
@@ -80,16 +130,36 @@ export async function sendScheduledNotification(
   delaySeconds: number
 ): Promise<string> {
   try {
+    // Ensure handler + permissions
+    ensureNotificationHandler();
+    await ensurePermissions();
+
+    // Ensure channel exists on Android
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#06b6d4',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    }
+
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title: options.title,
         body: options.body,
-        data: options.data || {},
+        data: { ...(options.data || {}), forceShow: true },
         badge: options.badge,
         sound: options.sound !== false,
+        sticky: true,
+        autoDismiss: false,
         ...(Platform.OS === 'android' && {
           color: '#06b6d4',
-          priority: Notifications.AndroidNotificationPriority.HIGH,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          channelId: 'default',
         }),
       },
       trigger: {
