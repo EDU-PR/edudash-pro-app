@@ -573,7 +573,11 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       });
     }
 
-    return isEarlyLearner ? actions.filter((action) => action.id !== 'view_grades') : actions;
+    if (isEarlyLearner) {
+      const hiddenForPreschool = new Set(['view_grades', 'my_exams', 'homework_history']);
+      return actions.filter((action) => !hiddenForPreschool.has(action.id));
+    }
+    return actions;
   }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked]);
 
   const quickActions = useMemo<ParentQuickAction[]>(() => baseQuickActions, [baseQuickActions]);

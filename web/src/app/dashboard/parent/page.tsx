@@ -15,7 +15,6 @@ import { CAPSActivitiesWidget } from '@/components/dashboard/parent/CAPSActiviti
 import { CollapsibleSection } from '@/components/dashboard/parent/CollapsibleSection';
 import { HomeworkCard } from '@/components/dashboard/parent/HomeworkCard';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
-import { QuotaCard } from '@/components/dashboard/QuotaCard';
 import { JoinLiveLessonWithToggle } from '@/components/calls';
 import { useParentOverviewMetrics } from '@/lib/hooks/parent/useParentOverviewMetrics';
 import { useOnboardingHint } from '@/lib/hooks/useOnboardingHint';
@@ -296,6 +295,7 @@ export default function ParentDashboard() {
 
   // Active child and age calculations
   const activeChild = childrenCards.find((c) => c.id === activeChildId);
+  const featuredChild = activeChild || childrenCards[0] || null;
   
   // Calculate age of active child (for age-appropriate content)
   const getChildAge = (dateOfBirth?: string): number => {
@@ -405,9 +405,85 @@ export default function ParentDashboard() {
           </div>
         )}
 
-        {/* AI Usage Quota Card - Only show if children exist and have age */}
-        {userId && childrenCards.length > 0 && childrenCards.some(c => c.dateOfBirth) && (
-          <QuotaCard userId={userId} />
+        {/* Child summary card (replaces AI usage card slot) */}
+        {featuredChild && (
+          <div className="card" style={{ marginBottom: 'var(--space-3)', padding: '16px' }}>
+            <div className="flex items-center justify-between gap-3" style={{ flexWrap: 'wrap' }}>
+              <div className="flex items-center gap-3">
+                {featuredChild.avatarUrl ? (
+                  <img
+                    src={featuredChild.avatarUrl}
+                    alt={`${featuredChild.firstName} ${featuredChild.lastName}`}
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 999,
+                      objectFit: 'cover',
+                      border: '2px solid var(--border)',
+                    }}
+                  />
+                ) : (
+                  <div className="avatar" style={{ width: 56, height: 56, fontSize: 20 }}>
+                    {featuredChild.firstName[0]}{featuredChild.lastName[0]}
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 2 }}>
+                    Active Child
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+                    {featuredChild.firstName} {featuredChild.lastName}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {featuredChild.grade}{featuredChild.className ? ` • ${featuredChild.className}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+                <button
+                  className="btn btnSecondary"
+                  onClick={() => router.push('/dashboard/parent/children')}
+                >
+                  Manage Child
+                </button>
+                <button
+                  className="btn btnSecondary"
+                  onClick={() => router.push('/dashboard/parent/homework')}
+                >
+                  View Homework
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2" style={{ marginTop: 12 }}>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{featuredChild.homeworkPending}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.childCard.homework}</div>
+              </div>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{featuredChild.upcomingEvents}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{COPY.childCard.events}</div>
+              </div>
+            </div>
+
+            {childrenCards.length > 1 && (
+              <div className="flex gap-2" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+                {childrenCards.map((child) => (
+                  <button
+                    key={child.id}
+                    className="btn btnSecondary"
+                    style={{
+                      borderColor: child.id === activeChildId ? 'var(--primary)' : undefined,
+                      color: child.id === activeChildId ? 'var(--primary)' : undefined,
+                    }}
+                    onClick={() => setActiveChildId(child.id)}
+                  >
+                    {child.firstName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Pending Requests (ONLY for organization-linked parents) */}

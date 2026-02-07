@@ -7,7 +7,7 @@ import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import type { ChildCard } from '@/lib/hooks/parent/types';
-import { Users, Plus, UserPlus, Camera, Loader2 } from 'lucide-react';
+import { Users, Plus, UserPlus, Camera, Loader2, ArrowLeft } from 'lucide-react';
 
 const AVATAR_BUCKET = 'avatars';
 const STUDENT_AVATAR_FOLDER = 'student_avatars';
@@ -318,14 +318,24 @@ function ChildrenContent({ userId }: { userId: string | undefined }) {
         <div style={{ fontSize: 14, color: 'var(--textLight)' }}>
           {childrenCards.length} {childrenCards.length === 1 ? 'child' : 'children'} linked
         </div>
-        <button
-          onClick={() => router.push('/dashboard/parent/claim-child')}
-          className="btn btnSecondary"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-        >
-          <Plus className="icon16" />
-          Add Another Child
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => router.push('/dashboard/parent')}
+            className="btn btnSecondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <ArrowLeft className="icon16" />
+            Back to Dashboard
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/parent/claim-child')}
+            className="btn btnSecondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <Plus className="icon16" />
+            Add Another Child
+          </button>
+        </div>
       </div>
 
       {uploadError && (
@@ -347,8 +357,21 @@ function ChildrenContent({ userId }: { userId: string | undefined }) {
           background: 'var(--success-subtle)',
           border: '1px solid var(--success)',
           color: 'var(--success)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
         }}>
-          {uploadSuccess}
+          <span>{uploadSuccess}</span>
+          <button
+            onClick={() => router.push('/dashboard/parent')}
+            className="btn btnSecondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          >
+            <ArrowLeft className="icon16" />
+            Back to Dashboard
+          </button>
         </div>
       )}
 
