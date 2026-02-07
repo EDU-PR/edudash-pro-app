@@ -5,3 +5,6 @@ shadow_port = 54332
 
 [functions.sync-campaign-to-edusite]
 verify_jwt = false
+
+[functions.sync-registrations-from-edusite]
+verify_jwt = false
