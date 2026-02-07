@@ -16,7 +16,7 @@ import {
   type EnhancedUserProfile,
   type PermissionChecker
 } from '@/lib/rbac';
-import { initializeSession, signOut, isPasswordRecoveryInProgress, syncSessionFromSupabase, clearStoredAuthData } from '@/lib/sessionManager';
+import { initializeSession, signOut, isPasswordRecoveryInProgress, syncSessionFromSupabase, clearStoredAuthData, updateStoredProfile } from '@/lib/sessionManager';
 import { securityAuditor } from '@/lib/security-audit';
 import { initializeVisibilityHandler, destroyVisibilityHandler } from '@/lib/visibilityHandler';
 import type { User } from '@supabase/supabase-js';
@@ -98,6 +98,40 @@ function isSameUserProfile(user: User, existingProfile?: EnhancedUserProfile | n
     return true;
   }
   return false;
+}
+
+async function persistProfileSnapshot(
+  enhancedProfile: EnhancedUserProfile | null,
+  user?: User | null
+): Promise<void> {
+  if (!enhancedProfile) return;
+  try {
+    const organizationName =
+      enhancedProfile.organization_name ||
+      enhancedProfile.organization_membership?.organization_name ||
+      undefined;
+    await updateStoredProfile({
+      id: enhancedProfile.id,
+      email: enhancedProfile.email || user?.email || undefined,
+      role: enhancedProfile.role as any,
+      organization_id: enhancedProfile.organization_id || undefined,
+      organization_name: organizationName,
+      preschool_id: (enhancedProfile as any)?.preschool_id || undefined,
+      preschool_name: organizationName,
+      first_name: enhancedProfile.first_name || undefined,
+      last_name: enhancedProfile.last_name || undefined,
+      full_name: enhancedProfile.full_name || undefined,
+      avatar_url: enhancedProfile.avatar_url || undefined,
+      seat_status:
+        (enhancedProfile as any)?.seat_status ||
+        enhancedProfile.organization_membership?.seat_status ||
+        undefined,
+      capabilities: enhancedProfile.capabilities || [],
+      last_login_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn('[AuthContext] Failed to persist profile snapshot:', error);
+  }
 }
 
 async function buildFallbackProfileFromSession(
@@ -313,13 +347,31 @@ async function buildFallbackProfileFromSession(
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthContextValue['user']>(null);
-  const [session, setSession] = useState<AuthContextValue['session']>(null);
-  const [profile, setProfile] = useState<EnhancedUserProfile | null>(null);
+  const [session, setSessionRaw] = useState<AuthContextValue['session']>(null);
+  const sessionRef = useRef<AuthContextValue['session']>(null);
+  const setSession = useCallback((s: AuthContextValue['session']) => {
+    sessionRef.current = s;
+    setSessionRaw(s);
+  }, []);
+  const [profile, _setProfile] = useState<EnhancedUserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileLoading, _setProfileLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionChecker>(createPermissionChecker(null));
   const [lastRefreshAttempt, setLastRefreshAttempt] = useState<number>(0);
   const lastUserIdRef = useRef<string | null>(null);
+  const orgNameRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileRef = useRef<EnhancedUserProfile | null>(null);
+  const profileLoadingRef = useRef(false);
+
+  // Wrapped setters that keep refs in sync for use inside closures
+  const setProfile = useCallback((p: EnhancedUserProfile | null) => {
+    profileRef.current = p;
+    _setProfile(p);
+  }, []);
+  const setProfileLoading = useCallback((v: boolean) => {
+    profileLoadingRef.current = v;
+    _setProfileLoading(v);
+  }, []);
 
   // Fetch enhanced user profile
   const fetchProfile = useCallback(async (userId: string) => {
@@ -386,6 +438,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setProfile(enhancedProfile);
       setPermissions(createPermissionChecker(enhancedProfile));
+      void persistProfileSnapshot(enhancedProfile, user);
       
       // Track profile load
       track('edudash.auth.profile_loaded', {
@@ -741,28 +794,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // No onSessionRefresh - this is the key fix
           });
         } else {
-          // Mobile platforms can use full refresh logic
+          // Mobile platforms can use lightweight session refresh
           logger.info('[Visibility] Initializing visibility handler for mobile platform');
           initializeVisibilityHandler({
             onSessionRefresh: async () => {
               const now = Date.now();
-              if (now - lastRefreshAttempt < 5000) return;
+              // Throttle: at most once every 60 seconds (was 30s – too aggressive, causes re-render storms)
+              if (now - lastRefreshAttempt < 60000) return;
               
               setLastRefreshAttempt(now);
               try {
+                // Lightweight: just validate/refresh the session token.
+                // Do NOT re-fetch the full profile — that triggers expensive RPCs
+                // and can cause SIGNED_IN events leading to infinite loops.
                 const { data: { session: currentSession } } = await assertSupabase().auth.getSession();
                 if (currentSession && mounted) {
-                  setSession(currentSession);
-                  setUser(currentSession.user);
-                  
-                  const enhancedProfile = await fetchEnhancedUserProfile(currentSession.user.id, currentSession);
-                  if (enhancedProfile && mounted) {
-                    setProfile(enhancedProfile);
-                    setPermissions(createPermissionChecker(enhancedProfile));
+                  // Only update state if the access_token actually changed.
+                  // Setting new object references even for identical sessions causes
+                  // full component tree re-renders → Dash AI re-init → audio focus → AppState blip loop.
+                  const prevToken = sessionRef.current?.access_token;
+                  if (prevToken !== currentSession.access_token) {
+                    setSession(currentSession);
+                    setUser(currentSession.user);
                   }
                 }
               } catch (error) {
-                console.error('[Visibility] Mobile refresh failed:', error);
+                console.error('[Visibility] Mobile session refresh failed:', error);
               }
             },
             onVisibilityChange: (isVisible) => {
@@ -773,7 +830,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 });
               }
             },
-            refreshDelay: 1000,
+            refreshDelay: 2000,
           });
         }
       } catch (e) {
@@ -809,11 +866,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         lastUserIdRef.current = nextUserId;
         
-        setSession(s ?? null);
-        setUser(s?.user ?? null);
+        // Only update session/user state if the token actually changed.
+        // Supabase fires TOKEN_REFRESHED / SIGNED_IN events frequently;
+        // setting new object references for identical sessions cascades
+        // re-renders through RootLayoutContent → Dash AI re-init → AppState cycling.
+        const prevToken = sessionRef.current?.access_token;
+        const nextToken = s?.access_token;
+        if (prevToken !== nextToken || event === 'SIGNED_OUT') {
+          setSession(s ?? null);
+          setUser(s?.user ?? null);
+        }
 
         try {
           if (event === 'SIGNED_IN' && s?.user) {
+            // ── De-duplicate: skip full re-processing if we already
+            //    have a valid profile for the SAME user and are not loading.
+            //    Supabase fires SIGNED_IN on token refresh, realtime reconnect,
+            //    etc. – these should NOT trigger a full profile re-fetch + re-nav.
+            const alreadyResolved =
+              profileRef.current?.id === s.user.id &&
+              !profileLoadingRef.current &&
+              lastUserIdRef.current === s.user.id;
+            if (alreadyResolved) {
+              debugLog('[AuthContext] Skipping duplicate SIGNED_IN for already-resolved user:', s.user.id);
+              // Token already synced by the prevToken !== nextToken check above.
+              // Do NOT call setSession/setUser here — they create new object
+              // references that cascade re-renders through the entire tree.
+              return;
+            }
+
             authDebug('auth.signed_in', { userId: s.user.id });
             // Fetch enhanced profile on sign in (non-blocking for routing)
             const QUICK_PROFILE_TIMEOUT_MS = 8000;
@@ -912,6 +993,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (mounted && enhancedProfile) {
                 setProfile(enhancedProfile);
                 setPermissions(createPermissionChecker(enhancedProfile));
+                void persistProfileSnapshot(enhancedProfile, s.user);
                 if (__DEV__) {
                   console.log('[AuthContext][DEV] Resolved org after sign-in:', {
                     organization_id: enhancedProfile.organization_id,
@@ -1025,6 +1107,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
                     // #endregion
                     authDebug('routeAfterLogin.called', { userId: s.user.id });
+
+                    // Register device session (non-blocking) — Option B multi-device awareness
+                    import('@/lib/deviceSessionTracker').then(({ registerDeviceSession }) => {
+                      registerDeviceSession().then((result) => {
+                        if (result.isNewDevice && result.otherDevices.length > 0) {
+                          const names = result.otherDevices.map(d => d.device_name || d.platform).join(', ');
+                          import('@/components/ui/ToastProvider').then(({ toast }) => {
+                            toast.info(`Also signed in on: ${names}`, { duration: 5000 });
+                          }).catch(() => {});
+                        }
+                      }).catch(() => {});
+                    }).catch(() => {});
                   } catch (error) {
                     console.error('Post-login routing failed:', error);
                     // #region agent log
@@ -1042,7 +1136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // This helps resolve "My School" headers caused by timing or RPC fallbacks.
               if (mounted && needsOrgNameRefresh && s?.user?.id) {
                 const refreshUserId = s.user.id;
-                setTimeout(async () => {
+                // Clear any existing org name refresh timer
+                if (orgNameRefreshTimerRef.current) {
+                  clearTimeout(orgNameRefreshTimerRef.current);
+                }
+                orgNameRefreshTimerRef.current = setTimeout(async () => {
+                  orgNameRefreshTimerRef.current = null;
                   if (!mounted || lastUserIdRef.current !== refreshUserId) return;
                   setProfileLoading(true);
                   try {
@@ -1050,6 +1149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     if (refreshed && mounted && lastUserIdRef.current === refreshUserId) {
                       setProfile(refreshed);
                       setPermissions(createPermissionChecker(refreshed));
+                      void persistProfileSnapshot(refreshed, s.user);
                       const refreshedOrgName =
                         refreshed.organization_name ||
                         refreshed.organization_membership?.organization_name ||
@@ -1180,6 +1280,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (e) {
               logger.debug('Push deregistration failed', e);
             }
+
+            // Deactivate device session (non-blocking)
+            import('@/lib/deviceSessionTracker').then(({ deactivateDeviceSession }) => {
+              deactivateDeviceSession().catch(() => {});
+            }).catch(() => {});
             
             try { await getPostHog()?.reset(); } catch (e) { logger.debug('PostHog reset failed', e); }
             try { Sentry.Native.setUser(null as any); } catch (e) { logger.debug('Sentry clear user failed', e); }
@@ -1207,6 +1312,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      if (orgNameRefreshTimerRef.current) {
+        clearTimeout(orgNameRefreshTimerRef.current);
+        orgNameRefreshTimerRef.current = null;
+      }
       try { unsub?.subscription?.unsubscribe(); } catch (e) { logger.debug('Auth listener unsubscribe failed', e); }
       try { destroyVisibilityHandler(); } catch (e) { logger.debug('Visibility handler cleanup failed', e); }
     };

@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
     const format = String(body.format || 'mp3').toLowerCase() === 'wav' ? 'wav' : 'mp3';
     const outputFormat = format === 'wav'
       ? 'riff-24khz-16bit-mono-pcm'
-      : 'audio-24khz-48kbitrate-mono-mp3';
+      : 'audio-24khz-96kbitrate-mono-mp3';
 
     const style = typeof body.style === 'string' ? body.style.trim() : '';
 

@@ -19,6 +19,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { fetchEnhancedUserProfile } from '@/lib/rbac';
 import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
 import { signOutAndRedirect } from '@/lib/authActions';
+import { reactivateUserTokens } from '@/lib/pushTokenUtils';
+import { registerPushDevice } from '@/lib/notifications';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -179,6 +181,15 @@ export function ProfileSwitcher({
       if (result.sessionRestored) {
         await refreshProfile();
         clearAllNavigationLocks();
+
+        // Reactivate push tokens for switched user so they receive notifications
+        try {
+          await reactivateUserTokens(account.userId);
+          const supabase = assertSupabase();
+          await registerPushDevice(supabase, { id: account.userId, email: account.email });
+        } catch (pushErr) {
+          console.warn('[ProfileSwitcher] Push token reactivation failed (non-fatal):', pushErr);
+        }
 
         const { data } = await assertSupabase().auth.getUser();
         const authUser = data?.user || ({ id: account.userId, email: account.email } as any);

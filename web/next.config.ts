@@ -7,6 +7,9 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
+
+  // Allow LAN testing in dev without cross-origin warnings
+  allowedDevOrigins: ['http://localhost:3000', 'http://192.168.0.31:3000'],
   
   // Turbopack configuration (Next.js 16+ default bundler)
   // Using empty config to acknowledge Turbopack while webpack config exists for fallback

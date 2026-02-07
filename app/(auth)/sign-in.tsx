@@ -30,7 +30,7 @@ export default function SignIn() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, user, loading: authLoading } = useAuth();
+  const { session, user, loading: authLoading, profileLoading } = useAuth();
   const searchParams = useLocalSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,13 +52,15 @@ export default function SignIn() {
     };
   }, []);
 
-  // Clear local loading state once auth state updates
+  // Safety net: clear local loading once auth resolves AND profile is loaded.
+  // Normally the component unmounts when routeAfterLogin navigates away,
+  // so loading stays true (spinner visible) until the route change.
   useEffect(() => {
-    if (loading && user) {
-      console.log('[SignIn] Auth user detected, clearing loading state');
+    if (loading && user && !profileLoading) {
+      console.log('[SignIn] Auth user + profile resolved, clearing loading state');
       setLoading(false);
     }
-  }, [loading, user]);
+  }, [loading, user, profileLoading]);
 
   // Pull-to-refresh handler - clears any stale state
   const onRefresh = useCallback(async () => {
@@ -475,7 +477,8 @@ console.log('[SignIn] Component rendering, theme:', theme);
       
       // Let AuthContext handle navigation via onAuthStateChange SIGNED_IN event.
       // Avoid local fallback routing to prevent wrong-org navigation.
-      setLoading(false);
+      // NOTE: Do NOT setLoading(false) here — keep spinner active until
+      // AuthContext finishes profile resolution and routes away (unmounts this component).
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
       console.error('=== SIGN IN ERROR DEBUG ===');

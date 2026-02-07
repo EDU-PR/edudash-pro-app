@@ -1,16 +1,15 @@
 /**
  * Public Job Application Page (Web)
- * Mirrors the mobile apply flow for teachers without the app.
+ * Mobile-first, polished apply flow for teachers without the app.
  */
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/msword',
@@ -32,10 +31,6 @@ type JobPosting = {
   preschool_id?: string | null;
 };
 
-type CandidateProfile = {
-  id: string;
-};
-
 type SchoolInfo = {
   id?: string;
   name: string;
@@ -51,7 +46,6 @@ export default function ApplyPage() {
   const params = useParams();
   const jobId = Array.isArray(params.job_id) ? params.job_id[0] : params.job_id;
   const supabase = useMemo(() => createClient(), []);
-  const { t } = useTranslation('common');
 
   const [loading, setLoading] = useState(true);
   const [jobPosting, setJobPosting] = useState<JobPosting | null>(null);
@@ -62,6 +56,7 @@ export default function ApplyPage() {
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop'>('desktop');
   const [schoolInfo, setSchoolInfo] = useState<SchoolInfo | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [showFullDescription, setShowFullDescription] = useState(false);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -71,6 +66,7 @@ export default function ApplyPage() {
   const [qualifications, setQualifications] = useState('');
   const [coverLetter, setCoverLetter] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -87,26 +83,26 @@ export default function ApplyPage() {
 
       if (fetchError || !data) {
         setJobPosting(null);
-        setStatusMessage(t('apply.notFoundDesc', { defaultValue: 'This job may have been removed or expired' }));
+        setStatusMessage('This job posting could not be found. It may have been removed or the link is incorrect.');
         setLoading(false);
         return;
       }
 
       if (data.status && data.status !== 'active') {
         setJobPosting(null);
-        setStatusMessage(t('apply.jobNotAvailableDesc', { defaultValue: 'This job posting is no longer active.' }));
+        setStatusMessage('This job posting is no longer accepting applications.');
         setLoading(false);
         return;
       }
 
       if (data.expires_at && new Date(data.expires_at) < new Date()) {
         setJobPosting(null);
-        setStatusMessage(t('apply.jobExpiredDesc', { defaultValue: 'This job posting has expired.' }));
+        setStatusMessage('This job posting has expired and is no longer accepting applications.');
         setLoading(false);
         return;
       }
 
-      setJobPosting(data as JobPosting);
+      if (isMounted) setJobPosting(data as JobPosting);
 
       if (data.preschool_id) {
         try {
@@ -116,19 +112,17 @@ export default function ApplyPage() {
             .eq('id', data.preschool_id)
             .maybeSingle();
 
-          if (preschool) {
-            if (isMounted) {
-              setSchoolInfo({
-                id: data.preschool_id,
-                name: preschool.name,
-                logoUrl: preschool.logo_url,
-                city: preschool.city,
-                province: preschool.province,
-                phone: preschool.phone,
-                email: preschool.contact_email,
-                website: preschool.website_url,
-              });
-            }
+          if (preschool && isMounted) {
+            setSchoolInfo({
+              id: data.preschool_id,
+              name: preschool.name,
+              logoUrl: preschool.logo_url,
+              city: preschool.city,
+              province: preschool.province,
+              phone: preschool.phone,
+              email: preschool.contact_email,
+              website: preschool.website_url,
+            });
           } else {
             const { data: org } = await supabase
               .from('organizations')
@@ -136,225 +130,115 @@ export default function ApplyPage() {
               .eq('id', data.preschool_id)
               .maybeSingle();
             if (org && isMounted) {
-              setSchoolInfo({
-                id: data.preschool_id,
-                name: org.name,
-                logoUrl: org.logo_url,
-              });
+              setSchoolInfo({ id: data.preschool_id, name: org.name, logoUrl: org.logo_url });
             }
           }
-        } catch (err) {
-          console.warn('Failed to load school info:', err);
+        } catch {
+          /* ignore */
         }
       }
 
-      if (isMounted) {
-        setLoading(false);
-      }
+      if (isMounted) setLoading(false);
     };
 
     void load();
-    return () => {
-      isMounted = false;
-    };
-  }, [jobId, supabase, t]);
+    return () => { isMounted = false; };
+  }, [jobId, supabase]);
 
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
-    if (/iphone|ipad|ipod/.test(ua)) {
-      setPlatform('ios');
-    } else if (/android/.test(ua)) {
-      setPlatform('android');
-    } else {
-      setPlatform('desktop');
-    }
+    if (/iphone|ipad|ipod/.test(ua)) setPlatform('ios');
+    else if (/android/.test(ua)) setPlatform('android');
+    else setPlatform('desktop');
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('invite') || params.get('inviteCode') || params.get('code');
-    if (code && code.trim()) {
-      setInviteCode(code.trim().toUpperCase());
-    }
+    const p = new URLSearchParams(window.location.search);
+    const code = p.get('invite') || p.get('inviteCode') || p.get('code');
+    if (code?.trim()) setInviteCode(code.trim().toUpperCase());
   }, []);
 
-  const formatEmploymentType = (value?: string | null) => {
-    const normalized = String(value || '').toLowerCase();
-    if (normalized === 'full-time' || normalized === 'full_time') return 'Full-Time';
-    if (normalized === 'part-time' || normalized === 'part_time') return 'Part-Time';
-    if (normalized === 'contract') return 'Contract';
-    if (normalized === 'temporary') return 'Temporary';
-    return 'Employment Type TBA';
+  const fmtType = (v?: string | null) => {
+    const n = String(v || '').toLowerCase();
+    if (n === 'full-time' || n === 'full_time') return 'Full-Time';
+    if (n === 'part-time' || n === 'part_time') return 'Part-Time';
+    if (n === 'contract') return 'Contract';
+    if (n === 'temporary') return 'Temporary';
+    return null;
   };
 
-  const formatSalaryRange = (posting?: JobPosting | null) => {
-    if (!posting) return 'Negotiable';
-    if (posting.salary_range_min && posting.salary_range_max) {
-      return `R${posting.salary_range_min} - R${posting.salary_range_max}`;
-    }
-    if (posting.salary_range_min) {
-      return `From R${posting.salary_range_min}`;
-    }
-    return 'Negotiable';
+  const fmtSalary = (p?: JobPosting | null) => {
+    if (!p) return null;
+    if (p.salary_range_min && p.salary_range_max) return `R${p.salary_range_min.toLocaleString()} – R${p.salary_range_max.toLocaleString()}`;
+    if (p.salary_range_min) return `From R${p.salary_range_min.toLocaleString()}`;
+    return null;
   };
 
-  const formatSchoolDetails = (info?: SchoolInfo | null) => {
+  const getInitials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('');
+
+  const fmtLocation = (info?: SchoolInfo | null) => {
     if (!info) return '';
-    const location = [info.city, info.province].filter(Boolean).join(', ');
-    const parts = [location, info.phone, info.email, info.website].filter(Boolean);
-    return parts.join(' • ');
+    return [info.city, info.province].filter(Boolean).join(', ');
   };
 
-  const getInitials = (name: string) =>
-    name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join('');
-
-  const validateEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  const validateEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
   const validateForm = () => {
     setError(null);
-    if (!firstName.trim()) {
-      setError(t('validation.required', { field: t('auth.firstName', { defaultValue: 'First Name' }) }));
-      return false;
-    }
-    if (!lastName.trim()) {
-      setError(t('validation.required', { field: t('auth.lastName', { defaultValue: 'Last Name' }) }));
-      return false;
-    }
-    if (!email.trim()) {
-      setError(t('validation.required', { field: t('auth.email', { defaultValue: 'Email' }) }));
-      return false;
-    }
-    if (!validateEmail(email.trim())) {
-      setError(t('validation.email_invalid', { defaultValue: 'Please enter a valid email.' }));
-      return false;
-    }
-    if (!phone.trim()) {
-      setError(t('validation.required', { field: t('apply.phoneNumber', { defaultValue: 'Phone Number' }) }));
-      return false;
-    }
-    if (!experienceYears.trim() || Number.isNaN(Number(experienceYears))) {
-      setError(t('apply.error.yearsExperienceNumber', { defaultValue: 'Please enter valid years of experience.' }));
-      return false;
-    }
-    if (!resumeFile) {
-      setError(t('apply.error.resumeRequired', { defaultValue: 'Please upload your resume.' }));
-      return false;
-    }
+    if (!firstName.trim()) { setError('First Name is required'); return false; }
+    if (!lastName.trim()) { setError('Last Name is required'); return false; }
+    if (!email.trim()) { setError('Email is required'); return false; }
+    if (!validateEmail(email.trim())) { setError('Please enter a valid email address'); return false; }
+    if (!phone.trim()) { setError('Phone number is required'); return false; }
+    if (!experienceYears.trim() || Number.isNaN(Number(experienceYears))) { setError('Please enter valid years of experience'); return false; }
+    if (!resumeFile) { setError('Please upload your CV/resume'); return false; }
     return true;
   };
 
-  const handleFileChange = (file: File | null) => {
-    if (!file) {
-      setResumeFile(null);
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setError(t('apply.fileTooLargeDesc', { defaultValue: 'Resume must be less than 50MB.' }));
-      return;
-    }
-
-    if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) {
-      setError(t('apply.invalidFileTypeDesc', { defaultValue: 'Please upload a PDF or Word document.' }));
-      return;
-    }
-
+  const handleFile = (file: File | null) => {
+    if (!file) { setResumeFile(null); return; }
+    if (file.size > MAX_FILE_SIZE) { setError('Resume must be less than 50MB'); return; }
+    if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) { setError('Please upload a PDF or Word document'); return; }
     setError(null);
     setResumeFile(file);
   };
 
-  const createOrGetCandidateProfile = async (): Promise<CandidateProfile> => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const { data: existing, error: fetchError } = await supabase
-      .from('candidate_profiles')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    if (existing && !fetchError) {
-      return existing as CandidateProfile;
-    }
-
-    const { data: created, error: createError } = await supabase
-      .from('candidate_profiles')
-      .insert({
-        email: normalizedEmail,
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        phone: phone.trim(),
-        experience_years: Number(experienceYears),
-        qualifications: qualifications.trim() ? [{ field: qualifications.trim() }] : [],
-      })
-      .select('id')
-      .single();
-
-    if (createError || !created) {
-      throw new Error(createError?.message || 'Failed to create candidate profile');
-    }
-
-    return created as CandidateProfile;
-  };
-
-  const uploadResume = async (): Promise<string | null> => {
-    if (!resumeFile) return null;
-    const { data: filename, error: filenameError } = await supabase.rpc('generate_resume_filename', {
-      candidate_email: email.trim().toLowerCase(),
-      original_filename: resumeFile.name,
-    });
-
-    if (filenameError || !filename) {
-      throw new Error('Failed to generate filename');
-    }
-
-    const filePath = filename as string;
-    const { error: uploadError } = await supabase.storage
-      .from('candidate-resumes')
-      .upload(filePath, resumeFile, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message || 'Failed to upload resume');
-    }
-
-    return filePath;
-  };
-
-  const onSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!jobPosting) return;
-    if (!validateForm()) return;
-
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jobPosting || !validateForm()) return;
     setSubmitting(true);
     setError(null);
     try {
-      const candidate = await createOrGetCandidateProfile();
-      const resumePath = await uploadResume();
-
-      const { error: submitError } = await supabase
-        .from('job_applications')
-        .insert({
-          job_posting_id: jobPosting.id,
-          candidate_profile_id: candidate.id,
-          cover_letter: coverLetter.trim() || null,
-          resume_file_path: resumePath,
-          status: 'new',
-        });
-
-      if (submitError) {
-        throw new Error(submitError.message || t('apply.submitError', { defaultValue: 'Failed to submit application.' }));
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data: existing } = await supabase.from('candidate_profiles').select('id').eq('email', normalizedEmail).maybeSingle();
+      let candidateId: string;
+      if (existing) {
+        candidateId = existing.id;
+      } else {
+        const { data: created, error: createErr } = await supabase
+          .from('candidate_profiles')
+          .insert({ email: normalizedEmail, first_name: firstName.trim(), last_name: lastName.trim(), phone: phone.trim(), experience_years: Number(experienceYears), qualifications: qualifications.trim() ? [{ field: qualifications.trim() }] : [] })
+          .select('id')
+          .single();
+        if (createErr || !created) throw new Error(createErr?.message || 'Failed to create candidate profile');
+        candidateId = created.id;
       }
 
+      let resumePath: string | null = null;
+      if (resumeFile) {
+        const { data: filename, error: fnErr } = await supabase.rpc('generate_resume_filename', { candidate_email: normalizedEmail, original_filename: resumeFile.name });
+        if (fnErr || !filename) throw new Error('Failed to generate filename');
+        const { error: upErr } = await supabase.storage.from('candidate-resumes').upload(filename as string, resumeFile, { cacheControl: '3600', upsert: false });
+        if (upErr) throw new Error(upErr.message || 'Failed to upload resume');
+        resumePath = filename as string;
+      }
+
+      const { error: submitErr } = await supabase.from('job_applications').insert({ job_posting_id: jobPosting.id, candidate_profile_id: candidateId, cover_letter: coverLetter.trim() || null, resume_file_path: resumePath, status: 'new' });
+      if (submitErr) throw new Error(submitErr.message || 'Failed to submit application');
       setSubmitted(true);
-    } catch (err: any) {
-      setError(err?.message || t('apply.submitError', { defaultValue: 'Failed to submit application.' }));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to submit application. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -362,320 +246,381 @@ export default function ApplyPage() {
 
   const openInApp = () => {
     if (!jobId) return;
-    const inviteQuery = inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : '';
-    const deepLink = `edudashpro:///apply/${encodeURIComponent(String(jobId))}${inviteQuery}`;
-    const handleVisibilityChange = () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.location.href = deepLink;
-    setTimeout(() => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, 1500);
+    const q = inviteCode ? `?invite=${encodeURIComponent(inviteCode)}` : '';
+    window.location.href = `edudashpro:///apply/${encodeURIComponent(String(jobId))}${q}`;
   };
-
-  const getStoreUrl = () => platform === 'ios'
-    ? 'https://apps.apple.com/app/edudash-pro/id6478437234'
-    : 'https://play.google.com/store/apps/details?id=com.edudashpro';
 
   const teacherSignupLink = inviteCode
     ? `/sign-up/teacher?invite=${encodeURIComponent(inviteCode)}${jobId ? `&job=${encodeURIComponent(String(jobId))}` : ''}`
     : `/sign-up/teacher${jobId ? `?job=${encodeURIComponent(String(jobId))}` : ''}`;
 
-  const showForm = !loading && Boolean(jobPosting) && !submitted;
-  const showEmptyState = !loading && !jobPosting;
+  const logoUrl = jobPosting?.logo_url || schoolInfo?.logoUrl;
+  const schoolName = schoolInfo?.name;
+  const isLongDesc = (jobPosting?.description?.length || 0) > 400;
 
   return (
     <>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spline+Sans:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
-          --dash-bg: #0a0d18;
-          --dash-panel: rgba(14, 20, 34, 0.86);
-          --dash-panel-strong: rgba(16, 24, 40, 0.96);
-          --dash-border: rgba(148, 163, 184, 0.16);
-          --dash-accent: #36f0ff;
-          --dash-accent-2: #4b7cff;
-          --dash-text: #e2e8f0;
-          --dash-muted: #94a3b8;
-          --font-heading: 'Space Grotesk', system-ui, sans-serif;
-          --font-body: 'Spline Sans', system-ui, sans-serif;
+          --bg-primary: #050810;
+          --bg-card: #0c1021;
+          --bg-card-elevated: #111631;
+          --bg-input: #0e1228;
+          --border-subtle: rgba(99, 102, 241, 0.12);
+          --border-strong: rgba(99, 102, 241, 0.25);
+          --accent: #818cf8;
+          --accent-bright: #a5b4fc;
+          --accent-glow: rgba(99, 102, 241, 0.15);
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --text-muted: #64748b;
+          --success: #34d399;
+          --success-bg: rgba(52, 211, 153, 0.1);
+          --error: #f87171;
+          --error-bg: rgba(248, 113, 113, 0.1);
         }
+        * { box-sizing: border-box; }
         body {
-          background: var(--dash-bg);
-          color: var(--dash-text);
-          font-family: var(--font-body);
+          margin: 0;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          -webkit-font-smoothing: antialiased;
         }
+        input, textarea, select, button { font-family: inherit; }
+        ::selection { background: rgba(129, 140, 248, 0.3); }
       `}</style>
-      <div className="min-h-screen relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-32 -right-20 h-80 w-80 rounded-full bg-cyan-500/20 blur-[120px]" />
-          <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-blue-500/20 blur-[140px]" />
-          <div
-            className="absolute inset-0 opacity-40"
-            style={{
-              backgroundImage:
-                'radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.15), transparent 40%), radial-gradient(circle at 80% 10%, rgba(79, 70, 229, 0.18), transparent 45%)',
-            }}
-          />
+
+      <div className="min-h-screen relative">
+        {/* Background gradient orbs */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full opacity-20" style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.3), transparent 70%)' }} />
+          <div className="absolute -bottom-60 -left-40 w-[600px] h-[600px] rounded-full opacity-15" style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.25), transparent 70%)' }} />
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto px-4 py-10 lg:py-14">
-          <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-6">
-            <div className="space-y-6">
-              <div className="rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel)] p-6 shadow-2xl">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-slate-900/70 border border-slate-700/60 flex items-center justify-center">
-                      <img src="/favicon.png" alt="EduDash Pro" className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/80">EduDash Pro</p>
-                      <p className="text-slate-300 text-sm">Hiring Hub Application</p>
-                    </div>
-                  </div>
+        <div className="relative z-10">
+          {/* Top bar */}
+          <header className="border-b border-[var(--border-subtle)] backdrop-blur-xl bg-[var(--bg-primary)]/80">
+            <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                  <img src="/favicon.png" alt="" className="w-5 h-5" />
                 </div>
-
-                {schoolInfo ? (
-                  <div className="mb-6 flex items-center gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
-                    {schoolInfo.logoUrl ? (
-                      <img src={schoolInfo.logoUrl} alt={schoolInfo.name} className="w-14 h-14 rounded-2xl object-cover" />
-                    ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-200 flex items-center justify-center text-lg font-semibold">
-                        {getInitials(schoolInfo.name)}
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-xs uppercase tracking-widest text-slate-400">School</p>
-                      <p className="text-white font-semibold text-lg">{schoolInfo.name}</p>
-                      {formatSchoolDetails(schoolInfo) ? (
-                        <p className="text-slate-400 text-sm mt-1">{formatSchoolDetails(schoolInfo)}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="mb-6">
-                  <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/80">
-                    {t('apply.headerTitle', { defaultValue: 'Apply for Position' })}
-                  </p>
-                  <h1 className="text-3xl md:text-4xl font-bold text-white" style={{ fontFamily: 'var(--font-heading)' }}>
-                    {jobPosting?.title || t('apply.screenTitle', { defaultValue: 'Apply for Job' })}
-                  </h1>
-                  {jobPosting && (
-                    <p className="text-slate-300 text-sm mt-2">
-                      {formatEmploymentType(jobPosting.employment_type)} • {jobPosting.location || 'Location TBA'} • {formatSalaryRange(jobPosting)}
-                    </p>
-                  )}
+                <div>
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">EduDash Pro</span>
+                  <span className="text-xs text-[var(--text-muted)] ml-1.5">Hiring Hub</span>
                 </div>
-
-                {inviteCode && (
-                  <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">Invite code detected</p>
-                    <div className="flex flex-wrap items-center gap-3 mt-2">
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-100 text-xs font-semibold">
-                        {inviteCode}
-                      </span>
-                      <Link
-                        href={teacherSignupLink}
-                        className="px-4 py-2 rounded-full bg-emerald-400/20 text-emerald-100 text-xs font-semibold border border-emerald-400/40 hover:bg-emerald-400/30 transition"
-                      >
-                        Create Teacher Account
-                      </Link>
-                    </div>
-                  </div>
-                )}
-
-                {jobPosting && (
-                  <div className="rounded-2xl border border-slate-700/60 bg-slate-900/60 p-5">
-                    <div className="flex flex-wrap items-center gap-3 mb-3">
-                      <span className="px-3 py-1 rounded-full bg-cyan-500/15 text-cyan-300 text-xs font-semibold">
-                        {formatEmploymentType(jobPosting.employment_type)}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-slate-700/60 text-slate-200 text-xs font-semibold">
-                        {jobPosting.location || 'Location TBA'}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-semibold">
-                        {formatSalaryRange(jobPosting)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-slate-200 font-semibold mb-2">Job Snapshot</div>
-                    <p className="text-sm text-slate-300 whitespace-pre-line">
-                      {jobPosting.description}
-                    </p>
-                    {jobPosting.requirements && (
-                      <div className="text-sm text-slate-300 mt-3">
-                        <span className="text-slate-100 font-semibold">Requirements:</span> {jobPosting.requirements}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                  <button
-                    type="button"
-                    onClick={openInApp}
-                    className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    Open in App
-                  </button>
-                  {platform !== 'desktop' && (
-                    <a
-                      href={getStoreUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full sm:w-auto px-5 py-3 border border-slate-600 text-slate-200 hover:bg-slate-700 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-                    >
-                      Download the App
-                    </a>
-                  )}
-                </div>
-
-                {loading && (
-                  <div className="text-slate-300 mt-6">{t('apply.loadingPosting', { defaultValue: 'Loading job posting...' })}</div>
-                )}
-
-                {showEmptyState && (
-                  <div className="mt-6 rounded-2xl border border-slate-700/60 bg-slate-900/70 p-5 text-slate-300">
-                    <p className="text-sm">{statusMessage || t('apply.notFoundDesc', { defaultValue: 'This job may have been removed or expired' })}</p>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={openInApp}
-                        className="px-4 py-2 rounded-full bg-cyan-500/20 text-cyan-100 text-xs font-semibold border border-cyan-400/40"
-                      >
-                        Open in App
-                      </button>
-                      <Link
-                        href={teacherSignupLink}
-                        className="px-4 py-2 rounded-full bg-slate-700/60 text-slate-200 text-xs font-semibold border border-slate-600/60"
-                      >
-                        Create Teacher Account
-                      </Link>
-                    </div>
-                  </div>
-                )}
               </div>
+              <button
+                onClick={openInApp}
+                className="text-xs font-medium text-indigo-300 hover:text-indigo-200 border border-indigo-500/20 rounded-lg px-3 py-1.5 hover:bg-indigo-500/10 transition-all"
+              >
+                Open in App
+              </button>
             </div>
+          </header>
 
-            <div className="rounded-3xl border border-[var(--dash-border)] bg-[var(--dash-panel-strong)] p-6 shadow-2xl">
-              {showForm && (
-                <form onSubmit={onSubmit} className="space-y-6">
-                  <section className="space-y-3">
-                    <h2 className="text-white font-semibold">{t('apply.schoolPosition', { defaultValue: 'School Position' })}</h2>
-                    <p className="text-slate-300 text-sm whitespace-pre-line">{jobPosting?.description}</p>
-                    {jobPosting?.requirements && (
-                      <div className="text-slate-300 text-sm whitespace-pre-line">
-                        <span className="font-semibold text-white">{t('apply.qualificationsTitle', { defaultValue: 'Qualifications' })}:</span> {jobPosting.requirements}
+          <main className="max-w-2xl mx-auto px-4 py-6 pb-20">
+            {/* Loading State */}
+            {loading && (
+              <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-10 h-10 border-2 border-indigo-500/20 border-t-indigo-400 rounded-full animate-spin" />
+                <p className="text-[var(--text-muted)] text-sm mt-4">Loading job posting...</p>
+              </div>
+            )}
+
+            {/* Empty/Error State */}
+            {!loading && !jobPosting && (
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-8 text-center mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Job Not Available</h2>
+                <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-sm mx-auto">{statusMessage}</p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button onClick={openInApp} className="px-5 py-2.5 rounded-xl bg-indigo-500/10 text-indigo-300 text-sm font-medium border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
+                    Browse Jobs in App
+                  </button>
+                  <Link href={teacherSignupLink} className="px-5 py-2.5 rounded-xl bg-[var(--bg-card-elevated)] text-[var(--text-secondary)] text-sm font-medium border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all text-center">
+                    Create Teacher Account
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Job Posted — Main Content */}
+            {!loading && jobPosting && !submitted && (
+              <div className="space-y-5">
+                {/* School + Job Header Card */}
+                <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] overflow-hidden">
+                  {/* School Banner */}
+                  <div className="px-5 pt-5 pb-4">
+                    <div className="flex items-start gap-4">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt={schoolName || ''} className="w-14 h-14 rounded-xl object-cover border border-[var(--border-subtle)] flex-shrink-0" />
+                      ) : schoolName ? (
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center text-indigo-300 text-lg font-bold flex-shrink-0">
+                          {getInitials(schoolName)}
+                        </div>
+                      ) : null}
+                      <div className="flex-1 min-w-0">
+                        {schoolName && (
+                          <p className="text-xs font-medium text-indigo-300/80 uppercase tracking-wider mb-1">{schoolName}</p>
+                        )}
+                        <h1 className="text-xl sm:text-2xl font-bold text-[var(--text-primary)] leading-tight">{jobPosting.title}</h1>
+                        {fmtLocation(schoolInfo) && (
+                          <p className="text-sm text-[var(--text-muted)] mt-1 flex items-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>
+                            {fmtLocation(schoolInfo)}
+                          </p>
+                        )}
                       </div>
-                    )}
-                  </section>
-
-                  <section className="space-y-4">
-                    <h2 className="text-white font-semibold">{t('apply.personalInfo', { defaultValue: 'Personal Information' })}</h2>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <input
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder={t('apply.placeholder.firstName', { defaultValue: 'First Name' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
-                      <input
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder={t('apply.placeholder.lastName', { defaultValue: 'Last Name' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
-                      <input
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={t('apply.placeholder.email', { defaultValue: 'Email' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
-                      <input
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder={t('apply.phoneNumber', { defaultValue: 'Phone Number' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
-                      <input
-                        value={experienceYears}
-                        onChange={(e) => setExperienceYears(e.target.value)}
-                        placeholder={t('apply.yearsExperience', { defaultValue: 'Years of Experience' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
-                      <input
-                        value={qualifications}
-                        onChange={(e) => setQualifications(e.target.value)}
-                        placeholder={t('apply.educationOptionalLabel', { defaultValue: 'Education & Certifications (Optional)' })}
-                        className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                      />
                     </div>
-                  </section>
 
-                  <section className="space-y-4">
-                    <h2 className="text-white font-semibold">{t('apply.resumeLabel', { defaultValue: 'Resume/CV' })}</h2>
-                    <div className="border border-dashed border-slate-600 rounded-xl p-4 text-slate-300">
-                      <input
-                        type="file"
-                        accept={ALLOWED_MIME_TYPES.join(',')}
-                        onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
-                        className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-500 file:text-white hover:file:bg-cyan-600"
-                      />
-                      <p className="text-xs text-slate-400 mt-2">
-                        {t('apply.uploadHint', { defaultValue: 'PDF or Word document, max 50MB' })}
-                      </p>
-                      {resumeFile && (
-                        <p className="text-xs text-cyan-300 mt-2">Selected: {resumeFile.name}</p>
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {fmtType(jobPosting.employment_type) && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/15">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          {fmtType(jobPosting.employment_type)}
+                        </span>
+                      )}
+                      {jobPosting.location && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-500/10 text-slate-300 border border-slate-500/15">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          {jobPosting.location}
+                        </span>
+                      )}
+                      {fmtSalary(jobPosting) && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/15">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10.75 10.818v2.614A3.13 3.13 0 0011.888 13c.482-.315.612-.648.612-.875 0-.227-.13-.56-.612-.875a3.13 3.13 0 00-1.138-.432zM8.33 8.62c.053.055.115.11.184.164.208.16.46.284.736.363V6.603a2.45 2.45 0 00-.44.23c-.317.2-.483.424-.483.663 0 .296.166.58.537.838l-.003-.003.003.002-.004.001z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM10.75 4.75a.75.75 0 00-1.5 0v.316a3.78 3.78 0 00-1.653.713C6.952 6.268 6.5 6.93 6.5 7.666c0 .753.37 1.37.943 1.834.448.363.98.614 1.557.769v2.926a3.33 3.33 0 01-1.18-.643.75.75 0 00-.97 1.145c.598.507 1.344.844 2.15.967v.331a.75.75 0 001.5 0v-.306a3.93 3.93 0 001.842-.778c.678-.488 1.158-1.2 1.158-2.045 0-.834-.48-1.49-1.098-1.937a5.12 5.12 0 00-1.902-.862V6.596c.34.122.636.29.873.493a.75.75 0 10.994-1.124A3.64 3.64 0 0010.75 5.1V4.75z" clipRule="evenodd" /></svg>
+                          {fmtSalary(jobPosting)}
+                        </span>
                       )}
                     </div>
-                  </section>
+                  </div>
 
-                  <section className="space-y-3">
-                    <h2 className="text-white font-semibold">{t('apply.coverLetterOptional', { defaultValue: 'Cover Letter (Optional)' })}</h2>
-                    <textarea
-                      value={coverLetter}
-                      onChange={(e) => setCoverLetter(e.target.value)}
-                      rows={5}
-                      className="w-full bg-slate-900/60 border border-slate-700 rounded-lg px-4 py-3 text-white"
-                    />
-                  </section>
+                  {/* Invite Code Banner */}
+                  {inviteCode && (
+                    <div className="mx-5 mb-4 rounded-xl bg-emerald-500/8 border border-emerald-500/20 p-3.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-emerald-300/70 font-medium">Invite Code Detected</p>
+                          <p className="text-sm font-semibold text-emerald-200 font-mono tracking-wide">{inviteCode}</p>
+                        </div>
+                      </div>
+                      <Link href={teacherSignupLink} className="px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-200 text-xs font-semibold border border-emerald-500/25 hover:bg-emerald-500/25 transition-all whitespace-nowrap flex-shrink-0">
+                        Create Account
+                      </Link>
+                    </div>
+                  )}
 
-                  {error && <div className="text-red-400 text-sm">{error}</div>}
+                  {/* Description */}
+                  <div className="border-t border-[var(--border-subtle)] px-5 py-4">
+                    <h3 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">About This Role</h3>
+                    <div className={`text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-line ${!showFullDescription && isLongDesc ? 'max-h-48 overflow-hidden relative' : ''}`}>
+                      {jobPosting.description}
+                      {!showFullDescription && isLongDesc && (
+                        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[var(--bg-card)] to-transparent" />
+                      )}
+                    </div>
+                    {isLongDesc && (
+                      <button onClick={() => setShowFullDescription(!showFullDescription)} className="text-xs font-medium text-indigo-400 hover:text-indigo-300 mt-2 transition-colors">
+                        {showFullDescription ? 'Show less' : 'Read more'}
+                      </button>
+                    )}
+                    {jobPosting.requirements && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                        <h3 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Requirements</h3>
+                        <p className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-line">{jobPosting.requirements}</p>
+                      </div>
+                    )}
+                  </div>
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full py-4 px-6 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 disabled:opacity-60"
-                  >
-                    {submitting ? t('status.uploading', { defaultValue: 'Uploading...' }) : t('apply.submitCta', { defaultValue: 'Submit Application' })}
-                  </button>
-
-                  <p className="text-xs text-slate-400 text-center">
-                    {t('apply.privacyNotice', { defaultValue: 'Your information will only be shared with the hiring school.' })}
-                  </p>
-                </form>
-              )}
-
-              {submitted && (
-                <div className="text-slate-200 text-center py-10">
-                  <h2 className="text-2xl font-bold mb-4">{t('apply.submittedTitle', { defaultValue: 'Application Submitted!' })}</h2>
-                  <p className="text-slate-300 whitespace-pre-line">
-                    {t('apply.submittedDesc', { defaultValue: 'Your application has been received.' })}
-                  </p>
+                  {/* CTA buttons */}
+                  <div className="border-t border-[var(--border-subtle)] px-5 py-4 flex flex-col sm:flex-row gap-2.5">
+                    <button onClick={openInApp} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-500/20">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5" /></svg>
+                      Apply in App
+                    </button>
+                    <Link href={teacherSignupLink} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[var(--bg-card-elevated)] text-[var(--text-secondary)] font-medium text-sm border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-all">
+                      Create Teacher Account
+                    </Link>
+                  </div>
                 </div>
-              )}
 
-              {!showForm && !submitted && !loading && jobPosting && (
-                <div className="text-slate-300 text-sm">We’re ready when you are. Start your application above.</div>
-              )}
-            </div>
-          </div>
+                {/* Application Form */}
+                <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] overflow-hidden">
+                  <div className="px-5 pt-5 pb-3">
+                    <h2 className="text-base font-bold text-[var(--text-primary)]">Apply Online</h2>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Fill in your details to submit your application directly.</p>
+                  </div>
+
+                  <form onSubmit={onSubmit} className="px-5 pb-6">
+                    {/* Personal Info */}
+                    <fieldset className="space-y-3.5 mb-6">
+                      <legend className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Personal Information</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormInput label="First Name" value={firstName} onChange={setFirstName} placeholder="First name" required />
+                        <FormInput label="Last Name" value={lastName} onChange={setLastName} placeholder="Last name" required />
+                      </div>
+                      <FormInput label="Email" value={email} onChange={setEmail} placeholder="you@example.com" type="email" required />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <FormInput label="Phone Number" value={phone} onChange={setPhone} placeholder="+27 82 123 4567" type="tel" required />
+                        <FormInput label="Years of Experience" value={experienceYears} onChange={setExperienceYears} placeholder="e.g. 3" type="number" required />
+                      </div>
+                      <FormInput label="Education & Certifications" value={qualifications} onChange={setQualifications} placeholder="e.g. NQF Level 4 in ECD" hint="Optional" />
+                    </fieldset>
+
+                    {/* Resume Upload */}
+                    <fieldset className="mb-6">
+                      <legend className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">CV / Resume</legend>
+                      <div
+                        className={`relative rounded-xl border-2 border-dashed transition-all p-5 text-center cursor-pointer ${dragActive ? 'border-indigo-400 bg-indigo-500/5' : resumeFile ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)] bg-[var(--bg-input)]'}`}
+                        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                        onDragLeave={() => setDragActive(false)}
+                        onDrop={(e) => { e.preventDefault(); setDragActive(false); handleFile(e.dataTransfer.files?.[0] || null); }}
+                        onClick={() => document.getElementById('resume-input')?.click()}
+                      >
+                        <input id="resume-input" type="file" accept={ALLOWED_MIME_TYPES.join(',')} onChange={(e) => handleFile(e.target.files?.[0] || null)} className="hidden" />
+                        {resumeFile ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            <span className="text-sm text-emerald-300 font-medium">{resumeFile.name}</span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setResumeFile(null); }} className="ml-2 text-[var(--text-muted)] hover:text-red-400 transition-colors">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <svg className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                            <p className="text-sm text-[var(--text-secondary)]">
+                              <span className="text-indigo-400 font-medium">Upload your CV</span> or drag and drop
+                            </p>
+                            <p className="text-xs text-[var(--text-muted)] mt-1">PDF or Word document, max 50MB</p>
+                          </>
+                        )}
+                      </div>
+                    </fieldset>
+
+                    {/* Cover Letter */}
+                    <fieldset className="mb-6">
+                      <legend className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">
+                        Cover Letter <span className="font-normal text-[var(--text-muted)]">(Optional)</span>
+                      </legend>
+                      <textarea
+                        value={coverLetter}
+                        onChange={(e) => setCoverLetter(e.target.value)}
+                        rows={4}
+                        placeholder="Tell us why you'd be a great fit for this role..."
+                        className="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20 transition-all resize-none"
+                      />
+                    </fieldset>
+
+                    {/* Error */}
+                    {error && (
+                      <div className="rounded-xl bg-[var(--error-bg)] border border-red-500/20 p-3.5 mb-4 flex items-start gap-2.5">
+                        <svg className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                        <p className="text-sm text-red-300">{error}</p>
+                      </div>
+                    )}
+
+                    {/* Submit */}
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full py-3.5 px-6 rounded-xl font-semibold text-sm transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-500/25"
+                    >
+                      {submitting ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Submitting...
+                        </span>
+                      ) : 'Submit Application'}
+                    </button>
+
+                    <p className="text-[10px] text-[var(--text-muted)] text-center mt-3">
+                      Your information will only be shared with the hiring school.
+                    </p>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Success State */}
+            {submitted && (
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-card)] p-8 text-center mt-8">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-5">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Application Submitted!</h2>
+                <p className="text-sm text-[var(--text-secondary)] max-w-sm mx-auto mb-6">
+                  Your application has been sent to {schoolName || 'the school'}. They&apos;ll review it and get back to you.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Link href={teacherSignupLink} className="px-5 py-2.5 rounded-xl bg-indigo-500/10 text-indigo-300 text-sm font-medium border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
+                    Create Teacher Account
+                  </Link>
+                  <button onClick={openInApp} className="px-5 py-2.5 rounded-xl bg-[var(--bg-card-elevated)] text-[var(--text-secondary)] text-sm font-medium border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all">
+                    Open EduDash Pro
+                  </button>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="border-t border-[var(--border-subtle)] py-6 text-center">
+            <p className="text-xs text-[var(--text-muted)]">
+              &copy; {new Date().getFullYear()} EduDash Pro &middot;{' '}
+              <Link href="/terms" className="text-indigo-400/60 hover:text-indigo-300 transition-colors">Terms</Link> &middot;{' '}
+              <Link href="/privacy" className="text-indigo-400/60 hover:text-indigo-300 transition-colors">Privacy</Link>
+            </p>
+          </footer>
         </div>
       </div>
     </>
+  );
+}
+
+/* Reusable Form Input */
+function FormInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  required,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  required?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+        {label} {required && <span className="text-indigo-400">*</span>}
+        {hint && <span className="text-[var(--text-muted)] font-normal ml-1">({hint})</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required={required}
+        className="w-full bg-[var(--bg-input)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20 transition-all"
+      />
+    </div>
   );
 }

@@ -23,10 +23,23 @@ interface ImageUsageRow {
   uploads_today: number | null;
 }
 
+interface MonthlyRollupRow {
+  usage_month: string | null;
+  total_cost: number | null;
+  total_tokens: number | null;
+  request_count: number | null;
+}
+
+interface AiCostSummary {
+  monthly_cost: number;
+}
+
 export default function AIUsagePage() {
   const supabase = createClient();
   const [usageRows, setUsageRows] = useState<AiUsageRow[]>([]);
   const [imageRows, setImageRows] = useState<ImageUsageRow[]>([]);
+  const [monthlyRollup, setMonthlyRollup] = useState<MonthlyRollupRow[]>([]);
+  const [aiCostSummary, setAiCostSummary] = useState<AiCostSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -43,17 +56,55 @@ export default function AIUsagePage() {
 
     setError(null);
     try {
-      const [{ data: usageData, error: usageError }, { data: imageData, error: imageError }] =
+      const [
+        { data: usageData, error: usageError },
+        { data: imageData, error: imageError },
+        { data: costData, error: costError },
+        { data: rollupData, error: rollupError },
+      ] =
         await Promise.all([
           supabase.rpc('admin_get_ai_usage_summary'),
           supabase.rpc('admin_get_image_uploads_today'),
+          supabase.rpc('get_superadmin_ai_usage_cost', { days_back: 30 }),
+          supabase
+            .from('monthly_ai_usage_rollup')
+            .select('usage_month,total_cost,total_tokens,request_count')
+            .order('usage_month', { ascending: false })
+            .limit(12),
         ]);
 
       if (usageError) throw usageError;
       if (imageError) throw imageError;
+      if (costError) console.warn('AI cost summary unavailable', costError);
+      if (rollupError) console.warn('Monthly rollup unavailable', rollupError);
 
       setUsageRows((usageData as AiUsageRow[]) || []);
       setImageRows((imageData as ImageUsageRow[]) || []);
+      if (costData?.success && costData.data) {
+        setAiCostSummary({ monthly_cost: Number(costData.data.monthly_cost || 0) });
+      }
+      const rawRollup = ((rollupData as MonthlyRollupRow[]) || []).filter((row) => row.usage_month);
+      const aggregated = new Map<string, MonthlyRollupRow>();
+      rawRollup.forEach((row) => {
+        const key = row.usage_month as string;
+        const current = aggregated.get(key) || {
+          usage_month: key,
+          total_cost: 0,
+          total_tokens: 0,
+          request_count: 0,
+        };
+        aggregated.set(key, {
+          usage_month: key,
+          total_cost: (current.total_cost || 0) + (row.total_cost || 0),
+          total_tokens: (current.total_tokens || 0) + (row.total_tokens || 0),
+          request_count: (current.request_count || 0) + (row.request_count || 0),
+        });
+      });
+      setMonthlyRollup(
+        Array.from(aggregated.values()).sort((a, b) =>
+          String(b.usage_month).localeCompare(String(a.usage_month))
+        )
+      );
     } catch (err: any) {
       console.error('Failed to load AI usage data', err);
       setError(err?.message || 'Failed to load AI usage data');
@@ -99,6 +150,18 @@ export default function AIUsagePage() {
     () => imageRows.reduce((sum, row) => sum + (row.uploads_today ?? 0), 0),
     [imageRows]
   );
+  const totalMonthlyRequests = useMemo(
+    () => monthlyRollup.reduce((sum, row) => sum + (row.request_count ?? 0), 0),
+    [monthlyRollup]
+  );
+  const totalMonthlyTokens = useMemo(
+    () => monthlyRollup.reduce((sum, row) => sum + (row.total_tokens ?? 0), 0),
+    [monthlyRollup]
+  );
+  const avgCostPerRequest = useMemo(() => {
+    if (!aiCostSummary?.monthly_cost || totalMonthlyRequests === 0) return 0;
+    return aiCostSummary.monthly_cost / totalMonthlyRequests;
+  }, [aiCostSummary, totalMonthlyRequests]);
 
   if (loading) {
     return (
@@ -177,6 +240,36 @@ export default function AIUsagePage() {
             </div>
             <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
               {formatNumber(totalUploadsToday)}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm">
+              <Activity className="w-4 h-4" />
+              AI Cost (30d)
+            </div>
+            <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+              {aiCostSummary ? `R${(aiCostSummary.monthly_cost || 0).toFixed(2)}` : '—'}
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm">
+              <MessageSquare className="w-4 h-4" />
+              Requests (30d)
+            </div>
+            <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+              {formatNumber(totalMonthlyRequests)}
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 text-sm">
+              <Activity className="w-4 h-4" />
+              Avg Cost / Request
+            </div>
+            <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
+              {avgCostPerRequest ? `R${avgCostPerRequest.toFixed(2)}` : '—'}
             </div>
           </div>
         </div>
@@ -279,6 +372,46 @@ export default function AIUsagePage() {
                       <div className="text-xs text-gray-500">{row.email || '—'}</div>
                     </td>
                     <td className="px-4 py-3 text-right">{formatNumber(row.uploads_today)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monthly AI Usage Report</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Last 12 months of AI usage + cost rollups</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requests</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tokens</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {monthlyRollup.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      No monthly rollup data available.
+                    </td>
+                  </tr>
+                )}
+                {monthlyRollup.map((row) => (
+                  <tr key={`${row.usage_month}-${row.request_count}-${row.total_cost}`}>
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{row.usage_month}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{formatNumber(row.request_count)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{formatNumber(row.total_tokens)}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      {row.total_cost ? `R${Number(row.total_cost).toFixed(2)}` : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

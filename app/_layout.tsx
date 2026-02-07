@@ -282,6 +282,7 @@ function RootLayoutContent() {
   const [dashInstance, setDashInstance] = useState<IDashAIAssistant | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const { session } = useAuth();
+  const lastDashSessionTokenRef = useRef<string | null>(null);
   
   if (__DEV__) console.log('[RootLayoutContent] Rendering...');
   
@@ -400,8 +401,21 @@ function RootLayoutContent() {
     
     // Skip initialization if no session (unauthenticated)
     if (!session) {
+      lastDashSessionTokenRef.current = null;
       return;
     }
+
+    // De-duplicate: skip if the access_token is the same as last init.
+    // AuthContext emits multiple setSession calls during boot (cached → fresh),
+    // each creating a new object reference. Without this guard, Dash AI
+    // re-initializes on each reference change, calling AudioModule.setAudioModeAsync
+    // which triggers a background→active AppState blip on Android.
+    const currentToken = session.access_token;
+    if (currentToken && currentToken === lastDashSessionTokenRef.current) {
+      if (__DEV__) console.log('[RootLayoutContent] Skipping duplicate Dash AI init (same token)');
+      return;
+    }
+    lastDashSessionTokenRef.current = currentToken ?? null;
     
     (async () => {
       try {

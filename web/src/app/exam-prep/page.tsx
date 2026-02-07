@@ -122,7 +122,7 @@ export default function ExamPrepPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <CheckCircle className="w-4 h-4" style={{ color: '#22c55e' }} />
-              All subjects • All grades
+              Broad CAPS coverage
             </div>
           </div>
         </div>
@@ -233,11 +233,11 @@ export default function ExamPrepPage() {
             gap: '12px'
           }}>
             {[
-              'Unlimited practice tests & exams',
-              'All study guides & revision notes',
-              'Unlimited flashcards generation',
+              'Expanded practice tests & exams',
+              'Study guides & revision notes',
+              'Flashcards generation',
               'Progress tracking & analytics',
-              'No daily limits • Cancel anytime'
+              'Plan-based AI limits • Cancel anytime'
             ].map((benefit, i) => (
               <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '15px' }}>
                 <CheckCircle className="w-5 h-5" style={{ color: '#22c55e', flexShrink: 0 }} />
@@ -246,7 +246,7 @@ export default function ExamPrepPage() {
             ))}
           </ul>
           <Link
-            href="/sign-in"
+            href="/sign-up/parent?redirect=/exam-prep"
             className="btn btnCyan"
             style={{ height: '48px', padding: '0 32px', fontSize: '16px', borderRadius: '12px' }}
           >
@@ -254,7 +254,7 @@ export default function ExamPrepPage() {
             <ArrowRight className="w-5 h-5" />
           </Link>
           <p style={{ marginTop: '16px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)' }}>
-            14-day free trial • No credit card required • Cancel anytime
+            7-day free trial • No credit card required • Cancel anytime
           </p>
         </div>
       </section>
@@ -264,10 +264,10 @@ export default function ExamPrepPage() {
         <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
             <h2 style={{ fontSize: 'clamp(24px, 4vw, 32px)', fontWeight: 800, marginBottom: '12px' }}>
-              All CAPS Subjects Covered
+              CAPS Subjects Coverage
             </h2>
             <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '16px' }}>
-              Grades R-12 • Foundation to FET Phase
+              Grades R–10 with selected Grade 11–12 subjects available on request
             </p>
           </div>
           <div style={{
@@ -320,10 +320,10 @@ export default function ExamPrepPage() {
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ marginBottom: '24px' }}>
             <h3 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px' }}>
-              🦅 <span style={{ color: 'var(--cyan)' }}>Young Eagles</span>
+              EduDash Pro
             </h3>
             <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '13px' }}>
-              Built with ❤️ for South African students
+              Built for African schools and beyond.
             </p>
           </div>
           <div style={{
@@ -348,7 +348,7 @@ export default function ExamPrepPage() {
           </div>
           <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '24px' }}>
             <p style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '13px' }}>
-              © {new Date().getFullYear()} Young Eagles. All rights reserved.
+              © {new Date().getFullYear()} EduDash Pro. All rights reserved.
             </p>
           </div>
         </div>
@@ -425,4 +425,3 @@ export default function ExamPrepPage() {
     </div>
   );
 }
-

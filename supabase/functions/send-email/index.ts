@@ -5,12 +5,14 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { renderEduDashProEmail } from "../_shared/edudashproEmail.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const FROM_EMAIL = Deno.env.get("FROM_EMAIL") || "EduDash Pro <onboarding@resend.dev>";
+const FROM_EMAIL = Deno.env.get("FROM_EMAIL") || "EduDash Pro <support@edudashpro.org.za>";
+const SUPPORT_EMAIL = Deno.env.get("SUPPORT_EMAIL") || "support@edudashpro.org.za";
 const ENVIRONMENT = Deno.env.get("ENVIRONMENT") || "production";
 
 const RATE_LIMIT_PER_HOUR = 50;
@@ -19,6 +21,14 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -171,13 +181,44 @@ serve(async (req) => {
       subject: body.subject,
     };
 
-    if (body.is_html !== false) {
-      emailPayload.html = body.body;
+    const wantsBrandedTemplate =
+      body.use_branded_template === true ||
+      body.template === "edudashpro" ||
+      body.template === "branded";
+
+    const isHtmlBody = body.is_html !== false;
+    const bodyHtml = isHtmlBody
+      ? String(body.body || "")
+      : `<p>${escapeHtml(String(body.body || "")).replace(/\r?\n/g, "<br />")}</p>`;
+
+    if (wantsBrandedTemplate) {
+      const html = renderEduDashProEmail({
+        title: body.title || body.subject,
+        subtitle: body.subtitle,
+        preheader: body.preheader || body.preview_text,
+        bodyHtml,
+        cta: body.cta,
+        secondaryCta: body.secondary_cta,
+        footerNote: body.footer_note,
+        supportEmail: body.support_email,
+        logoUrl: body.logo_url,
+        brandName: body.brand_name,
+      });
+      emailPayload.html = html;
+      if (!isHtmlBody) {
+        emailPayload.text = String(body.body || "");
+      }
+    } else if (isHtmlBody) {
+      emailPayload.html = bodyHtml;
     } else {
-      emailPayload.text = body.body;
+      emailPayload.text = String(body.body || "");
     }
 
-    if (body.reply_to) emailPayload.reply_to = body.reply_to;
+    if (body.reply_to) {
+      emailPayload.reply_to = body.reply_to;
+    } else if (SUPPORT_EMAIL) {
+      emailPayload.reply_to = SUPPORT_EMAIL;
+    }
     if (body.cc) emailPayload.cc = body.cc;
     if (body.bcc) emailPayload.bcc = body.bcc;
 

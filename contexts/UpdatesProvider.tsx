@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 import { trackOTAUpdateCheck, trackOTAUpdateFetch, trackOTAUpdateApply, trackOTAError } from '@/lib/otaObservability';
 import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
+import { storage } from '@/lib/storage';
 
 // Types for update state
 export interface UpdateState {
@@ -36,6 +37,40 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     updateError: null,
     lastCheckTime: null,
   });
+  const updatesBlockedRef = React.useRef(false);
+
+  const UPDATE_BLOCK_KEY = 'edudash_ota_block_until';
+  const UPDATE_LAST_RELOAD_KEY = 'edudash_ota_last_reload';
+
+  const isUpdatesBlocked = useCallback(async () => {
+    if (updatesBlockedRef.current) return true;
+    try {
+      const raw = await storage.getItem(UPDATE_BLOCK_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as { until?: number; reason?: string };
+      if (parsed?.until && Date.now() < parsed.until) {
+        updatesBlockedRef.current = true;
+        logger.warn('[Updates] OTA checks blocked:', parsed.reason || 'unknown');
+        return true;
+      }
+      if (parsed?.until && Date.now() >= parsed.until) {
+        await storage.removeItem(UPDATE_BLOCK_KEY);
+      }
+    } catch (err) {
+      logger.warn('[Updates] Failed to read OTA block state:', err);
+    }
+    return false;
+  }, []);
+
+  const blockUpdates = useCallback(async (minutes: number, reason: string) => {
+    const until = Date.now() + minutes * 60 * 1000;
+    try {
+      await storage.setItem(UPDATE_BLOCK_KEY, JSON.stringify({ until, reason }));
+      updatesBlockedRef.current = true;
+    } catch (err) {
+      logger.warn('[Updates] Failed to persist OTA block:', err);
+    }
+  }, []);
 
   // Update state helper
   const updateState = (partial: Partial<UpdateState>) => {
@@ -44,6 +79,10 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Check for updates manually
   const checkForUpdates = async (): Promise<boolean> => {
+    if (await isUpdatesBlocked()) {
+      logger.warn('[Updates] OTA checks blocked - skipping manual update check');
+      return false;
+    }
     // Log detailed update info for debugging
     const updateInfo = {
       isEnabled: Updates.isEnabled,
@@ -76,6 +115,12 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       logger.info('[Updates] Checking for updates...');
       
       const update = await Updates.checkForUpdateAsync();
+      if (!update.isAvailable && (update as any).reason === 'updatePreviouslyFailed') {
+        logger.warn('[Updates] Update previously failed to launch. Blocking OTA checks temporarily.');
+        updateState({ updateError: 'Latest update failed to launch. OTA checks paused temporarily.' });
+        await blockUpdates(60, 'updatePreviouslyFailed');
+        return false;
+      }
       console.log('[Updates] Update check result:', { 
         isAvailable: update.isAvailable, 
         manifestId: update.manifest?.id,
@@ -165,6 +210,19 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
   // Apply the downloaded update
   const applyUpdate = async () => {
     try {
+      // Guard: prevent reload loops in rapid succession
+      try {
+        const lastReloadRaw = await storage.getItem(UPDATE_LAST_RELOAD_KEY);
+        const lastReloadAt = lastReloadRaw ? parseInt(lastReloadRaw, 10) : 0;
+        if (lastReloadAt && Date.now() - lastReloadAt < 60 * 1000) {
+          logger.warn('[Updates] Skipping reload to prevent loop (last reload < 60s)');
+          updateState({ updateError: 'Update reload suppressed to prevent loop. Please try again shortly.' });
+          return;
+        }
+        await storage.setItem(UPDATE_LAST_RELOAD_KEY, String(Date.now()));
+      } catch (guardErr) {
+        logger.warn('[Updates] Reload guard failed (non-fatal):', guardErr);
+      }
       // Track before applying (since app will restart)
       trackOTAUpdateApply();
       
@@ -214,6 +272,15 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     };
   }, [state.isUpdateDownloaded]);
 
+  // Emergency launch safeguard: if last update crashed, disable OTA checks temporarily
+  useEffect(() => {
+    if (!Updates.isEmergencyLaunch) return;
+    const reason = Updates.emergencyLaunchReason || 'unknown';
+    logger.error('[Updates] Emergency launch detected. Disabling OTA checks temporarily.', { reason });
+    updateState({ updateError: 'App recovered from a failed update. OTA checks paused.' });
+    void blockUpdates(120, `emergencyLaunch:${reason}`);
+  }, [blockUpdates]);
+
   // Dismiss the update (clear badge)
   const dismissUpdate = () => {
     updateState({ isUpdateDownloaded: false });
@@ -230,6 +297,10 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Background update checking
   const backgroundCheck = useCallback(async () => {
+    if (await isUpdatesBlocked()) {
+      logger.warn('[Updates] OTA checks blocked - skipping background check');
+      return;
+    }
     // Log detailed update info for debugging
     logger.info('[Updates] Background check - Update environment:', {
       isEnabled: Updates.isEnabled,
@@ -254,6 +325,12 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     try {
       logger.info('[Updates] Background check for updates...');
       const update = await Updates.checkForUpdateAsync();
+      if (!update.isAvailable && (update as any).reason === 'updatePreviouslyFailed') {
+        logger.warn('[Updates] Update previously failed to launch. Blocking OTA checks temporarily.');
+        updateState({ updateError: 'Latest update failed to launch. OTA checks paused temporarily.' });
+        await blockUpdates(60, 'updatePreviouslyFailed');
+        return;
+      }
       logger.info('[Updates] Background check result:', { isAvailable: update.isAvailable });
       
       // Track background update check
@@ -301,7 +378,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         lastCheckTime: new Date()
       });
     }
-  }, []);
+  }, [blockUpdates, isUpdatesBlocked]);
 
   // Set up background checking on app state changes
   useEffect(() => {

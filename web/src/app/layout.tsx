@@ -27,7 +27,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "EduDash Pro",
-  description: "Educational dashboard for South African preschools",
+  description: "Educational dashboard for African schools and beyond",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

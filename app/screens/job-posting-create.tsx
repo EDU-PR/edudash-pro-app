@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, Linking, Platform, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, Linking, Platform, Switch, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,12 +16,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { base64ToUint8Array } from '@/lib/utils/base64';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
-
+import { useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function JobPostingCreateScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, AlertModalComponent } = useAlertModal();
 
   const preschoolId = profile?.organization_id || (profile as any)?.preschool_id;
 
@@ -56,15 +57,15 @@ export default function JobPostingCreateScreen() {
 
   const validateForm = (): boolean => {
     if (!title.trim()) {
-      Alert.alert('Validation Error', 'Job title is required');
+      showAlert({ title: 'Validation Error', message: 'Job title is required', type: 'warning' });
       return false;
     }
     if (!description.trim()) {
-      Alert.alert('Validation Error', 'Job description is required');
+      showAlert({ title: 'Validation Error', message: 'Job description is required', type: 'warning' });
       return false;
     }
     if (!employmentType) {
-      Alert.alert('Validation Error', 'Employment type is required');
+      showAlert({ title: 'Validation Error', message: 'Employment type is required', type: 'warning' });
       return false;
     }
 
@@ -72,15 +73,15 @@ export default function JobPostingCreateScreen() {
     const maxSalary = salaryMax ? parseFloat(salaryMax) : null;
 
     if (minSalary && isNaN(minSalary)) {
-      Alert.alert('Validation Error', 'Minimum salary must be a valid number');
+      showAlert({ title: 'Validation Error', message: 'Minimum salary must be a valid number', type: 'warning' });
       return false;
     }
     if (maxSalary && isNaN(maxSalary)) {
-      Alert.alert('Validation Error', 'Maximum salary must be a valid number');
+      showAlert({ title: 'Validation Error', message: 'Maximum salary must be a valid number', type: 'warning' });
       return false;
     }
     if (minSalary && maxSalary && minSalary > maxSalary) {
-      Alert.alert('Validation Error', 'Minimum salary cannot be greater than maximum salary');
+      showAlert({ title: 'Validation Error', message: 'Minimum salary cannot be greater than maximum salary', type: 'warning' });
       return false;
     }
 
@@ -210,13 +211,13 @@ export default function JobPostingCreateScreen() {
   const handlePickJobLogo = async () => {
     try {
       if (!preschoolId) {
-        Alert.alert('Error', 'Missing school information');
+        showAlert({ title: 'Error', message: 'Missing school information', type: 'error' });
         return;
       }
 
       const hasPermission = await ensureImageLibraryPermission();
       if (!hasPermission) {
-        Alert.alert('Permission Required', 'Please grant photo library access to upload a logo');
+        showAlert({ title: 'Permission Required', message: 'Please grant photo library access to upload a logo', type: 'warning' });
         return;
       }
 
@@ -298,7 +299,7 @@ export default function JobPostingCreateScreen() {
         console.warn('Failed to update preschool logo:', schoolErr);
       }
     } catch (error: any) {
-      Alert.alert('Logo Upload Failed', error.message || 'Failed to upload logo');
+      showAlert({ title: 'Logo Upload Failed', message: error.message || 'Failed to upload logo', type: 'error' });
     } finally {
       setJobLogoUploading(false);
     }
@@ -340,13 +341,13 @@ export default function JobPostingCreateScreen() {
   const handleCopyInviteCode = async () => {
     if (!shareInviteCode) return;
     await Clipboard.setStringAsync(shareInviteCode);
-    Alert.alert('Copied', 'Invite code copied to clipboard.');
+    showAlert({ title: 'Copied', message: 'Invite code copied to clipboard.', type: 'success' });
   };
 
   const handleCopyMessage = async () => {
     if (!shareMessage.trim()) return;
     await Clipboard.setStringAsync(shareMessage);
-    Alert.alert('Copied', 'WhatsApp message copied to clipboard.');
+    showAlert({ title: 'Copied', message: 'WhatsApp message copied to clipboard.', type: 'success' });
   };
 
   const handleWhatsAppBroadcast = async (jobPosting: any, messageOverride?: string): Promise<boolean> => {
@@ -384,19 +385,21 @@ export default function JobPostingCreateScreen() {
         recipients_count: 0, // Will be updated by backend with actual count
       });
 
-      Alert.alert(
-        'Success! 🎉',
-        'Job posting has been shared via WhatsApp to your contact list.',
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: 'Success! 🎉',
+        message: 'Job posting has been shared via WhatsApp to your contact list.',
+        type: 'success',
+        buttons: [{ text: 'OK' }],
+      });
       return true;
     } catch (error: any) {
       console.error('Error sharing on WhatsApp:', error);
-      Alert.alert(
-        'Sharing Failed',
-        'Could not share job posting via WhatsApp. You can still share it manually.',
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: 'Sharing Failed',
+        message: 'Could not share job posting via WhatsApp. You can still share it manually.',
+        type: 'error',
+        buttons: [{ text: 'OK' }],
+      });
       return false;
     }
   };
@@ -404,7 +407,7 @@ export default function JobPostingCreateScreen() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!preschoolId || !user?.id) {
-      Alert.alert('Error', 'Missing user or school information');
+      showAlert({ title: 'Error', message: 'Missing user or school information', type: 'error' });
       return;
     }
 
@@ -451,7 +454,7 @@ export default function JobPostingCreateScreen() {
       }
     } catch (error: any) {
       console.error('Error creating job posting:', error);
-      Alert.alert('Error', error.message || 'Failed to create job posting');
+      showAlert({ title: 'Error', message: error.message || 'Failed to create job posting', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -460,6 +463,7 @@ export default function JobPostingCreateScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Create Job Posting', headerShown: false }} />
+      <AlertModalComponent />
 
       {/* Header */}
       <View style={styles.header}>
@@ -767,10 +771,11 @@ export default function JobPostingCreateScreen() {
               disabled={broadcasting}
               onPress={() => {
                 if (!shareJobPosting) return;
-                Alert.alert(
-                  'Broadcast to all contacts?',
-                  'This will send the message to your full WhatsApp contact list. Continue?',
-                  [
+                showAlert({
+                  title: 'Broadcast to all contacts?',
+                  message: 'This will send the message to your full WhatsApp contact list. Continue?',
+                  type: 'warning',
+                  buttons: [
                     { text: 'Cancel', style: 'cancel' },
                     {
                       text: 'Broadcast',
@@ -785,8 +790,8 @@ export default function JobPostingCreateScreen() {
                         }
                       },
                     },
-                  ]
-                );
+                  ],
+                });
               }}
             >
               <Text style={styles.broadcastText}>

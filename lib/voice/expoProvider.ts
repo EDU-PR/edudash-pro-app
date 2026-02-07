@@ -32,12 +32,22 @@ class ExpoSpeechSession implements VoiceSession {
   private active = false;
   private muted = false;
   private currentOpts: VoiceStartOptions | null = null;
+  /** True when stop() was explicitly called (vs. Android auto-stopping after silence) */
+  private explicitlyStopped = false;
+  /** Timer for whisper-flow auto-restart after Android ends recognition */
+  private autoRestartTimer: ReturnType<typeof setTimeout> | null = null;
+  /** How many consecutive auto-restarts (capped to avoid runaway loops) */
+  private autoRestartCount = 0;
+  private static readonly MAX_AUTO_RESTARTS = 50;
+  /** Delay before auto-restart (ms) — short for seamless whisper-flow */
+  private static readonly AUTO_RESTART_DELAY_MS = 300;
 
   async start(opts: VoiceStartOptions): Promise<boolean> {
     try {
       if (__DEV__) console.log('[ExpoProvider] Starting speech recognition...');
       
       this.currentOpts = opts;
+      this.explicitlyStopped = false;
       
       // Request microphone permissions
       const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -112,6 +122,11 @@ class ExpoSpeechSession implements VoiceSession {
       
       ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         const errorText = event?.error ? String(event.error) : 'Speech recognition error';
+        // "no-speech" is normal on Android — just means silence; auto-restart handles it
+        if (errorText === 'no-speech') {
+          if (__DEV__) console.log('[ExpoProvider] No speech detected — will auto-restart');
+          return;
+        }
         console.error('[ExpoProvider] Recognition error:', errorText);
         this.active = false;
         this.currentOpts?.onError?.(errorText);
@@ -119,8 +134,32 @@ class ExpoSpeechSession implements VoiceSession {
       });
       
       ExpoSpeechRecognitionModule.addListener('end', () => {
-        if (__DEV__) console.log('[ExpoProvider] Recognition ended');
+        if (__DEV__) console.log('[ExpoProvider] Recognition ended', {
+          explicitlyStopped: this.explicitlyStopped,
+          autoRestartCount: this.autoRestartCount,
+        });
         this.active = false;
+
+        // Whisper-flow: auto-restart if not explicitly stopped
+        // Android frequently fires 'end' after silence even with continuous:true
+        if (
+          !this.explicitlyStopped &&
+          this.currentOpts &&
+          this.autoRestartCount < ExpoSpeechSession.MAX_AUTO_RESTARTS
+        ) {
+          this.autoRestartTimer = setTimeout(() => {
+            if (this.explicitlyStopped) return;
+            this.autoRestartCount++;
+            if (__DEV__) {
+              console.log(`[ExpoProvider] Whisper-flow auto-restart #${this.autoRestartCount}`);
+            }
+            // Re-start with same options (listeners are re-attached inside start())
+            this.cleanupListeners();
+            this.start(this.currentOpts!).catch((err) => {
+              console.error('[ExpoProvider] Auto-restart failed:', err);
+            });
+          }, ExpoSpeechSession.AUTO_RESTART_DELAY_MS);
+        }
       });
       
       this.active = true;
@@ -133,16 +172,31 @@ class ExpoSpeechSession implements VoiceSession {
     }
   }
 
+  /** Remove all listeners without stopping the recognizer */
+  private cleanupListeners(): void {
+    try {
+      ExpoSpeechRecognitionModule.removeAllListeners('result');
+      ExpoSpeechRecognitionModule.removeAllListeners('error');
+      ExpoSpeechRecognitionModule.removeAllListeners('end');
+    } catch {
+      // Non-fatal
+    }
+  }
+
   async stop(): Promise<void> {
     try {
       if (__DEV__) console.log('[ExpoProvider] Stopping recognition...');
+      this.explicitlyStopped = true;
+      this.autoRestartCount = 0;
+      if (this.autoRestartTimer) {
+        clearTimeout(this.autoRestartTimer);
+        this.autoRestartTimer = null;
+      }
       await ExpoSpeechRecognitionModule.stop();
       this.active = false;
       
       // Remove event listeners
-      ExpoSpeechRecognitionModule.removeAllListeners('result');
-      ExpoSpeechRecognitionModule.removeAllListeners('error');
-      ExpoSpeechRecognitionModule.removeAllListeners('end');
+      this.cleanupListeners();
     } catch (e) {
       console.error('[ExpoProvider] Stop failed:', e);
     }

@@ -16,7 +16,7 @@ import {
   View,
   TouchableOpacity,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
@@ -37,20 +37,25 @@ interface DraggableDashFABProps {
 export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: DraggableDashFABProps) {
   const { theme } = useTheme();
   const { profile } = useAuth();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { showDashFAB, fabPosition, setFabPosition } = useAppPreferencesSafe();
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+  
+  // Navigation debounce — prevents double-push which crashes ScreenStack on Android
+  const isNavigatingRef = useRef(false);
+  
+  // Hide FAB when the full-screen ORB/AI screens are open (since FAB opens them)
+  const isOrbScreenOpen = pathname?.includes('/dash-voice') || pathname?.includes('/super-admin-ai');
   
   // Determine destination based on user role
   const getDestination = () => {
     if (isSuperAdmin(profile?.role)) {
       return '/screens/super-admin-ai-command-center';
     }
-    if (isTutorRole) {
-      return '/screens/dash-orb';
-    }
-    return '/screens/dash-assistant';
+    // All roles → full-screen voice ORB experience
+    return '/screens/dash-voice';
   };
   
   // Default position (bottom right, above safe area)
@@ -128,7 +133,11 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
         if (!wasDragging.current && Math.abs(gestureState.dx) < 10 && Math.abs(gestureState.dy) < 10) {
           position.flattenOffset();
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          router.push(getDestination());
+          if (!isNavigatingRef.current) {
+            isNavigatingRef.current = true;
+            router.push(getDestination());
+            setTimeout(() => { isNavigatingRef.current = false; }, 1000);
+          }
           return;
         }
         
@@ -159,17 +168,19 @@ export function DraggableDashFAB({ bottomOffset = BOTTOM_NAV_HEIGHT }: Draggable
   ).current;
 
   const handlePress = async () => {
-    if (isDragging) return; // Don't navigate if dragging
+    if (isDragging || isNavigatingRef.current) return;
     
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {
       // Haptics not available
     }
+    isNavigatingRef.current = true;
     router.push(getDestination());
+    setTimeout(() => { isNavigatingRef.current = false; }, 1000);
   };
 
-  if (!showDashFAB) {
+  if (!showDashFAB || isOrbScreenOpen) {
     return null;
   }
 

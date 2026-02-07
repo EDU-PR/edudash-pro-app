@@ -1,72 +1,212 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { Space_Grotesk, Fraunces } from "next/font/google";
 import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
-import 'katex/dist/katex.min.css';
+import styles from "./page.module.css";
 
-const EARLY_BIRD_LIMIT = 20; // First 20 aftercare registrations get 50% off
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  weight: ["400", "600", "700"],
+});
+
+const EARLY_BIRD_LIMIT = 20;
+const COMMUNITY_SCHOOL_ID = "00000000-0000-0000-0000-000000000001";
+const DEMO_VIDEO_URL = process.env.NEXT_PUBLIC_DEMO_VIDEO_URL ?? "";
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 export default function Home() {
   const router = useRouter();
   const { isPWA, isLoading: isPWALoading } = useIsPWA();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [installSheetOpen, setInstallSheetOpen] = useState(false);
+  const [installMode, setInstallMode] = useState<"prompt" | "ios" | "unsupported">("unsupported");
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [checking, setChecking] = useState(true);
-  const [earlyAccessEmail, setEarlyAccessEmail] = useState('');
+  const [earlyAccessEmail, setEarlyAccessEmail] = useState("");
   const [earlyAccessSubmitting, setEarlyAccessSubmitting] = useState(false);
   const [earlyAccessSubmitted, setEarlyAccessSubmitted] = useState(false);
-  const [earlyAccessError, setEarlyAccessError] = useState('');
+  const [earlyAccessError, setEarlyAccessError] = useState("");
   const [aftercareSpotsRemaining, setAftercareSpotsRemaining] = useState<number | null>(null);
 
-  // Fetch aftercare spots remaining
+  const navLinks = useMemo(
+    () => [
+      { id: "features", label: "Features" },
+      { id: "dash-ai", label: "Dash AI" },
+      { id: "roles", label: "For Schools" },
+      { id: "programs", label: "Programs" },
+      { id: "pricing", label: "Pricing" },
+      { id: "faq", label: "FAQ" },
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBeforeInstall = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+      setInstallMode("prompt");
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+
+    if (isIOS && !isStandalone) {
+      setInstallMode("ios");
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+    };
+  }, []);
+
+  const featureCards = useMemo(
+    () => [
+      {
+        title: "Unified School OS",
+        copy: "Attendance, fees, messaging, and reporting in one streamlined workspace.",
+        tag: "Operations",
+      },
+      {
+        title: "Parent Engagement",
+        copy: "Real-time updates, progress snapshots, and two-way communication that actually gets read.",
+        tag: "Community",
+      },
+      {
+        title: "AI Learning Studio",
+        copy: "Generate lessons, activities, and summaries in minutes with teacher-in-the-loop controls.",
+        tag: "Dash AI",
+      },
+      {
+        title: "Secure Billing",
+        copy: "PayFast-ready invoicing, proof-of-payment review, and automated reminders.",
+        tag: "Payments",
+      },
+      {
+        title: "STEM + Robotics",
+        copy: "Robotics, coding, and computer skills packs available as optional curriculum add‑ons.",
+        tag: "STEM",
+      },
+      {
+        title: "Voice & Video Calls",
+        copy: "Run parent calls, class check-ins, and voice notes with the same dashboard tools.",
+        tag: "Comms",
+      },
+      {
+        title: "Offline Ready",
+        copy: "Critical dashboards stay available even with unstable connectivity.",
+        tag: "Resilience",
+      },
+    ],
+    []
+  );
+
+  const roleCards = useMemo(
+    () => [
+      {
+        title: "Principals & Owners",
+        copy: "Manage staff, billing, and performance from a single command center.",
+        items: ["School-wide analytics", "Seat management", "Financial oversight"],
+      },
+      {
+        title: "Teachers",
+        copy: "Plan, teach, and report faster with AI support and smart class tools.",
+        items: ["Lesson creation", "Attendance + homework", "Parent communication"],
+      },
+      {
+        title: "Parents",
+        copy: "Stay connected to progress, payments, and daily updates without friction.",
+        items: ["Daily summaries", "Messaging & calls", "Payment visibility"],
+      },
+    ],
+    []
+  );
+
+  const faqs = useMemo(
+    () => [
+      {
+        q: "Is EduDash Pro only for aftercare?",
+        a: "No. Aftercare is one program we support. The platform is built for full school operations across preschools, primary, and community schools.",
+      },
+      {
+        q: "Can we start small and scale?",
+        a: "Yes. You can start with parent messaging and attendance, then unlock AI workflows and advanced analytics when you’re ready.",
+      },
+      {
+        q: "What grades do you support?",
+        a: "We cover Grades R–10 with selected Grade 11–12 subjects available by request. Robotics and coding packs are available as add‑ons.",
+      },
+      {
+        q: "Does it work on low connectivity?",
+        a: "Yes. Key dashboards cache data for offline access and sync back when the connection returns.",
+      },
+    ],
+    []
+  );
+
   const fetchSpots = async () => {
     try {
       const supabase = createClient();
       const { count } = await supabase
-        .from('aftercare_registrations')
-        .select('*', { count: 'exact', head: true });
-      
+        .from("aftercare_registrations")
+        .select("*", { count: "exact", head: true })
+        .eq("preschool_id", COMMUNITY_SCHOOL_ID);
+
       if (count !== null) {
         setAftercareSpotsRemaining(Math.max(0, EARLY_BIRD_LIMIT - count));
       }
-    } catch (err) {
+    } catch {
       setAftercareSpotsRemaining(EARLY_BIRD_LIMIT);
     }
   };
 
   useEffect(() => {
     fetchSpots();
-
-    // Set up realtime subscription to update counter when new registrations are added
     const supabase = createClient();
-    const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
     const channel = supabase
-      .channel('aftercare-registrations-count-home')
+      .channel("aftercare-registrations-count-home")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'aftercare_registrations',
+          event: "INSERT",
+          schema: "public",
+          table: "aftercare_registrations",
           filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
         },
         () => {
-          // Refresh count when a new registration is inserted
           fetchSpots();
         }
       )
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'aftercare_registrations',
+          event: "DELETE",
+          schema: "public",
+          table: "aftercare_registrations",
           filter: `preschool_id=eq.${COMMUNITY_SCHOOL_ID}`,
         },
         () => {
-          // Refresh count when a registration is deleted
           fetchSpots();
         }
       )
@@ -77,67 +217,22 @@ export default function Home() {
     };
   }, []);
 
-  const handleEarlyAccessSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!earlyAccessEmail || !earlyAccessEmail.includes('@')) {
-      setEarlyAccessError('Please enter a valid email address');
-      return;
-    }
-    
-    setEarlyAccessSubmitting(true);
-    setEarlyAccessError('');
-    
-    try {
-      const supabase = createClient();
-      
-      // Save to early_access_signups table
-      const { error } = await supabase
-        .from('early_access_signups')
-        .insert({
-          email: earlyAccessEmail,
-          source: 'homepage',
-          platform: 'google_play',
-        });
-      
-      if (error && error.code !== '23505') { // Ignore duplicate email error
-        console.error('Early access signup error:', error);
-      }
-      
-      // Also send notification email to superadmin
-      await fetch('/api/early-access-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: earlyAccessEmail }),
-      }).catch(() => {}); // Don't fail if notification fails
-      
-      setEarlyAccessSubmitted(true);
-    } catch (err) {
-      console.error('Signup error:', err);
-      setEarlyAccessSubmitted(true); // Show success anyway for UX
-    } finally {
-      setEarlyAccessSubmitting(false);
-    }
-  };
-
-  // Redirect installed PWA users directly to dashboard
   useEffect(() => {
     if (isPWALoading) return;
 
     const checkAuthAndRedirect = async () => {
       if (isPWA) {
-        console.log('📱 [PWA] Installed app detected, checking auth...');
         const supabase = createClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
         if (session) {
-          console.log('✅ [PWA] User authenticated, redirecting to dashboard');
-          router.replace('/dashboard');
-          return;
-        } else {
-          console.log('🔐 [PWA] No session, redirecting to sign-in');
-          router.replace('/sign-in');
+          router.replace("/dashboard");
           return;
         }
+        router.replace("/sign-in");
+        return;
       }
       setChecking(false);
     };
@@ -145,661 +240,505 @@ export default function Home() {
     checkAuthAndRedirect();
   }, [isPWA, isPWALoading, router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const elements = Array.from(document.querySelectorAll("[data-reveal]"));
+    if (!elements.length) return;
+
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      elements.forEach((el) => el.classList.add(styles.revealVisible));
+      return;
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      elements.forEach((el) => el.classList.add(styles.revealVisible));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add(styles.revealVisible);
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
       setMobileMenuOpen(false);
     }
   };
 
-  // Show loading while checking PWA status
+  const handleEarlyAccessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!earlyAccessEmail || !earlyAccessEmail.includes("@")) {
+      setEarlyAccessError("Please enter a valid email address");
+      return;
+    }
+
+    setEarlyAccessSubmitting(true);
+    setEarlyAccessError("");
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("early_access_signups")
+        .insert({
+          email: earlyAccessEmail,
+          source: "homepage",
+          platform: "google_play",
+        });
+
+      if (error && error.code !== "23505") {
+        console.error("Early access signup error:", error);
+      }
+
+      await fetch("/api/early-access-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: earlyAccessEmail }),
+      }).catch(() => {});
+
+      setEarlyAccessSubmitted(true);
+    } catch (err) {
+      console.error("Signup error:", err);
+      setEarlyAccessSubmitted(true);
+    } finally {
+      setEarlyAccessSubmitting(false);
+    }
+  };
+
+  const handleInstallClick = async () => {
+    if (isPWA) return;
+
+    if (installMode === "prompt" && deferredPrompt) {
+      await deferredPrompt.prompt();
+      const result = await deferredPrompt.userChoice;
+      if (result.outcome === "accepted") {
+        setInstallMode("unsupported");
+      }
+      setDeferredPrompt(null);
+      return;
+    }
+
+    setInstallSheetOpen(true);
+  };
+
+  const showInstallButton = !isPWA;
+
   if (checking || isPWALoading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
-          <h2 style={{ color: '#00f5ff', fontSize: '20px', fontWeight: 700 }}>EduDash Pro</h2>
-          <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '8px' }}>Loading...</p>
+      <div className={`${styles.loading} ${spaceGrotesk.variable} ${fraunces.variable}`}>
+        <div className={styles.loadingCard}>
+          <div className={styles.loadingGlyph}>✦</div>
+          <h2>EduDash Pro</h2>
+          <p>Initializing next-gen learning ops...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{minHeight: '100vh', background: '#0a0a0f', color: 'var(--text)'}}>
-      {/* Sticky Navigation */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 1000, background: 'rgba(10, 10, 15, 0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div className="brand" style={{fontSize: '18px', fontWeight: 700}}>📚 EduDash Pro</div>
-          
-          {/* Mobile Menu Button */}
-          <button 
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            style={{ display: 'none', background: 'none', border: 0, color: '#fff', cursor: 'pointer', fontSize: '24px', padding: '8px' }}
-            className="mobile-menu-btn"
-          >
-            {mobileMenuOpen ? '✕' : '☰'}
-          </button>
-          
-          {/* Desktop Navigation */}
-          <nav style={{display: 'flex', alignItems: 'center', gap: '28px'}} className="desktop-nav">
-            <button onClick={() => scrollToSection('features')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Features</button>
-            <button onClick={() => scrollToSection('dash-ai')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Dash AI</button>
-            <Link href="/exam-prep" style={{background: 'none', border: 0, color: '#fbbf24', cursor: 'pointer', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'color 0.2s'}}>📚 Study Hub</Link>
-            <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>Pricing</button>
-            <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '14px', fontWeight: 500, transition: 'color 0.2s'}}>FAQ</button>
-            <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '14px', padding: '8px 18px', borderRadius: '8px'}}>Sign In</Link>
+    <div className={`${styles.page} ${spaceGrotesk.variable} ${fraunces.variable}`}>
+      <div className={styles.backgroundGlow} />
+      <div className={styles.backgroundNoise} />
+
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <div className={styles.brand}>
+            <Image src="/icon-192.png" alt="EduDash Pro logo" width={36} height={36} className={styles.brandLogo} />
+            <span className={styles.brandText}>EduDash Pro</span>
+          </div>
+
+          <nav className={styles.navDesktop}>
+            {navLinks.map((link) => (
+              <button
+                key={link.id}
+                className={styles.navLink}
+                onClick={() => scrollToSection(link.id)}
+              >
+                {link.label}
+              </button>
+            ))}
+            {showInstallButton && (
+              <button className={styles.installButton} onClick={handleInstallClick}>
+                Install App
+              </button>
+            )}
+            <Link href="/sign-in" className={styles.primaryGhost}>
+              Sign In
+            </Link>
+            <Link href="/apply" className={styles.primarySolid}>
+              Book a Demo
+            </Link>
           </nav>
+
+          <button
+            className={styles.navToggle}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+          >
+            {mobileMenuOpen ? "✕" : "☰"}
+          </button>
         </div>
-        
-        {/* Mobile Menu Dropdown */}
+
         {mobileMenuOpen && (
-          <div className="mobile-menu" style={{ background: 'rgba(10, 10, 15, 0.98)', borderTop: '1px solid rgba(255, 255, 255, 0.1)', padding: '16px 20px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <button onClick={() => scrollToSection('features')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Features</button>
-              <button onClick={() => scrollToSection('dash-ai')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Dash AI</button>
-              <Link href="/exam-prep" style={{color: '#fbbf24', fontSize: '16px', fontWeight: 600, textAlign: 'left', padding: '8px 0', textDecoration: 'none', display: 'block'}}>📚 Study Hub</Link>
-              <button onClick={() => scrollToSection('pricing')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>Pricing</button>
-              <button onClick={() => scrollToSection('faq')} style={{background: 'none', border: 0, color: '#9CA3AF', cursor: 'pointer', fontSize: '16px', fontWeight: 500, textAlign: 'left', padding: '8px 0'}}>FAQ</button>
-              <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '16px', marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <Link href="/sign-in" className="btn btnCyan" style={{fontSize: '16px', padding: '12px', borderRadius: '8px', textAlign: 'center', display: 'block'}}>Sign In</Link>
-              </div>
+          <div className={styles.navMobile}>
+            {navLinks.map((link) => (
+              <button
+                key={link.id}
+                className={styles.navLinkMobile}
+                onClick={() => scrollToSection(link.id)}
+              >
+                {link.label}
+              </button>
+            ))}
+            <div className={styles.navMobileCtas}>
+              {showInstallButton && (
+                <button className={styles.installButton} onClick={handleInstallClick}>
+                  Install App
+                </button>
+              )}
+              <Link href="/sign-in" className={styles.primaryGhost}>
+                Sign In
+              </Link>
+              <Link href="/apply" className={styles.primarySolid}>
+                Book a Demo
+              </Link>
             </div>
           </div>
         )}
       </header>
-      
-      <style jsx global>{`
-        /* Prevent horizontal scroll */
-        body, html {
-          overflow-x: hidden;
-          max-width: 100vw;
-        }
-        
-        /* Navigation hover effects */
-        nav button:hover {
-          color: #00f5ff !important;
-        }
-        
-        /* Mobile responsive */
-        @media (max-width: 768px) {
-          .desktop-nav {
-            display: none !important;
-          }
-          .mobile-menu-btn {
-            display: block !important;
-          }
-          .landingHero {
-            padding-top: 40px !important;
-          }
-        }
-        
-        @media (min-width: 769px) {
-          .mobile-menu {
-            display: none !important;
-          }
-        }
-        
-        /* Smooth transitions */
-        header {
-          transition: all 0.3s ease;
-        }
-      `}</style>
 
-      {/* Hero */}
-      <section className="landingHero" style={{paddingTop: '60px'}}>
-        <div className="container" style={{textAlign: 'center'}}>
-          <div style={{marginBottom: '16px'}}>
-            <span className="pillCyan" style={{fontSize: '11px'}}>🇿🇦 Built for South Africa</span>
-          </div>
-          <h1 className="heroTitle">
-            Educational dashboard for <br />
-            <span className="accent">South African Education</span>
-          </h1>
-          <p className="heroLead">
-            Engage every student, empower every teacher, and connect every parent with <strong style={{color: 'var(--cyan)'}}>AI-enhanced tools</strong> built for South Africa.
-          </p>
-          
-          {/* Early Access Signup */}
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%)',
-            border: '2px solid rgba(0, 245, 255, 0.3)',
-            borderRadius: '20px',
-            padding: '32px',
-            maxWidth: '500px',
-            margin: '0 auto 32px',
-            backdropFilter: 'blur(10px)'
-          }}>
-            <div style={{marginBottom: '16px'}}>
-              <span style={{fontSize: '32px'}}>📱</span>
+      {installSheetOpen && (
+        <div className={styles.installSheet}>
+          <div className={styles.installCard}>
+            <div className={styles.installHeader}>
+              <strong>Install EduDash Pro</strong>
+              <button className={styles.installClose} onClick={() => setInstallSheetOpen(false)}>
+                X
+              </button>
             </div>
-            <h3 style={{color: '#00f5ff', fontSize: '20px', fontWeight: 800, marginBottom: '8px'}}>
-              Get Early Access to Our App
-            </h3>
-            <p style={{color: '#9CA3AF', fontSize: '14px', marginBottom: '20px', lineHeight: 1.6}}>
-              Be among the first to download EduDash Pro from Google Play Store. Enter your Gmail address to join our early access list.
+            {installMode === "ios" ? (
+              <p>
+                On iPhone or iPad: tap <strong>Share</strong> then choose <strong>Add to Home Screen</strong>.
+              </p>
+            ) : installMode === "prompt" ? (
+              <p>
+                Install the EduDash Pro PWA for faster access, offline support, and push notifications.
+              </p>
+            ) : (
+              <p>
+                Open your browser menu and select <strong>Install App</strong> or <strong>Add to Home Screen</strong>.
+              </p>
+            )}
+            <div className={styles.installActions}>
+              <Link href="/apply" className={styles.primarySolidSmall}>
+                Book a demo
+              </Link>
+              <button className={styles.ghostButton} onClick={() => setInstallSheetOpen(false)}>
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <aside className={styles.sideRail}>
+        <div className={styles.sideCard}>
+          <span className={styles.sideLabel}>Ads + partners</span>
+          <h4>Reserve this space</h4>
+          <p>Feature your education brand or community program.</p>
+          <a className={styles.sideLink} href="mailto:partners@edudashpro.org.za">
+            partners@edudashpro.org.za
+          </a>
+        </div>
+        <div className={styles.sideCardAlt}>
+          <span className={styles.sideLabel}>Feedback</span>
+          <h4>Tell us what to build next</h4>
+          <p>We review every note and ship weekly.</p>
+          <a className={styles.sideLink} href="mailto:feedback@edudashpro.org.za">
+            Send feedback
+          </a>
+        </div>
+      </aside>
+
+      <main className={styles.main}>
+        <section className={styles.hero}>
+          <div className={styles.heroContent}>
+            <div className={styles.heroBadge}>Next-Gen School Operating System</div>
+            <h1 className={styles.heroTitle}>
+              An AI-powered command center for
+              <span className={styles.heroTitleAccent}> modern schools.</span>
+            </h1>
+            <p className={styles.heroSubtitle}>
+              EduDash Pro unifies teaching, parent engagement, billing, and AI lesson workflows into one
+              elegant platform built for African schools and beyond.
             </p>
-            
-            {earlyAccessSubmitted ? (
-              <div style={{
-                background: 'rgba(16, 185, 129, 0.2)',
-                border: '2px solid #10b981',
-                borderRadius: '12px',
-                padding: '16px',
-                textAlign: 'center'
-              }}>
-                <span style={{fontSize: '24px', marginBottom: '8px', display: 'block'}}>🎉</span>
-                <p style={{color: '#10b981', fontWeight: 700, margin: 0}}>You're on the list!</p>
-                <p style={{color: '#6ee7b7', fontSize: '13px', marginTop: '4px'}}>We'll email you when the app is ready.</p>
+            <div className={styles.heroCtas}>
+              <Link href="/apply" className={styles.primarySolidLarge}>
+                Request a live demo
+              </Link>
+              <Link href="/pricing" className={styles.primaryGhostLarge}>
+                View pricing
+              </Link>
+            </div>
+          <div className={`${styles.heroStats} ${styles.reveal}`} data-reveal>
+            <div>
+              <h3>Unified data</h3>
+              <p>Attendance, fees, lessons, and messaging in one flow.</p>
+            </div>
+              <div>
+                <h3>AI-ready</h3>
+                <p>Dash AI supports lesson planning and insights in minutes.</p>
+              </div>
+              <div>
+                <h3>Offline-first</h3>
+                <p>Critical dashboards keep running when networks drop.</p>
+              </div>
+            </div>
+          </div>
+          <div className={`${styles.heroVisual} ${styles.reveal}`} data-reveal>
+            {DEMO_VIDEO_URL ? (
+              <div className={styles.videoFrame}>
+                <iframe
+                  src={DEMO_VIDEO_URL}
+                  title="EduDash Pro Demo"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
               </div>
             ) : (
-              <form onSubmit={handleEarlyAccessSubmit} style={{display: 'flex', gap: '12px', flexDirection: 'column'}}>
-                <div style={{display: 'flex', gap: '12px', flexWrap: 'wrap'}}>
-                  <input
-                    type="email"
-                    placeholder="your.email@gmail.com"
-                    value={earlyAccessEmail}
-                    onChange={(e) => setEarlyAccessEmail(e.target.value)}
-                    required
-                    style={{
-                      flex: 1,
-                      minWidth: '200px',
-                      padding: '14px 16px',
-                      borderRadius: '10px',
-                      border: '2px solid rgba(255,255,255,0.2)',
-                      background: 'rgba(0,0,0,0.3)',
-                      color: '#fff',
-                      fontSize: '15px',
-                      outline: 'none'
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={earlyAccessSubmitting}
-                    style={{
-                      padding: '14px 28px',
-                      borderRadius: '10px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #00f5ff 0%, #7c3aed 100%)',
-                      color: '#fff',
-                      fontSize: '15px',
-                      fontWeight: 700,
-                      cursor: earlyAccessSubmitting ? 'not-allowed' : 'pointer',
-                      opacity: earlyAccessSubmitting ? 0.7 : 1,
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {earlyAccessSubmitting ? 'Joining...' : 'Get Early Access →'}
-                  </button>
+              <div className={styles.videoPlaceholder}>
+                Add your demo video URL in <strong>NEXT_PUBLIC_DEMO_VIDEO_URL</strong>.
+              </div>
+            )}
+            <p className={styles.videoCaption}>
+              A quick product walkthrough covering the parent app, teacher workflows, and Dash AI.
+            </p>
+          </div>
+        </section>
+
+        <section id="features" className={styles.section}>
+          <div className={`${styles.sectionHeader} ${styles.reveal}`} data-reveal>
+            <span>Core platform</span>
+            <h2>Everything your school needs in one intelligent workspace.</h2>
+            <p>Replace disconnected tools with a unified, high‑signal experience for staff and families.</p>
+            <p className={styles.sectionNote}>
+              Feature availability depends on plan and rollout; beta modules can be enabled on request.
+            </p>
+          </div>
+          <div className={styles.featureGrid}>
+            {featureCards.map((card, index) => (
+              <div
+                key={card.title}
+                className={`${styles.featureCard} ${styles.reveal}`}
+                data-reveal
+                style={{ transitionDelay: `${index * 80}ms` }}
+              >
+                <div className={styles.featureTag}>{card.tag}</div>
+                <h3>{card.title}</h3>
+                <p>{card.copy}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="dash-ai" className={styles.sectionAlt}>
+          <div className={styles.sectionSplit}>
+            <div className={styles.reveal} data-reveal>
+              <span className={styles.sectionLabel}>Dash AI</span>
+              <h2>AI workflows with educator control built in.</h2>
+              <p>
+                Dash AI supports teachers and principals with lesson ideas, progress insights, and parent-ready
+                summaries. You keep the final say. No black box.
+              </p>
+              <ul className={styles.inlineList}>
+                <li>Step‑by‑step lesson guides</li>
+                <li>Progress and engagement analysis</li>
+                <li>Parent‑friendly summaries</li>
+              </ul>
+              <div className={styles.sectionButtons}>
+                <Link href="/sign-in" className={styles.primarySolid}>
+                  Explore Dash AI
+                </Link>
+                <Link href="/apply" className={styles.primaryGhost}>
+                  Talk to us
+                </Link>
+              </div>
+            </div>
+            <div className={`${styles.sectionPanel} ${styles.reveal}`} data-reveal>
+              <div className={styles.sectionPanelHeader}>Sample insight</div>
+              <h3>Grade R engagement ↑ 18%</h3>
+              <p>
+                Dash AI detected higher engagement in sensory activities. Suggested three new lesson themes for the week.
+              </p>
+              <div className={styles.sectionPanelFoot}>Updated 3 mins ago • Human-reviewed</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="roles" className={styles.section}>
+          <div className={`${styles.sectionHeader} ${styles.reveal}`} data-reveal>
+            <span>Built for every role</span>
+            <h2>One platform, tailored experiences.</h2>
+            <p>EduDash Pro adapts to principals, teachers, and parents without fragmenting the system.</p>
+          </div>
+          <div className={styles.roleGrid}>
+            {roleCards.map((role, index) => (
+              <div
+                key={role.title}
+                className={`${styles.roleCard} ${styles.reveal}`}
+                data-reveal
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
+                <h3>{role.title}</h3>
+                <p>{role.copy}</p>
+                <ul>
+                  {role.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="programs" className={styles.sectionAlt}>
+          <div className={styles.sectionSplit}>
+            <div className={styles.reveal} data-reveal>
+              <span className={styles.sectionLabel}>Programs</span>
+              <h2>Aftercare and community programs, streamlined.</h2>
+              <p>
+                Our aftercare suite handles registrations, proof‑of‑payment, and parent comms while keeping
+                the core school platform front and center.
+              </p>
+              <div className={`${styles.aftercareCard} ${styles.reveal}`} data-reveal>
+                <div>
+                  <h4>EduDash Pro Aftercare</h4>
+                  <p>Registrations, payment tracking, and WhatsApp onboarding in one flow.</p>
                 </div>
-                {earlyAccessError && (
-                  <p style={{color: '#ef4444', fontSize: '13px', margin: 0}}>{earlyAccessError}</p>
-                )}
-                <p style={{color: '#6B7280', fontSize: '12px', margin: '4px 0 0'}}>
-                  🔒 We'll only use this to notify you about app availability.
-                </p>
-              </form>
+                <div>
+                  <span className={styles.aftercareBadge}>
+                    {aftercareSpotsRemaining === null
+                      ? "Early bird slots"
+                      : `${aftercareSpotsRemaining} early bird slots left`}
+                  </span>
+                  <Link href="/aftercare" className={styles.primarySolidSmall}>
+                    View program
+                  </Link>
+                </div>
+              </div>
+            </div>
+            <div className={styles.programStack}>
+              <div className={styles.reveal} data-reveal>
+                <h3>Live lessons & meetings</h3>
+                <p>Parent calls, class check‑ins, and live lesson sessions.</p>
+              </div>
+              <div className={styles.reveal} data-reveal>
+                <h3>Fee workflows</h3>
+                <p>Payment reminders, proof review, and automated receipts.</p>
+              </div>
+              <div className={styles.reveal} data-reveal>
+                <h3>Digital enrollment</h3>
+                <p>Faster approvals and smoother onboarding for families.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <div className={`${styles.sectionHeader} ${styles.reveal}`} data-reveal>
+            <span>Early access</span>
+            <h2>Get the parent app beta.</h2>
+            <p>We are onboarding new schools and parent testers now.</p>
+          </div>
+          <div className={`${styles.earlyAccessCard} ${styles.reveal}`} data-reveal>
+            <div>
+              <h3>Join the early access list</h3>
+              <p>We will contact you with onboarding steps and a private mobile app invite.</p>
+            </div>
+            <form className={styles.earlyAccessForm} onSubmit={handleEarlyAccessSubmit}>
+              <input
+                type="email"
+                placeholder="name@email.com"
+                value={earlyAccessEmail}
+                onChange={(e) => setEarlyAccessEmail(e.target.value)}
+              />
+              <button type="submit" disabled={earlyAccessSubmitting}>
+                {earlyAccessSubmitting ? "Submitting..." : earlyAccessSubmitted ? "Joined" : "Join"}
+              </button>
+            </form>
+            {earlyAccessError && <p className={styles.formError}>{earlyAccessError}</p>}
+            {earlyAccessSubmitted && !earlyAccessError && (
+              <p className={styles.formSuccess}>Thanks! We will email you with next steps.</p>
             )}
           </div>
-          
-          <div className="heroCtas">
-            <Link href="/sign-in" className="btn btnCyan" style={{height: '48px', padding: '0 32px', fontSize: '16px', borderRadius: '12px', fontWeight: 700}}>Sign In →</Link>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Early Bird Aftercare Special */}
-      <section id="aftercare" style={{
-        background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 50%, #8b5cf6 100%)',
-        padding: '60px 0',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
-        {/* Decorative stars */}
-        <div style={{position: 'absolute', top: '20px', left: '10%', fontSize: '24px', opacity: 0.6}}>✨</div>
-        <div style={{position: 'absolute', top: '40px', right: '15%', fontSize: '20px', opacity: 0.5}}>⭐</div>
-        <div style={{position: 'absolute', bottom: '30px', left: '20%', fontSize: '18px', opacity: 0.4}}>✨</div>
-        <div style={{position: 'absolute', bottom: '50px', right: '10%', fontSize: '22px', opacity: 0.5}}>⭐</div>
-        
-        <div className="container" style={{maxWidth: '900px', textAlign: 'center'}}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(251, 191, 36, 0.2)',
-            border: '2px solid #fbbf24',
-            borderRadius: '50px',
-            padding: '8px 20px',
-            marginBottom: '24px'
-          }}>
-            <span style={{fontSize: '20px'}}>⚡</span>
-            <span style={{color: '#fbbf24', fontWeight: 800, fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Early Bird Special</span>
-          </div>
-          
-          <h2 style={{
-            fontSize: 'clamp(32px, 5vw, 48px)',
-            fontWeight: 900,
-            color: '#fff',
-            marginBottom: '16px',
-            textShadow: '0 2px 20px rgba(0,0,0,0.3)'
-          }}>
-            <span style={{color: '#fbbf24'}}>50%</span> Registration OFF
-          </h2>
-          
-          {/* Spots Remaining Counter */}
-          {aftercareSpotsRemaining !== null && (
-            <div style={{
-              background: aftercareSpotsRemaining <= 5 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)',
-              border: `2px solid ${aftercareSpotsRemaining <= 5 ? '#ef4444' : '#10b981'}`,
-              borderRadius: '12px',
-              padding: '16px 32px',
-              display: 'inline-block',
-              marginBottom: '24px'
-            }}>
-              <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'}}>
-                <span style={{fontSize: '28px'}}>{aftercareSpotsRemaining <= 5 ? '🔥' : '🎯'}</span>
-                <div>
-                  <p style={{color: '#fff', fontSize: '14px', margin: 0, opacity: 0.9}}>Early Bird Spots Left</p>
-                  <p style={{
-                    color: aftercareSpotsRemaining <= 5 ? '#fca5a5' : '#6ee7b7',
-                    fontSize: '36px',
-                    fontWeight: 900,
-                    margin: 0,
-                    lineHeight: 1
-                  }}>
-                    {aftercareSpotsRemaining} <span style={{fontSize: '18px', fontWeight: 600}}>/ {EARLY_BIRD_LIMIT}</span>
-                  </p>
-                </div>
-              </div>
-              {aftercareSpotsRemaining <= 5 && aftercareSpotsRemaining > 0 && (
-                <p style={{color: '#fca5a5', fontSize: '13px', margin: '8px 0 0', fontWeight: 600}}>
-                  ⚠️ Almost sold out! Don't miss the 50% discount
-                </p>
-              )}
+        <section id="pricing" className={styles.sectionAlt}>
+          <div className={styles.sectionSplit}>
+            <div className={styles.reveal} data-reveal>
+              <span className={styles.sectionLabel}>Pricing</span>
+              <h2>Flexible tiers for every school size.</h2>
+              <p>Start free, then unlock AI automation and premium support as you grow.</p>
             </div>
-          )}
-          
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: '24px',
-            flexWrap: 'wrap',
-            marginBottom: '24px'
-          }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.15)',
-              borderRadius: '12px',
-              padding: '16px 24px',
-              backdropFilter: 'blur(10px)'
-            }}>
-              <p style={{color: 'rgba(255,255,255,0.7)', fontSize: '14px', marginBottom: '4px', textDecoration: 'line-through'}}>WAS: R400.00</p>
-              <p style={{color: '#fff', fontSize: '32px', fontWeight: 900}}>NOW: R200.00</p>
-            </div>
-          </div>
-          
-          <div style={{
-            display: 'inline-block',
-            background: '#fbbf24',
-            color: '#1f2937',
-            padding: '10px 24px',
-            borderRadius: '50px',
-            fontWeight: 800,
-            fontSize: '14px',
-            marginBottom: '20px'
-          }}>
-            AFTERCARE PROGRAM • GRADE R TO GRADE 7
-          </div>
-          
-          <p style={{
-            color: 'rgba(255,255,255,0.9)',
-            fontSize: '18px',
-            marginBottom: '32px',
-            maxWidth: '600px',
-            margin: '0 auto 32px'
-          }}>
-            Register your child at <strong>EduDash Pro Community School</strong> for our comprehensive aftercare program with homework assistance, educational activities, and safe supervision.
-          </p>
-          
-          <div style={{display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '32px'}}>
-            <Link 
-              href="/aftercare" 
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: '#fbbf24',
-                color: '#1f2937',
-                padding: '16px 32px',
-                borderRadius: '12px',
-                fontSize: '16px',
-                fontWeight: 800,
-                textDecoration: 'none',
-                boxShadow: '0 4px 20px rgba(251, 191, 36, 0.4)',
-                transition: 'all 0.2s'
-              }}
-            >
-              Register Now →
-            </Link>
-          </div>
-          
-          <div style={{display: 'flex', justifyContent: 'center', gap: '24px', flexWrap: 'wrap', color: 'rgba(255,255,255,0.8)', fontSize: '14px'}}>
-            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-              <span>📧</span>
-              <a href="mailto:info@edudashpro.org.za" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>info@edudashpro.org.za</a>
-            </div>
-            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-              <span>📞</span>
-              <a href="tel:+27674770975" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>+27 67 477 0975</a>
-            </div>
-            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-              <span style={{color: '#25D366'}}>💬</span>
-              <a href="https://wa.me/27815236000" style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>+27 81 523 6000</a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="lp-section alt">
-        <div className="container">
-          <div className="sectionHeader">
-            <span className="kicker" style={{color: 'var(--cyan)'}}>Features</span>
-            <h2 style={{fontSize: 'clamp(28px, 4vw, 40px)', fontWeight: 800, marginTop: '8px'}}>Built for South African education</h2>
-          </div>
-          <div className="featureGrid">
-            <div className="featureCard">
-              <div className="featureIcon">🎓</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Student-centered</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Track progress, homework, and achievements with ease. Personalized learning paths powered by AI.</p>
-            </div>
-            <div className="featureCard">
-              <div className="featureIcon">👨‍🏫</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Teacher tools</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Lesson planning, attendance, grading, and parent communication—all in one place.</p>
-            </div>
-            <div className="featureCard">
-              <div className="featureIcon">👪</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Parent engagement</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Real-time updates, messaging, and insights into your child's learning journey.</p>
-            </div>
-            <div className="featureCard">
-              <div className="featureIcon">🇿🇦</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Locally relevant</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Multi-language support (English, Afrikaans, Zulu, Xhosa), ZAR pricing, and South African curriculum alignment.</p>
-            </div>
-            <div className="featureCard">
-              <div className="featureIcon">🤖</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>AI-enhanced</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Generate lessons, grade homework, and analyze progress with child-safe AI tools.</p>
-            </div>
-            <div className="featureCard">
-              <div className="featureIcon">📱</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Mobile-first</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Works on any device—web, Android, iOS—with offline support for low-connectivity areas.</p>
-            </div>
-            <div className="featureCard" style={{background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)', border: '2px solid #7c3aed'}}>
-              <div className="featureIcon">🤖</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: '#c4b5fd'}}>Interactive Robotics & Coding</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>CAPS-aligned robotics simulations, block coding, and AI-powered STEM activities for Grades R-12. <span style={{color: '#7c3aed', fontWeight: 600}}>NEW!</span></p>
-            </div>
-            <div className="featureCard" style={{background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)', border: '2px solid #10b981'}}>
-              <div className="featureIcon">📚</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: '#6ee7b7'}}>37 DBE Textbooks</h3>
-              <p className="muted" style={{fontSize: '14px', lineHeight: 1.6}}>Browse, read, and generate AI diagrams from official CAPS textbooks. Perfect for visual learners!</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Dash AI Section */}
-      <section id="dash-ai" className="lp-section" style={{background: 'radial-gradient(circle at 50% 50%, rgba(0,245,255,.1), transparent 60%)'}}>
-        <div className="container" style={{textAlign: 'center', maxWidth: '900px'}}>
-          <span className="pillCyan">🤖 Dash AI Assistant</span>
-          <h2 style={{fontSize: 'clamp(28px, 4vw, 40px)', fontWeight: 800, margin: '16px 0'}}>Your Intelligent Teaching Partner</h2>
-          <p className="muted" style={{fontSize: '18px', marginBottom: '40px'}}>AI-powered tools that understand South African education</p>
-          <div className="aiGrid">
-            <div className="aiCard">
-              <div style={{fontSize: '40px', marginBottom: '12px'}}>🎓</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Voice Commands</h3>
-              <p className="muted" style={{fontSize: '13px'}}>Control with voice in en-ZA, af-ZA, zu-ZA, xh-ZA</p>
-            </div>
-            <div className="aiCard">
-              <div style={{fontSize: '40px', marginBottom: '12px'}}>✨</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>Smart Reports</h3>
-              <p className="muted" style={{fontSize: '13px'}}>Generate insights and progress analytics</p>
-            </div>
-            <div className="aiCard">
-              <div style={{fontSize: '40px', marginBottom: '12px'}}>🧠</div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '8px'}}>AI Insights</h3>
-              <p className="muted" style={{fontSize: '13px'}}>Actionable child development insights</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Role-Specific Features */}
-      <section className="lp-section alt">
-        <div className="container">
-          <div className="sectionHeader">
-            <span className="kicker" style={{color: 'var(--cyan)'}}>Built for Everyone</span>
-            <h2 style={{fontSize: 'clamp(28px, 4vw, 36px)', fontWeight: 800, marginTop: '8px'}}>Tailored for Each Role</h2>
-          </div>
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px'}}>
-            <div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '16px', color: 'var(--cyan)'}}>👨‍🏫 For Teachers</h3>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', color: 'var(--muted)', lineHeight: '2'}}>
-                <li>AI-powered lesson planning</li>
-                <li>Automated grading & feedback</li>
-                <li>Real-time progress tracking</li>
-                <li>Parent communication tools</li>
-              </ul>
-            </div>
-            <div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '16px', color: 'var(--cyan)'}}>👪 For Parents</h3>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', color: 'var(--muted)', lineHeight: '2'}}>
-                <li>Daily updates on child progress</li>
-                <li>Direct messaging with teachers</li>
-                <li>Photo & video sharing</li>
-                <li>Event notifications</li>
-              </ul>
-            </div>
-            <div>
-              <h3 style={{fontSize: '18px', fontWeight: 700, marginBottom: '16px', color: 'var(--cyan)'}}>🏫 For Principals</h3>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', color: 'var(--muted)', lineHeight: '2'}}>
-                <li>School-wide insights dashboard</li>
-                <li>Teacher performance analytics</li>
-                <li>Enrollment management</li>
-                <li>Compliance tracking</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="lp-section">
-        <div className="container">
-          <div className="sectionHeader">
-            <span className="kicker" style={{color: 'var(--cyan)'}}>Testimonials</span>
-            <h2 style={{fontSize: 'clamp(28px, 4vw, 36px)', fontWeight: 800, marginTop: '8px'}}>Loved by Educators</h2>
-          </div>
-          <div className="testimonialsGrid">
-            <div className="testimonialCard">
-              <p style={{fontSize: '16px', fontStyle: 'italic', marginBottom: '20px', lineHeight: 1.6}}>
-                "EduDash Pro helped my class improve within weeks."
-              </p>
-              <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                <div style={{width: '40px', height: '40px', borderRadius: '50%', background: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0a0a0f'}}>
-                  LM
-                </div>
-                <div>
-                  <p style={{margin: 0, fontSize: '14px', fontWeight: 600}}>Lerato M.</p>
-                  <p className="muted" style={{margin: 0, fontSize: '12px'}}>Teacher, Johannesburg</p>
-                </div>
-              </div>
-            </div>
-            <div className="testimonialCard">
-              <p style={{fontSize: '16px', fontStyle: 'italic', marginBottom: '20px', lineHeight: 1.6}}>
-                "I finally know how my child is doing every day."
-              </p>
-              <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                <div style={{width: '40px', height: '40px', borderRadius: '50%', background: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0a0a0f'}}>
-                  TK
-                </div>
-                <div>
-                  <p style={{margin: 0, fontSize: '14px', fontWeight: 600}}>Thabo K.</p>
-                  <p className="muted" style={{margin: 0, fontSize: '12px'}}>Parent, Pretoria</p>
-                </div>
-              </div>
-            </div>
-            <div className="testimonialCard">
-              <p style={{fontSize: '16px', fontStyle: 'italic', marginBottom: '20px', lineHeight: 1.6}}>
-                "Simplifies admin so I can focus on teaching."
-              </p>
-              <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                <div style={{width: '40px', height: '40px', borderRadius: '50%', background: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#0a0a0f'}}>
-                  MN
-                </div>
-                <div>
-                  <p style={{margin: 0, fontSize: '14px', fontWeight: 600}}>Ms. Naidoo</p>
-                  <p className="muted" style={{margin: 0, fontSize: '12px'}}>Principal, Durban East</p>
-                </div>
+            <div className={`${styles.pricingCard} ${styles.reveal}`} data-reveal>
+              <h3>Launch with confidence</h3>
+              <p>Explore detailed tiers and get a tailored quote for your school.</p>
+              <div className={styles.sectionButtons}>
+                <Link href="/pricing" className={styles.primarySolid}>
+                  View pricing
+                </Link>
+                <Link href="/apply" className={styles.primaryGhost}>
+                  Request proposal
+                </Link>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Pricing Preview */}
-      <section id="pricing" className="lp-section alt" style={{textAlign: 'center'}}>
-        <div className="container">
-          <div className="sectionHeader">
-            <span className="kicker" style={{color: 'var(--cyan)'}}>Pricing</span>
-            <h2 style={{fontSize: 'clamp(28px, 4vw, 36px)', fontWeight: 800, marginTop: '8px'}}>Simple, Transparent Pricing</h2>
-            <p className="muted" style={{fontSize: '16px', marginTop: '12px'}}>For parents and schools across South Africa</p>
+        <section id="faq" className={styles.section}>
+          <div className={`${styles.sectionHeader} ${styles.reveal}`} data-reveal>
+            <span>FAQ</span>
+            <h2>Answers to the most common questions.</h2>
           </div>
-          <div className="pricingGrid">
-            <div className="pricingCard">
-              <p className="kicker" style={{marginBottom: '12px', fontSize: '11px'}}>Free Plan</p>
-              <h3 style={{fontSize: '36px', fontWeight: 800, marginBottom: '4px'}}>R0</h3>
-              <p className="muted" style={{fontSize: '13px', marginBottom: '24px'}}>forever</p>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', textAlign: 'left', color: 'var(--muted)', marginBottom: '32px', lineHeight: '2'}}>
-                <li>Basic student management</li>
-                <li>Parent communication</li>
-                <li>10 AI queries/month</li>
-              </ul>
-              <Link href="/sign-in" className="btn btnOutlineCyan" style={{width: '100%', fontSize: '14px', display: 'block', textAlign: 'center', padding: '12px'}}>Get Started</Link>
-            </div>
-            <div className="pricingCard highlight" style={{position: 'relative'}}>
-              <div style={{position: 'absolute', top: '-12px', right: '24px', background: '#22c55e', color: '#fff', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: 700}}>POPULAR</div>
-              <p style={{marginBottom: '12px', fontSize: '11px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.1em'}}>Parent Starter</p>
-              <h3 style={{fontSize: '36px', fontWeight: 800, marginBottom: '4px', color: '#0a0a0f'}}>R49.50</h3>
-              <p style={{fontSize: '13px', marginBottom: '24px', color: '#0a0a0f'}}>per month</p>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', textAlign: 'left', color: '#0a0a0f', marginBottom: '32px', lineHeight: '2'}}>
-                <li>30 Homework Helper/month</li>
-                <li>AI lesson support</li>
-                <li>Child-safe explanations</li>
-                <li>Progress tracking</li>
-              </ul>
-              <Link href="/sign-in" className="btn" style={{width: '100%', fontSize: '14px', background: '#0a0a0f', color: '#fff', fontWeight: 700, display: 'block', textAlign: 'center', padding: '12px'}}>Start 7-Day Free Trial</Link>
-            </div>
-            <div className="pricingCard">
-              <p className="kicker" style={{marginBottom: '12px', fontSize: '11px'}}>Starter Plan</p>
-              <h3 style={{fontSize: '36px', fontWeight: 800, marginBottom: '4px'}}>R299</h3>
-              <p className="muted" style={{fontSize: '13px', marginBottom: '24px'}}>per month</p>
-              <ul style={{listStyleType: 'disc', paddingLeft: '20px', textAlign: 'left', color: 'var(--muted)', marginBottom: '32px', lineHeight: '2'}}>
-                <li>Essential features</li>
-                <li>AI-powered insights</li>
-                <li>Parent portal</li>
-                <li>WhatsApp notifications</li>
-              </ul>
-              <Link href="/sign-in" className="btn btnOutlineCyan" style={{width: '100%', fontSize: '14px', display: 'block', textAlign: 'center', padding: '12px'}}>Get Started</Link>
-            </div>
+          <div className={styles.faqGrid}>
+            {faqs.map((item, index) => (
+              <div
+                key={item.q}
+                className={`${styles.faqCard} ${styles.reveal}`}
+                data-reveal
+                style={{ transitionDelay: `${index * 100}ms` }}
+              >
+                <h3>{item.q}</h3>
+                <p>{item.a}</p>
+              </div>
+            ))}
           </div>
-          
-          <div style={{marginTop: '48px', textAlign: 'center'}}>
-            <Link href="/pricing" style={{display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '16px 32px', background: 'linear-gradient(135deg, #00f5ff 0%, #0080ff 100%)', color: '#0a0a0f', borderRadius: '12px', fontSize: '16px', fontWeight: 700, textDecoration: 'none', boxShadow: '0 4px 12px rgba(0, 245, 255, 0.3)', transition: 'all 0.2s'}}>
-              View All Plans & Pricing →
-            </Link>
-            <p className="muted" style={{fontSize: '14px', marginTop: '16px'}}>6 plans available for parents and schools</p>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* FAQ */}
-      <section id="faq" className="lp-section">
-        <div className="container" style={{maxWidth: '900px'}}>
-          <div className="sectionHeader">
-            <span className="kicker" style={{color: 'var(--cyan)'}}>FAQ</span>
-            <h2 style={{fontSize: 'clamp(28px, 4vw, 36px)', fontWeight: 800, marginTop: '8px'}}>Frequently Asked Questions</h2>
-          </div>
-          <div className="faqGroup" style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-            <details>
-              <summary style={{fontSize: '16px', fontWeight: 700}}>How does the AI assistance work?</summary>
-              <p className="muted" style={{marginTop: '16px', lineHeight: 1.6, fontSize: '14px'}}>
-                Dash AI uses Claude to generate lesson plans, grade assignments, and provide insights—all processed securely via our Edge Functions with child-safe guardrails.
-              </p>
-            </details>
-            <details>
-              <summary style={{fontSize: '16px', fontWeight: 700}}>Is it safe for preschool children?</summary>
-              <p className="muted" style={{marginTop: '16px', lineHeight: 1.6, fontSize: '14px'}}>
-                Yes. We comply with COPPA, GDPR, and POPIA. Parental consent is required, minimal data is collected, and child data is never used for AI training or advertising.
-              </p>
-            </details>
-            <details>
-              <summary style={{fontSize: '16px', fontWeight: 700}}>Do I need technical skills to use it?</summary>
-              <p className="muted" style={{marginTop: '16px', lineHeight: 1.6, fontSize: '14px'}}>
-                No. EduDash Pro is designed for educators and parents with no technical background. Simple, intuitive interface with voice control in multiple South African languages.
-              </p>
-            </details>
-            <details>
-              <summary style={{fontSize: '16px', fontWeight: 700}}>Can I try before committing?</summary>
-              <p className="muted" style={{marginTop: '16px', lineHeight: 1.6, fontSize: '14px'}}>
-                Yes! We offer a free tier and a 7-day trial for premium plans. No credit card required to start.
-              </p>
-            </details>
-          </div>
+      <footer className={styles.footer}>
+        <div>
+          <h3>EduDash Pro</h3>
+          <p>Next‑gen school operations for Africa and beyond.</p>
         </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="cta">
-        <div className="dots"></div>
-        <div className="inner container">
-          <h2 style={{fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, marginBottom: '16px', color: '#0a0a0f'}}>Ready to Transform Your Preschool?</h2>
-          <p style={{fontSize: '18px', marginBottom: '32px', color: 'rgba(10,10,15,.75)', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto'}}>
-            Join hundreds of educators using EduDash Pro to enhance learning outcomes
-          </p>
-          <div style={{marginBottom: '24px'}}>
-            <div style={{display: 'inline-block', background: 'rgba(10, 10, 15, 0.2)', border: '2px solid #0a0a0f', borderRadius: '12px', padding: '12px 24px', marginBottom: '20px'}}>
-              <p style={{margin: 0, fontSize: '18px', fontWeight: 800, color: '#0a0a0f', textTransform: 'uppercase', letterSpacing: '0.05em'}}>🎉 7-Day Free Trial</p>
-            </div>
-          </div>
-          <div style={{display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap'}}>
-            <Link href="/sign-in" className="btn" style={{background: '#0a0a0f', color: '#fff', height: '48px', padding: '0 32px', borderRadius: '12px', fontSize: '16px', fontWeight: 700}}>Start Free Trial →</Link>
-          </div>
-          <p style={{marginTop: '24px', fontSize: '14px', color: 'rgba(10,10,15,.65)', fontWeight: 600}}>✅ No credit card required • ⭐ Cancel anytime</p>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer style={{borderTop: '1px solid var(--border)', background: '#0a0a0f', padding: '48px 24px', textAlign: 'center'}}>
-        <div className="container" style={{maxWidth: '1200px'}}>
-          <div style={{marginBottom: '24px'}}>
-            <h3 style={{fontSize: '20px', fontWeight: 700, marginBottom: '8px'}}>📚 <span style={{color: 'var(--cyan)'}}>EduDash Pro</span></h3>
-            <p className="muted" style={{fontSize: '13px'}}>Built with ❤️ for South African preschools</p>
-          </div>
-          <div style={{display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '24px', marginBottom: '32px'}}>
-            <Link href="/privacy" className="muted" style={{fontSize: '14px'}}>Privacy Policy</Link>
-            <Link href="/terms" className="muted" style={{fontSize: '14px'}}>Terms of Service</Link>
-            <Link href="/popia" className="muted" style={{fontSize: '14px'}}>POPIA Compliance</Link>
-            <a href="https://edudashpro.org.za" target="_blank" rel="noopener noreferrer" className="muted" style={{fontSize: '14px'}}>Contact</a>
-          </div>
-          <div style={{borderTop: '1px solid var(--border)', paddingTop: '24px'}}>
-            <p style={{color: '#6B7280', fontSize: '13px'}}>© 2025 EduDash Pro. All rights reserved.</p>
-          </div>
+        <div className={styles.footerLinks}>
+          <Link href="/pricing">Pricing</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/data-deletion">Data deletion</Link>
         </div>
       </footer>
     </div>

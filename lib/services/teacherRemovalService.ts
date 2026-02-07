@@ -1,5 +1,13 @@
 import { assertSupabase } from '@/lib/supabase';
 
+/**
+ * Remove a teacher from a school via Edge Function.
+ *
+ * Uses the server-side `remove-teacher` Edge Function which runs
+ * with service_role privileges to bypass RLS policies that block
+ * principals from deleting organization_members or updating other
+ * users' profiles.
+ */
 export async function removeTeacherFromSchool(params: {
   teacherUserId: string;
   organizationId: string;
@@ -11,47 +19,29 @@ export async function removeTeacherFromSchool(params: {
   }
 
   const supabase = assertSupabase();
-
-  // Unassign from classes
-  const { error: classError } = await supabase
-    .from('classes')
-    .update({ teacher_id: null })
-    .eq('teacher_id', teacherUserId)
-    .eq('preschool_id', organizationId);
-  if (classError) throw classError;
-
-  // Deactivate teacher record
-  if (teacherRecordId) {
-    const { error: teacherError } = await supabase
-      .from('teachers')
-      .update({ is_active: false })
-      .or(`user_id.eq.${teacherUserId},id.eq.${teacherRecordId}`);
-    if (teacherError) throw teacherError;
-  } else {
-    const { error: teacherError } = await supabase
-      .from('teachers')
-      .update({ is_active: false })
-      .eq('user_id', teacherUserId);
-    if (teacherError) throw teacherError;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('You must be signed in to remove a teacher');
   }
 
-  // Remove organization membership (revokes seat)
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .delete()
-    .eq('user_id', teacherUserId)
-    .eq('organization_id', organizationId);
-  if (memberError) throw memberError;
+  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/remove-teacher`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+    },
+    body: JSON.stringify({
+      teacher_user_id: teacherUserId,
+      organization_id: organizationId,
+      teacher_record_id: teacherRecordId || null,
+    }),
+  });
 
-  // Clear profile org linkage + downgrade role
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({
-      organization_id: null,
-      preschool_id: null,
-      seat_status: 'inactive',
-      role: 'parent',
-    })
-    .eq('id', teacherUserId);
-  if (profileError) throw profileError;
+  const result = await response.json();
+
+  if (!response.ok || result.error) {
+    throw new Error(result.error || `Failed to remove teacher (${response.status})`);
+  }
 }

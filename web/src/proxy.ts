@@ -93,8 +93,24 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // Refresh session if it exists
-  await supabase.auth.getSession()
+  // Refresh session only when auth cookies exist (avoids noisy refresh errors on public routes)
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('edudash-auth-session'))
+
+  if (hasAuthCookie) {
+    try {
+      const { error: sessionError } = await supabase.auth.getSession()
+      if (sessionError && sessionError.code !== 'refresh_token_not_found') {
+        console.warn('[Middleware] getSession error:', sessionError)
+      }
+    } catch (error) {
+      const authError = error as { code?: string; message?: string }
+      if (authError?.code !== 'refresh_token_not_found') {
+        console.warn('[Middleware] getSession exception:', authError)
+      }
+    }
+  }
 
   return response
 }

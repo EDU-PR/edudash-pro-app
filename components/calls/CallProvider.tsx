@@ -10,6 +10,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -87,7 +88,9 @@ export function CallProvider({ children }: CallProviderProps) {
   const [isCallInterfaceOpen, setIsCallInterfaceOpen] = useState(false);
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
-  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  // appState tracked via ref only – setting React state here caused
+  // full re-renders of the entire provider tree on every AppState flicker.
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
@@ -145,17 +148,19 @@ export function CallProvider({ children }: CallProviderProps) {
     if (!callsEnabled) return;
 
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      console.log('[CallProvider] App state changed:', appState, '->', nextAppState);
-      setAppState(nextAppState);
+      const prevState = appStateRef.current;
+      if (prevState === nextAppState) return; // skip redundant transitions
+      appStateRef.current = nextAppState;
       
-      // When app comes to foreground, check for pending calls from HeadlessJS
-      if (nextAppState === 'active') {
+      // When app comes to foreground from actual background, check for pending calls
+      if (nextAppState === 'active' && prevState !== 'active') {
+        console.log('[CallProvider] App foregrounded from', prevState);
         checkPendingCall();
       }
     });
 
     return () => subscription.remove();
-  }, [appState, callsEnabled]);
+  }, [callsEnabled]);
 
   // Handle Android hardware back button during calls
   useEffect(() => {

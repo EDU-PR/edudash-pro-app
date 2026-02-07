@@ -49,7 +49,8 @@ export async function POST(request: NextRequest) {
 
       // Send invite email
       const { error: emailError } = await resend.emails.send({
-        from: 'EduDash Pro <noreply@edudashpro.org.za>',
+        from: 'EduDash Pro <support@edudashpro.org.za>',
+        reply_to: 'support@edudashpro.org.za',
         to: email,
         subject: `${inviterName || 'Someone'} invited you to join ${preschoolName || 'EduDash Pro'} as a ${roleLabel}`,
         html: generateInviteEmailHtml({

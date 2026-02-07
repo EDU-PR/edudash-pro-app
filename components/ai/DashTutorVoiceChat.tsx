@@ -26,14 +26,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { getWelcomeMessage } from '@/lib/ai/constants';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
+import { getOrganizationType } from '@/lib/tenant/compat';
 import { styles } from '@/components/super-admin/dash-ai-chat/DashAIChat.styles';
 import { ChatMessage, ChatMessageData } from '@/components/super-admin/dash-ai-chat/ChatMessage';
 import { ChatInput } from '@/components/super-admin/dash-ai-chat/ChatInput';
+import {
+  getQuickActions,
+  buildSystemPrompt,
+  cleanForTTS,
+  cleanRawJSON,
+  splitForTTS,
+  detectTextLanguage,
+} from '@/lib/dash-voice-utils';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { SUPPORTED_LANGUAGES } from '@/components/super-admin/voice-orb/useVoiceSTT';
-
-const CHAT_HISTORY_KEY = '@dash_tutor_voice_history';
-const MAX_STORED_MESSAGES = 50;
 
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
@@ -48,61 +54,14 @@ type VoiceOrbRefType = {
   isSpeaking: boolean;
 };
 
-const cleanForTTS = (text: string) =>
-  text
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/`[^`]+`/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/>\s/g, '')
-    .trim();
-
-/**
- * Remove any raw JSON artifacts that might have slipped through
- * This is a safety net to prevent displaying technical data to users
- */
-const cleanRawJSON = (text: string): string => {
-  // If text looks like pure JSON, try to extract the actual message
-  if (text.trim().startsWith('{') && text.includes('content_block_delta')) {
-    const lines = text.split('\n');
-    let extracted = '';
-    
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-          extracted += parsed.delta.text;
-        } else if (parsed.delta?.text) {
-          extracted += parsed.delta.text;
-        } else if (parsed.text) {
-          extracted += parsed.text;
-        } else if (parsed.content) {
-          extracted += parsed.content;
-        }
-      } catch {
-        // Not JSON, keep as is
-        if (!line.includes('content_block_delta') && !line.includes('"type"')) {
-          extracted += line + '\n';
-        }
-      }
-    }
-    
-    return extracted.trim() || text;
-  }
-  
-  // Remove any inline JSON artifacts
-  return text
-    .replace(/\{"type":"content_block_delta"[^}]*\}/g, '')
-    .replace(/\{"delta":\{"text":"[^"]*"\}\}/g, '')
-    .trim();
-};
-
 const findLanguageName = (code: SupportedLanguage | null) => {
   if (!code) return null;
   const match = SUPPORTED_LANGUAGES.find((lang) => lang.code === code);
   return match?.name || code;
 };
+
+const CHAT_HISTORY_KEY = '@dash_tutor_voice_history';
+const MAX_STORED_MESSAGES = 50;
 
 export default function DashTutorVoiceChat() {
   const { theme } = useTheme();
@@ -220,17 +179,48 @@ export default function DashTutorVoiceChat() {
 
   const buildTutorContext = useCallback(() => {
     const context: string[] = [];
+    const orgType = getOrganizationType(profile);
     
-    // Enhanced personality and teaching approach
     context.push('You are Dash, an intelligent, friendly AI tutor for South African learners.');
-    context.push('\\n**Your Teaching Style:**');
-    context.push('- Patient and encouraging - celebrate small wins! 🎉');
-    context.push('- Break complex topics into simple, bite-sized explanations');
-    context.push('- Use the Socratic method - ask guiding questions instead of giving direct answers');
-    context.push('- Provide culturally relevant examples from South African life');
-    context.push('\\n**Guidelines:**');
+    context.push('You are a full robotics-level AI tutor — smart, fast, and deeply interactive.');
+    
+    // Org-aware teaching approach
+    if (orgType === 'preschool') {
+      context.push('\n**Context:** You are helping preschool-age children (3-6 years old).');
+      context.push('- Use very simple language and short sentences');
+      context.push('- Focus on play-based learning: colors, shapes, counting, phonics, stories');
+      context.push('- Be warm, encouraging, and use fun examples');
+      context.push('- Keep explanations to 1-2 sentences at a time');
+      context.push('- Use visual emoji representations for counting/colors');
+    } else {
+      context.push('\n**CAPS-ALIGNED TEACHING (South African Curriculum):**');
+      context.push('- Follow CAPS (Curriculum Assessment Policy Statements) curriculum frameworks');
+      context.push('- Mathematics: Numbers, Patterns, Space & Shape, Measurement, Data Handling');
+      context.push('- English: Listening, Speaking, Reading, Writing, Language Structures');
+      context.push('- Natural Sciences: Life & Living, Energy & Change, Matter & Materials, Earth & Beyond');
+      context.push('- Social Sciences: Geography (SA provinces, climate) + History (heritage, key events)');
+      context.push('- Use CAPS terminology: Learning Outcome, Assessment Standard, Content Area');
+      context.push('- Reference SA-specific examples (Rand, SA geography, local culture)');
+      context.push('');
+      context.push('**Your Teaching Style (Socratic + Scaffolded):**');
+      context.push('- Use the Socratic method — ask guiding questions instead of giving direct answers');
+      context.push('- Break complex topics into micro-steps');
+      context.push('- Celebrate wins, scaffold failures with hints and worked examples');
+      context.push('- Adapt difficulty dynamically: simplify after 2+ wrong, increase after 3+ right');
+      context.push('- For homework: show worked examples, explain the WHY behind each step');
+    }
+    
+    context.push('\n**INTERACTIVE CAPABILITIES:**');
+    context.push('- Can explain any subject with step-by-step breakdowns');
+    context.push('- Can generate practice questions, quizzes, and mock tests');
+    context.push('- Can analyze homework photos and provide feedback');
+    context.push('- Can help with exam preparation (past papers, revision)');
+    context.push('- Can teach phonics with pronunciation guidance');
+    context.push('- Can provide real-time tutoring with adaptive difficulty');
+    context.push('- Always provide encouragement and positive reinforcement');
+    
+    context.push('\n**Guidelines:**');
     context.push('- Keep responses concise (2-3 short paragraphs unless explaining complex concepts)');
-    context.push('- Use emojis sparingly to stay engaging 😊');
     context.push('- If learner is wrong, give hints and guide them to the answer');
     context.push("- Adapt language complexity to the learner's level");
     context.push('- Ask one question at a time, wait for response');
@@ -238,16 +228,17 @@ export default function DashTutorVoiceChat() {
     
     if (preferredLanguage) {
       const name = findLanguageName(preferredLanguage) || preferredLanguage;
-      context.push(`\\n**Language:** User prefers ${name}. Always respond in ${name}.`);
-      context.push('\\n**CRITICAL for Voice/Audio:**');
+      context.push(`\n**Language:** User prefers ${name}. Always respond in ${name}.`);
+      context.push('\n**CRITICAL for Voice/Audio:**');
       context.push('- NEVER add English pronunciation guides like "(tot-SEENS)" or phonetic spellings');
       context.push('- Write words naturally in the target language only');
       context.push('- The text-to-speech system will handle pronunciation correctly');
-      context.push('- Example: Write "Totsiens" NOT "Totsiens (tot-SEENS)"');
+      context.push('- Write conversationally as if speaking face-to-face');
+      context.push('- Use short sentences with natural pauses (periods, not semicolons)');
     }
     
-    return context.join('\\n');
-  }, [preferredLanguage]);
+    return context.join('\n');
+  }, [preferredLanguage, profile]);
 
   const speakResponse = useCallback(async (text: string) => {
     if (!isVoiceModeRef.current) return;
@@ -255,19 +246,18 @@ export default function DashTutorVoiceChat() {
     const cleanText = cleanForTTS(text);
     if (!cleanText) return;
     
-    console.log('[DashTutorVoiceChat] 🔊 Speaking response:', {
-      isVoiceMode: isVoiceModeRef.current,
-      hasVoiceOrb: !!voiceOrbRef.current,
-      preferredLanguage: preferredLanguage,
-      textLength: cleanText.length,
-      textPreview: cleanText.substring(0, 50),
-    });
+    // Use sentence-aligned chunking for natural TTS with per-chunk language detection
+    const chunks = splitForTTS(cleanText, 1200);
+    if (chunks.length === 0) return;
     
     try {
       setIsSpeaking(true);
-      // Pass preferred language for correct pronunciation (critical for language learning)
-      await voiceOrbRef.current.speakText(cleanText, preferredLanguage || undefined);
-      console.log('[DashTutorVoiceChat] ✅ TTS completed');
+      for (const chunk of chunks) {
+        if (!isSpeakingRef.current) break; // Barge-in support
+        const chunkLang = preferredLanguage
+          || `${detectTextLanguage(chunk)}-ZA` as SupportedLanguage;
+        await voiceOrbRef.current.speakText(chunk, chunkLang);
+      }
     } catch (error) {
       console.error('[DashTutorVoiceChat] TTS error:', error);
     } finally {
@@ -332,6 +322,7 @@ export default function DashTutorVoiceChat() {
           metadata: {
             role: normalizedRole,
             source: 'dash_voice_orb',
+            org_type: getOrganizationType(profile),
             language: preferredLanguage || undefined,
           },
         }),
@@ -388,6 +379,7 @@ export default function DashTutorVoiceChat() {
           metadata: {
             role: normalizedRole,
             source: 'dash_voice_orb',
+            org_type: getOrganizationType(profile),
             language: preferredLanguage || undefined,
           },
         }),

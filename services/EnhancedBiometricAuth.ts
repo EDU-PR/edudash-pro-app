@@ -620,6 +620,10 @@ export class EnhancedBiometricAuth {
             const { data: refreshed, error: refreshErr } = await assertSupabase().auth.refreshSession({ refresh_token: refresh });
             if (!refreshErr && refreshed?.session?.user) {
               sessionRestored = true;
+              // Store the rotated refresh token so the next switch attempt also works
+              if (refreshed.session.refresh_token && refreshed.session.refresh_token !== refresh) {
+                await this.setRefreshTokenForUser(userId, refreshed.session.refresh_token);
+              }
             }
           }
         }

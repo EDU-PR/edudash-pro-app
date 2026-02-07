@@ -4,11 +4,12 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { renderEduDashProEmail } from '../_shared/edudashproEmail.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const FROM_EMAIL = 'EduDash Pro <noreply@edudashpro.org.za>';
+const FROM_EMAIL = 'EduDash Pro <support@edudashpro.org.za>';
 const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';
 
@@ -39,155 +40,69 @@ interface ConfirmationEmailRequest {
 }
 
 function generateConfirmationEmailHTML(data: ConfirmationEmailRequest): string {
-  const currentYear = new Date().getFullYear();
   const feeAmount = data.registration_fee || (data.is_early_bird ? 200 : 400);
   const originalFee = 400;
-  const discountText = data.is_early_bird 
-    ? `<span style="color: #10B981; font-weight: bold;">R${feeAmount}</span> <span style="text-decoration: line-through; color: #999;">R${originalFee}</span> (50% Early Bird Discount!)`
+  const discountText = data.is_early_bird
+    ? `<span style="color:#10B981;font-weight:700;">R${feeAmount}</span> <span style="text-decoration:line-through;color:#94a3b8;">R${originalFee}</span> (50% early bird)`
     : `<strong>R${feeAmount}</strong>`;
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aftercare Registration Confirmation</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5f5;">
-  
-  <!-- Header -->
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-    <h1 style="margin: 0; color: white; font-size: 28px;">🎓 EduDash Pro</h1>
-    <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">Community School Aftercare</p>
-  </div>
-  
-  <!-- Content -->
-  <div style="max-width: 600px; margin: 0 auto; padding: 30px 20px;">
-    
-    <!-- Welcome Card -->
-    <div style="background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h2 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 24px;">
-        Registration Received! ✅
-      </h2>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Dear <strong>${data.parent_name}</strong>,
-      </p>
-      
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 20px 0;">
-        Thank you for registering <strong>${data.child_name}</strong> for the EduDash Pro Community School 2026 Aftercare Program! We're excited to have your child join us.
-      </p>
-      
-      <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 15px; border-radius: 0 8px 8px 0; margin: 20px 0;">
-        <p style="margin: 0; color: #1e40af; font-weight: 600;">
-          📋 Your Payment Reference: <code style="background: #dbeafe; padding: 4px 8px; border-radius: 4px; font-family: monospace;">${data.payment_reference}</code>
-        </p>
-      </div>
-      
-      ${!data.has_proof ? `
-      <!-- Banking Details (only if no proof uploaded) -->
-      <div style="background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px; padding: 20px; margin: 20px 0;">
-        <h3 style="margin: 0 0 15px 0; color: #92400e; font-size: 18px;">
-          💳 Banking Details for Payment
-        </h3>
-        <p style="color: #78350f; margin: 0 0 15px 0;">
-          Registration Fee: ${discountText}
-        </p>
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Bank:</td>
-            <td style="padding: 8px 0; color: #1a1a2e;">${BANK_DETAILS.bank_name}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Account Name:</td>
-            <td style="padding: 8px 0; color: #1a1a2e;">${BANK_DETAILS.account_holder}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Account Number:</td>
-            <td style="padding: 8px 0; color: #1a1a2e; font-family: monospace;">${BANK_DETAILS.account_number}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Branch Code:</td>
-            <td style="padding: 8px 0; color: #1a1a2e; font-family: monospace;">${BANK_DETAILS.branch_code}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Account Type:</td>
-            <td style="padding: 8px 0; color: #1a1a2e;">${BANK_DETAILS.account_type}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #78350f; font-weight: 500;">Reference:</td>
-            <td style="padding: 8px 0; color: #1a1a2e; font-family: monospace; font-weight: bold;">${data.payment_reference}</td>
-          </tr>
-        </table>
-        
-        <div style="background: #fef3c7; border-radius: 8px; padding: 12px; margin-top: 15px;">
-          <p style="margin: 0; color: #92400e; font-size: 14px;">
-            ⚠️ <strong>Important:</strong> Please use the reference above when making payment so we can match your payment to this registration.
-          </p>
-        </div>
-      </div>
-      ` : `
-      <!-- Proof Received Confirmation -->
-      <div style="background: #ecfdf5; border: 1px solid #34d399; border-radius: 12px; padding: 20px; margin: 20px 0;">
-        <h3 style="margin: 0 0 10px 0; color: #065f46; font-size: 18px;">
-          ✅ Proof of Payment Received
-        </h3>
-        <p style="color: #047857; margin: 0;">
-          We have received your proof of payment. Our team will verify it and process your registration within 1-2 business days.
-        </p>
-      </div>
-      `}
-    </div>
-    
-    <!-- WhatsApp Group Card -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        💬 Join Our WhatsApp Group
-      </h3>
-      <p style="color: #4a5568; line-height: 1.6; margin: 0 0 15px 0;">
-        Stay connected with other parents and receive important updates about the aftercare program.
-      </p>
-      <a href="${WHATSAPP_GROUP_LINK}" style="display: inline-block; background: #25D366; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
-        Join WhatsApp Group →
-      </a>
-    </div>
-    
-    <!-- Next Steps -->
-    <div style="background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-      <h3 style="margin: 0 0 15px 0; color: #1a1a2e; font-size: 18px;">
-        📝 What Happens Next?
-      </h3>
-      <ol style="color: #4a5568; line-height: 1.8; margin: 0; padding-left: 20px;">
-        ${!data.has_proof ? `<li>Make payment using the banking details above</li>
-        <li>Send proof of payment via the app or reply to this email</li>` : ''}
-        <li>Our team will verify your payment (1-2 business days)</li>
-        <li>You'll receive a welcome email with your login details</li>
-        <li>Access the parent portal to view schedules and updates</li>
-      </ol>
-    </div>
-    
-    <!-- Support -->
-    <div style="text-align: center; padding: 20px;">
-      <p style="color: #718096; margin: 0 0 10px 0;">
-        Questions? We're here to help!
-      </p>
-      <a href="mailto:${SUPPORT_EMAIL}" style="color: #667eea; text-decoration: none; font-weight: 500;">
-        ${SUPPORT_EMAIL}
-      </a>
-    </div>
-    
-  </div>
-  
-  <!-- Footer -->
-  <div style="text-align: center; padding: 30px 20px; background: #f8fafc;">
-    <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-      EduDash Pro Community School Aftercare<br>
-      © ${currentYear} EduDash Pro. All rights reserved.
-    </p>
-  </div>
-  
-</body>
-</html>`;
+  const paymentReferenceBlock = `
+<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px;margin:14px 0;">
+  <p style="margin:0;color:#0369a1;font-weight:600;">Payment reference: <code style="background:#e0f2fe;padding:2px 6px;border-radius:6px;">${data.payment_reference}</code></p>
+</div>`;
+
+  const paymentDetailsBlock = !data.has_proof
+    ? `
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px;margin:16px 0;">
+  <p style="margin:0 0 10px 0;color:#92400e;font-weight:600;">Bank details</p>
+  <p style="margin:0 0 10px 0;color:#78350f;">Registration fee: ${discountText}</p>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;color:#1f2937;">
+    <tr><td style="padding:6px 0;font-weight:600;">Bank:</td><td style="padding:6px 0;">${BANK_DETAILS.bank_name}</td></tr>
+    <tr><td style="padding:6px 0;font-weight:600;">Account Name:</td><td style="padding:6px 0;">${BANK_DETAILS.account_holder}</td></tr>
+    <tr><td style="padding:6px 0;font-weight:600;">Account Number:</td><td style="padding:6px 0;font-family:monospace;">${BANK_DETAILS.account_number}</td></tr>
+    <tr><td style="padding:6px 0;font-weight:600;">Branch Code:</td><td style="padding:6px 0;font-family:monospace;">${BANK_DETAILS.branch_code}</td></tr>
+    <tr><td style="padding:6px 0;font-weight:600;">Account Type:</td><td style="padding:6px 0;">${BANK_DETAILS.account_type}</td></tr>
+    <tr><td style="padding:6px 0;font-weight:600;">Reference:</td><td style="padding:6px 0;font-family:monospace;font-weight:700;">${data.payment_reference}</td></tr>
+  </table>
+  <p style="margin:10px 0 0 0;color:#92400e;font-size:13px;">Please use the reference above when paying.</p>
+</div>`
+    : `
+<div style="background:#ecfdf5;border:1px solid #86efac;border-radius:12px;padding:14px;margin:16px 0;">
+  <p style="margin:0;color:#166534;">We received your proof of payment and it is being reviewed.</p>
+</div>`;
+
+  const nextStepsBlock = `
+<p><strong>What happens next:</strong></p>
+<ul style="margin:0 0 0 18px;padding:0;color:#475569;">
+  ${!data.has_proof ? '<li>Make payment using the banking details above.</li><li>Upload your proof of payment.</li>' : ''}
+  <li>We verify payment (1-2 business days).</li>
+  <li>You receive a welcome email with login details.</li>
+  <li>Access the parent portal for schedules and updates.</li>
+</ul>`;
+
+  const bodyHtml = `
+<p>Hi ${data.parent_name},</p>
+<p>Thanks for registering <strong>${data.child_name}</strong> for the EduDash Pro Community School aftercare program.</p>
+${paymentReferenceBlock}
+${paymentDetailsBlock}
+${nextStepsBlock}
+<p>Stay updated by joining our WhatsApp community.</p>
+  `.trim();
+
+  const title = data.has_proof ? 'Aftercare registration received' : 'Complete payment to finish registration';
+  const subtitle = data.has_proof ? 'Proof of payment received' : 'Payment required to secure your child’s place';
+
+  return renderEduDashProEmail({
+    title,
+    subtitle,
+    preheader: title,
+    bodyHtml,
+    cta: !data.has_proof
+      ? { label: 'Upload proof of payment', url: 'https://www.edudashpro.org.za/aftercare' }
+      : { label: 'Open EduDash Pro', url: 'https://www.edudashpro.org.za/sign-in' },
+    secondaryCta: { label: 'Join WhatsApp Group', url: WHATSAPP_GROUP_LINK },
+    supportEmail: SUPPORT_EMAIL,
+  });
 }
 
 serve(async (req) => {

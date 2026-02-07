@@ -7,6 +7,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { renderEduDashProEmail } from '../_shared/edudashproEmail.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -528,7 +529,8 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const fromEmail = Deno.env.get('FROM_EMAIL') || 'EduDash Pro <noreply@edudashpro.org.za>';
+    const fromEmail = Deno.env.get('FROM_EMAIL') || 'EduDash Pro <support@edudashpro.org.za>';
+    const supportEmail = Deno.env.get('SUPPORT_EMAIL') || 'support@edudashpro.org.za';
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -924,72 +926,27 @@ serve(async (req) => {
 
       for (const parent of newParentAccounts) {
         const parentFullName = `${parent.firstName || ''} ${parent.lastName || ''}`.trim() || 'Parent';
-        const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-    .credentials { background: #fff; border: 2px solid #667eea; border-radius: 8px; padding: 20px; margin: 20px 0; }
-    .credentials h3 { color: #667eea; margin-top: 0; }
-    .credentials p { margin: 10px 0; }
-    .credentials .value { font-family: monospace; font-size: 16px; background: #f0f0f0; padding: 8px 12px; border-radius: 4px; display: inline-block; }
-    .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
-    .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-    .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🎉 Welcome to EduDash Pro!</h1>
-      <p>Your child's registration has been approved</p>
-    </div>
-    <div class="content">
-      <p>Dear ${parentFullName},</p>
-      
-      <p>Great news! <strong>${childFullName}'s</strong> registration at <strong>${schoolName}</strong> has been approved.</p>
-      
-      <p>Your parent account has been created on the EduDash Pro platform. You can now access your child's information, view progress reports, and communicate with teachers.</p>
-      
-      <div class="credentials">
-        <h3>🔐 Your Login Credentials</h3>
-        <p><strong>Email:</strong><br><span class="value">${parent.email}</span></p>
-        <p><strong>Temporary Password:</strong><br><span class="value">${parent.generatedPassword}</span></p>
-      </div>
-      
-      <div class="warning">
-        <strong>⚠️ Important Security Notice:</strong><br>
-        Please change your password after your first login for security purposes. 
-        Go to Settings → Change Password after logging in.
-      </div>
-      
-      <p style="text-align: center;">
-        <a href="https://edudashpro.org.za/sign-in" class="button">Login to EduDash Pro</a>
-      </p>
-      
-      <p>Or download our mobile app:</p>
-      <ul>
-        <li><a href="https://play.google.com/store/apps/details?id=com.edudashproapp">Android (Google Play)</a></li>
-        <li>iOS (Coming Soon)</li>
-      </ul>
-      
-      <p>If you have any questions, please contact ${schoolName} directly.</p>
-      
-      <p>Best regards,<br>The EduDash Pro Team</p>
-    </div>
-    <div class="footer">
-      <p>This email was sent because a registration was approved at ${schoolName}.</p>
-      <p>© ${new Date().getFullYear()} EduDash Pro. All rights reserved.</p>
-    </div>
-  </div>
-</body>
-</html>
-      `;
+        const bodyHtml = `
+<p>Hi ${parentFullName},</p>
+<p>Great news! <strong>${childFullName}</strong>'s registration at <strong>${schoolName}</strong> has been approved.</p>
+<p>Your parent account is ready so you can track progress, homework, and messages in EduDash Pro.</p>
+<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:16px 0;">
+  <p style="margin:0 0 8px 0;font-weight:600;color:#0f172a;">Your login details</p>
+  <p style="margin:0 0 6px 0;"><strong>Email:</strong> ${parent.email}</p>
+  <p style="margin:0;"><strong>Temporary password:</strong> ${parent.generatedPassword}</p>
+</div>
+<p>Please change your password after your first login for security.</p>
+<p>If you have questions, contact ${schoolName} or reply to this email.</p>
+        `.trim();
+
+        const emailHtml = renderEduDashProEmail({
+          title: `Registration approved at ${schoolName}`,
+          subtitle: `${childFullName} is now enrolled`,
+          preheader: `Registration approved for ${childFullName}`,
+          bodyHtml,
+          cta: { label: 'Login to EduDash Pro', url: 'https://edudashpro.org.za/sign-in' },
+          supportEmail,
+        });
 
         try {
           console.log('[sync-registration] Sending welcome email to:', parent.email);
@@ -1004,6 +961,7 @@ serve(async (req) => {
               to: [parent.email],
               subject: `✅ Registration Approved - Welcome to ${schoolName}!`,
               html: emailHtml,
+              reply_to: supportEmail,
             }),
           });
 

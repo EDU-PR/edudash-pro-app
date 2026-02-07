@@ -259,6 +259,23 @@ export async function getStoredProfileForUser(userId?: string): Promise<UserProf
 }
 
 /**
+ * Merge and persist a profile update into local storage.
+ * Useful after a fresh profile fetch to keep cached org name in sync.
+ */
+export async function updateStoredProfile(partial: Partial<UserProfile> & { id?: string; email?: string }): Promise<void> {
+  try {
+    const existing = await getStoredProfile();
+    const merged = { ...(existing || {}), ...(partial || {}) } as UserProfile;
+    if (!merged.id || !merged.role) {
+      return;
+    }
+    await storeProfile(merged);
+  } catch (error) {
+    console.warn('[SessionManager] updateStoredProfile failed (non-fatal):', error);
+  }
+}
+
+/**
  * Clear stored session and profile data
  */
 async function clearStoredData(): Promise<void> {
@@ -411,6 +428,41 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
 
     const resolvedOrgId = profile.organization_id || profile.preschool_id;
     const resolvedPreschoolId = profile.preschool_id || profile.organization_id;
+    let organizationName: string | undefined;
+    let preschoolName: string | undefined;
+
+    if (resolvedOrgId || resolvedPreschoolId) {
+      const candidateIds = Array.from(new Set([resolvedOrgId, resolvedPreschoolId].filter(Boolean))) as string[];
+      for (const candidateId of candidateIds) {
+        try {
+          const { data: pres } = await assertSupabase()
+            .from('preschools')
+            .select('name')
+            .eq('id', candidateId)
+            .maybeSingle();
+          if (pres?.name) {
+            preschoolName = pres.name;
+            organizationName = pres.name;
+            break;
+          }
+        } catch {
+          // non-fatal
+        }
+        try {
+          const { data: org } = await assertSupabase()
+            .from('organizations')
+            .select('name')
+            .eq('id', candidateId)
+            .maybeSingle();
+          if (org?.name) {
+            organizationName = org.name;
+            break;
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+    }
 
     return {
       id: profile.id,
@@ -420,8 +472,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       last_name: profile.last_name,
       avatar_url: profile.avatar_url,
       organization_id: resolvedOrgId,
-      organization_name: undefined,
+      organization_name: organizationName,
       preschool_id: resolvedPreschoolId,
+      preschool_name: preschoolName,
       seat_status: profile.is_active !== false ? 'active' : 'inactive',
       capabilities,
       created_at: profile.created_at,

@@ -206,10 +206,27 @@ export function usePresence(
   useEffect(() => {
     if (!userId) return;
 
+    // Track the last AppState transition time to ignore rapid cycling.
+    // On Android, AudioModule.setAudioModeAsync can cause a spurious
+    // background→active blip within ~200ms. Ignoring transitions that
+    // reverse within a short window prevents unnecessary presence RPCs.
+    let lastTransitionTime = 0;
+    let pendingBackgroundTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       console.log('[usePresence] App state changed to:', nextAppState);
+      const now = Date.now();
       
       if (nextAppState === 'active') {
+        // If we had a pending "background" action queued, cancel it —
+        // the app never truly went to background.
+        if (pendingBackgroundTimer) {
+          clearTimeout(pendingBackgroundTimer);
+          pendingBackgroundTimer = null;
+          console.log('[usePresence] Cancelled spurious background transition (rapid active→bg→active)');
+          return;
+        }
+        
         // App came to foreground - go online immediately
         console.log('[usePresence] App active - setting online');
         setMyStatus('online');
@@ -219,27 +236,33 @@ export function usePresence(
         // Refresh presence data
         loadPresence();
       } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // App went to background - set to away and send immediate update
-        console.log('[usePresence] App backgrounded - setting away (still available)');
-        setMyStatus('away');
-        
-        // CRITICAL: Send presence update IMMEDIATELY before app is fully suspended
-        // Use Promise.all to ensure it goes through quickly
-        const supabase = assertSupabase();
-        try {
-          await Promise.race([
-            supabase.rpc('upsert_user_presence', {
-              p_user_id: userId,
-              p_status: 'away',
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-          ]);
-          console.log('[usePresence] Background presence update sent successfully');
-        } catch (err) {
-          console.warn('[usePresence] Failed to send background presence:', err);
-        }
-        
-        lastActivityRef.current = Date.now();
+        // Delay the "away" update slightly to filter out spurious blips.
+        // If the app returns to "active" within 500ms, we skip the update entirely.
+        lastTransitionTime = now;
+        pendingBackgroundTimer = setTimeout(async () => {
+          pendingBackgroundTimer = null;
+          
+          // App went to background - set to away and send immediate update
+          console.log('[usePresence] App backgrounded - setting away (still available)');
+          setMyStatus('away');
+          
+          // CRITICAL: Send presence update IMMEDIATELY before app is fully suspended
+          const supabase = assertSupabase();
+          try {
+            await Promise.race([
+              supabase.rpc('upsert_user_presence', {
+                p_user_id: userId,
+                p_status: 'away',
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+            ]);
+            console.log('[usePresence] Background presence update sent successfully');
+          } catch (err) {
+            console.warn('[usePresence] Failed to send background presence:', err);
+          }
+          
+          lastActivityRef.current = Date.now();
+        }, 500); // 500ms debounce to filter Android audio focus blips
       }
     };
 
@@ -247,6 +270,9 @@ export function usePresence(
     
     return () => {
       subscription.remove();
+      if (pendingBackgroundTimer) {
+        clearTimeout(pendingBackgroundTimer);
+      }
     };
   }, [userId, upsertPresence, loadPresence]);
 

@@ -17,6 +17,10 @@ import { getSingleUseVoiceProvider, type VoiceSession, type VoiceProvider } from
 
 export interface OnDeviceVoiceOptions {
   language?: string; // e.g., 'en-ZA', 'af-ZA', 'zu-ZA'
+  /** When true, auto-restarts listening after final result / session end (whisper-flow) */
+  continuous?: boolean;
+  /** Delay (ms) before auto-restart in continuous mode. Default 400 */
+  continuousRestartDelayMs?: number;
   onPartialResult?: (text: string) => void;
   onFinalResult?: (text: string) => void;
   onError?: (error: string) => void;
@@ -33,6 +37,8 @@ export interface OnDeviceVoiceState {
 export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
   const {
     language = 'en-ZA',
+    continuous = false,
+    continuousRestartDelayMs = 400,
     onPartialResult,
     onFinalResult,
     onError,
@@ -49,6 +55,10 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
   const isListeningRef = useRef(false);
   const sessionRef = useRef<VoiceSession | null>(null);
   const providerRef = useRef<VoiceProvider | null>(null);
+  /** Prevents auto-restart when user explicitly called stopListening */
+  const explicitStopRef = useRef(false);
+  /** Timer for whisper-flow continuous restart */
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize provider availability
   useEffect(() => {
@@ -73,6 +83,10 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
 
     return () => {
       mounted = false;
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
       sessionRef.current?.stop?.().catch(() => { /* Intentional: cleanup best-effort */ });
       sessionRef.current = null;
     };
@@ -90,8 +104,10 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
       return;
     }
 
+    explicitStopRef.current = false;
+
     try {
-      console.log('[useOnDeviceVoice] Starting speech recognition with language:', language);
+      console.log('[useOnDeviceVoice] Starting speech recognition with language:', language, continuous ? '(continuous/whisper-flow)' : '');
 
       const provider = providerRef.current ?? await getSingleUseVoiceProvider(language);
       providerRef.current = provider;
@@ -109,6 +125,11 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
           setState(prev => ({ ...prev, finalText: text, partialText: '' }));
           onFinalResult?.(text);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { /* Intentional: error handled */ });
+
+          // Whisper-flow: schedule restart after final result if continuous mode
+          if (continuous && !explicitStopRef.current) {
+            scheduleRestart();
+          }
         },
         onError: (errorMsg) => {
           isListeningRef.current = false;
@@ -138,9 +159,57 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
       setState(prev => ({ ...prev, error: errorMsg }));
       onError?.(errorMsg);
     }
-  }, [state.isAvailable, language, onError]);
+  }, [state.isAvailable, language, continuous, onPartialResult, onFinalResult, onError]);
+
+  /** Whisper-flow: schedule a restart of listening after a short delay */
+  const scheduleRestart = useCallback(() => {
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+    restartTimerRef.current = setTimeout(async () => {
+      if (explicitStopRef.current || !state.isAvailable) return;
+      console.log('[useOnDeviceVoice] 🔄 Whisper-flow: auto-restart listening');
+      isListeningRef.current = false; // Allow startListening to proceed
+      try {
+        await sessionRef.current?.stop?.();
+      } catch { /* best-effort cleanup */ }
+      sessionRef.current = null;
+      // Re-invoke startListening
+      // Note: We re-create provider + session to avoid stale listener state
+      const provider = providerRef.current ?? await getSingleUseVoiceProvider(language);
+      providerRef.current = provider;
+      const session = provider.createSession();
+      sessionRef.current = session;
+      const ok = await session.start({
+        language,
+        onPartial: (text) => {
+          setState(prev => ({ ...prev, partialText: text }));
+          onPartialResult?.(text);
+        },
+        onFinal: (text) => {
+          setState(prev => ({ ...prev, finalText: text, partialText: '' }));
+          onFinalResult?.(text);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          if (!explicitStopRef.current) scheduleRestart();
+        },
+        onError: (errorMsg) => {
+          isListeningRef.current = false;
+          setState(prev => ({ ...prev, isListening: false, error: errorMsg }));
+          onError?.(errorMsg);
+        },
+      });
+      if (ok) {
+        isListeningRef.current = true;
+        setState(prev => ({ ...prev, isListening: true }));
+      }
+    }, continuousRestartDelayMs);
+  }, [language, state.isAvailable, continuousRestartDelayMs, onPartialResult, onFinalResult, onError]);
 
   const stopListening = useCallback(async () => {
+    explicitStopRef.current = true;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
     if (!isListeningRef.current) {
       console.warn('[useOnDeviceVoice] Not listening');
       return;
@@ -158,6 +227,12 @@ export function useOnDeviceVoice(options: OnDeviceVoiceOptions = {}) {
   }, []);
 
   const cancelListening = useCallback(async () => {
+    explicitStopRef.current = true;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
     if (!isListeningRef.current) {
       return;
     }
