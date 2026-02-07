@@ -274,7 +274,7 @@ export default function PrincipalRegistrationsPage() {
       try {
         const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
         const guardianEmail = registration.guardian_email || registration.parent_email;
-        const schoolName = registration.organization_name || profile?.preschool_name || 'your school';
+        const schoolName = registration.organization_name || profile?.preschoolName || 'your school';
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.edudashpro.com';
 
         if (guardianEmail) {
@@ -500,7 +500,7 @@ export default function PrincipalRegistrationsPage() {
       try {
         const childName = `${registration.student_first_name} ${registration.student_last_name}`.trim();
         const guardianEmail = registration.guardian_email || registration.parent_email;
-        const schoolName = registration.organization_name || profile?.preschool_name || 'your school';
+        const schoolName = registration.organization_name || profile?.preschoolName || 'your school';
 
         if (guardianEmail) {
           await supabase.functions.invoke('notifications-dispatcher', {
