@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/Card';
 import { useTranslation } from 'react-i18next';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 // Document types
 type DocumentType = 'birth_certificate' | 'clinic_card' | 'guardian_id';
 
@@ -82,6 +83,7 @@ export default function ParentDocumentUploadScreen() {
   const [uploading, setUploading] = useState<DocumentType | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0); // 0-100 progress percentage
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
+  const [pendingDocImage, setPendingDocImage] = useState<{ uri: string; docType: DocumentType } | null>(null);
   const [registrationData, setRegistrationData] = useState<any>(null);
   const [studentData, setStudentData] = useState<any>(null);
 
@@ -227,21 +229,16 @@ export default function ParentDocumentUploadScreen() {
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
             quality: 0.8,
-            allowsEditing: true,
+            allowsEditing: false,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.8,
-            allowsEditing: true,
+            allowsEditing: false,
           });
 
       if (!result.canceled && result.assets[0]) {
-        await uploadDocument(docType, {
-          uri: result.assets[0].uri,
-          name: `${docType}_${Date.now()}.jpg`,
-          mimeType: 'image/jpeg',
-          size: result.assets[0].fileSize || 0,
-        });
+        setPendingDocImage({ uri: result.assets[0].uri, docType });
       }
     } catch (error) {
       console.error('[DocUpload] Error picking image:', error);
@@ -615,6 +612,27 @@ export default function ParentDocumentUploadScreen() {
           </Text>
         </View>
       </ScrollView>
+      {/* Image confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingDocImage}
+        imageUri={pendingDocImage?.uri ?? null}
+        onConfirm={async (uri) => {
+          if (pendingDocImage) {
+            await uploadDocument(pendingDocImage.docType, {
+              uri,
+              name: `${pendingDocImage.docType}_${Date.now()}.jpg`,
+              mimeType: 'image/jpeg',
+              size: 0,
+            });
+          }
+          setPendingDocImage(null);
+        }}
+        onCancel={() => setPendingDocImage(null)}
+        title="Upload Document"
+        confirmLabel="Upload"
+        confirmIcon="cloud-upload-outline"
+        loading={!!uploading}
+      />
     </SafeAreaView>
   );
 }

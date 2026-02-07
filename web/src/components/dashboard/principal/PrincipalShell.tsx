@@ -26,6 +26,8 @@ import {
   Calendar as CalendarIcon,
   Clock, // For aftercare
   Shirt,
+  ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -85,11 +87,13 @@ export function PrincipalShell({
     { href: '/dashboard/principal/students', label: 'Students', icon: Users },
     { href: '/dashboard/principal/teachers', label: 'Teachers', icon: School },
     { href: '/dashboard/principal/registrations', label: 'Registrations', icon: UserPlus },
+    { href: '/dashboard/principal/join-requests', label: 'Join Requests', icon: ShieldCheck },
     { href: '/dashboard/principal/uniforms', label: 'Uniforms', icon: Shirt },
     { href: '/dashboard/principal/campaigns', label: 'Campaigns', icon: Activity },
     { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
     { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },
     { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
+    { href: '/dashboard/principal/teacher-payroll', label: 'Teacher Payroll', icon: Wallet },
     { href: '/dashboard/principal/reports', label: 'Reports', icon: FileText },
     { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },

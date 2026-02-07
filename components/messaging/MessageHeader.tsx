@@ -210,26 +210,38 @@ export function MessageHeader({
 
 /**
  * MessagesListHeader - Header for the messages list screen
+ * Clean design with title + optional dropdown menu (no "new message" button — that's a FAB now)
  */
 interface MessagesListHeaderProps {
   title: string;
   subtitle?: string;
-  onNewMessage?: () => void;
-  onSettings?: () => void;
+  /** Dropdown menu items */
+  menuItems?: Array<{
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    onPress: () => void;
+    destructive?: boolean;
+  }>;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  /** @deprecated Use menuItems instead */
+  onNewMessage?: () => void;
+  /** @deprecated Use menuItems instead */
+  onSettings?: () => void;
 }
 
 export function MessagesListHeader({
   title,
   subtitle,
-  onNewMessage,
-  onSettings,
+  menuItems,
   showBackButton = true,
   onBackPress,
+  onNewMessage,
+  onSettings,
 }: MessagesListHeaderProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const [showMenu, setShowMenu] = React.useState(false);
   
   const handleBack = () => {
     if (onBackPress) {
@@ -238,6 +250,15 @@ export function MessagesListHeader({
       router.back();
     }
   };
+
+  // Build menu from either new menuItems prop or legacy onSettings/onNewMessage
+  const resolvedMenu = React.useMemo(() => {
+    if (menuItems && menuItems.length > 0) return menuItems;
+    const legacy: typeof menuItems = [];
+    if (onNewMessage) legacy.push({ icon: 'create-outline', label: 'New Message', onPress: onNewMessage });
+    if (onSettings) legacy.push({ icon: 'settings-outline', label: 'Settings', onPress: onSettings });
+    return legacy;
+  }, [menuItems, onNewMessage, onSettings]);
   
   const styles = StyleSheet.create({
     container: {
@@ -276,12 +297,7 @@ export function MessagesListHeader({
       color: theme.textSecondary,
       marginTop: 2,
     },
-    actionsContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    actionButton: {
+    menuButton: {
       width: 40,
       height: 40,
       borderRadius: 20,
@@ -289,50 +305,126 @@ export function MessagesListHeader({
       justifyContent: 'center',
       backgroundColor: theme.elevated,
     },
-    newMessageButton: {
-      backgroundColor: theme.primary,
+    // Dropdown menu
+    menuOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
+    },
+    menuBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    menuDropdown: {
+      position: 'absolute',
+      top: (Platform.OS === 'ios' ? insets.top : StatusBar.currentHeight || 0) + 52,
+      right: 12,
+      backgroundColor: theme.surface,
+      borderRadius: 14,
+      minWidth: 200,
+      paddingVertical: 6,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.25,
+          shadowRadius: 16,
+        },
+        android: {
+          elevation: 12,
+        },
+      }),
+      borderWidth: 1,
+      borderColor: theme.border,
+      zIndex: 1001,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    menuItemText: {
+      fontSize: 15,
+      fontWeight: '500',
+      color: theme.text,
+    },
+    menuItemTextDestructive: {
+      color: theme.error || '#ef4444',
+    },
+    menuSeparator: {
+      height: 1,
+      backgroundColor: theme.border,
+      marginVertical: 4,
+      marginHorizontal: 12,
     },
   });
   
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        {showBackButton && (
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={handleBack}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="arrow-back" size={24} color={theme.text} />
-          </TouchableOpacity>
-        )}
-        
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle && (
-            <Text style={styles.subtitle}>{subtitle}</Text>
-          )}
-        </View>
-        
-        <View style={styles.actionsContainer}>
-          {onSettings && (
+    <>
+      <View style={styles.container}>
+        <View style={styles.content}>
+          {showBackButton && (
             <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={onSettings}
+              style={styles.backButton} 
+              onPress={handleBack}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={theme.text} />
+            </TouchableOpacity>
+          )}
+          
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle && (
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            )}
+          </View>
+          
+          {resolvedMenu.length > 0 && (
+            <TouchableOpacity 
+              style={styles.menuButton}
+              onPress={() => setShowMenu(prev => !prev)}
             >
               <Ionicons name="ellipsis-vertical" size={20} color={theme.text} />
             </TouchableOpacity>
           )}
-          {onNewMessage && (
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.newMessageButton]}
-              onPress={onNewMessage}
-            >
-              <Ionicons name="create-outline" size={20} color={theme.onPrimary} />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
-    </View>
+
+      {/* Dropdown Menu – rendered outside header so it can overlap content */}
+      {showMenu && (
+        <View style={styles.menuOverlay} pointerEvents="box-none">
+          <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={() => setShowMenu(false)} />
+          <View style={styles.menuDropdown}>
+            {resolvedMenu.map((item, i) => (
+              <React.Fragment key={item.label}>
+                {i > 0 && item.destructive && <View style={styles.menuSeparator} />}
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    item.onPress();
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons
+                    name={item.icon}
+                    size={20}
+                    color={item.destructive ? (theme.error || '#ef4444') : theme.textSecondary}
+                  />
+                  <Text style={[styles.menuItemText, item.destructive && styles.menuItemTextDestructive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+      )}
+    </>
   );
 }

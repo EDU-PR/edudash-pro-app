@@ -204,9 +204,8 @@ export default function TeacherPostActivityScreen() {
 
       const result = await ImagePicker.launchCameraAsync({
         quality: 0.8,
-        allowsEditing: false,
+        allowsEditing: true,
       });
-
       if (!result.canceled && result.assets[0]) {
         setSelectedImages(prev => [...prev, result.assets[0].uri].slice(0, 5));
       }

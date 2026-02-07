@@ -30,6 +30,11 @@ import {
   ChevronDown,
   Phone,
   CheckCircle2,
+  BarChart3,
+  Camera,
+  Rocket,
+  GraduationCap,
+  School,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
@@ -212,13 +217,19 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: Megaphone },
         { href: '/dashboard/parent/messages', label: t('dashboard.parent.nav.messages', { defaultValue: 'Messages' }), icon: MessageCircle, badge: unreadCount },
+        { href: '/dashboard/parent/calls', label: t('dashboard.parent.nav.calls', { defaultValue: 'Calls' }), icon: Phone },
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        { href: '/dashboard/parent/homework-history', label: t('dashboard.parent.nav.homework_history', { defaultValue: 'Homework History' }), icon: GraduationCap },
         { href: '/dashboard/parent/attendance', label: t('dashboard.parent.nav.attendance', { defaultValue: 'Attendance' }), icon: CheckCircle2 },
+        { href: '/dashboard/parent/weekly-report', label: t('dashboard.parent.nav.weekly_report', { defaultValue: 'Weekly Report' }), icon: BarChart3 },
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
+        { href: '/dashboard/parent/picture-of-progress', label: t('dashboard.parent.nav.picture_of_progress', { defaultValue: 'Picture of Progress' }), icon: Camera },
         ...(hasExamEligibleChild && !isPreschoolChild
           ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
           : []),
+        ...(isPreschoolChild ? [{ href: '/dashboard/parent/learning-hub', label: t('dashboard.parent.nav.learning_hub', { defaultValue: 'Learning Hub' }), icon: Rocket }] : []),
         { href: '/dashboard/parent/payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: CreditCard },
+        { href: '/dashboard/parent/aftercare', label: t('dashboard.parent.nav.aftercare', { defaultValue: 'Aftercare Registration' }), icon: School },
         ...(!isPreschoolChild ? [{ href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles }] : []),
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
@@ -228,11 +239,15 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/messages?thread=dash-ai-assistant', label: t('dashboard.parent.nav.dash_ai', { defaultValue: 'Dash AI' }), icon: Sparkles },
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },
+        { href: '/dashboard/parent/homework-history', label: t('dashboard.parent.nav.homework_history', { defaultValue: 'Homework History' }), icon: GraduationCap },
         ...(hasExamEligibleChild && !isPreschoolChild
           ? [{ href: '/dashboard/parent/exam-prep', label: t('dashboard.parent.nav.exam_prep', { defaultValue: 'Exam Prep' }), icon: BookOpen }]
           : []),
+        ...(isPreschoolChild ? [{ href: '/dashboard/parent/learning-hub', label: t('dashboard.parent.nav.learning_hub', { defaultValue: 'Learning Hub' }), icon: Rocket }] : []),
         ...(!isPreschoolChild ? [{ href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles }] : []),
         { href: '/dashboard/parent/children', label: t('dashboard.parent.nav.my_children', { defaultValue: 'My Children' }), icon: Users },
+        { href: '/dashboard/parent/calls', label: t('dashboard.parent.nav.calls', { defaultValue: 'Calls' }), icon: Phone },
+        { href: '/dashboard/parent/aftercare', label: t('dashboard.parent.nav.aftercare', { defaultValue: 'Aftercare Registration' }), icon: School },
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },
       ];
     }

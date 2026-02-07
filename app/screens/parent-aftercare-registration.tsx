@@ -11,6 +11,7 @@ import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { Ionicons } from '@expo/vector-icons';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 // EduDash Pro Community School ID
 const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
 const EARLY_BIRD_LIMIT = 20; // First 20 registrations get 50% off
@@ -52,6 +53,7 @@ export default function ParentAftercareRegistrationScreen() {
   const [paymentMethod, setPaymentMethod] = useState<'eft' | 'cash' | 'card' | ''>('');
   const [proofOfPayment, setProofOfPayment] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [pendingPopUri, setPendingPopUri] = useState<string | null>(null);
 
   // State
   const [loading, setLoading] = useState(false);
@@ -157,36 +159,13 @@ export default function ParentAftercareRegistrationScreen() {
       
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
       
       if (result.canceled || !result.assets?.[0]?.uri) return;
       
-      setUploadingProof(true);
-      const uri = result.assets[0].uri;
-      const fileName = `aftercare_pop_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-      
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      const { data, error } = await assertSupabase()
-        .storage
-        .from('pop-uploads')
-        .upload(`aftercare/${fileName}`, blob, {
-          contentType: 'image/jpeg',
-          upsert: false,
-        });
-      
-      if (error) throw error;
-      
-      const { data: urlData } = assertSupabase()
-        .storage
-        .from('pop-uploads')
-        .getPublicUrl(`aftercare/${fileName}`);
-      
-      setProofOfPayment(urlData.publicUrl);
-      Alert.alert('Success', 'Proof of payment uploaded successfully!');
+      setPendingPopUri(result.assets[0].uri);
     } catch (error: any) {
       console.error('POP upload error:', error);
       Alert.alert('Upload Failed', error?.message || 'Failed to upload proof of payment. Please try again.');
@@ -856,6 +835,45 @@ export default function ParentAftercareRegistrationScreen() {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+
+      {/* POP confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingPopUri}
+        imageUri={pendingPopUri}
+        onConfirm={async (uri) => {
+          setUploadingProof(true);
+          try {
+            const fileName = `aftercare_pop_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+            const response = await fetch(uri);
+            const blob = await response.blob();
+            const { data, error } = await assertSupabase()
+              .storage
+              .from('pop-uploads')
+              .upload(`aftercare/${fileName}`, blob, {
+                contentType: 'image/jpeg',
+                upsert: false,
+              });
+            if (error) throw error;
+            const { data: urlData } = assertSupabase()
+              .storage
+              .from('pop-uploads')
+              .getPublicUrl(`aftercare/${fileName}`);
+            setProofOfPayment(urlData.publicUrl);
+            Alert.alert('Success', 'Proof of payment uploaded successfully!');
+          } catch (error: any) {
+            console.error('POP upload error:', error);
+            Alert.alert('Upload Failed', error?.message || 'Failed to upload proof of payment.');
+          } finally {
+            setUploadingProof(false);
+          }
+          setPendingPopUri(null);
+        }}
+        onCancel={() => setPendingPopUri(null)}
+        title="Proof of Payment"
+        confirmLabel="Upload"
+        confirmIcon="cloud-upload-outline"
+        loading={uploadingProof}
+      />
     </View>
   );
 }

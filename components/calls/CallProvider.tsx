@@ -29,6 +29,7 @@ import {
 } from '@/lib/calls/CallBackgroundNotification';
 import { setupIncomingCallNotifications } from '@/lib/calls/setupPushNotifications';
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
+import { prewarmCallSystem } from '@/lib/calls/CallPrewarming';
 import { toast } from '@/components/ui/ToastProvider';
 
 // Lazy getter to avoid accessing supabase at module load time
@@ -88,12 +89,37 @@ export function CallProvider({ children }: CallProviderProps) {
   const [isCallInterfaceOpen, setIsCallInterfaceOpen] = useState(false);
   const [answeringCall, setAnsweringCall] = useState<ActiveCall | null>(null);
   const [callState, setCallState] = useState<CallState>('idle');
+  const [callerPhotoUrl, setCallerPhotoUrl] = useState<string | null>(null);
   // appState tracked via ref only – setting React state here caused
   // full re-renders of the entire provider tree on every AppState flicker.
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Check if calls feature is enabled
   const callsEnabled = isCallsEnabled();
+
+  // Fetch caller photo when incoming call arrives
+  useEffect(() => {
+    if (!incomingCall?.caller_id) {
+      setCallerPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await getSupabase()
+          .from('profiles')
+          .select('avatar_url')
+          .eq('id', incomingCall.caller_id)
+          .maybeSingle();
+        if (!cancelled && data?.avatar_url) {
+          setCallerPhotoUrl(data.avatar_url);
+        }
+      } catch (e) {
+        console.warn('[CallProvider] Failed to fetch caller photo:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [incomingCall?.caller_id]);
   
   // Track presence for online/offline detection.
   // Presence is used by messaging and should not be disabled when calls are off.
@@ -188,6 +214,7 @@ export function CallProvider({ children }: CallProviderProps) {
   }, [callsEnabled, incomingCall, answeringCall, outgoingCall, isCallInterfaceOpen]);
   
   // Check for pending calls saved by HeadlessJS task OR background notification handler
+  // Includes retry logic for killed-app scenario where DB connection may not be ready
   const checkPendingCall = useCallback(async () => {
     try {
       // Check HeadlessJS pending call first (Firebase-based)
@@ -206,17 +233,35 @@ export function CallProvider({ children }: CallProviderProps) {
       
       if (pendingCall) {
         // CRITICAL: Verify call is still active before showing incoming call UI
-        // The caller may have hung up while the app was closed/offline
-        console.log('[CallProvider] Verifying call status in database:', pendingCall.call_id);
+        // Retry up to 3 times for killed-app scenario where DB connection may be slow
+        let callStatus: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const { data, error } = await getSupabase()
+              .from('active_calls')
+              .select('status, ended_at')
+              .eq('call_id', pendingCall.call_id)
+              .maybeSingle();
+            
+            if (!error && data) {
+              callStatus = data;
+              break;
+            }
+            
+            if (attempt < 3) {
+              console.log(`[CallProvider] DB check attempt ${attempt} failed, retrying...`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          } catch (err) {
+            console.warn(`[CallProvider] DB check attempt ${attempt} error:`, err);
+            if (attempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        }
         
-        const { data: callStatus, error: statusError } = await getSupabase()
-          .from('active_calls')
-          .select('status, ended_at')
-          .eq('call_id', pendingCall.call_id)
-          .maybeSingle();
-        
-        if (statusError || !callStatus) {
-          console.log('[CallProvider] Call not found in database (may have been deleted):', statusError?.message);
+        if (!callStatus) {
+          console.log('[CallProvider] Call not found in database after retries');
           return;
         }
         
@@ -228,7 +273,6 @@ export function CallProvider({ children }: CallProviderProps) {
             status: callStatus.status,
             ended_at: callStatus.ended_at,
           });
-          // Call has ended - don't show incoming call UI
           return;
         }
         
@@ -245,6 +289,11 @@ export function CallProvider({ children }: CallProviderProps) {
           caller_name: pendingCall.caller_name,
           meeting_url: pendingCall.meeting_url,
           started_at: new Date().toISOString(),
+        });
+        
+        // Pre-warm call system for faster answer
+        prewarmCallSystem(pendingCall.call_type === 'video').catch(err => {
+          console.warn('[CallProvider] Prewarm on pending call failed:', err);
         });
       }
     } catch (error) {
@@ -477,6 +526,11 @@ export function CallProvider({ children }: CallProviderProps) {
       console.log('[CallProvider] Setting incoming call from notification:', activeCall.call_id);
       setIncomingCallRef.current(activeCall);
       
+      // OPTIMIZATION: Pre-warm call system on notification so Daily.co is ready for answer
+      prewarmCallSystem(activeCall.call_type === 'video').catch(err => {
+        console.warn('[CallProvider] Prewarm on notification failed (non-fatal):', err);
+      });
+      
       // Start vibration for incoming call
       Vibration.vibrate([0, 1000, 500, 1000, 500, 1000], true);
     });
@@ -560,6 +614,12 @@ export function CallProvider({ children }: CallProviderProps) {
               ...call,
               meeting_url: meetingUrl,
               caller_name: callerName,
+            });
+            
+            // OPTIMIZATION: Pre-warm call system immediately so Daily.co object
+            // is ready when user presses Answer. This eliminates ~1-2s of latency.
+            prewarmCallSystem(call.call_type === 'video').catch(err => {
+              console.warn('[CallProvider] Prewarm on incoming call failed (non-fatal):', err);
             });
           }
         }
@@ -900,7 +960,7 @@ export function CallProvider({ children }: CallProviderProps) {
         <WhatsAppStyleIncomingCall
           isVisible={!!incomingCall && !answeringCall}
           callerName={incomingCall?.caller_name || 'Unknown'}
-          callerPhoto={null} // TODO: Fetch caller photo from profile
+          callerPhoto={callerPhotoUrl}
           callType={incomingCall?.call_type || 'voice'}
           onAnswer={answerCall}
           onReject={rejectCall}

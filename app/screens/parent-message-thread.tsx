@@ -32,7 +32,13 @@ import {
   MessageComposer,
   getDateKey,
   getDateSeparatorLabel,
+  ForwardMessagePicker,
+  ChatSearchOverlay,
+  MediaGalleryView,
+  StarredMessagesView,
+  SmartQuickReplies,
 } from '@/components/messaging';
+import { MessageScheduler } from '@/components/messaging/MessageScheduler';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Safe imports with fallbacks
@@ -41,6 +47,7 @@ let useAuth: () => { user: any; profile: any };
 let useThreadMessages: (id: string | null) => { data: any[]; isLoading: boolean; error: any; refetch: () => void };
 let useSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isLoading: boolean };
 let useMarkThreadRead: () => { mutate: (args: any) => void };
+let useRealtimeMessages: (threadId: string | null) => void = () => {};
 let assertSupabase: () => any;
 
 // Component imports with fallbacks
@@ -105,10 +112,8 @@ try {
   useThreadMessages = hooks.useThreadMessages;
   useSendMessage = hooks.useSendMessage;
   useMarkThreadRead = hooks.useMarkThreadRead;
-  // Real-time hook for messages and reactions
-  if (hooks.useParentMessagesRealtime) {
-    // Will be used in component
-  }
+  // Real-time hook - MUST be called at top-level of component, NOT inside useEffect
+  useRealtimeMessages = hooks.useParentMessagesRealtime || (() => {});
 } catch {
   useThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} });
   useSendMessage = () => ({ mutateAsync: async () => ({}), isLoading: false });
@@ -175,6 +180,12 @@ export default function ParentMessageThreadScreen() {
   // Reply state
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   
+  // Scroll-to-bottom FAB state
+  const [showScrollFab, setShowScrollFab] = useState(false);
+  
+  // Message scheduler state
+  const [showScheduler, setShowScheduler] = useState(false);
+  
   // Keyboard listeners
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -235,30 +246,37 @@ export default function ParentMessageThreadScreen() {
   }
 
   // Combined messages with optimistic updates
+  // Deduplicates by ID AND by content+sender+time match to prevent the brief
+  // duplication that occurs when the realtime INSERT fires before the optimistic
+  // message is removed from state.
   const allMessages = useMemo(() => {
     const ids = new Set(messages.map(m => m.id));
-    const unique = optimisticMsgs.filter(m => !ids.has(m.id));
+    const unique = optimisticMsgs.filter(m => {
+      // Already replaced by real message with same ID
+      if (ids.has(m.id)) return false;
+      // Also filter if a real message with same content from same sender arrived within 30s
+      return !messages.some(real =>
+        real.sender_id === m.sender_id &&
+        real.content === m.content &&
+        Math.abs(new Date(real.created_at).getTime() - new Date(m.created_at).getTime()) < 30000
+      );
+    });
     return [...messages, ...unique].sort((a, b) => 
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
   }, [messages, optimisticMsgs]);
 
-  // Real-time subscription for messages and reactions
-  // Import at top level instead of dynamic require for better performance
-  useEffect(() => {
-    if (!threadId || !user?.id) return;
-    
-    try {
-      const hooks = require('@/hooks/useParentMessaging');
-      if (hooks.useParentMessagesRealtime) {
-        hooks.useParentMessagesRealtime(threadId);
-      }
-        } catch (err) {
-      if (__DEV__) {
-        logger.warn('ParentThread', 'Real-time hook not available:', err);
-      }
-    }
-  }, [threadId, user?.id]);
+  // Smart quick replies — last received message
+  const lastReceivedMessage = useMemo(() => {
+    const received = allMessages
+      .filter(m => m.sender_id !== user?.id && m.content && typeof m.content === 'string')
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return received[0]?.content;
+  }, [allMessages, user?.id]);
+
+  // Real-time subscription for messages, delivery/read status, and reactions
+  // Called at top-level (not inside useEffect) to respect Rules of Hooks
+  useRealtimeMessages(threadId || null);
 
   // Mark messages as delivered and read when thread is opened
   // Delivered (gray ticks): When user comes online or opens thread
@@ -450,6 +468,9 @@ export default function ParentMessageThreadScreen() {
     setShowMessageActions(true);
   }, []);
 
+  // Get other participant info (must be defined before useThreadOptions)
+  const otherParticipant = useMemo(() => messages.find(m => m.sender_id !== user?.id), [messages, user?.id]);
+
   // Message action handlers - extracted to hook per WARP.md
   const {
     handleReact,
@@ -459,6 +480,16 @@ export default function ParentMessageThreadScreen() {
     handleForward,
     handleDelete,
     handleEdit,
+    handleToggleStar,
+    // Edit state & controls
+    editingMessage,
+    confirmEdit,
+    cancelEdit,
+    // Forward state & controls
+    showForwardPicker,
+    forwardingMessage,
+    confirmForward,
+    cancelForward,
   } = useMessageActions({
     selectedMessage,
     user,
@@ -482,8 +513,23 @@ export default function ParentMessageThreadScreen() {
     handleReport,
     handleBlockUser,
     handleViewContact,
+    // Search overlay state
+    showSearchOverlay,
+    searchResults,
+    searchQuery,
+    isSearching,
+    performSearch,
+    closeSearch,
+    // Media gallery state
+    showMediaGallery,
+    closeMediaGallery,
+    // Starred messages state
+    showStarredMessages: showStarredView,
+    closeStarredMessages,
   } = useThreadOptions({
     threadId,
+    userId: user?.id,
+    otherUserId: otherParticipant?.sender_id,
     refetch,
     setShowOptionsMenu,
     setOptimisticMsgs,
@@ -493,8 +539,7 @@ export default function ParentMessageThreadScreen() {
   // CallProvider context for calls + presence (unified single source)
   const callContext = useCallSafe();
   
-  // Get other participant info
-  const otherParticipant = useMemo(() => messages.find(m => m.sender_id !== user?.id), [messages, user?.id]);
+  // Derived from otherParticipant (defined above useThreadOptions)
   const recipientId = otherParticipant?.sender_id;
   const recipientName = otherParticipant?.sender?.first_name || displayName;
   const recipientRole = otherParticipant?.sender?.role || null;
@@ -605,8 +650,14 @@ export default function ParentMessageThreadScreen() {
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
     const paddingToBottom = 120;
-    isAtBottomRef.current =
-      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    const atBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    isAtBottomRef.current = atBottom;
+    setShowScrollFab(!atBottom);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    listRef.current?.scrollToEnd({ animated: true });
+    setShowScrollFab(false);
   }, []);
 
   // No thread ID error state
@@ -643,24 +694,27 @@ export default function ParentMessageThreadScreen() {
         onOptionsPress={() => setShowOptionsMenu(true)}
       />
 
-      {/* Full-screen wallpaper (covers behind messages + composer) */}
-      <View style={styles.wallpaperContainer}>
-        {currentWallpaper?.type === 'url' ? (
-          <ImageBackground
-            source={{ uri: currentWallpaper.value }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          >
-            <View style={styles.wallpaperOverlay} />
-          </ImageBackground>
-        ) : (
-          <LinearGradient
-            colors={getWallpaperGradient()}
-            style={StyleSheet.absoluteFillObject}
-          />
-        )}
-        
-        {/* Clipping container - messages hide at this boundary */}
+      {/* Content area below header - wallpaper covers messages + composer */}
+      <View style={styles.contentArea}>
+        {/* Full-screen wallpaper layer */}
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          {currentWallpaper?.type === 'url' ? (
+            <ImageBackground
+              source={{ uri: currentWallpaper.value }}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+            >
+              <View style={styles.wallpaperOverlay} />
+            </ImageBackground>
+          ) : (
+            <LinearGradient
+              colors={getWallpaperGradient()}
+              style={StyleSheet.absoluteFillObject}
+            />
+          )}
+        </View>
+
+        {/* Messages area - clips messages at boundary */}
         <View style={styles.messagesClip}>
           {loading ? (
             <View style={styles.center}>
@@ -696,63 +750,90 @@ export default function ParentMessageThreadScreen() {
               contentContainerStyle={[
                 styles.messagesContent,
                 {
-                  // Reserve space for the floating composer so the last message doesn't sit behind it.
-                  paddingBottom: 120 + (Platform.OS === 'ios' ? insets.bottom : 12),
+                  // Just enough space so the last bubble clears the composer
+                  paddingBottom: 56 + (Platform.OS === 'ios' ? insets.bottom : 4),
                 },
               ]}
             />
           )}
 
-          {/* Fade messages out before they reach the composer area */}
+          {/* Subtle bottom fade - works with any wallpaper */}
           <LinearGradient
             pointerEvents="none"
-            colors={['rgba(15,23,42,0)', 'rgba(15,23,42,0.45)', 'rgba(15,23,42,0.92)']}
+            colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.5)']}
             style={styles.messagesBottomFade}
           />
         </View>
-      </View>
 
-      {/* Typing Indicator - show above composer when someone is typing */}
-      {isOtherTyping && (
+        {/* Scroll to bottom FAB */}
+        {showScrollFab && (
+          <TouchableOpacity
+            style={[
+              styles.scrollToBottomFab,
+              { bottom: 80 + keyboardHeight + (Platform.OS === 'ios' ? insets.bottom : 8) },
+            ]}
+            onPress={scrollToBottom}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="chevron-down" size={22} color="#e2e8f0" />
+          </TouchableOpacity>
+        )}
+
+        {/* Typing Indicator - show above composer */}
+        {isOtherTyping && (
+          <View style={[
+            styles.typingIndicatorContainer,
+            { 
+              bottom: Platform.OS === 'ios' 
+                ? Math.max(insets.bottom, 4) + keyboardHeight + 70 
+                : Math.max(insets.bottom, 12) + keyboardHeight + 70,
+            }
+          ]}>
+            <View style={styles.typingIndicatorBubble}>
+              <TypingIndicator color="#94a3b8" size={5} />
+              <Text style={styles.typingIndicatorText}>{typingText}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Smart Quick Replies — contextual suggestions above composer */}
         <View style={[
-          styles.typingIndicatorContainer,
           { 
-            bottom: Platform.OS === 'ios' 
-              ? Math.max(insets.bottom, 4) + keyboardHeight + 70 
-              : Math.max(insets.bottom, 12) + keyboardHeight + 70,
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: keyboardHeight + (Platform.OS === 'ios' ? insets.bottom + 60 : Math.max(insets.bottom, 2) + 60),
+            zIndex: 5,
           }
         ]}>
-          <View style={styles.typingIndicatorBubble}>
-            <TypingIndicator color="#94a3b8" size={5} />
-            <Text style={styles.typingIndicatorText}>{typingText}</Text>
-          </View>
+          <SmartQuickReplies
+            lastReceivedMessage={lastReceivedMessage}
+            onSelectReply={(text) => handleSend(text)}
+            visible={!editingMessage && !replyingTo && !sending}
+          />
         </View>
-      )}
 
-      {/* Floating Composer */}
-      <View style={[
-        styles.composerArea,
-        { 
-          // Push the composer as low as possible now that the bottom nav is hidden on threads.
-          // Keep safe-area inside the composer container so it doesn't overlap the home indicator.
-          bottom: keyboardHeight,
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2),
-        }
-      ]}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(15,23,42,0)', 'rgba(15,23,42,0.7)', 'rgba(15,23,42,0.95)']}
-          style={styles.composerBackdrop}
-        />
-        <MessageComposer
-          onSend={handleSend}
-          onVoiceRecording={handleVoiceRecording}
-          onImageAttach={handleImageAttach}
-          sending={sending}
-          replyingTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          onTyping={setTyping}
-        />
+        {/* Floating Composer - glass effect lets wallpaper show through */}
+        <View style={[
+          styles.composerArea,
+          { 
+            bottom: keyboardHeight,
+            paddingBottom: Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2),
+          }
+        ]}>
+          <View style={styles.composerGlass} />
+          <MessageComposer
+            onSend={editingMessage ? confirmEdit : handleSend}
+            onVoiceRecording={handleVoiceRecording}
+            onImageAttach={handleImageAttach}
+            sending={sending}
+            replyingTo={replyingTo}
+            onCancelReply={() => setReplyingTo(null)}
+            onTyping={setTyping}
+            editingMessage={editingMessage}
+            onCancelEdit={cancelEdit}
+          />
+        </View>
       </View>
       
       {/* Thread Options Menu */}
@@ -808,8 +889,50 @@ export default function ParentMessageThreadScreen() {
           onForward={handleForward}
           onDelete={handleDelete}
           onEdit={selectedMessage.sender_id === user?.id ? handleEdit : undefined}
+          onStar={handleToggleStar}
         />
       )}
+
+      {/* Forward Message Picker */}
+      <ForwardMessagePicker
+        visible={showForwardPicker}
+        onSelect={confirmForward}
+        onCancel={cancelForward}
+      />
+
+      {/* Chat Search Overlay */}
+      <ChatSearchOverlay
+        visible={showSearchOverlay}
+        query={searchQuery}
+        results={searchResults as any[]}
+        isSearching={isSearching}
+        onSearch={performSearch}
+        onClose={closeSearch}
+      />
+
+      {/* Media Gallery */}
+      <MediaGalleryView
+        visible={showMediaGallery}
+        threadId={threadId}
+        onClose={closeMediaGallery}
+      />
+
+      {/* Starred Messages */}
+      <StarredMessagesView
+        visible={showStarredView}
+        threadId={threadId}
+        onClose={closeStarredMessages}
+      />
+
+      {/* Message Scheduler */}
+      <MessageScheduler
+        visible={showScheduler}
+        onClose={() => setShowScheduler(false)}
+        onSchedule={(scheduledAt) => {
+          toast.success(`Message scheduled for ${scheduledAt.toLocaleString()}`);
+          setShowScheduler(false);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -821,8 +944,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f172a',
   },
-  wallpaperContainer: { 
-    flex: 1, 
+  contentArea: {
+    flex: 1,
     position: 'relative',
   },
   wallpaperOverlay: { 
@@ -838,7 +961,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 140,
+    height: 32,
   },
   messages: { 
     flex: 1,
@@ -897,12 +1020,29 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 100,
   },
-  composerBackdrop: {
+  composerGlass: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  scrollToBottomFab: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 120,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(30, 41, 59, 0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 90,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.15)',
   },
   typingIndicatorContainer: {
     position: 'absolute',

@@ -95,8 +95,8 @@ export async function getPendingCall(): Promise<IncomingCallData | null> {
     // Clear after reading (one-time use)
     await AsyncStorage.removeItem(PENDING_CALL_KEY);
     
-    // Ignore stale calls (older than 60 seconds)
-    if (Date.now() - callData.timestamp > 60000) {
+    // Ignore stale calls (older than 90 seconds - allows for slow device wake)
+    if (Date.now() - callData.timestamp > 90000) {
       console.log('[CallHeadlessTask] Ignoring stale pending call');
       return null;
     }
@@ -200,7 +200,7 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
         id: 'incoming-calls',
         name: 'Incoming Calls',
         description: 'Voice and video call notifications - high priority with ringtone',
-        importance: AndroidImportance.HIGH, // HIGH shows heads-up notification
+        importance: AndroidImportance.HIGH, // HIGH for heads-up + full-screen intent
         vibration: true,
         vibrationPattern: RINGTONE_VIBRATION_PATTERN,
         lights: true,
@@ -228,6 +228,8 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
           // CRITICAL: These settings make notification persistent
           ongoing: true, // Cannot be swiped away
           autoCancel: false, // Don't dismiss when tapped
+          // Run as foreground service so Android cannot kill it
+          asForegroundService: true,
           // Full-screen intent shows on lock screen
           fullScreenAction: {
             id: 'default',
@@ -311,14 +313,14 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
       console.log('[CallHeadlessTask] ✅ expo-notifications incoming call notification shown:', callData.call_id);
     }
     
-    // Start continuous vibration to simulate ringtone (30 seconds)
+    // Start continuous vibration to simulate ringtone (60 seconds - matches call timeout)
     if (Platform.OS === 'android') {
       Vibration.vibrate(RINGTONE_VIBRATION_PATTERN, true); // true = repeat
       
-      // Stop vibration after 30 seconds if not answered
+      // Stop vibration after 60 seconds if not answered (matches call timeout)
       setTimeout(() => {
         Vibration.cancel();
-      }, 30000);
+      }, 60000);
     }
     
     // Update badge count

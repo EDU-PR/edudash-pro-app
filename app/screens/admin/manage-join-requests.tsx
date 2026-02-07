@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { InviteService, JoinRequest, JoinRequestStatus, JoinRequestType } from '@/services/InviteService';
+import { AdminWorkflowService } from '@/services/AdminWorkflowService';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { logger } from '@/lib/logger';
@@ -56,8 +57,10 @@ export default function ManageJoinRequestsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [reviewNotes, setReviewNotes] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<JoinRequestWithProfile | null>(null);
+  const [screeningRequestId, setScreeningRequestId] = useState<string | null>(null);
 
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  const isAdminUser = String(profile?.role || '').toLowerCase() === 'admin';
 
   // Fetch join requests
   const {
@@ -176,6 +179,46 @@ export default function ManageJoinRequestsScreen() {
     rejectMutation.mutate(selectedRequest.id);
   }, [selectedRequest, reviewNotes, rejectMutation]);
 
+  const isHiringRequest = useCallback((request: JoinRequestWithProfile): boolean => {
+    return request.request_type === 'teacher_invite' || request.request_type === 'staff_invite';
+  }, []);
+
+  const handleAdminScreen = useCallback(
+    async (
+      request: JoinRequestWithProfile,
+      status: 'recommended' | 'hold' | 'reject_recommended'
+    ) => {
+      setScreeningRequestId(request.id);
+      try {
+        const result = await AdminWorkflowService.screenRequest({
+          requestId: request.id,
+          screeningStatus: status,
+          notes:
+            status === 'recommended'
+              ? 'Screened by admin and recommended for principal final approval.'
+              : status === 'hold'
+              ? 'Screened by admin and held for additional verification.'
+              : 'Screened by admin with rejection recommendation.',
+          checklist: {
+            source: 'manage_join_requests',
+            screened_at: new Date().toISOString(),
+          },
+        });
+
+        if (!result.success) {
+          Alert.alert('Screening Failed', result.error || 'Could not update screening status.');
+          return;
+        }
+
+        Alert.alert('Screened', 'Screening recommendation saved for principal review.');
+        queryClient.invalidateQueries({ queryKey: ['joinRequests'] });
+      } finally {
+        setScreeningRequestId(null);
+      }
+    },
+    [queryClient]
+  );
+
   const getRequesterName = (request: JoinRequestWithProfile): string => {
     const profile = request.requester_profile;
     if (profile?.first_name || profile?.last_name) {
@@ -205,6 +248,8 @@ export default function ManageJoinRequestsScreen() {
   const renderRequestCard = useCallback(
     ({ item }: { item: JoinRequestWithProfile }) => {
       const isPending = item.status === 'pending';
+      const showScreeningActions = isPending && isAdminUser && isHiringRequest(item);
+      const isScreeningPending = screeningRequestId === item.id;
 
       return (
         <View style={styles.card}>
@@ -254,7 +299,7 @@ export default function ManageJoinRequestsScreen() {
             )}
           </View>
 
-          {isPending && (
+          {isPending && !showScreeningActions && (
             <View style={styles.cardFooter}>
               <TouchableOpacity
                 style={styles.rejectButton}
@@ -275,6 +320,32 @@ export default function ManageJoinRequestsScreen() {
             </View>
           )}
 
+          {showScreeningActions && (
+            <View style={styles.screeningFooter}>
+              <TouchableOpacity
+                style={[styles.screenButton, styles.recommendButton, isScreeningPending && styles.buttonDisabled]}
+                onPress={() => handleAdminScreen(item, 'recommended')}
+                disabled={isScreeningPending}
+              >
+                <Text style={styles.screenButtonText}>{isScreeningPending ? '...' : 'Recommend'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.screenButton, styles.holdButton, isScreeningPending && styles.buttonDisabled]}
+                onPress={() => handleAdminScreen(item, 'hold')}
+                disabled={isScreeningPending}
+              >
+                <Text style={styles.screenButtonText}>{isScreeningPending ? '...' : 'Hold'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.screenButton, styles.rejectRecommendButton, isScreeningPending && styles.buttonDisabled]}
+                onPress={() => handleAdminScreen(item, 'reject_recommended')}
+                disabled={isScreeningPending}
+              >
+                <Text style={styles.screenButtonText}>{isScreeningPending ? '...' : 'Reject Rec.'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {item.review_notes && (
             <View style={styles.reviewNotesContainer}>
               <Text style={styles.reviewNotesLabel}>Review Notes:</Text>
@@ -284,7 +355,16 @@ export default function ManageJoinRequestsScreen() {
         </View>
       );
     },
-    [styles, theme, handleApprove, handleReject]
+    [
+      styles,
+      theme,
+      handleApprove,
+      handleReject,
+      handleAdminScreen,
+      isAdminUser,
+      isHiringRequest,
+      screeningRequestId,
+    ]
   );
 
   const renderEmpty = () => {
@@ -559,6 +639,36 @@ function createStyles(theme: any) {
       padding: 16,
       borderTopWidth: 1,
       borderTopColor: theme?.border || '#2a2a4a',
+    },
+    screeningFooter: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingBottom: 16,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: theme?.border || '#2a2a4a',
+    },
+    screenButton: {
+      flex: 1,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    recommendButton: {
+      backgroundColor: '#2563EB',
+    },
+    holdButton: {
+      backgroundColor: '#D97706',
+    },
+    rejectRecommendButton: {
+      backgroundColor: '#DC2626',
+    },
+    screenButtonText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '700',
     },
     rejectButton: {
       flexDirection: 'row',

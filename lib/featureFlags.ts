@@ -38,6 +38,7 @@ export interface FeatureFlags {
   android_only_mode: boolean;
   admob_test_ids: boolean;
   production_db_dev_mode: boolean;
+  adaptive_admin_dashboard_mobile_v1: boolean;
   
   // Language Features
   enableMultilanguageSupport: boolean;
@@ -144,6 +145,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   android_only_mode: process.env.EXPO_PUBLIC_PLATFORM_TESTING === 'android',
   admob_test_ids: process.env.EXPO_PUBLIC_ADMOB_TEST_IDS_ONLY === 'true',
   production_db_dev_mode: process.env.EXPO_PUBLIC_USE_PRODUCTION_DB_AS_DEV === 'true',
+  adaptive_admin_dashboard_mobile_v1: process.env.EXPO_PUBLIC_ADAPTIVE_ADMIN_DASHBOARD_MOBILE_V1 !== 'false',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',
@@ -278,6 +280,8 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
       android_only_mode: DEFAULT_FLAGS.android_only_mode,
       admob_test_ids: DEFAULT_FLAGS.admob_test_ids,
       production_db_dev_mode: DEFAULT_FLAGS.production_db_dev_mode,
+      adaptive_admin_dashboard_mobile_v1:
+        flags.adaptive_admin_dashboard_mobile_v1 ?? DEFAULT_FLAGS.adaptive_admin_dashboard_mobile_v1,
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,

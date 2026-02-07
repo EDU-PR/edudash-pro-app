@@ -28,6 +28,7 @@ import { PettyCashSummaryCard } from '@/components/petty-cash/PettyCashSummary';
 import { PettyCashActions } from '@/components/petty-cash/PettyCashActions';
 import { PettyCashTransactionList } from '@/components/petty-cash/PettyCashTransactionList';
 import { PettyCashModals } from '@/components/petty-cash/PettyCashModals';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 
 // Hook for data management
 import { usePettyCash, type ExpenseFormData } from '@/hooks/usePettyCash';
@@ -71,6 +72,8 @@ export default function PettyCashScreen() {
   const [showReplenishment, setShowReplenishment] = useState(false);
   const [showWithdrawal, setShowWithdrawal] = useState(false);
   const [showReceipts, setShowReceipts] = useState(false);
+  const [pendingReceipt, setPendingReceipt] = useState<{ uri: string; transactionId: string } | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
   // Receipts state
   const [receiptsLoading, setReceiptsLoading] = useState(false);
@@ -237,20 +240,11 @@ export default function PettyCashScreen() {
               }
               const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [4, 3],
+                allowsEditing: false,
                 quality: 0.8,
               });
               if (!result.canceled && result.assets[0]) {
-                const path = await uploadReceiptImage(result.assets[0].uri, transactionId);
-                if (path) {
-                  showAlert({
-                    title: t('common.success'),
-                    message: t('receipt.attached_success', { defaultValue: 'Receipt attached' }),
-                    type: 'success',
-                    buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
-                  });
-                }
+                setPendingReceipt({ uri: result.assets[0].uri, transactionId });
               }
             } catch {
               showAlert({
@@ -278,20 +272,11 @@ export default function PettyCashScreen() {
               }
               const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [4, 3],
+                allowsEditing: false,
                 quality: 0.8,
               });
               if (!result.canceled && result.assets[0]) {
-                const path = await uploadReceiptImage(result.assets[0].uri, transactionId);
-                if (path) {
-                  showAlert({
-                    title: t('common.success'),
-                    message: t('receipt.attached_success', { defaultValue: 'Receipt attached' }),
-                    type: 'success',
-                    buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
-                  });
-                }
+                setPendingReceipt({ uri: result.assets[0].uri, transactionId });
               }
             } catch {
               showAlert({
@@ -381,6 +366,43 @@ export default function PettyCashScreen() {
           showAlert={showAlert}
           theme={theme}
         />
+
+      {/* Receipt confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingReceipt}
+        imageUri={pendingReceipt?.uri ?? null}
+        onConfirm={async (uri) => {
+          if (pendingReceipt) {
+            setUploadingReceipt(true);
+            try {
+              const path = await uploadReceiptImage(uri, pendingReceipt.transactionId);
+              if (path) {
+                showAlert({
+                  title: t('common.success'),
+                  message: t('receipt.attached_success', { defaultValue: 'Receipt attached' }),
+                  type: 'success',
+                  buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+                });
+              }
+            } catch {
+              showAlert({
+                title: t('common.error'),
+                message: t('receipt.attached_failed', { defaultValue: 'Failed to attach receipt' }),
+                type: 'error',
+                buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+              });
+            } finally {
+              setUploadingReceipt(false);
+            }
+          }
+          setPendingReceipt(null);
+        }}
+        onCancel={() => setPendingReceipt(null)}
+        title="Attach Receipt"
+        confirmLabel="Upload"
+        confirmIcon="cloud-upload-outline"
+        loading={uploadingReceipt}
+      />
 
       <AlertModal {...alertProps} />
     </SafeAreaView>

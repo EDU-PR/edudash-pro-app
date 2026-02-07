@@ -538,7 +538,7 @@ export default function TeacherMessageThreadScreen() {
           styles.composerArea,
           { 
             paddingBottom: keyboardHeight > 0 ? 8 : (Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : insets.bottom + 8),
-            backgroundColor: bgSource ? 'rgba(15, 23, 42, 0.85)' : 'transparent',
+            backgroundColor: bgSource ? 'rgba(15, 23, 42, 0.55)' : 'transparent',
           }
         ]}>
           <MessageComposer
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 12,
-    paddingBottom: 100,
+    paddingBottom: 56,
   },
   emptyState: {
     flex: 1,

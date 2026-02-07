@@ -233,8 +233,8 @@ export function MessageAttachmentBar({
         quality: 0.8,
         allowsEditing: true,
       });
-      
-      if (!result.canceled && result.assets.length > 0) {
+
+      if (!result.canceled && result.assets?.length) {
         const asset = result.assets[0];
         const attachment: MessageAttachment = {
           id: `attach_${Date.now()}`,

@@ -40,10 +40,36 @@ const K12_SCHOOL_TYPES = new Set([
   'secondary',
   'community_school',
 ]);
+const PRESCHOOL_TYPES = new Set([
+  'preschool',
+  'ecd',
+  'nursery',
+]);
 
 function isK12SchoolType(value: string | null | undefined): boolean {
   if (!value) return false;
   return K12_SCHOOL_TYPES.has(String(value).toLowerCase());
+}
+
+function normalizeSchoolType(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = String(value).toLowerCase().trim();
+  if (isK12SchoolType(normalized)) return 'k12_school';
+  if (PRESCHOOL_TYPES.has(normalized)) return 'preschool';
+  return null;
+}
+
+function resolveAdminSchoolType(profile: EnhancedUserProfile): string | null {
+  const fromMembership = normalizeSchoolType((profile as any)?.organization_membership?.school_type);
+  if (fromMembership) return fromMembership;
+
+  const fromOrgKind = normalizeSchoolType((profile as any)?.organization_membership?.organization_kind);
+  if (fromOrgKind) return fromOrgKind;
+
+  const fromTenantKind = normalizeSchoolType((profile as any)?.organization_kind || (profile as any)?.tenant_kind);
+  if (fromTenantKind) return fromTenantKind;
+
+  return null;
 }
 
 export function isNavigationLocked(userId: string): boolean {
@@ -635,7 +661,25 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         orgId: profile.organization_id,
         organization_membership: (profile as any)?.organization_membership,
       });
-      debugLog('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard');
+      const adaptiveAdminEnabled = process.env.EXPO_PUBLIC_ADAPTIVE_ADMIN_DASHBOARD_MOBILE_V1 !== 'false';
+      const adminSchoolType = resolveAdminSchoolType(profile);
+      const isSchoolAdminDashboardOrg = adminSchoolType === 'preschool' || adminSchoolType === 'k12_school';
+
+      if (adaptiveAdminEnabled && isSchoolAdminDashboardOrg) {
+        debugLog('[ROUTE DEBUG] Admin routing - using adaptive admin dashboard', {
+          adminSchoolType,
+          adaptiveAdminEnabled,
+        });
+        return {
+          path: '/screens/admin-dashboard',
+          params: { schoolType: adminSchoolType },
+        };
+      }
+
+      debugLog('[ROUTE DEBUG] Admin routing - routing to org-admin-dashboard', {
+        adaptiveAdminEnabled,
+        adminSchoolType,
+      });
       return { path: '/screens/org-admin-dashboard' };
     
     case 'principal_admin':
@@ -759,6 +803,8 @@ export function getRouteForRole(role: Role | string | null): string {
   switch (normalizedRole) {
     case 'super_admin':
       return '/screens/super-admin-dashboard';
+    case 'admin':
+      return '/screens/org-admin-dashboard';
     case 'principal_admin':
       return '/screens/principal-dashboard';
     case 'teacher':

@@ -37,7 +37,7 @@ export type TeacherStatus = 'active' | 'inactive' | 'pending' | 'probation' | 's
 
 export type ContractType = 'permanent' | 'temporary' | 'substitute' | 'probationary';
 
-export type TeacherManagementView = 'overview' | 'hiring' | 'performance' | 'payroll' | 'profile';
+export type TeacherManagementView = 'overview' | 'hiring' | 'applications' | 'performance' | 'payroll' | 'profile';
 
 export type CandidateStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected';
 
@@ -145,6 +145,7 @@ export const getViewIcon = (view: TeacherManagementView): string => {
   switch (view) {
     case 'overview': return 'grid-outline';
     case 'hiring': return 'person-add-outline';
+    case 'applications': return 'document-text-outline';
     case 'performance': return 'analytics-outline';
     case 'payroll': return 'card-outline';
     case 'profile': return 'person-outline';

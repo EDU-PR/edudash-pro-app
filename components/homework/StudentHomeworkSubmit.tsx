@@ -102,10 +102,9 @@ export function StudentHomeworkSubmit({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
-        aspect: [4, 3],
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets?.length) {
         const asset = result.assets[0];
         setMediaFiles(prev => [...prev, {
           uri: asset.uri,

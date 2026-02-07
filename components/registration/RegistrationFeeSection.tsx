@@ -9,6 +9,7 @@ import { createRegistrationStyles } from './child-registration.styles';
 import type { PromoApplied, RegistrationFormErrors } from '@/hooks/useChildRegistration';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 interface RegistrationFeeSectionProps {
   registrationFee: number;
   finalAmount: number;
@@ -50,6 +51,7 @@ export function RegistrationFeeSection({
 }: RegistrationFeeSectionProps) {
   const { theme } = useTheme();
   const styles = createRegistrationStyles(theme);
+  const [pendingPopUri, setPendingPopUri] = React.useState<string | null>(null);
 
   const handlePopUpload = async () => {
     try {
@@ -61,19 +63,25 @@ export function RegistrationFeeSection({
       
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
       
       if (result.canceled || !result.assets?.[0]?.uri) return;
       
-      setUploadingPop(true);
-      const uri = result.assets[0].uri;
+      setPendingPopUri(result.assets[0].uri);
+    } catch (error: any) {
+      console.error('POP picker error:', error);
+      Alert.alert('Error', 'Failed to select image.');
+    }
+  };
+
+  const confirmPopUpload = async (uri: string) => {
+    setUploadingPop(true);
+    try {
       const fileName = `pop_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-      
       const response = await fetch(uri);
       const blob = await response.blob();
-      
       const { data, error } = await assertSupabase()
         .storage
         .from('pop-uploads')
@@ -81,14 +89,11 @@ export function RegistrationFeeSection({
           contentType: 'image/jpeg',
           upsert: false,
         });
-      
       if (error) throw error;
-      
       const { data: urlData } = assertSupabase()
         .storage
         .from('pop-uploads')
         .getPublicUrl(`registration/${fileName}`);
-      
       setProofOfPaymentUrl(urlData.publicUrl);
       Alert.alert('Success', 'Proof of payment uploaded successfully!');
     } catch (error: any) {
@@ -97,6 +102,7 @@ export function RegistrationFeeSection({
     } finally {
       setUploadingPop(false);
     }
+    setPendingPopUri(null);
   };
 
   const paymentMethods = [
@@ -223,6 +229,18 @@ export function RegistrationFeeSection({
         </TouchableOpacity>
       )}
       {errors.proofOfPayment ? <Text style={styles.error}>{errors.proofOfPayment}</Text> : null}
+
+      {/* POP confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingPopUri}
+        imageUri={pendingPopUri}
+        onConfirm={confirmPopUpload}
+        onCancel={() => setPendingPopUri(null)}
+        title="Proof of Payment"
+        confirmLabel="Upload"
+        confirmIcon="cloud-upload-outline"
+        loading={uploadingPop}
+      />
     </View>
   );
 }

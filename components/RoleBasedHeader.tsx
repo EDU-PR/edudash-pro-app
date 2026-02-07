@@ -73,7 +73,7 @@ export function RoleBasedHeader({
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const route = useRoute();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const permissions = usePermissions();
   const { theme, mode, toggleTheme } = useTheme();
   const { tier } = useSubscription();
@@ -82,18 +82,19 @@ export function RoleBasedHeader({
   const currentRole = permissions?.enhancedProfile?.role || 'teacher';
   const currentRoleLabel = useRoleLabel(currentRole);
 
-  // Load avatar URL from user metadata, profiles, or users table
+  // Load avatar URL from user metadata/profile and keep it fresh.
   useEffect(() => {
+    let mounted = true;
+
     const loadAvatarUrl = async () => {
       if (!user?.id) {
-        setAvatarUrl(null);
+        if (mounted) setAvatarUrl(null);
         return;
       }
 
-      // First, try user metadata (fastest)
-      let url = user.user_metadata?.avatar_url;
-      
-      // If not in metadata, try profiles table using auth_user_id
+      let url = (user.user_metadata?.avatar_url as string | undefined) || (profile as any)?.avatar_url || null;
+
+      // If still missing, do a one-time DB lookup.
       if (!url) {
         try {
           const { data: profileData } = await assertSupabase()
@@ -101,30 +102,12 @@ export function RoleBasedHeader({
             .select('avatar_url')
             .eq('auth_user_id', user.id)
             .maybeSingle();
-          
+
           if (profileData?.avatar_url) {
             url = profileData.avatar_url;
           }
         } catch (error) {
           console.debug('Failed to load avatar from profiles:', error);
-        }
-      }
-
-      // If still not found, try profiles table again with different field (fallback)
-      if (!url) {
-        try {
-          const { data: profileData } = await assertSupabase()
-            .from('profiles')
-            .select('avatar_url')
-            .eq('auth_user_id', user.id)
-            .maybeSingle();
-          
-          if (profileData?.avatar_url) {
-            url = profileData.avatar_url;
-            console.log('✓ Avatar loaded from profiles table fallback:', url);
-          }
-        } catch (error) {
-          console.debug('Failed to load avatar from profiles fallback:', error);
         }
       }
       
@@ -134,12 +117,16 @@ export function RoleBasedHeader({
         url = null;
       }
       
-      console.log('Avatar URL loaded:', url ? 'Found' : 'Not found');
-      setAvatarUrl(url || null);
+      if (mounted) {
+        setAvatarUrl(url || null);
+      }
     };
 
-    loadAvatarUrl();
-  }, [user?.id, user?.user_metadata?.avatar_url]);
+    void loadAvatarUrl();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.avatar_url, user?.id, user?.user_metadata?.avatar_url]);
 
   // Convert avatar URL to data URI for web compatibility
   useEffect(() => {
@@ -241,12 +228,24 @@ export function RoleBasedHeader({
   const headerTextColor = textColor || theme.headerText;
 
   const profileInitials = useMemo(() => {
-    const name = (user?.user_metadata?.first_name || '') + ' ' + (user?.user_metadata?.last_name || '');
+    const firstName =
+      (user?.user_metadata?.first_name as string | undefined) ||
+      (profile as any)?.first_name ||
+      '';
+    const lastName =
+      (user?.user_metadata?.last_name as string | undefined) ||
+      (profile as any)?.last_name ||
+      '';
+    const fallbackName =
+      (user?.user_metadata?.full_name as string | undefined) ||
+      (profile as any)?.full_name ||
+      '';
+    const name = `${firstName} ${lastName}`.trim() || fallbackName;
     const parts = name.trim().split(' ').filter(Boolean);
     if (parts.length === 0) return 'U';
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
     return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-  }, [user?.user_metadata]);
+  }, [profile, user?.user_metadata]);
 
   const roleChip = permissions?.enhancedProfile?.role ? (
     <View style={[styles.roleChip, { backgroundColor: theme.surfaceVariant }]}>

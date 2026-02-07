@@ -18,6 +18,7 @@ import {
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { assertSupabase } from "@/lib/supabase";
 import { ensureImageLibraryPermission } from "@/lib/utils/mediaLibrary";
+import { ImageConfirmModal } from "@/components/ui/ImageConfirmModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
@@ -55,6 +56,7 @@ export default function AccountScreen() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showProfileSwitcher, setShowProfileSwitcher] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
@@ -283,10 +285,12 @@ export default function AccountScreen() {
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, aspect: [1, 1], quality: 0.8,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        await uploadProfileImage(result.assets[0].uri);
+        setPendingImageUri(result.assets[0].uri);
       }
     } catch { Alert.alert("Error", "Failed to select image"); }
   };
@@ -300,10 +304,12 @@ export default function AccountScreen() {
       }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, aspect: [1, 1], quality: 0.8,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        await uploadProfileImage(result.assets[0].uri);
+        setPendingImageUri(result.assets[0].uri);
       }
     } catch { Alert.alert("Error", "Failed to take photo"); }
   };
@@ -326,6 +332,9 @@ export default function AccountScreen() {
 
       if (result.success && result.publicUrl) {
         setProfileImage(result.publicUrl);
+        // Keep account header + global app header in sync immediately.
+        await refreshProfile();
+        await load();
         Alert.alert("Success", "Profile picture updated!");
       } else {
         const errorMessage = result.error?.includes('Bucket not found') 
@@ -564,6 +573,23 @@ export default function AccountScreen() {
           setShowProfileSwitcher(false);
           load();
         }}
+      />
+
+      {/* Image preview + confirm modal for profile picture */}
+      <ImageConfirmModal
+        visible={!!pendingImageUri}
+        imageUri={pendingImageUri}
+        title="Profile Photo"
+        confirmLabel="Set Photo"
+        confirmIcon="checkmark-circle-outline"
+        showCrop
+        cropAspect={[1, 1]}
+        loading={uploadingImage}
+        onConfirm={(uri) => {
+          setPendingImageUri(null);
+          uploadProfileImage(uri);
+        }}
+        onCancel={() => setPendingImageUri(null)}
       />
     </SafeAreaView>
   );

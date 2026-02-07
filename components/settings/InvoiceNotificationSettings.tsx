@@ -8,6 +8,7 @@ import { View, Text, Switch, TouchableOpacity, Image, Alert, ScrollView, StyleSh
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 
 // Hooks and Services
 import {
@@ -55,6 +56,7 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
   // Local state
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['events']));
   const [testingNotification, setTestingNotification] = useState<{event: NotificationEvent; channel: NotificationChannel} | null>(null);
+  const [pendingSignatureUri, setPendingSignatureUri] = useState<string | null>(null);
   const showTestSection = process.env.EXPO_PUBLIC_ENABLE_TEST_TOOLS === '1';
 
   const preferences = settings?.preferences;
@@ -103,21 +105,11 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [3, 1], // Wide aspect ratio for signatures
-        quality: 0.8,
-        base64: false,
+  allowsEditing: true,
       });
 
       if (!result.canceled && result.assets?.[0]?.uri) {
-        uploadSignatureMutation.mutate(result.assets[0].uri, {
-          onSuccess: () => {
-            Alert.alert('Success', 'Signature uploaded successfully!');
-          },
-          onError: (error) => {
-            Alert.alert('Upload Failed', `Failed to upload signature: ${error.message}`);
-          },
-        });
+        setPendingSignatureUri(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Image picker error:', error);
@@ -537,6 +529,30 @@ export default function InvoiceNotificationSettings({ onClose }: InvoiceNotifica
 
       {/* Bottom Padding */}
       <View style={styles.bottomPadding} />
+
+      {/* Signature confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingSignatureUri}
+        imageUri={pendingSignatureUri}
+        onConfirm={(uri) => {
+          uploadSignatureMutation.mutate(uri, {
+            onSuccess: () => {
+              Alert.alert('Success', 'Signature uploaded successfully!');
+              setPendingSignatureUri(null);
+            },
+            onError: (error) => {
+              Alert.alert('Upload Failed', `Failed to upload signature: ${error.message}`);
+              setPendingSignatureUri(null);
+            },
+          });
+        }}
+        onCancel={() => setPendingSignatureUri(null)}
+        title="Digital Signature"
+        confirmLabel="Set Signature"
+        showCrop
+        cropAspect={[3, 1]}
+        loading={uploadSignatureMutation.isPending}
+      />
     </ScrollView>
   );
 }

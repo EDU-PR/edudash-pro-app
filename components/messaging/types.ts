@@ -25,6 +25,9 @@ export interface Message {
   voice_url?: string;
   voice_duration?: number;
   reactions?: MessageReaction[];
+  forwarded_from_id?: string; // Set when message was forwarded
+  edited_at?: string; // Set when message was edited
+  is_starred?: boolean;
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';

@@ -10,6 +10,7 @@ export interface OrganizationDetails {
   phone: string | null;
   email: string | null;
   status: string;
+  settings?: Record<string, unknown> | null;
 }
 
 export function useOrganization() {
@@ -25,7 +26,7 @@ export function useOrganization() {
 
       const { data, error } = await supabase
         .from('organizations')
-        .select('id, name, slug, type, phone, email, status')
+        .select('id, name, slug, type, phone, email, status, settings')
         .eq('id', orgId)
         .single();
 
@@ -40,4 +41,3 @@ export function useOrganization() {
     staleTime: 300000, // 5 minutes
   });
 }
-

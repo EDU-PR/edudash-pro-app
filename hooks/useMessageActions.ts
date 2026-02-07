@@ -1,12 +1,13 @@
 /**
- * useMessageActions Hook
- * 
- * Extracted from parent-message-thread.tsx to reduce file size per WARP.md.
- * Handles message actions: react, reply, copy, forward, delete, edit.
+ * useMessageActions Hook — PRODUCTION IMPLEMENTATION
+ *
+ * Handles per-message actions: react, reply, copy, forward, delete, edit, star.
+ * All stubs from the original have been replaced with real implementations.
  */
 
-import { useCallback } from 'react';
-import { Alert } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, Platform } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
@@ -31,6 +32,15 @@ export function useMessageActions({
   setReplyingTo,
   setOptimisticMsgs,
 }: UseMessageActionsProps) {
+  /** When non-null the edit composer is open for this message */
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  /** When true the forward-thread picker modal is open */
+  const [showForwardPicker, setShowForwardPicker] = useState(false);
+  /** The message being forwarded (held while the picker is open) */
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+
+  // ─── React ───────────────────────────────────────────────────────────
+
   const handleReact = useCallback(
     async (emoji: string) => {
       if (!selectedMessage?.id || !user?.id) {
@@ -43,16 +53,19 @@ export function useMessageActions({
         const client = assertSupabase();
 
         // Delete any existing reaction from this user on this message first
-        await client.from('message_reactions').delete().eq('message_id', selectedMessage.id).eq('user_id', user.id);
+        await client
+          .from('message_reactions')
+          .delete()
+          .eq('message_id', selectedMessage.id)
+          .eq('user_id', user.id);
 
         // Add the new reaction
         await client.from('message_reactions').insert({
           message_id: selectedMessage.id,
           user_id: user.id,
-          emoji: emoji,
+          emoji,
         });
 
-        // Refresh messages to show updated reactions
         refetch();
       } catch (err) {
         logger.error('MessageActions', 'Error reacting to message:', err);
@@ -72,7 +85,6 @@ export function useMessageActions({
       try {
         const client = assertSupabase();
 
-        // Delete the user's reaction
         await client
           .from('message_reactions')
           .delete()
@@ -80,9 +92,7 @@ export function useMessageActions({
           .eq('user_id', user.id)
           .eq('emoji', emoji);
 
-        // Refresh messages
         refetch();
-        toast.success('Reaction removed');
       } catch (err) {
         logger.error('MessageActions', 'Error removing reaction:', err);
         toast.error('Failed to remove reaction');
@@ -90,6 +100,8 @@ export function useMessageActions({
     },
     [user?.id, refetch]
   );
+
+  // ─── Reply ───────────────────────────────────────────────────────────
 
   const handleReply = useCallback(() => {
     if (selectedMessage) {
@@ -99,16 +111,88 @@ export function useMessageActions({
     setSelectedMessage(null);
   }, [selectedMessage, setReplyingTo, setShowMessageActions, setSelectedMessage]);
 
-  const handleCopy = useCallback(() => {
+  // ─── Copy to clipboard (was a stub) ─────────────────────────────────
+
+  const handleCopy = useCallback(async () => {
+    if (selectedMessage?.content) {
+      try {
+        await Clipboard.setStringAsync(selectedMessage.content);
+        toast.success('Copied to clipboard');
+      } catch {
+        // Fallback for web
+        if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+          try {
+            await navigator.clipboard.writeText(selectedMessage.content);
+            toast.success('Copied to clipboard');
+          } catch (webErr) {
+            logger.error('MessageActions', 'Web clipboard failed:', webErr);
+            toast.error('Failed to copy');
+          }
+        }
+      }
+    }
     setShowMessageActions(false);
     setSelectedMessage(null);
-  }, [setShowMessageActions, setSelectedMessage]);
+  }, [selectedMessage, setShowMessageActions, setSelectedMessage]);
+
+  // ─── Forward (was a stub) ───────────────────────────────────────────
 
   const handleForward = useCallback(() => {
-    toast.info('Forwarding is not yet implemented', 'Forward');
+    if (!selectedMessage) return;
+    setForwardingMessage(selectedMessage);
+    setShowForwardPicker(true);
     setShowMessageActions(false);
     setSelectedMessage(null);
-  }, [setShowMessageActions, setSelectedMessage]);
+  }, [selectedMessage, setShowMessageActions, setSelectedMessage]);
+
+  /** Called by ForwardMessagePicker when the user selects a target thread */
+  const confirmForward = useCallback(
+    async (targetThreadId: string) => {
+      if (!forwardingMessage || !user?.id) return;
+
+      try {
+        const client = assertSupabase();
+
+        const { error } = await client.from('messages').insert({
+          thread_id: targetThreadId,
+          sender_id: user.id,
+          content: forwardingMessage.content,
+          content_type: (forwardingMessage as any).content_type || 'text',
+          voice_url: forwardingMessage.voice_url || null,
+          voice_duration: forwardingMessage.voice_duration || null,
+          forwarded_from_id: forwardingMessage.id,
+        });
+
+        if (error) throw error;
+
+        // Touch the target thread's last_message_at
+        await client
+          .from('message_threads')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', targetThreadId);
+
+        toast.success('Message forwarded');
+        logger.debug(
+          'MessageActions',
+          `Forwarded message ${forwardingMessage.id} → thread ${targetThreadId}`
+        );
+      } catch (err) {
+        logger.error('MessageActions', 'Forward failed:', err);
+        toast.error('Failed to forward message');
+      } finally {
+        setForwardingMessage(null);
+        setShowForwardPicker(false);
+      }
+    },
+    [forwardingMessage, user?.id]
+  );
+
+  const cancelForward = useCallback(() => {
+    setForwardingMessage(null);
+    setShowForwardPicker(false);
+  }, []);
+
+  // ─── Delete ──────────────────────────────────────────────────────────
 
   const handleDelete = useCallback(
     async () => {
@@ -131,7 +215,6 @@ export function useMessageActions({
 
               // Remove from local state immediately
               setOptimisticMsgs((prev) => prev.filter((m) => m.id !== selectedMessage.id));
-              // Trigger refetch to update from server
               refetch();
             } catch (err) {
               logger.error('MessageActions', 'Delete failed:', err);
@@ -146,12 +229,128 @@ export function useMessageActions({
     [selectedMessage, refetch, setOptimisticMsgs, setShowMessageActions, setSelectedMessage]
   );
 
+  // ─── Edit (was a stub — now fully implemented) ──────────────────────
+
   const handleEdit = useCallback(() => {
+    if (!selectedMessage || !user?.id) return;
+
+    // Only own messages
+    if (selectedMessage.sender_id !== user.id) {
+      toast.warn('You can only edit your own messages');
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+      return;
+    }
+
+    // 15-minute window
+    const sentAt = new Date(selectedMessage.created_at).getTime();
+    const fifteenMinutes = 15 * 60 * 1000;
+    if (Date.now() - sentAt > fifteenMinutes) {
+      toast.warn('Messages can only be edited within 15 minutes');
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+      return;
+    }
+
+    // Only text
+    if ((selectedMessage as any).content_type && (selectedMessage as any).content_type !== 'text') {
+      toast.warn('Only text messages can be edited');
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+      return;
+    }
+
+    setEditingMessage(selectedMessage);
     setShowMessageActions(false);
     setSelectedMessage(null);
-  }, [setShowMessageActions, setSelectedMessage]);
+  }, [selectedMessage, user?.id, setShowMessageActions, setSelectedMessage]);
+
+  /** Called from the composer when the user submits the edited text */
+  const confirmEdit = useCallback(
+    async (newContent: string) => {
+      if (!editingMessage) return;
+
+      const trimmed = newContent.trim();
+      if (!trimmed || trimmed === editingMessage.content) {
+        setEditingMessage(null);
+        return;
+      }
+
+      try {
+        const client = assertSupabase();
+        const { error } = await client
+          .from('messages')
+          .update({
+            content: trimmed,
+            edited_at: new Date().toISOString(),
+          })
+          .eq('id', editingMessage.id);
+
+        if (error) throw error;
+
+        // Optimistic update
+        setOptimisticMsgs((prev) =>
+          prev.map((m) =>
+            m.id === editingMessage.id
+              ? { ...m, content: trimmed, edited_at: new Date().toISOString() }
+              : m
+          )
+        );
+
+        refetch();
+        toast.success('Message edited');
+      } catch (err) {
+        logger.error('MessageActions', 'Edit failed:', err);
+        toast.error('Failed to edit message');
+      } finally {
+        setEditingMessage(null);
+      }
+    },
+    [editingMessage, refetch, setOptimisticMsgs]
+  );
+
+  const cancelEdit = useCallback(() => {
+    setEditingMessage(null);
+  }, []);
+
+  // ─── Star / unstar ──────────────────────────────────────────────────
+
+  const handleToggleStar = useCallback(
+    async () => {
+      if (!selectedMessage?.id || !user?.id) return;
+
+      try {
+        const client = assertSupabase();
+        const isCurrentlyStarred = !!(selectedMessage as any).is_starred;
+        const newStarred = !isCurrentlyStarred;
+
+        const { error } = await client
+          .from('messages')
+          .update({ is_starred: newStarred })
+          .eq('id', selectedMessage.id);
+
+        if (error) throw error;
+
+        setOptimisticMsgs((prev) =>
+          prev.map((m) =>
+            m.id === selectedMessage.id ? { ...m, is_starred: newStarred } : m
+          )
+        );
+
+        toast.success(newStarred ? 'Message starred' : 'Star removed');
+      } catch (err) {
+        logger.error('MessageActions', 'Star toggle failed:', err);
+        toast.error('Failed to update star');
+      }
+
+      setShowMessageActions(false);
+      setSelectedMessage(null);
+    },
+    [selectedMessage, user?.id, setOptimisticMsgs, setShowMessageActions, setSelectedMessage]
+  );
 
   return {
+    // Original actions (now fully implemented)
     handleReact,
     handleReactionPress,
     handleReply,
@@ -159,5 +358,16 @@ export function useMessageActions({
     handleForward,
     handleDelete,
     handleEdit,
+    // New actions
+    handleToggleStar,
+    // Edit state & controls
+    editingMessage,
+    confirmEdit,
+    cancelEdit,
+    // Forward state & controls
+    showForwardPicker,
+    forwardingMessage,
+    confirmForward,
+    cancelForward,
   };
 }

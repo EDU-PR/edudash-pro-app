@@ -379,6 +379,21 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'calls':
         router.push('/screens/calls');
         break;
+      case 'homework_history':
+        router.push('/screens/parent-homework-history');
+        break;
+      case 'ai_help':
+        router.push('/screens/parent-ai-help');
+        break;
+      case 'upgrade':
+        router.push('/screens/parent-upgrade');
+        break;
+      case 'my_exams':
+        router.push('/screens/parent-my-exams');
+        break;
+      case 'search':
+        router.push('/screens/parent-search');
+        break;
       case 'payments':
         handlePaymentsPress();
         break;
@@ -520,6 +535,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
       { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
       { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
+      { id: 'homework_history', title: t('parent.homework_history', { defaultValue: 'Homework History' }), icon: 'time', color: '#6366F1' },
+      { id: 'ai_help', title: t('parent.ai_help', { defaultValue: 'AI Help Hub' }), icon: 'sparkles', color: '#8B5CF6' },
+      { id: 'my_exams', title: t('parent.my_exams', { defaultValue: 'My Exams' }), icon: 'school', color: '#F59E0B' },
+      { id: 'upgrade', title: t('parent.upgrade', { defaultValue: 'Upgrade Plan' }), icon: 'arrow-up-circle', color: '#10B981', subtitle: t('parent.upgrade_subtitle', { defaultValue: 'Unlock premium features' }) },
       { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
     ];
 

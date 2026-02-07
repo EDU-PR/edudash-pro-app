@@ -83,8 +83,8 @@ export async function getPendingIncomingCall(): Promise<IncomingCallNotification
     // Clear after reading (one-time use)
     await AsyncStorage.removeItem(PENDING_CALL_KEY);
     
-    // Ignore stale calls (older than 60 seconds)
-    if (Date.now() - callData.timestamp > 60000) {
+    // Ignore stale calls (older than 90 seconds - allows for slow device wake)
+    if (Date.now() - callData.timestamp > 90000) {
       console.log('[CallBackgroundNotification] Ignoring stale pending call');
       return null;
     }
@@ -173,7 +173,7 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
         id: 'incoming-calls',
         name: 'Incoming Calls',
         description: 'Voice and video call notifications',
-        importance: AndroidImportance.HIGH,
+        importance: AndroidImportance.HIGH, // HIGH for heads-up + full-screen intent
         vibration: true,
         vibrationPattern: RINGTONE_VIBRATION_PATTERN,
         lights: true,
@@ -201,6 +201,8 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
           // CRITICAL: Make notification persistent
           ongoing: true,
           autoCancel: false,
+          // Run as foreground service so Android cannot kill it
+          asForegroundService: true,
           // Full-screen intent for lock screen
           fullScreenAction: {
             id: 'default',
@@ -277,10 +279,10 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
     if (Platform.OS === 'android') {
       Vibration.vibrate(RINGTONE_VIBRATION_PATTERN, true);
       
-      // Stop vibration after 30 seconds
+      // Stop vibration after 60 seconds (matches call timeout)
       setTimeout(() => {
         Vibration.cancel();
-      }, 30000);
+      }, 60000);
     }
     
     console.log('[CallBackgroundNotification] Notification shown for call:', callData.call_id);

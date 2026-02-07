@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 export default function OrgBrandingScreen() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -36,6 +37,7 @@ export default function OrgBrandingScreen() {
   const [linkedin, setLinkedin] = useState(orgSettings?.social_media?.linkedin || '');
   const [instagram, setInstagram] = useState(orgSettings?.social_media?.instagram || '');
   const [logoUploading, setLogoUploading] = useState(false);
+  const [pendingLogoUri, setPendingLogoUri] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (orgSettings) {
@@ -88,55 +90,17 @@ export default function OrgBrandingScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
         quality: 0.9,
       });
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
-      setLogoUploading(true);
-
-      // Process logo for consistent sizing and storage efficiency
-      const processed = await manipulateAsync(
-        result.assets[0].uri,
-        [{ resize: { width: 512, height: 512 } }],
-        { compress: 0.85, format: SaveFormat.PNG }
-      );
-
-      const base64Data = await FileSystem.readAsStringAsync(processed.uri, { encoding: 'base64' });
-      const body = base64ToUint8Array(base64Data);
-
-      if (body.byteLength === 0) {
-        throw new Error('Failed to prepare logo for upload');
-      }
-
-      const bucket = 'school-assets';
-      const timestamp = Date.now();
-      const path = `${orgId}/branding/logo_${timestamp}.png`;
-
-      const { error: uploadError } = await assertSupabase().storage
-        .from(bucket)
-        .upload(path, body as any, { contentType: 'image/png', upsert: true });
-
-      if (uploadError) {
-        throw new Error(uploadError.message);
-      }
-
-      const { data: publicData } = assertSupabase().storage.from(bucket).getPublicUrl(path);
-      const publicUrl = publicData?.publicUrl;
-      if (!publicUrl) {
-        throw new Error('Failed to generate logo URL');
-      }
-
-      // Set state to the hosted URL (never persist local file:// URIs)
-      setLogoUrl(publicUrl);
+      setPendingLogoUri(result.assets[0].uri);
     } catch (error: any) {
       Alert.alert(
         t('common.error', { defaultValue: 'Error' }),
-        error.message || t('branding.logo_upload_failed', { defaultValue: 'Failed to upload logo' })
+        error.message || t('branding.logo_upload_failed', { defaultValue: 'Failed to select image' })
       );
-    } finally {
-      setLogoUploading(false);
     }
   };
 
@@ -353,6 +317,47 @@ export default function OrgBrandingScreen() {
           </View>
         </Card>
       </ScrollView>
+
+      {/* Logo confirm modal */}
+      <ImageConfirmModal
+        visible={!!pendingLogoUri}
+        imageUri={pendingLogoUri}
+        onConfirm={async (uri) => {
+          const orgId = orgSettings?.id || profile?.organization_id;
+          if (!orgId) return;
+          setLogoUploading(true);
+          try {
+            const processed = await manipulateAsync(
+              uri,
+              [{ resize: { width: 512, height: 512 } }],
+              { compress: 0.85, format: SaveFormat.PNG }
+            );
+            const base64Data = await FileSystem.readAsStringAsync(processed.uri, { encoding: 'base64' });
+            const body = base64ToUint8Array(base64Data);
+            if (body.byteLength === 0) throw new Error('Failed to prepare logo for upload');
+            const bucket = 'school-assets';
+            const path = `${orgId}/branding/logo_${Date.now()}.png`;
+            const { error: uploadError } = await assertSupabase().storage
+              .from(bucket)
+              .upload(path, body as any, { contentType: 'image/png', upsert: true });
+            if (uploadError) throw new Error(uploadError.message);
+            const { data: publicData } = assertSupabase().storage.from(bucket).getPublicUrl(path);
+            if (!publicData?.publicUrl) throw new Error('Failed to generate logo URL');
+            setLogoUrl(publicData.publicUrl);
+          } catch (error: any) {
+            Alert.alert(t('common.error', { defaultValue: 'Error' }), error.message || 'Failed to upload logo');
+          } finally {
+            setLogoUploading(false);
+            setPendingLogoUri(null);
+          }
+        }}
+        onCancel={() => setPendingLogoUri(null)}
+        title="Organization Logo"
+        confirmLabel="Set Logo"
+        showCrop
+        cropAspect={[1, 1]}
+        loading={logoUploading}
+      />
     </View>
   );
 }
