@@ -81,6 +81,10 @@ export class DashAINavigator {
       financial: '/screens/financial-dashboard',
       finance: '/screens/financial-dashboard',
       fees: '/screens/financial-dashboard',
+      'log-expense': '/screens/log-expense',
+      expense: '/screens/log-expense',
+      salary: '/screens/log-expense',
+      'petty-cash': '/screens/petty-cash',
     };
   }
 

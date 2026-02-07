@@ -57,6 +57,15 @@ type LayoutMetrics = {
   cardGap: number;
 };
 
+type TodayHighlight = {
+  id: string;
+  label: string;
+  value: string;
+  sub: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+};
+
 const getLayoutMetrics = (width: number): LayoutMetrics => {
   const isTablet = width > 768;
   const isSmallScreen = width < 380;
@@ -558,7 +567,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     const pendingHomework = dashboardData?.recentHomework?.filter((hw: any) => hw.status === 'not_submitted').length ?? 0;
     const upcomingEvent = dashboardData?.upcomingEvents?.[0];
 
-    const highlights = [
+    const highlights: TodayHighlight[] = [
       {
         id: 'attendance',
         label: t('parent.attendance_today', { defaultValue: 'Attendance' }),
@@ -566,7 +575,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         sub: totalChildrenCount > 0
           ? `${presentToday}/${totalChildrenCount} ${t('parent.present', { defaultValue: 'present' })}`
           : t('parent.no_children', { defaultValue: 'No children linked' }),
-        icon: 'checkmark-circle-outline' as const,
+        icon: 'checkmark-circle-outline',
         color: theme.success,
       },
       {
@@ -576,7 +585,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         sub: pendingHomework > 0
           ? t('parent.needs_attention', { defaultValue: 'Needs attention' })
           : t('parent.caught_up', { defaultValue: 'All caught up' }),
-        icon: 'document-text-outline' as const,
+        icon: 'document-text-outline',
         color: pendingHomework > 0 ? theme.warning : theme.primary,
       },
       {
@@ -584,7 +593,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         label: t('parent.next_event', { defaultValue: 'Next Event' }),
         value: upcomingEvent?.title || t('parent.no_events', { defaultValue: 'No upcoming events' }),
         sub: upcomingEvent?.time || t('parent.check_back', { defaultValue: 'Check back soon' }),
-        icon: 'calendar-outline' as const,
+        icon: 'calendar-outline',
         color: theme.info,
       },
     ];
@@ -598,7 +607,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           defaultValue: 'Due in {{count}} days',
           count: feesDueSoon.daysUntil,
         }),
-        icon: 'card-outline' as const,
+        icon: 'card-outline',
         color: feesDueSoon.daysUntil <= 1 ? theme.error : theme.warning,
       });
     }

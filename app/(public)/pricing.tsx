@@ -33,7 +33,7 @@ interface MappedPlan {
   sortOrder: number;
 }
 
-// Fallback plans - Correct order: Parent plans, then School plans (Free, Starter, Premium, Enterprise)
+// Fallback plans - Correct order: Parent plans, then School plans
 const fallbackPlans = [
   // Parent Plans
   {
@@ -51,7 +51,7 @@ const fallbackPlans = [
     cta: 'Start Free Trial',
     featured: true,
     badge: 'MOST POPULAR',
-    tier: 'parent-starter',
+    tier: 'parent_starter',
     sortOrder: 1,
   },
   {
@@ -70,7 +70,7 @@ const fallbackPlans = [
     cta: 'Start Free Trial',
     featured: false,
     badge: null,
-    tier: 'parent-plus',
+    tier: 'parent_plus',
     sortOrder: 2,
   },
   
@@ -93,7 +93,7 @@ const fallbackPlans = [
     sortOrder: 3,
   },
   {
-    name: 'Starter',
+    name: 'School Starter',
     price: 'R299',
     period: 'per month',
     description: 'Most popular choice for growing preschools',
@@ -107,11 +107,11 @@ const fallbackPlans = [
     cta: 'Start Free Trial',
     featured: false,
     badge: null,
-    tier: 'starter',
+    tier: 'school_starter',
     sortOrder: 4,
   },
   {
-    name: 'Premium',
+    name: 'School Premium',
     price: 'R599',
     period: 'per month',
     description: 'Best for schools and organizations seeking advanced features',
@@ -126,11 +126,30 @@ const fallbackPlans = [
     cta: 'Start Free Trial',
     featured: true,
     badge: 'BEST FOR SCHOOLS',
-    tier: 'premium',
+    tier: 'school_premium',
     sortOrder: 5,
   },
   {
-    name: 'Enterprise',
+    name: 'School Pro',
+    price: 'R999',
+    period: 'per month',
+    description: 'Advanced features for large schools',
+    features: [
+      { name: 'Up to 30 teachers', included: true },
+      { name: 'Up to 1000 students', included: true },
+      { name: 'Everything in Premium', included: true },
+      { name: 'Dedicated account manager', included: true },
+      { name: 'Advanced AI features', included: true },
+      { name: 'Priority API access', included: true },
+    ],
+    cta: 'Start Free Trial',
+    featured: false,
+    badge: null,
+    tier: 'school_pro',
+    sortOrder: 6,
+  },
+  {
+    name: 'School Enterprise',
     price: 'Custom',
     period: 'contact us',
     description: 'Custom pricing for large organizations and multi-school networks',
@@ -146,8 +165,8 @@ const fallbackPlans = [
     cta: 'Contact Sales',
     featured: false,
     badge: null,
-    tier: 'enterprise',
-    sortOrder: 6,
+    tier: 'school_enterprise',
+    sortOrder: 7,
   },
 ];
 
@@ -202,7 +221,8 @@ export default function PricingPage() {
               'free': 3,
               'school_starter': 4,
               'school_premium': 5,
-              'school_enterprise': 6,
+              'school_pro': 6,
+              'school_enterprise': 7,
             };
             
             return {

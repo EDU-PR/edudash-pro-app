@@ -1114,7 +1114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         if (result.isNewDevice && result.otherDevices.length > 0) {
                           const names = result.otherDevices.map(d => d.device_name || d.platform).join(', ');
                           import('@/components/ui/ToastProvider').then(({ toast }) => {
-                            toast.info(`Also signed in on: ${names}`, { duration: 5000 });
+                            toast.info(`Also signed in on: ${names}`, 5000);
                           }).catch(() => {});
                         }
                       }).catch(() => {});

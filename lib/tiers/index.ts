@@ -389,18 +389,37 @@ export function isTierHigher(tierA: TierNameAligned, tierB: TierNameAligned): bo
 export function normalizeTierName(tier: string): TierNameAligned {
   const normalized = tier.toLowerCase().replace(/-/g, '_');
   
-  // Handle legacy mappings
+  // Direct match — already a canonical tier name
+  const validTiers: TierNameAligned[] = [
+    'free', 'trial',
+    'parent_starter', 'parent_plus',
+    'teacher_starter', 'teacher_pro',
+    'school_starter', 'school_premium', 'school_pro', 'school_enterprise',
+  ];
+  if (validTiers.includes(normalized as TierNameAligned)) {
+    return normalized as TierNameAligned;
+  }
+  
+  // Legacy DB tier name mappings (old → new)
+  // These handle records that haven't been migrated yet
   const legacyMap: Record<string, TierNameAligned> = {
-    'starter': 'parent_starter',
-    'basic': 'parent_starter',
-    'premium': 'parent_plus',
+    'starter': 'school_starter',
+    'basic': 'school_starter',
+    'premium': 'school_premium',
     'pro': 'school_pro',
     'enterprise': 'school_enterprise',
+    // Hyphenated variants
     'parent-starter': 'parent_starter',
     'parent-plus': 'parent_plus',
+    'teacher-starter': 'teacher_starter',
+    'teacher-pro': 'teacher_pro',
+    'school-starter': 'school_starter',
+    'school-premium': 'school_premium',
+    'school-pro': 'school_pro',
+    'school-enterprise': 'school_enterprise',
   };
   
-  return legacyMap[normalized] || (normalized as TierNameAligned) || 'free';
+  return legacyMap[normalized] || 'free';
 }
 
 // =============================================================================

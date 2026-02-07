@@ -7,6 +7,10 @@ import { assertSupabase } from '@/lib/supabase';
  * with service_role privileges to bypass RLS policies that block
  * principals from deleting organization_members or updating other
  * users' profiles.
+ *
+ * For teachers without an auth account (directly-added), use
+ * `removeTeacherDirect()` instead which deactivates the teacher
+ * record without requiring an Edge Function call.
  */
 export async function removeTeacherFromSchool(params: {
   teacherUserId: string;
@@ -43,5 +47,31 @@ export async function removeTeacherFromSchool(params: {
 
   if (!response.ok || result.error) {
     throw new Error(result.error || `Failed to remove teacher (${response.status})`);
+  }
+}
+
+/**
+ * Remove a directly-added teacher who has no auth account.
+ * Since there's no user profile or org membership to clean up,
+ * we just deactivate the teacher record.
+ */
+export async function removeTeacherDirect(params: {
+  teacherRecordId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { teacherRecordId, organizationId } = params;
+  if (!teacherRecordId || !organizationId) {
+    throw new Error('Missing teacher record or organization');
+  }
+
+  const supabase = assertSupabase();
+  const { error } = await supabase
+    .from('teachers')
+    .update({ is_active: false })
+    .eq('id', teacherRecordId)
+    .eq('preschool_id', organizationId);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to deactivate teacher record');
   }
 }

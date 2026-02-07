@@ -59,8 +59,8 @@ export default function PricingScreen() {
       let planTier = planKey;
       if (planKey === 'parent-starter') planTier = 'parent_starter';
       if (planKey === 'parent-plus') planTier = 'parent_plus';
-      if (planKey === 'starter') planTier = 'school_starter';
-      if (planKey === 'premium') planTier = 'school_premium';
+      // school_starter, school_premium, school_pro, school_enterprise
+      // are already canonical — no mapping needed
 
       const result = await createCheckout({
         scope: userType === 'parents' ? 'user' : 'school',
@@ -227,22 +227,24 @@ export default function PricingScreen() {
       originalPriceAnnual: undefined,
       popular: false,
       features: [
+        'Up to 2 teachers',
+        'Up to 50 students',
         'Basic dashboard',
-        'Student management',
         'Parent communication',
         'Basic reporting',
       ],
     },
     {
-      key: 'starter',
-      name: 'Starter Plan',
+      key: 'school_starter',
+      name: 'School Starter',
       price: schoolStarterBase?.monthly ?? 299,
       priceAnnual: schoolStarterBase?.annual ?? 2990,
       originalPrice: undefined,
       originalPriceAnnual: undefined,
       popular: true,
       features: [
-        'Essential features',
+        'Up to 5 teachers',
+        'Up to 150 students',
         'AI-powered insights',
         'Parent portal',
         'WhatsApp notifications',
@@ -251,8 +253,8 @@ export default function PricingScreen() {
       ],
     },
     {
-      key: 'premium',
-      name: 'Premium Plan',
+      key: 'school_premium',
+      name: 'School Premium',
       price: schoolPremiumBase?.monthly ?? 599,
       priceAnnual: schoolPremiumBase?.annual ?? 5990,
       originalPrice: undefined,
@@ -260,6 +262,8 @@ export default function PricingScreen() {
       popular: false,
       features: [
         'All Starter features',
+        'Up to 15 teachers',
+        'Up to 500 students',
         'Advanced reporting',
         'Priority support',
         'Custom branding',
@@ -268,16 +272,34 @@ export default function PricingScreen() {
       ],
     },
     {
-      key: 'enterprise',
-      name: 'Enterprise Plan',
+      key: 'school_pro',
+      name: 'School Pro',
+      price: TIER_PRICING.school_pro?.monthly ?? 999,
+      priceAnnual: TIER_PRICING.school_pro?.annual ?? 9990,
+      originalPrice: undefined,
+      originalPriceAnnual: undefined,
+      popular: false,
+      features: [
+        'All Premium features',
+        'Up to 30 teachers',
+        'Up to 1000 students',
+        'Dedicated account manager',
+        'Advanced AI features',
+        'Priority API access',
+      ],
+    },
+    {
+      key: 'school_enterprise',
+      name: 'School Enterprise',
       price: null,
       priceAnnual: null,
       originalPrice: undefined,
       originalPriceAnnual: undefined,
       popular: false,
       features: [
-        'All Premium features',
-        'Unlimited users',
+        'All Pro features',
+        'Up to 100 teachers',
+        'Unlimited students',
         'Dedicated success manager',
         'SLA guarantee',
         'White-label solution',

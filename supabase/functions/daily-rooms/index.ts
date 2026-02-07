@@ -28,6 +28,11 @@ interface CreateRoomRequest {
 // Tier-based time limits (in minutes)
 const TIER_MAX_DURATION: Record<string, number> = {
   free: 15,
+  school_starter: 30,
+  school_premium: 60,
+  school_pro: 60,
+  school_enterprise: 1440,
+  // Legacy names (fallback until all DB records are migrated)
   starter: 30,
   basic: 60,
   premium: 60,
@@ -140,7 +145,7 @@ Deno.serve(async (req: Request) => {
     } = body;
 
     // Get school's subscription tier for time limits
-    let subscriptionTier = 'starter';
+    let subscriptionTier = 'school_starter';
     const schoolId = preschoolId || profile.preschool_id;
     
     if (schoolId) {
@@ -156,7 +161,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Calculate actual duration based on tier
-    const tierMax = TIER_MAX_DURATION[subscriptionTier] || TIER_MAX_DURATION.starter;
+    const tierMax = TIER_MAX_DURATION[subscriptionTier] || TIER_MAX_DURATION.school_starter;
     const actualMinutes = isP2P ? Math.min(requestedMinutes, tierMax) : Math.min(requestedMinutes, tierMax);
     const expiryTime = Math.floor(Date.now() / 1000) + actualMinutes * 60;
 

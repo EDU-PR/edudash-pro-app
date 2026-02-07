@@ -408,19 +408,25 @@ export default function TeacherManagement() {
                   });
                   return;
                 }
-                if (!teacher.teacherUserId) {
-                  showAlert({
-                    title: 'Missing Teacher ID',
-                    message: 'This teacher record is missing a user id.',
-                    type: 'error',
+                if (teacher.teacherUserId) {
+                  // Teacher has an auth account — use edge function with service_role
+                  await removeTeacherFromSchool({
+                    teacherUserId: teacher.teacherUserId,
+                    organizationId: orgId,
+                    teacherRecordId: teacher.id,
                   });
-                  return;
+                } else {
+                  // Directly-added teacher with no auth account — deactivate the record directly
+                  const supabase = assertSupabase();
+                  const { error: deactivateErr } = await supabase
+                    .from('teachers')
+                    .update({ is_active: false })
+                    .eq('id', teacher.id)
+                    .eq('preschool_id', orgId);
+                  if (deactivateErr) {
+                    throw new Error(deactivateErr.message || 'Failed to deactivate teacher record');
+                  }
                 }
-                await removeTeacherFromSchool({
-                  teacherUserId: teacher.teacherUserId,
-                  organizationId: orgId,
-                  teacherRecordId: teacher.id,
-                });
                 await fetchTeachers();
                 refetchSeatLimits();
                 if (selectedTeacher?.id === teacher.id) {

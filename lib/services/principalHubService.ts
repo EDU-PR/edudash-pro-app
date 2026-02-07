@@ -289,36 +289,132 @@ export class PrincipalHubService {
   }
 
   /**
-   * Get financial summary for the school
+   * Get financial summary for the school (REAL data from student_fees + expenses)
    */
   static async getFinancialSummary(preschoolId: string): Promise<FinancialSummary> {
     try {
       const supabase = assertSupabase();
 
-      // Get student count for revenue calculation
-      const { count: studentCount } = await supabase
-        .from('students')
-        .select('id', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .eq('is_active', true);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-      // Calculate mock financial data based on student count
-      const monthlyRevenue = (studentCount || 0) * 850; // R850 per student
-      const monthlyExpenses = monthlyRevenue * 0.7; // 70% expense ratio
-      const netProfit = monthlyRevenue - monthlyExpenses;
-      const outstandingFees = monthlyRevenue * 0.15; // 15% outstanding
+      // Parallel queries for real financial data
+      const [
+        currentFeesResult,
+        prevFeesResult,
+        pettyCashResult,
+        financialTxResult,
+        studentCountResult,
+      ] = await Promise.all([
+        // Current month fees (revenue + outstanding)
+        supabase
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, amount_outstanding, status, students!inner(preschool_id)')
+          .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`, { foreignTable: 'students' })
+          .gte('due_date', monthStart)
+          .lt('due_date', nextMonthStart),
+
+        // Previous month fees (for trend)
+        supabase
+          .from('student_fees')
+          .select('amount, final_amount, amount_paid, status, students!inner(preschool_id)')
+          .or(`preschool_id.eq.${preschoolId},organization_id.eq.${preschoolId}`, { foreignTable: 'students' })
+          .gte('due_date', prevMonthStart)
+          .lt('due_date', monthStart),
+
+        // Petty cash expenses this month
+        supabase
+          .from('petty_cash_transactions')
+          .select('amount')
+          .eq('preschool_id', preschoolId)
+          .eq('type', 'expense')
+          .in('status', ['approved', 'pending'])
+          .gte('created_at', monthStart)
+          .lt('created_at', nextMonthStart),
+
+        // Financial transactions (salaries, operational expenses) this month
+        supabase
+          .from('financial_transactions')
+          .select('amount')
+          .eq('preschool_id', preschoolId)
+          .in('type', ['expense', 'operational_expense', 'salary', 'purchase'])
+          .in('status', ['approved', 'completed'])
+          .gte('created_at', monthStart)
+          .lt('created_at', nextMonthStart),
+
+        // Student count
+        supabase
+          .from('students')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .eq('is_active', true),
+      ]);
+
+      // Calculate current month revenue
+      const currentFees = (currentFeesResult.data || []) as any[];
+      const monthlyRevenue = currentFees.reduce((sum, fee) => {
+        const paid = Number(fee.amount_paid || 0);
+        if (paid > 0) return sum + paid;
+        return sum + (fee.status === 'paid' ? Number(fee.final_amount ?? fee.amount ?? 0) : 0);
+      }, 0);
+
+      // Calculate outstanding
+      const outstandingFees = currentFees.reduce((sum, fee) => {
+        const outstanding = Number(fee.amount_outstanding ?? 0);
+        if (outstanding > 0) return sum + outstanding;
+        if (['pending', 'overdue', 'partially_paid'].includes(fee.status)) {
+          return sum + Number(fee.final_amount ?? fee.amount ?? 0);
+        }
+        return sum;
+      }, 0);
+
+      // Calculate expenses
+      const pettyCashExpenses = (pettyCashResult.data || []).reduce(
+        (sum, t: any) => sum + Math.abs(Number(t.amount) || 0), 0
+      );
+      const financialTxExpenses = (financialTxResult.data || []).reduce(
+        (sum, t: any) => sum + Math.abs(Number(t.amount) || 0), 0
+      );
+      const monthlyExpenses = pettyCashExpenses + financialTxExpenses;
+
+      // Calculate previous month for trend
+      const prevFees = (prevFeesResult.data || []) as any[];
+      const prevRevenue = prevFees.reduce((sum, fee) => {
+        const paid = Number(fee.amount_paid || 0);
+        if (paid > 0) return sum + paid;
+        return sum + (fee.status === 'paid' ? Number(fee.final_amount ?? fee.amount ?? 0) : 0);
+      }, 0);
+
+      const totalPaymentVolume = monthlyRevenue + outstandingFees;
+      const paymentRate = totalPaymentVolume > 0
+        ? Math.round((monthlyRevenue / totalPaymentVolume) * 100)
+        : 0;
+
+      const enrollmentTrend: 'up' | 'down' | 'stable' =
+        monthlyRevenue > prevRevenue ? 'up' :
+        monthlyRevenue < prevRevenue ? 'down' : 'stable';
 
       return {
         monthlyRevenue,
         monthlyExpenses,
-        netProfit,
+        netProfit: monthlyRevenue - monthlyExpenses,
         outstandingFees,
-        enrollmentTrend: studentCount && studentCount > 20 ? 'up' : 'stable',
-        paymentRate: 85 // 85% payment rate
+        enrollmentTrend,
+        paymentRate,
       };
     } catch (error) {
       console.error('Failed to fetch financial summary:', error);
-      throw new Error('Failed to load financial information');
+      // Return zeros instead of throwing — dashboard should still render
+      return {
+        monthlyRevenue: 0,
+        monthlyExpenses: 0,
+        netProfit: 0,
+        outstandingFees: 0,
+        enrollmentTrend: 'stable',
+        paymentRate: 0,
+      };
     }
   }
 
