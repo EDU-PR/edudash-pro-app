@@ -1,82 +1,86 @@
 "use client";
 
+/**
+ * DailyActivityFeedCard — Web dashboard widget
+ *
+ * Compact card showing today's activities from `student_activity_feed`.
+ * Fixed: now reads from the correct table (matches teacher-post-activity).
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { Activity, BookOpen, Calculator, FlaskConical, Music, Palette, Salad, Sun } from "lucide-react";
+import { Activity, BookOpen, GamepadIcon, Music, Palette, Sun, Star, Trophy, Utensils, Moon, Users, Sparkles } from "lucide-react";
 
-interface DailyActivityRow {
+interface ActivityRow {
   id: string;
-  activity_name: string;
+  activity_type: string;
+  title: string;
   description: string | null;
-  activity_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  materials_needed: string[] | null;
-  learning_objectives: string[] | null;
-  notes: string | null;
-  created_by: string;
-  profiles?: { first_name: string | null; last_name: string | null } | null;
-}
-
-interface DailyActivity {
-  id: string;
-  name: string;
-  description: string | null;
-  time: string | null;
-  teacherName: string;
-  materials: string[];
-  objectives: string[];
-  notes: string | null;
+  media_urls: string[] | null;
+  activity_at: string;
+  duration_minutes: number | null;
+  teacher?: { first_name: string | null; last_name: string | null } | null;
 }
 
 interface DailyActivityFeedCardProps {
   classId?: string | null;
+  studentId?: string | null;
   date?: Date;
   maxItems?: number;
   showHeader?: boolean;
 }
 
-const isMissingSchema = (error?: PostgrestError | null) => {
-  if (!error) return false;
-  return error.code === "42P01" || error.code === "42703";
+const ACTIVITY_ICONS: Record<string, typeof Activity> = {
+  learning: BookOpen,
+  play: GamepadIcon,
+  meal: Utensils,
+  rest: Moon,
+  art: Palette,
+  music: Music,
+  story: BookOpen,
+  outdoor: Sun,
+  special: Star,
+  milestone: Trophy,
+  social: Users,
 };
 
-const iconForActivity = (name: string) => {
-  const lower = name.toLowerCase();
-  if (lower.includes("art") || lower.includes("paint") || lower.includes("craft")) return Palette;
-  if (lower.includes("music") || lower.includes("song")) return Music;
-  if (lower.includes("story") || lower.includes("read") || lower.includes("book")) return BookOpen;
-  if (lower.includes("math") || lower.includes("count")) return Calculator;
-  if (lower.includes("science") || lower.includes("experiment") || lower.includes("nature")) return FlaskConical;
-  if (lower.includes("lunch") || lower.includes("snack") || lower.includes("meal")) return Salad;
-  if (lower.includes("outdoor") || lower.includes("play") || lower.includes("game")) return Sun;
-  return Activity;
+const ACTIVITY_COLORS: Record<string, string> = {
+  learning: "#3B82F6",
+  play: "#10B981",
+  meal: "#EF4444",
+  rest: "#6366F1",
+  art: "#EC4899",
+  music: "#8B5CF6",
+  story: "#0EA5E9",
+  outdoor: "#F59E0B",
+  special: "#F97316",
+  milestone: "#EAB308",
+  social: "#06B6D4",
 };
 
-const formatTime = (timeString: string | null, locale: string) => {
-  if (!timeString) return null;
-  const date = new Date(`1970-01-01T${timeString}`);
-  if (Number.isNaN(date.getTime())) return timeString;
-  return date.toLocaleTimeString(locale || "en-ZA", { hour: "2-digit", minute: "2-digit" });
-};
+function formatTime(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(locale || "en-ZA", { hour: "2-digit", minute: "2-digit" });
+}
 
 export function DailyActivityFeedCard({
   classId,
+  studentId,
   date = new Date(),
   maxItems = 8,
   showHeader = true,
 }: DailyActivityFeedCardProps) {
   const { t, i18n } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
-  const [activities, setActivities] = useState<DailyActivity[]>([]);
+  const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const dateString = useMemo(() => date.toISOString().split("T")[0], [date]);
 
   const loadActivities = useCallback(async () => {
-    if (!classId) {
+    if (!studentId) {
       setActivities([]);
       setLoading(false);
       return;
@@ -84,65 +88,52 @@ export function DailyActivityFeedCard({
 
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("daily_activities")
-      .select(
-        "id, activity_name, description, activity_date, start_time, end_time, materials_needed, learning_objectives, notes, created_by, profiles:created_by(first_name, last_name)"
-      )
-      .eq("class_id", classId)
-      .eq("activity_date", dateString)
-      .order("start_time", { ascending: true, nullsFirst: false })
+    const dayStart = `${dateString}T00:00:00.000Z`;
+    const dayEnd = `${dateString}T23:59:59.999Z`;
+
+    let query = supabase
+      .from("student_activity_feed")
+      .select("id, activity_type, title, description, media_urls, activity_at, duration_minutes, teacher:profiles!student_activity_feed_teacher_id_fkey(first_name, last_name)")
+      .eq("student_id", studentId)
+      .eq("is_published", true)
+      .gte("activity_at", dayStart)
+      .lte("activity_at", dayEnd)
+      .order("activity_at", { ascending: true })
       .limit(maxItems);
 
-    if (error) {
-      if (!isMissingSchema(error)) {
-        setActivities([]);
-      }
-      setLoading(false);
-      return;
+    if (classId) {
+      query = query.eq("class_id", classId);
     }
 
-    const rows = (data || []) as DailyActivityRow[];
-    const mapped = rows.map((row) => ({
-      id: row.id,
-      name: row.activity_name,
-      description: row.description,
-      time: row.start_time
-        ? `${formatTime(row.start_time, i18n.language)}${row.end_time ? ` - ${formatTime(row.end_time, i18n.language)}` : ""}`
-        : null,
-      teacherName: row.profiles
-        ? `${row.profiles.first_name || ""} ${row.profiles.last_name || ""}`.trim() || t("roles.teacher", { defaultValue: "Teacher" })
-        : t("roles.teacher", { defaultValue: "Teacher" }),
-      materials: row.materials_needed || [],
-      objectives: row.learning_objectives || [],
-      notes: row.notes || null,
-    }));
+    const { data, error } = await query;
 
-    setActivities(mapped);
+    if (error) {
+      console.error("[DailyActivityFeedCard] Error:", error);
+      setActivities([]);
+    } else {
+      setActivities((data || []) as ActivityRow[]);
+    }
     setLoading(false);
-  }, [classId, dateString, i18n.language, maxItems, supabase, t]);
+  }, [studentId, classId, dateString, maxItems, supabase]);
 
   useEffect(() => {
     void loadActivities();
   }, [loadActivities]);
 
+  // Real-time
   useEffect(() => {
-    if (!classId) return;
+    if (!studentId) return;
     const channel = supabase
-      .channel(`daily-activities-${classId}-${dateString}`)
+      .channel(`web_daily_activities_${studentId}_${dateString}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "daily_activities", filter: `class_id=eq.${classId}` },
-        () => {
-          void loadActivities();
-        }
+        { event: "*", schema: "public", table: "student_activity_feed", filter: `student_id=eq.${studentId}` },
+        () => { void loadActivities(); }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [classId, dateString, loadActivities, supabase]);
+    return () => { supabase.removeChannel(channel); };
+  }, [studentId, dateString, loadActivities, supabase]);
 
   if (loading) {
     return (
@@ -173,11 +164,27 @@ export function DailyActivityFeedCard({
 
   return (
     <div className="card">
-      {showHeader && <div className="sectionTitle">{t("dashboard.parent.daily_activity.title", { defaultValue: "Today's Activities" })}</div>}
+      {showHeader && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div className="sectionTitle" style={{ margin: 0 }}>{t("dashboard.parent.daily_activity.title", { defaultValue: "Today's Activities" })}</div>
+          <a
+            href="/dashboard/parent/activities"
+            style={{ fontSize: 13, fontWeight: 600, color: "var(--primary)", textDecoration: "none" }}
+          >
+            See all →
+          </a>
+        </div>
+      )}
       <div style={{ display: "grid", gap: 12 }}>
         {activities.map((activity) => {
-          const Icon = iconForActivity(activity.name);
+          const Icon = ACTIVITY_ICONS[activity.activity_type] || Activity;
+          const color = ACTIVITY_COLORS[activity.activity_type] || "#F59E0B";
           const isExpanded = expandedId === activity.id;
+          const teacherName = activity.teacher
+            ? `${activity.teacher.first_name || ""} ${activity.teacher.last_name || ""}`.trim() || "Teacher"
+            : "Teacher";
+          const mediaUrls = (activity.media_urls || []) as string[];
+
           return (
             <div key={activity.id} className="card" style={{ padding: 12, border: "1px solid var(--border)" }}>
               <button
@@ -196,16 +203,18 @@ export function DailyActivityFeedCard({
                     width: 34,
                     height: 34,
                     borderRadius: 12,
-                    background: "var(--surface-2)",
+                    background: color + "18",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}>
-                    <Icon size={16} style={{ color: "var(--primary)" }} />
+                    <Icon size={16} style={{ color }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>{activity.name}</div>
-                    {activity.time && <div style={{ fontSize: 12, color: "var(--muted)" }}>{activity.time}</div>}
+                    <div style={{ fontWeight: 600 }}>{activity.title}</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                      {formatTime(activity.activity_at, i18n.language)}
+                    </div>
                   </div>
                 </div>
                 {activity.description && (
@@ -217,14 +226,17 @@ export function DailyActivityFeedCard({
 
               {isExpanded && (
                 <div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 12, color: "var(--muted)" }}>
-                  <div>{t("dashboard.parent.daily_activity.labels.teacher", { defaultValue: "Teacher:" })} {activity.teacherName}</div>
-                  {activity.materials.length > 0 && (
-                    <div>{t("dashboard.parent.daily_activity.labels.materials", { defaultValue: "Materials:" })} {activity.materials.join(", ")}</div>
+                  <div>Teacher: {teacherName}</div>
+                  {activity.duration_minutes && <div>Duration: {activity.duration_minutes} min</div>}
+                  {mediaUrls.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      {mediaUrls.slice(0, 3).map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                          <img src={url} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }} />
+                        </a>
+                      ))}
+                    </div>
                   )}
-                  {activity.objectives.length > 0 && (
-                    <div>{t("dashboard.parent.daily_activity.labels.objectives", { defaultValue: "Objectives:" })} {activity.objectives.join(", ")}</div>
-                  )}
-                  {activity.notes && <div>{t("dashboard.parent.daily_activity.labels.notes", { defaultValue: "Notes:" })} {activity.notes}</div>}
                 </div>
               )}
             </div>

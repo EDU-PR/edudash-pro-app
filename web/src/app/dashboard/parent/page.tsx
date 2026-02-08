@@ -782,7 +782,7 @@ export default function ParentDashboard() {
           onToggle={() => toggleSection('daily-activity')}
         >
           {hasOrganization && activeChild?.classId ? (
-            <DailyActivityFeedCard classId={activeChild.classId} />
+            <DailyActivityFeedCard classId={activeChild.classId} studentId={activeChild?.id} />
           ) : (
             <SectionEmptyState
               title={t('dashboard.parent.empty.daily_activity.title', { defaultValue: 'Daily activity preview' })}
