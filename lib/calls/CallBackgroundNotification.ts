@@ -15,6 +15,30 @@ import { Platform, Vibration, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+/**
+ * Detect whether the native binary includes custom call sounds in res/raw/.
+ * OTA updates run on older native binaries that may not have the sound file.
+ * Falls back to 'default' (system sound) to avoid silent notifications.
+ */
+function hasCustomCallSounds(): boolean {
+  try {
+    if (Constants.appOwnership === 'expo') return false;
+    const runtimeVersion = Constants.expoConfig?.runtimeVersion;
+    const jsRuntimeVersion = Constants.manifest2?.runtimeVersion;
+    if (runtimeVersion && jsRuntimeVersion && runtimeVersion === jsRuntimeVersion) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+const CALL_SOUND_NOTIFEE = hasCustomCallSounds() ? 'ringtone' : 'default';
+const CALL_SOUND_EXPO = hasCustomCallSounds() ? 'ringtone.mp3' : 'default';
+const CALL_CHANNEL_ID = hasCustomCallSounds() ? 'incoming-calls-v2' : 'incoming-calls';
 
 // Conditionally import Notifee for better notification control
 let notifee: typeof import('@notifee/react-native').default | null = null;
@@ -106,19 +130,28 @@ async function setupIncomingCallChannel(): Promise<void> {
     // CRITICAL: Create channel with MAX importance for full-screen intent
     // This enables the notification to show as a heads-up notification
     // and allows full-screen intent on Android 10+
-    await Notifications.setNotificationChannelAsync('incoming-calls', {
+    // Channel ID and sound are conditional: custom ringtone after native rebuild,
+    // system default on OTA updates to older native binaries
+    await Notifications.setNotificationChannelAsync(CALL_CHANNEL_ID, {
       name: 'Incoming Calls',
-      description: 'Voice and video call notifications with high priority and full-screen intent',
+      description: 'Voice and video call notifications with ringtone and full-screen intent',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: RINGTONE_VIBRATION_PATTERN,
       lightColor: '#00f5ff',
-      sound: 'default',
+      sound: CALL_SOUND_EXPO,
       enableLights: true,
       enableVibrate: true,
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
     });
+    
+    // Clean up old channel only when using v2
+    if (CALL_CHANNEL_ID === 'incoming-calls-v2') {
+      try {
+        await Notifications.deleteNotificationChannelAsync('incoming-calls');
+      } catch (_) { /* ignore if channel doesn't exist */ }
+    }
     
     // Setup notification category with answer/decline actions
     // These buttons appear when user expands the notification
@@ -168,17 +201,17 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
     if (notifee && AndroidImportance && Platform.OS === 'android') {
       console.log('[CallBackgroundNotification] Using Notifee for incoming call notification');
       
-      // Create/update incoming calls channel
+      // Create/update incoming calls channel — OTA-safe sound selection
       await notifee.createChannel({
-        id: 'incoming-calls',
+        id: CALL_CHANNEL_ID,
         name: 'Incoming Calls',
-        description: 'Voice and video call notifications',
+        description: 'Voice and video call notifications with ringtone',
         importance: AndroidImportance.HIGH, // HIGH for heads-up + full-screen intent
         vibration: true,
         vibrationPattern: RINGTONE_VIBRATION_PATTERN,
         lights: true,
         lightColor: '#00f5ff',
-        sound: 'default',
+        sound: CALL_SOUND_NOTIFEE,
         bypassDnd: true,
       });
       
@@ -196,7 +229,7 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
           meeting_url: callData.meeting_url || '',
         },
         android: {
-          channelId: 'incoming-calls',
+          channelId: CALL_CHANNEL_ID,
           importance: AndroidImportance.HIGH,
           // CRITICAL: Make notification persistent
           ongoing: true,
@@ -230,7 +263,7 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
           ...(AndroidCategory?.CALL && { category: AndroidCategory.CALL }),
           vibrationPattern: RINGTONE_VIBRATION_PATTERN,
           lights: ['#00f5ff', 300, 600],
-          sound: 'default',
+          sound: CALL_SOUND_NOTIFEE, // Custom ringtone or system default (OTA-safe)
           pressAction: {
             id: 'default',
             launchActivity: 'default',
@@ -258,9 +291,9 @@ async function showIncomingCallNotification(callData: IncomingCallNotificationDa
             call_type: callData.call_type,
             meeting_url: callData.meeting_url,
           },
-          sound: 'default',
+          sound: CALL_SOUND_EXPO,
           ...(Platform.OS === 'android' && {
-            channelId: 'incoming-calls',
+            channelId: CALL_CHANNEL_ID,
             priority: 'max',
             sticky: true,
             autoDismiss: false,

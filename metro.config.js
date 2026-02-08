@@ -22,15 +22,21 @@ const config = getDefaultConfig(__dirname);
 
 // CRITICAL: Ensure Promise.any polyfill runs BEFORE any other module
 // This is necessary because Daily.co SDK captures Promise at module init time
+// IMPORTANT: Extend (not replace) the default list so Expo's own shims are preserved
+const _defaultGetModules = config.serializer?.getModulesRunBeforeMainModule;
 config.serializer = {
   ...config.serializer,
-  getModulesRunBeforeMainModule: () => [
-    // React Native's polyfills (required)
-    require.resolve('react-native/Libraries/Core/InitializeCore'),
-    // Our Promise.any polyfill MUST run after InitializeCore but before app code
-    // This patches ALL Promise references including Hermes native Promise
-    require.resolve('./polyfills/promise-shim.js'),
-  ],
+  getModulesRunBeforeMainModule: () => {
+    const defaults = _defaultGetModules
+      ? _defaultGetModules()
+      : [require.resolve('react-native/Libraries/Core/InitializeCore')];
+    return [
+      ...defaults,
+      // Our Promise.any polyfill MUST run after InitializeCore but before app code
+      // This patches ALL Promise references including Hermes native Promise
+      require.resolve('./polyfills/promise-shim.js'),
+    ];
+  },
 };
 
 // Treat JSON files as source files (required for i18n locale imports)

@@ -10,7 +10,7 @@
 import { useState, useCallback } from 'react';
 import { logger } from '@/lib/logger';
 
-export type TutorMode = 'quiz' | 'practice' | 'diagnostic' | null;
+export type TutorMode = 'quiz' | 'practice' | 'diagnostic' | 'play' | null;
 
 export interface TutorSession {
   mode: TutorMode;
@@ -63,6 +63,8 @@ export function useDashTutorMode(): UseDashTutorReturn {
     const value = (text || '').toLowerCase();
     if (!value) return null;
     
+    // Play mode — preschool interactive play (before formal modes)
+    if (/(let.s\s+play|play\s+a\s+game|play\s+with\s+me|fun\s+game|counting\s+game|colour\s+game|shape\s+game|rhyme|story\s+time|animal\s+sound|letter\s+game|silly\s+question)/i.test(value)) return 'play';
     // Only activate tutor mode for EXPLICIT quiz/practice requests
     if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz)/.test(value)) return 'quiz';
     if (/(practice\s+question|drill\s+me)/.test(value)) return 'practice';

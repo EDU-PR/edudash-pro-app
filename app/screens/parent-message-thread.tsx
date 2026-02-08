@@ -98,6 +98,19 @@ const WALLPAPER_ACCENTS: Record<string, string> = {
   'dark-slate': '#93c5fd',
 };
 
+function hexToRgba(color: string, alpha: number, fallback: string): string {
+  if (!color.startsWith('#')) return fallback;
+  const hex = color.slice(1);
+  const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+  if (normalized.length !== 6) return fallback;
+  const intValue = Number.parseInt(normalized, 16);
+  if (Number.isNaN(intValue)) return fallback;
+  const r = (intValue >> 16) & 255;
+  const g = (intValue >> 8) & 255;
+  const b = intValue & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 try {
   useTheme = require('@/contexts/ThemeContext').useTheme;
 } catch {
@@ -277,14 +290,6 @@ export default function ParentMessageThreadScreen() {
     );
   }, [messages, optimisticMsgs]);
 
-  // Smart quick replies — last received message
-  const lastReceivedMessage = useMemo(() => {
-    const received = allMessages
-      .filter(m => m.sender_id !== user?.id && m.content && typeof m.content === 'string')
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return received[0]?.content;
-  }, [allMessages, user?.id]);
-
   // Real-time subscription for messages, delivery/read status, and reactions
   // Called at top-level (not inside useEffect) to respect Rules of Hooks
   useRealtimeMessages(threadId || null);
@@ -351,22 +356,11 @@ export default function ParentMessageThreadScreen() {
     setSending(true);
     setReplyingTo(null);
 
-    const tempMsg: Message = {
-      id: `temp-${Date.now()}`,
-      content,
-      sender_id: user?.id || '',
-      created_at: new Date().toISOString(),
-      sender: { first_name: 'You', last_name: '' },
-    };
-    setOptimisticMsgs(prev => [...prev, tempMsg]);
-
     try {
       await sendMessage({ threadId, content });
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentMessageThread', 'Send failed:', err);
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.error('Failed to send message. Please try again.');
     } finally {
       setSending(false);
@@ -380,15 +374,6 @@ export default function ParentMessageThreadScreen() {
     
     const durationSecs = Math.round(duration / 1000);
     const content = `🎤 Voice (${durationSecs}s)`;
-    
-    const tempMsg: Message = {
-      id: `temp-voice-${Date.now()}`,
-      content,
-      sender_id: user?.id || '',
-      created_at: new Date().toISOString(),
-      sender: { first_name: 'You', last_name: '' },
-    };
-    setOptimisticMsgs(prev => [...prev, tempMsg]);
     
     try {
       // Upload to Supabase Storage
@@ -407,11 +392,9 @@ export default function ParentMessageThreadScreen() {
         if (__DEV__) logger.warn('ParentThread', 'uploadVoiceNote not available, sending text only');
         await sendMessage({ threadId, content });
       }
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentThread', 'Voice send failed:', err);
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.error('Failed to send voice message.');
     }
   }, [threadId, user?.id, sendMessage]);
@@ -420,15 +403,6 @@ export default function ParentMessageThreadScreen() {
   const handleImageAttach = useCallback(async (uri: string, mimeType: string) => {
     if (!threadId || !user?.id) return;
     Vibration.vibrate([0, 30, 50, 30]);
-    
-    const tempMsg: Message = {
-      id: `temp-image-${Date.now()}`,
-      content: '📷 Sending photo...',
-      sender_id: user.id,
-      created_at: new Date().toISOString(),
-      sender: { first_name: 'You', last_name: '' },
-    };
-    setOptimisticMsgs(prev => [...prev, tempMsg]);
     
     try {
       // Get supabase client for image upload
@@ -460,12 +434,10 @@ export default function ParentMessageThreadScreen() {
         content,
       });
       
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.success('Photo sent');
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
     } catch (err) {
       logger.error('ParentThread', 'Image send failed:', err);
-      setOptimisticMsgs(prev => prev.filter(m => m.id !== tempMsg.id));
       toast.error('Failed to send photo.');
     }
   }, [threadId, user?.id, sendMessage]);
@@ -537,6 +509,10 @@ export default function ParentMessageThreadScreen() {
     // Starred messages state
     showStarredMessages: showStarredView,
     closeStarredMessages,
+    // Option state
+    isMuted,
+    isUserBlocked,
+    disappearingStatusLabel,
   } = useThreadOptions({
     threadId,
     userId: user?.id,
@@ -689,6 +665,16 @@ export default function ParentMessageThreadScreen() {
     currentWallpaper?.type === 'preset'
       ? (WALLPAPER_ACCENTS[currentWallpaper.value] || '#93c5fd')
       : '#93c5fd';
+  const composerSurfaceColor =
+    currentWallpaper?.type === 'url'
+      ? 'rgba(15, 23, 42, 0.9)'
+      : currentWallpaper?.type === 'preset'
+      ? hexToRgba(wallpaperAccent, 0.28, 'rgba(15, 23, 42, 0.82)')
+      : 'rgba(15, 23, 42, 0.75)';
+  const composerBorderColor =
+    currentWallpaper?.type === 'preset'
+      ? hexToRgba(wallpaperAccent, 0.45, 'rgba(148, 163, 184, 0.22)')
+      : 'rgba(148, 163, 184, 0.22)';
 
   // No thread ID error state
   if (!threadId) {
@@ -840,7 +826,15 @@ export default function ParentMessageThreadScreen() {
         ]}
           onLayout={handleComposerLayout}
         >
-          <View style={styles.composerGlass} />
+          <View
+            style={[
+              styles.composerGlass,
+              {
+                backgroundColor: composerSurfaceColor,
+                borderTopColor: composerBorderColor,
+              },
+            ]}
+          />
           <MessageComposer
             onSend={editingMessage ? confirmEdit : handleSend}
             onVoiceRecording={handleVoiceRecording}
@@ -875,6 +869,9 @@ export default function ParentMessageThreadScreen() {
           onReport={handleReport}
           onBlockUser={handleBlockUser}
           onViewContact={handleViewContact}
+          isMuted={isMuted}
+          isBlocked={isUserBlocked}
+          disappearingLabel={disappearingStatusLabel}
           contactName={displayName}
         />
       )}
@@ -1043,9 +1040,7 @@ const styles = StyleSheet.create({
   },
   composerGlass: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(148, 163, 184, 0.22)',
   },
   scrollToBottomFab: {
     position: 'absolute',

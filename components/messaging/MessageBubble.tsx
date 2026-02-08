@@ -81,6 +81,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   if (isVoice && msg.voice_url && VoiceMessageBubble) {
     return (
       <View style={[styles.container, isOwn ? styles.own : styles.other]}>
+        <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
           <View style={styles.voiceBubbleWrapper}>
             <VoiceMessageBubble
               audioUrl={msg.voice_url}
@@ -105,6 +106,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               onReactionPress={onReactionPress}
             />
           </View>
+        </View>
       </View>
     );
   }
@@ -123,6 +125,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
           <Text style={styles.forwardedText}>Forwarded</Text>
         </View>
       )}
+      <View style={[styles.bubbleRow, isOwn ? styles.bubbleRowOwn : styles.bubbleRowOther]}>
         <Pressable
           style={styles.pressableBubble}
           onLongPress={onLongPress}
@@ -138,78 +141,78 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               isVoice && styles.voiceBubble,
             ]}
           >
-        {isVoice ? (
-          <View style={styles.voiceContainer}>
-            <View style={styles.voiceRow}>
-              <TouchableOpacity 
-                style={[styles.playBtn, isOwn ? styles.playBtnOwn : styles.playBtnOther]}
-                onPress={() => toast.info('Voice playback requires audio URL', 'Voice Note')}
-              >
-                <Ionicons name="play" size={20} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
-              <View style={styles.waveformPlaceholder}>
-                {[...Array(24)].map((_, i) => (
-                  <View 
-                    key={i} 
-                    style={[
-                      styles.waveBar,
-                      { 
-                        height: 6 + (i % 5) * 3,
-                        backgroundColor: isOwn ? 'rgba(255,255,255,0.5)' : 'rgba(148,163,184,0.6)',
-                      }
-                    ]} 
-                  />
-                ))}
+            {isVoice ? (
+              <View style={styles.voiceContainer}>
+                <View style={styles.voiceRow}>
+                  <TouchableOpacity 
+                    style={[styles.playBtn, isOwn ? styles.playBtnOwn : styles.playBtnOther]}
+                    onPress={() => toast.info('Voice playback requires audio URL', 'Voice Note')}
+                  >
+                    <Ionicons name="play" size={20} color={isOwn ? '#3b82f6' : '#fff'} style={{ marginLeft: 2 }} />
+                  </TouchableOpacity>
+                  <View style={styles.waveformPlaceholder}>
+                    {[...Array(24)].map((_, i) => (
+                      <View 
+                        key={i} 
+                        style={[
+                          styles.waveBar,
+                          { 
+                            height: 6 + (i % 5) * 3,
+                            backgroundColor: isOwn ? 'rgba(255,255,255,0.5)' : 'rgba(148,163,184,0.6)',
+                          }
+                        ]} 
+                      />
+                    ))}
+                  </View>
+                  <Ionicons name="mic" size={14} color={isOwn ? 'rgba(255,255,255,0.6)' : '#64748b'} />
+                </View>
+                <Text style={[styles.voiceDuration, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
+                  {Math.floor(getVoiceNoteDuration(msg.content) / 1000)}s
+                </Text>
               </View>
-              <Ionicons name="mic" size={14} color={isOwn ? 'rgba(255,255,255,0.6)' : '#64748b'} />
+            ) : (() => {
+              const imageMatch = msg.content?.match(/\[image\]\((.+?)\)/);
+              if (imageMatch) {
+                const imageUrl = imageMatch[1];
+                const screenWidth = Dimensions.get('window').width;
+                const maxW = Math.min(screenWidth * 0.6, 260);
+                return (
+                  <View>
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={{ width: maxW, height: maxW * 0.75, borderRadius: 10 }}
+                      resizeMode="cover"
+                    />
+                    {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim() ? (
+                      <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 6 }]}>
+                        {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim()}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              }
+              return (
+                <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
+                  {msg.content}
+                </Text>
+              );
+            })()}
+            <View style={styles.footer}>
+              {msg.edited_at && (
+                <Text style={[styles.editedLabel, { color: isOwn ? 'rgba(255,255,255,0.5)' : '#64748b' }]}>edited</Text>
+              )}
+              <Text style={[styles.time, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
+                {formatTime(msg.created_at)}
+              </Text>
+              {isOwn && (
+                <View style={styles.ticksContainer}>
+                  <MessageTicks status={status} />
+                </View>
+              )}
             </View>
-            <Text style={[styles.voiceDuration, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
-              {Math.floor(getVoiceNoteDuration(msg.content) / 1000)}s
-            </Text>
-          </View>
-        ) : (() => {
-          // Check for image message: [image](url)
-          const imageMatch = msg.content?.match(/\[image\]\((.+?)\)/);
-          if (imageMatch) {
-            const imageUrl = imageMatch[1];
-            const screenWidth = Dimensions.get('window').width;
-            const maxW = Math.min(screenWidth * 0.6, 260);
-            return (
-              <View>
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={{ width: maxW, height: maxW * 0.75, borderRadius: 10 }}
-                  resizeMode="cover"
-                />
-                {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim() ? (
-                  <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0', marginTop: 6 }]}>
-                    {msg.content.replace(/📷 Photo\n?/, '').replace(/\[image\]\(.+?\)/, '').trim()}
-                  </Text>
-                ) : null}
-              </View>
-            );
-          }
-          return (
-            <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
-              {msg.content}
-            </Text>
-          );
-        })()}
-        <View style={styles.footer}>
-          {msg.edited_at && (
-            <Text style={[styles.editedLabel, { color: isOwn ? 'rgba(255,255,255,0.5)' : '#64748b' }]}>edited</Text>
-          )}
-          <Text style={[styles.time, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#64748b' }]}>
-            {formatTime(msg.created_at)}
-          </Text>
-          {isOwn && (
-            <View style={styles.ticksContainer}>
-              <MessageTicks status={status} />
-            </View>
-          )}
-        </View>
           </LinearGradient>
         </Pressable>
+      </View>
       
       {/* Reaction display below bubble - show all reactions with counts */}
       {activeReactions.length > 0 && (
@@ -257,6 +260,18 @@ const styles = StyleSheet.create({
   pressableBubble: {
     maxWidth: '88%',
     flexShrink: 1,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+    maxWidth: '100%',
+  },
+  bubbleRowOwn: {
+    justifyContent: 'flex-end',
+  },
+  bubbleRowOther: {
+    justifyContent: 'flex-start',
   },
   voiceBubbleWrapper: {
     maxWidth: '88%',

@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-02-08T09:12:02.903Z",
+  "options": {
+    "apply": false,
+    "strict": true
+  },
+  "before": {
+    "missingCount": 0,
+    "conflictCount": 0,
+    "bySurface": {
+      "native": 0,
+      "web": 0
+    }
+  },
+  "missing": [],
+  "conflicts": [],
+  "resolutionStats": {
+    "override": 0,
+    "default_value": 0,
+    "default_conflict_resolved_by_frequency": 0,
+    "fallback": 0,
+    "unsupported_namespace": 0,
+    "path_collision": 0
+  },
+  "apply": {
+    "englishAdded": {
+      "nativeCommon": 0,
+      "nativeWhatsapp": 0,
+      "webCommon": 0
+    },
+    "unresolved": [],
+    "propagation": {
+      "native": [],
+      "web": []
+    }
+  },
+  "after": null
+}

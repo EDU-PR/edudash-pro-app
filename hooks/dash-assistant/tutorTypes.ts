@@ -1,4 +1,15 @@
-export type TutorMode = 'diagnostic' | 'practice' | 'quiz' | 'explain';
+export type TutorMode = 'diagnostic' | 'practice' | 'quiz' | 'explain' | 'play';
+
+/** Preschool-specific play activities Dash can run in conversation */
+export type PreschoolPlayType =
+  | 'counting_game'
+  | 'colour_quiz'
+  | 'shape_hunt'
+  | 'rhyme_time'
+  | 'story_time'
+  | 'animal_sounds'
+  | 'letter_fun'
+  | 'silly_questions';
 
 export type TutorSession = {
   id: string;
@@ -17,6 +28,10 @@ export type TutorSession = {
   incorrectStreak: number;
   correctStreak: number;
   attemptsOnQuestion: number;
+  /** Preschool play type when mode === 'play' */
+  playType?: PreschoolPlayType | null;
+  /** Whether voice mode is active (kid-friendly ORB) */
+  voiceActive?: boolean;
 };
 
 export type TutorPayload = {

@@ -1,10 +1,12 @@
 import type { LearnerContext } from '@/lib/dash-ai/learnerContext';
-import type { TutorMode, TutorPayload, TutorSession } from '@/hooks/dash-assistant/tutorTypes';
+import type { TutorMode, TutorPayload, TutorSession, PreschoolPlayType } from '@/hooks/dash-assistant/tutorTypes';
 
 export const detectTutorIntent = (text: string): TutorMode | null => {
   const value = (text || '').toLowerCase();
   if (!value) return null;
 
+  // Play mode — preschool interactive play (check BEFORE other modes)
+  if (/(let.s\s+play|play\s+a\s+game|play\s+with\s+me|fun\s+game|counting\s+game|colour\s+game|shape\s+game|rhyme\s+game|story\s+time|animal\s+sound|letter\s+game|silly\s+question)/i.test(value)) return 'play';
   // Quiz mode — formal assessment-style
   if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz|assessment|mock\s+test|exam\s+prep|past\s+paper)/i.test(value)) return 'quiz';
   // Practice mode — exercises, drills, worksheets
@@ -14,6 +16,20 @@ export const detectTutorIntent = (text: string): TutorMode | null => {
   // Explain mode — teaching, homework help
   if (/(explain|help\s+me\s+understand|teach\s+me|how\s+does|what\s+is|homework\s+help|can\s+you\s+explain)/i.test(value)) return 'explain';
 
+  return null;
+};
+
+/** Detect which preschool play sub-type the user wants */
+export const detectPlayType = (text: string): PreschoolPlayType | null => {
+  const v = (text || '').toLowerCase();
+  if (/(count|number|how many)/i.test(v)) return 'counting_game';
+  if (/(colour|color|rainbow)/i.test(v)) return 'colour_quiz';
+  if (/(shape|circle|square|triangle)/i.test(v)) return 'shape_hunt';
+  if (/(rhyme|rhyming|poem|song)/i.test(v)) return 'rhyme_time';
+  if (/(story|tale|once upon|adventure)/i.test(v)) return 'story_time';
+  if (/(animal|sound|moo|woof|meow)/i.test(v)) return 'animal_sounds';
+  if (/(letter|abc|alphabet|phonics)/i.test(v)) return 'letter_fun';
+  if (/(silly|funny|joke|giggle)/i.test(v)) return 'silly_questions';
   return null;
 };
 
@@ -28,6 +44,8 @@ export const getMaxQuestions = (mode: TutorMode) => {
       return 5;
     case 'practice':
       return 3;
+    case 'play':
+      return 5;
     case 'explain':
     default:
       return 1;
@@ -41,6 +59,8 @@ export const getTutorPhaseLabel = (mode: TutorMode) => {
     case 'practice':
     case 'quiz':
       return 'Practice';
+    case 'play':
+      return 'Play';
     case 'diagnostic':
     default:
       return 'Diagnose';
@@ -89,8 +109,33 @@ export const buildTutorSystemContext = (
     normalizedSchool.includes('early') ||
     ageBand === '3-5' ||
     ageBand === '6-8';
+  const isPlayMode = session.mode === 'play';
 
-  const levelGuidance = isPreschool
+  const levelGuidance = isPlayMode
+    ? [
+        'PRESCHOOL PLAY MODE (3-5 YEAR OLDS):',
+        '- You are a warm, playful, patient AI friend called Dash.',
+        '- Speak like a fun teacher talking to a 3-5 year old child.',
+        '- Use VERY short sentences (5-10 words max).',
+        '- Use lots of emojis to make it visual and fun.',
+        '- Keep everything 100% play-based — NO formal testing language.',
+        '- Celebrate EVERY attempt, even wrong ones: "Great try! Let\'s look again!"',
+        '- Use silly sounds, animal noises, and countdown language.',
+        '- Ask ONE question at a time and wait.',
+        '- Topics: counting 1-10, colours, shapes, letters/sounds, animals, rhyming, stories.',
+        '- For counting: show emoji objects and ask "How many?"',
+        '- For colours: "What colour is a banana? 🍌"',
+        '- For shapes: "A wheel is round like a... ⭕"',
+        '- For letters: "Apple starts with which letter? Aaa-pple 🍎"',
+        '- For rhyming: "Which word sounds like CAT? Hat or Dog?"',
+        '- For stories: "Once upon a time... what happened next?"',
+        '- After 3 correct in a row, make it slightly harder.',
+        '- After 2 wrong in a row, make it easier and give the answer.',
+        '- Include a physical mini-challenge every 3rd round: "Jump like a frog! 🐸"',
+        '- End with a celebration: "You\'re a SUPERSTAR! ⭐⭐⭐"',
+        session.playType ? `- Play focus: ${session.playType.replace(/_/g, ' ')}` : '',
+      ].filter(Boolean).join('\n')
+    : isPreschool
     ? [
         'PRESCHOOL MODE:',
         '- Use very simple language and short sentences.',

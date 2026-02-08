@@ -153,7 +153,8 @@ export default function ParentActivityFeedPage() {
 
   // ── Auth ──────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then((result) => {
+      const data = result.data;
       if (data.user) {
         setUserId(data.user.id);
         setEmail(data.user.email || '');
@@ -169,7 +170,8 @@ export default function ParentActivityFeedPage() {
       .select('id')
       .eq('auth_user_id', userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then((result) => {
+        const data = result.data;
         setProfileId(data?.id || userId);
       });
   }, [userId, supabase]);
@@ -181,7 +183,8 @@ export default function ParentActivityFeedPage() {
       .from('students')
       .select('id, first_name, last_name, class_id, classes:class_id(name)')
       .eq('parent_id', profileId)
-      .then(({ data }) => {
+      .then((result) => {
+        const data = result.data;
         const mapped = (data || []).map((s: any) => ({
           id: s.id,
           first_name: s.first_name,

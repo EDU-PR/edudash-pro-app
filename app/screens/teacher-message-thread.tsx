@@ -28,12 +28,15 @@ import {
   DateSeparator,
   MessageBubble,
   MessageComposer,
-  SmartQuickReplies,
+  ChatSearchOverlay,
+  MediaGalleryView,
+  StarredMessagesView,
   getDateKey,
   getDateSeparatorLabel,
 } from '@/components/messaging';
 import { ChatHeader } from '@/components/messaging/ChatHeader';
 import { useTypingIndicator } from '@/hooks/useTypingIndicator';
+import { useThreadOptions } from '@/hooks/useThreadOptions';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Safe imports with fallbacks
@@ -76,7 +79,6 @@ const defaultTheme = {
 };
 
 const COMPOSER_OVERLAY_HEIGHT = 84;
-const QUICK_REPLIES_OVERLAY_HEIGHT = 86;
 const WALLPAPER_ACCENTS: Record<string, string> = {
   'purple-glow': '#a78bfa',
   midnight: '#60a5fa',
@@ -85,6 +87,19 @@ const WALLPAPER_ACCENTS: Record<string, string> = {
   'sunset-warm': '#fb923c',
   'dark-slate': '#93c5fd',
 };
+
+function hexToRgba(color: string, alpha: number, fallback: string): string {
+  if (!color.startsWith('#')) return fallback;
+  const hex = color.slice(1);
+  const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+  if (normalized.length !== 6) return fallback;
+  const intValue = Number.parseInt(normalized, 16);
+  if (Number.isNaN(intValue)) return fallback;
+  const r = (intValue >> 16) & 255;
+  const g = (intValue >> 8) & 255;
+  const b = intValue & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
 try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
@@ -142,9 +157,9 @@ export default function TeacherMessageThreadScreen() {
   const [wallpaper, setWallpaper] = useState<any>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [sending, setSending] = useState(false);
+  const [optimisticMsgs, setOptimisticMsgs] = useState<Message[]>([]);
   const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
   const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_HEIGHT);
-  const [quickRepliesHeight, setQuickRepliesHeight] = useState(QUICK_REPLIES_OVERLAY_HEIGHT);
   
   const listRef = useRef<FlashListRef<any> | null>(null);
   const isAtBottomRef = useRef(true);
@@ -157,7 +172,15 @@ export default function TeacherMessageThreadScreen() {
   // Subscribe to real-time message updates
   useTeacherMessagesRealtime(threadId);
   
-  const otherIds = useMemo(() => parentId ? [parentId] : [], [parentId]);
+  const otherParticipant = useMemo(
+    () => messages.find((m) => m.sender_id !== user?.id),
+    [messages, user?.id]
+  );
+  const resolvedOtherUserId = parentId || otherParticipant?.sender_id;
+  const otherIds = useMemo(
+    () => (resolvedOtherUserId ? [resolvedOtherUserId] : []),
+    [resolvedOtherUserId]
+  );
   
   // Mark messages as delivered and read when thread is opened
   // Delivered (gray ticks): When user comes online or opens thread
@@ -205,11 +228,47 @@ export default function TeacherMessageThreadScreen() {
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+  const {
+    handleClearChat,
+    handleMuteNotifications,
+    handleSearchInChat,
+    handleExportChat,
+    handleMediaLinksAndDocs,
+    handleStarredMessages,
+    handleDisappearingMessages,
+    handleAddShortcut,
+    handleReport,
+    handleBlockUser,
+    handleViewContact,
+    isMuted,
+    isUserBlocked,
+    disappearingStatusLabel,
+    showSearchOverlay,
+    searchResults,
+    searchQuery,
+    isSearching,
+    performSearch,
+    closeSearch,
+    showMediaGallery,
+    closeMediaGallery,
+    showStarredMessages: showStarredView,
+    closeStarredMessages,
+  } = useThreadOptions({
+    threadId: threadId || '',
+    userId: user?.id,
+    otherUserId: resolvedOtherUserId,
+    refetch,
+    setShowOptionsMenu: setShowOptions,
+    setOptimisticMsgs,
+    displayName,
+  });
   
   // Handlers
   const handleSend = useCallback(async (content: string) => {
     if (!content.trim() || !threadId || !user?.id) return;
     setSending(true);
+    setReplyTo(null);
     try {
       await sendMessage({ threadId, content, senderId: user.id });
       refetch();
@@ -326,6 +385,34 @@ export default function TeacherMessageThreadScreen() {
     }
   }, [user?.id, refetch]);
 
+  const handleToggleStar = useCallback(async () => {
+    if (!selectedMsg?.id || !user?.id) {
+      setShowActions(false);
+      return;
+    }
+
+    try {
+      const client = require('@/lib/supabase').assertSupabase();
+      const isCurrentlyStarred = !!(selectedMsg as any).is_starred;
+
+      const { error } = await client
+        .from('messages')
+        .update({ is_starred: !isCurrentlyStarred })
+        .eq('id', selectedMsg.id);
+
+      if (error) throw error;
+
+      refetch();
+      toast.success(!isCurrentlyStarred ? 'Message starred' : 'Star removed');
+    } catch (error) {
+      console.error('Error toggling star:', error);
+      toast.error('Failed to update star');
+    } finally {
+      setShowActions(false);
+      setSelectedMsg(null);
+    }
+  }, [selectedMsg, user?.id, refetch]);
+
   const handleVoiceCall = useCallback(() => {
     if (!callContext) {
       toast.warn('Voice calling is not available', 'Voice Call');
@@ -369,11 +456,16 @@ export default function TeacherMessageThreadScreen() {
     | { type: 'message'; key: string; msg: Message };
 
   const messagesAsc = useMemo(() => {
-    const sorted = [...messages].sort((a: any, b: any) => {
+    const ids = new Set(messages.map((m: any) => m.id));
+    const merged = [
+      ...messages,
+      ...optimisticMsgs.filter((m) => !ids.has(m.id)),
+    ];
+    const sorted = [...merged].sort((a: any, b: any) => {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
     return sorted as Message[];
-  }, [messages]);
+  }, [messages, optimisticMsgs]);
 
   const voiceMessageIdsAsc = useMemo(() => {
     return messagesAsc.filter((m) => m.voice_url).map((m) => m.id);
@@ -455,51 +547,31 @@ export default function TeacherMessageThreadScreen() {
       layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
   }, []);
 
-  const lastReceivedMessage = useMemo(() => {
-    const received = messagesAsc
-      .filter((m) => m.sender_id !== user?.id && m.content && typeof m.content === 'string')
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    return received[0]?.content;
-  }, [messagesAsc, user?.id]);
-
   const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.ceil(event.nativeEvent.layout.height);
     if (nextHeight > 0 && Math.abs(nextHeight - composerHeight) > 1) {
       setComposerHeight(nextHeight);
     }
   }, [composerHeight]);
-
-  const handleQuickRepliesLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-    if (nextHeight > 0 && Math.abs(nextHeight - quickRepliesHeight) > 1) {
-      setQuickRepliesHeight(nextHeight);
-    }
-  }, [quickRepliesHeight]);
-
-  const quickRepliesVisible = !!lastReceivedMessage && !replyTo && !sending && !isPending;
   const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
   const composerKeyboardOffset =
     keyboardHeight > 0 ? keyboardHeight - (Platform.OS === 'ios' ? insets.bottom : 0) + 8 : 0;
   const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
-  const safeQuickRepliesHeight = quickRepliesVisible
-    ? Math.max(quickRepliesHeight, QUICK_REPLIES_OVERLAY_HEIGHT)
-    : 0;
-  const quickRepliesBottom =
-    composerKeyboardOffset +
-    composerBottomInset +
-    safeComposerHeight -
-    2;
   const messageViewportInset =
     composerKeyboardOffset +
     composerBottomInset +
-    safeComposerHeight +
-    safeQuickRepliesHeight;
+    safeComposerHeight;
   const messageBottomReserve = 24;
   const wallpaperAccent =
     wallpaper?.type === 'preset' ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
-  const quickRepliesSurface =
-    bgSource ? 'rgba(15, 23, 42, 0.94)' : 'rgba(15, 23, 42, 0.9)';
-  const wallpaperVariant = bgSource ? 'image' : 'gradient';
+  const composerSurfaceColor = bgSource
+    ? 'rgba(15, 23, 42, 0.96)'
+    : wallpaper?.type === 'preset'
+    ? hexToRgba(wallpaperAccent, 0.28, 'rgba(15, 23, 42, 0.88)')
+    : theme.background;
+  const composerBorderColor = wallpaper?.type === 'preset'
+    ? hexToRgba(wallpaperAccent, 0.45, 'rgba(148, 163, 184, 0.18)')
+    : 'rgba(148, 163, 184, 0.18)';
   
   // Loading state
   if (isLoading) {
@@ -629,29 +701,6 @@ export default function TeacherMessageThreadScreen() {
         )}
       </View>
 
-      {/* Smart Quick Replies */}
-      <View
-        pointerEvents={quickRepliesVisible ? 'auto' : 'none'}
-        onLayout={handleQuickRepliesLayout}
-        style={[
-          styles.quickRepliesArea,
-          {
-            bottom: quickRepliesBottom,
-            opacity: quickRepliesVisible ? 1 : 0,
-          },
-        ]}
-      >
-        <SmartQuickReplies
-          lastReceivedMessage={lastReceivedMessage}
-          onSelectReply={handleSend}
-          visible={quickRepliesVisible}
-          wallpaperMode
-          accentColor={wallpaperAccent}
-          surfaceColor={quickRepliesSurface}
-          wallpaperVariant={wallpaperVariant}
-        />
-      </View>
-      
       {/* Floating Composer */}
       <View style={[
         styles.composerKeyboard,
@@ -661,7 +710,8 @@ export default function TeacherMessageThreadScreen() {
           styles.composerArea,
           { 
             paddingBottom: keyboardHeight > 0 ? 8 : composerBottomInset,
-            backgroundColor: bgSource ? 'rgba(15, 23, 42, 0.97)' : theme.background,
+            backgroundColor: composerSurfaceColor,
+            borderTopColor: composerBorderColor,
           }
         ]}
           onLayout={handleComposerLayout}
@@ -682,35 +732,20 @@ export default function TeacherMessageThreadScreen() {
           visible={showOptions}
           onClose={() => setShowOptions(false)}
           onChangeWallpaper={() => { setShowOptions(false); setShowWallpaper(true); }}
-          onMuteNotifications={() => { setShowOptions(false); toast.success('Notifications muted'); }}
-          onSearchInChat={() => { setShowOptions(false); toast.info('Coming soon', 'Search'); }}
-          onClearChat={async () => { 
-            setShowOptions(false);
-            try {
-              const { assertSupabase } = await import('@/lib/supabase');
-              const supabase = assertSupabase();
-              
-              if (!threadId) return;
-              
-              const { error } = await supabase
-                .from('messages')
-                .delete()
-                .eq('thread_id', threadId);
-              
-              if (error) throw error;
-              
-              refetch();
-              toast.success('Chat cleared');
-            } catch (error) {
-              console.error('[ClearChat] Error:', error);
-              toast.error('Failed to clear chat');
-            }
-          }}
-          onBlockUser={() => { setShowOptions(false); toast.warn('User blocked'); }}
-          onViewContact={() => { setShowOptions(false); toast.info(displayName, 'Contact'); }}
-          onExportChat={() => { setShowOptions(false); toast.info('Coming soon', 'Export'); }}
-          onMediaLinksAndDocs={() => { setShowOptions(false); toast.info('Coming soon', 'Media'); }}
-          onStarredMessages={() => { setShowOptions(false); toast.info('Coming soon', 'Starred'); }}
+          onMuteNotifications={handleMuteNotifications}
+          onSearchInChat={handleSearchInChat}
+          onClearChat={handleClearChat}
+          onExportChat={handleExportChat}
+          onMediaLinksAndDocs={handleMediaLinksAndDocs}
+          onStarredMessages={handleStarredMessages}
+          onDisappearingMessages={handleDisappearingMessages}
+          onAddShortcut={handleAddShortcut}
+          onReport={handleReport}
+          onBlockUser={handleBlockUser}
+          onViewContact={handleViewContact}
+          isMuted={isMuted}
+          isBlocked={isUserBlocked}
+          disappearingLabel={disappearingStatusLabel}
           contactName={displayName}
         />
       )}
@@ -728,6 +763,7 @@ export default function TeacherMessageThreadScreen() {
           onCopy={() => setShowActions(false)}
           onForward={() => { setShowActions(false); toast.info('Coming soon', 'Forward'); }}
           onDelete={() => { setShowActions(false); toast.success('Message deleted'); }}
+          onStar={handleToggleStar}
         />
       )}
       
@@ -739,6 +775,30 @@ export default function TeacherMessageThreadScreen() {
           onSelect={(w: any) => { setWallpaper(w); setShowWallpaper(false); }}
         />
       )}
+
+      {/* Chat Search Overlay */}
+      <ChatSearchOverlay
+        visible={showSearchOverlay}
+        query={searchQuery}
+        results={searchResults as any[]}
+        isSearching={isSearching}
+        onSearch={performSearch}
+        onClose={closeSearch}
+      />
+
+      {/* Media Gallery */}
+      <MediaGalleryView
+        visible={showMediaGallery}
+        threadId={threadId || ''}
+        onClose={closeMediaGallery}
+      />
+
+      {/* Starred Messages */}
+      <StarredMessagesView
+        visible={showStarredView}
+        threadId={threadId || ''}
+        onClose={closeStarredMessages}
+      />
     </View>
   );
 }
@@ -866,12 +926,5 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     borderTopWidth: 1,
     borderTopColor: 'rgba(148, 163, 184, 0.18)',
-  },
-  quickRepliesArea: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 90,
-    elevation: 24,
   },
 });

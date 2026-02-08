@@ -170,6 +170,15 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'warning',
     category: 'reports',
   },
+  family_activity_review: {
+    path: '/screens/family-activity-review' as Href,
+    title: 'Family Activity Review',
+    titleKey: 'teacher.family_activity_review',
+    icon: 'home',
+    color: '#14B8A6',
+    category: 'reports',
+    roles: ['teacher', 'principal_admin'],
+  },
   reputation: {
     path: '/screens/teacher-references' as Href,
     title: 'My Reputation',
@@ -222,6 +231,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'messages',
   'manage_groups',
   'student_reports',
+  'family_activity_review',
   'reputation',
   'ai_assistant',
   'call_parent',

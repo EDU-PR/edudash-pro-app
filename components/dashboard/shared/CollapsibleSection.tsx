@@ -16,10 +16,18 @@ import Animated, {
   interpolate
 } from 'react-native-reanimated';
 import Feedback from '@/lib/feedback';
+import { SectionAttentionDot, type AttentionPriority } from './SectionAttentionDot';
+import { GlowContainer } from './GlowContainer';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
 const isSmallScreen = width < 380;
+
+export interface SectionAttention {
+  priority: AttentionPriority;
+  count: number;
+  label?: string;
+}
 
 export interface CollapsibleSectionProps {
   title: string;
@@ -33,6 +41,8 @@ export interface CollapsibleSectionProps {
   actionLabel?: string;
   /** Optional action button press handler */
   onActionPress?: () => void;
+  /** Attention indicator — drives glow, dot, and badge */
+  attention?: SectionAttention;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ 
@@ -45,11 +55,17 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   onToggle,
   actionLabel,
   onActionPress,
+  attention,
 }) => {
   const { theme } = useTheme();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const rotation = useSharedValue(defaultCollapsed ? 0 : 1);
   const contentOpacity = useSharedValue(defaultCollapsed ? 0 : 1);
+
+  // Attention visuals only show when section is collapsed (not yet acknowledged)
+  const attentionPriority: AttentionPriority = 
+    (collapsed && attention?.priority) ? attention.priority : 'none';
+  const isElevated = attentionPriority === 'critical';
 
   const styles = createStyles(theme);
 
@@ -92,7 +108,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     };
   });
 
-  return (
+  const sectionContent = (
     <View style={styles.container}>
       <TouchableOpacity
         style={styles.header}
@@ -133,6 +149,12 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
               <Text style={[styles.actionText, { color: theme.primary }]}>{actionLabel}</Text>
             </TouchableOpacity>
           )}
+          {attentionPriority !== 'none' && (
+            <SectionAttentionDot
+              priority={attentionPriority}
+              count={attention?.count}
+            />
+          )}
           <Animated.View style={animatedChevronStyle}>
             <Ionicons 
               name="chevron-forward" 
@@ -150,6 +172,17 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
       </Animated.View>
     </View>
   );
+
+  // Wrap in GlowContainer when attention is needed
+  if (attentionPriority !== 'none') {
+    return (
+      <GlowContainer urgency={attentionPriority} elevated={isElevated}>
+        {sectionContent}
+      </GlowContainer>
+    );
+  }
+
+  return sectionContent;
 };
 
 const createStyles = (theme: any) => {

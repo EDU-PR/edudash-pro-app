@@ -42,6 +42,8 @@ interface ThreadOptionsMenuProps {
   onAddShortcut?: () => void;
   onReport?: () => void;
   isMuted?: boolean;
+  isBlocked?: boolean;
+  disappearingLabel?: string;
   contactName?: string;
 }
 
@@ -121,6 +123,8 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
   onAddShortcut,
   onReport,
   isMuted = false,
+  isBlocked = false,
+  disappearingLabel,
   contactName,
 }) => {
   const { theme } = useTheme();
@@ -295,7 +299,7 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                 {onDisappearingMessages && (
                   <OptionItem
                     icon="timer-outline"
-                    label="Disappearing Messages"
+                    label={disappearingLabel ? `Disappearing Messages (${disappearingLabel})` : 'Disappearing Messages'}
                     onPress={() => handleOptionPress(onDisappearingMessages)}
                     theme={theme}
                   />
@@ -340,7 +344,7 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                 {onReport && (
                   <OptionItem
                     icon="flag-outline"
-                    label="Report"
+                    label="Report User"
                     onPress={() => handleOptionPress(onReport)}
                     destructive
                     theme={theme}
@@ -359,10 +363,10 @@ export const ThreadOptionsMenu: React.FC<ThreadOptionsMenuProps> = ({
                 
                 {onBlockUser && (
                   <OptionItem
-                    icon="ban-outline"
-                    label="Block User"
+                    icon={isBlocked ? 'lock-open-outline' : 'ban-outline'}
+                    label={isBlocked ? 'Unblock User' : 'Block User'}
                     onPress={() => handleOptionPress(onBlockUser)}
-                    destructive
+                    destructive={!isBlocked}
                     theme={theme}
                   />
                 )}
