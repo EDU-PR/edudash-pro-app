@@ -379,6 +379,9 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'calls':
         router.push('/screens/calls');
         break;
+      case 'activity_feed':
+        router.push('/screens/parent-activity-feed');
+        break;
       case 'homework_history':
         router.push('/screens/parent-homework-history');
         break;
@@ -403,6 +406,51 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       case 'learning_hub':
         router.push('/screens/learning-hub');
         break;
+      case 'dash_playground':
+        router.push('/screens/dash-playground');
+        break;
+      case 'family_activity':
+        router.push('/screens/dash-playground');
+        break;
+      case 'upload_progress': {
+        const child = activeChild || children[0];
+        if (!child?.id) {
+          showAlert({
+            title: t('parent.no_child_selected', { defaultValue: 'No child selected' }),
+            message: t('parent.no_child_selected_message', { defaultValue: 'Please link or select a child first, then upload progress evidence.' }),
+            type: 'info',
+          });
+          break;
+        }
+        const first = child.firstName || child.first_name || '';
+        const last = child.lastName || child.last_name || '';
+        const fallbackName = child.name || t('parent.child', { defaultValue: 'Child' });
+        const childName = `${first} ${last}`.trim() || fallbackName;
+        router.push({
+          pathname: '/screens/parent-picture-of-progress',
+          params: {
+            studentId: String(child.id),
+            studentName: encodeURIComponent(childName),
+          },
+        } as any);
+        break;
+      }
+      case 'dash_grade_test': {
+        const child = activeChild || children[0];
+        const childGrade = child?.grade || child?.grade_level || 'Age 6';
+        const childName = child?.firstName || child?.first_name || child?.name || t('parent.child', { defaultValue: 'Child' });
+        const childId = child?.id ? String(child.id) : '';
+        router.push({
+          pathname: '/screens/ai-homework-grader-live',
+          params: {
+            assignmentTitle: t('parent.family_activity_assignment_title', { defaultValue: 'Family Activity Review' }),
+            gradeLevel: childGrade,
+            studentId: childId,
+            submissionContent: `${childName} completed today's family activity. Add what they did, then press Start Live Grading.`,
+          },
+        } as any);
+        break;
+      }
       default:
         showAlert({
           title: t('common.coming_soon', { defaultValue: 'Coming Soon' }),
@@ -418,6 +466,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'view_homework', label: t('parent.view_homework', { defaultValue: 'View Homework' }), icon: 'book' },
       { id: 'messages', label: t('parent.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles' },
       { id: 'check_attendance', label: t('parent.check_attendance', { defaultValue: 'Check Attendance' }), icon: 'calendar' },
+      { id: 'activity_feed', label: t('parent.activity_feed', { defaultValue: 'Activity Feed' }), icon: 'newspaper' },
     ];
     if (isK12School && !isEarlyLearner) {
       base.push({ id: 'view_grades', label: t('parent.view_grades', { defaultValue: 'View Grades' }), icon: 'school' });
@@ -531,6 +580,10 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
       { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
       { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
+      { id: 'activity_feed', title: t('parent.activity_feed', { defaultValue: 'Activity Feed' }), icon: 'newspaper', color: '#0EA5E9', subtitle: t('parent.activity_feed_subtitle', { defaultValue: "See today's classroom activities & photos" }) },
+      { id: 'family_activity', title: t('parent.family_activity', { defaultValue: 'Family Activity with Dash' }), icon: 'sparkles-outline', color: '#EC4899', subtitle: t('parent.family_activity_subtitle', { defaultValue: 'Get a fun guided home activity.' }) },
+      { id: 'upload_progress', title: t('parent.upload_progress', { defaultValue: 'Upload Activity Evidence' }), icon: 'camera-outline', color: '#0EA5E9' },
+      { id: 'dash_grade_test', title: t('parent.dash_grade_test', { defaultValue: 'Dash Grade Test Run' }), icon: 'checkmark-done-outline', color: '#8B5CF6' },
       { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
       { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
       { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
@@ -570,6 +623,15 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         title: t('parent.learning_hub', { defaultValue: 'Learning Hub' }),
         icon: 'rocket',
         color: '#0EA5E9',
+      });
+      // Dash Playground — interactive activities for 3-5 year olds
+      actions.splice(4, 0, {
+        id: 'dash_playground',
+        title: t('parent.dash_playground', { defaultValue: 'Dash Playground' }),
+        icon: 'game-controller',
+        color: '#8B5CF6',
+        subtitle: t('parent.dash_playground_subtitle', { defaultValue: 'Fun activities with counting, letters, shapes & more!' }),
+        glow: true,
       });
     }
 
@@ -658,11 +720,15 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       check_attendance: 'learning',
       view_grades: 'learning',
       learning_hub: 'learning',
+      dash_playground: 'learning',
+      family_activity: 'learning',
+      upload_progress: 'learning',
       messages: 'communication',
       calls: 'communication',
       events: 'communication',
       dev_notifications: 'communication',
       payments: 'payments',
+      dash_grade_test: 'ai',
       dash_tutor: 'ai',
       ai_homework_help: 'ai',
       ask_dash: 'ai',

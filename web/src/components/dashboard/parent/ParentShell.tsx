@@ -35,6 +35,7 @@ import {
   Rocket,
   GraduationCap,
   School,
+  Newspaper,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
@@ -216,6 +217,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
       return [
         { href: '/dashboard/parent', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: LayoutDashboard },
         { href: '/dashboard/parent/announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: Megaphone },
+        { href: '/dashboard/parent/activities', label: t('dashboard.parent.nav.activities', { defaultValue: 'Activity Feed' }), icon: Newspaper },
         { href: '/dashboard/parent/messages', label: t('dashboard.parent.nav.messages', { defaultValue: 'Messages' }), icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/parent/calls', label: t('dashboard.parent.nav.calls', { defaultValue: 'Calls' }), icon: Phone },
         { href: '/dashboard/parent/homework', label: t('dashboard.parent.nav.homework', { defaultValue: 'Homework' }), icon: Clipboard, badge: homeworkCount },

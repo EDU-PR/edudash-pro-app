@@ -1,38 +1,30 @@
 /**
  * DailyActivityFeed Component
  *
- * Displays daily activities for a child's class to parents.
- * Shows what activities were done today, materials used, and learning objectives.
+ * Dashboard widget showing today's classroom activities posted by teachers.
+ * Reads from `student_activity_feed` (the same table teachers post to).
  *
  * Features:
  * - Real-time updates via Supabase subscription
- * - Activity timeline with icons and colors
- * - Expandable activity details
- * - Empty state for days with no activities logged
+ * - Activity timeline with type icons and colors
+ * - Expandable activity details with media preview
+ * - "See all" link to full activity feed screen
+ * - Empty state for days with no activities
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { formatTime } from '@/lib/utils/dateUtils';
+import { router } from 'expo-router';
+import {
+  useChildActivityFeed,
+  useActivityFeedRealtime,
+  type ActivityItem,
+} from '@/hooks/useActivityFeed';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-interface DailyActivity {
-  id: string;
-  activity_name: string;
-  description?: string;
-  activity_date: string;
-  start_time?: string;
-  end_time?: string;
-  materials_needed?: string[];
-  learning_objectives?: string[];
-  notes?: string;
-  created_by: string;
-  teacher_name?: string;
-}
 
 interface DailyActivityFeedProps {
   classId?: string;
@@ -40,38 +32,32 @@ interface DailyActivityFeedProps {
   date?: Date;
   maxItems?: number;
   showHeader?: boolean;
-  onActivityPress?: (activity: DailyActivity) => void;
+  onActivityPress?: (activity: any) => void;
 }
 
-// Activity type icons and colors
-const getActivityIcon = (name: string): { icon: string; color: string } => {
-  const nameLower = name.toLowerCase();
-  if (nameLower.includes('art') || nameLower.includes('craft') || nameLower.includes('paint')) {
-    return { icon: 'color-palette', color: '#EC4899' };
-  }
-  if (nameLower.includes('music') || nameLower.includes('song') || nameLower.includes('sing')) {
-    return { icon: 'musical-notes', color: '#8B5CF6' };
-  }
-  if (nameLower.includes('story') || nameLower.includes('read') || nameLower.includes('book')) {
-    return { icon: 'book', color: '#3B82F6' };
-  }
-  if (nameLower.includes('play') || nameLower.includes('game') || nameLower.includes('outdoor')) {
-    return { icon: 'basketball', color: '#10B981' };
-  }
-  if (nameLower.includes('math') || nameLower.includes('count') || nameLower.includes('number')) {
-    return { icon: 'calculator', color: '#F59E0B' };
-  }
-  if (nameLower.includes('science') || nameLower.includes('experiment') || nameLower.includes('nature')) {
-    return { icon: 'flask', color: '#06B6D4' };
-  }
-  if (nameLower.includes('lunch') || nameLower.includes('snack') || nameLower.includes('meal')) {
-    return { icon: 'restaurant', color: '#EF4444' };
-  }
-  if (nameLower.includes('nap') || nameLower.includes('rest') || nameLower.includes('sleep')) {
-    return { icon: 'moon', color: '#6366F1' };
-  }
-  return { icon: 'star', color: '#F59E0B' };
+// Activity type → icon & colour (matches teacher-post-activity.tsx)
+const ACTIVITY_META: Record<string, { icon: string; color: string }> = {
+  learning: { icon: 'school', color: '#3B82F6' },
+  play: { icon: 'game-controller', color: '#10B981' },
+  meal: { icon: 'restaurant', color: '#EF4444' },
+  rest: { icon: 'moon', color: '#6366F1' },
+  art: { icon: 'color-palette', color: '#EC4899' },
+  music: { icon: 'musical-notes', color: '#8B5CF6' },
+  story: { icon: 'book', color: '#0EA5E9' },
+  outdoor: { icon: 'sunny', color: '#F59E0B' },
+  special: { icon: 'star', color: '#F97316' },
+  milestone: { icon: 'trophy', color: '#EAB308' },
+  social: { icon: 'people', color: '#06B6D4' },
 };
+
+function getMeta(type: string) {
+  return ACTIVITY_META[type] || { icon: 'star', color: '#F59E0B' };
+}
+
+function formatActivityTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
 
 export function DailyActivityFeed({
   classId,
@@ -83,88 +69,38 @@ export function DailyActivityFeed({
 }: DailyActivityFeedProps) {
   const { theme } = useTheme();
   const { t, i18n } = useTranslation();
-  const [activities, setActivities] = useState<DailyActivity[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-
   const styles = useMemo(() => createStyles(theme), [theme]);
+
   const dateString = date.toISOString().split('T')[0];
 
-  const loadActivities = useCallback(async () => {
-    if (!classId) {
-      setLoading(false);
-      return;
-    }
+  // ── Data: reads from student_activity_feed ───────
+  const {
+    data: allActivities = [],
+    isLoading,
+  } = useChildActivityFeed(studentId, { date: dateString, limit: maxItems });
 
-    try {
-      const supabase = assertSupabase();
+  // ── Real-time ────────────────────────────────────
+  useActivityFeedRealtime(studentId);
 
-      const { data, error } = await supabase
-        .from('daily_activities')
-        .select(`
-          *,
-          profiles:created_by (first_name, last_name)
-        `)
-        .eq('class_id', classId)
-        .eq('activity_date', dateString)
-        .order('start_time', { ascending: true, nullsFirst: false })
-        .limit(maxItems);
-
-      if (error) {
-        console.error('[DailyActivityFeed] Error loading activities:', error);
-        setActivities([]);
-      } else {
-        const mapped = (data || []).map((a: any) => ({
-          ...a,
-          teacher_name: a.profiles
-            ? `${a.profiles.first_name || ''} ${a.profiles.last_name || ''}`.trim() || t('roles.teacher', { defaultValue: 'Teacher' })
-            : t('roles.teacher', { defaultValue: 'Teacher' }),
-        }));
-        setActivities(mapped);
-      }
-    } catch (err) {
-      console.error('[DailyActivityFeed] Error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [classId, dateString, maxItems, t]);
-
-  useEffect(() => {
-    loadActivities();
-
-    // Real-time subscription
-    if (!classId) return;
-
-    const supabase = assertSupabase();
-    const subscription = supabase
-      .channel(`daily_activities_${classId}_${dateString}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'daily_activities',
-          filter: `class_id=eq.${classId}`,
-        },
-        () => {
-          loadActivities();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, [classId, dateString, loadActivities]);
+  // Filter to class if classId is provided (student_activity_feed has class_id)
+  const activities = useMemo(() => {
+    if (!classId) return allActivities;
+    return allActivities.filter((a) => a.class_id === classId);
+  }, [allActivities, classId]);
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
   };
 
-  const renderActivity = ({ item, index }: { item: DailyActivity; index: number }) => {
-    const { icon, color } = getActivityIcon(item.activity_name);
+  const renderActivity = ({ item, index }: { item: ActivityItem; index: number }) => {
+    const { icon, color } = getMeta(item.activity_type);
     const isExpanded = expandedId === item.id;
     const isLast = index === activities.length - 1;
+    const teacherName = item.teacher
+      ? `${item.teacher.first_name || ''} ${item.teacher.last_name || ''}`.trim()
+      : '';
+    const mediaUrls = (item.media_urls || []) as string[];
 
     return (
       <TouchableOpacity
@@ -186,15 +122,12 @@ export function DailyActivityFeed({
         {/* Activity content */}
         <View style={styles.activityContent}>
           <View style={styles.activityHeader}>
-            <Text style={[styles.activityName, { color: theme.text }]}>
-              {item.activity_name}
+            <Text style={[styles.activityName, { color: theme.text }]} numberOfLines={1}>
+              {item.title}
             </Text>
-            {item.start_time && (
-              <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
-                {formatTime(item.start_time)}
-                {item.end_time ? ` - ${formatTime(item.end_time)}` : ''}
-              </Text>
-            )}
+            <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
+              {formatActivityTime(item.activity_at)}
+            </Text>
           </View>
 
           {item.description && (
@@ -206,49 +139,46 @@ export function DailyActivityFeed({
             </Text>
           )}
 
+          {/* Media thumbnail row (compact) */}
+          {mediaUrls.length > 0 && (
+            <View style={styles.mediaRow}>
+              {mediaUrls.slice(0, 3).map((url, i) => (
+                <Image key={i} source={{ uri: url }} style={styles.mediaMini} resizeMode="cover" />
+              ))}
+              {mediaUrls.length > 3 && (
+                <View style={[styles.mediaMini, styles.moreMedia]}>
+                  <Text style={styles.moreMediaText}>+{mediaUrls.length - 3}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Expanded details */}
           {isExpanded && (
             <View style={styles.expandedDetails}>
-              {item.learning_objectives && item.learning_objectives.length > 0 && (
-                <View style={styles.detailSection}>
-                  <Text style={[styles.detailLabel, { color: theme.primary }]}>
-                    <Ionicons name="bulb" size={12} /> {t('dashboard.parent.daily_activity.labels.learning_goals', { defaultValue: 'Learning Goals' })}
-                  </Text>
-                  {item.learning_objectives.map((obj, i) => (
-                    <Text key={i} style={[styles.detailText, { color: theme.textSecondary }]}>
-                      • {obj}
-                    </Text>
-                  ))}
-                </View>
-              )}
-
-              {item.materials_needed && item.materials_needed.length > 0 && (
-                <View style={styles.detailSection}>
-                  <Text style={[styles.detailLabel, { color: theme.warning }]}>
-                    <Ionicons name="cube" size={12} /> {t('dashboard.parent.daily_activity.labels.materials_used', { defaultValue: 'Materials Used' })}
-                  </Text>
+              {item.duration_minutes ? (
+                <View style={styles.detailRow}>
+                  <Ionicons name="time-outline" size={13} color={theme.textSecondary} />
                   <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-                    {item.materials_needed.join(', ')}
+                    {item.duration_minutes} min
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Reaction counts */}
+              {(item.activity_reactions || []).length > 0 && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailText}>
+                    {(item.activity_reactions || []).map((r) => r.emoji).join(' ')}
                   </Text>
                 </View>
               )}
 
-              {item.notes && (
-                <View style={styles.detailSection}>
-                  <Text style={[styles.detailLabel, { color: theme.info }]}>
-                    <Ionicons name="document-text" size={12} /> {t('dashboard.parent.daily_activity.labels.teacher_notes', { defaultValue: 'Teacher Notes' })}
-                  </Text>
-                  <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-                    {item.notes}
-                  </Text>
-                </View>
-              )}
-
-              {item.teacher_name && (
+              {teacherName ? (
                 <Text style={[styles.teacherName, { color: theme.textTertiary }]}>
-                  {t('dashboard.parent.daily_activity.labels.added_by', { defaultValue: 'Added by {{name}}', name: item.teacher_name })}
+                  {t('dashboard.parent.daily_activity.labels.added_by', { defaultValue: 'Added by {{name}}', name: teacherName })}
                 </Text>
-              )}
+              ) : null}
             </View>
           )}
 
@@ -264,7 +194,7 @@ export function DailyActivityFeed({
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <EduDashSpinner size="small" color={theme.primary} />
@@ -282,22 +212,26 @@ export function DailyActivityFeed({
               {t('dashboard.parent.daily_activity.title', { defaultValue: "Today's Activities" })}
             </Text>
           </View>
-          <Text style={[styles.headerDate, { color: theme.textSecondary }]}
+          <TouchableOpacity
+            style={styles.seeAllBtn}
+            onPress={() => router.push('/screens/parent-activity-feed' as any)}
+            activeOpacity={0.7}
           >
-            {date.toLocaleDateString(i18n.language || 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-          </Text>
+            <Text style={[styles.seeAllText, { color: theme.primary }]}>
+              {t('common.see_all', { defaultValue: 'See all' })}
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color={theme.primary} />
+          </TouchableOpacity>
         </View>
       )}
 
       {activities.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="calendar-outline" size={40} color={theme.textTertiary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}
-          >
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
             {t('dashboard.parent.daily_activity.empty.title', { defaultValue: 'No activities logged yet today' })}
           </Text>
-          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}
-          >
+          <Text style={[styles.emptySubtext, { color: theme.textTertiary }]}>
             {t('dashboard.parent.daily_activity.empty.description', { defaultValue: "Check back later for updates from your child's teacher" })}
           </Text>
         </View>
@@ -340,8 +274,14 @@ const createStyles = (theme: any) =>
       fontSize: 18,
       fontWeight: '600',
     },
-    headerDate: {
-      fontSize: 14,
+    seeAllBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    seeAllText: {
+      fontSize: 13,
+      fontWeight: '600',
     },
     activityItem: {
       flexDirection: 'row',
@@ -387,19 +327,38 @@ const createStyles = (theme: any) =>
       fontSize: 14,
       lineHeight: 20,
     },
+    mediaRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 8,
+    },
+    mediaMini: {
+      width: 48,
+      height: 48,
+      borderRadius: 8,
+      backgroundColor: '#1e293b',
+    },
+    moreMedia: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(148,163,184,0.15)',
+    },
+    moreMediaText: {
+      color: '#94a3b8',
+      fontSize: 12,
+      fontWeight: '700',
+    },
     expandedDetails: {
       marginTop: 12,
       paddingTop: 12,
       borderTopWidth: 1,
       borderTopColor: 'rgba(128, 128, 128, 0.2)',
     },
-    detailSection: {
-      marginBottom: 10,
-    },
-    detailLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 4,
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
     },
     detailText: {
       fontSize: 13,
@@ -407,7 +366,7 @@ const createStyles = (theme: any) =>
     },
     teacherName: {
       fontSize: 11,
-      marginTop: 8,
+      marginTop: 4,
       fontStyle: 'italic',
     },
     expandIcon: {
