@@ -213,6 +213,7 @@ export default function DashOrb({
   const { speak, stop: stopSpeaking, isSpeaking } = Platform.OS !== 'web' 
     ? voiceTTS 
     : { speak: async () => {}, stop: async () => {}, isSpeaking: false };
+  const lastTTSErrorRef = useRef<string>('');
   
   // Voice input integration - useVoiceRecorder returns [state, actions, audioLevel] tuple
   const voiceRecorderHookResult = useVoiceRecorder();
@@ -256,6 +257,17 @@ export default function DashOrb({
       }
     },
   });
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    if (!voiceEnabled) return;
+    const err = voiceTTS.error?.trim();
+    if (!err) return;
+    if (lastTTSErrorRef.current === err) return;
+    lastTTSErrorRef.current = err;
+    toast.info('Dash voice had a service issue. Switched to device voice where available.');
+    console.warn('[DashOrb] TTS warning:', err);
+  }, [voiceEnabled, voiceTTS.error]);
   
   // Wake word detection
   const wakeWord = useWakeWord({

@@ -193,6 +193,7 @@
       "./plugins/withAndroidManifestFix.js",
       "./plugins/withForegroundService.js",
       "./plugins/withFirebaseMessaging.js",
+      "./plugins/withCallSounds.js",
       "./plugins/withAndroid15BootFix.js"
     ],
     "experiments": {

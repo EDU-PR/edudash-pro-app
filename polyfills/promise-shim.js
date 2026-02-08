@@ -1,226 +1,167 @@
 /**
  * Promise.any polyfill shim for React Native / Hermes
- * 
- * This file is loaded by Metro's getModulesRunBeforeMainModule
- * which ensures it runs BEFORE any other app code (including Daily.co SDK).
- * 
- * IMPORTANT: This is a CommonJS file (.js) because shims run very early in Metro's
- * boot process before TypeScript compilation.
- * 
- * The polyfill is installed IMMEDIATELY and SYNCHRONOUSLY at module load time.
- * 
- * CRITICAL FIX: Daily.co's mediasoup-client uses a bundled Promise that may not
- * see our polyfill. We need to ensure Promise.any is available on ALL Promise
- * references including the one Hermes provides natively.
+ *
+ * Loaded by Metro's getModulesRunBeforeMainModule BEFORE any app code.
+ * This ensures Promise.any exists before Daily.co's mediasoup-client
+ * captures the Promise constructor at module init time.
+ *
+ * IMPORTANT: CommonJS (.js) — shims run before TypeScript compilation.
+ *
+ * DESIGN: Ultra-simple, no IIFE, no strict mode. Uses direct assignment
+ * first (fastest path), falls back to Object.defineProperty, and has a
+ * nuclear fallback that replaces globalThis.Promise with a thin wrapper.
  */
 
-// Execute immediately - don't wait for anything
-(function() {
-  'use strict';
-  
-  // Get ALL possible global objects
-  var globals = [];
-  if (typeof globalThis !== 'undefined') globals.push(globalThis);
-  if (typeof global !== 'undefined') globals.push(global);
-  if (typeof window !== 'undefined') globals.push(window);
-  if (typeof self !== 'undefined') globals.push(self);
-  
-  // Use the first available global
-  var g = globals[0] || this;
-  
-  // AggregateError polyfill (required for Promise.any)
-  function ensureAggregateError(target) {
-    if (typeof target.AggregateError === 'undefined') {
-      target.AggregateError = function AggregateError(errors, message) {
-        var instance = new Error(message || 'All promises were rejected');
-        instance.name = 'AggregateError';
-        instance.errors = Array.isArray(errors) ? errors : Array.from(errors);
-        Object.setPrototypeOf(instance, target.AggregateError.prototype);
-        return instance;
-      };
-      target.AggregateError.prototype = Object.create(Error.prototype);
-      target.AggregateError.prototype.constructor = target.AggregateError;
+/* eslint-disable no-var */
+
+// ── AggregateError polyfill ──────────────────────────────────────────
+if (typeof globalThis.AggregateError === 'undefined') {
+  globalThis.AggregateError = function AggregateError(errors, message) {
+    var err = new Error(message || 'All promises were rejected');
+    err.name = 'AggregateError';
+    err.errors = Array.isArray(errors) ? errors : Array.from(errors);
+    return err;
+  };
+}
+
+// ── Promise.any implementation ───────────────────────────────────────
+function _promiseAny(iterable) {
+  var P = typeof Promise !== 'undefined' ? Promise : globalThis.Promise;
+  return new P(function (resolve, reject) {
+    var promises = Array.isArray(iterable) ? iterable : Array.from(iterable);
+    if (promises.length === 0) {
+      reject(new globalThis.AggregateError([], 'All promises were rejected'));
+      return;
     }
-  }
-  
-  // Install AggregateError on all globals
-  globals.forEach(function(target) {
-    ensureAggregateError(target);
-  });
-
-  // Promise.any implementation
-  function createPromiseAny(PromiseConstructor, AggregateErrorClass) {
-    return function promiseAny(iterable) {
-      return new PromiseConstructor(function(resolve, reject) {
-        var promises = Array.from(iterable);
-        
-        if (promises.length === 0) {
-          reject(new AggregateErrorClass([], 'All promises were rejected'));
-          return;
-        }
-
-        var errors = new Array(promises.length);
-        var rejectionCount = 0;
-        var resolved = false;
-
-        promises.forEach(function(promise, index) {
-          PromiseConstructor.resolve(promise).then(
-            function(value) {
-              if (!resolved) {
-                resolved = true;
-                resolve(value);
-              }
-            },
-            function(reason) {
-              if (!resolved) {
-                errors[index] = reason;
-                rejectionCount++;
-                if (rejectionCount === promises.length) {
-                  reject(new AggregateErrorClass(errors, 'All promises were rejected'));
-                }
+    var errors = new Array(promises.length);
+    var rejections = 0;
+    var done = false;
+    for (var i = 0; i < promises.length; i++) {
+      (function (idx) {
+        P.resolve(promises[idx]).then(
+          function (value) {
+            if (!done) {
+              done = true;
+              resolve(value);
+            }
+          },
+          function (reason) {
+            if (!done) {
+              errors[idx] = reason;
+              rejections++;
+              if (rejections === promises.length) {
+                reject(
+                  new globalThis.AggregateError(
+                    errors,
+                    'All promises were rejected'
+                  )
+                );
               }
             }
-          );
-        });
-      });
-    };
-  }
-  
-  // Install Promise.any on all globals that have a Promise
-  var installedCount = 0;
-  var promiseReferences = [];
-  
-  globals.forEach(function(target) {
-    if (target && target.Promise) {
-      promiseReferences.push(target.Promise);
-      if (typeof target.Promise.any !== 'function') {
-        try {
-          // Use Object.defineProperty for better compatibility
-          Object.defineProperty(target.Promise, 'any', {
-            value: createPromiseAny(target.Promise, target.AggregateError || g.AggregateError),
-            writable: true,
-            configurable: true,
-            enumerable: false
-          });
-          installedCount++;
-        } catch (e) {
-          // Fallback if defineProperty fails
-      target.Promise.any = createPromiseAny(target.Promise, target.AggregateError || g.AggregateError);
-      installedCount++;
-        }
-      }
-    }
-  });
-  
-  // Also install on the local Promise (in case it's different)
-  if (typeof Promise !== 'undefined') {
-    promiseReferences.push(Promise);
-    if (typeof Promise.any !== 'function') {
-      try {
-        Object.defineProperty(Promise, 'any', {
-          value: createPromiseAny(Promise, g.AggregateError),
-          writable: true,
-          configurable: true,
-          enumerable: false
-        });
-        installedCount++;
-      } catch (e) {
-    Promise.any = createPromiseAny(Promise, g.AggregateError);
-    installedCount++;
-  }
-    }
-  }
-  
-  // CRITICAL: Check if all Promise references are the same object
-  // If Daily.co captures a different Promise, we need to know
-  var uniquePromises = {};
-  promiseReferences.forEach(function(p) {
-    if (p) {
-      var key = p.toString();
-      uniquePromises[key] = (uniquePromises[key] || 0) + 1;
-    }
-  });
-  
-  if (Object.keys(uniquePromises).length > 1) {
-    console.warn('[PromiseShim] ⚠️ Multiple Promise constructors detected!', Object.keys(uniquePromises).length);
-  }
-  
-  // CRITICAL: Patch Promise.prototype to catch bundled code that uses Promise.prototype.constructor
-  // Daily.co's mediasoup-client bundles Promise and may access it via prototype
-  var PromisePrototype = Promise && Promise.prototype;
-  if (PromisePrototype && PromisePrototype.constructor) {
-    var PromiseConstructor = PromisePrototype.constructor;
-    if (PromiseConstructor && typeof PromiseConstructor.any !== 'function') {
-      try {
-        Object.defineProperty(PromiseConstructor, 'any', {
-          value: createPromiseAny(PromiseConstructor, g.AggregateError),
-          writable: true,
-          configurable: true,
-          enumerable: false
-        });
-        installedCount++;
-        console.log('[PromiseShim] ✅ Patched Promise.prototype.constructor.any');
-      } catch (e) {
-        PromiseConstructor.any = createPromiseAny(PromiseConstructor, g.AggregateError);
-        installedCount++;
-      }
-    }
-  }
-  
-  // CRITICAL: Also patch any Promise found via Object.getPrototypeOf
-  // This catches edge cases where code accesses Promise through prototype chain
-  try {
-    var protoPromise = Object.getPrototypeOf && Object.getPrototypeOf(Promise);
-    if (protoPromise && protoPromise.constructor && typeof protoPromise.constructor.any !== 'function') {
-      protoPromise.constructor.any = createPromiseAny(protoPromise.constructor, g.AggregateError);
-      installedCount++;
-      console.log('[PromiseShim] ✅ Patched Promise from prototype chain');
-    }
-  } catch (e) {
-    // Ignore prototype access errors
-  }
-  
-  if (installedCount > 0) {
-    console.log('[PromiseShim] ✅ Promise.any polyfill installed on ' + installedCount + ' Promise reference(s)');
-  } else {
-    console.log('[PromiseShim] Promise.any already available (native or pre-installed)');
-  }
-  
-  // CRITICAL: The issue is that Daily.co's mediasoup-client bundles Promise at build time
-  // and captures it before our polyfill runs. We can't patch bundled code, but we can
-  // ensure our polyfill runs as early as possible and patches ALL Promise references.
-  // The polyfill is loaded via Metro's getModulesRunBeforeMainModule which should be early enough.
-  
-  // Final verification - test actual Promise.any call (async, don't block startup)
-  setTimeout(function() {
-    try {
-      var testValue = 'test';
-      var testPromise = Promise.any([Promise.resolve(testValue)]);
-      if (testPromise && typeof testPromise.then === 'function') {
-        testPromise.then(function(result) {
-          if (result === testValue) {
-            console.log('[PromiseShim] ✅ Promise.any functional test PASSED');
-          } else {
-            console.warn('[PromiseShim] ⚠️ Promise.any returned wrong value:', result, 'expected:', testValue);
           }
-        }).catch(function(err) {
-          console.error('[PromiseShim] ❌ Promise.any functional test FAILED:', err.message || err);
-        });
-      } else {
-        console.warn('[PromiseShim] ⚠️ Promise.any exists but may not be functional');
-      }
-    } catch (testError) {
-      console.error('[PromiseShim] ❌ Promise.any functional test FAILED:', testError.message || testError);
+        );
+      })(i);
     }
-  }, 100); // Small delay to ensure everything is initialized
-  
-  // Final verification
-  console.log('[PromiseShim] Verification:', {
-    'Promise.any': typeof Promise.any,
-    'global.Promise.any': typeof (g.Promise && g.Promise.any),
-    'AggregateError': typeof g.AggregateError,
   });
-})();
+}
 
-// Export for module system compatibility
+// ── Install on a target Promise constructor ──────────────────────────
+function _install(target, label) {
+  if (!target || typeof target !== 'function') return false;
+  if (typeof target.any === 'function') return false; // already native
+  try {
+    target.any = _promiseAny;
+    if (typeof target.any === 'function') {
+      console.log('[PromiseShim] ✅ Installed on ' + label);
+      return true;
+    }
+  } catch (e) { /* direct assign failed */ }
+  try {
+    Object.defineProperty(target, 'any', {
+      value: _promiseAny,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    if (typeof target.any === 'function') {
+      console.log('[PromiseShim] ✅ Installed via defineProperty on ' + label);
+      return true;
+    }
+  } catch (e2) {
+    console.warn('[PromiseShim] ❌ Failed on ' + label + ':', e2);
+  }
+  return false;
+}
+
+var installed = 0;
+
+// 1. Local Promise binding (most important — this is what all code resolves to)
+if (_install(Promise, 'Promise')) installed++;
+
+// 2. globalThis.Promise
+if (typeof globalThis !== 'undefined' && globalThis.Promise) {
+  if (_install(globalThis.Promise, 'globalThis.Promise')) installed++;
+}
+
+// 3. global.Promise (Node/RN fallback global)
+if (typeof global !== 'undefined' && global.Promise) {
+  if (_install(global.Promise, 'global.Promise')) installed++;
+}
+
+// 4. Promise.prototype.constructor (catches bundled code via prototype chain)
+if (Promise.prototype && Promise.prototype.constructor) {
+  if (_install(Promise.prototype.constructor, 'Promise.prototype.constructor'))
+    installed++;
+}
+
+// ── Nuclear fallback: replace Promise globally ───────────────────────
+// If NOTHING above worked (Hermes may freeze native Promise), wrap it.
+if (typeof Promise.any !== 'function') {
+  console.error(
+    '[PromiseShim] ❌ Promise.any STILL undefined after all attempts.',
+    'Applying nuclear fix: wrapping globalThis.Promise'
+  );
+
+  var OrigPromise = Promise;
+  var WP = function Promise(executor) {
+    return new OrigPromise(executor);
+  };
+  var keys = Object.getOwnPropertyNames(OrigPromise);
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k];
+    if (key !== 'prototype' && key !== 'length' && key !== 'name') {
+      try { WP[key] = OrigPromise[key]; } catch (e) { /* skip */ }
+    }
+  }
+  WP.prototype = OrigPromise.prototype;
+  WP.resolve = function (v) { return OrigPromise.resolve(v); };
+  WP.reject  = function (v) { return OrigPromise.reject(v); };
+  WP.all     = function (v) { return OrigPromise.all(v); };
+  WP.race    = function (v) { return OrigPromise.race(v); };
+  if (typeof OrigPromise.allSettled === 'function') {
+    WP.allSettled = function (v) { return OrigPromise.allSettled(v); };
+  }
+  WP.any = _promiseAny;
+
+  if (typeof globalThis !== 'undefined') globalThis.Promise = WP;
+  if (typeof global !== 'undefined') global.Promise = WP;
+
+  if (typeof WP.any === 'function') {
+    console.log('[PromiseShim] ✅ Nuclear fix applied — Promise replaced globally');
+    installed++;
+  } else {
+    console.error('[PromiseShim] ❌ Nuclear fix ALSO failed!');
+  }
+}
+
+console.log(
+  '[PromiseShim] Done:',
+  installed, 'install(s),',
+  'Promise.any:', typeof Promise.any,
+  'globalThis.Promise.any:',
+  typeof (typeof globalThis !== 'undefined' &&
+    globalThis.Promise &&
+    globalThis.Promise.any)
+);
+
 module.exports = { installed: typeof Promise.any === 'function' };

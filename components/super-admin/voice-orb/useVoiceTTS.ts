@@ -26,6 +26,14 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
+const mapToDeviceLocale = (language: string): string => {
+  const normalized = (language || 'en-ZA').toLowerCase();
+  if (normalized.startsWith('af')) return 'af-ZA';
+  if (normalized.startsWith('zu')) return 'zu-ZA';
+  if (normalized.startsWith('en')) return 'en-ZA';
+  return 'en-ZA';
+};
+
 export function useVoiceTTS(): UseVoiceTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +98,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   }, [stopPlayback]);
 
   const playAudioUrl = useCallback((audioUrl: string, timeoutMs: number): Promise<void> => {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       let settled = false;
       let hasStarted = false;
       const playbackId = playbackIdRef.current + 1;
@@ -99,11 +107,15 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       clearPlaybackTimers();
       cleanupPlayer(playerRef.current);
 
-      const finalize = () => {
+      const finalize = (err?: Error) => {
         if (settled) return;
         settled = true;
         clearPlaybackTimers();
         cleanupPlayer(playerRef.current);
+        if (err) {
+          reject(err);
+          return;
+        }
         resolve();
       };
 
@@ -114,7 +126,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         player.play();
       } catch (err) {
         console.error('[VoiceTTS] Failed to start audio playback:', err);
-        finalize();
+        finalize(new Error('AUDIO_PLAYER_INIT_FAILED'));
         return;
       }
 
@@ -124,7 +136,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           return;
         }
         if (!player) {
-          finalize();
+          finalize(new Error('AUDIO_PLAYER_MISSING'));
           return;
         }
         let playing = false;
@@ -132,7 +144,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           playing = player.playing;
         } catch (err) {
           console.warn('[VoiceTTS] Playback status error, stopping:', err);
-          finalize();
+          finalize(new Error('AUDIO_PLAYER_STATUS_ERROR'));
           return;
         }
         if (playing) {
@@ -144,10 +156,31 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }, 150);
 
       playbackTimeoutRef.current = setTimeout(() => {
+        if (!hasStarted) {
+          finalize(new Error('AUDIO_PLAYBACK_TIMEOUT'));
+          return;
+        }
         finalize();
       }, timeoutMs);
     });
   }, [clearPlaybackTimers, cleanupPlayer]);
+
+  const speakWithDeviceTTS = useCallback(async (text: string, language: string): Promise<void> => {
+    const locale = mapToDeviceLocale(language);
+    await stopPlayback();
+    await new Promise<void>((resolve, reject) => {
+      Speech.speak(text, {
+        language: locale,
+        rate: 1.0,
+        pitch: 1.0,
+        onDone: () => resolve(),
+        onStopped: () => resolve(),
+        onError: (err) => {
+          reject(err instanceof Error ? err : new Error('DEVICE_TTS_FAILED'));
+        },
+      });
+    });
+  }, [stopPlayback]);
 
   /**
    * Speak using Azure TTS (primary method)
@@ -321,14 +354,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Stop any current playback without cancelling this session
       await stopPlayback();
       
-      // TTS supports en, af, zu (South African languages with Azure Neural voices)
+      // Azure supports en/af/zu in this client path; device fallback will cover the rest.
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
       const baseLang = language.split('-')[0];
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
-        console.warn(`[VoiceTTS] Language ${language} not supported - TTS disabled.`);
-        setError('TTS not available for this language');
-        setIsSpeaking(false);
+        console.warn(`[VoiceTTS] Language ${language} not supported by Azure path. Falling back to device TTS.`);
+        await speakWithDeviceTTS(text, language);
         return;
       }
       
@@ -409,7 +441,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Speak chunks sequentially so speech never cuts off mid-sentence
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
-        await speakWithAzure(chunk, effectiveLanguage);
+        try {
+          await speakWithAzure(chunk, effectiveLanguage);
+        } catch (azureErr) {
+          console.warn('[VoiceTTS] Azure chunk failed; using device fallback for this chunk:', azureErr);
+          await speakWithDeviceTTS(chunk, effectiveLanguage);
+        }
       }
       
     } catch (err) {
@@ -419,7 +456,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     } finally {
       setIsSpeaking(false);
     }
-  }, [stopPlayback, speakWithAzure]);
+  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS]);
 
   return { speak, stop, isSpeaking, error };
 }

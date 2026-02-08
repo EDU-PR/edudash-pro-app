@@ -1,15 +1,14 @@
 /**
- * New Enhanced Parent Dashboard - Refactored
+ * New Enhanced Parent Dashboard — Mission Control Edition
  * 
- * A modular, clean implementation following WARP.md file size standards.
- * Uses extracted components for better maintainability.
+ * Modular, WARP-compliant parent dashboard with next-gen attention system.
+ * Uses extracted components, hooks, and styles for ≤500 line screen limit.
  * 
  * Features:
- * - Clean grid-based layout with improved visual hierarchy
- * - Mobile-first responsive design with <2s load time
- * - Child switching with multi-child support
- * - Collapsible sections for progressive disclosure
- * - Enhanced loading states and error handling
+ * - Priority elevation + glow on sections needing attention
+ * - "Mission Control 🚀" replaces Quick Actions
+ * - Extracted: ChildFocusCard, TodayHighlights, MissionControlSection
+ * - Extracted: useParentQuickActions, useParentSectionAttention
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -17,31 +16,26 @@ import {
   View,
   Text,
   ScrollView,
-  StyleSheet,
   useWindowDimensions,
   RefreshControl,
-  TouchableOpacity,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
 import { logger } from '@/lib/logger';
 import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { assertSupabase } from '@/lib/supabase';
 import Feedback from '@/lib/feedback';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { track } from '@/lib/analytics';
 import { useNotificationsWithFocus } from '@/hooks/useNotifications';
 import { useParentDashboard } from '@/hooks/useDashboardData';
 import { calculateAge } from '@/lib/date-utils';
-import { formatCurrency } from '@/lib/dashboard/parentDashboardHelpers';
 import { normalizePersonName } from '@/lib/utils/nameUtils';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
-// Import shared components
-import { MetricCard, CollapsibleSection, SearchBar, type SearchBarSuggestion } from './shared';
+// Shared dashboard components
+import { MetricCard, CollapsibleSection, SearchBar, GlowContainer, type SearchBarSuggestion } from './shared';
 import { ChildSwitcher, DailyActivityFeed, TeacherQuickNotes, ChildProgressBadges, UniformSizesSection } from './parent';
 import { JoinLiveLesson } from '@/components/calls/JoinLiveLesson';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
@@ -50,32 +44,22 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
 
-type LayoutMetrics = {
-  isTablet: boolean;
-  isSmallScreen: boolean;
-  cardPadding: number;
-  cardGap: number;
-};
+// Extracted parent dashboard modules
+import { ChildFocusCard } from './parent/ChildFocusCard';
+import { TodayHighlights } from './parent/TodayHighlights';
+import { MissionControlSection } from './parent/MissionControlSection';
+import { ParentDashboardHeader } from './parent/ParentDashboardHeader';
+import { UpgradeBanner } from './parent/UpgradeBanner';
+import { useParentQuickActions } from '@/hooks/useParentQuickActions';
+import { useParentSectionAttention } from '@/hooks/useParentSectionAttention';
+import { useParentDashboardNavigation } from '@/hooks/useParentDashboardNavigation';
+import { useParentMetrics } from '@/hooks/useParentMetrics';
+import { useUniformEnabled } from '@/hooks/useUniformEnabled';
+import { createParentDashboardStyles, getLayoutMetrics } from './parent/ParentDashboard.styles';
 
-type TodayHighlight = {
-  id: string;
-  label: string;
-  value: string;
-  sub: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-};
-
-const getLayoutMetrics = (width: number): LayoutMetrics => {
-  const isTablet = width > 768;
-  const isSmallScreen = width < 380;
-  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
-  const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-  return { isTablet, isSmallScreen, cardPadding, cardGap };
-};
 const DEFAULT_COLLAPSED_SECTIONS = [
   'overview',
-  'quick-actions',
+  'mission-control',
   'uniform-sizes',
   'live-classes',
   'teacher-notes',
@@ -109,8 +93,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [refreshing, setRefreshing] = useState(false);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [children, setChildren] = useState<any[]>([]);
-  const [uniformEnabled, setUniformEnabled] = useState(false);
-  const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
+  const { uniformEnabled, uniformSchoolIds } = useUniformEnabled(children);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     () => new Set(DEFAULT_COLLAPSED_SECTIONS)
   );
@@ -163,7 +146,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const [showQuickActionsHint, dismissQuickActionsHint] = useOnboardingHint('parent_quick_actions');
   const [showLiveClassesHint, dismissLiveClassesHint] = useOnboardingHint('parent_live_classes');
   
-  const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom, layout), [theme, insets.top, insets.bottom, layout]);
+  const styles = useMemo(() => createParentDashboardStyles(theme, insets.top, insets.bottom, layout), [theme, insets.top, insets.bottom, layout]);
 
   useEffect(() => {
     if (!focusSection) return;
@@ -189,6 +172,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   const { birthdays: upcomingBirthdays, loading: birthdaysLoading, refresh: refreshBirthdays } = useBirthdayPlanner();
   const feesDueSoon = dashboardData?.feesDueSoon ?? null;
   const isFeesDueSoon = Boolean(feesDueSoon && feesDueSoon.daysUntil <= 3);
+  const upcomingBirthdaysCount = useMemo(
+    () =>
+      (upcomingBirthdays?.today.length ?? 0) +
+      (upcomingBirthdays?.thisWeek.length ?? 0) +
+      (upcomingBirthdays?.thisMonth.length ?? 0) +
+      (upcomingBirthdays?.nextMonth.length ?? 0),
+    [upcomingBirthdays]
+  );
   const feesDueSubtitle = isFeesDueSoon && feesDueSoon
     ? t('parent.fees_due_in_days', {
       defaultValue: 'Due in {{count}} day',
@@ -222,65 +213,6 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
       }
     }
   }, [dashboardData?.children, activeChildId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadUniformEnabled = async () => {
-      const preschoolIds = Array.from(new Set(
-        children
-          .map((child) => child.preschoolId || child.preschool_id)
-          .filter(Boolean)
-      )) as string[];
-
-      if (!preschoolIds.length) {
-        if (!cancelled) {
-          setUniformEnabled(false);
-          setUniformSchoolIds([]);
-        }
-        return;
-      }
-
-      try {
-        const supabase = assertSupabase();
-        const { data: preschoolSettings, error: preschoolError } = await supabase
-          .from('preschools')
-          .select('id, settings')
-          .in('id', preschoolIds);
-        if (preschoolError) throw preschoolError;
-
-        const { data: organizationSettings, error: organizationError } = await supabase
-          .from('organizations')
-          .select('id, settings')
-          .in('id', preschoolIds);
-        if (organizationError) throw organizationError;
-
-        const enabledIds = new Set<string>();
-        (preschoolSettings || []).forEach((row: any) => {
-          const enabled = row?.settings?.features?.uniforms?.enabled;
-          if (enabled) enabledIds.add(row.id);
-        });
-        (organizationSettings || []).forEach((row: any) => {
-          const enabled = row?.settings?.features?.uniforms?.enabled;
-          if (enabled) enabledIds.add(row.id);
-        });
-
-        if (!cancelled) {
-          setUniformSchoolIds(Array.from(enabledIds));
-          setUniformEnabled(enabledIds.size > 0);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setUniformEnabled(false);
-          setUniformSchoolIds([]);
-        }
-      }
-    };
-
-    loadUniformEnabled();
-    return () => {
-      cancelled = true;
-    };
-  }, [children]);
 
   const getGreeting = (): string => {
     const hour = new Date().getHours();
@@ -327,138 +259,12 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     });
   }, []);
 
-  const handlePaymentsPress = useCallback(() => {
-    track('parent.dashboard.quick_action', { action: 'payments', layout: 'enhanced' });
-    router.push('/screens/parent-payments');
-  }, []);
-
-  const handleQuickAction = (action: string) => {
-    track('parent.dashboard.quick_action', { action, layout: 'enhanced' });
-    
-    switch (action) {
-      case 'view_homework':
-        router.push('/screens/homework');
-        break;
-      case 'assigned_lessons':
-        router.push('/screens/parent-assigned-lessons');
-        break;
-      case 'check_attendance':
-        // Parents go to read-only attendance view, not teacher attendance management
-        router.push('/screens/parent-attendance');
-        break;
-      case 'view_grades':
-        router.push('/screens/grades');
-        break;
-      case 'messages':
-        router.push('/screens/parent-messages');
-        break;
-      case 'events':
-        router.push('/screens/calendar');
-        break;
-      case 'ai_homework_help':
-        router.push('/screens/ai-homework-helper');
-        break;
-      case 'ask_dash':
-      case 'dash_tutor':
-        router.push('/screens/dash-assistant');
-        break;
-      case 'dash_explain':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_explain_prompt', { defaultValue: 'Explain a concept to me in simple terms.' }) } });
-        break;
-      case 'dash_quiz':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_quiz_prompt', { defaultValue: 'Create a short practice quiz for my child.' }) } });
-        break;
-      case 'dash_study_plan':
-        router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: t('parent.dash_study_plan_prompt', { defaultValue: 'Create a simple study plan for this week.' }) } });
-        break;
-      case 'children':
-        // Show children list or scroll to child switcher
-        // For now, could navigate to profile or show modal
-        router.push('/screens/account');
-        break;
-      case 'calls':
-        router.push('/screens/calls');
-        break;
-      case 'activity_feed':
-        router.push('/screens/parent-activity-feed');
-        break;
-      case 'homework_history':
-        router.push('/screens/parent-homework-history');
-        break;
-      case 'ai_help':
-        router.push('/screens/parent-ai-help');
-        break;
-      case 'upgrade':
-        router.push('/screens/parent-upgrade');
-        break;
-      case 'my_exams':
-        router.push('/screens/parent-my-exams');
-        break;
-      case 'search':
-        router.push('/screens/parent-search');
-        break;
-      case 'payments':
-        handlePaymentsPress();
-        break;
-      case 'dev_notifications':
-        router.push('/screens/dev-notification-tester');
-        break;
-      case 'learning_hub':
-        router.push('/screens/learning-hub');
-        break;
-      case 'dash_playground':
-        router.push('/screens/dash-playground');
-        break;
-      case 'family_activity':
-        router.push('/screens/dash-playground');
-        break;
-      case 'upload_progress': {
-        const child = activeChild || children[0];
-        if (!child?.id) {
-          showAlert({
-            title: t('parent.no_child_selected', { defaultValue: 'No child selected' }),
-            message: t('parent.no_child_selected_message', { defaultValue: 'Please link or select a child first, then upload progress evidence.' }),
-            type: 'info',
-          });
-          break;
-        }
-        const first = child.firstName || child.first_name || '';
-        const last = child.lastName || child.last_name || '';
-        const fallbackName = child.name || t('parent.child', { defaultValue: 'Child' });
-        const childName = `${first} ${last}`.trim() || fallbackName;
-        router.push({
-          pathname: '/screens/parent-picture-of-progress',
-          params: {
-            studentId: String(child.id),
-            studentName: encodeURIComponent(childName),
-          },
-        } as any);
-        break;
-      }
-      case 'dash_grade_test': {
-        const child = activeChild || children[0];
-        const childGrade = child?.grade || child?.grade_level || 'Age 6';
-        const childName = child?.firstName || child?.first_name || child?.name || t('parent.child', { defaultValue: 'Child' });
-        const childId = child?.id ? String(child.id) : '';
-        router.push({
-          pathname: '/screens/ai-homework-grader-live',
-          params: {
-            assignmentTitle: t('parent.family_activity_assignment_title', { defaultValue: 'Family Activity Review' }),
-            gradeLevel: childGrade,
-            studentId: childId,
-            submissionContent: `${childName} completed today's family activity. Add what they did, then press Start Live Grading.`,
-          },
-        } as any);
-        break;
-      }
-      default:
-        showAlert({
-          title: t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          message: t('dashboard.feature_coming_soon', { defaultValue: 'This feature is coming soon!' }),
-          type: 'info',
-        });
-    }
-  };
+  // ─── Navigation routing (extracted hook) ─────────────
+  const { handleQuickAction, handlePaymentsPress } = useParentDashboardNavigation({
+    activeChild,
+    children,
+    showAlert,
+  });
 
   // Search suggestions for PWA-style search
   const searchSuggestions: SearchBarSuggestion[] = useMemo(() => {
@@ -487,263 +293,34 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     }
   };
 
-  // Metrics from dashboard data - now with onPress navigation, glow, and badges
-  const metrics = useMemo(() => {
-    if (!dashboardData) {
-      return [
-        { title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }), value: '...', icon: 'mail-unread', color: theme.primary, trend: 'stable' as const, action: 'messages', glow: false, badge: 0 },
-        { title: t('parent.missed_calls', { defaultValue: 'Missed Calls' }), value: '...', icon: 'call', color: '#10B981', trend: 'stable' as const, action: 'calls', glow: false, badge: 0 },
-        { title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }), value: '...', icon: 'document-text', color: theme.warning, trend: 'stable' as const, action: 'view_homework', glow: false, badge: 0 },
-        { title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }), value: '...', icon: 'calendar', color: theme.success, trend: 'stable' as const, action: 'check_attendance', glow: false, badge: 0 },
-      ];
-    }
+  // ─── Metrics + highlights (extracted hook) ────────────
+  const { metrics, todayHighlights } = useParentMetrics({
+    dashboardData,
+    unreadMessageCount,
+    missedCallsCount,
+    childrenCount: children.length,
+    isFeesDueSoon,
+    feesDueSoon,
+  });
 
-    const pendingHomework = dashboardData.recentHomework?.filter((hw: any) => hw.status === 'not_submitted').length ?? 0;
-    const attendancePercentage = `${dashboardData.attendanceRate ?? 0}%`;
-    const unreadCount = dashboardData.unreadMessages || unreadMessageCount || 0;
-    const attendanceRate = dashboardData.attendanceRate ?? 0;
-    
-    const baseMetrics = [
-      {
-        title: t('parent.unread_messages', { defaultValue: 'Unread Messages' }),
-        value: String(unreadCount),
-        icon: 'mail-unread',
-        color: theme.primary,
-        trend: (unreadCount > 5 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
-        action: 'messages',
-        glow: unreadCount > 0,
-        badge: unreadCount,
-        priority: unreadCount > 5 ? 'important' : unreadCount > 0 ? 'informational' : undefined,
-      },
-      {
-        title: t('parent.missed_calls', { defaultValue: 'Missed Calls' }),
-        value: String(missedCallsCount),
-        icon: 'call',
-        color: '#10B981',
-        trend: (missedCallsCount > 0 ? 'attention' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
-        action: 'calls',
-        glow: missedCallsCount > 0,
-        badge: missedCallsCount,
-        priority: missedCallsCount > 2 ? 'urgent' : missedCallsCount > 0 ? 'important' : undefined,
-      },
-      {
-        title: t('parent.homework_pending', { defaultValue: 'Homework Pending' }),
-        value: pendingHomework.toString(),
-        icon: 'document-text',
-        color: theme.warning,
-        trend: (pendingHomework > 3 ? 'attention' : pendingHomework === 0 ? 'up' : 'stable') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
-        action: 'view_homework',
-        glow: pendingHomework > 0,
-        badge: pendingHomework,
-        priority: pendingHomework > 3 ? 'urgent' : pendingHomework > 0 ? 'important' : undefined,
-      },
-      {
-        title: t('parent.attendance_rate', { defaultValue: 'Attendance Rate' }),
-        value: attendancePercentage,
-        icon: 'calendar',
-        color: theme.success,
-        trend: (attendanceRate >= 90 ? 'up' : attendanceRate >= 75 ? 'stable' : 'attention') as 'stable' | 'attention' | 'up' | 'down' | 'good' | 'excellent' | 'warning' | 'needs_attention' | 'low' | 'high',
-        action: 'check_attendance',
-        glow: false,
-        badge: 0,
-        priority: attendanceRate < 75 ? 'urgent' : attendanceRate < 90 ? 'important' : 'informational',
-      },
-    ];
+  // ─── Quick Actions (extracted hook) ───────────────────
+  const { quickActions, hasLockedActions, missionControlSections, groupedQuickActions } = useParentQuickActions({
+    isK12School,
+    isEarlyLearner,
+    isFeesDueSoon,
+    feesDueSubtitle,
+    isDashOrbUnlocked,
+    isDev: __DEV__,
+  });
 
-    const priorityRank: Record<string, number> = { urgent: 0, important: 1, informational: 2 };
-    return baseMetrics
-      .map((metric, index) => ({
-        ...metric,
-        _index: index,
-        _rank: priorityRank[metric.priority ?? 'informational'] ?? 3,
-      }))
-      .sort((a, b) => (a._rank - b._rank) || (a._index - b._index))
-      .map(({ _index, _rank, ...rest }) => rest);
-  }, [dashboardData, unreadMessageCount, missedCallsCount, theme, t]);
-
-  // Quick actions - enhanced with parent-friendly labels
-  type ParentQuickAction = {
-    id: string;
-    title: string;
-    icon: string;
-    color: string;
-    disabled?: boolean;
-    subtitle?: string;
-    glow?: boolean;
-  };
-
-  const baseQuickActions = useMemo<ParentQuickAction[]>(() => {
-    const dashTutorSubtitle = isDashOrbUnlocked
-      ? t('parent.dash_tutor_subtitle', { defaultValue: 'Homework help, practice, and explanations.' })
-      : t('parent.dash_tutor_locked', { defaultValue: 'Upgrade to unlock Dash Tutor.' });
-    const actions: ParentQuickAction[] = [
-      { id: 'view_homework', title: t('parent.view_homework', { defaultValue: "My Child's Homework" }), icon: 'book', color: theme.primary },
-      { id: 'assigned_lessons', title: t('parent.assigned_lessons', { defaultValue: "Assigned Lessons" }), icon: 'library', color: '#10B981' },
-      { id: 'check_attendance', title: t('parent.check_attendance', { defaultValue: "Today's Attendance" }), icon: 'calendar', color: theme.success },
-      { id: 'activity_feed', title: t('parent.activity_feed', { defaultValue: 'Activity Feed' }), icon: 'newspaper', color: '#0EA5E9', subtitle: t('parent.activity_feed_subtitle', { defaultValue: "See today's classroom activities & photos" }) },
-      { id: 'family_activity', title: t('parent.family_activity', { defaultValue: 'Family Activity with Dash' }), icon: 'sparkles-outline', color: '#EC4899', subtitle: t('parent.family_activity_subtitle', { defaultValue: 'Get a fun guided home activity.' }) },
-      { id: 'upload_progress', title: t('parent.upload_progress', { defaultValue: 'Upload Activity Evidence' }), icon: 'camera-outline', color: '#0EA5E9' },
-      { id: 'dash_grade_test', title: t('parent.dash_grade_test', { defaultValue: 'Dash Grade Test Run' }), icon: 'checkmark-done-outline', color: '#8B5CF6' },
-      { id: 'view_grades', title: t('parent.view_grades', { defaultValue: 'View Progress' }), icon: 'school', color: theme.secondary },
-      { id: 'messages', title: t('parent.messages', { defaultValue: 'Message Teacher' }), icon: 'chatbubbles', color: theme.info },
-      { id: 'events', title: t('parent.events', { defaultValue: 'School Events' }), icon: 'calendar-outline', color: theme.warning },
-      { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
-      { id: 'homework_history', title: t('parent.homework_history', { defaultValue: 'Homework History' }), icon: 'time', color: '#6366F1' },
-      { id: 'ai_help', title: t('parent.ai_help', { defaultValue: 'AI Help Hub' }), icon: 'sparkles', color: '#8B5CF6' },
-      { id: 'my_exams', title: t('parent.my_exams', { defaultValue: 'My Exams' }), icon: 'school', color: '#F59E0B' },
-      { id: 'upgrade', title: t('parent.upgrade', { defaultValue: 'Upgrade Plan' }), icon: 'arrow-up-circle', color: '#10B981', subtitle: t('parent.upgrade_subtitle', { defaultValue: 'Unlock premium features' }) },
-      { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
-    ];
-
-    if (__DEV__) {
-      actions.push({
-        id: 'dev_notifications',
-        title: 'Dev Notification Tester',
-        icon: 'notifications-outline',
-        color: '#06b6d4',
-        subtitle: 'Test push + badge',
-      });
-    }
-
-    if (!isDashOrbUnlocked) {
-      actions.push({
-        id: 'dash_tutor',
-        title: t('parent.dash_tutor', { defaultValue: 'Dash Tutor' }),
-        icon: 'sparkles',
-        color: '#8B5CF6',
-        subtitle: dashTutorSubtitle,
-        disabled: !isDashOrbUnlocked,
-      });
-    }
-
-    const shouldShowLearningHub = !isK12School || isEarlyLearner;
-    if (shouldShowLearningHub) {
-      actions.splice(3, 0, {
-        id: 'learning_hub',
-        title: t('parent.learning_hub', { defaultValue: 'Learning Hub' }),
-        icon: 'rocket',
-        color: '#0EA5E9',
-      });
-      // Dash Playground — interactive activities for 3-5 year olds
-      actions.splice(4, 0, {
-        id: 'dash_playground',
-        title: t('parent.dash_playground', { defaultValue: 'Dash Playground' }),
-        icon: 'game-controller',
-        color: '#8B5CF6',
-        subtitle: t('parent.dash_playground_subtitle', { defaultValue: 'Fun activities with counting, letters, shapes & more!' }),
-        glow: true,
-      });
-    }
-
-    if (isEarlyLearner) {
-      const hiddenForPreschool = new Set(['view_grades', 'my_exams', 'homework_history']);
-      return actions.filter((action) => !hiddenForPreschool.has(action.id));
-    }
-    return actions;
-  }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked]);
-
-  const quickActions = useMemo<ParentQuickAction[]>(() => baseQuickActions, [baseQuickActions]);
-  const hasLockedActions = useMemo(() => quickActions.some(action => action.disabled), [quickActions]);
-
-  const todayHighlights = useMemo(() => {
-    const totalChildrenCount = dashboardData?.totalChildren ?? children.length;
-    const presentToday = dashboardData?.presentToday ?? 0;
-    const attendanceRate = dashboardData?.attendanceRate ?? 0;
-    const pendingHomework = dashboardData?.recentHomework?.filter((hw: any) => hw.status === 'not_submitted').length ?? 0;
-    const upcomingEvent = dashboardData?.upcomingEvents?.[0];
-
-    const highlights: TodayHighlight[] = [
-      {
-        id: 'attendance',
-        label: t('parent.attendance_today', { defaultValue: 'Attendance' }),
-        value: `${attendanceRate}%`,
-        sub: totalChildrenCount > 0
-          ? `${presentToday}/${totalChildrenCount} ${t('parent.present', { defaultValue: 'present' })}`
-          : t('parent.no_children', { defaultValue: 'No children linked' }),
-        icon: 'checkmark-circle-outline',
-        color: theme.success,
-      },
-      {
-        id: 'homework',
-        label: t('parent.homework_due', { defaultValue: 'Homework' }),
-        value: pendingHomework > 0 ? String(pendingHomework) : t('parent.all_done', { defaultValue: '0' }),
-        sub: pendingHomework > 0
-          ? t('parent.needs_attention', { defaultValue: 'Needs attention' })
-          : t('parent.caught_up', { defaultValue: 'All caught up' }),
-        icon: 'document-text-outline',
-        color: pendingHomework > 0 ? theme.warning : theme.primary,
-      },
-      {
-        id: 'next_event',
-        label: t('parent.next_event', { defaultValue: 'Next Event' }),
-        value: upcomingEvent?.title || t('parent.no_events', { defaultValue: 'No upcoming events' }),
-        sub: upcomingEvent?.time || t('parent.check_back', { defaultValue: 'Check back soon' }),
-        icon: 'calendar-outline',
-        color: theme.info,
-      },
-    ];
-
-    if (isFeesDueSoon && feesDueSoon) {
-      highlights.push({
-        id: 'fees_due',
-        label: t('parent.fees_due', { defaultValue: 'Fees Due' }),
-        value: formatCurrency(feesDueSoon.amount || 0),
-        sub: t('parent.fees_due_in_days', {
-          defaultValue: 'Due in {{count}} days',
-          count: feesDueSoon.daysUntil,
-        }),
-        icon: 'card-outline',
-        color: feesDueSoon.daysUntil <= 1 ? theme.error : theme.warning,
-      });
-    }
-
-    return highlights;
-  }, [dashboardData, children.length, t, theme, isFeesDueSoon, feesDueSoon]);
-
-  const quickActionSections = useMemo(() => ([
-    { id: 'learning', title: t('parent.actions_learning', { defaultValue: 'Learning' }), icon: 'book-outline' },
-    { id: 'communication', title: t('parent.actions_communication', { defaultValue: 'Communication' }), icon: 'chatbubbles-outline' },
-    { id: 'payments', title: t('parent.actions_payments', { defaultValue: 'Payments' }), icon: 'card-outline' },
-    { id: 'ai', title: t('parent.actions_ai', { defaultValue: 'Dash AI' }), icon: 'sparkles-outline' },
-  ]), [t]);
-
-  const groupedQuickActions = useMemo(() => {
-    const groupMap: Record<string, ParentQuickAction[]> = {
-      learning: [],
-      communication: [],
-      payments: [],
-      ai: [],
-    };
-    const categoryById: Record<string, keyof typeof groupMap> = {
-      view_homework: 'learning',
-      assigned_lessons: 'learning',
-      check_attendance: 'learning',
-      view_grades: 'learning',
-      learning_hub: 'learning',
-      dash_playground: 'learning',
-      family_activity: 'learning',
-      upload_progress: 'learning',
-      messages: 'communication',
-      calls: 'communication',
-      events: 'communication',
-      dev_notifications: 'communication',
-      payments: 'payments',
-      dash_grade_test: 'ai',
-      dash_tutor: 'ai',
-      ai_homework_help: 'ai',
-      ask_dash: 'ai',
-      dash_explain: 'ai',
-      dash_quiz: 'ai',
-      dash_study_plan: 'ai',
-    };
-
-    quickActions.forEach((action) => {
-      const groupKey = categoryById[action.id] || 'learning';
-      groupMap[groupKey].push(action);
-    });
-
-    return groupMap;
-  }, [quickActions]);
+  // ─── Attention system ────────────────────────────────
+  const sectionAttention = useParentSectionAttention({
+    dashboardData,
+    unreadMessageCount,
+    missedCallsCount,
+    feesDueSoon,
+    upcomingBirthdaysCount,
+  });
 
   const activeChildDisplay = useMemo(() => {
     if (!activeChild) return null;
@@ -789,36 +366,8 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Compact Header with Greeting + Tier/Role Badge */}
-        <View style={styles.compactHeader}>
-          <View style={styles.greetingRow}>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            <View style={styles.badgeRow}>
-              {/* Role Badge */}
-              <View style={[styles.roleBadge, { backgroundColor: theme.primary + '20' }]}>
-                <Text style={[styles.roleBadgeText, { color: theme.primary }]}>
-                  {t('roles.parent', { defaultValue: 'Parent' })}
-                </Text>
-              </View>
-              {/* Tier Badge */}
-              <View style={[
-                styles.tierBadge, 
-                { backgroundColor: (!tier || tier === 'free') ? theme.textSecondary + '20' : theme.success + '20' }
-              ]}>
-                <Text style={[
-                  styles.tierBadgeText, 
-                  { color: (!tier || tier === 'free') ? theme.textSecondary : theme.success }
-                ]}>
-                  {(!tier || tier === 'free') ? t('subscription.free', { defaultValue: 'Free' }) :
-                   (tier === 'parent_starter' || tier === 'starter') ? t('subscription.starter', { defaultValue: 'Starter' }) :
-                   (tier === 'parent_plus' || tier === 'pro' || tier === 'premium') ? t('subscription.plus', { defaultValue: 'Plus' }) :
-                   tier === 'enterprise' ? t('subscription.enterprise', { defaultValue: 'Enterprise' }) :
-                   t('subscription.premium', { defaultValue: 'Premium' })}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        {/* Compact Header */}
+        <ParentDashboardHeader greeting={getGreeting()} tier={tier} />
 
         {/* PWA-Style Search Bar */}
         <View style={styles.searchSection}>
@@ -841,115 +390,18 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
 
         {/* Child Focus Card */}
         {activeChildDisplay && (
-          <View style={styles.childFocusCard}>
-            <View style={styles.childFocusHeader}>
-              <View style={styles.childAvatar}>
-                <Text style={styles.childAvatarText}>{activeChildDisplay.initials}</Text>
-              </View>
-              <View style={styles.childInfo}>
-                <Text style={styles.childName}>{activeChildDisplay.fullName}</Text>
-                <Text style={styles.childMeta}>
-                  {activeChildDisplay.grade || t('parent.grade_unknown', { defaultValue: 'Grade' })}
-                  {'  •  '}
-                  {activeChildDisplay.className}
-                </Text>
-                <Text style={styles.childTeacher}>
-                  {t('parent.teacher_label', { defaultValue: 'Teacher' })}: {activeChildDisplay.teacherName}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.childFocusActions}>
-              <TouchableOpacity
-                style={[styles.childActionButton, styles.childActionPrimary]}
-                onPress={() => handleQuickAction('messages')}
-              >
-                <Ionicons name="chatbubbles" size={16} color="#fff" />
-                <Text style={styles.childActionTextPrimary}>{t('parent.message_teacher', { defaultValue: 'Message Teacher' })}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.childActionButton, styles.childActionSecondary]}
-                onPress={() => handleQuickAction('view_homework')}
-              >
-                <Ionicons name="book" size={16} color={theme.primary} />
-                <Text style={styles.childActionTextSecondary}>{t('parent.view_homework', { defaultValue: 'View Homework' })}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <ChildFocusCard
+            child={activeChildDisplay}
+            onMessageTeacher={() => handleQuickAction('messages')}
+            onViewHomework={() => handleQuickAction('view_homework')}
+          />
         )}
 
         {/* Today Highlights */}
-        <View style={styles.todayHighlightsSection}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>
-              {t('dashboard.today_focus', { defaultValue: 'Today' })}
-            </Text>
-            <Text style={styles.sectionHeaderHint}>
-              {t('dashboard.hints.today_focus', { defaultValue: 'Academic highlights at a glance.' })}
-            </Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.todayHighlightsRow}
-          >
-            {todayHighlights.map((item) => (
-              <View key={item.id} style={styles.todayHighlightCard}>
-                <View style={[styles.todayHighlightIcon, { backgroundColor: item.color + '1A' }]}>
-                  <Ionicons name={item.icon} size={18} color={item.color} />
-                </View>
-                <Text style={styles.todayHighlightLabel}>{item.label}</Text>
-                <Text style={styles.todayHighlightValue}>{item.value}</Text>
-                <Text style={styles.todayHighlightSub}>{item.sub}</Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
+        <TodayHighlights highlights={todayHighlights} />
 
         {/* Upgrade CTA for Free Tier */}
-        {(() => {
-          // Check if user is on free tier (handle various possible tier values)
-          const tierLower = (tier || '').toLowerCase();
-          const isFreeTier = !tier || tierLower === 'free' || tierLower === '';
-          // Show banner only if there are locked actions that require upgrade
-          const shouldShowBanner = hasLockedActions;
-          
-          // Debug logging
-          if (__DEV__) {
-            logger.debug('[ParentDashboard] Upgrade banner check', {
-              tier,
-              tierLower,
-              isFreeTier,
-              subscriptionReady,
-              shouldShowBanner,
-            });
-          }
-          
-          return shouldShowBanner ? (
-            <View style={styles.upgradeBanner}>
-              <View style={styles.upgradeBannerContent}>
-                <View style={styles.upgradeBannerIconContainer}>
-                  <Ionicons name="sparkles" size={16} color="#FFD700" />
-                </View>
-                <View style={styles.upgradeBannerText}>
-                  <Text style={styles.upgradeBannerTitle}>
-                    {upgradeBannerTitle}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.upgradeBannerButton}
-                  onPress={() => {
-                    track('parent.dashboard.upgrade_cta_clicked', { source: 'free_tier_banner', tier });
-                    router.push('/pricing');
-                  }}
-                >
-                  <Text style={styles.upgradeBannerButtonText}>
-                    {t('common.upgrade', { defaultValue: 'Upgrade' })}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null;
-        })()}
+        <UpgradeBanner title={upgradeBannerTitle} tier={tier} visible={hasLockedActions} />
 
         {/* Ad Banner for Free Tier Users (Android only) */}
         <AdBannerWithUpgrade 
@@ -959,6 +411,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
         />
 
         {/* Metrics Grid */}
+        <GlowContainer urgency={sectionAttention['overview']?.priority ?? 'none'} elevated={sectionAttention['overview']?.priority === 'critical'}>
         <CollapsibleSection 
           title={t('dashboard.todays_overview', { defaultValue: "Today's Overview" })}
           sectionId="overview"
@@ -966,6 +419,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           hint={t('dashboard.hints.overview', { defaultValue: 'Attendance, fees, messages, and highlights at a glance.' })}
           defaultCollapsed={collapsedSections.has('overview')}
           onToggle={toggleSection}
+          attention={sectionAttention['overview']}
         >
           <View style={styles.metricsGrid}>
             {metrics.map((metric, index) => (
@@ -989,17 +443,20 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
             ))}
           </View>
         </CollapsibleSection>
+        </GlowContainer>
 
-        {/* Quick Actions */}
+        {/* Mission Control 🚀 */}
+        <GlowContainer urgency={sectionAttention['mission-control']?.priority ?? 'none'} elevated={sectionAttention['mission-control']?.priority === 'critical'}>
         <CollapsibleSection 
-          title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
-          sectionId="quick-actions"
-          icon="⚡"
-          hint={t('dashboard.hints.quick_actions', { defaultValue: 'Shortcuts to homework, messages, fees, and AI help.' })}
-          defaultCollapsed={collapsedSections.has('quick-actions')}
+          title={t('dashboard.mission_control', { defaultValue: 'Mission Control' })}
+          sectionId="mission-control"
+          icon="🚀"
+          hint={t('dashboard.hints.mission_control', { defaultValue: 'Shortcuts to homework, messages, fees, and Dash Intelligence.' })}
+          defaultCollapsed={collapsedSections.has('mission-control')}
           onToggle={toggleSection}
+          attention={sectionAttention['mission-control']}
         >
-          {/* Onboarding hint for Quick Actions */}
+          {/* Onboarding hint for Mission Control */}
           {showQuickActionsHint && (
             <OnboardingHint
               hintId="parent_quick_actions"
@@ -1010,45 +467,14 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
               onDismiss={dismissQuickActionsHint}
             />
           )}
-          {quickActionSections.map((section) => {
-            const actions = groupedQuickActions[section.id] || [];
-            if (actions.length === 0) return null;
-            return (
-              <View key={section.id} style={styles.actionSection}>
-                <View style={styles.actionSectionHeader}>
-                  <View style={styles.actionSectionIcon}>
-                    <Ionicons name={section.icon as any} size={14} color={theme.textSecondary} />
-                  </View>
-                  <Text style={styles.actionSectionTitle}>{section.title}</Text>
-                </View>
-                <View style={styles.actionsGrid}>
-                  {actions.map((action) => (
-                    <View key={action.id} style={action.disabled ? { opacity: 0.5 } : undefined}>
-                      <MetricCard
-                        title={action.disabled ? `${action.title} 🔒` : action.title}
-                        subtitle={action.subtitle}
-                        value=""
-                        icon={action.icon}
-                        color={action.disabled ? theme.textSecondary : action.color}
-                        size="small"
-                        glow={Boolean(action.glow)}
-                        onPress={() => {
-                          if (action.disabled) {
-                            router.push('/screens/subscription-setup' as any);
-                          } else if (action.id === 'payments') {
-                            handlePaymentsPress();
-                          } else {
-                            handleQuickAction(action.id);
-                          }
-                        }}
-                      />
-                    </View>
-                  ))}
-                </View>
-              </View>
-            );
-          })}
+          <MissionControlSection
+            sections={missionControlSections}
+            groupedActions={groupedQuickActions}
+            onAction={handleQuickAction}
+            onUpgrade={() => router.push('/screens/subscription-setup' as any)}
+          />
         </CollapsibleSection>
+        </GlowContainer>
 
         {/* Uniform Sizes (enabled by school) */}
         {hasOrganization && children.length > 0 && uniformEnabled && (
@@ -1078,6 +504,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           hint={t('dashboard.hints.live_classes', { defaultValue: 'Join live lessons and events when they start.' })}
           defaultCollapsed={collapsedSections.has('live-classes')}
           onToggle={toggleSection}
+          attention={sectionAttention['live-classes']}
         >
           {showLiveClassesHint && !showQuickActionsHint && (
             <OnboardingHint
@@ -1116,6 +543,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           hint={t('dashboard.hints.teacher_notes', { defaultValue: 'Latest feedback and notes from educators.' })}
           defaultCollapsed={collapsedSections.has('teacher-notes')}
           onToggle={toggleSection}
+          attention={sectionAttention['teacher-notes']}
         >
           {activeChildId ? (
             <TeacherQuickNotes
@@ -1176,6 +604,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           hint={t('dashboard.hints.birthdays', { defaultValue: 'Upcoming class birthdays and reminders.' })}
           defaultCollapsed={collapsedSections.has('birthdays')}
           onToggle={toggleSection}
+          attention={sectionAttention['birthdays']}
           actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
           onActionPress={() => router.push('/screens/birthday-chart' as any)}
         >
@@ -1212,6 +641,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
           hint={t('dashboard.hints.daily_activities', { defaultValue: 'Daily class activities, photos, and updates.' })}
           defaultCollapsed={collapsedSections.has('daily-activities')}
           onToggle={toggleSection}
+          attention={sectionAttention['daily-activities']}
         >
           {dashboardData?.children?.find((c: any) => c.id === activeChildId)?.classId ? (
             <DailyActivityFeed
@@ -1245,297 +675,5 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
     </View>
   );
 };
-
-const createStyles = (theme: any, topInset: number, bottomInset: number, layout: LayoutMetrics) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: layout.isSmallScreen ? 8 : 12,
-    paddingHorizontal: layout.cardPadding,
-    paddingBottom: Math.max(bottomInset, 34) + 120, // Ensure space for bottom nav/FAB on all devices
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.background,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: theme.textSecondary,
-    marginTop: 16,
-  },
-  compactHeader: {
-    marginBottom: 12,
-  },
-  greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  greeting: {
-    fontSize: layout.isTablet ? 24 : layout.isSmallScreen ? 18 : 20,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  roleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tierBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  tierBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  searchSection: {
-    marginBottom: 16,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -layout.cardGap / 2,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -layout.cardGap / 2,
-  },
-  upgradeBanner: {
-    backgroundColor: theme.cardBackground,
-    borderRadius: layout.isSmallScreen ? 10 : 12,
-    paddingVertical: layout.isSmallScreen ? 10 : 12,
-    paddingHorizontal: layout.isSmallScreen ? 12 : 14,
-    marginBottom: layout.cardGap,
-    borderWidth: 1,
-    borderColor: theme.primary + '20',
-  },
-  upgradeBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  upgradeBannerIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  upgradeBannerText: {
-    flex: 1,
-  },
-  upgradeBannerTitle: {
-    fontSize: layout.isSmallScreen ? 13 : 14,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  upgradeBannerSubtitle: {
-    fontSize: layout.isSmallScreen ? 11 : 12,
-    color: theme.textSecondary,
-    lineHeight: 16,
-  },
-  upgradeBannerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.primary,
-    paddingVertical: layout.isSmallScreen ? 6 : 8,
-    paddingHorizontal: layout.isSmallScreen ? 12 : 14,
-    borderRadius: layout.isSmallScreen ? 6 : 8,
-  },
-  upgradeBannerButtonText: {
-    fontSize: layout.isSmallScreen ? 12 : 13,
-    fontWeight: '600',
-    color: theme.onPrimary,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionHeaderTitle: {
-    fontSize: layout.isTablet ? 18 : 16,
-    fontWeight: '700',
-    color: theme.text,
-  },
-  sectionHeaderHint: {
-    fontSize: 12,
-    color: theme.textSecondary,
-  },
-  todayHighlightsSection: {
-    marginBottom: 20,
-  },
-  todayHighlightsRow: {
-    paddingHorizontal: 2,
-  },
-  todayHighlightCard: {
-    minWidth: layout.isSmallScreen ? 150 : 180,
-    backgroundColor: theme.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: theme.borderLight,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  todayHighlightIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  todayHighlightLabel: {
-    fontSize: 10,
-    color: theme.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  todayHighlightValue: {
-    fontSize: layout.isTablet ? 18 : 16,
-    fontWeight: '700',
-    color: theme.text,
-    marginTop: 4,
-  },
-  todayHighlightSub: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    marginTop: 2,
-  },
-  childFocusCard: {
-    backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: theme.borderLight,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  childFocusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  childAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: theme.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  childAvatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.primary,
-  },
-  childInfo: {
-    flex: 1,
-  },
-  childName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 2,
-  },
-  childMeta: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    marginBottom: 4,
-  },
-  childTeacher: {
-    fontSize: 12,
-    color: theme.textSecondary,
-  },
-  childFocusActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  childActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  childActionPrimary: {
-    backgroundColor: theme.primary,
-  },
-  childActionSecondary: {
-    backgroundColor: theme.primary + '15',
-    borderWidth: 1,
-    borderColor: theme.primary + '30',
-  },
-  childActionTextPrimary: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  childActionTextSecondary: {
-    color: theme.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  actionSection: {
-    marginBottom: 16,
-  },
-  actionSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  actionSectionIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.surfaceVariant,
-    borderWidth: 1,
-    borderColor: theme.borderLight,
-  },
-  actionSectionTitle: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-});
 
 export default NewEnhancedParentDashboard;

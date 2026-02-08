@@ -47,21 +47,57 @@ interface SelectedFile {
 }
 
 export default function PictureOfProgressScreen() {
-  const { studentId, studentName } = useLocalSearchParams<{
-    studentId: string;
-    studentName: string;
+  const params = useLocalSearchParams<{
+    studentId?: string | string[];
+    studentName?: string | string[];
+    prefillTitle?: string | string[];
+    prefillDescription?: string | string[];
+    prefillSubject?: string | string[];
+    prefillLearningArea?: string | string[];
+    nextStep?: string | string[];
+    gradeLevel?: string | string[];
+    assignmentTitle?: string | string[];
+    submissionTemplate?: string | string[];
+    contextTag?: string | string[];
+    sourceFlow?: string | string[];
+    activityId?: string | string[];
+    activityTitle?: string | string[];
   }>();
   const { theme } = useTheme();
   const { t } = useTranslation();
   const createUpload = useCreatePOPUpload();
   const { celebrate, successHaptic, milestoneHaptic, selectionHaptic, lightHaptic } = useCelebration();
+  const readParam = useCallback((value?: string | string[]) => {
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (!raw) return '';
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }, []);
+  const studentId = readParam(params.studentId);
+  const studentName = readParam(params.studentName);
+  const nextStep = readParam(params.nextStep);
+  const prefillTitle = readParam(params.prefillTitle);
+  const prefillDescription = readParam(params.prefillDescription);
+  const prefillSubject = readParam(params.prefillSubject);
+  const prefillLearningArea = readParam(params.prefillLearningArea);
+  const gradeLevel = readParam(params.gradeLevel);
+  const assignmentTitle = readParam(params.assignmentTitle);
+  const submissionTemplate = readParam(params.submissionTemplate);
+  const contextTag = readParam(params.contextTag);
+  const sourceFlow = readParam(params.sourceFlow);
+  const activityId = readParam(params.activityId);
+  const activityTitle = readParam(params.activityTitle);
+  const shouldContinueToGrader = nextStep === 'grade';
   
   // Form state
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [subject, setSubject] = useState<string>('');
+  const [title, setTitle] = useState(prefillTitle);
+  const [description, setDescription] = useState(prefillDescription);
+  const [subject, setSubject] = useState<string>(prefillSubject);
   const [achievementLevel, setAchievementLevel] = useState<string>('');
-  const [learningArea, setLearningArea] = useState('');
+  const [learningArea, setLearningArea] = useState(prefillLearningArea);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [displayUri, setDisplayUri] = useState<string | null>(null);
   const [showSubjects, setShowSubjects] = useState(false);
@@ -76,6 +112,13 @@ export default function PictureOfProgressScreen() {
   // Animation refs for celebrations
   const celebrationScale = useState(new Animated.Value(1))[0];
   const milestoneOpacity = useState(new Animated.Value(0))[0];
+
+  useEffect(() => {
+    if (prefillTitle && !title) setTitle(prefillTitle);
+    if (prefillDescription && !description) setDescription(prefillDescription);
+    if (prefillSubject && !subject) setSubject(prefillSubject);
+    if (prefillLearningArea && !learningArea) setLearningArea(prefillLearningArea);
+  }, [description, learningArea, prefillDescription, prefillLearningArea, prefillSubject, prefillTitle, subject, title]);
 
   // Convert local image URIs to data URIs for web compatibility
   useEffect(() => {
@@ -493,7 +536,7 @@ export default function PictureOfProgressScreen() {
         milestone_type: milestoneResult.milestone?.name,
       };
       
-      await createUpload.mutateAsync(uploadData);
+      const createdUpload = await createUpload.mutateAsync(uploadData);
       
       // Celebrate successful upload! 🎉
       if (milestoneResult.detected) {
@@ -512,7 +555,34 @@ export default function PictureOfProgressScreen() {
         [
           {
             text: t('common.ok'),
-            onPress: () => router.back(),
+            onPress: () => {
+              if (!shouldContinueToGrader) {
+                router.back();
+                return;
+              }
+
+              const fallbackName = studentName || 'Child';
+              const finalAssignmentTitle = assignmentTitle || `${title.trim() || 'Family Activity'} Review`;
+              const finalSubmissionTemplate = submissionTemplate
+                || `${fallbackName} completed ${title.trim() || 'a family activity'} at home. Add what they found easy or difficult and what they learned.`;
+              const finalGradeLevel = gradeLevel || 'Age 5';
+              const gradingParams: Record<string, string> = {
+                assignmentTitle: encodeURIComponent(finalAssignmentTitle),
+                gradeLevel: encodeURIComponent(finalGradeLevel),
+                submissionContent: encodeURIComponent(finalSubmissionTemplate),
+                studentId,
+                progressUploadId: createdUpload.id,
+                contextTag: encodeURIComponent(contextTag || 'family_activity'),
+                sourceFlow: encodeURIComponent(sourceFlow || 'parent_picture_of_progress'),
+              };
+              if (activityId) gradingParams.activityId = encodeURIComponent(activityId);
+              if (activityTitle) gradingParams.activityTitle = encodeURIComponent(activityTitle);
+
+              router.push({
+                pathname: '/screens/ai-homework-grader-live',
+                params: gradingParams,
+              } as any);
+            },
           },
         ]
       );
@@ -526,7 +596,8 @@ export default function PictureOfProgressScreen() {
   
   const getSelectedSubjectLabel = () => {
     const subjectOption = SUBJECTS.find(s => s.value === subject);
-    return subjectOption ? subjectOption.label : t('pop.subject');
+    if (subjectOption) return subjectOption.label;
+    return subject || t('pop.subject');
   };
   
   const getSelectedAchievementLabel = () => {
@@ -545,7 +616,7 @@ export default function PictureOfProgressScreen() {
         {studentName && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              {t('pop.progressFor')}: {decodeURIComponent(studentName)}
+              {t('pop.progressFor')}: {studentName}
             </Text>
           </View>
         )}

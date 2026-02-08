@@ -145,7 +145,13 @@
     "languageLabel": "Language",
     "startTutorSession": "Start Tutor Session",
     "clear": "Clear",
-    "goalPlaceholderPreschool": "e.g., counting, letter sounds, social skills"
+    "goalPlaceholderPreschool": "e.g., counting, letter sounds, social skills",
+    "autoCollapseOff": "Auto-collapse: Off",
+    "autoCollapseOn": "Auto-collapse: On",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "rememberOff": "Remember: Off",
+    "rememberOn": "Remember: On"
   },
   "birthdayChart": {
     "title": "Birthday Chart",
@@ -1117,6 +1123,24 @@
           "description": "Basic skills practice: typing, mouse control, app navigation, online safety",
           "prompt": "Help me teach my child basic computer skills like using a mouse, keyboard, and safe online practices",
           "display": "Computer Literacy Guide"
+        },
+        "preschool_literacy": {
+          "description": "Letter sounds, storytelling, and picture-based vocabulary games",
+          "display": "Early Literacy Activities",
+          "prompt": "Give early literacy activities for preschoolers using songs, rhymes, and picture books.",
+          "title": "Early Literacy"
+        },
+        "preschool_math": {
+          "description": "Counting, patterns, and shape recognition with everyday objects",
+          "display": "Numbers & Shapes Practice",
+          "prompt": "Suggest simple counting and shapes activities for a preschool child using everyday items.",
+          "title": "Numbers & Shapes"
+        },
+        "preschool_play": {
+          "description": "Fun, hands-on activities to build curiosity, creativity, and confidence",
+          "display": "Play-Based Learning Ideas",
+          "prompt": "Share 3 play-based learning activities for a preschool child (simple, fun, and safe).",
+          "title": "Play-Based Learning"
         }
       },
       "early_learning": {
@@ -1279,7 +1303,14 @@
         "settings": "Settings",
         "dash_ai": "Dash AI",
         "notifications": "Notifications",
-        "menu": "Menu"
+        "menu": "Menu",
+        "activities": "Activity Feed",
+        "aftercare": "Aftercare Registration",
+        "calls": "Calls",
+        "homework_history": "Homework History",
+        "learning_hub": "Learning Hub",
+        "picture_of_progress": "Picture of Progress",
+        "weekly_report": "Weekly Report"
       },
       "profile": {
         "menu": "Profile menu",

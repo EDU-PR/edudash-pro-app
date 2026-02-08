@@ -32,6 +32,37 @@ try {
 // in metro.config.js, which ensures it runs BEFORE any module initialization.
 // This ensures Daily.co SDK gets the polyfilled Promise at module load time.
 
+// SAFETY NET: Ensure Promise.any is available RIGHT BEFORE Daily.co loads.
+// This catches edge cases where the Metro shim didn't stick on Hermes.
+if (typeof Promise.any !== 'function') {
+  console.warn('[VoiceCallDaily] ⚠️ Promise.any missing — installing inline polyfill');
+  (Promise as any).any = function promiseAny(iterable: Iterable<any>): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const arr = Array.from(iterable);
+      if (arr.length === 0) { reject(new Error('All promises were rejected')); return; }
+      const errors: any[] = new Array(arr.length);
+      let rejections = 0;
+      let done = false;
+      arr.forEach((p, i) => {
+        Promise.resolve(p).then(
+          (v) => { if (!done) { done = true; resolve(v); } },
+          (e) => {
+            if (!done) {
+              errors[i] = e;
+              rejections++;
+              if (rejections === arr.length) reject(new Error('All promises were rejected'));
+            }
+          }
+        );
+      });
+    });
+  };
+  // Also patch globalThis in case Daily.co references it there
+  if (typeof globalThis !== 'undefined' && globalThis.Promise) {
+    (globalThis as any).Promise.any = (Promise as any).any;
+  }
+}
+
 // Lazy Supabase getter
 const getSupabase = () => assertSupabase();
 
@@ -107,6 +138,9 @@ export function useVoiceCallDaily({
   // This solves the closure issue where event handlers capture stale function references
   const endCallRef = useRef<(() => Promise<void>) | null>(null);
   
+  // Guard against re-entrant cleanup (prevents 4+ duplicate "Call ended" cycles)
+  const cleanupInProgressRef = useRef(false);
+  
   // CRITICAL: State to trigger realtime subscription when call ID is set
   // Refs don't cause re-renders, so we need a state variable to trigger the subscription effect
   // Initialize with initialCallId if provided (callee case)
@@ -114,6 +148,12 @@ export function useVoiceCallDaily({
   
   // Cleanup call resources
   const cleanupCall = useCallback(async () => {
+    // Prevent duplicate cleanup cycles
+    if (cleanupInProgressRef.current) {
+      console.log('[VoiceCallDaily] Cleanup already in progress — skipping');
+      return;
+    }
+    cleanupInProgressRef.current = true;
     console.log('[VoiceCallDaily] Cleaning up call resources');
     
     if (dailyRef.current) {
@@ -143,6 +183,9 @@ export function useVoiceCallDaily({
     
     // CRITICAL: Must await to ensure audio refs are reset before state changes
     await stopAudio();
+    
+    // Reset guard after short delay so a NEW call can clean up normally
+    setTimeout(() => { cleanupInProgressRef.current = false; }, 500);
   }, [dailyRef, stopAudio]);
 
   // CRITICAL: Sync activeCallId state with initialCallId prop when set (callee case)

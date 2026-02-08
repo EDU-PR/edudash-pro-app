@@ -17,7 +17,47 @@
 import { AppRegistry, Platform, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { BadgeCoordinator } from '@/lib/BadgeCoordinator';
+
+/**
+ * Detect whether the native binary includes custom call sounds in res/raw/.
+ * The withCallSounds config plugin was added in a specific native build.
+ * OTA updates run on older native binaries that don't have res/raw/ringtone.mp3.
+ * We check the native build version — if it's before the build that added the
+ * plugin, fall back to 'default'. After the next native rebuild the custom sound
+ * will be present and this will return true.
+ *
+ * Simple heuristic: The plugin was registered alongside withAndroid15BootFix.
+ * If Constants.expoConfig exists (dev client / standalone) we optimistically
+ * assume the native binary matches the JS. For Expo Go we always fall back.
+ */
+function hasCustomCallSounds(): boolean {
+  try {
+    // In Expo Go the plugin hasn't run so there's no res/raw/ringtone.mp3
+    if (Constants.appOwnership === 'expo') return false;
+    // Check if native build number is recent enough.
+    // After the next `npx expo prebuild && eas build` the file will exist.
+    // We use the runtimeVersion as a proxy — if it matches the JS bundle,
+    // the native binary was built with the same app.json that includes
+    // the withCallSounds plugin.
+    const runtimeVersion = Constants.expoConfig?.runtimeVersion;
+    const jsRuntimeVersion = Constants.manifest2?.runtimeVersion;
+    if (runtimeVersion && jsRuntimeVersion && runtimeVersion === jsRuntimeVersion) {
+      return true; // Native binary matches JS — plugin was included
+    }
+    // Fallback: if update is running on an older native binary, sound file
+    // may not exist. Use 'default' to be safe.
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Resolve once at module load
+const CALL_SOUND_NOTIFEE = hasCustomCallSounds() ? 'ringtone' : 'default';
+const CALL_SOUND_EXPO = hasCustomCallSounds() ? 'ringtone.mp3' : 'default';
+const CALL_CHANNEL_ID = hasCustomCallSounds() ? 'incoming-calls-v2' : 'incoming-calls';
 
 // Conditionally import Notifee for better notification control
 let notifee: typeof import('@notifee/react-native').default | null = null;
@@ -128,19 +168,28 @@ async function setupIncomingCallChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   
   try {
-    await Notifications.setNotificationChannelAsync('incoming-calls', {
+    // Use custom ringtone when native build has res/raw/ringtone.mp3,
+    // otherwise fall back to system default (safe for OTA on older binaries)
+    await Notifications.setNotificationChannelAsync(CALL_CHANNEL_ID, {
       name: 'Incoming Calls',
-      description: 'Voice and video call notifications - high priority with ringtone',
+      description: 'Voice and video call notifications with ringtone',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: RINGTONE_VIBRATION_PATTERN,
       lightColor: '#00f5ff',
-      sound: 'default', // Uses system ringtone at MAX importance
+      sound: CALL_SOUND_EXPO,
       enableLights: true,
       enableVibrate: true,
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
     });
+    
+    // Clean up old channel (if using new v2 channel)
+    if (CALL_CHANNEL_ID === 'incoming-calls-v2') {
+      try {
+        await Notifications.deleteNotificationChannelAsync('incoming-calls');
+      } catch (_) { /* ignore if channel doesn't exist */ }
+    }
     
     // Setup notification category with answer/decline actions
     // These buttons appear when user expands the notification (swipes down)
@@ -195,17 +244,18 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
     if (notifee && AndroidImportance) {
       console.log('[CallHeadlessTask] 📱 Using Notifee for incoming call notification');
       
-      // Create/update incoming calls channel with MAX importance
+      // Create/update incoming calls channel — uses custom ringtone if native
+      // binary includes it, otherwise system default (OTA-safe)
       await notifee.createChannel({
-        id: 'incoming-calls',
+        id: CALL_CHANNEL_ID,
         name: 'Incoming Calls',
-        description: 'Voice and video call notifications - high priority with ringtone',
+        description: 'Voice and video call notifications with ringtone',
         importance: AndroidImportance.HIGH, // HIGH for heads-up + full-screen intent
         vibration: true,
         vibrationPattern: RINGTONE_VIBRATION_PATTERN,
         lights: true,
         lightColor: '#00f5ff',
-        sound: 'default',
+        sound: CALL_SOUND_NOTIFEE,
         bypassDnd: true,
       });
       
@@ -223,7 +273,7 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
           meeting_url: callData.meeting_url || '',
         },
         android: {
-          channelId: 'incoming-calls',
+          channelId: CALL_CHANNEL_ID,
           importance: AndroidImportance.HIGH,
           // CRITICAL: These settings make notification persistent
           ongoing: true, // Cannot be swiped away
@@ -262,8 +312,8 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
           vibrationPattern: RINGTONE_VIBRATION_PATTERN,
           // Lights
           lights: ['#00f5ff', 300, 600],
-          // Sound
-          sound: 'default',
+          // Sound — custom ringtone or system default (OTA-safe)
+          sound: CALL_SOUND_NOTIFEE,
           // Press action - open app
           pressAction: {
             id: 'default',
@@ -294,9 +344,9 @@ async function showIncomingCallNotification(callData: IncomingCallData): Promise
             meeting_url: callData.meeting_url,
             forceShow: true,
           },
-          sound: 'default',
+          sound: CALL_SOUND_EXPO,
           ...(Platform.OS === 'android' && {
-            channelId: 'incoming-calls',
+            channelId: CALL_CHANNEL_ID,
             priority: 'max',
             sticky: true,
             autoDismiss: false,

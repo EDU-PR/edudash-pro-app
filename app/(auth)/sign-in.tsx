@@ -1057,7 +1057,7 @@ return (
                 onPress={() => router.push('/(auth)/forgot-password')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.forgotPasswordText}>{t('auth.forgot_password', { defaultValue: 'Forgot Password?' })}</Text>
+                <Text style={styles.forgotPasswordText}>{t('auth.forgot_password.title', { defaultValue: 'Forgot Password?' })}</Text>
               </TouchableOpacity>
             </View>
 

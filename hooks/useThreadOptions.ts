@@ -6,9 +6,8 @@
  * All stubs replaced with real DB-backed implementations.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Share, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useAlert } from '@/components/ui/StyledAlert';
 import { toast } from '@/components/ui/ToastProvider';
 import { assertSupabase } from '@/lib/supabase';
@@ -41,7 +40,6 @@ export function useThreadOptions({
   displayName,
 }: UseThreadOptionsProps) {
   const alert = useAlert();
-  const router = useRouter();
 
   // ─── Local state for search & media gallery overlays ────────────
   const [showSearchOverlay, setShowSearchOverlay] = useState(false);
@@ -51,6 +49,104 @@ export function useThreadOptions({
   const [showMediaGallery, setShowMediaGallery] = useState(false);
   const [showStarredMessages, setShowStarredMessages] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isUserBlocked, setIsUserBlocked] = useState(false);
+  const [disappearAfterSeconds, setDisappearAfterSeconds] = useState<number | null>(null);
+  const [inferredOtherUserId, setInferredOtherUserId] = useState<string | null>(null);
+  const effectiveOtherUserId = otherUserId || inferredOtherUserId || undefined;
+
+  useEffect(() => {
+    if (!threadId) return;
+
+    let cancelled = false;
+
+    const loadThreadSettings = async () => {
+      try {
+        const supabase = assertSupabase();
+        let targetOtherUserId = otherUserId || undefined;
+
+        if (userId) {
+          const { data: participantData, error: participantError } = await supabase
+            .from('message_participants')
+            .select('is_muted')
+            .eq('thread_id', threadId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (!cancelled && !participantError && typeof participantData?.is_muted === 'boolean') {
+            setIsMuted(participantData.is_muted);
+          }
+
+          if (!targetOtherUserId) {
+            const { data: otherParticipantData, error: otherParticipantError } = await supabase
+              .from('message_participants')
+              .select('user_id')
+              .eq('thread_id', threadId)
+              .neq('user_id', userId)
+              .limit(1)
+              .maybeSingle();
+
+            if (!cancelled && !otherParticipantError) {
+              const inferredId = (otherParticipantData as any)?.user_id ?? null;
+              setInferredOtherUserId(inferredId);
+              targetOtherUserId = inferredId || undefined;
+            }
+          }
+        }
+
+        const { data: threadData, error: threadError } = await supabase
+          .from('message_threads')
+          .select('disappear_after_seconds')
+          .eq('id', threadId)
+          .maybeSingle();
+
+        if (!cancelled) {
+          if (!threadError) {
+            setDisappearAfterSeconds((threadData as any)?.disappear_after_seconds ?? null);
+          } else {
+            setDisappearAfterSeconds(null);
+          }
+        }
+
+        if (userId && targetOtherUserId) {
+          const { data: blockData, error: blockError } = await supabase
+            .from('user_blocks')
+            .select('is_active, expires_at')
+            .eq('blocker_id', userId)
+            .eq('blocked_id', targetOtherUserId)
+            .eq('block_type', 'communication')
+            .maybeSingle();
+
+          if (!cancelled) {
+            if (blockError) {
+              setIsUserBlocked(false);
+            } else {
+              const expiryMs = blockData?.expires_at ? new Date(blockData.expires_at).getTime() : null;
+              const isExpired = !!expiryMs && expiryMs < Date.now();
+              setIsUserBlocked(Boolean(blockData?.is_active) && !isExpired);
+            }
+          }
+        } else if (!cancelled) {
+          setIsUserBlocked(false);
+        }
+      } catch (error) {
+        logger.warn('ThreadOptions', 'Failed to load thread options state:', error);
+      }
+    };
+
+    loadThreadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [threadId, userId, otherUserId]);
+
+  const disappearingStatusLabel = useMemo(() => {
+    if (!disappearAfterSeconds) return 'Off';
+    if (disappearAfterSeconds === 86400) return 'On • 24h';
+    if (disappearAfterSeconds === 604800) return 'On • 7d';
+    if (disappearAfterSeconds === 7776000) return 'On • 90d';
+    return `On • ${disappearAfterSeconds}s`;
+  }, [disappearAfterSeconds]);
 
   // ─── Clear Chat (real — was already working) ────────────────────
   const handleClearChat = useCallback(async () => {
@@ -172,6 +268,95 @@ export function useThreadOptions({
   }, []);
 
   // ─── Export Chat (was a stub) ──────────────────────────────────
+  const exportChat = useCallback(
+    async (includeMedia: boolean) => {
+      try {
+        const supabase = assertSupabase();
+        const { data, error } = await supabase
+          .from('messages')
+          .select(
+            `content, content_type, voice_url, created_at,
+             sender:profiles!messages_sender_id_fkey(first_name, last_name)`
+          )
+          .eq('thread_id', threadId)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          toast.info('No messages to export');
+          return;
+        }
+
+        const lines = (data as any[]).map((m: any) => {
+          const time = new Date(m.created_at).toLocaleString();
+          const sender = Array.isArray(m.sender) ? m.sender[0] : m.sender;
+          const name = sender
+            ? `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'Unknown'
+            : 'Unknown';
+          const body =
+            m.content_type === 'voice'
+              ? '[Voice Message]'
+              : m.content_type === 'image'
+              ? '[Image]'
+              : m.content_type === 'file'
+              ? '[File]'
+              : m.content || '';
+
+          if (!includeMedia) {
+            return `[${time}] ${name}: ${body}`;
+          }
+
+          const mediaRefs: string[] = [];
+          const imageMatches = typeof m.content === 'string'
+            ? [...m.content.matchAll(/\[image\]\((.+?)\)/g)].map((match) => match[1])
+            : [];
+
+          if (imageMatches.length > 0) {
+            imageMatches.forEach((url: string) => mediaRefs.push(`Image: ${url}`));
+          }
+
+          if (m.voice_url) {
+            mediaRefs.push(`Voice: ${m.voice_url}`);
+          }
+
+          if (mediaRefs.length === 0) {
+            return `[${time}] ${name}: ${body}`;
+          }
+
+          return `[${time}] ${name}: ${body}\n  ${mediaRefs.join('\n  ')}`;
+        });
+
+        const header = includeMedia
+          ? `Chat Export (With Media Links) — ${displayName}`
+          : `Chat Export — ${displayName}`;
+        const text = `${header}\n${'─'.repeat(40)}\n${lines.join('\n')}`;
+
+        if (Platform.OS === 'web') {
+          const blob = new Blob([text], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `chat-${displayName.replace(/\s+/g, '_')}${includeMedia ? '-with-media' : ''}.txt`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } else {
+          await Share.share({
+            message: text,
+            title: `Chat with ${displayName}`,
+          });
+        }
+
+        toast.success(includeMedia ? 'Chat exported with media links' : 'Chat exported');
+      } catch (error) {
+        logger.error('ThreadOptions', 'Export error:', error);
+        toast.error('Failed to export chat');
+      }
+    },
+    [threadId, displayName]
+  );
+
   const handleExportChat = useCallback(() => {
     alert.show(
       'Export Chat',
@@ -180,74 +365,21 @@ export function useThreadOptions({
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Without Media',
-          onPress: async () => {
-            try {
-              const supabase = assertSupabase();
-              const { data, error } = await supabase
-                .from('messages')
-                .select(
-                  `content, content_type, created_at,
-                   sender:users!messages_sender_id_fkey(first_name, last_name)`
-                )
-                .eq('thread_id', threadId)
-                .is('deleted_at', null)
-                .order('created_at', { ascending: true });
-
-              if (error) throw error;
-
-              if (!data || data.length === 0) {
-                toast.info('No messages to export');
-                return;
-              }
-
-              // Build plain text export
-              const lines = (data as any[]).map((m: any) => {
-                const time = new Date(m.created_at).toLocaleString();
-                const name = m.sender
-                  ? `${m.sender.first_name} ${m.sender.last_name}`
-                  : 'Unknown';
-                const body =
-                  m.content_type === 'voice'
-                    ? '[Voice Message]'
-                    : m.content_type === 'image'
-                    ? '[Image]'
-                    : m.content_type === 'file'
-                    ? '[File]'
-                    : m.content;
-                return `[${time}] ${name}: ${body}`;
-              });
-
-              const text = `Chat Export — ${displayName}\n${'─'.repeat(40)}\n${lines.join('\n')}`;
-
-              if (Platform.OS === 'web') {
-                // Download as .txt on web
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `chat-${displayName.replace(/\s+/g, '_')}.txt`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } else {
-                // Use Share API on native
-                await Share.share({
-                  message: text,
-                  title: `Chat with ${displayName}`,
-                });
-              }
-
-              toast.success('Chat exported');
-            } catch (error) {
-              logger.error('ThreadOptions', 'Export error:', error);
-              toast.error('Failed to export chat');
-            }
+          onPress: () => {
+            exportChat(false);
+          },
+        },
+        {
+          text: 'Include Media Links',
+          onPress: () => {
+            exportChat(true);
           },
         },
       ],
       { type: 'info' }
     );
     setShowOptionsMenu(false);
-  }, [alert, threadId, displayName, setShowOptionsMenu]);
+  }, [alert, exportChat, setShowOptionsMenu]);
 
   // ─── Media, Links & Docs (was a stub) ──────────────────────────
   const handleMediaLinksAndDocs = useCallback(() => {
@@ -308,6 +440,7 @@ export function useThreadOptions({
           .eq('id', threadId);
 
         if (error) throw error;
+        setDisappearAfterSeconds(seconds);
 
         if (seconds === null) {
           toast.success('Disappearing messages turned off');
@@ -396,7 +529,7 @@ export function useThreadOptions({
           report_reason: reason,
           severity: reason === 'harassment' ? 'high' : 'medium',
           school_id: schoolId || null,
-          author_id: otherUserId || null,
+          author_id: effectiveOtherUserId || null,
         });
 
         if (error) throw error;
@@ -408,25 +541,32 @@ export function useThreadOptions({
         toast.error('Failed to submit report');
       }
     },
-    [userId, threadId, displayName, schoolId, otherUserId]
+    [userId, threadId, displayName, schoolId, effectiveOtherUserId]
   );
 
-  // ─── Block User (was a stub — now wired to user_blocks table) ─
+  // ─── Block / Unblock User ──────────────────────────────────────
   const handleBlockUser = useCallback(() => {
-    if (!otherUserId) {
+    if (!effectiveOtherUserId) {
       toast.warn('Cannot block in group chats from here');
       setShowOptionsMenu(false);
       return;
     }
 
+    const nextBlocked = !isUserBlocked;
+    const title = nextBlocked ? 'Block User' : 'Unblock User';
+    const message = nextBlocked
+      ? `Block ${displayName}? They won't be able to message you.`
+      : `Unblock ${displayName}? They will be able to message you again.`;
+    const actionText = nextBlocked ? 'Block' : 'Unblock';
+
     alert.show(
-      'Block User',
-      `Block ${displayName}? They won't be able to message you.`,
+      title,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Block',
-          style: 'destructive',
+          text: actionText,
+          style: nextBlocked ? 'destructive' : 'default',
           onPress: async () => {
             if (!userId) {
               toast.error('Not signed in');
@@ -436,57 +576,87 @@ export function useThreadOptions({
             try {
               const supabase = assertSupabase();
 
-              // Upsert to handle re-blocking after unblock
-              const { error } = await supabase.from('user_blocks').upsert(
-                {
-                  blocker_id: userId,
-                  blocked_id: otherUserId,
-                  block_type: 'communication',
-                  reason: 'Blocked from messaging thread options',
-                  school_id: schoolId || null,
-                  is_active: true,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: 'blocker_id,blocked_id,block_type' }
-              );
+              if (nextBlocked) {
+                const { error } = await supabase.from('user_blocks').upsert(
+                  {
+                    blocker_id: userId,
+                    blocked_id: effectiveOtherUserId,
+                    block_type: 'communication',
+                    reason: 'Blocked from messaging thread options',
+                    school_id: schoolId || null,
+                    is_active: true,
+                    updated_at: new Date().toISOString(),
+                  },
+                  { onConflict: 'blocker_id,blocked_id,block_type' }
+                );
+                if (error) throw error;
+              } else {
+                const { error } = await supabase
+                  .from('user_blocks')
+                  .update({
+                    is_active: false,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('blocker_id', userId)
+                  .eq('blocked_id', effectiveOtherUserId)
+                  .eq('block_type', 'communication');
 
-              if (error) throw error;
+                if (error) throw error;
+              }
 
-              toast.warn(`${displayName} has been blocked`);
+              setIsUserBlocked(nextBlocked);
+              toast.success(nextBlocked ? `${displayName} has been blocked` : `${displayName} has been unblocked`);
               logger.info(
                 'ThreadOptions',
-                `Blocked user ${otherUserId} (${displayName})`
+                `${nextBlocked ? 'Blocked' : 'Unblocked'} user ${effectiveOtherUserId} (${displayName})`
               );
-
-              // Navigate back since the thread is now blocked
-              if (router.canGoBack()) {
-                router.back();
-              }
             } catch (error) {
-              logger.error('ThreadOptions', 'Block error:', error);
-              toast.error('Failed to block user');
+              logger.error('ThreadOptions', 'Block toggle error:', error);
+              toast.error(nextBlocked ? 'Failed to block user' : 'Failed to unblock user');
             }
           },
         },
       ],
-      { type: 'warning' }
+      { type: nextBlocked ? 'warning' : 'confirm' }
     );
     setShowOptionsMenu(false);
-  }, [alert, userId, otherUserId, displayName, schoolId, router, setShowOptionsMenu]);
+  }, [alert, userId, effectiveOtherUserId, isUserBlocked, displayName, schoolId, setShowOptionsMenu]);
 
-  // ─── View Contact (was a stub) ────────────────────────────────
-  const handleViewContact = useCallback(() => {
-    if (otherUserId) {
-      // Navigate to profile view
-      router.push({
-        pathname: '/(app)/profile/[userId]' as any,
-        params: { userId: otherUserId },
-      });
-    } else {
-      toast.info(`Contact details for ${displayName}`);
-    }
+  // ─── View Contact ──────────────────────────────────────────────
+  const handleViewContact = useCallback(async () => {
     setShowOptionsMenu(false);
-  }, [otherUserId, displayName, router, setShowOptionsMenu]);
+
+    if (!effectiveOtherUserId) {
+      toast.info(`Contact details for ${displayName}`);
+      return;
+    }
+
+    try {
+      const supabase = assertSupabase();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, role, email, phone')
+        .eq('id', effectiveOtherUserId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const fullName = `${data?.first_name || ''} ${data?.last_name || ''}`.trim() || displayName;
+      const role = data?.role || 'User';
+      const email = data?.email || 'Not available';
+      const phone = data?.phone || 'Not available';
+
+      alert.show(
+        'Contact Info',
+        `${fullName}\nRole: ${role}\nEmail: ${email}\nPhone: ${phone}`,
+        [{ text: 'Close', style: 'default' }],
+        { type: 'info' }
+      );
+    } catch (error) {
+      logger.error('ThreadOptions', 'ViewContact error:', error);
+      toast.error('Failed to load contact details');
+    }
+  }, [effectiveOtherUserId, displayName, alert, setShowOptionsMenu]);
 
   return {
     // Thread-level actions (all production-ready)
@@ -504,6 +674,8 @@ export function useThreadOptions({
     // Mute state
     isMuted,
     setIsMuted,
+    isUserBlocked,
+    disappearingStatusLabel,
     // Search overlay state & controls
     showSearchOverlay,
     searchResults,

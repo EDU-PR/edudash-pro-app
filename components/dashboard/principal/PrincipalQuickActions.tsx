@@ -132,6 +132,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'create-lesson', title: t('dashboard.create_lesson', { defaultValue: 'Create Lesson' }), icon: 'add-circle', color: '#10B981' },
         { id: 'assign-lessons', title: t('dashboard.assign_lessons', { defaultValue: 'Assign Lessons' }), icon: 'paper-plane', color: '#8B5CF6' },
         { id: 'reports', title: t('dashboard.view_reports', { defaultValue: 'Reports' }), icon: 'bar-chart', color: '#8B5CF6' },
+        { id: 'family-activity-review', title: t('dashboard.family_activity_review', { defaultValue: 'Family Activity Review' }), icon: 'home', color: '#14B8A6' },
         { id: 'activities', title: t('dashboard.learning_activities', { defaultValue: 'Activities' }), icon: 'game-controller', color: '#EC4899' },
         { id: 'calendar', title: t('dashboard.manage_calendar', { defaultValue: 'Calendar' }), icon: 'calendar', color: '#EC4899' },
         { id: 'year-planner', title: t('dashboard.year_planner', { defaultValue: 'Year Planner' }), icon: 'calendar', color: '#3B82F6' },
@@ -204,6 +205,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'reports':
         router.push('/screens/principal-reports');
+        break;
+      case 'family-activity-review':
+        router.push('/screens/family-activity-review');
         break;
       case 'announcements':
         router.push('/screens/principal-announcement');

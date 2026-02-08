@@ -8,7 +8,8 @@ import { getCombinedUsage } from '@/lib/ai/usage'
 import { useGrader } from '@/hooks/useGrader'
 import { canUseFeature, getQuotaStatus, getEffectiveLimits } from '@/lib/ai/limits'
 import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences'
-import { router } from 'expo-router'
+import { assertSupabase } from '@/lib/supabase'
+import { router, useLocalSearchParams } from 'expo-router'
 import { useGradingModels } from '@/hooks/useAIModelSelection'
 import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
@@ -40,9 +41,25 @@ interface UsageCounts {
 }
 export default function AIHomeworkGraderLive() {
   const { theme } = useTheme()
-  const [assignmentTitle, setAssignmentTitle] = useState('Counting to 10')
-  const [gradeLevel, setGradeLevel] = useState('Age 5')
-  const [submissionContent, setSubmissionContent] = useState('I counted 1 2 3 4 6 7 8 10')
+  const params = useLocalSearchParams<{
+    assignmentTitle?: string | string[]
+    gradeLevel?: string | string[]
+    submissionContent?: string | string[]
+    studentId?: string | string[]
+    progressUploadId?: string | string[]
+    contextTag?: string | string[]
+    sourceFlow?: string | string[]
+    activityId?: string | string[]
+    activityTitle?: string | string[]
+  }>()
+  const readParam = (value: string | string[] | undefined) => {
+    const raw = Array.isArray(value) ? value[0] : value
+    if (!raw) return ''
+    try { return decodeURIComponent(raw) } catch { return raw }
+  }
+  const [assignmentTitle, setAssignmentTitle] = useState(readParam(params.assignmentTitle) || 'Counting to 10')
+  const [gradeLevel, setGradeLevel] = useState(readParam(params.gradeLevel) || 'Age 5')
+  const [submissionContent, setSubmissionContent] = useState(readParam(params.submissionContent) || 'I counted 1 2 3 4 6 7 8 10')
   const [isStreaming, setIsStreaming] = useState(false)
   const [pending, setPending] = useState(false)
   const [jsonBuffer, setJsonBuffer] = useState('')
@@ -50,7 +67,13 @@ export default function AIHomeworkGraderLive() {
   const [usage, setUsage] = useState<UsageCounts>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [recordStatus, setRecordStatus] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; id?: string; message?: string }>({ state: 'idle' })
   const bufferRef = useRef('')
+  const progressUploadId = readParam(params.progressUploadId)
+  const contextTag = readParam(params.contextTag)
+  const sourceFlow = readParam(params.sourceFlow)
+  const activityId = readParam(params.activityId)
+  const activityTitle = readParam(params.activityTitle)
 
   const flags = getFeatureFlagsSync()
   const AI_ENABLED = (process.env.EXPO_PUBLIC_AI_ENABLED === 'true') || (process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true')
@@ -58,6 +81,18 @@ export default function AIHomeworkGraderLive() {
 
   const { grade, result } = useGrader()
   const { quotas } = useGradingModels()
+  const hasHydratedParams = useRef(false)
+
+  React.useEffect(() => {
+    if (hasHydratedParams.current) return
+    const titleParam = readParam(params.assignmentTitle)
+    const gradeParam = readParam(params.gradeLevel)
+    const submissionParam = readParam(params.submissionContent)
+    if (titleParam) setAssignmentTitle(titleParam)
+    if (gradeParam) setGradeLevel(gradeParam)
+    if (submissionParam) setSubmissionContent(submissionParam)
+    hasHydratedParams.current = true
+  }, [params.assignmentTitle, params.gradeLevel, params.submissionContent])
 
   React.useEffect(() => {
     (async () => {
@@ -73,10 +108,109 @@ export default function AIHomeworkGraderLive() {
     })()
   }, [])
 
+  const parseResult = React.useCallback((text: string, summary?: Partial<ParsedResult> | null): ParsedResult => {
+    if (summary && summary.feedback) {
+      return {
+        score: Number(summary.score || 0),
+        feedback: String(summary.feedback || ''),
+        suggestions: Array.isArray(summary.suggestions) ? summary.suggestions : [],
+        strengths: Array.isArray(summary.strengths) ? summary.strengths : [],
+        areasForImprovement: Array.isArray(summary.areasForImprovement) ? summary.areasForImprovement : [],
+      }
+    }
+
+    try {
+      const parsedObj = JSON.parse(text || '{}')
+      if (parsedObj && typeof parsedObj === 'object' && (parsedObj.score || parsedObj.feedback)) {
+        return {
+          score: Number(parsedObj.score || 0),
+          feedback: String(parsedObj.feedback || ''),
+          suggestions: Array.isArray(parsedObj.suggestions) ? parsedObj.suggestions : [],
+          strengths: Array.isArray(parsedObj.strengths) ? parsedObj.strengths : [],
+          areasForImprovement: Array.isArray(parsedObj.areasForImprovement) ? parsedObj.areasForImprovement : [],
+        }
+      }
+    } catch {
+      // Fallback to plain text
+    }
+
+    return {
+      score: 0,
+      feedback: text || '',
+      suggestions: [],
+      strengths: [],
+      areasForImprovement: [],
+    }
+  }, [])
+
+  const persistGradingRecord = React.useCallback(async (gradeResult: ParsedResult, rawResponse: string) => {
+    const supabase = assertSupabase() as any
+    const { data: authData } = await supabase.auth.getUser()
+    const userId = authData?.user?.id
+    if (!userId) {
+      throw new Error('You must be signed in to save grading records.')
+    }
+
+    const studentId = readParam(params.studentId) || null
+    const payload = {
+      user_id: userId,
+      student_id: studentId,
+      mode: 'practice',
+      subject: 'homework_grading',
+      grade: gradeLevel || null,
+      topic: assignmentTitle || null,
+      question: assignmentTitle || null,
+      learner_answer: submissionContent || null,
+      score: Number.isFinite(gradeResult.score) ? gradeResult.score : null,
+      feedback: gradeResult.feedback || null,
+      is_correct: null,
+      metadata: {
+        source: 'ai_homework_grader_live',
+        context_tag: contextTag || null,
+        source_flow: sourceFlow || null,
+        progress_upload_id: progressUploadId || null,
+        activity_id: activityId || null,
+        activity_title: activityTitle || null,
+        model: selectedModel || null,
+        assignment_title: assignmentTitle || null,
+        grade_level: gradeLevel || null,
+        suggestions: gradeResult.suggestions || [],
+        strengths: gradeResult.strengths || [],
+        areas_for_improvement: gradeResult.areasForImprovement || [],
+        raw_response_preview: (rawResponse || '').slice(0, 2000),
+      },
+    }
+
+    const { data, error } = await supabase
+      .from('dash_ai_tutor_attempts')
+      .insert(payload)
+      .select('id, created_at')
+      .single()
+
+    if (error) {
+      throw new Error(error.message || 'Failed to save grading record')
+    }
+    return data as { id: string; created_at: string }
+  }, [
+    activityId,
+    activityTitle,
+    assignmentTitle,
+    contextTag,
+    gradeLevel,
+    params.studentId,
+    progressUploadId,
+    readParam,
+    selectedModel,
+    sourceFlow,
+    submissionContent,
+  ])
+
   const startStreaming = async () => {
     setPending(true)
+    setRecordStatus({ state: 'idle' })
     if (!submissionContent.trim()) {
       toast.warn('Please provide the student submission text.')
+      setPending(false)
       return
     }
     if (!aiGradingEnabled) {
@@ -104,6 +238,7 @@ export default function AIHomeworkGraderLive() {
       setJsonBuffer('')
       bufferRef.current = ''
       setParsed(null)
+      let finalSummary: Partial<ParsedResult> | null = null
       track('edudash.ai.grader.ui_started', {})
 
       // Use hook for grading (non-streaming for now). We still keep UI notion of streaming.
@@ -118,33 +253,37 @@ export default function AIHomeworkGraderLive() {
           },
           onFinal: (summary) => {
             if (summary && summary.feedback) {
-              setParsed({ score: Number(summary.score || 0), feedback: summary.feedback, suggestions: summary.suggestions || [], strengths: summary.strengths || [], areasForImprovement: summary.areasForImprovement || [] });
+              finalSummary = summary
+              setParsed({
+                score: Number(summary.score || 0),
+                feedback: String(summary.feedback || ''),
+                suggestions: Array.isArray(summary.suggestions) ? summary.suggestions : [],
+                strengths: Array.isArray(summary.strengths) ? summary.strengths : [],
+                areasForImprovement: Array.isArray(summary.areasForImprovement) ? summary.areasForImprovement : [],
+              });
             }
           }
         }
       )
 
-      // Basic parsing if model returned JSON-ish content in text
+      const finalParsed = parseResult(text, finalSummary)
+      setParsed(finalParsed)
+
+      // Persist grading run so parents have a durable record.
+      setRecordStatus({ state: 'saving' })
       try {
-        const parsedObj = JSON.parse(text || '{}')
-        if (parsedObj && typeof parsedObj === 'object' && (parsedObj.score || parsedObj.feedback)) {
-          setParsed({
-            score: Number(parsedObj.score || 0),
-            feedback: String(parsedObj.feedback || ''),
-            suggestions: parsedObj.suggestions || [],
-            strengths: parsedObj.strengths || [],
-            areasForImprovement: parsedObj.areasForImprovement || [],
-          })
-        } else {
-          setParsed({ score: 0, feedback: text || '', suggestions: [], strengths: [], areasForImprovement: [] })
-        }
-      } catch {
-        setParsed({ score: 0, feedback: text || '', suggestions: [], strengths: [], areasForImprovement: [] })
+        const saved = await persistGradingRecord(finalParsed, text)
+        setRecordStatus({ state: 'saved', id: saved.id })
+      } catch (persistErr: unknown) {
+        const persistMessage = persistErr instanceof Error ? persistErr.message : 'Failed to save grading record'
+        setRecordStatus({ state: 'error', message: persistMessage })
+        toast.warn(`Grading completed, but record save failed: ${persistMessage}`)
       }
+
       setIsStreaming(false)
       setPending(false)
       setUsage(await getCombinedUsage())
-      track('edudash.ai.grader.ui_completed', { score: parsed?.score })
+      track('edudash.ai.grader.ui_completed', { score: finalParsed.score })
     } catch (e: unknown) {
       setIsStreaming(false)
       setPending(false)
@@ -254,6 +393,16 @@ export default function AIHomeworkGraderLive() {
             <Text style={[styles.parsedScore, { color: scoreColor }]}>{parsed.score}</Text>
             <Text style={[styles.parsedLabel, { color: '#6B7280' }]}>Feedback</Text>
             <Text style={[styles.parsedText, { color: '#111827' }]}>{parsed.feedback}</Text>
+            <Text style={[styles.parsedLabel, { color: '#6B7280' }]}>Record</Text>
+            {recordStatus.state === 'saving' && (
+              <Text style={[styles.parsedText, { color: '#6B7280' }]}>Saving grading record...</Text>
+            )}
+            {recordStatus.state === 'saved' && (
+              <Text style={[styles.parsedText, { color: '#10B981' }]}>Saved to record: {recordStatus.id}</Text>
+            )}
+            {recordStatus.state === 'error' && (
+              <Text style={[styles.parsedText, { color: '#EF4444' }]}>{recordStatus.message || 'Failed to save grading record'}</Text>
+            )}
           </View>
         )}
 
