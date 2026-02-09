@@ -68,7 +68,7 @@ server-examples/
 # Scripts and local reports (optional to exclude)
 scripts/*.sh
 scripts/*.ts
-reports/
+/reports/
 
 # Keep assets (png/jpg) and config JSON files included for the app to bundle correctly
 # Do NOT add global patterns like *.png or *.json here.
