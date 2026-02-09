@@ -19,6 +19,35 @@ import {
 
 type ShowAlert = (title: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', buttons?: any[]) => void;
 
+function toDayStart(dateValue?: string | null): Date | null {
+  if (!dateValue) return null;
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function resolvePendingLikeStatus(
+  fee: StudentFee,
+  nextOutstanding: number,
+  amountPaid: number,
+): StudentFee['status'] {
+  if (nextOutstanding <= 0) return nextOutstanding === 0 ? 'paid' : 'waived';
+  if (amountPaid > 0) return 'partially_paid';
+  const dueStart = toDayStart(fee.due_date);
+  if (!dueStart) return 'pending';
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return dueStart < todayStart ? 'overdue' : 'pending';
+}
+
+function getSupabaseErrorMessage(error: any, fallback: string): string {
+  if (!error) return fallback;
+  const message = [error.message, error.details, error.hint]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join(' | ');
+  return message || fallback;
+}
+
 export interface StudentFeeActionsParams {
   student: Student | null;
   setStudent: React.Dispatch<React.SetStateAction<Student | null>>;
@@ -33,6 +62,8 @@ export interface StudentFeeActionsParams {
 
 export interface StudentFeeActionsReturn {
   saving: boolean;
+  processingFeeId: string | null;
+  processingFeeAction: 'mark_paid' | 'mark_unpaid' | null;
   modalType: ModalType;
   setModalType: (t: ModalType) => void;
   selectedFee: StudentFee | null;
@@ -76,6 +107,8 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const { profile } = useAuth();
 
   const [saving, setSaving] = useState(false);
+  const [processingFeeId, setProcessingFeeId] = useState<string | null>(null);
+  const [processingFeeAction, setProcessingFeeAction] = useState<'mark_paid' | 'mark_unpaid' | null>(null);
   const [modalType, setModalType] = useState<ModalType>(null);
   const [selectedFee, setSelectedFee] = useState<StudentFee | null>(null);
   const [showEnrollmentPicker, setShowEnrollmentPicker] = useState(false);
@@ -99,8 +132,14 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
 
   const handleWaiveFee = async () => {
     if (!selectedFee || !profile?.id) return;
-    const amount = waiveType === 'full' ? selectedFee.final_amount : parseFloat(waiveAmount);
-    if (waiveType === 'partial' && (!amount || amount <= 0 || amount > selectedFee.final_amount)) {
+    const currentFinal = Number(selectedFee.final_amount || selectedFee.amount || 0);
+    const currentDiscount = Number(selectedFee.discount_amount || selectedFee.waived_amount || 0);
+    const currentPaid = Number(selectedFee.amount_paid || 0);
+    const currentOutstanding = Number.isFinite(Number(selectedFee.amount_outstanding))
+      ? Number(selectedFee.amount_outstanding)
+      : Math.max(0, currentFinal - currentPaid);
+    const amount = waiveType === 'full' ? currentOutstanding : parseFloat(waiveAmount);
+    if (waiveType === 'partial' && (!amount || amount <= 0 || amount > currentOutstanding)) {
       showAlert('Invalid Amount', 'Please enter a valid waiver amount.', 'warning'); return;
     }
     if (!waiveReason.trim()) { showAlert('Reason Required', 'Please provide a reason for the waiver.', 'warning'); return; }
@@ -108,19 +147,30 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     setSaving(true);
     try {
       const supabase = assertSupabase();
-      const newFinal = selectedFee.final_amount - amount;
+      const nowIso = new Date().toISOString();
+      const newFinal = Math.max(0, currentFinal - amount);
+      const newDiscount = Number((currentDiscount + amount).toFixed(2));
+      const newOutstanding = Math.max(0, newFinal - currentPaid);
+      const nextStatus =
+        newFinal <= 0
+          ? 'waived'
+          : resolvePendingLikeStatus(selectedFee, newOutstanding, currentPaid);
+
       await supabase.from('student_fees').update({
-        final_amount: Math.max(0, newFinal),
-        waived_amount: (selectedFee.waived_amount || 0) + amount,
-        waived_reason: waiveReason.trim(), waived_at: new Date().toISOString(), waived_by: profile.id,
-        status: newFinal <= 0 ? 'waived' : selectedFee.status,
-        amount_outstanding: Math.max(0, newFinal),
+        discount_amount: newDiscount,
+        final_amount: newFinal,
+        status: nextStatus,
+        amount_outstanding: newOutstanding,
+        updated_at: nowIso,
       }).eq('id', selectedFee.id).throwOnError();
 
       showAlert('Fee Waived', waiveType === 'full' ? 'The fee has been fully waived.' : `R${amount.toFixed(2)} has been waived from this fee.`, 'success');
       setModalType(null); setSelectedFee(null); setWaiveAmount(''); setWaiveReason(''); setWaiveType('full');
       loadFees();
-    } catch (error: any) { showAlert('Error', error.message || 'Failed to waive fee.', 'error'); }
+    } catch (error: any) {
+      console.error('[StudentFees] handleWaiveFee failed', { feeId: selectedFee.id, error });
+      showAlert('Error', getSupabaseErrorMessage(error, 'Failed to waive fee.'), 'error');
+    }
     finally { setSaving(false); }
   };
 
@@ -135,11 +185,17 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     setSaving(true);
     try {
       const supabase = assertSupabase();
+      const amountPaid = Number(selectedFee.amount_paid || 0);
+      const amountOutstanding = Math.max(0, amount - amountPaid);
+      const nextStatus = resolvePendingLikeStatus(selectedFee, amountOutstanding, amountPaid);
       await supabase.from('student_fees').update({
-        amount, final_amount: amount, amount_outstanding: amount, status: 'pending', updated_at: new Date().toISOString(),
+        amount,
+        final_amount: amount,
+        discount_amount: 0,
+        amount_outstanding: amountOutstanding,
+        status: amount === 0 ? 'waived' : nextStatus,
+        updated_at: new Date().toISOString(),
       }).eq('id', selectedFee.id).throwOnError();
-
-      try { await supabase.from('fee_adjustments').insert({ fee_id: selectedFee.id, student_id: selectedFee.student_id, previous_amount: selectedFee.final_amount, new_amount: amount, reason: adjustReason.trim(), adjusted_by: profile.id }); } catch { /* table may not exist */ }
 
       if (isRegistrationFeeEntry(selectedFee.fee_type, selectedFee.description)) {
         const { error: regError } = await supabase.from('students').update({ registration_fee_amount: amount, updated_at: new Date().toISOString() }).eq('id', selectedFee.student_id);
@@ -149,7 +205,10 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       showAlert('Fee Adjusted', `Fee amount updated to R${amount.toFixed(2)}.`, 'success');
       setModalType(null); setSelectedFee(null); setAdjustAmount(''); setAdjustReason('');
       loadFees();
-    } catch (error: any) { showAlert('Error', error.message || 'Failed to adjust fee.', 'error'); }
+    } catch (error: any) {
+      console.error('[StudentFees] handleAdjustFee failed', { feeId: selectedFee.id, error });
+      showAlert('Error', getSupabaseErrorMessage(error, 'Failed to adjust fee.'), 'error');
+    }
     finally { setSaving(false); }
   };
 
@@ -200,6 +259,9 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
 
   const handleMarkPaid = async (fee: StudentFee) => {
     if (!profile?.id || !student) return;
+    if (processingFeeId) return;
+    setProcessingFeeId(fee.id);
+    setProcessingFeeAction('mark_paid');
     setSaving(true);
     try {
       const supabase = assertSupabase();
@@ -212,24 +274,46 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       await generateReceiptForFee(fee, amount, paidDate, student, profile as any, organizationId);
       showAlert('Payment Updated', 'Fee marked as paid.', 'success');
       loadFees();
-    } catch (error: any) { showAlert('Error', error.message || 'Failed to update fee status.', 'error'); }
-    finally { setSaving(false); }
+    } catch (error: any) {
+      console.error('[StudentFees] handleMarkPaid failed', { feeId: fee.id, error });
+      showAlert('Error', getSupabaseErrorMessage(error, 'Failed to update fee status.'), 'error');
+    }
+    finally {
+      setSaving(false);
+      setProcessingFeeId(null);
+      setProcessingFeeAction(null);
+    }
   };
 
   const handleMarkUnpaid = async (fee: StudentFee) => {
     if (!profile?.id || !student) return;
+    if (processingFeeId) return;
+    setProcessingFeeId(fee.id);
+    setProcessingFeeAction('mark_unpaid');
     setSaving(true);
     try {
       const supabase = assertSupabase();
       const nowIso = new Date().toISOString();
       const amount = fee.final_amount || fee.amount;
-      await supabase.from('student_fees').update({ status: 'pending', paid_date: null, amount_paid: null, amount_outstanding: amount, updated_at: nowIso }).eq('id', fee.id).throwOnError();
+      const nextStatus = resolvePendingLikeStatus(fee, amount, 0);
+      await supabase
+        .from('student_fees')
+        .update({ status: nextStatus, paid_date: null, amount_paid: 0, amount_outstanding: amount, updated_at: nowIso })
+        .eq('id', fee.id)
+        .throwOnError();
       await upsertPaymentRecord(fee, 'reversed', student, organizationId, profile.id);
       await upsertFinancialTransaction(fee, 'voided', student, organizationId, profile.id);
       showAlert('Payment Updated', 'Fee marked as unpaid.', 'success');
       loadFees();
-    } catch (error: any) { showAlert('Error', error.message || 'Failed to update fee status.', 'error'); }
-    finally { setSaving(false); }
+    } catch (error: any) {
+      console.error('[StudentFees] handleMarkUnpaid failed', { feeId: fee.id, error });
+      showAlert('Error', getSupabaseErrorMessage(error, 'Failed to update fee status.'), 'error');
+    }
+    finally {
+      setSaving(false);
+      setProcessingFeeId(null);
+      setProcessingFeeAction(null);
+    }
   };
 
   // ── Receipts ──────────────────────────────────────────────
@@ -280,7 +364,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const canSubmitClassCorrection = Boolean(newClassId) && hasValidFee && (hasClassChange || hasFeeChange) && !saving && !loadingSuggestedFee;
 
   return {
-    saving, modalType, setModalType, selectedFee, setSelectedFee,
+    saving, processingFeeId, processingFeeAction, modalType, setModalType, selectedFee, setSelectedFee,
     showEnrollmentPicker, setShowEnrollmentPicker,
     waiveAmount, setWaiveAmount, waiveReason, setWaiveReason, waiveType, setWaiveType,
     adjustAmount, setAdjustAmount, adjustReason, setAdjustReason,

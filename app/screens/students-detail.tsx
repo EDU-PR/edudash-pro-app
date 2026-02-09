@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,7 @@ export default function StudentsDetailScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   // Alert modal state
   const [alertState, setAlertState] = useState<AlertState>({
@@ -179,6 +180,7 @@ export default function StudentsDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setActionMessage(`Removing ${studentName}...`);
               const preschoolId = getPreschoolId();
               await softDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');
               setStudents(prev => prev.filter(s => s.id !== studentId));
@@ -186,6 +188,8 @@ export default function StudentsDetailScreen() {
             } catch (error: any) {
               logger.error(TAG, 'Error soft-deleting student:', error);
               showAlert('Error', error.message || 'Failed to remove student. Please try again.', 'error');
+            } finally {
+              setActionMessage(null);
             }
           },
         },
@@ -209,6 +213,7 @@ export default function StudentsDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setActionMessage(`Permanently deleting ${studentName}...`);
               const preschoolId = getPreschoolId();
               await permanentDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');
               setStudents(prev => prev.filter(s => s.id !== studentId));
@@ -216,6 +221,8 @@ export default function StudentsDetailScreen() {
             } catch (error: any) {
               logger.error(TAG, 'Error permanently deleting student:', error);
               showAlert('Error', error.message || 'Failed to delete student. Please try again.', 'error');
+            } finally {
+              setActionMessage(null);
             }
           },
         },
@@ -237,6 +244,7 @@ export default function StudentsDetailScreen() {
   // ---------- Render Helpers ----------
   const renderStudentCard = ({ item }: { item: Student }) => {
     const age = calculateAge(item.dateOfBirth);
+    const busy = Boolean(actionMessage);
     return (
       <TouchableOpacity style={styles.studentCard} onPress={() => handleEditStudent(item)}>
         <View style={styles.studentHeader}>
@@ -278,10 +286,18 @@ export default function StudentsDetailScreen() {
 
           {canManageStudent() && (
             <View style={styles.studentActions}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => toggleStudentStatus(item.id, item.status)}>
+              <TouchableOpacity
+                style={[styles.actionButton, busy && styles.disabledAction]}
+                onPress={() => toggleStudentStatus(item.id, item.status)}
+                disabled={busy}
+              >
                 <Ionicons name={item.status === 'active' ? 'pause' : 'play'} size={16} color={theme.colors.text} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteStudent(item.id, `${item.firstName} ${item.lastName}`)}>
+              <TouchableOpacity
+                style={[styles.actionButton, busy && styles.disabledAction]}
+                onPress={() => handleDeleteStudent(item.id, `${item.firstName} ${item.lastName}`)}
+                disabled={busy}
+              >
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
               </TouchableOpacity>
             </View>
@@ -377,6 +393,15 @@ export default function StudentsDetailScreen() {
         onPermanentDelete={handlePermanentDelete}
         theme={theme}
       />
+
+      {actionMessage && (
+        <View style={styles.operationOverlay} pointerEvents="auto">
+          <View style={styles.operationCard}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.operationText}>{actionMessage}</Text>
+          </View>
+        </View>
+      )}
 
       {/* Alert Modal */}
       <AlertModal
@@ -579,6 +604,33 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+  },
+  disabledAction: {
+    opacity: 0.5,
+  },
+  operationOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  operationCard: {
+    minWidth: 240,
+    backgroundColor: theme.colors.surface || 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border || '#e2e8f0',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  operationText: {
+    marginTop: 12,
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,

@@ -23,10 +23,15 @@ export interface StudentFee {
   student_id: string;
   amount: number;
   final_amount: number;
+  discount_amount?: number;
+  amount_paid?: number;
+  amount_outstanding?: number;
+  category_code?: string;
   status: 'pending' | 'paid' | 'overdue' | 'waived' | 'partially_paid';
   due_date: string;
   fee_type: string;
   description?: string;
+  // Backward-compatible aliases (derived from discount_amount in current schema).
   waived_amount?: number;
   waived_reason?: string;
   waived_at?: string;
