@@ -4,7 +4,7 @@
  * Groups can be used for study groups, regional teams, special committees, etc.
  */
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Modal } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Group types for SOA organization
@@ -64,6 +65,7 @@ export default function MemberGroupsScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { showAlert, alertProps } = useAlertModal();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
@@ -144,10 +146,10 @@ export default function MemberGroupsScreen() {
       setNewGroupName('');
       setNewGroupDescription('');
       setNewGroupType('study_group');
-      Alert.alert('Success', 'Group created successfully');
+      showAlert({ title: 'Success', message: 'Group created successfully' });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to create group');
+      showAlert({ title: 'Error', message: error.message || 'Failed to create group' });
     },
   });
 
@@ -165,7 +167,7 @@ export default function MemberGroupsScreen() {
 
   const handleCreateGroup = () => {
     if (!newGroupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
+      showAlert({ title: 'Error', message: 'Please enter a group name' });
       return;
     }
     
@@ -247,6 +249,7 @@ export default function MemberGroupsScreen() {
   };
 
   return (
+    <>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
@@ -443,6 +446,8 @@ export default function MemberGroupsScreen() {
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

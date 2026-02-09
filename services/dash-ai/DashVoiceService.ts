@@ -73,8 +73,9 @@ export interface SpeechCallbacks {
 export class DashVoiceService {
   private config: VoiceRecordingConfig;
   private isRecording = false;
-  // TODO: Migrate to expo-audio hook-based API (useAudioRecorder)
-  // For now, disable recording in this service - use DashVoiceRecorder component instead
+  // NOTE: Recording is handled by expo-audio useAudioRecorder hooks in components
+  // (VoiceRecorder, InlineVoiceRecorder, MessageAttachmentBar, useVoiceRecorder)
+  // This service retains transcription + TTS playback only
   private recordingObject: any = null;
   private soundObject: any = null;
   private voiceController: any = null; // Optional Phase 4 architecture
@@ -172,9 +173,9 @@ export class DashVoiceService {
       }
 
       console.log('[DashVoice] Starting recording...');
-      // TODO: Migrate to expo-audio useAudioRecorder hook
-      // this.recordingObject = new Audio.Recording();
-      throw new Error('DashVoiceService recording requires migration to expo-audio hooks');
+      // Recording is now handled by expo-audio useAudioRecorder hooks in UI components.
+      // DashVoiceService.startRecording() is deprecated — use VoiceRecorder or InlineVoiceRecorder.
+      throw new Error('DashVoiceService recording is deprecated. Use useAudioRecorder hooks in VoiceRecorder components.');
 
       // Use the expo-audio recording API (migration in progress)
       // await this.recordingObject.prepareToRecordAsync({

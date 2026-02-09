@@ -1,0 +1,1 @@
+export const FINANCE_MONTH_CUTOFF_DAY = 25;

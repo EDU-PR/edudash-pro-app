@@ -206,3 +206,36 @@ export function validatePhoneNumber(input: string): {
     e164: result.e164
   };
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate WhatsApp deep-link URLs for a phone number.
+ * Returns both the native app URL and the web fallback.
+ */
+export function generateWhatsAppUrl(
+  phone: string,
+  message?: string,
+): { appUrl: string; webUrl: string } {
+  const result = convertToE164(phone);
+  // Strip the '+' for wa.me links (they only want digits)
+  const digits = (result.e164 || phone).replace(/[^\d]/g, '');
+  const encodedMsg = message ? `&text=${encodeURIComponent(message)}` : '';
+  return {
+    appUrl: `whatsapp://send?phone=${digits}${encodedMsg}`,
+    webUrl: `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ''}`,
+  };
+}
+
+/**
+ * Open WhatsApp with the given phone number.
+ * Attempts the native deep-link first, falls back to wa.me web URL.
+ */
+export async function openWhatsApp(phone: string, message?: string): Promise<void> {
+  const { Linking } = await import('react-native');
+  const { appUrl, webUrl } = generateWhatsAppUrl(phone, message);
+  const canOpen = await Linking.canOpenURL(appUrl);
+  await Linking.openURL(canOpen ? appUrl : webUrl);
+}

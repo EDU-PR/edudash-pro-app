@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Stack, router } from 'expo-router';
@@ -9,11 +9,14 @@ import { createOrganization } from '@/services/OrganizationService';
 import { assertSupabase } from '@/lib/supabase';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 // Organization Onboarding with Authentication
 // For new organizations (skills/tertiary/other organizations)
 // Creates both user account and organization, then routes to Org Admin Dashboard
 export default function OrgOnboardingScreen() {
   const { user, profile, refreshProfile, profileLoading, loading } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
 
   type Step = 'account_creation' | 'type_selection' | 'details' | 'review';
 
@@ -40,17 +43,15 @@ export default function OrgOnboardingScreen() {
       setHasCheckedOrg(true);
       const currentOrgId = profile?.organization_id || (profile as any)?.preschool_id;
       if (currentOrgId) {
-        console.log('[Org Onboarding] User already has organization, redirecting to dashboard', {
+        logger.debug('OrgOnboarding', 'User already has organization, redirecting to dashboard', {
           organization_id: currentOrgId,
-          profile
         });
         setOrgId(currentOrgId);
         // Show message and redirect
-        Alert.alert(
-          'Organization Already Exists',
-          'You already have an organization set up. Redirecting to your dashboard...',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Organization Already Exists',
+          message: 'You already have an organization set up. Redirecting to your dashboard...',
+        });
         // Small delay to show alert, then redirect
         const timer = setTimeout(() => {
           router.replace('/screens/org-admin-dashboard');
@@ -120,11 +121,10 @@ export default function OrgOnboardingScreen() {
 
       // If confirmations are enabled, route to verify screen and stop the wizard
       if (!authData.session) {
-        Alert.alert(
-          'Verify your email',
-          'We\'ve sent you a confirmation email. Please verify your address to continue.',
-          [{ text: 'OK' }]
-        );
+        showAlert({
+          title: 'Verify your email',
+          message: 'We\'ve sent you a confirmation email. Please verify your address to continue.',
+        });
         router.replace({
           pathname: '/screens/verify-your-email',
           params: { email }
@@ -135,36 +135,32 @@ export default function OrgOnboardingScreen() {
       // Update admin name for next steps
       setAdminName(`${firstName.trim()} ${lastName.trim()}`);
 
-      Alert.alert(
-        'Account Created!', 
-        'Your account has been created successfully. Now let\'s set up your organization.',
-        [{ text: 'Continue', onPress: () => setStep('type_selection') }]
-      );
+      showAlert({
+        title: 'Account Created!',
+        message: 'Your account has been created successfully. Now let\'s set up your organization.',
+        buttons: [{ text: 'Continue', onPress: () => setStep('type_selection') }],
+      });
       
     } catch (e: any) {
-      console.error('Create account failed', e);
+      logger.error('OrgOnboarding', 'Create account failed', e);
       const isEmailAlreadyRegistered = e.message?.includes('already registered');
       
       if (isEmailAlreadyRegistered) {
         // Provide option to sign in instead
-        Alert.alert(
-          'Email Already Registered',
-          'This email is already registered. Would you like to sign in with your existing account?',
-          [
+        showAlert({
+          title: 'Email Already Registered',
+          message: 'This email is already registered. Would you like to sign in with your existing account?',
+          buttons: [
             { text: 'Use Different Email', style: 'cancel' },
-            { 
-              text: 'Sign In', 
-              style: 'default',
-              onPress: () => router.replace('/(auth)/sign-in')
-            }
-          ]
-        );
+            { text: 'Sign In', onPress: () => router.replace('/(auth)/sign-in') },
+          ],
+        });
       } else {
         let errorMessage = 'Failed to create account';
         if (e.message) {
           errorMessage = e.message;
         }
-        Alert.alert('Error', errorMessage);
+        showAlert({ title: 'Error', message: errorMessage });
       }
     } finally {
       setCreatingAccount(false);
@@ -177,18 +173,11 @@ export default function OrgOnboardingScreen() {
     // Check if user already has an organization before creating
     const currentOrgId = profile?.organization_id || (profile as any)?.preschool_id;
     if (currentOrgId) {
-      Alert.alert(
-        'Organization Already Exists',
-        'You already have an organization. Redirecting to your dashboard...',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              router.replace('/screens/org-admin-dashboard');
-            }
-          }
-        ]
-      );
+      showAlert({
+        title: 'Organization Already Exists',
+        message: 'You already have an organization. Redirecting to your dashboard...',
+        buttons: [{ text: 'OK', onPress: () => router.replace('/screens/org-admin-dashboard') }],
+      });
       return;
     }
     
@@ -214,29 +203,21 @@ export default function OrgOnboardingScreen() {
       try { 
         await refreshProfile?.();
       } catch (e) { 
-        console.debug('refreshProfile failed', e); 
+        logger.debug('OrgOnboarding', 'refreshProfile failed', e);
       }
       
       // Update local state with the created org ID
       setOrgId(created.id);
 
       // Show success alert, then navigate after user dismisses
-      Alert.alert(
-        'Organization Created!', 
-        `${orgName} has been created and activated. You can now start using your organization dashboard.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate after alert is dismissed
-              router.replace('/screens/org-admin-dashboard');
-            }
-          }
-        ]
-      );
+      showAlert({
+        title: 'Organization Created!',
+        message: `${orgName} has been created and activated. You can now start using your organization dashboard.`,
+        buttons: [{ text: 'OK', onPress: () => router.replace('/screens/org-admin-dashboard') }],
+      });
     } catch (e: any) {
-      console.error('Create org failed', e);
-      Alert.alert('Error', e?.message || 'Failed to create organization');
+      logger.error('OrgOnboarding', 'Create org failed', e);
+      showAlert({ title: 'Error', message: e?.message || 'Failed to create organization' });
     } finally {
       setCreating(false);
     }
@@ -457,6 +438,7 @@ export default function OrgOnboardingScreen() {
           </View>
         )}
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

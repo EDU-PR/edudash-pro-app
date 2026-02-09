@@ -106,7 +106,7 @@ export function AddStudentNoteModal({
         }
       }
     } catch (err) {
-      console.error('[AddStudentNote] Error loading students:', err);
+      if (__DEV__) console.error('[AddStudentNote] Error loading students:', err);
     } finally {
       setLoadingStudents(false);
     }
@@ -160,7 +160,7 @@ export function AddStudentNoteModal({
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      console.error('[AddStudentNote] Error:', err);
+      if (__DEV__) console.error('[AddStudentNote] Error:', err);
       Alert.alert('Error', err.message || 'Failed to send note');
     } finally {
       setLoading(false);

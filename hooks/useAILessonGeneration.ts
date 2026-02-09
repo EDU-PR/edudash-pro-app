@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 
 import { assertSupabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { isAIEnabled } from '@/lib/ai/aiConfig';
 import { track } from '@/lib/analytics';
 import { getCombinedUsage, incrementUsage, logUsageEvent, getUsage } from '@/lib/ai/usage';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
@@ -72,7 +73,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
   const [progressInterval, setProgressInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   const flags = getFeatureFlagsSync();
-  const AI_ENABLED = process.env.EXPO_PUBLIC_AI_ENABLED === 'true' || process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true';
+  const AI_ENABLED = isAIEnabled();
   const isQuotaExhausted = Boolean(quotaStatus && quotaStatus.limit !== -1 && quotaStatus.used >= quotaStatus.limit);
 
   // Load initial usage
@@ -83,7 +84,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
         const s = await getQuotaStatus('lesson_generation');
         setQuotaStatus(s);
       } catch (err) {
-        console.warn('[useAILessonGeneration] Failed to load quota:', err);
+        if (__DEV__) console.warn('[useAILessonGeneration] Failed to load quota:', err);
       }
     })();
   }, []);
@@ -170,8 +171,9 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       try {
         gate = await invokeWithTimeout(canUseFeature('lesson_generation', 1), 10000);
       } catch {
-        toast.info('Network is slow; proceeding.');
-        gate = { allowed: true };
+        // Fail CLOSED on timeout — do not bypass quota on network issues
+        toast.error('Could not verify usage quota. Please check your connection and try again.');
+        return;
       }
 
       if (!gate?.allowed) {
@@ -244,7 +246,7 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
           timestamp: new Date().toISOString(),
         });
       } catch (usageError) {
-        console.error('[useAILessonGeneration] Failed to track usage:', usageError);
+        if (__DEV__) console.error('[useAILessonGeneration] Failed to track usage:', usageError);
       }
 
       await refreshUsage();

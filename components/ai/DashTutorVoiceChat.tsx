@@ -225,6 +225,13 @@ export default function DashTutorVoiceChat() {
     context.push("- Adapt language complexity to the learner's level");
     context.push('- Ask one question at a time, wait for response');
     context.push('- Encourage curiosity and critical thinking');
+    context.push('');
+    context.push('**Deterministic Tutor Response Contract:**');
+    context.push('- Use this structure when tutoring:');
+    context.push('  Goal: one-line objective');
+    context.push('  Steps: 2-4 short numbered steps');
+    context.push('  Check: exactly one follow-up question');
+    context.push('- Avoid raw JSON or tool metadata in learner-facing responses.');
     
     if (preferredLanguage) {
       const name = findLanguageName(preferredLanguage) || preferredLanguage;

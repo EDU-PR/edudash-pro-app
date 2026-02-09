@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Switch, Share, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Share, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { InviteCodeService, SchoolInvitationCode } from '@/lib/services/inviteCodeService';
 import { Picker } from '@react-native-picker/picker';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
@@ -12,6 +13,7 @@ try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 export default function PrincipalParentInviteCodeScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const organizationId = (profile?.organization_id as string) || null;
@@ -35,7 +37,7 @@ export default function PrincipalParentInviteCodeScreen() {
       const list = await InviteCodeService.listCodes(schoolId, inviteType);
       setCodes(list);
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to load invite codes');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to load invite codes' });
     } finally {
       setLoading(false);
     }
@@ -45,7 +47,7 @@ export default function PrincipalParentInviteCodeScreen() {
 
   const onGenerate = async () => {
     if (!schoolId || !user?.id) {
-      Alert.alert('Missing context', 'You need a school to create invites.');
+      showAlert({ title: 'Missing context', message: 'You need a school to create invites.' });
       return;
     }
     try {
@@ -69,9 +71,9 @@ export default function PrincipalParentInviteCodeScreen() {
       // Optimistically show the new/active code at the top while we refresh from server
       setCodes(prev => [created, ...prev.filter(c => c.id !== created.id)]);
       await load();
-      Alert.alert('Invite created', `Code: ${created.code}`);
+      showAlert({ title: 'Invite created', message: `Code: ${created.code}` });
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create invite');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to create invite' });
     } finally {
       setLoading(false);
     }
@@ -81,12 +83,12 @@ export default function PrincipalParentInviteCodeScreen() {
     try {
       if (Clipboard?.setStringAsync) {
         await Clipboard.setStringAsync(value);
-        Alert.alert('Copied', 'Invite code copied to clipboard');
+        showAlert({ title: 'Copied', message: 'Invite code copied to clipboard' });
       } else {
         throw new Error('Clipboard not available');
       }
     } catch {
-      Alert.alert('Copy failed', 'Clipboard not available on this platform');
+      showAlert({ title: 'Copy failed', message: 'Clipboard not available on this platform' });
     }
   };
 
@@ -102,7 +104,7 @@ export default function PrincipalParentInviteCodeScreen() {
       const message = buildShareMessage(item.code);
       await Share.share({ message });
     } catch (e: any) {
-      Alert.alert('Share failed', e?.message || 'Unable to open share dialog');
+      showAlert({ title: 'Share failed', message: e?.message || 'Unable to open share dialog' });
     }
   };
 
@@ -114,10 +116,10 @@ export default function PrincipalParentInviteCodeScreen() {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('WhatsApp not available', 'Please install WhatsApp or use Share/Copy instead.');
+        showAlert({ title: 'WhatsApp not available', message: 'Please install WhatsApp or use Share/Copy instead.' });
       }
     } catch (e: any) {
-      Alert.alert('Share failed', e?.message || 'Unable to share via WhatsApp');
+      showAlert({ title: 'Share failed', message: e?.message || 'Unable to share via WhatsApp' });
     }
   };
 
@@ -127,7 +129,7 @@ export default function PrincipalParentInviteCodeScreen() {
       await InviteCodeService.setActive(item.id, !(item.is_active ?? false));
       await load();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to update' });
     } finally {
       setLoading(false);
     }
@@ -176,39 +178,39 @@ export default function PrincipalParentInviteCodeScreen() {
                   const link = latest ? `https://www.edudashpro.org.za/invite/${path}?code=${encodeURIComponent(latest.code)}` : '';
 
                   const copyLink = async () => {
-                    if (!latest) return Alert.alert('No code', 'Generate an invite first.');
+                    if (!latest) return showAlert({ title: 'No code', message: 'Generate an invite first.' });
                     try {
                       if (Clipboard?.setStringAsync) {
                         await Clipboard.setStringAsync(link);
-                        Alert.alert('Copied', 'Share link copied to clipboard');
+                        showAlert({ title: 'Copied', message: 'Share link copied to clipboard' });
                       } else {
                         throw new Error('Clipboard not available');
                       }
                     } catch {
-                      Alert.alert('Copy failed', 'Clipboard not available on this platform');
+                      showAlert({ title: 'Copy failed', message: 'Clipboard not available on this platform' });
                     }
                   };
 
                   const shareQuick = async () => {
-                    if (!latest) return Alert.alert('No code', 'Generate an invite first.');
+                    if (!latest) return showAlert({ title: 'No code', message: 'Generate an invite first.' });
                     try {
                       const message = buildShareMessage(latest.code);
                       await Share.share({ message });
                     } catch (e: any) {
-                      Alert.alert('Share failed', e?.message || 'Unable to open share dialog');
+                      showAlert({ title: 'Share failed', message: e?.message || 'Unable to open share dialog' });
                     }
                   };
 
                   const waQuick = async () => {
-                    if (!latest) return Alert.alert('No code', 'Generate an invite first.');
+                    if (!latest) return showAlert({ title: 'No code', message: 'Generate an invite first.' });
                     try {
                       const message = encodeURIComponent(buildShareMessage(latest.code));
                       const url = `whatsapp://send?text=${message}`;
                       const supported = await Linking.canOpenURL(url);
                       if (supported) await Linking.openURL(url);
-                      else Alert.alert('WhatsApp not available', 'Please install WhatsApp or use Share/Copy instead.');
+                      else showAlert({ title: 'WhatsApp not available', message: 'Please install WhatsApp or use Share/Copy instead.' });
                     } catch (e: any) {
-                      Alert.alert('Share failed', e?.message || 'Unable to share via WhatsApp');
+                      showAlert({ title: 'Share failed', message: e?.message || 'Unable to share via WhatsApp' });
                     }
                   };
 
@@ -301,6 +303,7 @@ export default function PrincipalParentInviteCodeScreen() {
           </>
         )}
       </ScrollView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

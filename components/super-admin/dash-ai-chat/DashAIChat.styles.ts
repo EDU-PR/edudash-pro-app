@@ -115,6 +115,15 @@ export const styles = StyleSheet.create({
   toolsText: {
     fontSize: 11,
   },
+  messageActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  messageAction: {
+    padding: 4,
+  },
   voiceModeOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',

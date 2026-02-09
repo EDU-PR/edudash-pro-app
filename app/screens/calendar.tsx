@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
 import { log, logError } from '@/lib/debug';
+import { logger } from '@/lib/logger';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -92,7 +93,7 @@ export default function CalendarScreen() {
     // Decision 2: User exists but no organization -> onboarding
     if (!orgId) {
       navigationAttempted.current = true;
-      console.log('Calendar: No school found, redirecting to onboarding', {
+      logger.debug('Calendar', 'No school found, redirecting to onboarding', {
         profile,
         organization_id: profile?.organization_id,
         preschool_id: (profile as any)?.preschool_id,

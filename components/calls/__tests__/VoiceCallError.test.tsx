@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native/pure';
 import { VoiceCallError } from '../VoiceCallError';
 
 describe('VoiceCallError', () => {

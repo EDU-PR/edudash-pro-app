@@ -4,7 +4,7 @@
  * Tailored from Youth President dashboard but focused on secretary responsibilities
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import {
   DashboardBackground,
   DashboardWallpaperBackground,
@@ -22,6 +23,7 @@ import {
 } from '@/components/membership/dashboard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Youth Secretary specific stats interface
@@ -55,7 +57,7 @@ export default function YouthSecretaryDashboard() {
   React.useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
     if (profile && memberType !== 'youth_secretary') {
-      console.log('[YouthSecretaryDashboard] Access denied - member_type:', memberType, '- redirecting to correct dashboard');
+      logger.debug('[YouthSecretaryDashboard] Access denied - member_type:', memberType, '- redirecting to correct dashboard');
       // Redirect to appropriate dashboard based on member_type
       if (memberType === 'youth_president' || memberType === 'youth_deputy' || memberType === 'youth_treasurer') {
         router.replace('/screens/membership/youth-president-dashboard');
@@ -76,6 +78,7 @@ export default function YouthSecretaryDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
   const [showWallpaperSettings, setShowWallpaperSettings] = useState(false);
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings>({});
 
@@ -132,13 +135,13 @@ export default function YouthSecretaryDashboard() {
         
         if (error) {
           // If status filter fails (e.g., constraint not applied), return 0
-          console.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
+          logger.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
           pendingEventProposalsCount = 0;
         } else {
           pendingEventProposalsCount = count || 0;
         }
       } catch (err) {
-        console.warn('Error fetching pending event proposals:', err);
+        logger.warn('Error fetching pending event proposals:', err);
         pendingEventProposalsCount = 0;
       }
 
@@ -183,7 +186,7 @@ export default function YouthSecretaryDashboard() {
       setRecentMembers(recent || []);
 
     } catch (error) {
-      console.error('Error fetching secretary stats:', error);
+      logger.error('Error fetching secretary stats:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -203,7 +206,7 @@ export default function YouthSecretaryDashboard() {
     if (type === 'members') {
       router.push('/screens/membership/pending-approvals');
     } else {
-      Alert.alert('Coming Soon', 'This feature will be available soon.');
+      showAlert({ title: 'Coming Soon', message: 'This feature will be available soon.' });
     }
   };
 
@@ -419,6 +422,7 @@ export default function YouthSecretaryDashboard() {
         </ScrollView>
       </DashboardBackground>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

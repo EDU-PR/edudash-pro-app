@@ -3,7 +3,7 @@
  * Create new message threads - regional, wing, or direct
  */
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useSOACreateThread } from '@/hooks/useSOAMessaging';
 import { 
   WING_CONFIG, 
@@ -74,6 +75,7 @@ export default function NewChatScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   const [selectedType, setSelectedType] = useState<SOAThreadType | null>(null);
   const [selectedWing, setSelectedWing] = useState<SOAWing | null>(null);
@@ -94,11 +96,11 @@ export default function NewChatScreen() {
 
   const handleSelectType = (type: SOAThreadType) => {
     if (type === 'broadcast' && !canCreateBroadcast) {
-      Alert.alert(
-        'Permission Required',
-        'Only leadership members can create announcements.',
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: 'Permission Required',
+        message: 'Only leadership members can create announcements.',
+        buttons: [{ text: 'OK' }],
+      });
       return;
     }
     setSelectedType(type);
@@ -111,12 +113,12 @@ export default function NewChatScreen() {
 
   const handleCreateThread = async () => {
     if (!selectedType || !organizationId) {
-      Alert.alert('Error', 'Please select a chat type');
+      showAlert({ title: 'Error', message: 'Please select a chat type' });
       return;
     }
 
     if (selectedType === 'wing_chat' && !selectedWing) {
-      Alert.alert('Error', 'Please select a wing');
+      showAlert({ title: 'Error', message: 'Please select a wing' });
       return;
     }
 
@@ -141,7 +143,7 @@ export default function NewChatScreen() {
         },
       });
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to create chat');
+      showAlert({ title: 'Error', message: err.message || 'Failed to create chat' });
     }
   };
 
@@ -296,6 +298,7 @@ export default function NewChatScreen() {
   const showDetails = selectedType && (selectedType !== 'wing_chat' || selectedWing);
 
   return (
+    <>
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen
         options={{
@@ -351,6 +354,8 @@ export default function NewChatScreen() {
         </View>
       )}
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

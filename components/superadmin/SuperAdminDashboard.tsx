@@ -6,16 +6,19 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { styles } from './SuperAdminDashboard.styles';
+
 interface SuperAdminDashboardProps {
   loading: boolean;
   setLoading: (loading: boolean) => void;
@@ -47,7 +50,8 @@ interface SystemTestResult {
 
 const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setLoading }) => {
   const { theme } = useTheme();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemTestResult | null>(null);
@@ -58,7 +62,6 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
       setLoading(true);
       setError(null);
 
-      // Call the deployed RPC function to get dashboard data
       const { data: dashboardResult, error: dashboardError } = await assertSupabase()
         .rpc('get_superadmin_dashboard_data');
 
@@ -76,32 +79,29 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
         throw new Error('Dashboard data fetch was not successful');
       }
 
-      // Test system health
       const { data: systemResult, error: systemError } = await assertSupabase()
         .rpc('test_superadmin_system');
 
       if (systemError) {
-        console.warn('System test error:', systemError.message);
-        // Don't throw here, as dashboard data might still be valid
+        logger.warn('System test error:', systemError.message);
       } else if (systemResult) {
         setSystemStatus(systemResult);
       }
 
-      // Track dashboard access
       track('superadmin.dashboard.accessed', {
         user_id: user?.id,
         platform: Platform.OS,
         timestamp: new Date().toISOString(),
       });
 
-    } catch (error: any) {
-      console.error('Failed to fetch dashboard data:', error);
-      setError(error.message || 'Failed to load dashboard');
-      Alert.alert('Error', 'Failed to load dashboard data. Please try refreshing.');
+    } catch (err: any) {
+      logger.error('Failed to fetch dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard');
+      showAlert({ title: 'Error', message: 'Failed to load dashboard data. Please try refreshing.' });
     } finally {
       setLoading(false);
     }
-  }, [setLoading, user?.id]);
+  }, [setLoading, user?.id, showAlert]);
 
   useEffect(() => {
     if (user) {
@@ -125,9 +125,9 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
     if (route) {
       router.push(route as any);
     } else {
-      Alert.alert('Coming Soon', `${action} functionality will be available soon.`);
+      showAlert({ title: 'Coming Soon', message: `${action} functionality will be available soon.` });
     }
-  }, [user?.id]);
+  }, [user?.id, showAlert]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -140,9 +140,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
     }
   };
 
-  const formatNumber = (num: number) => {
-    return num.toLocaleString();
-  };
+  const formatNumber = (num: number) => num.toLocaleString();
 
   if (loading && !refreshing) {
     return (
@@ -166,6 +164,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
         >
           <Text style={[styles.retryButtonText, { color: theme.onPrimary }]}>Retry</Text>
         </TouchableOpacity>
+        <AlertModal {...alertProps} />
       </View>
     );
   }
@@ -240,54 +239,20 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
           </View>
           
           <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>
-                {formatNumber(dashboardData.user_stats.total_users)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Users</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.success }]}>
-                {formatNumber(dashboardData.user_stats.active_users)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Active Users</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.warning }]}>
-                {formatNumber(dashboardData.user_stats.inactive_users)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Inactive Users</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.error }]}>
-                {formatNumber(dashboardData.user_stats.superadmins)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>SuperAdmins</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.primary }]}>
-                {formatNumber(dashboardData.user_stats.principals)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Principals</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>
-                {formatNumber(dashboardData.user_stats.teachers)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Teachers</Text>
-            </View>
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.text }]}>
-                {formatNumber(dashboardData.user_stats.parents)}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Parents</Text>
-            </View>
+            {[
+              { value: dashboardData.user_stats.total_users, label: 'Total Users', color: theme.text },
+              { value: dashboardData.user_stats.active_users, label: 'Active Users', color: theme.success },
+              { value: dashboardData.user_stats.inactive_users, label: 'Inactive Users', color: theme.warning },
+              { value: dashboardData.user_stats.superadmins, label: 'SuperAdmins', color: theme.error },
+              { value: dashboardData.user_stats.principals, label: 'Principals', color: theme.primary },
+              { value: dashboardData.user_stats.teachers, label: 'Teachers', color: theme.text },
+              { value: dashboardData.user_stats.parents, label: 'Parents', color: theme.text },
+            ].map(({ value, label, color }) => (
+              <View key={label} style={styles.statItem}>
+                <Text style={[styles.statValue, { color }]}>{formatNumber(value)}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{label}</Text>
+              </View>
+            ))}
           </View>
           
           <Text style={[styles.dataTimestamp, { color: theme.textTertiary }]}>
@@ -304,41 +269,25 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
         </View>
         
         <View style={styles.quickActionsGrid}>
-          <TouchableOpacity
-            style={[styles.quickActionButton, { borderColor: theme.divider }]}
-            onPress={() => handleQuickAction('User Management', '/screens/super-admin-users')}
-          >
-            <Ionicons name="people-outline" size={24} color={theme.primary} />
-            <Text style={[styles.quickActionText, { color: theme.text }]}>User Management</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.quickActionButton, { borderColor: theme.divider }]}
-            onPress={() => handleQuickAction('AI Quotas', '/screens/super-admin-ai-quotas')}
-          >
-            <Ionicons name="flash-outline" size={24} color={theme.primary} />
-            <Text style={[styles.quickActionText, { color: theme.text }]}>AI Quotas</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.quickActionButton, { borderColor: theme.divider }]}
-            onPress={() => handleQuickAction('System Health', '/screens/super-admin-system-monitor')}
-          >
-            <Ionicons name="pulse-outline" size={24} color={theme.primary} />
-            <Text style={[styles.quickActionText, { color: theme.text }]}>System Health</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.quickActionButton, { borderColor: theme.divider }]}
-            onPress={() => handleQuickAction('Settings', '/screens/super-admin-settings')}
-          >
-            <Ionicons name="settings-outline" size={24} color={theme.primary} />
-            <Text style={[styles.quickActionText, { color: theme.text }]}>Settings</Text>
-          </TouchableOpacity>
+          {[
+            { label: 'User Management', icon: 'people-outline' as const, route: '/screens/super-admin-users' },
+            { label: 'AI Quotas', icon: 'flash-outline' as const, route: '/screens/super-admin-ai-quotas' },
+            { label: 'System Health', icon: 'pulse-outline' as const, route: '/screens/super-admin-system-monitor' },
+            { label: 'Settings', icon: 'settings-outline' as const, route: '/screens/super-admin-settings' },
+          ].map(({ label, icon, route }) => (
+            <TouchableOpacity
+              key={label}
+              style={[styles.quickActionButton, { borderColor: theme.divider }]}
+              onPress={() => handleQuickAction(label, route)}
+            >
+              <Ionicons name={icon} size={24} color={theme.primary} />
+              <Text style={[styles.quickActionText, { color: theme.text }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
-      {/* Recent Activity (Mock data for now) */}
+      {/* Recent Activity */}
       <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
         <View style={styles.cardHeader}>
           <Ionicons name="time" size={24} color={theme.primary} />
@@ -346,198 +295,27 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
         </View>
         
         <View style={styles.activityList}>
-          <View style={styles.activityItem}>
-            <View style={[styles.activityDot, { backgroundColor: theme.success }]} />
-            <View style={styles.activityContent}>
-              <Text style={[styles.activityText, { color: theme.text }]}>System health check completed</Text>
-              <Text style={[styles.activityTime, { color: theme.textSecondary }]}>2 minutes ago</Text>
+          {[
+            { text: 'System health check completed', time: '2 minutes ago', color: theme.success },
+            { text: 'Dashboard data refreshed', time: '5 minutes ago', color: theme.primary },
+            { text: 'User management system accessed', time: '12 minutes ago', color: theme.warning },
+          ].map(({ text, time, color }) => (
+            <View key={text} style={styles.activityItem}>
+              <View style={[styles.activityDot, { backgroundColor: color }]} />
+              <View style={styles.activityContent}>
+                <Text style={[styles.activityText, { color: theme.text }]}>{text}</Text>
+                <Text style={[styles.activityTime, { color: theme.textSecondary }]}>{time}</Text>
+              </View>
             </View>
-          </View>
-          
-          <View style={styles.activityItem}>
-            <View style={[styles.activityDot, { backgroundColor: theme.primary }]} />
-            <View style={styles.activityContent}>
-              <Text style={[styles.activityText, { color: theme.text }]}>Dashboard data refreshed</Text>
-              <Text style={[styles.activityTime, { color: theme.textSecondary }]}>5 minutes ago</Text>
-            </View>
-          </View>
-          
-          <View style={styles.activityItem}>
-            <View style={[styles.activityDot, { backgroundColor: theme.warning }]} />
-            <View style={styles.activityContent}>
-              <Text style={[styles.activityText, { color: theme.text }]}>User management system accessed</Text>
-              <Text style={[styles.activityTime, { color: theme.textSecondary }]}>12 minutes ago</Text>
-            </View>
-          </View>
+          ))}
         </View>
       </View>
+
+      <AlertModal {...alertProps} />
     </ScrollView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingBottom: 20,
-  },
-  errorContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorMessage: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  card: {
-    margin: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  systemStatusContainer: {
-    gap: 12,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statusValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 12,
-  },
-  statusLoadingText: {
-    fontSize: 14,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 16,
-  },
-  statItem: {
-    flex: 1,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  dataTimestamp: {
-    fontSize: 11,
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginTop: 8,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickActionButton: {
-    flex: 1,
-    minWidth: 140,
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 8,
-    gap: 8,
-  },
-  quickActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  activityList: {
-    gap: 12,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  activityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  activityTime: {
-    fontSize: 12,
-  },
-});
+export default SuperAdminDashboard;
 
 export default SuperAdminDashboard;

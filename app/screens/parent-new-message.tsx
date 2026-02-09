@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,8 @@ import { useCreateThread } from '@/hooks/useParentMessaging';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 interface Child {
   id: string;
   first_name: string;
@@ -28,6 +30,7 @@ export default function ParentNewMessageScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   
   const createThread = useCreateThread();
@@ -58,7 +61,7 @@ export default function ParentNewMessageScreen() {
         .eq('is_active', true);
       
       if (error) {
-        console.error('[ParentNewMessage] Query error:', error);
+        logger.error('[ParentNewMessage] Query error:', error);
         throw new Error(error.message || 'Failed to load children');
       }
       
@@ -100,10 +103,10 @@ export default function ParentNewMessageScreen() {
   
   const handleStartMessage = async () => {
     if (!selectedChildId) {
-      Alert.alert(
-        t('parent.selectChildFirst', { defaultValue: 'Select Child' }),
-        t('parent.selectChildForMessage', { defaultValue: 'Please select a child to message their teacher.' })
-      );
+      showAlert({
+        title: t('parent.selectChildFirst', { defaultValue: 'Select Child' }),
+        message: t('parent.selectChildForMessage', { defaultValue: 'Please select a child to message their teacher.' }),
+      });
       return;
     }
     
@@ -117,11 +120,11 @@ export default function ParentNewMessageScreen() {
       // Navigate to the thread
       router.replace(`/message-thread?threadId=${threadId}&title=${encodeURIComponent(title)}`);
     } catch (err) {
-      console.error('Error creating thread:', err);
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        t('parent.failedToCreateThread', { defaultValue: 'Failed to start conversation. Please try again.' })
-      );
+      logger.error('Error creating thread:', err);
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: t('parent.failedToCreateThread', { defaultValue: 'Failed to start conversation. Please try again.' }),
+      });
     }
   };
   
@@ -434,6 +437,7 @@ export default function ParentNewMessageScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

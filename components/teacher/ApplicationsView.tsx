@@ -41,6 +41,7 @@ interface ApplicationsViewProps {
     type?: 'info' | 'warning' | 'success' | 'error';
     buttons?: AlertButton[];
   }) => void;
+  onCreateAccount?: (email: string, name: string) => void;
 }
 
 export function ApplicationsView({
@@ -48,6 +49,7 @@ export function ApplicationsView({
   userId,
   theme,
   showAlert,
+  onCreateAccount,
 }: ApplicationsViewProps) {
   const [applications, setApplications] = useState<ApplicationWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -246,6 +248,16 @@ export function ApplicationsView({
             </TouchableOpacity>
           ) : null}
 
+          {item.status === ApplicationStatus.ACCEPTED && onCreateAccount ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#10B981' + '15' }]}
+              onPress={() => onCreateAccount(item.candidate_email, item.candidate_name)}
+            >
+              <Ionicons name="person-add-outline" size={14} color="#10B981" />
+              <Text style={[styles.actionBtnText, { color: '#10B981', marginLeft: 4 }]}>Create Account</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {actions.map((a) => (
             <TouchableOpacity
               key={a.status}
@@ -441,6 +453,8 @@ const createStyles = (theme?: ThemeColors) =>
     },
     resumeBtnText: { fontSize: 12, fontWeight: '700', color: '#4F46E5' },
     actionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 10,

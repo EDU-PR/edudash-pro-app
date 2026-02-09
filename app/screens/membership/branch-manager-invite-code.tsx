@@ -4,7 +4,7 @@
  * Branch Managers can invite: Learners, Youth Members, Facilitators, Mentors
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Switch, Share, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Share, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +12,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
@@ -44,6 +46,7 @@ export default function BranchManagerInviteCodeScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   const organizationId = profile?.organization_id as string | null;
 
@@ -90,7 +93,7 @@ export default function BranchManagerInviteCodeScreen() {
         
         // Verify user is a branch manager
         if (memberData?.member_type !== 'branch_manager') {
-          Alert.alert('Access Denied', 'Only branch managers can create invite codes from this screen.');
+          showAlert({ title: 'Access Denied', message: 'Only branch managers can create invite codes from this screen.' });
           router.back();
           return;
         }
@@ -103,7 +106,7 @@ export default function BranchManagerInviteCodeScreen() {
           setBranchName(`${region?.name || 'Branch'} Branch`);
         }
       } catch (e: any) {
-        console.error('[BranchInviteCode] Error loading member info:', e);
+        logger.error('[BranchInviteCode] Error loading member info:', e);
       }
     };
 
@@ -127,7 +130,7 @@ export default function BranchManagerInviteCodeScreen() {
       if (error) throw error;
       setCodes(data || []);
     } catch (e: any) {
-      console.error('[BranchInviteCode] Failed to load codes:', e);
+      logger.error('[BranchInviteCode] Failed to load codes:', e);
     } finally {
       setInitialLoading(false);
     }
@@ -161,12 +164,12 @@ export default function BranchManagerInviteCodeScreen() {
 
   const onGenerate = async () => {
     if (!organizationId || !user?.id) {
-      Alert.alert('Missing context', 'You need to be signed in to create invites.');
+      showAlert({ title: 'Missing context', message: 'You need to be signed in to create invites.' });
       return;
     }
     
     if (selectedTypes.length === 0) {
-      Alert.alert('Select Types', 'Please select at least one member type for the invite code.');
+      showAlert({ title: 'Select Types', message: 'Please select at least one member type for the invite code.' });
       return;
     }
     
@@ -201,10 +204,10 @@ export default function BranchManagerInviteCodeScreen() {
       if (error) throw error;
 
       await loadCodes();
-      Alert.alert('Invite Created', `Code: ${inviteCode}\n\nShare this code with potential members in your branch!`);
+      showAlert({ title: 'Invite Created', message: `Code: ${inviteCode}\n\nShare this code with potential members in your branch!` });
     } catch (e: any) {
-      console.error('[BranchInviteCode] Error creating invite:', e);
-      Alert.alert('Error', e?.message || 'Failed to create invite');
+      logger.error('[BranchInviteCode] Error creating invite:', e);
+      showAlert({ title: 'Error', message: e?.message || 'Failed to create invite' });
     } finally {
       setLoading(false);
     }
@@ -214,12 +217,12 @@ export default function BranchManagerInviteCodeScreen() {
     try {
       if (Clipboard?.setStringAsync) {
         await Clipboard.setStringAsync(value);
-        Alert.alert('Copied', 'Invite code copied to clipboard');
+        showAlert({ title: 'Copied', message: 'Invite code copied to clipboard' });
       } else {
-        Alert.alert('Copy failed', 'Clipboard not available');
+        showAlert({ title: 'Copy failed', message: 'Clipboard not available' });
       }
     } catch {
-      Alert.alert('Copy failed', 'Unable to copy');
+      showAlert({ title: 'Copy failed', message: 'Unable to copy' });
     }
   };
 
@@ -233,7 +236,7 @@ export default function BranchManagerInviteCodeScreen() {
       const message = buildShareMessage(item.code);
       await Share.share({ message });
     } catch (e: any) {
-      Alert.alert('Share failed', e?.message || 'Unable to open share dialog');
+      showAlert({ title: 'Share failed', message: e?.message || 'Unable to open share dialog' });
     }
   };
 
@@ -243,7 +246,7 @@ export default function BranchManagerInviteCodeScreen() {
       const url = `whatsapp://send?text=${message}`;
       await Linking.openURL(url);
     } catch (e: any) {
-      Alert.alert('WhatsApp Error', 'Unable to open WhatsApp. Please try Share instead.');
+      showAlert({ title: 'WhatsApp Error', message: 'Unable to open WhatsApp. Please try Share instead.' });
     }
   };
 
@@ -260,7 +263,7 @@ export default function BranchManagerInviteCodeScreen() {
       if (error) throw error;
       await loadCodes();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to update' });
     } finally {
       setLoading(false);
     }
@@ -566,6 +569,7 @@ export default function BranchManagerInviteCodeScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

@@ -199,7 +199,7 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
         { id: 'classes', label: 'Classes', icon: 'library', route: '/screens/class-teacher-management' },
         { id: 'attendance', label: 'Attendance', icon: 'checkbox', route: '/screens/attendance' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-message-list' },
-        { id: 'financials', label: 'Financials', icon: 'cash', route: '/screens/financial-dashboard' },
+        { id: 'financials', label: 'Financials', icon: 'cash', route: '/screens/finance-control-center?tab=overview' },
         { id: 'campaigns', label: 'Campaigns', icon: 'megaphone', route: '/screens/campaigns' },
         { id: 'reports', label: 'Reports', icon: 'analytics', route: '/screens/teacher-reports' },
         { id: 'calendar', label: 'Calendar', icon: 'calendar', route: '/screens/calendar-management' },

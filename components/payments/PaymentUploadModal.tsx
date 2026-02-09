@@ -9,6 +9,8 @@ import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { inferFeeCategoryCode } from '@/lib/utils/feeUtils';
+import type { FeeCategoryCode } from '@/types/finance';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotificationService';
 import { useAlert } from '@/components/ui/StyledAlert';
@@ -29,6 +31,16 @@ interface PaymentUploadModalProps {
   paymentPurpose?: string;
   theme: any;
 }
+
+const CATEGORY_OPTIONS: Array<{ code: FeeCategoryCode; label: string }> = [
+  { code: 'tuition', label: 'Tuition' },
+  { code: 'registration', label: 'Registration' },
+  { code: 'uniform', label: 'Uniform' },
+  { code: 'aftercare', label: 'Aftercare' },
+  { code: 'transport', label: 'Transport' },
+  { code: 'meal', label: 'Meal' },
+  { code: 'ad_hoc', label: 'Other' },
+];
 
 export function PaymentUploadModal({
   visible,
@@ -52,6 +64,7 @@ export function PaymentUploadModal({
   const [uploading, setUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [paymentForMonth, setPaymentForMonth] = useState<Date | null>(null);
+  const [categoryCode, setCategoryCode] = useState<FeeCategoryCode>('tuition');
   const [showPaymentForPicker, setShowPaymentForPicker] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -67,6 +80,10 @@ export function PaymentUploadModal({
   const paymentDateValue = today.toISOString().split('T')[0];
   const lowerPurpose = (paymentPurpose || '').toLowerCase();
   const isUniformPayment = (feeId || '').startsWith('uniform:') || lowerPurpose.includes('uniform');
+  const autoCategoryCode = React.useMemo<FeeCategoryCode>(() => {
+    if (isUniformPayment) return 'uniform';
+    return inferFeeCategoryCode(paymentPurpose || 'tuition');
+  }, [isUniformPayment, paymentPurpose]);
   // Memoize to avoid creating a new Date on every render (which would trigger useEffect loops)
   const autoPaymentForMonth = React.useMemo(
     () => resolveMonthStart(paymentForDate) ?? new Date(today.getFullYear(), today.getMonth(), 1),
@@ -78,7 +95,7 @@ export function PaymentUploadModal({
     : null;
   const isPaymentForLocked = Boolean(paymentForDate) || isUniformPayment;
   const showPaymentForField = !isUniformPayment;
-  const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment);
+  const canSubmit = Boolean(selectedFile) && !uploading && (paymentForMonth || isUniformPayment) && Boolean(categoryCode);
 
   // Track previous visible state to only reset fields on open transition (false → true),
   // not on every re-render while modal is open (which caused infinite setState loops).
@@ -90,9 +107,10 @@ export function PaymentUploadModal({
       setPaymentAmount(initialAmount);
       const resolvedMonth = resolveMonthStart(paymentForDate);
       setPaymentForMonth(isUniformPayment ? (resolvedMonth ?? autoPaymentForMonth) : resolvedMonth);
+      setCategoryCode(autoCategoryCode);
     }
     prevVisibleRef.current = visible;
-  }, [visible, initialReference, initialAmount, paymentForDate, isUniformPayment, autoPaymentForMonth]);
+  }, [visible, initialReference, initialAmount, paymentForDate, isUniformPayment, autoPaymentForMonth, autoCategoryCode]);
 
   const handleImagePicker = async () => {
     try {
@@ -268,6 +286,7 @@ export function PaymentUploadModal({
       const popTitle = `${titlePrefix} - ${studentCode}${paymentReference ? ` (${paymentReference})` : ''}`;
 
       const normalizedPurpose = paymentPurpose?.trim() || 'School Fees';
+      const normalizedCategory = categoryCode || autoCategoryCode || inferFeeCategoryCode(normalizedPurpose);
       const { data: insertedPOP, error: dbError } = await supabase
         .from('pop_uploads')
         .insert({
@@ -284,6 +303,7 @@ export function PaymentUploadModal({
           payment_amount: paymentAmountNum, // Required by CHECK constraint
           payment_date: paymentDateValue, // Actual payment date (YYYY-MM-DD)
           payment_for_month: paymentForMonthValue, // Billing period month (YYYY-MM-DD)
+          category_code: normalizedCategory,
           payment_reference: paymentReference || studentCode,
           status: 'pending',
         })
@@ -304,7 +324,7 @@ export function PaymentUploadModal({
             payment_amount: paymentAmountNum,
             payment_date: paymentDateValue,
             payment_method: 'bank_transfer',
-            payment_purpose: paymentPurpose || 'School Fees',
+            payment_purpose: normalizedPurpose,
             status: 'submitted',
             auto_matched: false,
             submitted_at: new Date().toISOString(),
@@ -446,6 +466,27 @@ export function PaymentUploadModal({
             </View>
           )}
 
+          <Text style={styles.modalLabel}>Payment Category *</Text>
+          <View style={styles.categoryRow}>
+            {CATEGORY_OPTIONS.map((option) => {
+              const isSelected = categoryCode === option.code;
+              return (
+                <TouchableOpacity
+                  key={option.code}
+                  style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
+                  onPress={() => setCategoryCode(option.code)}
+                >
+                  <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.referenceHint}>
+            This helps allocate the payment correctly in the monthly finance ledger.
+          </Text>
+
           <Text style={styles.modalLabel}>Bank Transaction Reference (Optional)</Text>
           <View style={styles.inputContainer}>
             <Ionicons name="document-text-outline" size={20} color={theme.textSecondary} />
@@ -556,6 +597,31 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) => St
   referenceHint: { fontSize: 12, color: theme.textSecondary, marginTop: 6, fontStyle: 'italic' },
   oneTimePaymentRow: {
     marginBottom: 8,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+  },
+  categoryChipActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    color: theme.text,
+    fontWeight: '600',
+  },
+  categoryChipTextActive: {
+    color: '#fff',
   },
   filePickerRow: { flexDirection: 'row', gap: 12 },
   filePickerButton: {

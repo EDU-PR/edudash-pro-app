@@ -20,15 +20,6 @@ import { useProgressReportActions } from '@/hooks/useProgressReportActions';
 import { Ionicons } from '@expo/vector-icons';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-/**
- * Progress Report Creator Screen (Refactored)
- * 
- * Reduced from 1,570 lines to ~460 lines by extracting:
- * - Form state → hooks/useProgressReportForm.ts
- * - Actions → hooks/useProgressReportActions.ts
- * - Helpers → lib/progress-report-helpers.ts
- * - UI components → components/progress-report/
- */
 
 export default function ProgressReportCreator() {
   const { profile } = useAuth();
@@ -45,27 +36,19 @@ export default function ProgressReportCreator() {
 
   const styles = useMemo(() => createProgressReportStyles(theme), [theme]);
 
-  // Role-based access control: Only teachers can create progress reports
+  // Role-based access: Only teachers can create progress reports
   if (profile && profile.role === 'principal') {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Ionicons name="lock-closed" size={64} color={theme.warning} />
-          <Text style={[{ fontSize: 20, fontWeight: '700', color: theme.text, marginTop: 16, textAlign: 'center' }]}>Access Restricted</Text>
-          <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
-            Progress report creation is restricted to teachers only. Principals can review and approve reports from the dashboard.
-          </Text>
-          <TouchableOpacity 
-            style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 14, backgroundColor: theme.primary, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            onPress={() => router.push('/screens/principal-report-review')}
-          >
+          <Text style={{ fontSize: 20, fontWeight: '700', color: theme.text, marginTop: 16, textAlign: 'center' }}>Access Restricted</Text>
+          <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>Progress report creation is restricted to teachers only. Principals can review and approve reports from the dashboard.</Text>
+          <TouchableOpacity style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 14, backgroundColor: theme.primary, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => router.push('/screens/principal-report-review')}>
             <Ionicons name="document-text" size={20} color="#fff" />
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Go to Report Review</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={{ marginTop: 12, paddingHorizontal: 24, paddingVertical: 14 }}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={{ marginTop: 12, paddingHorizontal: 24, paddingVertical: 14 }} onPress={() => router.back()}>
             <Text style={{ color: theme.textSecondary }}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -73,33 +56,24 @@ export default function ProgressReportCreator() {
     );
   }
 
-  // Loading state
   if (!profile || formState.loading) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <EduDashSpinner size="large" color={theme.primary} />
-          <Text style={{ color: theme.textSecondary, marginTop: 16 }}>
-            {!profile ? 'Loading profile...' : 'Loading student...'}
-          </Text>
+          <Text style={{ color: theme.textSecondary, marginTop: 16 }}>{!profile ? 'Loading profile...' : 'Loading student...'}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Error state
   if (!formState.student) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <Text style={[styles.errorText, { color: theme.error }]}>Student not found</Text>
-          <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>
-            Student ID: {studentId}
-          </Text>
-          <TouchableOpacity 
-            style={{ marginTop: 20, padding: 12, backgroundColor: theme.primary, borderRadius: 8 }}
-            onPress={() => router.back()}
-          >
+          <Text style={{ color: theme.textSecondary, marginTop: 8, textAlign: 'center' }}>Student ID: {studentId}</Text>
+          <TouchableOpacity style={{ marginTop: 20, padding: 12, backgroundColor: theme.primary, borderRadius: 8 }} onPress={() => router.back()}>
             <Text style={{ color: theme.background }}>Go Back</Text>
           </TouchableOpacity>
         </View>

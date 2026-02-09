@@ -3,121 +3,17 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshC
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
-
-interface ParentProfile {
-  id?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}
-
-interface UniformRow {
-  id: string;
-  child_name: string;
-  age_years: number;
-  tshirt_size: string;
-  tshirt_quantity?: number | null;
-  shorts_quantity?: number | null;
-  tshirt_number?: string | null;
-  is_returning?: boolean | null;
-  sample_supplied?: boolean | null;
-  created_at: string;
-  updated_at?: string | null;
-  student_id: string;
-  student?: {
-    first_name?: string | null;
-    last_name?: string | null;
-    student_id?: string | null;
-  } | null;
-  parent?: ParentProfile | null;
-}
-
-interface StudentRow {
-  id: string;
-  first_name: string;
-  last_name: string;
-  student_id?: string | null;
-  class_id?: string | null;
-  classroom?: {
-    id?: string | null;
-    name?: string | null;
-  } | null;
-  parent?: ParentProfile | null;
-  guardian?: ParentProfile | null;
-}
-
-interface DisplayRow {
-  id: string;
-  studentId: string;
-  childName: string;
-  ageYears: number | null;
-  tshirtSize: string;
-  tshirtQuantity: number | null;
-  shortsQuantity: number | null;
-  tshirtNumber: string;
-  isReturning: boolean;
-  sampleSupplied: boolean;
-  studentCode: string;
-  parentId: string;
-  parentName: string;
-  parentEmail: string;
-  parentPhone: string;
-  submittedAt: string | null;
-  updatedAt: string | null;
-  status: 'submitted' | 'missing';
-  className: string;
-  paymentStatus: 'paid' | 'pending' | 'unpaid';
-}
-
-const SIZE_OPTIONS = [
-  '2-3',
-  '3-4',
-  '4-5',
-  '5-6',
-  '6-7',
-  '7-8',
-  '8-9',
-  '9-10',
-  '10-11',
-  '11-12',
-  '12-13',
-  'XS',
-  'S',
-  'M',
-  'L',
-  'XL',
-];
-
-const escapeHtml = (value: string | number | null | undefined) => {
-  const stringValue = value === null || value === undefined ? '' : String(value);
-  return stringValue
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-};
-
-const formatName = (first?: string | null, last?: string | null) =>
-  `${first || ''} ${last || ''}`.trim();
-
-const resolveParentProfile = (student?: StudentRow | null, override?: ParentProfile | null) =>
-  override || student?.parent || student?.guardian || null;
-
-const isUniformLabel = (value?: string | null) => (value || '').toLowerCase().includes('uniform');
-const isUniformPaymentRecord = (payment: any) =>
-  isUniformLabel(payment?.description) ||
-  isUniformLabel(payment?.metadata?.payment_purpose) ||
-  String(payment?.metadata?.payment_context || '').toLowerCase() === 'uniform' ||
-  String(payment?.metadata?.fee_type || '').toLowerCase() === 'uniform';
+import { logger } from '@/lib/logger';
+import {
+  SIZE_OPTIONS, isUniformPaymentRecord,
+  deriveUniformData, exportUniformPdf, useUniformMessaging,
+} from '@/hooks/principal-uniforms';
+import type { UniformRow, StudentRow, DisplayRow } from '@/hooks/principal-uniforms';
 
 export default function PrincipalUniformsScreen() {
   const { user, profile } = useAuth();
@@ -137,10 +33,13 @@ export default function PrincipalUniformsScreen() {
   const [exporting, setExporting] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid'>(null);
   const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
     () => new Map()
   );
+
+  const { bulkMessaging, bulkMessageMissing, bulkMessageUnpaid } = useUniformMessaging({
+    userId: user?.id, schoolId, profile, showAlert,
+  });
 
   const load = useCallback(async () => {
     if (!schoolId) return;
@@ -165,37 +64,30 @@ export default function PrincipalUniformsScreen() {
       setRows((data as any) || []);
       setStudents((studentData as any) || []);
 
-      const studentIds = (studentData as any[] | null)?.map((s) => s.id).filter(Boolean) || [];
+      const studentIds = (studentData as any[] | null)?.map((s: any) => s.id).filter(Boolean) || [];
       if (studentIds.length) {
         const [{ data: popData }, { data: paymentsData }] = await Promise.all([
-          supabase
-            .from('pop_uploads')
+          supabase.from('pop_uploads')
             .select('student_id, status, description, title')
-            .eq('preschool_id', schoolId)
-            .eq('upload_type', 'proof_of_payment')
-            .in('student_id', studentIds),
-          supabase
-            .from('payments')
+            .eq('preschool_id', schoolId).eq('upload_type', 'proof_of_payment').in('student_id', studentIds),
+          supabase.from('payments')
             .select('student_id, status, description, metadata')
-            .eq('preschool_id', schoolId)
-            .in('student_id', studentIds),
+            .eq('preschool_id', schoolId).in('student_id', studentIds),
         ]);
 
         const nextMap = new Map<string, 'paid' | 'pending' | 'unpaid'>();
-        studentIds.forEach((id) => nextMap.set(id, 'unpaid'));
+        studentIds.forEach((id: string) => nextMap.set(id, 'unpaid'));
 
+        const { isUniformLabel } = await import('@/lib/utils/feeUtils');
         (popData || [])
           .filter((pop: any) => isUniformLabel(pop?.description) || isUniformLabel(pop?.title))
           .forEach((pop: any) => {
-          const current = nextMap.get(pop.student_id) || 'unpaid';
-          if (pop.status === 'approved') {
-            nextMap.set(pop.student_id, 'paid');
-            return;
-          }
-          if (current !== 'paid' && ['pending', 'submitted'].includes(String(pop.status))) {
-            nextMap.set(pop.student_id, 'pending');
-          }
-        });
+            const current = nextMap.get(pop.student_id) || 'unpaid';
+            if (pop.status === 'approved') { nextMap.set(pop.student_id, 'paid'); return; }
+            if (current !== 'paid' && ['pending', 'submitted'].includes(String(pop.status))) {
+              nextMap.set(pop.student_id, 'pending');
+            }
+          });
 
         (paymentsData || []).filter(isUniformPaymentRecord).forEach((payment: any) => {
           if (!payment.student_id) return;
@@ -209,12 +101,8 @@ export default function PrincipalUniformsScreen() {
         setPaymentStatusByStudent(new Map());
       }
     } catch (e: any) {
-      console.error('Load uniform sizes failed', e);
-      showAlert({
-        title: 'Error',
-        message: e?.message || 'Failed to load uniform sizes',
-        buttons: [{ text: 'OK' }],
-      });
+      logger.error('PrincipalUniforms', 'Load uniform sizes failed', e);
+      showAlert({ title: 'Error', message: e?.message || 'Failed to load uniform sizes', buttons: [{ text: 'OK' }] });
     } finally {
       setLoading(false);
     }
@@ -228,553 +116,46 @@ export default function PrincipalUniformsScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const studentLookup = useMemo(() => {
-    const map = new Map<string, StudentRow>();
-    students.forEach((student) => map.set(student.id, student));
-    return map;
-  }, [students]);
-
-  const submittedStudentIds = useMemo(() => new Set(rows.map((row) => row.student_id)), [rows]);
-
-  const missingStudents = useMemo(
-    () => students.filter((student) => !submittedStudentIds.has(student.id)),
-    [students, submittedStudentIds]
+  const derived = useMemo(
+    () => deriveUniformData(rows, students, paymentStatusByStudent),
+    [rows, students, paymentStatusByStudent]
   );
 
-  const submittedRows: DisplayRow[] = useMemo(() => rows.map((row) => {
-    const student = studentLookup.get(row.student_id);
-    const parentProfile = resolveParentProfile(student, row.parent || null);
-    const childName = row.child_name || formatName(row.student?.first_name, row.student?.last_name) || formatName(student?.first_name, student?.last_name);
-    const parentName = formatName(parentProfile?.first_name, parentProfile?.last_name) || parentProfile?.email || '';
-    return {
-      id: row.id,
-      studentId: row.student_id,
-      childName: childName || 'Unnamed Child',
-      ageYears: row.age_years,
-      tshirtSize: row.tshirt_size,
-      tshirtQuantity: row.tshirt_quantity ?? 0,
-      shortsQuantity: row.shorts_quantity ?? 0,
-      tshirtNumber: row.tshirt_number || '',
-      isReturning: Boolean(row.is_returning),
-      sampleSupplied: Boolean(row.sample_supplied),
-      studentCode: row.student?.student_id || student?.student_id || '',
-      parentId: parentProfile?.id || '',
-      parentName,
-      parentEmail: parentProfile?.email || '',
-      parentPhone: parentProfile?.phone || '',
-      submittedAt: row.created_at,
-      updatedAt: row.updated_at || null,
-      status: 'submitted' as const,
-      className: student?.classroom?.name || 'Unassigned',
-      paymentStatus: paymentStatusByStudent.get(row.student_id) || 'unpaid',
-    };
-  }), [rows, studentLookup, paymentStatusByStudent]);
-
-  const missingRows: DisplayRow[] = useMemo(() => missingStudents.map((student) => {
-    const parentProfile = resolveParentProfile(student, null);
-    const parentName = formatName(parentProfile?.first_name, parentProfile?.last_name) || parentProfile?.email || '';
-    return {
-      id: student.id,
-      studentId: student.id,
-      childName: formatName(student.first_name, student.last_name) || 'Unnamed Child',
-      ageYears: null,
-      tshirtSize: '',
-      tshirtQuantity: null,
-      shortsQuantity: null,
-      tshirtNumber: '',
-      isReturning: false,
-      sampleSupplied: false,
-      studentCode: student.student_id || '',
-      parentId: parentProfile?.id || '',
-      parentName,
-      parentEmail: parentProfile?.email || '',
-      parentPhone: parentProfile?.phone || '',
-      submittedAt: null,
-      updatedAt: null,
-      status: 'missing' as const,
-      className: student.classroom?.name || 'Unassigned',
-      paymentStatus: paymentStatusByStudent.get(student.id) || 'unpaid',
-    };
-  }), [missingStudents, paymentStatusByStudent]);
-
-  const submittedCount = submittedRows.length;
-  const missingCount = missingRows.length;
-  const missingContactableCount = useMemo(() => missingRows.filter((row) => row.parentId).length, [missingRows]);
-  const unpaidContactableCount = useMemo(
-    () => submittedRows.filter((row) => row.paymentStatus === 'unpaid' && row.parentId).length,
-    [submittedRows]
-  );
+  const { submittedRows, missingRows, submittedCount, missingCount,
+    missingContactableCount, unpaidContactableCount, sizeSummary, missingByClass } = derived;
 
   const displayRows: DisplayRow[] = useMemo(() => (
-    statusFilter === 'submitted'
-      ? submittedRows
-      : statusFilter === 'missing'
-        ? missingRows
+    statusFilter === 'submitted' ? submittedRows
+      : statusFilter === 'missing' ? missingRows
         : [...submittedRows, ...missingRows]
   ), [missingRows, submittedRows, statusFilter]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return displayRows.filter((row) => {
-      const matchesSearch = !q || [
-        row.childName,
-        row.studentCode,
-        row.parentName,
-        row.parentEmail,
-        row.parentPhone,
-        row.className,
-      ].some((field) => field.toLowerCase().includes(q));
+      const matchesSearch = !q || [row.childName, row.studentCode, row.parentName, row.parentEmail, row.parentPhone, row.className]
+        .some((field) => field.toLowerCase().includes(q));
       const matchesSize = sizeFilter === 'all' || row.tshirtSize === sizeFilter || row.status === 'missing';
       return matchesSearch && matchesSize;
     });
   }, [displayRows, search, sizeFilter]);
 
-  const sizeSummary = useMemo(() => {
-    const summary: Record<string, number> = {};
-    rows.forEach((row) => {
-      if (!row.tshirt_size) return;
-      summary[row.tshirt_size] = (summary[row.tshirt_size] || 0) + 1;
-    });
-    return summary;
-  }, [rows]);
-
-  const missingByClass = useMemo(() => {
-    const summary: Record<string, number> = {};
-    missingStudents.forEach((student) => {
-      const className = student.classroom?.name || 'Unassigned';
-      summary[className] = (summary[className] || 0) + 1;
-    });
-    return Object.entries(summary)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [missingStudents]);
-
-  const exportPdf = useCallback(async () => {
-    if (!filtered.length) {
-      showAlert({
-        title: 'Nothing to export',
-        message: 'No uniform records to export.',
-        buttons: [{ text: 'OK' }],
-      });
-      return;
-    }
+  const handleExportPdf = useCallback(async () => {
     setExporting(true);
     try {
-      const generatedAt = new Date().toLocaleString('en-ZA');
-      const sizeSummaryRows = Object.entries(sizeSummary)
-        .map(([size, count]) => `<span class="chip"><span>${escapeHtml(size)}</span><strong>${count}</strong></span>`)
-        .join('');
-      const missingClassRows = missingByClass
-        .map(({ name, count }) => `<span class="chip"><span>${escapeHtml(name)}</span><strong>${count}</strong></span>`)
-        .join('');
-
-      const htmlRows = filtered.map((row, index) => {
-        const updated = row.updatedAt || row.submittedAt;
-        const updatedText = updated ? new Date(updated).toLocaleDateString('en-ZA') : '-';
-        const firstName = row.childName.split(' ')[0] || row.childName;
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(firstName)}</td>
-            <td>${escapeHtml(row.className)}</td>
-            <td>${escapeHtml(row.ageYears ?? '-')}</td>
-            <td>${escapeHtml(row.tshirtSize || '-')}</td>
-            <td>${escapeHtml(row.tshirtQuantity ?? '-')}</td>
-            <td>${escapeHtml(row.shortsQuantity ?? '-')}</td>
-            <td>${row.isReturning ? 'Yes' : 'No'}</td>
-            <td>${escapeHtml(row.tshirtNumber || '-')}</td>
-            <td>${row.sampleSupplied ? 'Yes' : 'No'}</td>
-            <td>${escapeHtml(row.studentCode || '-')}</td>
-            <td>${escapeHtml(row.parentName || '-')}</td>
-            <td>${escapeHtml(updatedText)}</td>
-            <td>${escapeHtml(row.status)}</td>
-            <td>${escapeHtml(row.paymentStatus)}</td>
-          </tr>
-        `;
-      }).join('');
-
-      const html = `
-        <html>
-          <head>
-            <meta charset="utf-8" />
-            <style>
-              @page { size: A4; margin: 20mm; }
-              body { font-family: Arial, sans-serif; color: #111827; }
-              h1 { font-size: 20px; margin: 0 0 4px; }
-              .subtitle { font-size: 12px; color: #6b7280; margin-bottom: 16px; }
-              .section { margin-bottom: 16px; }
-              .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-              .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 999px; background: #f3f4f6; font-size: 11px; }
-              .chip strong { font-size: 11px; color: #111827; }
-              table { width: 100%; border-collapse: collapse; font-size: 11px; }
-              th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; vertical-align: top; }
-              th { background: #f9fafb; font-weight: 700; }
-              thead { display: table-header-group; }
-              .footer { margin-top: 16px; font-size: 10px; color: #6b7280; text-align: right; }
-            </style>
-          </head>
-          <body>
-            <h1>Uniform Sizes</h1>
-            <div class="subtitle">Generated ${escapeHtml(generatedAt)}</div>
-
-            <div class="section">
-              <div style="font-weight: 700; font-size: 12px; margin-bottom: 6px;">Size Summary</div>
-              <div class="chips">${sizeSummaryRows || '<span class="chip">No submissions yet</span>'}</div>
-            </div>
-
-            <div class="section">
-              <div style="font-weight: 700; font-size: 12px; margin-bottom: 6px;">Missing by Class</div>
-              <div class="chips">${missingClassRows || '<span class="chip">No missing submissions</span>'}</div>
-            </div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Child</th>
-                  <th>Class</th>
-                  <th>Age</th>
-                  <th>Size</th>
-                  <th># T-shirt</th>
-                  <th># Shorts</th>
-                  <th>Returning</th>
-                  <th>Back #</th>
-                  <th>Sample</th>
-                  <th>Student Code</th>
-                  <th>Submitted By</th>
-                  <th>Last Updated</th>
-                  <th>Status</th>
-                  <th>Payment</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${htmlRows}
-              </tbody>
-            </table>
-
-            <div class="footer">EduDash Pro • Uniform Sizes</div>
-          </body>
-        </html>
-      `;
-
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'Export uniform sizes (PDF)',
-          UTI: 'com.adobe.pdf',
-        });
-      } else {
-        showAlert({
-          title: 'PDF Generated',
-          message: 'The uniform sizes PDF has been generated.',
-          buttons: [{ text: 'OK' }],
-        });
-      }
+      await exportUniformPdf({ filtered, sizeSummary, missingByClass, showAlert });
     } catch (e: any) {
-      console.error('Export PDF failed', e);
-      showAlert({
-        title: 'Export Error',
-        message: e?.message || 'Failed to export PDF',
-        buttons: [{ text: 'OK' }],
-      });
+      showAlert({ title: 'Export Error', message: e?.message || 'Failed to export PDF', buttons: [{ text: 'OK' }] });
     } finally {
       setExporting(false);
     }
-  }, [filtered, missingByClass, showAlert, sizeSummary]);
+  }, [filtered, sizeSummary, missingByClass, showAlert]);
 
   const paymentStatusMeta = useCallback((status: DisplayRow['paymentStatus']) => {
-    if (status === 'paid') {
-      return { label: 'Paid', bg: theme.success + '22', border: theme.success + '55', text: theme.success };
-    }
-    if (status === 'pending') {
-      return { label: 'Pending', bg: theme.warning + '22', border: theme.warning + '55', text: theme.warning };
-    }
+    if (status === 'paid') return { label: 'Paid', bg: theme.success + '22', border: theme.success + '55', text: theme.success };
+    if (status === 'pending') return { label: 'Pending', bg: theme.warning + '22', border: theme.warning + '55', text: theme.warning };
     return { label: 'Unpaid', bg: theme.error + '22', border: theme.error + '55', text: theme.error };
   }, [theme]);
-
-  const getOrCreateParentPrincipalThread = useCallback(async (payload: { studentId: string; parentId: string; subject: string }) => {
-    if (!user?.id || !schoolId) return null;
-    const supabase = assertSupabase();
-
-    const { data } = await supabase
-      .from('message_threads')
-      .select('id, message_participants(user_id, role)')
-      .eq('preschool_id', schoolId)
-      .eq('type', 'parent-principal')
-      .eq('student_id', payload.studentId);
-
-    const threads = (data as any[] | null) || [];
-    const existing = threads.find((thread) => {
-      const participants = (thread.message_participants || []) as Array<{ user_id: string }>;
-      const ids = new Set(participants.map((p) => p.user_id));
-      return ids.has(payload.parentId) && ids.has(user.id);
-    });
-
-    if (existing?.id) return existing.id as string;
-
-    const { data: createdThread, error: threadError } = await supabase
-      .from('message_threads')
-      .insert({
-        preschool_id: schoolId,
-        created_by: user.id,
-        subject: payload.subject,
-        type: 'parent-principal',
-        student_id: payload.studentId,
-        last_message_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (threadError) throw threadError;
-    const threadId = createdThread?.id as string;
-
-    const { error: participantsError } = await supabase.from('message_participants').insert([
-      { thread_id: threadId, user_id: user.id, role: 'principal' },
-      { thread_id: threadId, user_id: payload.parentId, role: 'parent' },
-    ]);
-
-    if (participantsError) throw participantsError;
-    return threadId;
-  }, [schoolId, user?.id]);
-
-  const sendMessagePushNotification = useCallback(async (params: {
-    threadId: string;
-    messageId: string;
-    senderId: string;
-    senderName: string;
-    messageContent: string;
-    recipientIds: string[];
-  }) => {
-    const { threadId, messageId, senderId, senderName, messageContent, recipientIds } = params;
-    const recipientsExcludingSender = recipientIds.filter((id) => id && id !== senderId);
-    if (!recipientsExcludingSender.length) return;
-
-    try {
-      const supabase = assertSupabase();
-      const { data: sessionResult } = await supabase.auth.getSession();
-      const accessToken = sessionResult?.session?.access_token;
-      if (!accessToken) return;
-
-      const truncatedBody = messageContent.length > 100
-        ? `${messageContent.substring(0, 97)}...`
-        : messageContent;
-
-      await supabase.functions.invoke('notifications-dispatcher', {
-        body: {
-          event_type: 'new_message',
-          user_ids: recipientsExcludingSender,
-          thread_id: threadId,
-          message_id: messageId,
-          send_immediately: true,
-          template_override: {
-            title: `💬 ${senderName}`,
-            body: truncatedBody,
-            data: {
-              type: 'message',
-              thread_id: threadId,
-              message_id: messageId,
-              sender_id: senderId,
-              sender_name: senderName,
-              screen: 'messages',
-            },
-          },
-        },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-    } catch (err) {
-      // Notification failures should not block message sending.
-      console.warn('[PrincipalUniforms] Push notification failed:', err);
-    }
-  }, []);
-
-  const bulkMessageMissing = useCallback(async () => {
-    if (!user?.id || !schoolId) return;
-    if (bulkMessaging) return;
-
-    const targets = missingRows.filter((row) => row.parentId);
-    if (!targets.length) {
-      showAlert({
-        title: 'No Parents Found',
-        message: 'No missing uniform submissions have a linked parent contact.',
-        type: 'warning',
-        buttons: [{ text: 'OK' }],
-      });
-      return;
-    }
-
-    showAlert({
-      title: 'Message Missing Sizes',
-      message: `Send an in-app message to ${targets.length} parent(s) who have not submitted uniform sizes yet?`,
-      type: 'warning',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          onPress: async () => {
-            setBulkMessaging('missing');
-            const supabase = assertSupabase();
-            const senderName =
-              (profile as any)?.full_name ||
-              `${(profile as any)?.first_name || ''} ${(profile as any)?.last_name || ''}`.trim() ||
-              'School';
-
-            let sent = 0;
-            let failed = 0;
-
-            for (const row of targets) {
-              try {
-                const parentLabel = row.parentName || 'Parent';
-                const studentCodeLine = row.studentCode ? ` Student code: ${row.studentCode}.` : '';
-                const content = `Hi ${parentLabel}, please submit ${row.childName}'s uniform size and quantities in the app.${studentCodeLine} Thank you.`;
-                const subject = `Uniform Reminder • ${row.childName}`.trim();
-                const threadId = await getOrCreateParentPrincipalThread({
-                  studentId: row.studentId,
-                  parentId: row.parentId,
-                  subject,
-                });
-                if (!threadId) {
-                  failed++;
-                  continue;
-                }
-
-                const { data: messageData, error: messageError } = await supabase
-                  .from('messages')
-                  .insert({
-                    thread_id: threadId,
-                    sender_id: user.id,
-                    content,
-                    content_type: 'text',
-                  })
-                  .select('id, content')
-                  .single();
-                if (messageError) throw messageError;
-
-                await sendMessagePushNotification({
-                  threadId,
-                  messageId: messageData.id,
-                  senderId: user.id,
-                  senderName,
-                  messageContent: messageData.content,
-                  recipientIds: [row.parentId],
-                });
-
-                sent++;
-              } catch (err) {
-                console.warn('[PrincipalUniforms] Bulk message (missing) failed:', err);
-                failed++;
-              }
-            }
-
-            setBulkMessaging(null);
-            showAlert({
-              title: 'Bulk Message Complete',
-              message: failed
-                ? `Sent ${sent} message(s). Failed: ${failed}.`
-                : `Sent ${sent} message(s).`,
-              type: failed ? 'warning' : 'success',
-              buttons: [{ text: 'OK' }],
-            });
-          },
-        },
-      ],
-    });
-  }, [bulkMessaging, getOrCreateParentPrincipalThread, missingRows, profile, schoolId, sendMessagePushNotification, showAlert, user?.id]);
-
-  const bulkMessageUnpaid = useCallback(async () => {
-    if (!user?.id || !schoolId) return;
-    if (bulkMessaging) return;
-
-    const targets = submittedRows.filter((row) => row.paymentStatus === 'unpaid' && row.parentId);
-    if (!targets.length) {
-      showAlert({
-        title: 'No Unpaid Orders',
-        message: 'There are no unpaid uniform orders with a linked parent contact.',
-        type: 'info',
-        buttons: [{ text: 'OK' }],
-      });
-      return;
-    }
-
-    showAlert({
-      title: 'Message Unpaid Uniform Orders',
-      message: `Send an in-app payment reminder to ${targets.length} parent(s) with unpaid uniform orders?`,
-      type: 'warning',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          onPress: async () => {
-            setBulkMessaging('unpaid');
-            const supabase = assertSupabase();
-            const senderName =
-              (profile as any)?.full_name ||
-              `${(profile as any)?.first_name || ''} ${(profile as any)?.last_name || ''}`.trim() ||
-              'School';
-
-            let sent = 0;
-            let failed = 0;
-
-            for (const row of targets) {
-              try {
-                const parentLabel = row.parentName || 'Parent';
-                const studentCodeLine = row.studentCode ? ` Student code: ${row.studentCode}.` : '';
-                const content = `Hi ${parentLabel}, please complete uniform payment (or upload proof of payment) for ${row.childName}'s uniform order in the app.${studentCodeLine} Thank you.`;
-                const subject = `Uniform Payment • ${row.childName}`.trim();
-                const threadId = await getOrCreateParentPrincipalThread({
-                  studentId: row.studentId,
-                  parentId: row.parentId,
-                  subject,
-                });
-                if (!threadId) {
-                  failed++;
-                  continue;
-                }
-
-                const { data: messageData, error: messageError } = await supabase
-                  .from('messages')
-                  .insert({
-                    thread_id: threadId,
-                    sender_id: user.id,
-                    content,
-                    content_type: 'text',
-                  })
-                  .select('id, content')
-                  .single();
-                if (messageError) throw messageError;
-
-                await sendMessagePushNotification({
-                  threadId,
-                  messageId: messageData.id,
-                  senderId: user.id,
-                  senderName,
-                  messageContent: messageData.content,
-                  recipientIds: [row.parentId],
-                });
-
-                sent++;
-              } catch (err) {
-                console.warn('[PrincipalUniforms] Bulk message (unpaid) failed:', err);
-                failed++;
-              }
-            }
-
-            setBulkMessaging(null);
-            showAlert({
-              title: 'Bulk Message Complete',
-              message: failed
-                ? `Sent ${sent} message(s). Failed: ${failed}.`
-                : `Sent ${sent} message(s).`,
-              type: failed ? 'warning' : 'success',
-              buttons: [{ text: 'OK' }],
-            });
-          },
-        },
-      ],
-    });
-  }, [bulkMessaging, getOrCreateParentPrincipalThread, profile, schoolId, showAlert, submittedRows, sendMessagePushNotification, user?.id]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -790,7 +171,7 @@ export default function PrincipalUniformsScreen() {
             </View>
             <TouchableOpacity
               style={[styles.exportButton, { backgroundColor: theme.primary }]}
-              onPress={exportPdf}
+              onPress={handleExportPdf}
               disabled={exporting || filtered.length === 0}
             >
               <Ionicons name="document-text-outline" size={18} color="#fff" />
@@ -817,22 +198,22 @@ export default function PrincipalUniformsScreen() {
             </View>
             <TouchableOpacity
               style={[styles.bulkButton, { backgroundColor: theme.warning || '#f59e0b' }]}
-              onPress={bulkMessageMissing}
+              onPress={() => bulkMessageMissing(missingRows)}
               disabled={bulkMessaging !== null || missingContactableCount === 0}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={16} color="#fff" />
               <Text style={styles.bulkButtonText}>
-                {bulkMessaging === 'missing' ? 'Sending...' : `Message Missing (${missingContactableCount})`}
+                {bulkMessaging === 'missing' ? 'Sending...' : 'Message Missing (' + missingContactableCount + ')'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.bulkButton, { backgroundColor: theme.error || '#ef4444' }]}
-              onPress={bulkMessageUnpaid}
+              onPress={() => bulkMessageUnpaid(submittedRows)}
               disabled={bulkMessaging !== null || unpaidContactableCount === 0}
             >
               <Ionicons name="cash-outline" size={16} color="#fff" />
               <Text style={styles.bulkButtonText}>
-                {bulkMessaging === 'unpaid' ? 'Sending...' : `Message Unpaid (${unpaidContactableCount})`}
+                {bulkMessaging === 'unpaid' ? 'Sending...' : 'Message Unpaid (' + unpaidContactableCount + ')'}
               </Text>
             </TouchableOpacity>
             <View style={styles.controlsSpacer} />
@@ -855,7 +236,7 @@ export default function PrincipalUniformsScreen() {
           {!showFilters && (
             <View style={styles.filterSummaryRow}>
               <Text style={styles.filterSummaryText}>
-                Size: {sizeFilter === 'all' ? 'All' : sizeFilter} • Status: {statusFilter === 'all' ? 'All' : statusFilter}
+                Size: {sizeFilter === 'all' ? 'All' : sizeFilter} &bull; Status: {statusFilter === 'all' ? 'All' : statusFilter}
               </Text>
             </View>
           )}
@@ -867,13 +248,12 @@ export default function PrincipalUniformsScreen() {
                 <View style={styles.pickerWrap}>
                   <Picker selectedValue={sizeFilter} onValueChange={(value) => setSizeFilter(value)} style={styles.picker}>
                     <Picker.Item label="All sizes" value="all" />
-                    {SIZE_OPTIONS.map((size) => (
+                    {SIZE_OPTIONS.map((size: string) => (
                       <Picker.Item key={size} label={size} value={size} />
                     ))}
                   </Picker>
                 </View>
               </View>
-
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>Status</Text>
                 <View style={styles.pickerWrap}>
@@ -904,16 +284,14 @@ export default function PrincipalUniformsScreen() {
                   </View>
                 )}
               </View>
-
               <View style={styles.insightDivider} />
-
               <View style={styles.insightBlock}>
                 <Text style={styles.summaryTitle}>Missing by Class</Text>
                 {missingByClass.length === 0 ? (
                   <Text style={styles.muted}>No missing submissions.</Text>
                 ) : (
                   <View style={styles.summaryRow}>
-                    {missingByClass.map(({ name, count }) => (
+                    {missingByClass.map(({ name, count }: { name: string; count: number }) => (
                       <View key={name} style={styles.summaryChip}>
                         <Text style={styles.summaryChipText}>{name}</Text>
                         <Text style={styles.summaryChipCount}>{count}</Text>
@@ -937,15 +315,10 @@ export default function PrincipalUniformsScreen() {
                 <View style={styles.cardHeader}>
                   <Text style={styles.name}>{item.childName}</Text>
                   {item.status === 'submitted' && (
-                    <View
-                      style={[
-                        styles.paymentChip,
-                        {
-                          backgroundColor: paymentStatusMeta(item.paymentStatus).bg,
-                          borderColor: paymentStatusMeta(item.paymentStatus).border,
-                        },
-                      ]}
-                    >
+                    <View style={[styles.paymentChip, {
+                      backgroundColor: paymentStatusMeta(item.paymentStatus).bg,
+                      borderColor: paymentStatusMeta(item.paymentStatus).border,
+                    }]}>
                       <Text style={[styles.paymentChipText, { color: paymentStatusMeta(item.paymentStatus).text }]}>
                         {paymentStatusMeta(item.paymentStatus).label}
                       </Text>
@@ -1002,68 +375,19 @@ const createStyles = (theme: any) => StyleSheet.create({
   exportButtonText: { color: '#fff', fontWeight: '700' },
   search: { backgroundColor: theme?.surface || '#111827', color: theme?.text || '#fff', borderRadius: 10, padding: 10, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 6 },
   controlsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 6 },
-  countChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: theme?.surface || '#111827',
-    borderWidth: 1,
-    borderColor: theme?.border || '#1f2937',
-  },
+  countChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: theme?.surface || '#111827', borderWidth: 1, borderColor: theme?.border || '#1f2937' },
   countChipText: { color: theme?.text || '#fff', fontSize: 12, fontWeight: '600' },
-  bulkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
+  bulkButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   bulkButtonText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   controlsSpacer: { flexGrow: 1 },
-  toggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme?.border || '#1f2937',
-    backgroundColor: theme?.surface || '#111827',
-  },
-  toggleButtonActive: {
-    backgroundColor: theme?.primary || '#3b82f6',
-    borderColor: theme?.primary || '#3b82f6',
-  },
+  toggleButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: theme?.border || '#1f2937', backgroundColor: theme?.surface || '#111827' },
+  toggleButtonActive: { backgroundColor: theme?.primary || '#3b82f6', borderColor: theme?.primary || '#3b82f6' },
   toggleButtonText: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, fontWeight: '700' },
   toggleButtonTextActive: { color: '#fff' },
-  filterSummaryRow: {
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    marginBottom: 6,
-  },
+  filterSummaryRow: { paddingVertical: 4, paddingHorizontal: 6, marginBottom: 6 },
   filterSummaryText: { color: theme?.textSecondary || '#9CA3AF', fontSize: 12, fontWeight: '600' },
-  filtersCard: {
-    backgroundColor: theme?.cardBackground || '#111827',
-    borderRadius: 12,
-    padding: 10,
-    borderColor: theme?.border || '#1f2937',
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  insightsCard: {
-    backgroundColor: theme?.cardBackground || '#111827',
-    borderRadius: 12,
-    padding: 10,
-    borderColor: theme?.border || '#1f2937',
-    borderWidth: 1,
-    marginBottom: 8,
-  },
+  filtersCard: { backgroundColor: theme?.cardBackground || '#111827', borderRadius: 12, padding: 10, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 8 },
+  insightsCard: { backgroundColor: theme?.cardBackground || '#111827', borderRadius: 12, padding: 10, borderColor: theme?.border || '#1f2937', borderWidth: 1, marginBottom: 8 },
   insightBlock: { marginBottom: 10 },
   insightDivider: { height: 1, backgroundColor: theme?.border || '#1f2937', marginVertical: 6 },
   summaryTitle: { color: theme?.text || '#fff', fontWeight: '700', marginBottom: 8 },
@@ -1079,30 +403,8 @@ const createStyles = (theme: any) => StyleSheet.create({
   missingCard: { borderStyle: 'dashed', borderColor: theme?.warning || '#f59e0b' },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   name: { color: theme?.text || '#fff', fontWeight: '800', fontSize: 16, marginBottom: 4 },
-  paymentChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  paymentChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  paymentChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
+  paymentChipText: { fontSize: 11, fontWeight: '700' },
   text: { color: theme?.text || '#fff', fontSize: 13 },
-  messageButton: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: theme?.primary || '#3b82f6',
-  },
-  messageButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
   muted: { color: theme?.textSecondary || '#9CA3AF', paddingVertical: 8, fontSize: 12 },
 });

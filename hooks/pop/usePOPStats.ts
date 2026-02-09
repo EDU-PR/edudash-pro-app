@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { POP_QUERY_KEYS } from './queryKeys';
 import type { POPStats } from './types';
+import { logger } from '@/lib/logger';
 
 export const usePOPStats = (studentId?: string) => {
   return useQuery({
@@ -17,7 +18,7 @@ export const usePOPStats = (studentId?: string) => {
       });
       
       if (error) {
-        console.error('Failed to fetch POP stats:', error);
+        logger.error('Failed to fetch POP stats:', error);
         throw new Error(`Failed to load upload statistics: ${error.message}`);
       }
       

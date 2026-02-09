@@ -1,6 +1,8 @@
 /**
  * Action Builders for Teacher Dashboard
  * Creates AI Tools and Quick Actions configurations
+ * @deprecated Legacy action builder retained temporarily.
+ * Active #NEXT-GEN teacher quick actions are built in `hooks/useNewEnhancedTeacherState.ts`.
  */
 
 import { Alert } from 'react-native';
@@ -79,7 +81,7 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
           return;
         }
         track("edudash.ai.homework_grader_opened");
-        router.push("/screens/ai-homework-grader-live");
+        router.push(getTeacherRoute('homework_grader'));
       },
     },
     {
@@ -94,7 +96,7 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
           return;
         }
         track("edudash.ai.homework_helper_opened");
-        router.push("/screens/ai-homework-helper");
+        router.push(getTeacherRoute('homework_helper'));
       },
     },
     {
@@ -105,7 +107,7 @@ export const buildAITools = (params: BuildAIToolsParams): AITool[] => {
       color: "#7C3AED",
       onPress: () => {
         track("edudash.ai.progress_analysis_opened");
-        router.push("/screens/ai-progress-analysis");
+        router.push(getTeacherRoute('progress_analysis'));
       },
     },
   ];
@@ -135,7 +137,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       icon: "chatbubbles",
       color: "#6366F1",
       onPress: () => {
-        router.push("/screens/dash-assistant");
+        router.push(getTeacherRoute('ai_assistant'));
       },
     },
     {
@@ -144,7 +146,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       icon: "checkmark-done",
       color: "#059669",
       onPress: () => {
-        router.push("/screens/attendance");
+        router.push(getTeacherRoute('take_attendance'));
       },
       requiredCap: "manage_classes",
     },
@@ -155,7 +157,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#4F46E5",
       onPress: async () => {
         await maybeShowInterstitial('teacher_dashboard_lessons_hub');
-        router.push("/screens/lessons-hub");
+        router.push(getTeacherRoute('browse_lessons'));
       },
       requiredCap: "create_assignments",
     },
@@ -166,7 +168,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#EC4899",
       onPress: async () => {
         await maybeShowInterstitial('teacher_dashboard_saved_lessons');
-        router.push("/screens/lessons-hub");
+        router.push(getTeacherRoute('browse_lessons'));
       },
       requiredCap: "create_assignments",
     },
@@ -177,7 +179,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#7C3AED",
       onPress: async () => {
         await maybeShowInterstitial('teacher_dashboard_message_parents');
-        router.push("/screens/teacher-message-list");
+        router.push(getTeacherRoute('messages'));
       },
       requiredCap: "communicate_with_parents",
     },
@@ -188,7 +190,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#DC2626",
       onPress: async () => {
         await maybeShowInterstitial('teacher_dashboard_view_reports');
-        router.push("/screens/teacher-reports");
+        router.push(getTeacherRoute('student_reports'));
       },
       requiredCap: "view_class_analytics",
     },
@@ -199,7 +201,7 @@ export const buildQuickActions = (params: BuildQuickActionsParams): QuickAction[
       color: "#8B5CF6",
       onPress: () => {
         track('edudash.progress_reports.quick_action_pressed');
-        router.push("/screens/student-management");
+        router.push(getTeacherRoute('student_reports'));
       },
       requiredCap: "manage_students",
     },

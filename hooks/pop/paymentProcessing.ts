@@ -4,7 +4,8 @@
  */
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
-import { getUniformItemType, inferPaymentCategory, isTuitionFee } from '@/lib/utils/feeUtils';
+import { getUniformItemType, inferPaymentCategory, inferFeeCategoryCode, isTuitionFee } from '@/lib/utils/feeUtils';
+import { getDateOnlyISO, getMonthEndISO, getMonthStartISO } from '@/lib/utils/dateUtils';
 import type { POPUpload } from './types';
 
 const UNIFORM_KEYWORDS = ['uniform'];
@@ -119,11 +120,13 @@ async function ensureUniformFeeRecord(
 
   if (!feeStructure) return null;
 
-  const targetDate = resolvePaymentDate(data.payment_for_month || data.payment_date);
-  const monthStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-  const monthEnd = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0);
-  const monthStartIso = monthStart.toISOString().split('T')[0];
-  const monthEndIso = monthEnd.toISOString().split('T')[0];
+  const targetPeriodValue = data.payment_for_month || data.payment_date;
+  const monthStartIso = getMonthStartISO(targetPeriodValue, {
+    recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+  });
+  const monthEndIso = getMonthEndISO(targetPeriodValue, {
+    recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+  });
 
   const { data: existingFees, error: existingError } = await supabase
     .from('student_fees')
@@ -139,7 +142,7 @@ async function ensureUniformFeeRecord(
   }
 
   const paymentAmount = data.payment_amount || feeStructure.amount || 0;
-  const paidDate = (data.payment_date || new Date().toISOString()).split('T')[0];
+  const paidDate = getDateOnlyISO(data.payment_date);
 
   if (existingFees?.length) {
     const feeId = existingFees[0].id;
@@ -160,7 +163,7 @@ async function ensureUniformFeeRecord(
     return { feeId, feeStructureId: feeStructure.id };
   }
 
-  const dueDate = (data.payment_for_month || data.payment_date || monthStartIso).split('T')[0];
+  const dueDate = monthStartIso;
   const { data: insertedFee, error: insertError } = await supabase
     .from('student_fees')
     .insert({
@@ -195,6 +198,10 @@ export async function createPaymentRecord(
     const uniformPayment = isUniformPayment(data);
     const description = data.description || data.title || (uniformPayment ? 'Uniform payment' : 'School fees payment');
     const feeCategory = inferPaymentCategory(description);
+    const categoryCode = inferFeeCategoryCode(data.category_code || description);
+    const billingMonth = getMonthStartISO(data.payment_for_month || data.payment_date, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
     const uniformFee = uniformPayment ? await ensureUniformFeeRecord(data, reviewerId) : null;
 
     const paymentRecord = {
@@ -212,13 +219,17 @@ export async function createPaymentRecord(
       reviewed_by: reviewerId,
       reviewed_at: new Date().toISOString(),
       submitted_at: data.created_at,
+      billing_month: billingMonth,
+      category_code: categoryCode,
+      transaction_date: getDateOnlyISO(data.payment_date),
       fee_ids: uniformFee?.feeId ? [uniformFee.feeId] : (uniformPayment ? [] : undefined),
       metadata: {
         pop_upload_id: uploadId,
         payment_date: data.payment_date,
-        payment_for_month: data.payment_for_month,
-        fee_type: uniformPayment ? 'uniform' : 'tuition',
+        payment_for_month: billingMonth,
+        fee_type: uniformPayment ? 'uniform' : categoryCode,
         fee_category: feeCategory,
+        category_code: categoryCode,
         payment_context: uniformPayment ? 'uniform' : 'school_fees',
         payment_purpose: description,
         fee_structure_id: uniformFee?.feeStructureId || null,
@@ -238,9 +249,12 @@ export async function createPaymentRecord(
 export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
   try {
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = resolvePaymentDate(periodDateValue);
-    const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
-    const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
+    const monthStart = getMonthStartISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
+    const monthEnd = getMonthEndISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
     
     const { data: invoices } = await supabase
       .from('student_invoices')
@@ -267,31 +281,32 @@ export async function updateInvoiceStatus(data: POPUpload): Promise<void> {
 export async function updateFeeStatus(data: POPUpload): Promise<void> {
   try {
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = resolvePaymentDate(periodDateValue);
-    const monthStartDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1);
-    const monthEndDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0);
-    const monthStart = monthStartDate.toISOString();
-    const monthEnd = monthEndDate.toISOString();
+    const monthStartIso = getMonthStartISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
+    const monthEndIso = getMonthEndISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
     const hasExplicitPeriod = Boolean(data.payment_for_month);
     
-    // First try to find a fee matching the payment month
+    // First try to find a fee matching the selected billing month.
     let { data: fees } = await supabase
       .from('student_fees')
-      .select('id, due_date, amount, final_amount')
+      .select('id, due_date, amount, final_amount, amount_paid, amount_outstanding, status')
       .eq('student_id', data.student_id)
       .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
-      .gte('due_date', monthStart)
-      .lte('due_date', monthEnd)
+      .gte('due_date', monthStartIso)
+      .lte('due_date', monthEndIso)
       .limit(1);
 
     // If payment is for a future or explicit month and no fee exists yet, create one
     if (!fees?.length && hasExplicitPeriod && data.preschool_id) {
       const { data: existingAny } = await supabase
         .from('student_fees')
-        .select('id, status, amount, final_amount, due_date')
+        .select('id, status, amount, final_amount, due_date, amount_paid, amount_outstanding')
         .eq('student_id', data.student_id)
-        .gte('due_date', monthStart)
-        .lte('due_date', monthEnd)
+        .gte('due_date', monthStartIso)
+        .lte('due_date', monthEndIso)
         .limit(1);
 
       if (existingAny?.length) {
@@ -304,7 +319,6 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
         const tuitionFee = await findTuitionFeeStructure(data.preschool_id);
         if (tuitionFee) {
           const feeAmount = tuitionFee.amount || data.payment_amount || 0;
-          const paidDate = (data.payment_date || new Date().toISOString()).split('T')[0];
           const { data: insertedFee, error: insertError } = await supabase
             .from('student_fees')
             .insert({
@@ -312,63 +326,60 @@ export async function updateFeeStatus(data: POPUpload): Promise<void> {
               fee_structure_id: tuitionFee.id,
               amount: feeAmount,
               final_amount: feeAmount,
-              due_date: monthStartDate.toISOString().split('T')[0],
-              status: 'paid',
-              amount_paid: feeAmount,
-              amount_outstanding: 0,
-              paid_date: paidDate,
+              due_date: monthStartIso,
+              status: 'pending',
+              amount_paid: 0,
+              amount_outstanding: feeAmount,
+              paid_date: null,
+              billing_month: monthStartIso,
+              category_code: inferFeeCategoryCode(data.category_code || data.description || data.title || 'tuition'),
             })
-            .select('id, amount, final_amount')
+            .select('id, amount, final_amount, amount_paid, amount_outstanding, status')
             .single();
 
           if (insertError || !insertedFee) {
             logger.error('[updateFeeStatus] Failed to create fee for prepayment month:', insertError);
           } else {
-            logger.info('[updateFeeStatus] Created and paid fee for prepayment month');
-            return;
+            logger.info('[updateFeeStatus] Created fee row for selected billing month');
+            fees = [insertedFee as any];
           }
         } else {
           logger.warn('[updateFeeStatus] No tuition fee structure found to create prepayment fee');
         }
       }
     }
-    
-    // If no fee found for the payment month, get the oldest pending fee
-    if (!fees?.length) {
-      logger.info('[updateFeeStatus] No fee found for payment month, looking for oldest pending fee');
-      const { data: oldestFees } = await supabase
-        .from('student_fees')
-        .select('id, due_date, amount, final_amount')
-        .eq('student_id', data.student_id)
-        .in('status', ['pending', 'overdue', 'partially_paid', 'pending_verification'])
-        .order('due_date', { ascending: true })
-        .limit(1);
-      fees = oldestFees;
-    }
-    
+
     if (fees?.length) {
       const feeId = fees[0].id;
-      // Use final_amount if available, otherwise fall back to amount or payment_amount
-      const feeAmount = fees[0].final_amount || fees[0].amount || data.payment_amount || 0;
-      logger.info(`[updateFeeStatus] Marking fee ${feeId} as paid for student ${data.student_id}`);
+      const feeAmount = Number(fees[0].final_amount || fees[0].amount || 0);
+      const paymentAmount = Number(data.payment_amount || 0);
+      const existingPaid = Number(fees[0].amount_paid || 0);
+      const safeIncoming = paymentAmount > 0 ? paymentAmount : feeAmount;
+      const newAmountPaid = Math.min(feeAmount, existingPaid + safeIncoming);
+      const newOutstanding = Math.max(feeAmount - newAmountPaid, 0);
+      const nextStatus = newOutstanding <= 0 ? 'paid' : 'partially_paid';
+
+      logger.info(`[updateFeeStatus] Applying payment to fee ${feeId} for student ${data.student_id}`);
       
       const { error: updateError } = await supabase
         .from('student_fees')
         .update({
-          status: 'paid',
-          paid_date: (data.payment_date || new Date().toISOString()).split('T')[0],
-          amount_paid: feeAmount,
-          amount_outstanding: 0,
+          status: nextStatus,
+          paid_date: nextStatus === 'paid' ? getDateOnlyISO(data.payment_date) : null,
+          amount_paid: newAmountPaid,
+          amount_outstanding: newOutstanding,
+          billing_month: monthStartIso,
+          category_code: inferFeeCategoryCode(data.category_code || data.description || data.title || 'tuition'),
         })
         .eq('id', feeId);
       
       if (updateError) {
         logger.error('Failed to update fee status:', updateError);
       } else {
-        logger.info('✅ Student fee marked as paid');
+        logger.info(`✅ Student fee updated (${nextStatus})`);
       }
     } else {
-      logger.warn(`[updateFeeStatus] No pending fees found for student ${data.student_id}`);
+      logger.warn(`[updateFeeStatus] No fee found for selected billing month ${monthStartIso} for student ${data.student_id}`);
     }
   } catch (err) {
     logger.error('Error updating fee:', err);
@@ -396,7 +407,10 @@ export async function generateInvoice(
       .single();
     
     const periodDateValue = data.payment_for_month || data.payment_date;
-    const paymentDate = resolvePaymentDate(periodDateValue);
+    const invoiceMonthIso = getMonthStartISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
+    const paymentDate = resolvePaymentDate(invoiceMonthIso);
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const invoiceMonth = monthNames[paymentDate.getMonth()];
     const invoiceYear = paymentDate.getFullYear();
@@ -405,8 +419,8 @@ export async function generateInvoice(
     
     const today = new Date();
     const issueDate = paymentDate < today ? paymentDate : today;
-    const issueDateStr = issueDate.toISOString().split('T')[0];
-    let dueDateStr = paymentDate.toISOString().split('T')[0];
+    const issueDateStr = getDateOnlyISO(issueDate);
+    let dueDateStr = getDateOnlyISO(paymentDate);
     if (dueDateStr < issueDateStr) {
       dueDateStr = issueDateStr;
     }

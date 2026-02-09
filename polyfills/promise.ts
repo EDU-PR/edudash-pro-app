@@ -1,10 +1,10 @@
 /**
- * Promise.any polyfill for React Native / Hermes
+ * Promise.any + Promise.allSettled polyfill for React Native / Hermes
  * 
  * CRITICAL: This must run BEFORE any other modules load, especially Daily.co SDK.
  * Daily.co captures Promise at module load time, so we must patch it synchronously.
  * 
- * This ONLY adds Promise.any - it does NOT replace the Promise constructor.
+ * This ONLY adds Promise.any / Promise.allSettled - it does NOT replace the Promise constructor.
  * (core-js causes infinite loops with Hermes because it replaces the entire Promise)
  */
 
@@ -110,9 +110,52 @@ declare const self: any;
     }
   }
 
+  // Promise.allSettled implementation
+  function promiseAllSettled<T>(
+    values: Iterable<T | PromiseLike<T>>
+  ): Promise<PromiseSettledResult<Awaited<T>>[]> {
+    const list = Array.from(values);
+    return Promise.all(
+      list.map((p) =>
+        Promise.resolve(p)
+          .then((value) => ({ status: 'fulfilled' as const, value: value as Awaited<T> }))
+          .catch((reason) => ({ status: 'rejected' as const, reason }))
+      )
+    );
+  }
+
+  // Patch Promise.allSettled if missing
+  if (typeof PromiseConstructor.allSettled !== 'function') {
+    try {
+      Object.defineProperty(PromiseConstructor, 'allSettled', {
+        value: promiseAllSettled,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+      });
+    } catch {
+      (PromiseConstructor as any).allSettled = promiseAllSettled;
+    }
+
+    if (Promise !== PromiseConstructor && typeof Promise.allSettled !== 'function') {
+      try {
+        Object.defineProperty(Promise, 'allSettled', {
+          value: promiseAllSettled,
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+      } catch {
+        (Promise as any).allSettled = promiseAllSettled;
+      }
+    }
+  }
+
   // Verify installation
   const isAvailable = typeof Promise.any === 'function';
+  const isAllSettledAvailable = typeof Promise.allSettled === 'function';
   console.log('[Polyfill] Promise.any:', isAvailable ? '✅ installed' : '❌ FAILED');
+  console.log('[Polyfill] Promise.allSettled:', isAllSettledAvailable ? '✅ installed' : '❌ FAILED');
   
   if (!isAvailable) {
     console.error('[Polyfill] CRITICAL: Promise.any polyfill failed to install!');

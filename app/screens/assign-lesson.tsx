@@ -5,7 +5,7 @@
  * Part of the lesson delivery workflow.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
@@ -16,6 +16,20 @@ import { assertSupabase } from '@/lib/supabase';
 import { useLessonAssignment } from '@/hooks/useLessonAssignment';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  PRESCHOOL_ACTIVITIES,
+  DOMAIN_LABELS,
+  getActivityById,
+} from '@/lib/activities/preschoolActivities.data';
+import {
+  getRecommendedPlaygroundActivityIds,
+  sortPlaygroundActivitiesForLesson,
+} from '@/lib/activities/playgroundLessonAlignment';
+import {
+  ensurePlaygroundInteractiveActivity,
+} from '@/lib/services/playgroundAssignmentService';
+import type { PlaygroundDifficultyLevel } from '@/lib/activities/playgroundDifficulty';
+import type { PreschoolActivity } from '@/lib/activities/preschoolActivities.types';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Lesson {
@@ -42,7 +56,7 @@ interface ClassInfo {
   student_count?: number;
 }
 
-type AssignmentMode = 'lesson' | 'student' | 'class';
+const PLAYGROUND_DIFFICULTY_OPTIONS: PlaygroundDifficultyLevel[] = ['easy', 'medium', 'tricky'];
 
 export default function AssignLessonScreen() {
   const { theme } = useTheme();
@@ -51,7 +65,6 @@ export default function AssignLessonScreen() {
   const params = useLocalSearchParams<{ lessonId?: string; studentId?: string; classId?: string }>();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   
-  const [mode, setMode] = useState<AssignmentMode>('lesson');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
   
@@ -60,6 +73,11 @@ export default function AssignLessonScreen() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [assignToClass, setAssignToClass] = useState(false);
+  const [attachPlaygroundActivity, setAttachPlaygroundActivity] = useState(false);
+  const [playgroundActivityId, setPlaygroundActivityId] = useState<string | null>(
+    PRESCHOOL_ACTIVITIES[0]?.id ?? null,
+  );
+  const [playgroundDifficulty, setPlaygroundDifficulty] = useState<PlaygroundDifficultyLevel>('medium');
   
   // Assignment options
   const [dueDate, setDueDate] = useState<Date | null>(null);
@@ -76,6 +94,33 @@ export default function AssignLessonScreen() {
   const { assignLesson, assignLessonToClass, isAssigning } = useLessonAssignment();
   
   const organizationId = profile?.organization_id || profile?.preschool_id;
+  const teacherId = profile?.id;
+
+  const orderedPlaygroundActivities = useMemo<PreschoolActivity[]>(() => {
+    if (!selectedLesson) return [...PRESCHOOL_ACTIVITIES];
+    return sortPlaygroundActivitiesForLesson({
+      title: selectedLesson.title,
+      subject: selectedLesson.subject,
+      description: selectedLesson.description,
+    });
+  }, [selectedLesson]);
+
+  const recommendedActivityIds = useMemo(() => {
+    if (!selectedLesson) return new Set<string>();
+    return new Set(
+      getRecommendedPlaygroundActivityIds({
+        title: selectedLesson.title,
+        subject: selectedLesson.subject,
+        description: selectedLesson.description,
+      }),
+    );
+  }, [selectedLesson]);
+
+  useEffect(() => {
+    if (!playgroundActivityId && orderedPlaygroundActivities.length > 0) {
+      setPlaygroundActivityId(orderedPlaygroundActivities[0].id);
+    }
+  }, [playgroundActivityId, orderedPlaygroundActivities]);
   
   // Fetch initial data
   useEffect(() => {
@@ -156,19 +201,50 @@ export default function AssignLessonScreen() {
       Alert.alert('Error', 'Please select a class');
       return;
     }
+
+    if (attachPlaygroundActivity && !playgroundActivityId) {
+      Alert.alert('Error', 'Please select a Dash Playground activity');
+      return;
+    }
     
     try {
       let success = false;
+      let interactiveActivityId: string | undefined;
+
+      if (attachPlaygroundActivity) {
+        if (!organizationId || !teacherId) {
+          Alert.alert('Error', 'Teacher profile is required to attach Dash Playground activities.');
+          return;
+        }
+        const interactiveActivity = await ensurePlaygroundInteractiveActivity({
+          preschoolId: organizationId,
+          teacherId,
+          lesson: {
+            id: selectedLesson.id,
+            title: selectedLesson.title,
+            subject: selectedLesson.subject,
+            description: selectedLesson.description,
+          },
+          presetActivityId: playgroundActivityId!,
+          difficulty: playgroundDifficulty,
+        });
+        interactiveActivityId = interactiveActivity.id;
+      }
+
+      const assignmentOptions = {
+        due_date: dueDate?.toISOString().split('T')[0],
+        priority,
+        notes: notes || undefined,
+        interactive_activity_id: interactiveActivityId,
+        lesson_type: interactiveActivityId ? ('interactive' as const) : ('standard' as const),
+        stem_category: 'none' as const,
+      };
       
       if (assignToClass && selectedClass) {
         success = await assignLessonToClass(
           selectedLesson.id,
           selectedClass.id,
-          {
-            due_date: dueDate?.toISOString().split('T')[0],
-            priority,
-            notes: notes || undefined,
-          }
+          assignmentOptions,
         );
       } else {
         // Assign to each selected student
@@ -176,9 +252,7 @@ export default function AssignLessonScreen() {
           const result = await assignLesson({
             lesson_id: selectedLesson.id,
             student_id: studentId,
-            due_date: dueDate?.toISOString().split('T')[0],
-            priority,
-            notes: notes || undefined,
+            ...assignmentOptions,
           });
           if (result) success = true;
         }
@@ -188,8 +262,8 @@ export default function AssignLessonScreen() {
         Alert.alert(
           'Success',
           assignToClass
-            ? `Lesson assigned to ${selectedClass?.name}`
-            : `Lesson assigned to ${selectedStudents.length} student(s)`,
+            ? `Lesson assigned to ${selectedClass?.name}${interactiveActivityId ? ' with Dash Playground activity' : ''}`
+            : `Lesson assigned to ${selectedStudents.length} student(s)${interactiveActivityId ? ' with Dash Playground activity' : ''}`,
           [{ text: 'OK', onPress: () => router.back() }]
         );
       } else {
@@ -221,6 +295,20 @@ export default function AssignLessonScreen() {
     l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     l.subject.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const selectedPlaygroundActivity = playgroundActivityId
+    ? getActivityById(playgroundActivityId)
+    : null;
+
+  const toggleAttachPlayground = () => {
+    setAttachPlaygroundActivity((previous) => {
+      const next = !previous;
+      if (next && !playgroundActivityId && orderedPlaygroundActivities.length > 0) {
+        setPlaygroundActivityId(orderedPlaygroundActivities[0].id);
+      }
+      return next;
+    });
+  };
   
   const filteredStudents = students.filter(s => 
     `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchQuery.toLowerCase())
@@ -315,6 +403,109 @@ export default function AssignLessonScreen() {
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={
+              <View style={styles.playgroundSection}>
+                <View style={styles.playgroundHeaderRow}>
+                  <View style={styles.playgroundHeaderContent}>
+                    <Text style={styles.playgroundSectionTitle}>Attach Dash Playground Activity</Text>
+                    <Text style={styles.playgroundSectionSubtitle}>
+                      Teacher-assigned only. Parents will see this activity in Dash Playground.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.playgroundToggle,
+                      attachPlaygroundActivity && styles.playgroundToggleActive,
+                    ]}
+                    onPress={toggleAttachPlayground}
+                  >
+                    <View
+                      style={[
+                        styles.playgroundToggleDot,
+                        attachPlaygroundActivity && styles.playgroundToggleDotActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {attachPlaygroundActivity && (
+                  <>
+                    <Text style={styles.playgroundLabel}>Difficulty</Text>
+                    <View style={styles.playgroundDifficultyRow}>
+                      {PLAYGROUND_DIFFICULTY_OPTIONS.map((difficulty) => {
+                        const isActive = playgroundDifficulty === difficulty;
+                        return (
+                          <TouchableOpacity
+                            key={difficulty}
+                            style={[
+                              styles.playgroundDifficultyChip,
+                              isActive && styles.playgroundDifficultyChipActive,
+                            ]}
+                            onPress={() => setPlaygroundDifficulty(difficulty)}
+                          >
+                            <Text
+                              style={[
+                                styles.playgroundDifficultyText,
+                                isActive && styles.playgroundDifficultyTextActive,
+                              ]}
+                            >
+                              {difficulty === 'easy'
+                                ? 'Easy'
+                                : difficulty === 'medium'
+                                  ? 'Medium'
+                                  : 'Tricky'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={styles.playgroundLabel}>Select Activity</Text>
+                    {selectedLesson ? (
+                      orderedPlaygroundActivities.map((activity) => {
+                        const isSelected = playgroundActivityId === activity.id;
+                        const isRecommended = recommendedActivityIds.has(activity.id);
+                        const domain = DOMAIN_LABELS[activity.domain];
+                        return (
+                          <TouchableOpacity
+                            key={activity.id}
+                            style={[
+                              styles.playgroundActivityItem,
+                              isSelected && styles.playgroundActivityItemSelected,
+                            ]}
+                            onPress={() => setPlaygroundActivityId(activity.id)}
+                          >
+                            <View style={styles.playgroundActivityLeft}>
+                              <Text style={styles.playgroundActivityEmoji}>{activity.emoji}</Text>
+                              <View style={styles.playgroundActivityText}>
+                                <View style={styles.playgroundActivityTitleRow}>
+                                  <Text style={styles.playgroundActivityTitle}>{activity.title}</Text>
+                                  {isRecommended && (
+                                    <View style={styles.recommendedBadge}>
+                                      <Text style={styles.recommendedBadgeText}>Recommended</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <Text style={styles.playgroundActivityMeta}>
+                                  {(domain?.emoji || '🎯')} {(domain?.label || activity.domain)} • {activity.durationMinutes} min
+                                </Text>
+                              </View>
+                            </View>
+                            {isSelected && (
+                              <Ionicons name="checkmark-circle" size={22} color="#8B5CF6" />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.playgroundEmptyHint}>
+                        Pick a lesson first to see aligned Dash Playground recommendations.
+                      </Text>
+                    )}
+                  </>
+                )}
+              </View>
+            }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No lessons found</Text>
@@ -487,6 +678,16 @@ export default function AssignLessonScreen() {
                   : `${selectedStudents.length} student(s)`}
               </Text>
             </View>
+
+            {attachPlaygroundActivity && selectedPlaygroundActivity && (
+              <View style={styles.summaryRow}>
+                <Ionicons name="game-controller" size={20} color={theme.primary} />
+                <Text style={styles.summaryLabel}>Playground:</Text>
+                <Text style={styles.summaryValue}>
+                  {selectedPlaygroundActivity.title} ({playgroundDifficulty})
+                </Text>
+              </View>
+            )}
           </View>
           
           {/* Options */}
@@ -688,6 +889,148 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 16,
     paddingTop: 0,
     paddingBottom: 100,
+  },
+  playgroundSection: {
+    marginTop: 12,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+  },
+  playgroundHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  playgroundHeaderContent: {
+    flex: 1,
+    gap: 4,
+  },
+  playgroundSectionTitle: {
+    color: theme.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  playgroundSectionSubtitle: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  playgroundToggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: theme.border,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+  },
+  playgroundToggleActive: {
+    backgroundColor: '#8B5CF6',
+  },
+  playgroundToggleDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+  },
+  playgroundToggleDotActive: {
+    alignSelf: 'flex-end',
+  },
+  playgroundLabel: {
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  playgroundDifficultyRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  playgroundDifficultyChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.background,
+  },
+  playgroundDifficultyChipActive: {
+    backgroundColor: '#8B5CF6',
+    borderColor: '#8B5CF6',
+  },
+  playgroundDifficultyText: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  playgroundDifficultyTextActive: {
+    color: '#fff',
+  },
+  playgroundActivityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: theme.background,
+    marginTop: 8,
+  },
+  playgroundActivityItemSelected: {
+    borderColor: '#8B5CF6',
+    backgroundColor: '#8B5CF610',
+  },
+  playgroundActivityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  playgroundActivityEmoji: {
+    fontSize: 24,
+  },
+  playgroundActivityText: {
+    flex: 1,
+    gap: 3,
+  },
+  playgroundActivityTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  playgroundActivityTitle: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  playgroundActivityMeta: {
+    color: theme.textSecondary,
+    fontSize: 12,
+  },
+  recommendedBadge: {
+    backgroundColor: '#10B98120',
+    borderColor: '#10B98160',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  recommendedBadgeText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  playgroundEmptyHint: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
   listItem: {
     flexDirection: 'row',

@@ -3,6 +3,7 @@
  * Shared interfaces for POP upload system
  */
 import type { POPUploadType } from '@/lib/popUpload';
+import type { FeeCategoryCode, PaymentAllocationInput } from '@/types/finance';
 
 // POP Upload interface
 export interface POPUpload {
@@ -23,6 +24,7 @@ export interface POPUpload {
   payment_method?: string;
   payment_date?: string;
   payment_for_month?: string;
+  category_code?: FeeCategoryCode;
   payment_reference?: string;
   
   // Picture of Progress specific
@@ -80,6 +82,7 @@ export interface CreatePOPUploadData {
   payment_method?: string;
   payment_date?: string;
   payment_for_month?: string;
+  category_code?: FeeCategoryCode;
   payment_reference?: string;
   
   // Progress specific
@@ -95,6 +98,9 @@ export interface UpdatePOPStatusParams {
   uploadId: string;
   status: 'approved' | 'rejected' | 'needs_revision';
   reviewNotes?: string;
+  billingMonth?: string;
+  categoryCode?: FeeCategoryCode;
+  allocations?: PaymentAllocationInput[];
 }
 
 // Filter options for queries

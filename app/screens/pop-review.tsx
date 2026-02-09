@@ -18,6 +18,8 @@ import { SuccessModal } from '@/components/ui/SuccessModal';
 import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import { ReceiptService } from '@/lib/services/ReceiptService';
+import { inferFeeCategoryCode, normalizeFeeCategoryCode } from '@/lib/utils/feeUtils';
+import type { FeeCategoryCode } from '@/types/finance';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,6 +41,7 @@ interface POPUpload {
   payment_method?: string;
   payment_date?: string;
   payment_for_month?: string;
+  category_code?: string;
   payment_reference?: string;
   status: 'pending' | 'approved' | 'rejected' | 'needs_revision';
   reviewed_by?: string;
@@ -69,6 +72,26 @@ interface ReceiptDraft {
 }
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
+
+const CATEGORY_META: Record<FeeCategoryCode, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  tuition: { label: 'Tuition', color: '#3B82F6', icon: 'school-outline' },
+  registration: { label: 'Registration', color: '#8B5CF6', icon: 'clipboard-outline' },
+  uniform: { label: 'Uniform', color: '#F59E0B', icon: 'shirt-outline' },
+  aftercare: { label: 'Aftercare', color: '#22C55E', icon: 'moon-outline' },
+  transport: { label: 'Transport', color: '#06B6D4', icon: 'bus-outline' },
+  meal: { label: 'Meals', color: '#EF4444', icon: 'restaurant-outline' },
+  ad_hoc: { label: 'General', color: '#64748B', icon: 'apps-outline' },
+};
+
+const CATEGORY_ORDER: FeeCategoryCode[] = [
+  'tuition',
+  'registration',
+  'uniform',
+  'aftercare',
+  'transport',
+  'meal',
+  'ad_hoc',
+];
 
 export default function POPReviewScreen() {
   // #region agent log
@@ -101,6 +124,7 @@ export default function POPReviewScreen() {
   const [receiptDraft, setReceiptDraft] = useState<ReceiptDraft | null>(null);
   const [receiptGenerating, setReceiptGenerating] = useState(false);
   const [receiptResult, setReceiptResult] = useState<{ receiptUrl?: string | null; storagePath?: string | null; filename?: string } | null>(null);
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, FeeCategoryCode>>({});
 
   const organizationId = profile?.organization_id || profile?.preschool_id;
 
@@ -432,13 +456,55 @@ export default function POPReviewScreen() {
     fetchUploads();
   };
 
-  const handleApprove = async (upload: POPUpload) => {
+  const getResolvedCategoryCode = useCallback((upload: POPUpload): FeeCategoryCode => {
+    const override = categoryOverrides[upload.id];
+    if (override) return override;
+    if (upload.category_code) {
+      return normalizeFeeCategoryCode(upload.category_code);
+    }
+    return inferFeeCategoryCode(upload.description || upload.title || 'tuition');
+  }, [categoryOverrides]);
+
+  const getCategoryMeta = useCallback((upload: POPUpload) => {
+    const code = getResolvedCategoryCode(upload);
+    return { code, ...CATEGORY_META[code] };
+  }, [getResolvedCategoryCode]);
+
+  const openCategoryPicker = useCallback((upload: POPUpload) => {
+    const currentCode = getResolvedCategoryCode(upload);
     showAlert({
-      title: 'Approve Payment',
-      message: `Are you sure you want to approve this payment proof from ${upload.uploader?.first_name || 'the parent'}?`,
+      title: 'Payment Category',
+      message: 'Choose the category to use when approving this POP.',
       type: 'warning',
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
+        ...CATEGORY_ORDER.map((code) => ({
+          text: `${CATEGORY_META[code].label}${currentCode === code ? ' ✓' : ''}`,
+          onPress: () => {
+            setCategoryOverrides((prev) => ({ ...prev, [upload.id]: code }));
+          },
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }, [getResolvedCategoryCode, showAlert]);
+
+  const handleApprove = async (upload: POPUpload) => {
+    const originalCategory = upload.category_code
+      ? normalizeFeeCategoryCode(upload.category_code)
+      : inferFeeCategoryCode(upload.description || upload.title || 'tuition');
+    const selectedCategory = getResolvedCategoryCode(upload);
+    const categoryLabel = CATEGORY_META[selectedCategory].label;
+    const categoryWasCorrected = selectedCategory !== originalCategory;
+    const reviewNotes = categoryWasCorrected
+      ? `Payment verified and approved. Category corrected from ${CATEGORY_META[originalCategory].label} to ${CATEGORY_META[selectedCategory].label}.`
+      : `Payment verified and approved. Category confirmed as ${CATEGORY_META[selectedCategory].label}.`;
+    showAlert({
+      title: 'Approve Payment',
+      message: `Approve this payment proof from ${upload.uploader?.first_name || 'the parent'}?\n\nCategory: ${categoryLabel}${categoryWasCorrected ? ' (corrected)' : ''}`,
+      type: 'warning',
+      buttons: [
+        { text: 'Change Category', onPress: () => openCategoryPicker(upload) },
+        { text: 'Cancel', style: 'cancel' as const },
         {
           text: 'Approve',
           style: 'default',
@@ -448,7 +514,14 @@ export default function POPReviewScreen() {
               await updatePOPStatus.mutateAsync({
                 uploadId: upload.id,
                 status: 'approved',
-                reviewNotes: 'Payment verified and approved',
+                reviewNotes,
+                billingMonth: (upload.payment_for_month || upload.payment_date || new Date().toISOString()).split('T')[0],
+                categoryCode: selectedCategory,
+              });
+              setCategoryOverrides((prev) => {
+                const next = { ...prev };
+                delete next[upload.id];
+                return next;
               });
               openReceiptModal(upload);
               
@@ -587,6 +660,7 @@ export default function POPReviewScreen() {
       ? `${item.uploader.first_name} ${item.uploader.last_name}` 
       : 'Unknown';
     const paymentForMonth = item.payment_for_month || item.payment_date;
+    const categoryMeta = getCategoryMeta(item);
 
     return (
       <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -639,6 +713,24 @@ export default function POPReviewScreen() {
               </Text>
             </View>
           )}
+
+          <View style={styles.infoRow}>
+            <Ionicons name="pricetag" size={16} color={theme.textSecondary} />
+            <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Category:</Text>
+            <View style={[styles.categoryBadge, { backgroundColor: categoryMeta.color + '20', borderColor: categoryMeta.color + '55' }]}>
+              <Ionicons name={categoryMeta.icon} size={12} color={categoryMeta.color} />
+              <Text style={[styles.categoryBadgeText, { color: categoryMeta.color }]}>{categoryMeta.label}</Text>
+            </View>
+            {item.status === 'pending' && (
+              <TouchableOpacity
+                style={[styles.categoryEditButton, { borderColor: theme.border }]}
+                onPress={() => openCategoryPicker(item)}
+              >
+                <Ionicons name="create-outline" size={12} color={theme.textSecondary} />
+                <Text style={[styles.categoryEditText, { color: theme.textSecondary }]}>Change</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           {item.payment_reference && (
             <View style={styles.infoRow}>
@@ -1130,6 +1222,7 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+      flexWrap: 'wrap',
     },
     infoLabel: {
       fontSize: 13,
@@ -1138,6 +1231,33 @@ const createStyles = (theme: any, insets: { top: number; bottom: number }) =>
       fontSize: 14,
       fontWeight: '500',
       flex: 1,
+    },
+    categoryBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      gap: 4,
+    },
+    categoryBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    categoryEditButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      gap: 3,
+      marginLeft: 'auto',
+    },
+    categoryEditText: {
+      fontSize: 11,
+      fontWeight: '600',
     },
     cardActions: {
       flexDirection: 'row',

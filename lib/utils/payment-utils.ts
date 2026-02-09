@@ -59,3 +59,16 @@ export function getUploadStatusColor(status: string): { color: string; bgColor: 
       return { color: '#fbbf24', bgColor: 'rgba(251, 191, 36, 0.1)' };
   }
 }
+
+/**
+ * Compact currency format for dashboard cards and stats.
+ * R1.2M, R45k, R500
+ */
+export function formatCurrencyCompact(amount: number): string {
+  if (amount >= 1_000_000) {
+    return `R${(amount / 1_000_000).toFixed(1)}M`;
+  } else if (amount >= 1_000) {
+    return `R${(amount / 1_000).toFixed(0)}k`;
+  }
+  return `R${amount.toFixed(0)}`;
+}

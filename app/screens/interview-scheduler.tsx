@@ -135,7 +135,7 @@ export default function InterviewSchedulerScreen() {
 
       showAlert({
         title: 'Success',
-        message: 'Interview scheduled successfully. The candidate will receive an email notification.',
+        message: 'Interview scheduled successfully.',
         type: 'success',
         icon: 'checkmark-circle',
         buttons: [{ text: 'OK', onPress: () => router.back() }],
@@ -309,7 +309,7 @@ export default function InterviewSchedulerScreen() {
         <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={20} color={theme.info} />
           <Text style={styles.infoText}>
-            The candidate will receive an email with interview details and calendar invite.
+            The candidate is notified with the interview details once you schedule it.
           </Text>
         </View>
       </ScrollView>

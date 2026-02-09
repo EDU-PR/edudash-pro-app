@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,28 +18,49 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { usePrincipalHub } from '@/hooks/usePrincipalHub';
 import { useRecentStudents } from '@/hooks/useRecentStudents';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
+import { usePrincipalDashboardSections } from '@/hooks/principal/usePrincipalDashboardSections';
 import { normalizePersonName } from '@/lib/utils/nameUtils';
-import { StudentSummaryCard } from '@/components/dashboard/shared';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { StudentSummaryCard, CollapsibleSection } from '@/components/dashboard/shared';
 import { PendingParentLinkRequests } from '@/components/dashboard/PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/UpcomingBirthdaysCard';
 import { BirthdayDonationSummaryCard } from '@/components/dashboard/principal/BirthdayDonationSummaryCard';
-import { PrincipalDoNowInbox, PrincipalGettingStartedCard, PrincipalQuickActions, PrincipalSchoolPulse } from '@/components/dashboard/principal';
+import {
+  PrincipalDoNowInbox,
+  PrincipalGettingStartedCard,
+  PrincipalQuickActions,
+  PrincipalSchoolPulse,
+} from '@/components/dashboard/principal';
+import {
+  isPrincipalSectionId,
+  type PrincipalSectionConfig,
+  type PrincipalSectionId,
+} from '@/components/dashboard/principal/sectionTypes';
+import type { AttentionPriority } from '@/components/dashboard/shared/SectionAttentionDot';
 import TierBadge from '@/components/ui/TierBadge';
+import { getApprovalStats } from '@/lib/services/teacherApprovalService';
 
 interface PrincipalDashboardV2Props {
   refreshTrigger?: number;
 }
 
-type Tone = 'info' | 'warning' | 'error' | 'success';
-interface NeedsAttentionItem {
-  id: string;
-  title: string;
-  value: number;
-  action: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  tone: Tone;
-  route: string;
-}
+const getAttentionPriority = (
+  count: number,
+  criticalThreshold = 8,
+  importantThreshold = 1
+): AttentionPriority => {
+  if (count >= criticalThreshold) return 'critical';
+  if (count >= importantThreshold) return 'important';
+  return 'none';
+};
+
+const toAttention = (config: PrincipalSectionConfig) => {
+  if (config.attentionPriority === 'none') return undefined;
+  return {
+    priority: config.attentionPriority,
+    count: config.attentionCount,
+  };
+};
 
 export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const { t } = useTranslation();
@@ -47,6 +68,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const { user, profile } = useAuth();
   const { ready: subscriptionReady } = useSubscription();
   const insets = useSafeAreaInsets();
+  const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
 
   const {
     data,
@@ -72,9 +94,15 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   });
 
   const [refreshing, setRefreshing] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [pendingTeacherApprovals, setPendingTeacherApprovals] = useState(0);
 
   const stats = data.stats;
+
+  // Fetch pending teacher approvals count
+  useEffect(() => {
+    if (!organizationId) return;
+    getApprovalStats(organizationId).then(s => setPendingTeacherApprovals(s.pending)).catch(() => {});
+  }, [organizationId, refreshing]);
 
   const totalStudents = stats?.students?.total ?? 0;
   const totalTeachers = stats?.staff?.total ?? 0;
@@ -94,6 +122,27 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const pendingApprovalsTotal = pendingReports + pendingActivities + pendingHomework;
 
   const urgentCount = pendingPayments + pendingPOPs + pendingApprovalsTotal;
+  const urgentQueueCount = pendingRegistrations + pendingPayments + pendingPOPs + pendingApprovalsTotal;
+  const admissionsQueueCount = pendingApplications + pendingRegistrations + pendingPayments + pendingPOPs;
+  const upcomingBirthdaysCount =
+    (birthdays?.today?.length || 0) +
+    (birthdays?.thisWeek?.length || 0) +
+    (birthdays?.thisMonth?.length || 0);
+
+  const {
+    collapsedSections,
+    toggleSection,
+    expandAll,
+    collapseAll,
+    isHydrated,
+  } = usePrincipalDashboardSections({
+    userId: user?.id ?? null,
+    orgId: organizationId,
+    pendingRegistrations,
+    pendingPayments,
+    pendingPOPs,
+    pendingApprovals: pendingApprovalsTotal,
+  });
 
   const lastUpdatedAt = useMemo(() => {
     if (stats?.timestamp) {
@@ -114,15 +163,6 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     await Promise.all([refresh(), refreshBirthdays(), refreshStudents()]);
     setRefreshing(false);
   }, [refresh, refreshBirthdays, refreshStudents]);
-
-  const toggleSection = useCallback((sectionId: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sectionId)) next.delete(sectionId);
-      else next.add(sectionId);
-      return next;
-    });
-  }, []);
 
   const schoolName = profile?.organization_name || data.schoolName || t('dashboard.your_school', { defaultValue: 'Your School' });
   const normalizedName = normalizePersonName({
@@ -148,62 +188,89 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     return `R${amount.toFixed(0)}`;
   };
 
-  const needsAttention: NeedsAttentionItem[] = [
-    {
-      id: 'pendingPayments',
-      title: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }),
-      value: pendingPayments,
-      action: t('common.review', { defaultValue: 'Review' }),
-      icon: 'cash',
-      tone: pendingPayments > 0 ? 'warning' : 'success',
-      route: '/screens/principal-fee-overview',
+  const sectionConfigs = useMemo<Record<PrincipalSectionId, PrincipalSectionConfig>>(
+    () => ({
+      'start-here': {
+        id: 'start-here',
+        title: t('dashboard.section.start_here.title', { defaultValue: 'Start Here' }),
+        hint: t('dashboard.section.start_here.hint', { defaultValue: 'School pulse and setup guidance in one place.' }),
+        icon: 'sparkles',
+        defaultCollapsed: collapsedSections.has('start-here'),
+        attentionPriority: 'none',
+        attentionCount: 0,
+      },
+      'urgent-queue': {
+        id: 'urgent-queue',
+        title: t('dashboard.section.urgent_queue.title', { defaultValue: 'Urgent Queue' }),
+        hint: t('dashboard.section.urgent_queue.hint', { defaultValue: 'Handle priority items first: POPs, unpaid fees, and approvals.' }),
+        icon: 'warning-outline',
+        defaultCollapsed: collapsedSections.has('urgent-queue'),
+        attentionPriority: getAttentionPriority(urgentQueueCount, 10, 1),
+        attentionCount: urgentQueueCount,
+      },
+      'daily-ops': {
+        id: 'daily-ops',
+        title: t('dashboard.section.daily_ops.title', { defaultValue: 'Daily Ops & Compliance' }),
+        hint: t('dashboard.section.daily_ops.hint', { defaultValue: 'Attendance, staffing, and safety checks for today.' }),
+        icon: 'shield-checkmark-outline',
+        defaultCollapsed: collapsedSections.has('daily-ops'),
+        attentionPriority:
+          pendingReports > 0 ? 'action' : 'none',
+        attentionCount: pendingReports,
+      },
+      'admissions-cashflow': {
+        id: 'admissions-cashflow',
+        title: t('dashboard.section.admissions_cashflow.title', { defaultValue: 'Admissions & Cashflow' }),
+        hint: t('dashboard.section.admissions_cashflow.hint', { defaultValue: 'Track applications, registrations, fees, POPs, and collections.' }),
+        icon: 'wallet-outline',
+        defaultCollapsed: collapsedSections.has('admissions-cashflow'),
+        attentionPriority: getAttentionPriority(admissionsQueueCount, 8, 1),
+        attentionCount: admissionsQueueCount,
+      },
+      'learners-families': {
+        id: 'learners-families',
+        title: t('dashboard.section.learners_families.title', { defaultValue: 'Learners & Families' }),
+        hint: t('dashboard.section.learners_families.hint', { defaultValue: 'Students in focus, birthdays, and parent link requests.' }),
+        icon: 'people-outline',
+        defaultCollapsed: collapsedSections.has('learners-families'),
+        attentionPriority: upcomingBirthdaysCount > 0 ? 'info' : 'none',
+        attentionCount: upcomingBirthdaysCount,
+      },
+      'quick-actions': {
+        id: 'quick-actions',
+        title: t('dashboard.quick_actions', { defaultValue: 'Quick Actions' }),
+        hint: t('dashboard.qa.money_hint', { defaultValue: 'Open common workflows fast.' }),
+        icon: 'flash-outline',
+        defaultCollapsed: collapsedSections.has('quick-actions'),
+        attentionPriority: urgentQueueCount > 0 ? 'action' : 'none',
+        attentionCount: urgentQueueCount,
+      },
+    }),
+    [
+      admissionsQueueCount,
+      collapsedSections,
+      pendingReports,
+      t,
+      upcomingBirthdaysCount,
+      urgentQueueCount,
+    ]
+  );
+
+  const handleSectionToggle = useCallback(
+    (sectionId: string, isCollapsed: boolean) => {
+      if (!isPrincipalSectionId(sectionId)) return;
+      toggleSection(sectionId, isCollapsed);
     },
-    {
-      id: 'pendingRegistrations',
-      title: t('dashboard.new_applications', { defaultValue: 'New Applications' }),
-      value: pendingRegistrations,
-      action: t('common.review', { defaultValue: 'Review' }),
-      icon: 'document-text',
-      tone: pendingRegistrations > 0 ? 'info' : 'success',
-      route: '/screens/principal-registrations',
+    [toggleSection]
+  );
+
+  const handleQuickActionsToggle = useCallback(
+    (sectionId: string) => {
+      if (!isPrincipalSectionId(sectionId)) return;
+      toggleSection(sectionId);
     },
-    {
-      id: 'pendingPOPs',
-      title: t('dashboard.payment_proofs', { defaultValue: 'POPs to Verify' }),
-      value: pendingPOPs,
-      action: t('dashboard.verify', { defaultValue: 'Verify' }),
-      icon: 'card',
-      tone: pendingPOPs > 0 ? 'warning' : 'success',
-      route: '/screens/pop-review',
-    },
-    {
-      id: 'pendingReports',
-      title: t('dashboard.pending_reports', { defaultValue: 'Reports Pending' }),
-      value: pendingReports,
-      action: t('dashboard.review', { defaultValue: 'Review' }),
-      icon: 'clipboard',
-      tone: pendingReports > 0 ? 'error' : 'success',
-      route: '/screens/principal-report-review',
-    },
-    {
-      id: 'pendingActivities',
-      title: t('dashboard.pending_activities', { defaultValue: 'Activities Pending' }),
-      value: pendingActivities,
-      action: t('dashboard.review', { defaultValue: 'Review' }),
-      icon: 'checkmark-circle',
-      tone: pendingActivities > 0 ? 'warning' : 'success',
-      route: '/screens/principal-activity-approvals',
-    },
-    {
-      id: 'pendingHomework',
-      title: t('dashboard.pending_homework', { defaultValue: 'Homework Pending' }),
-      value: pendingHomework,
-      action: t('dashboard.review', { defaultValue: 'Review' }),
-      icon: 'document-text',
-      tone: pendingHomework > 0 ? 'warning' : 'success',
-      route: '/screens/principal-homework-approvals',
-    },
-  ];
+    [toggleSection]
+  );
 
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
 
@@ -245,277 +312,329 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
           </View>
         </View>
 
-        {/* Do Now Inbox - first, for non-technical users */}
-        <View style={{ paddingHorizontal: 16 }}>
-          <PrincipalSchoolPulse stats={stats} />
-          <PrincipalGettingStartedCard stats={stats} />
-        </View>
-
-        <PrincipalDoNowInbox
-          counts={{
-            pendingRegistrations,
-            pendingPaymentProofs: pendingPOPs,
-            pendingUnpaidFees: pendingPayments,
-            pendingApprovals: pendingApprovalsTotal,
-          }}
-        />
-
-        {/* Today's Operations */}
-        <SectionHeader
-          title={t('dashboard.today_operations', { defaultValue: "Today's Operations" })}
-          subtitle={t('dashboard.today_operations_subtitle', { defaultValue: 'Keep the day under control' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <OperationRow
-            icon="checkmark-circle"
-            label={t('dashboard.attendance_rate', { defaultValue: 'Attendance' })}
-            value={`${attendancePresent}/${totalStudents}`}
-            detail={`${attendanceRate.toFixed(0)}% ${t('dashboard.attendance_avg', { defaultValue: 'average' })}`}
-            color={theme.info}
-            theme={theme}
-          />
-          <OperationRow
-            icon="people"
-            label={t('dashboard.staff_coverage', { defaultValue: 'Staff Coverage' })}
-            value={`${totalTeachers}`}
-            detail={t('dashboard.staff_active', { defaultValue: 'Active staff' })}
-            color={theme.success}
-            theme={theme}
-          />
-          <OperationRow
-            icon="alert-circle"
-            label={t('dashboard.urgent_items', { defaultValue: 'Urgent Items' })}
-            value={`${urgentCount}`}
-            detail={`${pendingPayments} payments • ${pendingPOPs} POPs • ${pendingApprovalsTotal} approvals`}
-            color={theme.error}
-            theme={theme}
-          />
-        </View>
-
-        {/* Admissions & Payments */}
-        <SectionHeader
-          title={t('dashboard.admissions_payments', { defaultValue: 'Admissions & Payments' })}
-          subtitle={t('dashboard.admissions_payments_subtitle', { defaultValue: 'Pipeline for new families' })}
-          theme={theme}
-        />
-        <View style={styles.metricGrid}>
-          <MetricTile
-            icon="document-text"
-            label={t('dashboard.new_applications', { defaultValue: 'Applications' })}
-            value={`${pendingApplications}`}
-            sublabel={t('dashboard.awaiting_review', { defaultValue: 'Awaiting review' })}
-            color={theme.primary}
-            theme={theme}
-          />
-          <MetricTile
-            icon="person-add"
-            label={t('dashboard.pending_registrations', { defaultValue: 'Registrations' })}
-            value={`${pendingRegistrations}`}
-            sublabel={t('dashboard.awaiting_payment', { defaultValue: 'Awaiting payment' })}
-            color={theme.warning}
-            theme={theme}
-          />
-          <MetricTile
-            icon="cash"
-            label={t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' })}
-            value={`${pendingPayments}`}
-            sublabel={t('dashboard.overdue', { defaultValue: 'Overdue' })}
-            color={theme.error}
-            theme={theme}
-          />
-          <MetricTile
-            icon="card"
-            label={t('dashboard.payment_proofs', { defaultValue: 'POPs' })}
-            value={`${pendingPOPs}`}
-            sublabel={t('dashboard.to_verify', { defaultValue: 'To verify' })}
-            color={theme.info}
-            theme={theme}
-          />
-        </View>
-
-        {/* Safety & Compliance */}
-        <SectionHeader
-          title={t('dashboard.safety_compliance', { defaultValue: 'Safety & Compliance' })}
-          subtitle={t('dashboard.safety_compliance_subtitle', { defaultValue: 'Daily checks for peace of mind' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <InfoRow
-            icon="medkit"
-            label={t('dashboard.medical_alerts', { defaultValue: 'Medical Alerts' })}
-            value={t('dashboard.no_alerts', { defaultValue: 'None today' })}
-            tone="success"
-            theme={theme}
-          />
-          <InfoRow
-            icon="alert"
-            label={t('dashboard.incident_reports', { defaultValue: 'Incident Reports' })}
-            value={`${pendingReports}`}
-            tone={pendingReports > 0 ? 'warning' : 'success'}
-            theme={theme}
-          />
-          <InfoRow
-            icon="document"
-            label={t('dashboard.expiring_docs', { defaultValue: 'Expiring Documents' })}
-            value={t('dashboard.none_due', { defaultValue: 'None due' })}
-            tone="success"
-            theme={theme}
-          />
-        </View>
-
-        {/* School Overview */}
-        <SectionHeader
-          title={t('dashboard.school_overview', { defaultValue: 'School Overview' })}
-          subtitle={t('dashboard.school_overview_hint', { defaultValue: 'Snapshot of your school today' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <MetricInline label={t('dashboard.enrolled_students', { defaultValue: 'Enrolled Students' })} value={`${totalStudents}`} theme={theme} />
-          <MetricInline label={t('dashboard.active_classes', { defaultValue: 'Active Classes' })} value={`${totalClasses}`} theme={theme} />
-          <MetricInline label={t('dashboard.total_staff', { defaultValue: 'Total Staff' })} value={`${totalTeachers}`} theme={theme} />
-          <View style={styles.progressRow}>
-            <Text style={styles.progressLabel}>{t('dashboard.capacity_usage', { defaultValue: 'Capacity Usage' })}</Text>
-            <Text style={styles.progressValue}>{utilization}%</Text>
+        <View style={styles.layoutControlsWrap}>
+          <Text style={styles.layoutControlsTitle}>
+            {t('dashboard.layout_controls', { defaultValue: 'Dashboard layout' })}
+          </Text>
+          <View style={styles.layoutControlsRow}>
+            <TouchableOpacity
+              style={[styles.layoutControlButton, !isHydrated && styles.layoutControlButtonDisabled]}
+              onPress={expandAll}
+              disabled={!isHydrated}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.layoutControlButtonText}>
+                {t('dashboard.expand_all', { defaultValue: 'Expand all' })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.layoutControlButton, !isHydrated && styles.layoutControlButtonDisabled]}
+              onPress={collapseAll}
+              disabled={!isHydrated}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.layoutControlButtonText}>
+                {t('dashboard.collapse_all_except_urgent', { defaultValue: 'Collapse all (except urgent)' })}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <ProgressBar progress={Math.min(Math.max(utilization / 100, 0), 1)} color={theme.primary} trackColor={theme.border} />
         </View>
 
-        {/* Children In Focus */}
-        <SectionHeader
-          title={t('dashboard.children_in_focus', { defaultValue: 'Children In Focus' })}
-          subtitle={t('dashboard.children_in_focus_subtitle', { defaultValue: 'Recent learners and profiles' })}
-          actionLabel={t('common.view_all', { defaultValue: 'View All' })}
-          onActionPress={() => router.push('/screens/student-management' as any)}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          {studentsLoading ? (
-            <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
-          ) : (
-            recentStudents.map((student) => (
-              <StudentSummaryCard
-                key={student.id}
-                student={student}
-                onPress={() => router.push(`/screens/student-detail?id=${student.id}` as any)}
-                subtitle={student.className || t('common.noClass', { defaultValue: 'No class assigned' })}
+        <View style={styles.sectionBlock}>
+          <CollapsibleSection
+            title={sectionConfigs['start-here'].title}
+            sectionId={sectionConfigs['start-here'].id}
+            icon={sectionConfigs['start-here'].icon}
+            hint={sectionConfigs['start-here'].hint}
+            defaultCollapsed={sectionConfigs['start-here'].defaultCollapsed}
+            onToggle={handleSectionToggle}
+            attention={toAttention(sectionConfigs['start-here'])}
+          >
+            <View style={styles.sectionBody}>
+              <PrincipalSchoolPulse stats={stats} />
+              <PrincipalGettingStartedCard stats={stats} />
+            </View>
+          </CollapsibleSection>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <CollapsibleSection
+            title={sectionConfigs['urgent-queue'].title}
+            sectionId={sectionConfigs['urgent-queue'].id}
+            icon={sectionConfigs['urgent-queue'].icon}
+            hint={sectionConfigs['urgent-queue'].hint}
+            defaultCollapsed={sectionConfigs['urgent-queue'].defaultCollapsed}
+            onToggle={handleSectionToggle}
+            attention={toAttention(sectionConfigs['urgent-queue'])}
+          >
+            <View style={styles.sectionBody}>
+              <PrincipalDoNowInbox
+                counts={{
+                  pendingRegistrations,
+                  pendingPaymentProofs: pendingPOPs,
+                  pendingUnpaidFees: pendingPayments,
+                  pendingApprovals: pendingApprovalsTotal,
+                }}
               />
-            ))
-          )}
-          {!studentsLoading && recentStudents.length === 0 && (
-            <Text style={styles.emptyText}>{t('dashboard.no_students', { defaultValue: 'No students yet.' })}</Text>
-          )}
+            </View>
+          </CollapsibleSection>
         </View>
 
-        {/* Upcoming Birthdays */}
-        <SectionHeader
-          title={t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays' })}
-          actionLabel={t('dashboard.view_chart', { defaultValue: 'View Chart' })}
-          onActionPress={() => router.push('/screens/birthday-chart' as any)}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <UpcomingBirthdaysCard
-            birthdays={birthdays}
-            loading={birthdaysLoading}
-            showHeader={false}
-            maxItems={5}
-            compact
-            onViewAll={() => router.push('/screens/birthday-chart' as any)}
+        <View style={styles.sectionBlock}>
+          <CollapsibleSection
+            title={sectionConfigs['daily-ops'].title}
+            sectionId={sectionConfigs['daily-ops'].id}
+            icon={sectionConfigs['daily-ops'].icon}
+            hint={sectionConfigs['daily-ops'].hint}
+            defaultCollapsed={sectionConfigs['daily-ops'].defaultCollapsed}
+            onToggle={handleSectionToggle}
+            attention={toAttention(sectionConfigs['daily-ops'])}
+          >
+            <View style={styles.sectionBody}>
+              <Text style={styles.sectionDescriptor}>
+                {t('dashboard.section.daily_ops.copy', { defaultValue: 'Keep attendance, staffing, and safety on track for the day.' })}
+              </Text>
+
+              <View style={styles.card}>
+                <OperationRow
+                  icon="checkmark-circle"
+                  label={t('dashboard.attendance_rate', { defaultValue: 'Attendance' })}
+                  value={`${attendancePresent}/${totalStudents}`}
+                  detail={`${attendanceRate.toFixed(0)}% ${t('dashboard.attendance_avg', { defaultValue: 'average' })}`}
+                  color={theme.info}
+                  theme={theme}
+                />
+                <OperationRow
+                  icon="people"
+                  label={t('dashboard.staff_coverage', { defaultValue: 'Staff Coverage' })}
+                  value={`${totalTeachers}`}
+                  detail={t('dashboard.staff_active', { defaultValue: 'Active staff' })}
+                  color={theme.success}
+                  theme={theme}
+                />
+                <OperationRow
+                  icon="alert-circle"
+                  label={t('dashboard.urgent_items', { defaultValue: 'Urgent Items' })}
+                  value={`${urgentCount}`}
+                  detail={`${pendingPayments} payments • ${pendingPOPs} POPs • ${pendingApprovalsTotal} approvals`}
+                  color={theme.error}
+                  theme={theme}
+                />
+              </View>
+
+              <View style={styles.card}>
+                <InfoRow
+                  icon="medkit"
+                  label={t('dashboard.medical_alerts', { defaultValue: 'Medical Alerts' })}
+                  value={t('dashboard.no_alerts', { defaultValue: 'None today' })}
+                  tone="success"
+                  theme={theme}
+                />
+                <InfoRow
+                  icon="alert"
+                  label={t('dashboard.incident_reports', { defaultValue: 'Incident Reports' })}
+                  value={`${pendingReports}`}
+                  tone={pendingReports > 0 ? 'warning' : 'success'}
+                  theme={theme}
+                />
+                <InfoRow
+                  icon="document"
+                  label={t('dashboard.expiring_docs', { defaultValue: 'Expiring Documents' })}
+                  value={t('dashboard.none_due', { defaultValue: 'None due' })}
+                  tone="success"
+                  theme={theme}
+                />
+              </View>
+            </View>
+          </CollapsibleSection>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <CollapsibleSection
+            title={sectionConfigs['admissions-cashflow'].title}
+            sectionId={sectionConfigs['admissions-cashflow'].id}
+            icon={sectionConfigs['admissions-cashflow'].icon}
+            hint={sectionConfigs['admissions-cashflow'].hint}
+            defaultCollapsed={sectionConfigs['admissions-cashflow'].defaultCollapsed}
+            onToggle={handleSectionToggle}
+            attention={toAttention(sectionConfigs['admissions-cashflow'])}
+          >
+            <View style={styles.sectionBody}>
+              <Text style={styles.sectionDescriptor}>
+                {t('dashboard.section.admissions_cashflow.copy', { defaultValue: 'Track new-family pipeline and payment health month by month.' })}
+              </Text>
+
+              <View style={styles.metricGrid}>
+                <MetricTile
+                  icon="document-text"
+                  label={t('dashboard.new_applications', { defaultValue: 'Applications' })}
+                  value={`${pendingApplications}`}
+                  sublabel={t('dashboard.awaiting_review', { defaultValue: 'Awaiting review' })}
+                  color={theme.primary}
+                  theme={theme}
+                />
+                <MetricTile
+                  icon="person-add"
+                  label={t('dashboard.pending_registrations', { defaultValue: 'Registrations' })}
+                  value={`${pendingRegistrations}`}
+                  sublabel={t('dashboard.awaiting_payment', { defaultValue: 'Awaiting payment' })}
+                  color={theme.warning}
+                  theme={theme}
+                />
+                <MetricTile
+                  icon="cash"
+                  label={t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' })}
+                  value={`${pendingPayments}`}
+                  sublabel={t('dashboard.overdue', { defaultValue: 'Overdue' })}
+                  color={theme.error}
+                  theme={theme}
+                />
+                <MetricTile
+                  icon="card"
+                  label={t('dashboard.payment_proofs', { defaultValue: 'POPs' })}
+                  value={`${pendingPOPs}`}
+                  sublabel={t('dashboard.to_verify', { defaultValue: 'To verify' })}
+                  color={theme.info}
+                  theme={theme}
+                />
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.inlineSectionTitle}>
+                  {t('dashboard.money_summary', { defaultValue: 'Finance Snapshot' })}
+                </Text>
+                <MetricInline label={t('dashboard.money_received', { defaultValue: 'Collected' })} value={formatCurrency(stats?.monthlyRevenue?.total)} theme={theme} />
+                <MetricInline label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })} value={`${pendingPayments}`} theme={theme} />
+                <MetricInline label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })} value={`${pendingApprovalsTotal}`} theme={theme} />
+                <View style={styles.progressRow}>
+                  <Text style={styles.progressLabel}>{t('dashboard.capacity_usage', { defaultValue: 'Capacity Usage' })}</Text>
+                  <Text style={styles.progressValue}>{utilization}%</Text>
+                </View>
+                <ProgressBar progress={Math.min(Math.max(utilization / 100, 0), 1)} color={theme.primary} trackColor={theme.border} />
+              </View>
+
+              {showUniformSection && (
+                <View style={styles.card}>
+                  <Text style={styles.inlineSectionTitle}>
+                    {t('dashboard.uniform_collections', { defaultValue: 'Uniform Collections' })}
+                  </Text>
+                  <Text style={styles.uniformNote}>
+                    {isYoungEagles
+                      ? t('dashboard.uniform_collections_note', { defaultValue: 'Young Eagles uniform payments are tracked separately from school revenue.' })
+                      : t('dashboard.uniform_collections_note', { defaultValue: 'Uniform payments are tracked separately from school revenue.' })}
+                  </Text>
+                  <MetricInline
+                    label={t('dashboard.uniform_paid', { defaultValue: 'Paid (Uniforms)' })}
+                    value={formatCurrency(uniformSummary?.totalPaid || 0)}
+                    theme={theme}
+                  />
+                  <MetricInline
+                    label={t('dashboard.uniform_outstanding', { defaultValue: 'Outstanding' })}
+                    value={formatCurrency(uniformSummary?.totalOutstanding || 0)}
+                    theme={theme}
+                  />
+                  <MetricInline
+                    label={t('dashboard.uniform_pending_pops', { defaultValue: 'Pending POPs' })}
+                    value={`${uniformSummary?.pendingUploads || 0}${
+                      uniformSummary?.pendingUploadAmount ? ` • ${formatCurrency(uniformSummary.pendingUploadAmount)}` : ''
+                    }`}
+                    theme={theme}
+                  />
+                </View>
+              )}
+            </View>
+          </CollapsibleSection>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <CollapsibleSection
+            title={sectionConfigs['learners-families'].title}
+            sectionId={sectionConfigs['learners-families'].id}
+            icon={sectionConfigs['learners-families'].icon}
+            hint={sectionConfigs['learners-families'].hint}
+            defaultCollapsed={sectionConfigs['learners-families'].defaultCollapsed}
+            onToggle={handleSectionToggle}
+            attention={toAttention(sectionConfigs['learners-families'])}
+          >
+            <View style={styles.sectionBody}>
+              <Text style={styles.sectionDescriptor}>
+                {t('dashboard.section.learners_families.copy', { defaultValue: 'Review learners in focus and stay ahead of parent-facing moments.' })}
+              </Text>
+
+              <View style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.inlineSectionTitle}>
+                    {t('dashboard.children_in_focus', { defaultValue: 'Children In Focus' })}
+                  </Text>
+                  <TouchableOpacity onPress={() => router.push('/screens/student-management' as any)}>
+                    <Text style={styles.linkText}>{t('common.view_all', { defaultValue: 'View All' })}</Text>
+                  </TouchableOpacity>
+                </View>
+                {studentsLoading ? (
+                  <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
+                ) : (
+                  recentStudents.map((student) => (
+                    <StudentSummaryCard
+                      key={student.id}
+                      student={student}
+                      onPress={() => router.push(`/screens/student-detail?id=${student.id}` as any)}
+                      subtitle={student.className || t('common.noClass', { defaultValue: 'No class assigned' })}
+                    />
+                  ))
+                )}
+                {!studentsLoading && recentStudents.length === 0 && (
+                  <Text style={styles.emptyText}>{t('dashboard.no_students', { defaultValue: 'No students yet.' })}</Text>
+                )}
+              </View>
+
+              <View style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.inlineSectionTitle}>
+                    {t('dashboard.upcoming_birthdays', { defaultValue: 'Upcoming Birthdays' })}
+                  </Text>
+                  <TouchableOpacity onPress={() => router.push('/screens/birthday-chart' as any)}>
+                    <Text style={styles.linkText}>{t('dashboard.view_chart', { defaultValue: 'View Chart' })}</Text>
+                  </TouchableOpacity>
+                </View>
+                <UpcomingBirthdaysCard
+                  birthdays={birthdays}
+                  loading={birthdaysLoading}
+                  showHeader={false}
+                  maxItems={5}
+                  compact
+                  onViewAll={() => router.push('/screens/birthday-chart' as any)}
+                />
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.inlineSectionTitle}>
+                  {t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}
+                </Text>
+                <BirthdayDonationSummaryCard organizationId={organizationId} />
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.inlineSectionTitle}>
+                  {t('dashboard.parent_requests', { defaultValue: 'Parent Requests' })}
+                </Text>
+                <PendingParentLinkRequests />
+              </View>
+            </View>
+          </CollapsibleSection>
+        </View>
+
+        <View style={styles.sectionBlock}>
+          <PrincipalQuickActions
+            stats={data.stats}
+            pendingRegistrationsCount={pendingRegistrations}
+            pendingPaymentsCount={pendingPayments}
+            pendingPOPUploadsCount={pendingPOPs}
+            pendingTeacherApprovalsCount={pendingTeacherApprovals}
+            collapsedSections={collapsedSections as Set<string>}
+            onToggleSection={handleQuickActionsToggle}
+            resolvedSchoolType={resolvedSchoolType}
           />
         </View>
-
-        {/* Birthday Donations */}
-        <SectionHeader
-          title={t('dashboard.birthday_donations.title', { defaultValue: 'Birthday Donations' })}
-          subtitle={t('dashboard.birthday_donations.principal_subtitle', { defaultValue: 'Track daily birthday pack contributions' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <BirthdayDonationSummaryCard organizationId={organizationId} />
-        </View>
-
-        {/* Parent Requests */}
-        <SectionHeader
-          title={t('dashboard.parent_requests', { defaultValue: 'Parent Requests' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <PendingParentLinkRequests />
-        </View>
-
-        {/* Finance Snapshot */}
-        <SectionHeader
-          title={t('dashboard.money_summary', { defaultValue: 'Finance Snapshot' })}
-          subtitle={t('dashboard.money_summary_hint', { defaultValue: 'Registration fee collection at a glance' })}
-          theme={theme}
-        />
-        <View style={styles.card}>
-          <MetricInline label={t('dashboard.money_received', { defaultValue: 'Collected' })} value={formatCurrency(stats?.monthlyRevenue?.total)} theme={theme} />
-          <MetricInline label={t('dashboard.money_owed', { defaultValue: 'Outstanding' })} value={`${pendingPayments}`} theme={theme} />
-          <MetricInline label={t('dashboard.pending_approvals', { defaultValue: 'Pending Approvals' })} value={`${pendingApprovalsTotal}`} theme={theme} />
-        </View>
-
-        {showUniformSection && (
-          <>
-            <SectionHeader
-              title={t('dashboard.uniform_collections', { defaultValue: 'Uniform Collections' })}
-              subtitle={
-                isYoungEagles
-                  ? t('dashboard.uniform_collections_note', { defaultValue: 'Young Eagles uniform payments are tracked separately from school revenue.' })
-                  : t('dashboard.uniform_collections_note', { defaultValue: 'Uniform payments are tracked separately from school revenue.' })
-              }
-              theme={theme}
-            />
-            <View style={styles.card}>
-              <MetricInline
-                label={t('dashboard.uniform_paid', { defaultValue: 'Paid (Uniforms)' })}
-                value={formatCurrency(uniformSummary?.totalPaid || 0)}
-                theme={theme}
-              />
-              <MetricInline
-                label={t('dashboard.uniform_outstanding', { defaultValue: 'Outstanding' })}
-                value={formatCurrency(uniformSummary?.totalOutstanding || 0)}
-                theme={theme}
-              />
-              <MetricInline
-                label={t('dashboard.uniform_pending_pops', { defaultValue: 'Pending POPs' })}
-                value={`${uniformSummary?.pendingUploads || 0}${
-                  uniformSummary?.pendingUploadAmount ? ` • ${formatCurrency(uniformSummary.pendingUploadAmount)}` : ''
-                }`}
-                theme={theme}
-              />
-              {uniformSummary?.recentPayments?.length ? (
-                <View style={styles.uniformList}>
-                  <Text style={styles.uniformListTitle}>
-                    {t('dashboard.uniform_recent', { defaultValue: 'Recent Uniform Payments' })}
-                  </Text>
-                  {uniformSummary.recentPayments.map((payment) => (
-                    <View key={payment.id} style={styles.uniformRow}>
-                      <View style={styles.uniformRowLeft}>
-                        <Text style={styles.uniformStudent}>{payment.studentName}</Text>
-                        <Text style={styles.uniformMeta}>
-                          {payment.paidDate ? new Date(payment.paidDate).toLocaleDateString('en-ZA') : '—'}
-                        </Text>
-                      </View>
-                      <Text style={styles.uniformAmount}>{formatCurrency(payment.amount)}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          </>
-        )}
-
-        {/* Quick Actions (grouped) */}
-        <PrincipalQuickActions
-          stats={data.stats}
-          pendingRegistrationsCount={pendingRegistrations}
-          pendingPaymentsCount={pendingPayments}
-          pendingPOPUploadsCount={pendingPOPs}
-          collapsedSections={collapsedSections}
-          onToggleSection={toggleSection}
-        />
 
         {loading && (
           <Text style={styles.loadingText}>{t('common.loading', { defaultValue: 'Loading...' })}</Text>
@@ -524,59 +643,6 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
     </View>
   );
 };
-
-const SectionHeader = ({
-  title,
-  subtitle,
-  actionLabel,
-  onActionPress,
-  theme,
-}: {
-  title: string;
-  subtitle?: string;
-  actionLabel?: string;
-  onActionPress?: () => void;
-  theme: any;
-}) => (
-  <View style={headerStyles.container}>
-    <View style={headerStyles.titleRow}>
-      <Text style={[headerStyles.title, { color: theme.text }]}>{title}</Text>
-      {actionLabel && onActionPress && (
-        <TouchableOpacity onPress={onActionPress}>
-          <Text style={[headerStyles.action, { color: theme.primary }]}>{actionLabel}</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-    {subtitle ? <Text style={[headerStyles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
-  </View>
-);
-
-const headerStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  action: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#7C3AED',
-  },
-});
 
 const OperationRow = ({
   icon,
@@ -604,39 +670,6 @@ const OperationRow = ({
     <Text style={[rowStyles.value, { color: theme.text }]}>{value}</Text>
   </View>
 );
-
-const TriageRow = ({
-  title,
-  actionLabel,
-  icon,
-  tone,
-  onPress,
-  theme,
-}: {
-  title: string;
-  actionLabel: string;
-  icon: string;
-  tone: Tone;
-  onPress: () => void;
-  theme: any;
-}) => {
-  const toneColors: Record<Tone, string> = {
-    info: '#3B82F6',
-    warning: '#F59E0B',
-    error: '#EF4444',
-    success: '#10B981',
-  };
-
-  return (
-    <TouchableOpacity style={[triageStyles.row, { borderBottomColor: theme.border }]} onPress={onPress} activeOpacity={0.7}>
-      <View style={[triageStyles.icon, { backgroundColor: toneColors[tone] + '20' }]}>
-        <Ionicons name={icon as any} size={16} color={toneColors[tone]} />
-      </View>
-      <Text style={[triageStyles.title, { color: theme.text }]}>{title}</Text>
-      <Text style={[triageStyles.action, { color: toneColors[tone] }]}>{actionLabel}</Text>
-    </TouchableOpacity>
-  );
-};
 
 const MetricTile = ({
   icon,
@@ -680,15 +713,16 @@ const InfoRow = ({
   icon: string;
   label: string;
   value: string;
-  tone: Tone;
+  tone: 'info' | 'warning' | 'error' | 'success';
   theme: any;
 }) => {
-  const toneColors: Record<Tone, string> = {
+  const toneColors: Record<'info' | 'warning' | 'error' | 'success', string> = {
     info: '#3B82F6',
     warning: '#F59E0B',
     error: '#EF4444',
     success: '#10B981',
   };
+
   return (
     <View style={[infoStyles.row, { borderBottomColor: theme.border }]}>
       <Ionicons name={icon as any} size={16} color={toneColors[tone]} />
@@ -726,25 +760,6 @@ const rowStyles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   detail: { fontSize: 12, color: '#9CA3AF' },
   value: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-});
-
-const triageStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  icon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  title: { flex: 1, color: '#FFFFFF', fontSize: 13 },
-  action: { fontSize: 12, fontWeight: '600' },
 });
 
 const tileStyles = StyleSheet.create({
@@ -796,7 +811,7 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
     container: { flex: 1, backgroundColor: theme.background },
     scrollContent: {
       paddingTop: insetTop + 12,
-      paddingBottom: insetBottom + 32,
+      paddingBottom: Math.max(insetBottom, 8),
     },
     header: {
       flexDirection: 'row',
@@ -835,21 +850,86 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
       color: theme.primary,
     },
     updatedAt: { fontSize: 11, color: theme.textTertiary, marginTop: 4 },
-    card: {
+    layoutControlsWrap: {
+      marginTop: 8,
       marginHorizontal: 16,
-      marginTop: 12,
+      marginBottom: 8,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    layoutControlsTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textSecondary,
+      marginBottom: 8,
+    },
+    layoutControlsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    layoutControlButton: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.primary + '14',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    layoutControlButtonDisabled: {
+      opacity: 0.5,
+    },
+    layoutControlButtonText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.primary,
+    },
+    sectionBlock: {
+      paddingHorizontal: 16,
+      marginTop: 4,
+    },
+    sectionBody: {
+      paddingTop: 12,
+      gap: 12,
+    },
+    sectionDescriptor: {
+      fontSize: 12,
+      lineHeight: 18,
+      color: theme.textSecondary,
+      paddingHorizontal: 2,
+    },
+    card: {
       padding: 14,
       borderRadius: 16,
       backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
     },
+    rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 8,
+    },
+    linkText: {
+      color: theme.primary,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    inlineSectionTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.text,
+      marginBottom: 10,
+    },
     metricGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      marginTop: 8,
+      marginTop: 4,
     },
     progressRow: {
       flexDirection: 'row',
@@ -859,23 +939,12 @@ const createStyles = (theme: any, insetTop: number, insetBottom: number) =>
     },
     progressLabel: { fontSize: 12, color: theme.textSecondary },
     progressValue: { fontSize: 12, color: theme.textSecondary },
-    uniformList: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
+    uniformNote: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginBottom: 10,
+      lineHeight: 18,
     },
-    uniformListTitle: { fontSize: 12, fontWeight: '700', color: theme.textSecondary, marginBottom: 8 },
-    uniformRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 6,
-    },
-    uniformRowLeft: { flex: 1, marginRight: 12 },
-    uniformStudent: { fontSize: 13, fontWeight: '600', color: theme.text },
-    uniformMeta: { fontSize: 11, color: theme.textTertiary, marginTop: 2 },
-    uniformAmount: { fontSize: 13, fontWeight: '700', color: theme.text },
     loadingText: { textAlign: 'center', color: theme.textSecondary, marginTop: 8 },
     emptyText: { textAlign: 'center', color: theme.textSecondary, marginVertical: 8 },
   });

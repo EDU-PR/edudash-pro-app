@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { track } from '@/lib/analytics';
@@ -17,6 +17,7 @@ export interface Child {
   name: string;
   grade: string;
   avatar: string;
+  avatarUrl?: string | null;
   avgGrade: string;
   attendance: number;
   pendingAssignments: number;
@@ -42,12 +43,16 @@ export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
     }}
   >
     <View style={styles.childCardHeader}>
-      <LinearGradient
-        colors={[child.color, child.color + 'CC']}
-        style={styles.childAvatar}
-      >
-        <Text style={styles.childAvatarText}>{child.avatar}</Text>
-      </LinearGradient>
+      {child.avatarUrl ? (
+        <Image source={{ uri: child.avatarUrl }} style={styles.childAvatarImage} />
+      ) : (
+        <LinearGradient
+          colors={[child.color, child.color + 'CC']}
+          style={styles.childAvatar}
+        >
+          <Text style={styles.childAvatarText}>{child.avatar}</Text>
+        </LinearGradient>
+      )}
       <View style={styles.childInfo}>
         <Text style={[styles.childName, { color: colors.text }]}>{child.name}</Text>
         <Text style={[styles.childGrade, { color: colors.textSecondary }]}>{child.grade}</Text>

@@ -7,6 +7,7 @@ import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
 import { useChildMetrics } from '@/lib/hooks/parent/useChildMetrics';
 import { useUnreadMessages } from '@/lib/hooks/parent/useUnreadMessages';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { resolveSchoolTypeFromProfile } from '@/lib/tenant/schoolTypeResolver';
 
 export interface TrialStatus {
   is_trial: boolean;
@@ -53,6 +54,7 @@ export function useParentDashboardData() {
   // Derived values
   const userName = profile?.firstName || profile?.email?.split('@')[0] || 'User';
   const usageType = profile?.usageType;
+  const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
   const hasOrganization = !!(profile?.preschoolId || profile?.organizationId);
   
   // Show "EduDash Pro Community School" for standalone users (digital learning focus), actual school name for org users
@@ -118,6 +120,7 @@ export function useParentDashboardData() {
     userName,
     preschoolName,
     usageType,
+    resolvedSchoolType,
     hasOrganization,
     tenantSlug,
     

@@ -77,7 +77,7 @@ export default function GlobalShortcuts() {
           'a': '/screens/dash-assistant',
           'd': dashboardRoute,
           'p': '/screens/principal-dashboard',
-          'f': '/screens/financial-dashboard',
+          'f': '/screens/finance-control-center?tab=overview',
           'h': '/screens/dash-conversations-history',
           't': '/screens/teachers-detail',
           'u': '/screens/students-detail',

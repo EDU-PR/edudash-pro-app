@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { POP_QUERY_KEYS } from './queryKeys';
 import type { POPUpload, POPUploadFilters } from './types';
+import { logger } from '@/lib/logger';
 
 /**
  * Fetch POP uploads for a specific student
@@ -20,7 +21,7 @@ export const useStudentPOPUploads = (studentId: string, limit = 10) => {
       });
       
       if (error) {
-        console.error('Failed to fetch student POP uploads:', error);
+        logger.error('Failed to fetch student POP uploads:', error);
         throw new Error(`Failed to load uploads: ${error.message}`);
       }
       
@@ -61,7 +62,7 @@ export const useMyPOPUploads = (filters: POPUploadFilters = {}) => {
       const { data, error } = await query;
       
       if (error) {
-        console.error('Failed to fetch POP uploads:', error);
+        logger.error('Failed to fetch POP uploads:', error);
         throw new Error(`Failed to load uploads: ${error.message}`);
       }
       

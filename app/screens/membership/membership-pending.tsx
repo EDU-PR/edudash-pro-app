@@ -8,7 +8,7 @@
  * 3. Membership status is 'pending' or 'pending_verification'
  */
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,20 +17,16 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-interface MembershipStatus {
-  status: 'pending' | 'pending_verification' | 'active' | 'suspended' | 'revoked';
-  memberType: string;
-  organizationName: string;
-  regionName?: string;
-  requestedAt: string;
-  message?: string;
-}
-
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { createStyles, formatDate, getMemberTypeLabel } from '@/lib/screen-styles/membership/membership-pending.styles';
+import type { MembershipStatus } from '@/lib/screen-styles/membership/membership-pending.styles';
+import { logger } from '@/lib/logger';
 export default function MembershipPendingScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,7 +51,7 @@ export default function MembershipPendingScreen() {
         .maybeSingle();
 
       if (error) {
-        console.error('[MembershipPending] Error fetching membership:', error);
+        logger.error('[MembershipPending] Error fetching membership:', error);
         return;
       }
 
@@ -70,15 +66,15 @@ export default function MembershipPendingScreen() {
 
         // If status is now 'active', redirect to dashboard
         if (membership.membership_status === 'active') {
-          Alert.alert(
-            'Membership Approved! 🎉',
-            'Your membership has been approved. Welcome aboard!',
-            [{ text: 'Continue', onPress: () => router.replace('/profiles-gate') }]
-          );
+          showAlert({
+            title: 'Membership Approved! 🎉',
+            message: 'Your membership has been approved. Welcome aboard!',
+            buttons: [{ text: 'Continue', onPress: () => router.replace('/profiles-gate') }],
+          });
         }
       }
     } catch (error) {
-      console.error('[MembershipPending] Error:', error);
+      logger.error('[MembershipPending] Error:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -105,21 +101,21 @@ export default function MembershipPendingScreen() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[MembershipPending] Membership updated:', payload);
+          logger.debug('[MembershipPending] Membership updated:', payload);
           const newStatus = payload.new?.membership_status;
           
           if (newStatus === 'active') {
-            Alert.alert(
-              'Membership Approved! 🎉',
-              'Your membership has been approved by the President. Welcome aboard!',
-              [{ text: 'Continue', onPress: () => router.replace('/profiles-gate') }]
-            );
+            showAlert({
+              title: 'Membership Approved! 🎉',
+              message: 'Your membership has been approved by the President. Welcome aboard!',
+              buttons: [{ text: 'Continue', onPress: () => router.replace('/profiles-gate') }],
+            });
           } else if (newStatus === 'revoked' || newStatus === 'suspended') {
-            Alert.alert(
-              'Membership Update',
-              'Your membership request was not approved. Please contact the organization for more information.',
-              [{ text: 'OK' }]
-            );
+            showAlert({
+              title: 'Membership Update',
+              message: 'Your membership request was not approved. Please contact the organization for more information.',
+              buttons: [{ text: 'OK' }],
+            });
           }
           
           fetchMembershipStatus();
@@ -138,10 +134,10 @@ export default function MembershipPendingScreen() {
   }, [fetchMembershipStatus]);
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out? You can sign back in anytime to check your membership status.',
-      [
+    showAlert({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out? You can sign back in anytime to check your membership status.',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Sign Out', 
@@ -150,36 +146,16 @@ export default function MembershipPendingScreen() {
             await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
           }
         },
-      ]
-    );
-  };
-
-  const handleContactSupport = () => {
-    Alert.alert(
-      'Contact Support',
-      'For assistance with your membership application, please contact:\n\n• Email: support@soilofafrica.org\n• WhatsApp: +27 XX XXX XXXX',
-      [{ text: 'OK' }]
-    );
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-ZA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+      ],
     });
   };
 
-  const getMemberTypeLabel = (type: string): string => {
-    const labels: Record<string, string> = {
-      youth_member: 'Youth Member',
-      youth_president: 'Youth President',
-      youth_secretary: 'Youth Secretary',
-      youth_coordinator: 'Youth Coordinator',
-      learner: 'Learner',
-      member: 'Member',
-    };
-    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const handleContactSupport = () => {
+    showAlert({
+      title: 'Contact Support',
+      message: 'For assistance with your membership application, please contact:\n\n• Email: support@soilofafrica.org\n• WhatsApp: +27 XX XXX XXXX',
+      buttons: [{ text: 'OK' }],
+    });
   };
 
   if (loading) {
@@ -335,150 +311,8 @@ export default function MembershipPendingScreen() {
           </View>
         </ScrollView>
       </DashboardWallpaperBackground>
+
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    lineHeight: 20,
-  },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cardContent: {
-    padding: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-  },
-  detailLabel: {
-    fontSize: 14,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  infoStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  stepNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepNumberText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  stepText: {
-    fontSize: 14,
-    flex: 1,
-  },
-  refreshHint: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  actions: {
-    gap: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

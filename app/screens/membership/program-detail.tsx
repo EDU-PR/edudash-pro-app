@@ -3,7 +3,7 @@
  * Shows detailed view of a youth program for the Youth President dashboard
  */
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { STATUS_CONFIG, CATEGORY_ICONS } from '@/hooks/membership/useYouthPrograms';
 import { styles } from '@/components/membership/styles/program-detail.styles';
 
@@ -63,6 +64,7 @@ export default function YouthProgramDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
 
   // Fetch program details
   const {
@@ -143,17 +145,17 @@ export default function YouthProgramDetailScreen() {
   };
 
   const handleStatusChange = (newStatus: string) => {
-    Alert.alert(
-      'Change Status',
-      `Are you sure you want to change the program status to ${newStatus}?`,
-      [
+    showAlert({
+      title: 'Change Status',
+      message: `Are you sure you want to change the program status to ${newStatus}?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Confirm',
           onPress: () => updateStatusMutation.mutate(newStatus),
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (isLoading) {
@@ -412,6 +414,7 @@ export default function YouthProgramDetailScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

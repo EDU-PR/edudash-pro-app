@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Linking } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,19 +25,24 @@ import {
 } from '@/components/payments';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 export default function ParentPaymentsScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const router = useRouter();
   const { showAlert, alertProps } = useAlertModal();
-  const { tab, childId, studentId } = useLocalSearchParams<{
+  const { tab, childId, studentId, ref: prefillRef, amount: prefillAmount, purpose: prefillPurpose } = useLocalSearchParams<{
     tab?: string;
     childId?: string;
     studentId?: string;
+    ref?: string;
+    amount?: string;
+    purpose?: string;
   }>();
   const normalizedTab: PaymentTabType | undefined =
     tab === 'upcoming' || tab === 'history' || tab === 'upload' ? (tab as PaymentTabType) : undefined;
   const requestedChildId = childId || studentId;
+  const hasConsumedPrefillRef = React.useRef(false);
   
   // Data hook
   const {
@@ -69,7 +74,7 @@ export default function ParentPaymentsScreen() {
   // Refresh data when screen comes into focus (e.g., from notification tap)
   useFocusEffect(
     useCallback(() => {
-      console.log('[ParentPayments] Screen focused, refreshing data...');
+      logger.debug('[ParentPayments] Screen focused, refreshing data...');
       reloadFees();
     }, [reloadFees])
   );
@@ -87,6 +92,21 @@ export default function ParentPaymentsScreen() {
       setSelectedChildId(requestedChildId);
     }
   }, [requestedChildId, children, setSelectedChildId]);
+
+  React.useEffect(() => {
+    if (hasConsumedPrefillRef.current) return;
+    if (normalizedTab !== 'upload') return;
+    if (!selectedChildId || !selectedChild) return;
+    if (!prefillRef && !prefillAmount && !prefillPurpose) return;
+
+    setSelectedFeeAmount(prefillAmount ? String(prefillAmount) : '');
+    setSelectedFeeReference(prefillRef ? String(prefillRef) : '');
+    setSelectedPaymentPurpose(prefillPurpose ? String(prefillPurpose) : 'Registration Fee');
+    setSelectedFeeId(undefined);
+    setSelectedFeeDueDate(undefined);
+    setShowUploadModal(true);
+    hasConsumedPrefillRef.current = true;
+  }, [normalizedTab, selectedChildId, selectedChild, prefillRef, prefillAmount, prefillPurpose]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -111,7 +131,7 @@ export default function ParentPaymentsScreen() {
 
   const handlePayNow = (fee: StudentFee) => {
     if (!selectedChildId || !selectedChild) {
-      Alert.alert('Error', 'Please select a child first');
+      showAlert({ title: 'Error', message: 'Please select a child first' });
       return;
     }
 
@@ -173,7 +193,7 @@ export default function ParentPaymentsScreen() {
   }, [router, showAlert]);
 
   const handleUploadSuccess = () => {
-    console.log('[ParentPayments] Upload success - reloading all payment data');
+    logger.debug('[ParentPayments] Upload success - reloading all payment data');
     // Force a complete refresh of all payment data
     reloadFees();
     // Also trigger a full refresh including children data

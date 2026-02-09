@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { setActiveOrganization } from '@/components/account/OrganizationSwitcher';
 import { setPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 export default function TeacherInviteAcceptScreen() {
   const { user } = useAuth();
   const [token, setToken] = useState('');
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
 
   // Prefill from deep link params if present
   const params = useLocalSearchParams<{ token?: string; email?: string }>();
@@ -35,19 +37,20 @@ export default function TeacherInviteAcceptScreen() {
 
   const onAccept = async () => {
     if (!user?.id) {
-      Alert.alert(
-        'Sign in required',
-        'Please sign in or create an account to accept this invite.',
-        [
+      showAlert({
+        title: 'Sign in required',
+        message: 'Please sign in or create an account to accept this invite.',
+        type: 'warning',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Sign In', onPress: handleSignIn },
           { text: 'Create Account', onPress: handleSignUp },
-        ]
-      );
+        ],
+      });
       return;
     }
     if (!token.trim() || !email.trim()) {
-      Alert.alert('Missing info', 'Enter the invite token and email.');
+      showAlert({ title: 'Missing info', message: 'Enter the invite token and email.', type: 'warning' });
       return;
     }
     try {
@@ -56,10 +59,11 @@ export default function TeacherInviteAcceptScreen() {
       const result = await TeacherInviteService.accept({ token: token.trim(), authUserId: user.id, email: email.trim() });
 
       if (result.status === 'requires_switch') {
-        Alert.alert(
-          'Invite accepted',
-          'You are already linked to another school. Switch to this school now to access teacher tools?',
-          [
+        showAlert({
+          title: 'Invite accepted',
+          message: 'You are already linked to another school. Switch now to complete principal approval for this school?',
+          type: 'info',
+          buttons: [
             {
               text: 'Later',
               style: 'cancel',
@@ -93,21 +97,25 @@ export default function TeacherInviteAcceptScreen() {
                     role: 'teacher',
                   }, user.id);
 
-                  router.replace('/screens/teacher-dashboard');
+                  router.replace('/screens/teacher-approval-pending');
                 } catch (e: any) {
-                  Alert.alert('Error', e?.message || 'Failed to switch schools');
+                  showAlert({ title: 'Error', message: e?.message || 'Failed to switch schools', type: 'error' });
                 }
               },
             },
-          ]
-        );
+          ],
+        });
         return;
       }
 
-      Alert.alert('Invite accepted', 'Your account has been linked as a teacher.');
-      router.replace('/screens/teacher-dashboard');
+      showAlert({
+        title: 'Invite accepted',
+        message: 'Your invite was accepted. The principal will review and activate your account.',
+        type: 'success',
+      });
+      router.replace('/screens/teacher-approval-pending');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to accept invite');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to accept invite', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -131,6 +139,7 @@ export default function TeacherInviteAcceptScreen() {
         <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleSignUp}>
           <Text style={[styles.buttonText, styles.secondaryButtonText]}>Create Account</Text>
         </TouchableOpacity>
+        <AlertModal {...alertProps} />
       </View>
     );
   }
@@ -146,6 +155,7 @@ export default function TeacherInviteAcceptScreen() {
       <TouchableOpacity disabled={submitting} style={styles.button} onPress={onAccept}>
         <Text style={styles.buttonText}>{submitting ? 'Submitting…' : 'Accept Invite'}</Text>
       </TouchableOpacity>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

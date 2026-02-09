@@ -1,14 +1,18 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
+
 export default function ParentJoinByCodeScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [code, setCode] = useState('');
@@ -37,7 +41,7 @@ export default function ParentJoinByCodeScreen() {
           setCurrentSchool(data);
         }
       } catch (e) {
-        console.error('Failed to fetch current school:', e);
+        logger.error('Failed to fetch current school:', e);
       } finally {
         setLoadingSchool(false);
       }
@@ -48,7 +52,7 @@ export default function ParentJoinByCodeScreen() {
 
   const onValidate = async () => {
     if (!code.trim() || !email.trim()) {
-      Alert.alert('Missing info', 'Enter the school code and your email.');
+      showAlert({ title: 'Missing info', message: 'Enter the school code and your email.' });
       return;
     }
     try {
@@ -65,14 +69,14 @@ export default function ParentJoinByCodeScreen() {
           throw new Error(data.error || 'Invalid invitation code');
         }
         setValidated(data);
-        Alert.alert('Valid Code!', `You can join ${data.school_name || 'this school'}.`);
+        showAlert({ title: 'Valid Code!', message: `You can join ${data.school_name || 'this school'}.` });
       } else {
         // Legacy format fallback
         setValidated(data);
-        Alert.alert('Code valid', 'You can join this school.');
+        showAlert({ title: 'Code valid', message: 'You can join this school.' });
       }
     } catch (e: any) {
-      Alert.alert('Invalid code', e?.message || 'This code is invalid or expired.');
+      showAlert({ title: 'Invalid code', message: e?.message || 'This code is invalid or expired.' });
     } finally {
       setValidating(false);
     }
@@ -80,21 +84,17 @@ export default function ParentJoinByCodeScreen() {
 
   const onJoin = async () => {
     if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in first.');
+      showAlert({ title: 'Sign in required', message: 'Please sign in first.' });
       return;
     }
     if (!code.trim()) {
-      Alert.alert('Missing code', 'Enter a school code first.');
+      showAlert({ title: 'Missing code', message: 'Enter a school code first.' });
       return;
     }
     
     // Check if user already belongs to a school
     if (profile?.preschool_id && validated?.school_id && profile.preschool_id !== validated.school_id) {
-      Alert.alert(
-        'Already Linked',
-        'You are already linked to a different school. Please contact support to change schools.',
-        [{ text: 'OK' }]
-      );
+      showAlert({ title: 'Already Linked', message: 'You are already linked to a different school. Please contact support to change schools.' });
       return;
     }
     
@@ -110,7 +110,7 @@ export default function ParentJoinByCodeScreen() {
         });
       
       if (error) {
-        console.error('Join school error:', error);
+        logger.error('Join school error:', error);
         // Handle specific error cases
         if (error.code === 'P0001' || error.message?.includes('already')) {
           throw new Error('You are already linked to a school. Please contact support if you need to change schools.');
@@ -118,14 +118,14 @@ export default function ParentJoinByCodeScreen() {
         throw error;
       }
       
-      Alert.alert('Success!', `You've joined ${validated?.school_name || 'the school'}!`);
+      showAlert({ title: 'Success!', message: `You've joined ${validated?.school_name || 'the school'}!` });
       // Refresh the page to update profile
       setTimeout(() => {
         router.replace('/screens/parent-children');
       }, 1000);
     } catch (e: any) {
-      console.error('Join error:', e);
-      Alert.alert('Failed', e?.message || 'Could not join with this code.');
+      logger.error('Join error:', e);
+      showAlert({ title: 'Failed', message: e?.message || 'Could not join with this code.' });
     } finally {
       setRedeeming(false);
     }
@@ -207,6 +207,7 @@ export default function ParentJoinByCodeScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <AlertModal {...alertProps} />
     </ScrollView>
   );
 }

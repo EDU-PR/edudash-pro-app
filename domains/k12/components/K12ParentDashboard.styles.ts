@@ -216,6 +216,11 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  childAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
   childAvatarText: {
     color: '#FFFFFF',
     fontSize: 20,

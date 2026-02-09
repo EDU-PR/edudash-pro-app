@@ -8,6 +8,7 @@
  */
 
 import type { Href } from 'expo-router';
+import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
 /**
  * Route configuration for teacher features
@@ -150,6 +151,38 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     requiresPremium: true,
     category: 'ai',
   },
+  homework_grader: {
+    path: '/screens/ai-homework-grader-live' as Href,
+    title: 'Grade Homework',
+    titleKey: 'teacher.homework_grader',
+    icon: 'checkmark-circle',
+    color: '#059669',
+    category: 'ai',
+  },
+  homework_helper: {
+    path: '/screens/ai-homework-helper' as Href,
+    title: 'Homework Helper',
+    titleKey: 'teacher.homework_helper',
+    icon: 'help-circle',
+    color: '#2563EB',
+    category: 'ai',
+  },
+  progress_analysis: {
+    path: '/screens/ai-progress-analysis' as Href,
+    title: 'Progress Analysis',
+    titleKey: 'teacher.progress_analysis',
+    icon: 'analytics',
+    color: '#7C3AED',
+    category: 'ai',
+  },
+  generate_image: {
+    path: '/screens/dash-image-studio' as Href,
+    title: 'Generate Image',
+    titleKey: 'teacher.generate_image',
+    icon: 'image-outline',
+    color: '#2563EB',
+    category: 'ai',
+  },
   
   // === ATTENDANCE ===
   take_attendance: {
@@ -207,6 +240,27 @@ export const getTeacherRoute = (action: keyof typeof TEACHER_ROUTES): Href => {
 };
 
 /**
+ * Resolve teacher route with school-type-aware overrides.
+ * Preschool keeps the preschool lesson generator; K-12 uses the generic AI generator.
+ */
+export const getTeacherRouteForSchoolType = (
+  action: keyof typeof TEACHER_ROUTES,
+  schoolType: ResolvedSchoolType
+): Href => {
+  if (action === 'create_lesson') {
+    return (schoolType === 'k12_school'
+      ? '/screens/ai-lesson-generator'
+      : '/screens/preschool-lesson-generator') as Href;
+  }
+  if (action === 'quick_lesson') {
+    return (schoolType === 'k12_school'
+      ? '/screens/ai-lesson-generator'
+      : '/screens/preschool-lesson-generator?mode=quick') as Href;
+  }
+  return getTeacherRoute(action);
+};
+
+/**
  * Get all routes for a specific category
  */
 export const getRoutesByCategory = (category: TeacherRoute['category']): TeacherRoute[] => {
@@ -233,6 +287,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'student_reports',
   'family_activity_review',
   'reputation',
+  'generate_image',
   'ai_assistant',
   'call_parent',
 ];

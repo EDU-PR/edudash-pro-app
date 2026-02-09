@@ -1,17 +1,5 @@
 /**
- * Dash Playground — Interactive Learning Activities for 3-5 Year Olds
- *
- * The fun entry point for parents to try Dash-powered activities with their kids.
- * Features:
- * - Domain-grouped activity cards (Numeracy, Literacy, Science, Movement, Cognitive)
- * - Interactive game player with emoji-based rounds
- * - Star ratings and completion celebration
- * - Seamless handoff to Dash AI for follow-up conversation
- * - Tier-gated activities with upgrade prompts
- * - Child switcher for multi-child families
- * - Voice integration — Dash speaks prompts and celebrations
- *
- * Screen limit: ≤500 lines (WARP.md)
+ * Dash Playground — Teacher-assigned activities for parent + child practice.
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -27,8 +15,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useParentDashboard } from '@/hooks/useDashboardData';
 import { assertSupabase } from '@/lib/supabase';
@@ -37,25 +25,41 @@ import { ActivityPlayer } from '@/components/activities/ActivityPlayer';
 import { ActivityComplete } from '@/components/activities/ActivityComplete';
 import { useKidVoice } from '@/hooks/useKidVoice';
 import { track } from '@/lib/analytics';
-import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-import {
-  PRESCHOOL_ACTIVITIES,
-  DOMAIN_LABELS,
-  getActivitiesGroupedByDomain,
-} from '@/lib/activities/preschoolActivities.data';
+import { DOMAIN_LABELS } from '@/lib/activities/preschoolActivities.data';
 import type { PreschoolActivity, ActivityResult } from '@/lib/activities/preschoolActivities.types';
+import {
+  completeAssignedPlaygroundActivity,
+  getSnapshotFromInteractiveContent,
+  type PlaygroundSnapshotContent,
+} from '@/lib/services/playgroundAssignmentService';
 
-type TierKey = 'free' | 'starter' | 'plus';
+interface AssignmentQueryRow {
+  id: string;
+  lesson_id: string | null;
+  due_date: string | null;
+  status: string;
+  assigned_at: string | null;
+  lesson: { id: string; title: string } | { id: string; title: string }[] | null;
+  interactive_activity:
+    | { id: string; title: string; description: string | null; content: unknown }
+    | { id: string; title: string; description: string | null; content: unknown }[]
+    | null;
+}
 
-const normalizeTier = (tierRaw?: string | null): TierKey => {
-  const capTier = getCapabilityTier(normalizeTierName(tierRaw || 'free'));
-  if (capTier === 'premium' || capTier === 'enterprise') return 'plus';
-  if (capTier === 'starter') return 'starter';
-  return 'free';
-};
-
-const TIER_RANK: Record<TierKey, number> = { free: 0, starter: 1, plus: 2 };
+interface AssignedPlaygroundActivity {
+  assignmentId: string;
+  lessonId: string | null;
+  lessonTitle: string | null;
+  dueDate: string | null;
+  status: string;
+  assignedAt: string | null;
+  interactiveActivityId: string;
+  interactiveTitle: string;
+  interactiveDescription: string | null;
+  content: PlaygroundSnapshotContent;
+  activity: PreschoolActivity;
+}
 
 const mapDomainToSubject = (domain?: string): string => {
   switch ((domain || '').toLowerCase()) {
@@ -65,29 +69,40 @@ const mapDomainToSubject = (domain?: string): string => {
       return 'reading';
     case 'science':
       return 'science';
-    case 'movement':
+    case 'gross_motor':
       return 'physical_education';
+    case 'fine_motor':
+    case 'social_emotional':
     case 'cognitive':
+    case 'creative_arts':
     default:
       return 'life_skills';
   }
 };
 
+const getStatusLabel = (status: string): string => {
+  if (status === 'completed') return 'Completed';
+  if (status === 'in_progress') return 'In progress';
+  return 'Assigned';
+};
+
+const toSingle = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] || null : value;
+};
+
 export default function DashPlaygroundScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const { tier } = useSubscription();
   const { data, loading } = useParentDashboard();
-
-  const tierKey = normalizeTier(tier);
-  const grouped = useMemo(() => getActivitiesGroupedByDomain(), []);
-  const { speak, speakIntro, speakCelebration, stop: stopSpeech, isSpeaking } = useKidVoice({ tier });
+  const { speak, speakIntro, stop: stopSpeech } = useKidVoice({ tier });
 
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
-  const [activeActivity, setActiveActivity] = useState<PreschoolActivity | null>(null);
+  const [activeAssignment, setActiveAssignment] = useState<AssignedPlaygroundActivity | null>(null);
   const [activityResult, setActivityResult] = useState<ActivityResult | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
+  const [isSavingCompletion, setIsSavingCompletion] = useState(false);
 
   const children = useMemo(() => data?.children || [], [data?.children]);
   const activeChild = useMemo(
@@ -101,93 +116,170 @@ export default function DashPlaygroundScreen() {
     }
   }, [children, activeChildId]);
 
-  const hasTierAccess = useCallback(
-    (required?: string | null) => {
-      if (!required) return true;
-      return TIER_RANK[tierKey] >= TIER_RANK[required as TierKey];
-    },
-    [tierKey],
-  );
+  const {
+    data: assignedActivities = [],
+    isLoading: assignedLoading,
+    refetch: refetchAssignments,
+  } = useQuery({
+    queryKey: ['dash-playground-assignments', activeChild?.id],
+    enabled: !!activeChild?.id,
+    staleTime: 15000,
+    queryFn: async (): Promise<AssignedPlaygroundActivity[]> => {
+      const childId = activeChild?.id;
+      if (!childId) return [];
 
-  const handleStartActivity = (activity: PreschoolActivity) => {
-    if (!hasTierAccess(activity.requiresTier)) {
-      router.push('/screens/subscription-setup' as any);
+      const supabase = assertSupabase();
+      const { data: rows, error } = await supabase
+        .from('lesson_assignments')
+        .select(`
+          id,
+          lesson_id,
+          due_date,
+          status,
+          assigned_at,
+          lesson:lessons!lesson_assignments_lesson_id_fkey(id, title),
+          interactive_activity:interactive_activities!lesson_assignments_interactive_activity_id_fkey(id, title, description, content)
+        `)
+        .eq('student_id', childId)
+        .not('interactive_activity_id', 'is', null)
+        .in('status', ['assigned', 'in_progress', 'completed'])
+        .order('assigned_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const parsed = ((rows || []) as AssignmentQueryRow[])
+        .map((row) => {
+          const interactive = toSingle(row.interactive_activity);
+          if (!interactive) return null;
+
+          const content = getSnapshotFromInteractiveContent(interactive.content);
+          if (!content) return null;
+          if (content.source !== 'dash_playground' && content.source !== 'dash_temp_lesson') {
+            return null;
+          }
+          if (content.source === 'dash_temp_lesson' && content.expires_at) {
+            const expiresAt = Date.parse(content.expires_at);
+            if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
+              return null;
+            }
+          }
+
+          const lesson = toSingle(row.lesson);
+          return {
+            assignmentId: row.id,
+            lessonId: row.lesson_id,
+            lessonTitle: lesson?.title || content.linked_lesson_title || interactive.title || null,
+            dueDate: row.due_date,
+            status: row.status,
+            assignedAt: row.assigned_at,
+            interactiveActivityId: interactive.id,
+            interactiveTitle: interactive.title,
+            interactiveDescription: interactive.description,
+            content,
+            activity: content.snapshot,
+          } as AssignedPlaygroundActivity;
+        })
+        .filter((item): item is AssignedPlaygroundActivity => item !== null);
+
+      return parsed;
+    },
+  });
+
+  useEffect(() => {
+    if (!activeAssignment) return;
+    const exists = assignedActivities.some((item) => item.assignmentId === activeAssignment.assignmentId);
+    if (!exists) {
+      setActiveAssignment(null);
+      setActivityResult(null);
+    }
+  }, [assignedActivities, activeAssignment]);
+
+  const grouped = useMemo(() => {
+    const map: Record<string, AssignedPlaygroundActivity[]> = {};
+    assignedActivities.forEach((item) => {
+      if (!map[item.activity.domain]) {
+        map[item.activity.domain] = [];
+      }
+      map[item.activity.domain].push(item);
+    });
+    return map;
+  }, [assignedActivities]);
+
+  const availableDomains = useMemo(() => Object.keys(grouped), [grouped]);
+
+  useEffect(() => {
+    if (!filter) return;
+    if (!availableDomains.includes(filter)) {
+      setFilter(null);
+    }
+  }, [filter, availableDomains]);
+
+  const displayDomains = useMemo(() => {
+    if (filter && grouped[filter]) return [filter];
+    return availableDomains;
+  }, [filter, grouped, availableDomains]);
+
+  const handleStartActivity = useCallback((item: AssignedPlaygroundActivity) => {
+    track('playground.activity_started', {
+      assignmentId: item.assignmentId,
+      activityId: item.activity.id,
+      domain: item.activity.domain,
+      difficulty: item.content.difficulty,
+    });
+    setActiveAssignment(item);
+    setActivityResult(null);
+    if (item.activity.dashIntro) {
+      speakIntro(item.activity.dashIntro);
+    }
+  }, [speakIntro]);
+
+  const handleComplete = useCallback((result: ActivityResult) => {
+    const assignment = activeAssignment;
+    setActivityResult(result);
+
+    if (!assignment) {
       return;
     }
-    track('playground.activity_started', { activityId: activity.id, domain: activity.domain });
-    setActiveActivity(activity);
-    setActivityResult(null);
-    // Dash speaks the intro when activity opens
-    if (activity.dashIntro) {
-      speakIntro(activity.dashIntro);
-    }
-  };
 
-  const handleComplete = (result: ActivityResult) => {
-    if (activeActivity && activeChild?.id && user?.id) {
-      const score = result.totalRounds > 0
-        ? Math.round((result.correctAnswers / result.totalRounds) * 100)
-        : 0;
-      const learnerSummary = [
-        `${activeChild.firstName || 'Child'} completed ${activeActivity.title}.`,
-        `Correct answers: ${result.correctAnswers}/${result.totalRounds}.`,
-        `Time spent: ${result.timeSpentSeconds}s.`,
-      ].join(' ');
-
-      void (async () => {
-        try {
-          const { error } = await assertSupabase()
-            .from('dash_ai_tutor_attempts')
-            .insert({
-              user_id: user.id,
-              student_id: String(activeChild.id),
-              mode: 'practice',
-              subject: 'family_activity',
-              grade: activeChild.grade || null,
-              topic: activeActivity.title,
-              question: activeActivity.learningObjective || activeActivity.subtitle || null,
-              learner_answer: learnerSummary,
-              score,
-              feedback: result.stars >= 3
-                ? 'Excellent completion'
-                : result.stars === 2
-                  ? 'Good completion with room to improve'
-                  : 'Completed with support needed',
-              is_correct: result.stars >= 2,
-              metadata: {
-                source: 'dash_playground_activity',
-                activity_id: activeActivity.id,
-                activity_domain: activeActivity.domain,
-                activity_skills: activeActivity.skills,
-                stars: result.stars,
-                used_hints: result.usedHints,
-                completed_at: result.completedAt,
-              },
-            });
-          if (error) {
-            console.warn('[DashPlayground] Failed to persist completion record:', error.message);
-          }
-        } catch (error) {
-          console.warn('[DashPlayground] Completion persistence error:', error);
-        }
-      })();
-    }
+    setIsSavingCompletion(true);
+    void completeAssignedPlaygroundActivity({
+      assignmentId: assignment.assignmentId,
+      result,
+      difficulty: assignment.content.difficulty,
+      activityMeta: {
+        activity_id: assignment.activity.id,
+        interactive_activity_id: assignment.interactiveActivityId,
+        lesson_id: assignment.lessonId,
+        lesson_title: assignment.lessonTitle,
+        domain: assignment.activity.domain,
+      },
+    })
+      .then(() => refetchAssignments())
+      .catch((error) => {
+        console.warn('[DashPlayground] Failed to persist assignment completion:', error);
+      })
+      .finally(() => {
+        setIsSavingCompletion(false);
+      });
 
     track('playground.activity_completed', {
+      assignmentId: assignment.assignmentId,
       activityId: result.activityId,
       stars: result.stars,
       correctAnswers: result.correctAnswers,
       timeSpent: result.timeSpentSeconds,
+      difficulty: assignment.content.difficulty,
     });
-    setActivityResult(result);
-  };
+  }, [activeAssignment, refetchAssignments]);
 
   const handleContinueWithDash = () => {
-    if (!activeActivity?.dashFollowUp) return;
+    if (!activeAssignment?.activity.dashFollowUp) return;
     const childName = activeChild?.firstName || 'my child';
-    const prompt = `${activeActivity.dashFollowUp} Their name is ${childName}.`;
+    const prompt = `${activeAssignment.activity.dashFollowUp} Their name is ${childName}.`;
     stopSpeech();
-    setActiveActivity(null);
+    setActiveAssignment(null);
     setActivityResult(null);
     router.push({ pathname: '/screens/dash-assistant', params: { initialMessage: prompt } });
   };
@@ -198,51 +290,45 @@ export default function DashPlaygroundScreen() {
 
   const handleCloseActivity = () => {
     stopSpeech();
-    setActiveActivity(null);
+    setActiveAssignment(null);
     setActivityResult(null);
   };
 
   const handleUploadAndGrade = () => {
-    if (!activeActivity || !activeChild?.id) return;
+    if (!activeAssignment || !activeChild?.id) return;
+
+    const activity = activeAssignment.activity;
     const childName = `${activeChild.firstName || ''} ${activeChild.lastName || ''}`.trim()
       || activeChild.firstName
       || 'Child';
     const gradeLevel = activeChild.grade || 'Age 5';
-    const subject = mapDomainToSubject(activeActivity.domain);
-    const title = `${activeActivity.title} - Family Activity`;
-    const description = `We completed ${activeActivity.title} together at home. ${activeActivity.learningObjective}`;
-    const learningArea = activeActivity.skills?.slice(0, 2).join(', ') || activeActivity.domain;
+    const subject = mapDomainToSubject(activity.domain);
 
     stopSpeech();
-    setActiveActivity(null);
+    setActiveAssignment(null);
     setActivityResult(null);
     router.push({
       pathname: '/screens/parent-picture-of-progress',
       params: {
         studentId: String(activeChild.id),
         studentName: encodeURIComponent(childName),
-        prefillTitle: encodeURIComponent(title),
-        prefillDescription: encodeURIComponent(description),
+        prefillTitle: encodeURIComponent(`${activity.title} - Assigned Playground Activity`),
+        prefillDescription: encodeURIComponent(`We completed ${activity.title} together as a teacher-assigned activity.`),
         prefillSubject: encodeURIComponent(subject),
-        prefillLearningArea: encodeURIComponent(learningArea),
+        prefillLearningArea: encodeURIComponent(activity.skills?.slice(0, 2).join(', ') || activity.domain),
         nextStep: 'grade',
         gradeLevel: encodeURIComponent(gradeLevel),
-        assignmentTitle: encodeURIComponent(`${activeActivity.title} Review`),
-        submissionTemplate: encodeURIComponent(`${childName} completed ${activeActivity.title}. Add what they did, where they found it easy/hard, and what they learned.`),
-        contextTag: encodeURIComponent('family_activity'),
-        sourceFlow: encodeURIComponent('dash_playground'),
-        activityId: encodeURIComponent(activeActivity.id),
-        activityTitle: encodeURIComponent(activeActivity.title),
+        assignmentTitle: encodeURIComponent(`${activity.title} Review`),
+        submissionTemplate: encodeURIComponent(`${childName} completed ${activity.title}. Add what they did, where they found it easy or hard, and what they learned.`),
+        contextTag: encodeURIComponent('assigned_playground_activity'),
+        sourceFlow: encodeURIComponent('dash_playground_assigned'),
+        activityId: encodeURIComponent(activity.id),
+        activityTitle: encodeURIComponent(activity.title),
       },
     } as any);
   };
 
-  const displayDomains = useMemo(() => {
-    if (!filter) return Object.keys(grouped);
-    return [filter];
-  }, [filter, grouped]);
-
-  const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets]);
+  const styles = useMemo(() => createStyles(theme, insets.bottom), [theme, insets.bottom]);
 
   if (loading && !data) {
     return (
@@ -250,7 +336,7 @@ export default function DashPlaygroundScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
           <EduDashSpinner size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>Loading activities...</Text>
+          <Text style={styles.loadingText}>Loading playground...</Text>
         </View>
       </SafeAreaView>
     );
@@ -261,20 +347,16 @@ export default function DashPlaygroundScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={22} color={theme.text} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>Dash Playground</Text>
-            <Text style={styles.subtitle}>
-              Fun activities for {activeChild?.firstName || 'your little one'} 🎈
-            </Text>
+            <Text style={styles.subtitle}>Teacher-assigned activities for {activeChild?.firstName || 'your child'}</Text>
           </View>
         </View>
 
-        {/* Child Switcher */}
         <ChildSwitcher
           children={children.map((c: any) => ({
             id: c.id,
@@ -286,118 +368,126 @@ export default function DashPlaygroundScreen() {
           onChildChange={setActiveChildId}
         />
 
-        {/* Intro Card */}
-        <LinearGradient colors={['#6D28D9', '#8B5CF6']} style={styles.introCard}>
-          <Text style={styles.introEmoji}>🧸</Text>
+        <LinearGradient colors={['#1D4ED8', '#0F766E']} style={styles.introCard}>
+          <Text style={styles.introEmoji}>🧠</Text>
           <View style={styles.introContent}>
-            <Text style={styles.introTitle}>Play & Learn with Dash!</Text>
+            <Text style={styles.introTitle}>Lesson-Aligned Playground</Text>
             <Text style={styles.introText}>
-              Fun activities designed by early childhood experts. Each one builds real skills —
-              counting, letters, shapes, and more! After each activity, Dash can continue
-              the learning conversation. 🌟
+              Activities appear here only when a teacher assigns them. Complete them together and Dash records progress for the class lesson.
             </Text>
           </View>
         </LinearGradient>
 
-        {/* Domain Filters */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          <TouchableOpacity
-            style={[styles.filterChip, !filter && styles.filterChipActive]}
-            onPress={() => setFilter(null)}
-          >
-            <Text style={[styles.filterText, !filter && styles.filterTextActive]}>All 🎯</Text>
-          </TouchableOpacity>
-          {Object.entries(DOMAIN_LABELS).map(([key, { label, emoji }]) => {
-            if (!grouped[key]) return null;
-            const isActive = filter === key;
-            return (
+        {!activeChild ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={28} color={theme.textSecondary} />
+            <Text style={styles.emptyTitle}>No linked child found</Text>
+            <Text style={styles.emptyText}>Link a child account first to access assigned playground activities.</Text>
+          </View>
+        ) : assignedLoading ? (
+          <View style={styles.emptyState}>
+            <EduDashSpinner size="small" color={theme.primary} />
+            <Text style={styles.emptyText}>Loading assigned activities...</Text>
+          </View>
+        ) : assignedActivities.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="lock-closed-outline" size={28} color={theme.textSecondary} />
+            <Text style={styles.emptyTitle}>No teacher-assigned activities yet</Text>
+            <Text style={styles.emptyText}>Ask your teacher to assign a Dash Playground activity for this child.</Text>
+          </View>
+        ) : (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
               <TouchableOpacity
-                key={key}
-                style={[styles.filterChip, isActive && styles.filterChipActive]}
-                onPress={() => setFilter(isActive ? null : key)}
+                style={[styles.filterChip, !filter && styles.filterChipActive]}
+                onPress={() => setFilter(null)}
               >
-                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                  {emoji} {label}
-                </Text>
+                <Text style={[styles.filterText, !filter && styles.filterTextActive]}>All</Text>
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Activity Cards by Domain */}
-        {displayDomains.map(domain => {
-          const activities = grouped[domain];
-          if (!activities || activities.length === 0) return null;
-          const domainInfo = DOMAIN_LABELS[domain] || { label: domain, emoji: '📋', color: '#6B7280' };
-
-          return (
-            <View key={domain} style={styles.domainSection}>
-              <Text style={styles.domainTitle}>
-                {domainInfo.emoji} {domainInfo.label}
-              </Text>
-              {activities.map(activity => {
-                const locked = !hasTierAccess(activity.requiresTier);
+              {availableDomains.map((domain) => {
+                const domainInfo = DOMAIN_LABELS[domain] || { label: domain, emoji: '🎯' };
+                const isActive = filter === domain;
                 return (
                   <TouchableOpacity
-                    key={activity.id}
-                    activeOpacity={0.85}
-                    onPress={() => handleStartActivity(activity)}
-                    style={styles.activityCard}
+                    key={domain}
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                    onPress={() => setFilter(isActive ? null : domain)}
                   >
-                    <LinearGradient colors={activity.gradient} style={styles.activityGradient}>
-                      <View style={styles.activityRow}>
-                        <Text style={styles.activityEmoji}>{activity.emoji}</Text>
-                        <View style={styles.activityInfo}>
-                          <Text style={styles.activityTitle}>{activity.title}</Text>
-                          <Text style={styles.activitySubtitle}>{activity.subtitle}</Text>
-                        </View>
-                        {locked ? (
-                          <View style={styles.lockBadge}>
-                            <Ionicons name="lock-closed" size={14} color="#fff" />
-                          </View>
-                        ) : (
-                          <View style={styles.durationBadge}>
-                            <Ionicons name="time-outline" size={13} color="#fff" />
-                            <Text style={styles.durationText}>{activity.durationMinutes}m</Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.skillRow}>
-                        {activity.skills.slice(0, 3).map(skill => (
-                          <View key={skill} style={styles.skillTag}>
-                            <Text style={styles.skillText}>{skill}</Text>
-                          </View>
-                        ))}
-                      </View>
-                      <Text style={styles.objectiveText} numberOfLines={2}>
-                        {activity.learningObjective}
-                      </Text>
-                    </LinearGradient>
+                    <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                      {domainInfo.emoji} {domainInfo.label}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          );
-        })}
+            </ScrollView>
 
-        {/* Bottom CTA */}
-        <TouchableOpacity
-          style={styles.dashCta}
-          onPress={() => router.push('/screens/dash-assistant')}
-        >
-          <Ionicons name="sparkles" size={20} color={theme.primary} />
-          <Text style={[styles.dashCtaText, { color: theme.primary }]}>
-            Or just chat with Dash for a custom activity!
-          </Text>
-        </TouchableOpacity>
+            {displayDomains.map((domain) => {
+              const items = grouped[domain] || [];
+              if (items.length === 0) return null;
+
+              const domainInfo = DOMAIN_LABELS[domain] || { label: domain, emoji: '📋' };
+              return (
+                <View key={domain} style={styles.domainSection}>
+                  <Text style={styles.domainTitle}>{domainInfo.emoji} {domainInfo.label}</Text>
+                  {items.map((item) => {
+                    const activity = item.activity;
+                    return (
+                      <TouchableOpacity
+                        key={item.assignmentId}
+                        activeOpacity={0.85}
+                        onPress={() => handleStartActivity(item)}
+                        style={styles.activityCard}
+                      >
+                        <LinearGradient colors={activity.gradient} style={styles.activityGradient}>
+                          <View style={styles.activityTopRow}>
+                            <View style={styles.activityHeaderLeft}>
+                              <Text style={styles.activityEmoji}>{activity.emoji}</Text>
+                              <View style={styles.activityInfo}>
+                                <Text style={styles.activityTitle}>{activity.title}</Text>
+                                <Text style={styles.activitySubtitle}>{item.lessonTitle || 'Lesson assignment'}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.statusBadge}>
+                              <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.activityMetaRow}>
+                            <View style={styles.metaChip}>
+                              <Ionicons name="layers-outline" size={12} color="#fff" />
+                              <Text style={styles.metaChipText}>{item.content.difficulty}</Text>
+                            </View>
+                            <View style={styles.metaChip}>
+                              <Ionicons name="time-outline" size={12} color="#fff" />
+                              <Text style={styles.metaChipText}>{activity.durationMinutes}m</Text>
+                            </View>
+                            {item.dueDate && (
+                              <View style={styles.metaChip}>
+                                <Ionicons name="calendar-outline" size={12} color="#fff" />
+                                <Text style={styles.metaChipText}>{item.dueDate}</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          <Text style={styles.objectiveText} numberOfLines={2}>
+                            {activity.learningObjective}
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </>
+        )}
       </ScrollView>
 
-      {/* Activity Player Modal */}
-      <Modal visible={!!activeActivity && !activityResult} animationType="slide" presentationStyle="fullScreen">
-        {activeActivity && (
+      <Modal visible={!!activeAssignment && !activityResult} animationType="slide" presentationStyle="fullScreen">
+        {activeAssignment && (
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <ActivityPlayer
-              activity={activeActivity}
+              activity={activeAssignment.activity}
               childId={activeChildId || 'unknown'}
               onComplete={handleComplete}
               onClose={handleCloseActivity}
@@ -407,18 +497,23 @@ export default function DashPlaygroundScreen() {
         )}
       </Modal>
 
-      {/* Completion Modal */}
-      <Modal visible={!!activityResult && !!activeActivity} animationType="fade" presentationStyle="fullScreen">
-        {activityResult && activeActivity && (
+      <Modal visible={!!activityResult && !!activeAssignment} animationType="fade" presentationStyle="fullScreen">
+        {activityResult && activeAssignment && (
           <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
             <ActivityComplete
-              activity={activeActivity}
+              activity={activeAssignment.activity}
               result={activityResult}
               onPlayAgain={handlePlayAgain}
               onContinueWithDash={handleContinueWithDash}
               onUploadAndGrade={handleUploadAndGrade}
               onClose={handleCloseActivity}
             />
+            {isSavingCompletion && (
+              <View style={styles.savingBanner}>
+                <EduDashSpinner size="small" color="#fff" />
+                <Text style={styles.savingText}>Saving progress for teacher...</Text>
+              </View>
+            )}
           </SafeAreaView>
         )}
       </Modal>
@@ -426,7 +521,7 @@ export default function DashPlaygroundScreen() {
   );
 }
 
-const createStyles = (theme: any, topInset: number, bottomInset: number) =>
+const createStyles = (theme: any, bottomInset: number) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
@@ -435,25 +530,49 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) =>
     scrollContent: { paddingHorizontal: 16, paddingBottom: bottomInset + 40, gap: 16 },
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 8 },
     backBtn: {
-      width: 40, height: 40, borderRadius: 20,
-      backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'center',
-      borderWidth: 1, borderColor: theme.border,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     headerCenter: { flex: 1 },
     title: { fontSize: 24, fontWeight: '800', color: theme.text },
     subtitle: { fontSize: 14, color: theme.textSecondary, fontWeight: '500' },
     introCard: {
-      borderRadius: 20, padding: 20,
-      flexDirection: 'row', alignItems: 'center', gap: 14,
+      borderRadius: 20,
+      padding: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
     },
-    introEmoji: { fontSize: 48 },
+    introEmoji: { fontSize: 42 },
     introContent: { flex: 1, gap: 6 },
     introTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
     introText: { fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 19 },
+    emptyState: {
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 16,
+      paddingVertical: 24,
+      paddingHorizontal: 18,
+      alignItems: 'center',
+      gap: 8,
+    },
+    emptyTitle: { color: theme.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+    emptyText: { color: theme.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 19 },
     filterRow: { flexDirection: 'row', marginBottom: -8 },
     filterChip: {
-      paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-      backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
       marginRight: 8,
     },
     filterChipActive: { backgroundColor: theme.primary, borderColor: theme.primary },
@@ -463,28 +582,45 @@ const createStyles = (theme: any, topInset: number, bottomInset: number) =>
     domainTitle: { fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 4 },
     activityCard: { borderRadius: 18, overflow: 'hidden', elevation: 3 },
     activityGradient: { padding: 16, gap: 10 },
-    activityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    activityEmoji: { fontSize: 36 },
+    activityTopRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+    activityHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+    activityEmoji: { fontSize: 34 },
     activityInfo: { flex: 1 },
     activityTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
-    activitySubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-    lockBadge: {
-      backgroundColor: 'rgba(0,0,0,0.3)', width: 32, height: 32, borderRadius: 16,
-      alignItems: 'center', justifyContent: 'center',
+    activitySubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+    statusBadge: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: 'rgba(0,0,0,0.22)',
+      alignSelf: 'flex-start',
     },
-    durationBadge: {
-      flexDirection: 'row', alignItems: 'center', gap: 4,
-      backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+    statusText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+    activityMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    metaChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
     },
-    durationText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-    skillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    skillTag: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-    skillText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-    objectiveText: { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic', lineHeight: 17 },
-    dashCta: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      paddingVertical: 16, backgroundColor: theme.surface, borderRadius: 16,
-      borderWidth: 1, borderColor: theme.border,
+    metaChipText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+    objectiveText: { fontSize: 12, color: 'rgba(255,255,255,0.86)', lineHeight: 17 },
+    savingBanner: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      bottom: 16,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: 'rgba(17,24,39,0.88)',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
     },
-    dashCtaText: { fontSize: 14, fontWeight: '600' },
+    savingText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   });

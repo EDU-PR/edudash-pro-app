@@ -5,7 +5,7 @@
  * Refactored to use modular components following WARP.md standards
  */
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Alert, Share, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Share, Modal, Image } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { MemberIDCardFront, MemberIDCardBack } from '@/components/membership/MemberIDCard';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { CARD_TEMPLATES, CardTemplate, isExecutiveMemberType } from '@/components/membership/types';
 import { generateCardPrintHTML } from '@/components/membership/id-card';
 import { useIDCard } from '@/hooks/membership';
@@ -25,12 +26,14 @@ import { MemberPhotoService } from '@/services/MemberPhotoService';
 import { useQueryClient } from '@tanstack/react-query';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 export default function MemberIDCardScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { memberId } = useLocalSearchParams<{ memberId?: string }>();
+  const { showAlert, alertProps } = useAlertModal();
   
   const { loading, member, card, selectedTemplate, setSelectedTemplate, refetch } = useIDCard(memberId);
   
@@ -75,7 +78,7 @@ export default function MemberIDCardScreen() {
       const html = generateCardPrintHTML(member, card, selectedTemplate);
       await Print.printAsync({ html });
     } catch (error) {
-      Alert.alert('Error', 'Failed to print ID card');
+      showAlert({ title: 'Error', message: 'Failed to print ID card' });
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -94,7 +97,7 @@ export default function MemberIDCardScreen() {
         });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to save ID card as PDF');
+      showAlert({ title: 'Error', message: 'Failed to save ID card as PDF' });
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -114,17 +117,17 @@ export default function MemberIDCardScreen() {
   const handleUploadPhoto = async () => {
     if (!member || !user) return;
 
-    Alert.alert(
-      'Upload ID Card Photo',
-      'Choose an option to upload your photo for the ID card',
-      [
+    showAlert({
+      title: 'Upload ID Card Photo',
+      message: 'Choose an option to upload your photo for the ID card',
+      buttons: [
         {
           text: 'Take Photo',
           onPress: async () => {
             try {
               const { status } = await ImagePicker.requestCameraPermissionsAsync();
               if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Camera permission is required to take a photo.');
+                showAlert({ title: 'Permission Required', message: 'Camera permission is required to take a photo.' });
                 return;
               }
               const result = await ImagePicker.launchCameraAsync({
@@ -137,7 +140,7 @@ export default function MemberIDCardScreen() {
                 setShowImagePreview(true);
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to take photo');
+              showAlert({ title: 'Error', message: 'Failed to take photo' });
             }
           },
         },
@@ -147,7 +150,7 @@ export default function MemberIDCardScreen() {
             try {
               const hasPermission = await ensureImageLibraryPermission();
               if (!hasPermission) {
-                Alert.alert('Permission Required', 'Photo library permission is required.');
+                showAlert({ title: 'Permission Required', message: 'Photo library permission is required.' });
                 return;
               }
               const result = await ImagePicker.launchImageLibraryAsync({
@@ -160,13 +163,13 @@ export default function MemberIDCardScreen() {
                 setShowImagePreview(true);
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to select image');
+              showAlert({ title: 'Error', message: 'Failed to select image' });
             }
           },
         },
         { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+      ],
+    });
   };
 
   const handleCropImage = async () => {
@@ -176,7 +179,7 @@ export default function MemberIDCardScreen() {
       // Request permissions
       const hasPermission = await ensureImageLibraryPermission();
       if (!hasPermission) {
-        Alert.alert('Permission Required', 'Photo library permission is required to crop the image.');
+        showAlert({ title: 'Permission Required', message: 'Photo library permission is required to crop the image.' });
         return;
       }
 
@@ -194,8 +197,8 @@ export default function MemberIDCardScreen() {
         setSelectedImageUri(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Crop image error:', error);
-      Alert.alert('Error', 'Failed to crop image');
+      logger.error('Crop image error:', error);
+      showAlert({ title: 'Error', message: 'Failed to crop image' });
     }
   };
 
@@ -220,7 +223,7 @@ export default function MemberIDCardScreen() {
       // Validate image first
       const validation = await MemberPhotoService.validateImage(uri);
       if (!validation.valid) {
-        Alert.alert('Invalid Image', validation.error || 'Please select a valid image');
+        showAlert({ title: 'Invalid Image', message: validation.error || 'Please select a valid image' });
         setUploadingPhoto(false);
         return;
       }
@@ -239,13 +242,13 @@ export default function MemberIDCardScreen() {
         // Refetch member data
         await refetch();
         
-        Alert.alert('Success', 'ID card photo updated successfully!');
+        showAlert({ title: 'Success', message: 'ID card photo updated successfully!' });
       } else {
-        Alert.alert('Upload Failed', result.error || 'Failed to upload photo');
+        showAlert({ title: 'Upload Failed', message: result.error || 'Failed to upload photo' });
       }
     } catch (error: any) {
-      console.error('Upload photo error:', error);
-      Alert.alert('Error', error?.message || 'Failed to upload photo');
+      logger.error('Upload photo error:', error);
+      showAlert({ title: 'Error', message: error?.message || 'Failed to upload photo' });
     } finally {
       setUploadingPhoto(false);
     }
@@ -275,6 +278,7 @@ export default function MemberIDCardScreen() {
   }
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* Custom Header */}
       <View style={[styles.customHeader, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
@@ -513,6 +517,8 @@ export default function MemberIDCardScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

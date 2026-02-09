@@ -7,8 +7,9 @@ import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { SubPageHeader } from '@/components/dashboard/SubPageHeader';
 import {
   Camera, Upload, CheckCircle, Star, Sparkles, Image as ImageIcon,
-  BookOpen, Palette, FlaskConical, Music, Dumbbell,
+  BookOpen, Palette, FlaskConical, Music, Dumbbell, Loader2, Trophy, Tag,
 } from 'lucide-react';
+import { useVisionAnalysis } from '@/lib/hooks/parent/useVisionAnalysis';
 
 const SUBJECTS = [
   { value: 'mathematics', label: '🔢 Mathematics' },
@@ -51,6 +52,10 @@ export default function PictureOfProgressPage() {
   const [submitted, setSubmitted] = useState(false);
   const [uploads, setUploads] = useState<any[]>([]);
   const [loadingUploads, setLoadingUploads] = useState(true);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+
+  // AI Vision Analysis
+  const { analyze, result: visionResult, loading: analyzing } = useVisionAnalysis();
 
   useEffect(() => {
     const init = async () => {
@@ -90,6 +95,20 @@ export default function PictureOfProgressPage() {
     const reader = new FileReader();
     reader.onload = () => setPreview(reader.result as string);
     reader.readAsDataURL(f);
+
+    // Trigger AI vision analysis
+    analyze(f, description, subject).then((result) => {
+      if (!result) return;
+      if (result.suggestedTags?.length) {
+        setSuggestedTags((prev) => [...new Set([...prev, ...result.suggestedTags])]);
+      }
+      if (result.caption && !description.trim()) {
+        setDescription(result.caption);
+      }
+      if (result.suggestedSubject && !subject) {
+        setSubject(result.suggestedSubject);
+      }
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,6 +141,11 @@ export default function PictureOfProgressPage() {
           achievement_level: achievementLevel || null,
           learning_area: learningArea.trim() || null,
           uploaded_by: userId,
+          tags: suggestedTags.length > 0 ? suggestedTags : null,
+          is_milestone: visionResult?.milestoneDetected || false,
+          milestone_type: visionResult?.milestoneType || null,
+          ai_caption: visionResult?.caption || null,
+          ai_insight: visionResult?.developmentalInsight || null,
         });
 
       if (dbError) throw dbError;
@@ -276,7 +300,7 @@ export default function PictureOfProgressPage() {
                       style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 12 }}
                     />
                     <button
-                      type="button" onClick={() => { setFile(null); setPreview(''); }}
+                      type="button" onClick={() => { setFile(null); setPreview(''); setSuggestedTags([]); }}
                       style={{
                         position: 'absolute', top: 8, right: 8,
                         width: 32, height: 32, borderRadius: 16,
@@ -286,9 +310,65 @@ export default function PictureOfProgressPage() {
                     >
                       ✕
                     </button>
+                    {analyzing && (
+                      <div style={{
+                        position: 'absolute', bottom: 8, left: 8,
+                        background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 12px',
+                        borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
+                      }}>
+                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        <Sparkles size={14} style={{ color: '#22d3ee' }} />
+                        AI analyzing...
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* AI Vision Insights */}
+              {visionResult && !analyzing && (
+                <div style={{
+                  marginBottom: 16, padding: 16, borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(34,211,238,0.08), rgba(59,130,246,0.08))',
+                  border: '1px solid rgba(34,211,238,0.2)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <Sparkles size={16} style={{ color: '#22d3ee' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0891b2' }}>AI Analysis</span>
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>
+                    {visionResult.developmentalInsight}
+                  </p>
+                  {visionResult.milestoneDetected && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <Trophy size={14} style={{ color: '#f59e0b' }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#d97706' }}>
+                        Milestone detected: {visionResult.milestoneType}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI Suggested Tags */}
+              {suggestedTags.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <Tag size={14} style={{ color: '#22d3ee' }} />
+                    <label style={{ fontSize: 13, fontWeight: 600 }}>AI-Suggested Tags</label>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {suggestedTags.map((tag, i) => (
+                      <span key={i} style={{
+                        fontSize: 11, padding: '4px 10px', borderRadius: 12,
+                        background: 'rgba(34,211,238,0.1)', color: '#0891b2', fontWeight: 600,
+                      }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"

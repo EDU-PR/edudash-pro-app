@@ -1,20 +1,15 @@
 /**
- * Application Review Screen — Upgraded
+ * Application Review Screen
  * 
- * Full candidate review with:
- * - AI-powered screening & scoring
- * - SA vetting checklist (SACE, police clearance, etc.)
- * - Custom AlertModal (no Alert.alert)
- * - Resume viewer
- * - References & ratings
- * - Pipeline actions (Review → Shortlist → Interview → Offer → Accept)
- * - Offer letter navigation
+ * Full candidate review with AI-powered screening, SA vetting, pipeline actions.
+ * Vetting/AI sections extracted to ApplicationVettingPanel.
  */
 
+import { openWhatsApp } from '@/lib/utils/phoneUtils';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Linking, ActivityIndicator, TextInput,
+  Linking, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
@@ -33,6 +28,7 @@ import type { ApplicationWithDetails } from '@/types/hiring';
 import type { TeacherReference, TeacherRatingSummary } from '@/types/teacher-reputation';
 import { useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import ApplicationVettingPanel from '@/components/hiring/ApplicationVettingPanel';
 
 export default function ApplicationReviewScreen() {
   const { applicationId, id } = useLocalSearchParams<{ applicationId?: string; id?: string }>();
@@ -78,11 +74,9 @@ export default function ApplicationReviewScreen() {
         setReferences(refs);
       }
 
-      // Generate vetting checklist & score
       if (data) {
         const cl = AIVettingService.generateVettingChecklist(data, data.candidate_profile);
         setChecklist(cl);
-
         if (data.candidate_profile) {
           const score = AIVettingService.calculateVettingScore(
             data.candidate_profile, cl, summary, refs, data.job_posting
@@ -105,11 +99,7 @@ export default function ApplicationReviewScreen() {
     try {
       await HiringHubService.updateApplicationStatus(application.id, newStatus, user.id, reason);
       setApplication({ ...application, status: newStatus });
-      showAlert({
-        title: 'Status Updated',
-        message: `Application moved to "${getApplicationStatusLabel(newStatus)}"`,
-        type: 'success', icon: 'checkmark-circle',
-      });
+      showAlert({ title: 'Status Updated', message: `Application moved to "${getApplicationStatusLabel(newStatus)}"`, type: 'success', icon: 'checkmark-circle' });
     } catch (error: any) {
       showAlert({ title: 'Error', message: error.message || 'Failed to update status', type: 'error' });
     } finally {
@@ -273,7 +263,6 @@ export default function ApplicationReviewScreen() {
       <Stack.Screen options={{ title: 'Review Application', headerShown: false }} />
       <AlertModalComponent />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
@@ -303,150 +292,35 @@ export default function ApplicationReviewScreen() {
           </View>
         </View>
 
-        {/* Vetting Score */}
-        {vettingScore && (
-          <View style={styles.section}>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Vetting Score</Text>
-              <View style={[styles.riskBadge, { backgroundColor: AIVettingService.getRiskColor(vettingScore.riskLevel) + '20' }]}>
-                <Text style={[styles.riskText, { color: AIVettingService.getRiskColor(vettingScore.riskLevel) }]}>
-                  {vettingScore.riskLevel.toUpperCase()} RISK
-                </Text>
-              </View>
-            </View>
-            <View style={styles.scoreBarOuter}>
-              <View style={[styles.scoreBarInner, { width: `${vettingScore.overall}%`, backgroundColor: AIVettingService.getRiskColor(vettingScore.riskLevel) }]} />
-            </View>
-            <Text style={styles.scoreLabel}>{vettingScore.overall}/100 — {AIVettingService.getVettingStatusText(vettingScore)}</Text>
-            <View style={styles.breakdownGrid}>
-              {Object.entries(vettingScore.breakdown).map(([key, val]) => (
-                <View key={key} style={styles.breakdownItem}>
-                  <Text style={styles.breakdownValue}>{val}</Text>
-                  <Text style={styles.breakdownLabel}>{key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}</Text>
-                </View>
-              ))}
-            </View>
-            {vettingScore.flags.length > 0 && (
-              <View style={styles.flagsContainer}>
-                {vettingScore.flags.map((flag, i) => (
-                  <View key={i} style={styles.flagItem}>
-                    <Ionicons name="warning" size={14} color="#F59E0B" />
-                    <Text style={styles.flagText}>{flag}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* AI Screening */}
-        <View style={styles.section}>
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>AI Screening</Text>
-            {!aiScreening && !aiScreeningLoading && (
-              <TouchableOpacity style={styles.aiButton} onPress={handleRunAIScreening}>
-                <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                <Text style={styles.aiButtonText}>Run AI Screen</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {aiScreeningLoading && (
-            <View style={styles.aiLoadingRow}>
-              <ActivityIndicator size="small" color={theme.primary} />
-              <Text style={styles.aiLoadingText}>Analyzing candidate...</Text>
-            </View>
-          )}
-          {aiScreening && (
-            <View>
-              <View style={styles.aiScoreRow}>
-                <View style={styles.aiScoreCircle}>
-                  <Text style={styles.aiScoreValue}>{aiScreening.score}</Text>
-                  <Text style={styles.aiScoreMax}>/100</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <View style={[styles.recBadge, { backgroundColor: AIVettingService.getRecommendationColor(aiScreening.recommendation) + '20' }]}>
-                    <Text style={[styles.recText, { color: AIVettingService.getRecommendationColor(aiScreening.recommendation) }]}>
-                      {AIVettingService.getRecommendationLabel(aiScreening.recommendation)}
-                    </Text>
-                  </View>
-                  <Text style={styles.aiSummary}>{aiScreening.summary}</Text>
-                </View>
-              </View>
-              {aiScreening.strengths.length > 0 && (
-                <View style={styles.aiListSection}>
-                  <Text style={styles.aiListTitle}>Strengths</Text>
-                  {aiScreening.strengths.map((s, i) => (
-                    <View key={i} style={styles.aiListItem}>
-                      <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                      <Text style={styles.aiListText}>{s}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {aiScreening.concerns.length > 0 && (
-                <View style={styles.aiListSection}>
-                  <Text style={styles.aiListTitle}>Concerns</Text>
-                  {aiScreening.concerns.map((c, i) => (
-                    <View key={i} style={styles.aiListItem}>
-                      <Ionicons name="alert-circle" size={16} color="#F59E0B" />
-                      <Text style={styles.aiListText}>{c}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              {aiScreening.interviewQuestions.length > 0 && (
-                <View style={styles.aiListSection}>
-                  <Text style={styles.aiListTitle}>Suggested Interview Questions</Text>
-                  {aiScreening.interviewQuestions.map((q, i) => (
-                    <View key={i} style={styles.aiListItem}>
-                      <Text style={styles.questionNumber}>{i + 1}.</Text>
-                      <Text style={styles.aiListText}>{q}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-
-        {/* Vetting Checklist */}
-        {checklist && (
-          <View style={styles.section}>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Vetting Checklist</Text>
-              <Text style={styles.completionText}>{checklist.completionPercentage}% Complete</Text>
-            </View>
-            {(['identity', 'qualifications', 'experience', 'references', 'compliance', 'background'] as const).map(cat => {
-              const items = checklist.items.filter(i => i.category === cat);
-              if (items.length === 0) return null;
-              return (
-                <View key={cat} style={styles.checklistCategory}>
-                  <Text style={styles.categoryTitle}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</Text>
-                  {items.map((item) => (
-                    <TouchableOpacity key={item.id} style={styles.checklistItem} onPress={() => handleChecklistToggle(item.id)}>
-                      <Ionicons
-                        name={item.status === 'passed' ? 'checkbox' : item.status === 'needs_review' ? 'alert-circle' : 'square-outline'}
-                        size={22}
-                        color={item.status === 'passed' ? '#10B981' : item.status === 'needs_review' ? '#F59E0B' : theme.textSecondary}
-                      />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={[styles.checklistLabel, item.status === 'passed' && styles.checklistLabelPassed]}>{item.label}</Text>
-                        {item.details && <Text style={styles.checklistDetails}>{item.details}</Text>}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              );
-            })}
-          </View>
-        )}
+        <ApplicationVettingPanel
+          theme={theme}
+          vettingScore={vettingScore}
+          aiScreening={aiScreening}
+          aiScreeningLoading={aiScreeningLoading}
+          checklist={checklist}
+          onRunAIScreening={handleRunAIScreening}
+          onChecklistToggle={handleChecklistToggle}
+        />
 
         {/* Candidate Info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Candidate Information</Text>
           <InfoRow icon="person-outline" label="Name" value={application.candidate_name || 'N/A'} theme={theme} />
-          <InfoRow icon="mail-outline" label="Email" value={application.candidate_email} theme={theme} />
-          {application.candidate_phone && <InfoRow icon="call-outline" label="Phone" value={application.candidate_phone} theme={theme} />}
+          <InfoRow icon="mail-outline" label="Email" value={application.candidate_email} theme={theme}
+            actions={<TouchableOpacity onPress={() => Linking.openURL(`mailto:${application.candidate_email}`)} style={{ padding: 4 }}>
+              <Ionicons name="send" size={16} color={theme.primary} />
+            </TouchableOpacity>} />
+          {application.candidate_phone && (
+            <InfoRow icon="call-outline" label="Phone" value={application.candidate_phone} theme={theme}
+              actions={<View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${application.candidate_phone}`)} style={{ padding: 4 }}>
+                  <Ionicons name="call" size={16} color={theme.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openWhatsApp(application.candidate_phone!, `Hi ${application.candidate_name || ''}, regarding your application...`)} style={{ padding: 4 }}>
+                  <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+                </TouchableOpacity>
+              </View>} />
+          )}
           <InfoRow icon="briefcase-outline" label="Experience" value={`${application.candidate_experience_years} years`} theme={theme} />
           <InfoRow icon="calendar-outline" label="Applied" value={new Date(application.created_at || application.applied_at).toLocaleDateString()} theme={theme} />
         </View>
@@ -527,12 +401,13 @@ export default function ApplicationReviewScreen() {
   );
 }
 
-function InfoRow({ icon, label, value, theme }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; theme: any }) {
+function InfoRow({ icon, label, value, theme, actions }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; theme: any; actions?: React.ReactNode }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
       <Ionicons name={icon} size={18} color={theme.textSecondary} />
       <Text style={{ fontSize: 13, fontWeight: '600', color: theme.textSecondary, minWidth: 70 }}>{label}</Text>
       <Text style={{ flex: 1, fontSize: 14, color: theme.text }}>{value}</Text>
+      {actions}
     </View>
   );
 }
@@ -563,41 +438,6 @@ const createStyles = (theme: any) =>
     sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     sectionTitle: { fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 12 },
     linkText: { fontSize: 13, color: theme.primary, fontWeight: '600' },
-    scoreBarOuter: { height: 8, borderRadius: 4, backgroundColor: theme.border, marginBottom: 8, overflow: 'hidden' },
-    scoreBarInner: { height: '100%', borderRadius: 4 },
-    scoreLabel: { fontSize: 13, color: theme.textSecondary, fontWeight: '500' },
-    riskBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-    riskText: { fontSize: 11, fontWeight: '700' },
-    breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-    breakdownItem: { alignItems: 'center', paddingVertical: 8, paddingHorizontal: 10, backgroundColor: theme.background, borderRadius: 8, minWidth: 60 },
-    breakdownValue: { fontSize: 18, fontWeight: '700', color: theme.primary },
-    breakdownLabel: { fontSize: 10, color: theme.textSecondary, textAlign: 'center', marginTop: 2 },
-    flagsContainer: { marginTop: 12, gap: 6 },
-    flagItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    flagText: { fontSize: 12, color: '#F59E0B', flex: 1 },
-    aiButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#8B5CF6', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-    aiButtonText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
-    aiLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
-    aiLoadingText: { fontSize: 14, color: theme.textSecondary },
-    aiScoreRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-    aiScoreCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: theme.primary + '15', justifyContent: 'center', alignItems: 'center' },
-    aiScoreValue: { fontSize: 22, fontWeight: '800', color: theme.primary },
-    aiScoreMax: { fontSize: 10, color: theme.textSecondary },
-    recBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, marginBottom: 6 },
-    recText: { fontSize: 12, fontWeight: '700' },
-    aiSummary: { fontSize: 13, color: theme.textSecondary, lineHeight: 19 },
-    aiListSection: { marginTop: 12 },
-    aiListTitle: { fontSize: 14, fontWeight: '700', color: theme.text, marginBottom: 6 },
-    aiListItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
-    aiListText: { fontSize: 13, color: theme.text, flex: 1, lineHeight: 19 },
-    questionNumber: { fontSize: 13, fontWeight: '700', color: theme.primary, minWidth: 18 },
-    completionText: { fontSize: 13, color: theme.primary, fontWeight: '600' },
-    checklistCategory: { marginBottom: 12 },
-    categoryTitle: { fontSize: 13, fontWeight: '700', color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-    checklistItem: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border + '40' },
-    checklistLabel: { fontSize: 14, color: theme.text, fontWeight: '500' },
-    checklistLabelPassed: { textDecorationLine: 'line-through', color: theme.textSecondary },
-    checklistDetails: { fontSize: 11, color: theme.textSecondary, marginTop: 2 },
     starRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
     ratingText: { fontSize: 13, fontWeight: '600', color: theme.text },

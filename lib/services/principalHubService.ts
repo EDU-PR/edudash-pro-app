@@ -1,55 +1,9 @@
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { User } from '@supabase/supabase-js';
+import type { PrincipalHubStats, TeacherInfo, AnnouncementData, FinancialSummary } from './principalHubService.types';
 
-// Types for Principal Hub data
-export interface PrincipalHubStats {
-  totalStudents: number;
-  totalTeachers: number;
-  totalClasses: number;
-  attendanceRate: number;
-  monthlyRevenue: number;
-  pendingApplications: number;
-  upcomingEvents: number;
-}
-
-export interface TeacherInfo {
-  id: string;
-  auth_user_id: string;
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  email: string;
-  phone?: string;
-  subject_specialization?: string;
-  is_active: boolean;
-  created_at: string;
-  classes_assigned: number;
-  students_count: number;
-  last_login?: string;
-}
-
-export interface AnnouncementData {
-  id: string;
-  title: string;
-  content: string;
-  target_audience: string[];
-  target_classes?: string[];
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  scheduled_for?: string;
-  expires_at?: string;
-  is_published: boolean;
-  created_at: string;
-  created_by: string;
-}
-
-export interface FinancialSummary {
-  monthlyRevenue: number;
-  monthlyExpenses: number;
-  netProfit: number;
-  outstandingFees: number;
-  enrollmentTrend: 'up' | 'down' | 'stable';
-  paymentRate: number;
-}
+export type { PrincipalHubStats, TeacherInfo, AnnouncementData, FinancialSummary };
 
 export class PrincipalHubService {
   
@@ -160,7 +114,7 @@ export class PrincipalHubService {
         upcomingEvents
       };
     } catch (error) {
-      console.error('Failed to fetch school stats:', error);
+      logger.error('PrincipalHubService', 'Failed to fetch school stats:', error);
       throw new Error('Failed to load school statistics');
     }
   }
@@ -243,7 +197,7 @@ export class PrincipalHubService {
 
       return enhancedTeachers;
     } catch (error) {
-      console.error('Failed to fetch teachers list:', error);
+      logger.error('PrincipalHubService', 'Failed to fetch teachers list:', error);
       throw new Error('Failed to load teachers information');
     }
   }
@@ -283,7 +237,7 @@ export class PrincipalHubService {
       if (error) throw error;
       return String((data as any).id);
     } catch (error) {
-      console.error('Failed to create announcement:', error);
+      logger.error('PrincipalHubService', 'Failed to create announcement:', error);
       throw new Error('Failed to create announcement');
     }
   }
@@ -405,7 +359,7 @@ export class PrincipalHubService {
         paymentRate,
       };
     } catch (error) {
-      console.error('Failed to fetch financial summary:', error);
+      logger.error('PrincipalHubService', 'Failed to fetch financial summary:', error);
       // Return zeros instead of throwing — dashboard should still render
       return {
         monthlyRevenue: 0,
@@ -461,7 +415,7 @@ export class PrincipalHubService {
 
       return pipeline;
     } catch (error) {
-      console.error('Failed to fetch enrollment pipeline:', error);
+      logger.error('PrincipalHubService', 'Failed to fetch enrollment pipeline:', error);
       // Safe fallback
       return {
         new_applications: 0,
@@ -504,7 +458,7 @@ export class PrincipalHubService {
         available_spots: capacity - (currentEnrollment || 0)
       };
     } catch (error) {
-      console.error('Failed to fetch capacity metrics:', error);
+      logger.error('PrincipalHubService', 'Failed to fetch capacity metrics:', error);
       return {
         capacity: 100,
         current_enrollment: 0,

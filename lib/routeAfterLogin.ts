@@ -4,8 +4,12 @@ import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { fetchEnhancedUserProfile, type EnhancedUserProfile, type Role } from '@/lib/rbac';
 import type { User } from '@supabase/supabase-js';
-import { logger } from '@/lib/logger';
 import { getPendingTeacherInvite, clearPendingTeacherInvite } from '@/lib/utils/teacherInvitePending';
+import {
+  normalizeResolvedSchoolType,
+  resolveSchoolTypeFromProfile,
+  type ResolvedSchoolType,
+} from '@/lib/schoolTypeResolver';
 
 const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 const debugLog = (...args: unknown[]) => {
@@ -29,47 +33,59 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 const navigationLocks: Map<string, number> = new Map();
 const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
 
-// EduDash Pro Community School must always use K-12 dashboards.
-export const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
-
-const K12_SCHOOL_TYPES = new Set([
-  'k12',
-  'k12_school',
-  'combined',
-  'primary',
-  'secondary',
-  'community_school',
-]);
-const PRESCHOOL_TYPES = new Set([
-  'preschool',
-  'ecd',
-  'nursery',
-]);
-
-function isK12SchoolType(value: string | null | undefined): boolean {
-  if (!value) return false;
-  return K12_SCHOOL_TYPES.has(String(value).toLowerCase());
-}
-
-function normalizeSchoolType(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const normalized = String(value).toLowerCase().trim();
-  if (isK12SchoolType(normalized)) return 'k12_school';
-  if (PRESCHOOL_TYPES.has(normalized)) return 'preschool';
-  return null;
-}
-
-function resolveAdminSchoolType(profile: EnhancedUserProfile): string | null {
-  const fromMembership = normalizeSchoolType((profile as any)?.organization_membership?.school_type);
+function resolveAdminSchoolType(profile: EnhancedUserProfile): ResolvedSchoolType | null {
+  const fromMembership = normalizeResolvedSchoolType((profile as any)?.organization_membership?.school_type);
   if (fromMembership) return fromMembership;
 
-  const fromOrgKind = normalizeSchoolType((profile as any)?.organization_membership?.organization_kind);
+  const fromOrgKind = normalizeResolvedSchoolType((profile as any)?.organization_membership?.organization_kind);
   if (fromOrgKind) return fromOrgKind;
 
-  const fromTenantKind = normalizeSchoolType((profile as any)?.organization_kind || (profile as any)?.tenant_kind);
+  const fromTenantKind = normalizeResolvedSchoolType((profile as any)?.organization_kind || (profile as any)?.tenant_kind);
   if (fromTenantKind) return fromTenantKind;
 
   return null;
+}
+
+async function resolveTeacherApprovalRoute(profile: EnhancedUserProfile): Promise<{ path: string; params?: Record<string, string> } | null> {
+  const role = normalizeRole(profile.role);
+  if (role !== 'teacher') return null;
+
+  const teacherId = profile.id;
+  const schoolId = profile.organization_id || (profile as any)?.preschool_id || null;
+  if (!teacherId || !schoolId) return null;
+
+  try {
+    const { data: approval, error } = await assertSupabase()
+      .from('teacher_approvals')
+      .select('status')
+      .eq('teacher_id', teacherId)
+      .eq('preschool_id', schoolId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[ROUTE DEBUG] Teacher approval lookup failed, skipping gate:', error.message);
+      return null;
+    }
+
+    if (!approval?.status || approval.status === 'approved') {
+      return null;
+    }
+
+    if (approval.status === 'pending') {
+      return { path: '/screens/teacher-approval-pending' };
+    }
+
+    if (approval.status === 'rejected') {
+      return { path: '/screens/teacher-approval-pending', params: { state: 'rejected' } };
+    }
+
+    return null;
+  } catch (lookupError) {
+    console.warn('[ROUTE DEBUG] Teacher approval gate exception, skipping:', lookupError);
+    return null;
+  }
 }
 
 export function isNavigationLocked(userId: string): boolean {
@@ -324,12 +340,20 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
     }
 
     // Determine route based on enhanced profile
-    const route = determineUserRoute(enhancedProfile);
+    let route = determineUserRoute(enhancedProfile);
+    const teacherApprovalRoute = await resolveTeacherApprovalRoute(enhancedProfile);
+    if (teacherApprovalRoute) {
+      route = teacherApprovalRoute;
+    }
+    const resolvedSchoolType = resolveSchoolTypeFromProfile(enhancedProfile);
+    const targetDashboard = route.path;
     
     // Track routing decision
     track('edudash.auth.route_after_login', {
       user_id: userId,
       role: enhancedProfile.role,
+      resolved_school_type: resolvedSchoolType,
+      target_dashboard: targetDashboard,
       organization_id: enhancedProfile.organization_id,
       seat_status: enhancedProfile.seat_status,
       plan_tier: enhancedProfile.organization_membership?.plan_tier,
@@ -555,10 +579,11 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   }
   
   // PRIORITY CHECK #2: School admin/principal roles skip member_type routing
-  // This prevents principals with accidental org_member entries from going to wrong dashboards
-  // Note: 'admin' is NOT included here - SOA admins should use member_type routing above
+  // This prevents school users with accidental org_member entries from going to wrong dashboards.
+  // Keep SOA/org admins on member_type routing, but allow school admins to use role routing.
+  const isSchoolAdminRole = role === 'admin' && !!resolveAdminSchoolType(profile);
   const schoolAdminRoles = ['super_admin', 'principal_admin', 'principal', 'teacher'];
-  if (role && schoolAdminRoles.includes(role)) {
+  if ((role && schoolAdminRoles.includes(role)) || isSchoolAdminRole) {
     debugLog('[ROUTE DEBUG] School admin role detected:', role, '- using profile role routing');
     // Fall through to role-based routing below
   } else if (memberType && hasOrganization) {
@@ -694,17 +719,11 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       return { path: '/screens/teacher-dashboard' };
 
     case 'parent':
-      // Check school_type to route to appropriate parent dashboard
-      const parentSchoolType = (profile as any)?.organization_membership?.school_type;
-      const isCommunitySchoolParent = profile.organization_id === COMMUNITY_SCHOOL_ID;
-      const resolvedParentSchoolType = parentSchoolType || (isCommunitySchoolParent ? 'community_school' : undefined);
-      const normalizedParentSchoolType = resolvedParentSchoolType ? String(resolvedParentSchoolType).toLowerCase() : undefined;
+      // Route to dashboard family from a single school-type resolver
+      const resolvedParentSchoolType = resolveSchoolTypeFromProfile(profile);
       // #region agent log
       debugLog('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
-        parentSchoolType,
         resolvedParentSchoolType,
-        normalizedParentSchoolType,
-        isCommunitySchoolParent,
         organization_membership: (profile as any)?.organization_membership,
         organization_id: profile.organization_id,
         hasOrgMembership: !!(profile as any)?.organization_membership,
@@ -712,37 +731,29 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         timestamp: Date.now()
       }));
       // #endregion
-      debugLog('[ROUTE DEBUG] Parent routing - school_type:', parentSchoolType, 'resolved:', normalizedParentSchoolType);
+      debugLog('[ROUTE DEBUG] Parent routing - resolved school type:', resolvedParentSchoolType);
       
-      // K-12 related school types route to K-12 parent dashboard
-      const isK12Parent = isK12SchoolType(normalizedParentSchoolType);
-      if (isK12Parent) {
+      if (resolvedParentSchoolType === 'k12_school') {
         debugLog('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
         return {
           path: '/(k12)/parent/dashboard',
-          params: { schoolType: normalizedParentSchoolType || 'k12', mode: 'k12' },
+          params: { schoolType: 'k12_school', mode: 'k12' },
         };
       }
       // Default to preschool parent dashboard
       return { path: '/screens/parent-dashboard' };
 
     case 'student':
-      // Check school_type to route to appropriate student dashboard
-      const studentSchoolType = (profile as any)?.organization_membership?.school_type;
-      const isCommunitySchoolStudent = profile.organization_id === COMMUNITY_SCHOOL_ID;
-      const resolvedStudentSchoolType = studentSchoolType || (isCommunitySchoolStudent ? 'community_school' : undefined);
-      const normalizedStudentSchoolType = resolvedStudentSchoolType ? String(resolvedStudentSchoolType).toLowerCase() : undefined;
-      debugLog('[ROUTE DEBUG] Student routing - school_type:', studentSchoolType, 'resolved:', normalizedStudentSchoolType);
+      const resolvedStudentSchoolType = resolveSchoolTypeFromProfile(profile);
+      debugLog('[ROUTE DEBUG] Student routing - resolved school type:', resolvedStudentSchoolType);
       
       // Students with organization_id go to appropriate dashboard
       if (hasOrganization) {
-        // K-12 related school types route to K-12 student dashboard
-        const isK12Student = isK12SchoolType(normalizedStudentSchoolType);
-        if (isK12Student) {
+        if (resolvedStudentSchoolType === 'k12_school') {
           debugLog('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
           return {
             path: '/(k12)/student/dashboard',
-            params: { schoolType: normalizedStudentSchoolType || 'k12', mode: 'k12' },
+            params: { schoolType: 'k12_school', mode: 'k12' },
           };
         }
         // Default to learner dashboard for preschool/other types

@@ -1,5 +1,7 @@
 /**
  * New Enhanced Principal Dashboard - Refactored
+ * @deprecated Legacy principal dashboard implementation retained for compatibility.
+ * Active #NEXT-GEN path is `PrincipalDashboardV2` via `PrincipalDashboardWrapper`.
  * 
  * A modular, clean implementation following WARP.md file size standards.
  * Uses extracted components for better maintainability.
@@ -39,6 +41,7 @@ import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { PendingParentLinkRequests } from './PendingParentLinkRequests';
 import { UpcomingBirthdaysCard } from './UpcomingBirthdaysCard';
 import { useBirthdayPlanner } from '@/hooks/useBirthdayPlanner';
+import { getApprovalStats } from '@/lib/services/teacherApprovalService';
 
 // Import modular components
 import { 
@@ -72,12 +75,19 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
   const [refreshing, setRefreshing] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingTeacherApprovals, setPendingTeacherApprovals] = useState(0);
   const insets = useSafeAreaInsets();
   
   const styles = useMemo(() => createStyles(theme, insets.top, insets.bottom), [theme, insets.top, insets.bottom]);
   
   // Get organization ID for birthday planner
   const organizationId = profile?.organization_id || profile?.preschool_id;
+
+  // Fetch pending teacher approvals count
+  useEffect(() => {
+    if (!organizationId) return;
+    getApprovalStats(organizationId).then(s => setPendingTeacherApprovals(s.pending)).catch(() => {});
+  }, [organizationId, refreshing]);
   
   // Birthday planner hook
   const {
@@ -105,17 +115,26 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
     isEmpty
   } = usePrincipalHub();
 
-  const toggleSection = useCallback((sectionId: string) => {
+  const allSectionIds = useMemo(() => [
+    'do-now', 'quick-actions', 'parent-requests', 'birthdays',
+    'recent-activity', 'metrics', 'search', 'tips',
+  ], []);
+
+  const toggleSection = useCallback((sectionId: string, isCollapsed?: boolean) => {
     setCollapsedSections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(sectionId)) {
-        newSet.delete(sectionId);
-      } else {
-        newSet.add(sectionId);
+      const shouldCollapse = typeof isCollapsed === 'boolean' ? isCollapsed : !prev.has(sectionId);
+      if (shouldCollapse) {
+        // Collapsing — just add it
+        const next = new Set(prev);
+        next.add(sectionId);
+        return next;
       }
-      return newSet;
+      // Expanding — collapse all others (accordion)
+      const next = new Set(allSectionIds);
+      next.delete(sectionId);
+      return next;
     });
-  }, []);
+  }, [allSectionIds]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -152,7 +171,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
         router.push('/screens/student-management');
         break;
       case 'finances':
-        router.push('/screens/financial-dashboard');
+        router.push('/screens/finance-control-center?tab=overview');
         break;
       case 'reports':
         router.push('/screens/teacher-reports');
@@ -240,6 +259,7 @@ export const NewEnhancedPrincipalDashboard: React.FC<NewEnhancedPrincipalDashboa
             pendingRegistrationsCount={data.stats?.pendingRegistrations?.total ?? 0}
             pendingPaymentsCount={data.stats?.pendingPayments?.total ?? 0}
             pendingPOPUploadsCount={data.stats?.pendingPOPUploads?.total ?? 0}
+            pendingTeacherApprovalsCount={pendingTeacherApprovals}
             collapsedSections={collapsedSections}
             onToggleSection={toggleSection}
           />

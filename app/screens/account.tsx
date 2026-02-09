@@ -3,7 +3,6 @@ import {
   View,
   ScrollView,
   RefreshControl,
-  Alert,
   Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +23,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useTranslation } from "react-i18next";
 import { useThemedStyles, themedStyles } from "@/hooks/useThemedStyles";
 import ProfileImageService from '@/services/ProfileImageService';
+import { AlertModal, useAlertModal, type AlertButton } from '@/components/ui/AlertModal';
 
 // Extracted components
 import {
@@ -41,6 +41,7 @@ export default function AccountScreen() {
   const { theme, mode } = useTheme();
   const { refreshProfile } = useAuth();
   const { t } = useTranslation();
+  const { showAlert, alertProps } = useAlertModal();
   const [refreshing, setRefreshing] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -67,6 +68,14 @@ export default function AccountScreen() {
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showOrgSwitcher, setShowOrgSwitcher] = useState(false);
   const [hasMultipleOrgs, setHasMultipleOrgs] = useState(false);
+
+  const showAppAlert = useCallback((
+    title: string,
+    message: string,
+    buttons?: AlertButton[],
+  ) => {
+    showAlert({ title, message, buttons });
+  }, [showAlert]);
 
   const styles = useThemedStyles((theme) => ({
     container: { flex: 1, backgroundColor: theme.background },
@@ -280,7 +289,7 @@ export default function AccountScreen() {
     try {
       const hasPermission = await ensureImageLibraryPermission();
       if (!hasPermission) {
-        Alert.alert("Permission needed", "We need camera roll permissions to select a profile picture.");
+        showAppAlert("Permission needed", "We need camera roll permissions to select a profile picture.");
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -292,14 +301,14 @@ export default function AccountScreen() {
       if (!result.canceled && result.assets[0]) {
         setPendingImageUri(result.assets[0].uri);
       }
-    } catch { Alert.alert("Error", "Failed to select image"); }
+    } catch { showAppAlert("Error", "Failed to select image"); }
   };
 
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "We need camera permissions to take a photo.");
+        showAppAlert("Permission needed", "We need camera permissions to take a photo.");
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -311,18 +320,18 @@ export default function AccountScreen() {
       if (!result.canceled && result.assets[0]) {
         setPendingImageUri(result.assets[0].uri);
       }
-    } catch { Alert.alert("Error", "Failed to take photo"); }
+    } catch { showAppAlert("Error", "Failed to take photo"); }
   };
 
   const uploadProfileImage = async (uri: string) => {
     try {
       setUploadingImage(true);
       const { data } = await assertSupabase().auth.getUser();
-      if (!data.user?.id) { Alert.alert('Error', 'User not found'); return; }
+      if (!data.user?.id) { showAppAlert('Error', 'User not found'); return; }
 
       const validation = await ProfileImageService.validateImage(uri);
       if (!validation.valid) {
-        Alert.alert('Invalid Image', validation.error || 'Please select a valid image');
+        showAppAlert('Invalid Image', validation.error || 'Please select a valid image');
         return;
       }
 
@@ -335,22 +344,22 @@ export default function AccountScreen() {
         // Keep account header + global app header in sync immediately.
         await refreshProfile();
         await load();
-        Alert.alert("Success", "Profile picture updated!");
+        showAppAlert("Success", "Profile picture updated!");
       } else {
         const errorMessage = result.error?.includes('Bucket not found') 
           ? "Avatar storage is not set up. Please contact support."
           : result.error || "Failed to update profile picture.";
-        Alert.alert("Upload Failed", errorMessage);
+        showAppAlert("Upload Failed", errorMessage);
       }
     } catch {
-      Alert.alert("Error", "Failed to update profile picture.");
+      showAppAlert("Error", "Failed to update profile picture.");
     } finally {
       setUploadingImage(false);
     }
   };
 
   const showImageOptions = () => {
-    Alert.alert("Update Profile Picture", "Choose an option", [
+    showAppAlert("Update Profile Picture", "Choose an option", [
       { text: "Take Photo", onPress: takePhoto },
       { text: "Choose from Library", onPress: pickImage },
       { text: "Cancel", style: "cancel" },
@@ -360,28 +369,28 @@ export default function AccountScreen() {
   // Biometric toggle
   const toggleBiometric = async () => {
     if (!biometricEnrolled) {
-      Alert.alert("Biometric Setup Required", "Please set up fingerprint or face recognition in device settings.");
+      showAppAlert("Biometric Setup Required", "Please set up fingerprint or face recognition in device settings.");
       return;
     }
     try {
       const { data } = await assertSupabase().auth.getUser();
-      if (!data.user) { Alert.alert("Error", "User not found"); return; }
+      if (!data.user) { showAppAlert("Error", "User not found"); return; }
 
       if (biometricEnabled) {
         await BiometricAuthService.disableBiometric();
         await setBiometricsEnabled(false);
         setBiometricEnabled(false);
-        Alert.alert("Biometric Login Disabled", "You will need to use your password to sign in.");
+        showAppAlert("Biometric Login Disabled", "You will need to use your password to sign in.");
       } else {
         const success = await BiometricAuthService.enableBiometric(data.user.id, data.user.email || "");
         if (success) {
           await setBiometricsEnabled(true);
           setBiometricEnabled(true);
-          Alert.alert("Biometric Login Enabled", "You can now use biometric authentication.");
+          showAppAlert("Biometric Login Enabled", "You can now use biometric authentication.");
         }
       }
     } catch {
-      Alert.alert("Error", "Failed to update biometric settings.");
+      showAppAlert("Error", "Failed to update biometric settings.");
     }
     setShowSettingsMenu(false);
   };
@@ -391,7 +400,7 @@ export default function AccountScreen() {
     try {
       setSavingProfile(true);
       const { data } = await assertSupabase().auth.getUser();
-      if (!data.user?.id) { Alert.alert("Error", "User not found"); return; }
+      if (!data.user?.id) { showAppAlert("Error", "User not found"); return; }
 
       const { data: profileRow } = await assertSupabase()
         .from("profiles")
@@ -400,7 +409,7 @@ export default function AccountScreen() {
         .maybeSingle();
 
       if (!profileRow?.id) {
-        Alert.alert("Error", "Profile not found");
+        showAppAlert("Error", "Profile not found");
         return;
       }
 
@@ -414,7 +423,7 @@ export default function AccountScreen() {
         })
         .eq("id", profileRow.id);
 
-      if (error) Alert.alert("Warning", "Profile updated locally but failed to sync.");
+      if (error) showAppAlert("Warning", "Profile updated locally but failed to sync.");
 
       // Keep auth metadata in sync so greetings and headers update immediately
       try {
@@ -433,9 +442,9 @@ export default function AccountScreen() {
       setAddress(editAddress.trim() || null);
       await refreshProfile();
       setShowEditProfile(false);
-      Alert.alert("Success", "Profile updated successfully!");
+      showAppAlert("Success", "Profile updated successfully!");
     } catch {
-      Alert.alert("Error", "Failed to save profile changes.");
+      showAppAlert("Error", "Failed to save profile changes.");
     } finally {
       setSavingProfile(false);
     }
@@ -517,8 +526,13 @@ export default function AccountScreen() {
         biometricEnrolled={biometricEnrolled}
         biometricEnabled={biometricEnabled}
         themeMode={mode}
+        showAlert={(config) => showAppAlert(config.title, config.message, config.buttons)}
         onToggleBiometric={toggleBiometric}
         onOpenThemeSettings={() => { setShowSettingsMenu(false); setShowThemeSettings(true); }}
+        onOpenSettings={() => {
+          setShowSettingsMenu(false);
+          router.push('/screens/settings');
+        }}
         onOpenOrgSwitcher={() => { setShowSettingsMenu(false); setShowOrgSwitcher(true); }}
         onOpenChangeEmail={() => {
           setShowSettingsMenu(false);
@@ -560,6 +574,7 @@ export default function AccountScreen() {
       <OrganizationSwitcher
         visible={showOrgSwitcher}
         onClose={() => setShowOrgSwitcher(false)}
+        showAlert={(config) => showAppAlert(config.title, config.message, config.buttons)}
         onOrganizationSwitched={() => {
           setShowOrgSwitcher(false);
           load(); // Refresh account data
@@ -591,6 +606,7 @@ export default function AccountScreen() {
         }}
         onCancel={() => setPendingImageUri(null)}
       />
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

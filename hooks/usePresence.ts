@@ -57,6 +57,12 @@ export function usePresence(
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+  const myStatusRef = useRef<PresenceStatus>(myStatus);
+
+  // Keep ref in sync with state so heartbeat reads current value
+  useEffect(() => {
+    myStatusRef.current = myStatus;
+  }, [myStatus]);
 
   // Update presence in database
   const upsertPresence = useCallback(async (status: PresenceStatus) => {
@@ -310,7 +316,7 @@ export function usePresence(
       
       if (timeSinceActivity > awayTimeout) {
         // User has been inactive - mark as away
-        if (myStatus !== 'away') {
+        if (myStatusRef.current !== 'away') {
           console.log('[usePresence] User inactive, marking as away');
           setMyStatus('away');
           upsertPresence('away');
@@ -318,7 +324,7 @@ export function usePresence(
       } else {
         // User is active - maintain online status
         console.log('[usePresence] User active, maintaining online status');
-        upsertPresence(myStatus === 'away' ? 'away' : 'online');
+        upsertPresence(myStatusRef.current === 'away' ? 'away' : 'online');
       }
     }, heartbeatInterval);
 
@@ -360,7 +366,7 @@ export function usePresence(
       // Mark as offline on unmount
       upsertPresence('offline');
     };
-  }, [userId, heartbeatInterval, awayTimeout, loadPresence, upsertPresence, myStatus]);
+  }, [userId, heartbeatInterval, awayTimeout, loadPresence, upsertPresence]);
 
   // Track user activity (call this on user interactions)
   useEffect(() => {

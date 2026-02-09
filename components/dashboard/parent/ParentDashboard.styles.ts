@@ -98,12 +98,15 @@ export const createParentDashboardStyles = (
     metricsGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      marginHorizontal: -layout.cardGap / 2,
+      marginHorizontal: 0,
+      alignItems: 'flex-start',
+      gap: layout.cardGap,
     },
     actionsGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       marginHorizontal: -layout.cardGap / 2,
+      alignItems: 'flex-start',
     },
     // ─── Upgrade Banner ──────────────────────────────────
     upgradeBanner: {

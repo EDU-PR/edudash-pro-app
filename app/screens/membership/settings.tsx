@@ -19,7 +19,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useOrganizationBranding } from '@/contexts/OrganizationBrandingContext';
-import { 
+import { logger } from '@/lib/logger';
+import {
   DashboardWallpaperBackground,
   DashboardWallpaperSettings,
   type DashboardSettings,
@@ -82,7 +83,7 @@ export default function MembershipSettingsScreen() {
         }
       }
     } catch (error) {
-      console.error('[MembershipSettings] Error fetching organization:', error);
+      logger.error('[MembershipSettings] Error fetching organization:', error);
     }
   };
 

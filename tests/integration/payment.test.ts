@@ -17,15 +17,15 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const PAYFAST_PASSPHRASE=REDACTED
 
-describe('PayFast Payment Integration Tests', () => {
+const SKIP = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+const describeIfEnv = SKIP ? describe.skip : describe;
+
+describeIfEnv('PayFast Payment Integration Tests', () => {
   let supabase: SupabaseClient;
   let testUserId: string | null = null;
   let testOrgId: string | null = null;
 
   beforeAll(() => {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing Supabase credentials');
-    }
     supabase = assertSupabase();
   });
 

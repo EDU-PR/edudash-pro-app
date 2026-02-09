@@ -317,7 +317,7 @@ export const getApplicationStatusLabel = (status: ApplicationStatus): string => 
     [ApplicationStatus.SHORTLISTED]: 'Shortlisted',
     [ApplicationStatus.INTERVIEW_SCHEDULED]: 'Interview Scheduled',
     [ApplicationStatus.OFFERED]: 'Offer Sent',
-    [ApplicationStatus.ACCEPTED]: 'Accepted',
+    [ApplicationStatus.ACCEPTED]: 'Hired',
     [ApplicationStatus.REJECTED]: 'Rejected',
   };
   return labels[status] || status;

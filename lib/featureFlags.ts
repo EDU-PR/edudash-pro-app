@@ -18,6 +18,9 @@ export interface FeatureFlags {
   ai_progress_analysis: boolean;
   ai_insights: boolean;
   ai_streaming_enabled: boolean;
+  ENABLE_DASH_IMAGE_GEN: boolean;
+  ENABLE_IMAGE_PROVIDER_FALLBACK: boolean;
+  ENABLE_PARENT_TEMP_LESSONS: boolean;
   
   // Collaboration Features
   principal_meeting_rooms: boolean;
@@ -39,6 +42,7 @@ export interface FeatureFlags {
   admob_test_ids: boolean;
   production_db_dev_mode: boolean;
   adaptive_admin_dashboard_mobile_v1: boolean;
+  NEXT_GEN_DASH_POLICY_V1: boolean;
   
   // Language Features
   enableMultilanguageSupport: boolean;
@@ -125,6 +129,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   ai_progress_analysis: AI_DEFAULT,
   ai_insights: AI_DEFAULT,
   ai_streaming_enabled: false,
+  ENABLE_DASH_IMAGE_GEN: process.env.EXPO_PUBLIC_ENABLE_DASH_IMAGE_GEN !== 'false',
+  ENABLE_IMAGE_PROVIDER_FALLBACK: process.env.EXPO_PUBLIC_ENABLE_IMAGE_PROVIDER_FALLBACK === 'true',
+  ENABLE_PARENT_TEMP_LESSONS: process.env.EXPO_PUBLIC_ENABLE_PARENT_TEMP_LESSONS !== 'false',
   
   // Collaboration Features
   principal_meeting_rooms: false,
@@ -146,6 +153,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   admob_test_ids: process.env.EXPO_PUBLIC_ADMOB_TEST_IDS_ONLY === 'true',
   production_db_dev_mode: process.env.EXPO_PUBLIC_USE_PRODUCTION_DB_AS_DEV === 'true',
   adaptive_admin_dashboard_mobile_v1: process.env.EXPO_PUBLIC_ADAPTIVE_ADMIN_DASHBOARD_MOBILE_V1 !== 'false',
+  NEXT_GEN_DASH_POLICY_V1: process.env.EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_V1 !== 'false',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',
@@ -260,6 +268,11 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
       ai_progress_analysis: flags.ai_progress_analysis ?? DEFAULT_FLAGS.ai_progress_analysis,
       ai_insights: flags.ai_insights ?? DEFAULT_FLAGS.ai_insights,
       ai_streaming_enabled: flags.ai_streaming ?? DEFAULT_FLAGS.ai_streaming_enabled,
+      ENABLE_DASH_IMAGE_GEN: flags.enable_dash_image_gen ?? DEFAULT_FLAGS.ENABLE_DASH_IMAGE_GEN,
+      ENABLE_IMAGE_PROVIDER_FALLBACK:
+        flags.enable_image_provider_fallback ?? DEFAULT_FLAGS.ENABLE_IMAGE_PROVIDER_FALLBACK,
+      ENABLE_PARENT_TEMP_LESSONS:
+        flags.enable_parent_temp_lessons ?? DEFAULT_FLAGS.ENABLE_PARENT_TEMP_LESSONS,
       
       // Collaboration Features
       principal_meeting_rooms: flags.principal_meetings ?? DEFAULT_FLAGS.principal_meeting_rooms,
@@ -282,6 +295,8 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
       production_db_dev_mode: DEFAULT_FLAGS.production_db_dev_mode,
       adaptive_admin_dashboard_mobile_v1:
         flags.adaptive_admin_dashboard_mobile_v1 ?? DEFAULT_FLAGS.adaptive_admin_dashboard_mobile_v1,
+      NEXT_GEN_DASH_POLICY_V1:
+        flags.next_gen_dash_policy_v1 ?? DEFAULT_FLAGS.NEXT_GEN_DASH_POLICY_V1,
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,

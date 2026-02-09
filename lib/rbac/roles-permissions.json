@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "lastUpdated": "2025-09-21",
-    "description": "EduDash Pro Roles and Permissions Matrix - Phase 1 Core Roles",
+    "description": "EduDash Pro Roles and Permissions Matrix - Phase 1 Core Roles + Parent",
     "compatibleWith": "Existing 5-role system (super_admin, principal, teacher, parent, student)"
   },
   "roles": {
@@ -64,7 +64,7 @@
       "description": "Student with course enrollment and assignment submission capabilities",
       "scope": "self",
       "inheritsFrom": [],
-      "mapToExisting": ["parent", "student"],
+      "mapToExisting": ["student"],
       "permissions": [
         "view_courses",
         "enroll_in_courses",
@@ -75,6 +75,55 @@
         "access_student_dashboard",
         "use_ai_homework_helper",
         "view_own_progress"
+      ]
+    },
+    "parent": {
+      "id": "parent",
+      "name": "Parent",
+      "level": 1,
+      "description": "Parent/guardian with child monitoring, payment, and communication capabilities",
+      "scope": "children",
+      "inheritsFrom": [],
+      "mapToExisting": ["parent"],
+      "permissions": [
+        "view_child_progress",
+        "view_child_attendance",
+        "view_child_grades",
+        "view_child_homework",
+        "view_weekly_reports",
+        "view_courses",
+        "communicate_with_instructors",
+        "make_payments",
+        "upload_documents",
+        "manage_child_profile",
+        "access_parent_dashboard",
+        "use_ai_homework_helper",
+        "use_ai_insights",
+        "view_daily_activities",
+        "view_announcements",
+        "join_live_classes"
+      ]
+    },
+    "parent_level_2": {
+      "id": "parent_level_2",
+      "name": "Parent Level 2",
+      "level": 2,
+      "description": "Enhanced parent role with expanded child visibility, payments, and communication access",
+      "scope": "children",
+      "inheritsFrom": [],
+      "mapToExisting": ["parent"],
+      "permissions": [
+        "view_child_progress",
+        "view_child_reports",
+        "view_child_attendance",
+        "upload_documents",
+        "view_weekly_reports",
+        "make_payments",
+        "view_payment_history",
+        "communicate_with_teachers",
+        "access_parent_dashboard",
+        "link_child",
+        "view_announcements"
       ]
     }
   },
@@ -306,6 +355,152 @@
       "resources": ["dashboards"],
       "actions": ["read"]
     },
+    "access_parent_dashboard": {
+      "id": "access_parent_dashboard",
+      "name": "Access Parent Dashboard",
+      "category": "ui",
+      "description": "Access parent dashboard and tools",
+      "resources": ["dashboards"],
+      "actions": ["read"]
+    },
+    "view_child_progress": {
+      "id": "view_child_progress",
+      "name": "View Child Progress",
+      "category": "analytics",
+      "description": "View progress and analytics for linked children",
+      "resources": ["analytics", "progress", "students"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_child_reports": {
+      "id": "view_child_reports",
+      "name": "View Child Reports",
+      "category": "analytics",
+      "description": "View detailed child report cards and assessment summaries",
+      "resources": ["reports", "students"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_child_attendance": {
+      "id": "view_child_attendance",
+      "name": "View Child Attendance",
+      "category": "analytics",
+      "description": "View attendance records for linked children",
+      "resources": ["attendance", "students"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_child_grades": {
+      "id": "view_child_grades",
+      "name": "View Child Grades",
+      "category": "assignments",
+      "description": "View grades and feedback for linked children",
+      "resources": ["grades", "submissions"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_child_homework": {
+      "id": "view_child_homework",
+      "name": "View Child Homework",
+      "category": "assignments",
+      "description": "View homework assignments for linked children",
+      "resources": ["homework", "assignments"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_weekly_reports": {
+      "id": "view_weekly_reports",
+      "name": "View Weekly Reports",
+      "category": "analytics",
+      "description": "View weekly learning reports for linked children",
+      "resources": ["weekly_learning_reports"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "make_payments": {
+      "id": "make_payments",
+      "name": "Make Payments",
+      "category": "billing",
+      "description": "Make payments for school fees and subscriptions",
+      "resources": ["payments", "invoices"],
+      "actions": ["create", "read"]
+    },
+    "view_payment_history": {
+      "id": "view_payment_history",
+      "name": "View Payment History",
+      "category": "billing",
+      "description": "View past payment records and transaction history for linked children",
+      "resources": ["payments", "transactions", "invoices"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "upload_documents": {
+      "id": "upload_documents",
+      "name": "Upload Documents",
+      "category": "communication",
+      "description": "Upload proof of payment, medical certificates, and other documents",
+      "resources": ["documents", "storage"],
+      "actions": ["create", "read"]
+    },
+    "communicate_with_teachers": {
+      "id": "communicate_with_teachers",
+      "name": "Communicate with Teachers",
+      "category": "communication",
+      "description": "Send and receive messages with teachers for linked children",
+      "resources": ["messages"],
+      "actions": ["create", "read"],
+      "scope": "children"
+    },
+    "manage_child_profile": {
+      "id": "manage_child_profile",
+      "name": "Manage Child Profile",
+      "category": "user_management",
+      "description": "Update contact details and profile information for linked children",
+      "resources": ["students", "profiles"],
+      "actions": ["read", "update"]
+    },
+    "link_child": {
+      "id": "link_child",
+      "name": "Link Child",
+      "category": "user_management",
+      "description": "Link a child profile to the parent account",
+      "resources": ["students", "parent_child_links"],
+      "actions": ["create", "read"],
+      "scope": "children"
+    },
+    "use_ai_insights": {
+      "id": "use_ai_insights",
+      "name": "Use AI Insights",
+      "category": "ai",
+      "description": "View AI-powered insights and predictions about child performance",
+      "resources": ["ai_services"],
+      "actions": ["read"]
+    },
+    "view_daily_activities": {
+      "id": "view_daily_activities",
+      "name": "View Daily Activities",
+      "category": "analytics",
+      "description": "View daily class activities and photos for linked children",
+      "resources": ["daily_activities"],
+      "actions": ["read"],
+      "scope": "children"
+    },
+    "view_announcements": {
+      "id": "view_announcements",
+      "name": "View Announcements",
+      "category": "communication",
+      "description": "View school announcements and notifications",
+      "resources": ["announcements"],
+      "actions": ["read"]
+    },
+    "join_live_classes": {
+      "id": "join_live_classes",
+      "name": "Join Live Classes",
+      "category": "course_access",
+      "description": "Observe or join live class sessions",
+      "resources": ["live_sessions"],
+      "actions": ["read"]
+    },
     "manage_roles": {
       "id": "manage_roles",
       "name": "Manage Roles",
@@ -364,6 +559,10 @@
       "name": "AI Features",
       "description": "Permissions related to AI functionality"
     },
+    "billing": {
+      "name": "Billing & Payments",
+      "description": "Permissions related to payments and billing"
+    },
     "ui": {
       "name": "User Interface",
       "description": "Permissions related to dashboard and UI access"
@@ -375,12 +574,12 @@
       {
         "rule": "level_inheritance",
         "description": "Higher level roles inherit permissions from lower levels",
-        "implementation": "admin (level 4) > instructor (level 2) > student (level 1)"
+        "implementation": "admin (level 4) > instructor (level 2) > student/parent (level 1)"
       },
       {
         "rule": "scope_restriction", 
         "description": "Permissions are scoped based on role context",
-        "implementation": "admin: global, instructor: organization, student: self"
+        "implementation": "admin: global, instructor: organization, parent: children, student: self"
       },
       {
         "rule": "resource_filtering",

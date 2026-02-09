@@ -282,11 +282,11 @@ export default function NotificationsScreen() {
             navigateSafe('/screens/parent-payments', { tab });
           }
         } else if (isPrincipal) {
-          navigateSafe('/screens/financial-dashboard');
+          navigateSafe('/screens/finance-control-center?tab=overview');
         } else if (isTeacher) {
           navigateSafe('/screens/teacher-dashboard');
         } else {
-          navigateSafe('/screens/financial-dashboard');
+          navigateSafe('/screens/finance-control-center?tab=overview');
         }
         break;
       case 'calendar':

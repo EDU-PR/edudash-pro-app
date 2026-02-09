@@ -63,6 +63,13 @@ interface ActivityRow {
   activity_comments?: { id: string; parent_id: string; comment_text: string; is_approved: boolean; created_at: string; profiles?: { first_name: string; last_name: string } | null }[];
 }
 
+interface StudentWithClassRow {
+  id: string;
+  first_name: string;
+  last_name: string;
+  classes: { name: string } | { name: string }[] | null;
+}
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const ACTIVITY_META: Record<string, { icon: typeof Activity; color: string; label: string }> = {
@@ -153,49 +160,80 @@ export default function ParentActivityFeedPage() {
 
   // ── Auth ──────────────────────────────────────
   useEffect(() => {
-    supabase.auth.getUser().then((result) => {
-      const data = result.data;
-      if (data.user) {
-        setUserId(data.user.id);
-        setEmail(data.user.email || '');
-      }
-    });
+    let isActive = true;
+
+    const loadAuthUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!isActive || !data.user) return;
+      setUserId(data.user.id);
+      setEmail(data.user.email || '');
+    };
+
+    void loadAuthUser();
+    return () => {
+      isActive = false;
+    };
   }, [supabase]);
 
   // ── Profile ID ────────────────────────────────
   useEffect(() => {
     if (!userId) return;
-    supabase
-      .from('profiles')
-      .select('id')
-      .eq('auth_user_id', userId)
-      .maybeSingle()
-      .then((result) => {
-        const data = result.data;
-        setProfileId(data?.id || userId);
-      });
+
+    let isActive = true;
+    const loadProfileId = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_user_id', userId)
+        .maybeSingle();
+
+      if (!isActive) return;
+      setProfileId(data?.id || userId);
+    };
+
+    void loadProfileId();
+    return () => {
+      isActive = false;
+    };
   }, [userId, supabase]);
 
   // ── Children ──────────────────────────────────
   useEffect(() => {
     if (!profileId) return;
-    supabase
-      .from('students')
-      .select('id, first_name, last_name, class_id, classes:class_id(name)')
-      .eq('parent_id', profileId)
-      .then((result) => {
-        const data = result.data;
-        const mapped = (data || []).map((s: any) => ({
-          id: s.id,
-          first_name: s.first_name,
-          last_name: s.last_name,
-          class_name: s.classes?.name || undefined,
-        }));
-        setChildren(mapped);
-        if (mapped.length > 0 && !selectedChild) {
-          setSelectedChild(mapped[0].id);
-        }
+
+    let isActive = true;
+    const loadChildren = async () => {
+      const { data } = await supabase
+        .from('students')
+        .select('id, first_name, last_name, class_id, classes:class_id(name)')
+        .eq('parent_id', profileId);
+
+      if (!isActive) return;
+
+      const rows = (data || []) as StudentWithClassRow[];
+      const mapped = rows.map((student) => {
+        const className = Array.isArray(student.classes)
+          ? student.classes[0]?.name
+          : student.classes?.name;
+
+        return {
+          id: student.id,
+          first_name: student.first_name,
+          last_name: student.last_name,
+          class_name: className || undefined,
+        };
       });
+
+      setChildren(mapped);
+      if (mapped.length > 0 && !selectedChild) {
+        setSelectedChild(mapped[0].id);
+      }
+    };
+
+    void loadChildren();
+    return () => {
+      isActive = false;
+    };
   }, [profileId, supabase, selectedChild]);
 
   // ── Fetch activities ──────────────────────────

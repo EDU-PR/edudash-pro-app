@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { PrincipalDashboardWrapper } from '@/components/dashboard/PrincipalDashboardWrapper';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { logger } from '@/lib/logger';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
@@ -52,7 +53,7 @@ export default function PrincipalDashboardScreen() {
     // Decision 2: User exists but no organization -> onboarding
     if (!orgId) {
       navigationAttempted.current = true;
-      console.log('Principal dashboard: No school found, redirecting to onboarding', {
+      logger.debug('PrincipalDashboard', 'No school found, redirecting to onboarding', {
         profile,
         organization_id: profile?.organization_id,
         preschool_id: (profile as any)?.preschool_id,
@@ -60,7 +61,7 @@ export default function PrincipalDashboardScreen() {
       try { 
         router.replace('/screens/principal-onboarding'); 
       } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
+        logger.debug('PrincipalDashboard', 'Redirect to onboarding failed', e);
       }
       return;
     }
@@ -91,7 +92,7 @@ export default function PrincipalDashboardScreen() {
       <View style={styles.empty}>
         <Text style={styles.text}>{t('dashboard.no_school_found_redirect')}</Text>
         <TouchableOpacity onPress={() => {
-          try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+          try { router.replace('/screens/principal-onboarding'); } catch (e) { logger.debug('PrincipalDashboard', 'Redirect failed', e); }
         }}>
           <Text style={[styles.text, { textDecorationLine: 'underline' }]}>{t('common.go_now')}</Text>
         </TouchableOpacity>

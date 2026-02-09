@@ -34,7 +34,7 @@ interface PrincipalRecentActivityProps {
     pendingPayments?: { total: number };
   };
   collapsedSections: Set<string>;
-  onToggleSection: (sectionId: string) => void;
+  onToggleSection: (sectionId: string, isCollapsed?: boolean) => void;
 }
 
 export const PrincipalRecentActivity: React.FC<PrincipalRecentActivityProps> = ({

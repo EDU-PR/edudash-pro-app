@@ -3,7 +3,7 @@
  * Manages budget requests and approvals for Youth President dashboard
  */
 import React, { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { DashboardWallpaperBackground } from '@/components/membership/dashboard'
 import { useBudgetRequests, BudgetRequest, STATUS_CONFIG } from '@/hooks/membership/useBudgetRequests';
 import { BudgetRequestForm } from '@/components/membership/BudgetRequestForm';
 import { styles } from '@/components/membership/styles/budget-requests.styles';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type FilterType = 'all' | 'pending' | 'approved' | 'rejected';
@@ -27,19 +28,20 @@ export default function BudgetRequestsScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ title: '', description: '', amount: '', category: 'Events' });
+  const { showAlert, alertProps } = useAlertModal();
 
   const { requests, isLoading, isRefreshing, stats, refetch, submitRequest, isSubmitting } = useBudgetRequests(activeFilter);
 
   const handleSubmit = async () => {
-    if (!formData.title.trim()) return Alert.alert('Error', 'Please enter a title');
-    if (!formData.amount || parseFloat(formData.amount) <= 0) return Alert.alert('Error', 'Please enter a valid amount');
+    if (!formData.title.trim()) return showAlert({ title: 'Error', message: 'Please enter a title' });
+    if (!formData.amount || parseFloat(formData.amount) <= 0) return showAlert({ title: 'Error', message: 'Please enter a valid amount' });
 
     try {
       await submitRequest({ title: formData.title, description: formData.description, amount: parseFloat(formData.amount), category: formData.category });
       setShowModal(false);
       setFormData({ title: '', description: '', amount: '', category: 'Events' });
-      Alert.alert('Success', 'Budget request submitted successfully');
-    } catch { Alert.alert('Error', 'Failed to submit request'); }
+      showAlert({ title: 'Success', message: 'Budget request submitted successfully' });
+    } catch { showAlert({ title: 'Error', message: 'Failed to submit request' }); }
   };
 
   const renderRequestItem = ({ item }: { item: BudgetRequest }) => {
@@ -112,6 +114,7 @@ export default function BudgetRequestsScreen() {
 
         <BudgetRequestForm visible={showModal} onClose={() => setShowModal(false)} onSubmit={handleSubmit} isSubmitting={isSubmitting} formData={formData} setFormData={setFormData} theme={theme} />
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

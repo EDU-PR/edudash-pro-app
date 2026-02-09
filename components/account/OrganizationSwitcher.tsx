@@ -6,7 +6,7 @@
  * Updates the user's active organization and navigates to the appropriate dashboard.
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Alert, Image } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, FlatList, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -14,6 +14,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { toast } from '@/components/ui/ToastProvider';
+import type { ParentAlertApi } from '@/components/ui/parentAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const ACTIVE_ORG_KEY = '@active_organization';
@@ -36,12 +38,15 @@ export interface OrganizationSwitcherProps {
   onClose: () => void;
   /** Callback after successful organization switch */
   onOrganizationSwitched?: (org: UserOrganization) => void;
+  /** Optional modal alert API for parent/account flows */
+  showAlert?: ParentAlertApi;
 }
 
 export function OrganizationSwitcher({
   visible,
   onClose,
   onOrganizationSwitched,
+  showAlert,
 }: OrganizationSwitcherProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -51,6 +56,14 @@ export function OrganizationSwitcher({
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState<string | null>(null);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
+
+  const showOrgAlert = useCallback((title: string, message: string) => {
+    if (showAlert) {
+      showAlert({ title, message, type: 'error' });
+      return;
+    }
+    toast.error(message, title);
+  }, [showAlert]);
 
   // Load user's organizations
   const loadOrganizations = useCallback(async () => {
@@ -255,11 +268,11 @@ export function OrganizationSwitcher({
       onClose();
     } catch (error) {
       console.error('[OrganizationSwitcher] Failed to switch organization:', error);
-      Alert.alert('Error', 'Failed to switch organization. Please try again.');
+      showOrgAlert('Error', 'Failed to switch organization. Please try again.');
     } finally {
       setSwitching(null);
     }
-  }, [user?.id, refreshProfile, onOrganizationSwitched, onClose]);
+  }, [user?.id, refreshProfile, onOrganizationSwitched, onClose, showOrgAlert]);
 
   // Render organization item
   const renderOrganization = ({ item }: { item: UserOrganization }) => {

@@ -3,7 +3,7 @@
  * Generate and share invite codes for recruiting youth members
  */
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Switch, Share, Linking, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Switch, Share, Linking, Modal, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,12 +12,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { generateTemporaryPassword } from '@/lib/memberRegistrationUtils';
 import { MEMBER_TYPE_LABELS } from '@/components/membership/types';
 import { useOrganizationRegions, OrganizationRegion } from '@/hooks/membership';
 import Constants from 'expo-constants';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
@@ -61,18 +63,19 @@ export default function YouthInviteCodeScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   // Route guard: Only youth_president and youth_secretary can invite members
   useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
     const allowedTypes = ['youth_president', 'youth_secretary'];
     if (profile && !allowedTypes.includes(memberType)) {
-      console.log('[YouthInviteCode] Access denied - member_type:', memberType, '- redirecting');
-      Alert.alert(
-        'Access Restricted',
-        'Only Youth President and Youth Secretary can invite members.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      logger.debug('[YouthInviteCode] Access denied - member_type:', memberType, '- redirecting');
+      showAlert({
+        title: 'Access Restricted',
+        message: 'Only Youth President and Youth Secretary can invite members.',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     }
   }, [profile]);
 
@@ -132,7 +135,7 @@ export default function YouthInviteCodeScreen() {
       }));
       setCodes(mapped);
     } catch (e: any) {
-      console.error('Failed to load codes:', e);
+      logger.error('Failed to load codes:', e);
     } finally {
       setInitialLoading(false);
     }
@@ -156,10 +159,10 @@ export default function YouthInviteCodeScreen() {
         if (!error && data?.region_id) {
           setUserRegionId(data.region_id);
           setSelectedRegionId(data.region_id); // Default to user's region
-          console.log('[YouthInviteCode] User region_id:', data.region_id);
+          logger.debug('[YouthInviteCode] User region_id:', data.region_id);
         }
       } catch (e) {
-        console.warn('[YouthInviteCode] Failed to load user region:', e);
+        logger.warn('[YouthInviteCode] Failed to load user region:', e);
       }
     };
     loadUserRegion();
@@ -176,12 +179,12 @@ export default function YouthInviteCodeScreen() {
 
   const onGenerate = async () => {
     if (!organizationId || !user?.id) {
-      Alert.alert('Missing context', 'You need to be part of an organization to create invites.');
+      showAlert({ title: 'Missing context', message: 'You need to be part of an organization to create invites.' });
       return;
     }
     
     if (!selectedRegionId) {
-      Alert.alert('Select Region', 'Please select a region for this invite code.');
+      showAlert({ title: 'Select Region', message: 'Please select a region for this invite code.' });
       return;
     }
     
@@ -220,30 +223,30 @@ export default function YouthInviteCodeScreen() {
       await loadCodes();
       
       // Show success with temporary password
-      Alert.alert(
-        'Invite Created Successfully! 🎉',
-        `Invite Code: ${inviteCode}\n\nTemporary Password: ${tempPassword}\n\n` +
+      showAlert({
+        title: 'Invite Created Successfully! 🎉',
+        message: `Invite Code: ${inviteCode}\n\nTemporary Password: ${tempPassword}\n\n` +
         `Share both the code and password with potential members.\n\n` +
         `⚠️ IMPORTANT: Members will use this password to login after joining. They should change it after first login.`,
-        [
+        buttons: [
           {
             text: 'Copy Password',
             onPress: async () => {
               try {
                 if (Clipboard?.setStringAsync) {
                   await Clipboard.setStringAsync(tempPassword);
-                  Alert.alert('Copied', 'Temporary password copied to clipboard');
+                  showAlert({ title: 'Copied', message: 'Temporary password copied to clipboard' });
                 }
               } catch (error) {
-                console.error('[YouthInviteCode] Failed to copy password:', error);
+                logger.error('[YouthInviteCode] Failed to copy password:', error);
               }
             }
           },
           { text: 'OK' }
-        ]
-      );
+        ],
+      });
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create invite');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to create invite' });
     } finally {
       setLoading(false);
     }
@@ -253,12 +256,12 @@ export default function YouthInviteCodeScreen() {
     try {
       if (Clipboard?.setStringAsync) {
         await Clipboard.setStringAsync(value);
-        Alert.alert('Copied', 'Invite code copied to clipboard');
+        showAlert({ title: 'Copied', message: 'Invite code copied to clipboard' });
       } else {
-        Alert.alert('Copy failed', 'Clipboard not available');
+        showAlert({ title: 'Copy failed', message: 'Clipboard not available' });
       }
     } catch {
-      Alert.alert('Copy failed', 'Unable to copy');
+      showAlert({ title: 'Copy failed', message: 'Unable to copy' });
     }
   };
 
@@ -300,7 +303,7 @@ export default function YouthInviteCodeScreen() {
       const message = buildShareMessage(item);
       await Share.share({ message });
     } catch (e: any) {
-      Alert.alert('Share failed', e?.message || 'Unable to open share dialog');
+      showAlert({ title: 'Share failed', message: e?.message || 'Unable to open share dialog' });
     }
   };
 
@@ -310,7 +313,7 @@ export default function YouthInviteCodeScreen() {
       const url = `whatsapp://send?text=${message}`;
       await Linking.openURL(url);
     } catch (e: any) {
-      Alert.alert('WhatsApp Error', 'Unable to open WhatsApp. Please try Share instead.');
+      showAlert({ title: 'WhatsApp Error', message: 'Unable to open WhatsApp. Please try Share instead.' });
     }
   };
 
@@ -328,17 +331,17 @@ export default function YouthInviteCodeScreen() {
       if (error) throw error;
       await loadCodes();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to update');
+      showAlert({ title: 'Error', message: e?.message || 'Failed to update' });
     } finally {
       setLoading(false);
     }
   };
 
   const deleteCode = async (item: YouthInviteCode) => {
-    Alert.alert(
-      'Delete Invite Code',
-      `Are you sure you want to permanently delete the invite code "${item.code}"?\n\nThis action cannot be undone.`,
-      [
+    showAlert({
+      title: 'Delete Invite Code',
+      message: `Are you sure you want to permanently delete the invite code "${item.code}"?\n\nThis action cannot be undone.`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -355,16 +358,16 @@ export default function YouthInviteCodeScreen() {
               
               if (error) throw error;
               await loadCodes();
-              Alert.alert('Deleted', 'Invite code has been deleted');
+              showAlert({ title: 'Deleted', message: 'Invite code has been deleted' });
             } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Failed to delete');
+              showAlert({ title: 'Error', message: e?.message || 'Failed to delete' });
             } finally {
               setLoading(false);
             }
           }
         }
-      ]
-    );
+      ],
+    });
   };
 
   const latest = codes.find(c => c.is_active);
@@ -801,6 +804,7 @@ export default function YouthInviteCodeScreen() {
           </View>
         </Modal>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

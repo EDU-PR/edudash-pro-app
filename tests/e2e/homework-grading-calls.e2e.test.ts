@@ -32,11 +32,19 @@ const TEST_SCHOOL_ID = 'test-school-id';
 
 let supabase: SupabaseClient;
 
+const SKIP = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+if (SKIP) {
+  test.only('skipped — no Supabase credentials in env', () => {
+    console.log('⏭ E2E tests skipped: set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to run');
+  });
+}
+
 // ============================================================================
 // Test Setup & Teardown
 // ============================================================================
 
 beforeAll(async () => {
+  if (SKIP) return;
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   console.log('🧪 E2E Tests initialized');
 });

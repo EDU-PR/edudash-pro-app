@@ -74,7 +74,7 @@ export const PrincipalGettingStartedCard: React.FC<PrincipalGettingStartedCardPr
         subtitle: t('onboarding.set_fees_sub', { defaultValue: 'Set fee rules so reminders and payment tracking work.' }),
         done: true,
         icon: 'cash',
-        route: '/screens/principal-fee-overview',
+        route: '/screens/finance-control-center?tab=overview',
         cta: t('common.open', { defaultValue: 'Open' }),
       },
     ];

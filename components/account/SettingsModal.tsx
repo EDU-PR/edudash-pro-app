@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import type { ViewStyle, TextStyle } from 'react-native';
+import type { ParentAlertApi } from '@/components/ui/parentAlert';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -13,10 +14,12 @@ interface SettingsModalProps {
   themeMode: 'light' | 'dark' | 'system';
   onToggleBiometric: () => void;
   onOpenThemeSettings: () => void;
+  onOpenSettings?: () => void;
   onOpenOrgSwitcher?: () => void;
   onOpenChangeEmail?: () => void;
   onOpenChangePassword?: () => void;
   hasMultipleOrgs?: boolean;
+  showAlert?: ParentAlertApi;
   theme: {
     text: string;
     textSecondary: string;
@@ -49,14 +52,28 @@ export function SettingsModal({
   themeMode,
   onToggleBiometric,
   onOpenThemeSettings,
+  onOpenSettings,
   onOpenOrgSwitcher,
   onOpenChangeEmail,
   onOpenChangePassword,
   hasMultipleOrgs,
+  showAlert,
   theme,
   styles,
 }: SettingsModalProps) {
   const { t } = useTranslation();
+  const showSettingsAlert = (
+    title: string,
+    message: string,
+    type: 'info' | 'warning' | 'error' | 'success' = 'info',
+  ) => {
+    showAlert?.({
+      title,
+      message,
+      type,
+      buttons: [{ text: t('common.ok', { defaultValue: 'OK' }) }],
+    });
+  };
 
   return (
     <Modal
@@ -82,10 +99,10 @@ export function SettingsModal({
           <TouchableOpacity
             style={styles.settingItem}
             onPress={biometricSupported ? onToggleBiometric : () => {
-              Alert.alert(
+              showSettingsAlert(
                 t('settings.biometric.title', { defaultValue: 'Biometric Authentication' }),
                 t('settings.biometric.not_available_desc', { defaultValue: 'Biometric authentication is not available on this device.' }),
-                [{ text: t('common.ok', { defaultValue: 'OK' }) }]
+                'warning',
               );
             }}
           >
@@ -157,6 +174,24 @@ export function SettingsModal({
             </TouchableOpacity>
           )}
 
+          {/* Full Settings Screen */}
+          {onOpenSettings && (
+            <TouchableOpacity style={styles.settingItem} onPress={onOpenSettings}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="settings-outline" size={24} color={theme.primary} />
+                <View style={styles.settingText}>
+                  <Text style={styles.settingTitle}>
+                    {t('settings.open_full_settings', { defaultValue: 'Open Settings' })}
+                  </Text>
+                  <Text style={styles.settingSubtitle}>
+                    {t('settings.open_full_settings_desc', { defaultValue: 'Manage notifications, preferences, billing, and app settings' })}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          )}
+
           {/* Change Email */}
           {onOpenChangeEmail && (
             <TouchableOpacity style={styles.settingItem} onPress={onOpenChangeEmail}>
@@ -201,7 +236,7 @@ export function SettingsModal({
           <TouchableOpacity
             style={styles.settingItem}
             onPress={() =>
-              Alert.alert(
+              showSettingsAlert(
                 t('common.coming_soon', { defaultValue: 'Coming Soon' }),
                 t('settings.notifications_coming_soon_desc', { defaultValue: 'Notification settings will be available in the next update.' }),
               )
@@ -221,7 +256,7 @@ export function SettingsModal({
           <TouchableOpacity
             style={styles.settingItem}
             onPress={() =>
-              Alert.alert(
+              showSettingsAlert(
                 "Privacy & Security",
                 "Your data is encrypted and stored securely. Biometric data never leaves your device.",
               )

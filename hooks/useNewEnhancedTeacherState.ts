@@ -15,10 +15,13 @@ import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { normalizePersonName } from '@/lib/utils/nameUtils';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
 import { 
   TEACHER_ROUTES, 
   TEACHER_QUICK_ACTIONS, 
   getTeacherRoute,
+  getTeacherRouteForSchoolType,
   resolveRouteColor 
 } from '@/lib/constants/teacherRoutes';
 
@@ -52,25 +55,22 @@ export const useNewEnhancedTeacherState = () => {
       await refresh();
       await Feedback.vibrate(10);
     } catch (error) {
-      console.error('Refresh error:', error);
+      if (__DEV__) console.error('Refresh error:', error);
     } finally {
       setRefreshing(false);
     }
   };
 
   // Check if user is from a preschool (used to tailor quick lesson actions)
-  const schoolType =
-    profile?.organization_membership?.school_type ||
-    (profile as any)?.school_type ||
-    (profile as any)?.usage_type;
-  const isPreschool = schoolType ? schoolType === 'preschool' : Boolean(profile?.preschool_id);
+  const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+  const isPreschool = resolvedSchoolType === 'preschool';
 
   /**
    * Navigate to a teacher route using centralized route config
    * Single source of truth for all navigation
    */
   const handleQuickAction = (action: string) => {
-    track('teacher.dashboard.quick_action', { action, layout: 'enhanced', isPreschool });
+    track('teacher.dashboard.quick_action', { action, layout: 'enhanced', isPreschool, resolvedSchoolType });
     
     const routeConfig = TEACHER_ROUTES[action as keyof typeof TEACHER_ROUTES];
     
@@ -98,8 +98,11 @@ export const useNewEnhancedTeacherState = () => {
       return;
     }
     
-    // Navigate to the route from single source of truth
-    router.push(routeConfig.path);
+    const routePath = getTeacherRouteForSchoolType(
+      action as keyof typeof TEACHER_ROUTES,
+      resolvedSchoolType
+    );
+    router.push(routePath);
   };
 
   // Build metrics data for display
@@ -141,19 +144,30 @@ export const useNewEnhancedTeacherState = () => {
   const buildQuickActions = () => {
     const flags = getFeatureFlagsSync();
     const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
+    const applyNextGenPolicy = flags.NEXT_GEN_DASH_POLICY_V1;
+    const actionKeys = TEACHER_QUICK_ACTIONS.filter(actionKey => {
+      if (actionKey === 'start_live_lesson' && !canLiveLessons) return false;
+      if (actionKey === 'call_parent' && !(flags.voice_calls_enabled || flags.video_calls_enabled)) return false;
+      if (actionKey === 'quick_lesson' && !isPreschool) return false;
+      if (
+        applyNextGenPolicy &&
+        !isDashboardActionAllowed('teacher', resolvedSchoolType, actionKey)
+      ) {
+        return false;
+      }
+      return true;
+    });
 
-    return TEACHER_QUICK_ACTIONS.map(actionKey => {
-      if (actionKey === 'start_live_lesson' && !canLiveLessons) return null;
-      if (actionKey === 'call_parent' && !(flags.voice_calls_enabled || flags.video_calls_enabled)) return null;
-      if (actionKey === 'quick_lesson' && !isPreschool) return null;
-
+    return actionKeys.map(actionKey => {
       const route = TEACHER_ROUTES[actionKey];
       if (!route) return null;
+      const resolvedPath = getTeacherRouteForSchoolType(actionKey, resolvedSchoolType);
       
       return {
         title: t(route.titleKey, { defaultValue: route.title }),
         icon: route.icon,
         color: resolveRouteColor(route.color, theme),
+        path: resolvedPath,
         onPress: () => handleQuickAction(actionKey),
         disabled: route.requiresPremium && tier === 'free',
         category: route.category,
@@ -169,6 +183,7 @@ export const useNewEnhancedTeacherState = () => {
     tier,
     refreshing,
     isPreschool,
+    resolvedSchoolType,
     getGreeting,
     handleRefresh,
     handleQuickAction,

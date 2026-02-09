@@ -13,6 +13,7 @@
  */
 const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const { normalizeMetroRequestUrl } = require('./lib/dev/normalizeMetroUrl');
 
 // Load environment variables from .env file
 require('dotenv').config();
@@ -166,9 +167,28 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 
 // Serve public assets (PWA manifest and icons) for web builds
 const fs = require('fs');
+const originalRewriteRequestUrl = config.server?.rewriteRequestUrl;
 
 config.server = {
   ...config.server,
+  // Harden HMR URL handling: Metro/Expo HMR expects an absolute URL.
+  // Relative/malformed request URLs can crash hot reload with "Invalid URL".
+  rewriteRequestUrl: (url) => {
+    const rewritten = typeof originalRewriteRequestUrl === 'function'
+      ? originalRewriteRequestUrl(url)
+      : url;
+
+    return normalizeMetroRequestUrl(rewritten, {
+      fallbackOrigin: process.env.EXPO_PUBLIC_DEV_SERVER_ORIGIN || 'http://127.0.0.1:8081',
+      onError: (error, meta) => {
+        console.warn('[Metro] Failed to normalize rewriteRequestUrl:', {
+          error: error?.message || String(error),
+          rawUrl: meta?.rawUrl,
+          fallbackOrigin: meta?.fallbackOrigin,
+        });
+      },
+    });
+  },
   enhanceMiddleware: (middleware) => {
     return (req, res, next) => {
       // Serve /manifest.json from /public/manifest.json

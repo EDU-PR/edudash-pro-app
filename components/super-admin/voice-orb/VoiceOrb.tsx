@@ -50,6 +50,7 @@ import {
 import { useVoiceRecorder } from './useVoiceRecorder';
 import { useVoiceSTT, SUPPORTED_LANGUAGES, SupportedLanguage, TranscribeLanguage } from './useVoiceSTT';
 import { useVoiceTTS } from './useVoiceTTS';
+import { canAutoRestartAfterInterrupt, INTERRUPT_RESTART_DELAY_MS } from './interrupt';
 
 // ============================================================================
 // Types
@@ -148,8 +149,18 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected);
   const { transcribe, isTranscribing } = useVoiceSTT({ preschoolId: tenantId });
   const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking } = useVoiceTTS();
+  const isSpeakingRef = useRef(isSpeaking);
+  const ttsSpeakingRef = useRef(ttsIsSpeaking);
   const resetLiveSilenceTimerRef = useRef<(() => void) | null>(null);
   const finalizeLiveRef = useRef<((text: string) => void) | null>(null);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
+
+  useEffect(() => {
+    ttsSpeakingRef.current = ttsIsSpeaking;
+  }, [ttsIsSpeaking]);
 
   useEffect(() => {
     usingLiveSTTRef.current = usingLiveSTT;
@@ -580,7 +591,22 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       console.log('[VoiceOrb] 🛑 User interrupted TTS - stopping speech');
       await stopSpeaking();
       setStatusText('Interrupted');
-      // Don't auto-start after interrupt - let user tap again
+      setTimeout(() => {
+        if (
+          canAutoRestartAfterInterrupt({
+            isMuted,
+            isProcessing,
+            isRecording: recorderState.isRecording,
+            usingLiveSTT: usingLiveSTTRef.current,
+            isSpeaking: isSpeakingRef.current,
+            ttsIsSpeaking: ttsSpeakingRef.current,
+          })
+        ) {
+          console.log('[VoiceOrb] ✅ One-tap interrupt restart to listening');
+          handleStartRecordingRef.current?.();
+          setStatusText('Listening...');
+        }
+      }, INTERRUPT_RESTART_DELAY_MS);
       return;
     }
     

@@ -31,7 +31,8 @@
     "programs": "Programs",
     "regions": "Regions",
     "students": "Students",
-    "work": "Work"
+    "work": "Work",
+    "dash": "Dash"
   },
   "auth": {
     "signIn": "Se connecter",

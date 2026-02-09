@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Alert, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Animated, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,7 +13,8 @@ import { toast } from '@/components/ui/ToastProvider';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
-import { CYAN_BORDER, CYAN_PRIMARY, CYAN_GLOW } from './theme';
+import { CYAN_GLOW } from './theme';
+import type { ParentAlertApi } from '@/components/ui/parentAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
@@ -46,6 +47,8 @@ interface MessageComposerProps {
   editingMessage?: Message | null;
   /** Called to cancel editing */
   onCancelEdit?: () => void;
+  /** Optional modal alert API (used by parent flows to avoid native alerts) */
+  showAlert?: ParentAlertApi;
 }
 
 const COMPOSER_IMAGE_ASPECT: [number, number] = [4, 3];
@@ -106,6 +109,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   onTyping,
   editingMessage,
   onCancelEdit,
+  showAlert,
 }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -135,6 +139,31 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   }, [editingMessage]);
 
   const isEditing = !!editingMessage;
+
+  const showComposerAlert = useCallback((
+    title: string,
+    message: string,
+    type: 'info' | 'warning' | 'error' | 'success' = 'info',
+  ) => {
+    if (showAlert) {
+      showAlert({ title, message, type });
+      return;
+    }
+
+    if (type === 'error') {
+      toast.error(message, title);
+      return;
+    }
+    if (type === 'warning') {
+      toast.warn(message, title);
+      return;
+    }
+    if (type === 'success') {
+      toast.success(message, title);
+      return;
+    }
+    toast.info(message, title);
+  }, [showAlert]);
 
   const handleSend = async () => {
     const content = text.trim();
@@ -175,9 +204,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert(
+        showComposerAlert(
           'Permission Required',
-          'Please grant camera access to take photos.'
+          'Please grant camera access to take photos.',
+          'warning',
         );
         return;
       }
@@ -196,7 +226,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       console.error('[MessageComposer] Camera error:', error);
       toast.error('Failed to take photo. Please try again.', 'Camera');
     }
-  }, []);
+  }, [showComposerAlert]);
 
   // Handle gallery/attachment picker
   const handleAttachment = useCallback(async () => {
@@ -209,9 +239,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       const hasPermission = await ensureImageLibraryPermission();
       
       if (!hasPermission) {
-        Alert.alert(
+        showComposerAlert(
           'Permission Required',
-          'Please grant gallery access to attach images.'
+          'Please grant gallery access to attach images.',
+          'warning',
         );
         return;
       }
@@ -232,7 +263,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
       console.error('[MessageComposer] Attachment error:', error);
       toast.error('Failed to pick image. Please try again.', 'Attachments');
     }
-  }, []);
+  }, [showComposerAlert]);
 
   const handleConfirmImage = useCallback(async (uri: string) => {
     if (!onImageAttach || !pendingImage) return;
@@ -313,7 +344,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
               <TextInput
                 style={styles.textInput}
                 placeholder={placeholder}
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor="rgba(255,255,255,0.55)"
                 value={text}
                 onChangeText={(newText) => {
                   setText(newText);
@@ -407,8 +438,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 6,
+    paddingBottom: 6,
   },
   composerRow: {
     flexDirection: 'row',
@@ -419,14 +450,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    backgroundColor: 'rgba(15, 23, 42, 0.46)',
     borderRadius: 24,
     paddingLeft: 8,
     paddingRight: 6,
     paddingVertical: 6,
     minHeight: 48,
     borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.2)',
+    borderColor: 'rgba(148, 163, 184, 0.24)',
   },
   textInput: {
     flex: 1,
@@ -445,20 +476,20 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   actionButton: {
-    width: 46,
-    height: 46,
+    width: 48,
+    height: 48,
   },
   gradientButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#021129ff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: '#020617',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 7,
   },
   micButton: {
     borderWidth: 1.5,
@@ -487,7 +518,7 @@ const styles = StyleSheet.create({
   editBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    backgroundColor: 'rgba(99, 102, 241, 0.14)',
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginHorizontal: 8,

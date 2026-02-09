@@ -53,7 +53,7 @@ export const TeacherModals: React.FC<TeacherModalsProps> = ({
         try {
           await Linking.openURL(res.redirect_url);
         } catch (err) {
-          console.warn("Failed to open URL:", err);
+          if (__DEV__) console.warn('Failed to open URL:', err);
         }
       }
       setShowUpgradeModal(false);

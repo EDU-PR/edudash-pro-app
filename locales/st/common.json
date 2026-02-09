@@ -31,7 +31,8 @@
     "regions": "Regions",
     "retry": "Retry",
     "students": "Students",
-    "work": "Work"
+    "work": "Work",
+    "dash": "Dash"
   },
   "auth": {
     "signIn": "Tsena",

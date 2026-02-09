@@ -32,6 +32,7 @@ import type { AttentionPriority } from './SectionAttentionDot';
 
 const GLOW_COLORS: Record<AttentionPriority, { from: string; to: string }> = {
   critical: { from: '#EF444400', to: '#EF444455' },
+  important:{ from: '#F59E0B00', to: '#F59E0B45' },
   action:   { from: '#F59E0B00', to: '#F59E0B40' },
   info:     { from: '#3B82F600', to: '#3B82F620' },
   none:     { from: '#00000000', to: '#00000000' },
@@ -39,6 +40,7 @@ const GLOW_COLORS: Record<AttentionPriority, { from: string; to: string }> = {
 
 const BORDER_COLORS: Record<AttentionPriority, { from: string; to: string }> = {
   critical: { from: '#EF444430', to: '#EF4444AA' },
+  important:{ from: '#F59E0B25', to: '#F59E0B88' },
   action:   { from: '#F59E0B20', to: '#F59E0B80' },
   info:     { from: '#3B82F615', to: '#3B82F640' },
   none:     { from: '#00000000', to: '#00000000' },
@@ -46,6 +48,7 @@ const BORDER_COLORS: Record<AttentionPriority, { from: string; to: string }> = {
 
 const CYCLE_MS: Record<AttentionPriority, number> = {
   critical: 1200,
+  important: 1300,
   action: 1500,
   info: 0,
   none: 0,
@@ -68,6 +71,14 @@ export const GlowContainer: React.FC<GlowContainerProps> = ({
   const glowProgress = useSharedValue(0);
   const translateY = useSharedValue(0);
   const cardScale = useSharedValue(1);
+  // Use || for safety — ?? doesn't protect against keys missing from the record
+  const glowColors = GLOW_COLORS[urgency] || GLOW_COLORS.none;
+  const borderColors = BORDER_COLORS[urgency] || BORDER_COLORS.none;
+  // Cache color strings as primitives so the worklet closure never receives undefined
+  const borderFrom = borderColors.from;
+  const borderTo = borderColors.to;
+  const glowFrom = glowColors.from;
+  const glowTo = glowColors.to;
 
   // Glow breathing animation
   useEffect(() => {
@@ -108,7 +119,7 @@ export const GlowContainer: React.FC<GlowContainerProps> = ({
     const borderColor = interpolateColor(
       glowProgress.value,
       [0, 1],
-      [BORDER_COLORS[urgency].from, BORDER_COLORS[urgency].to],
+      [borderFrom, borderTo],
     );
 
     const base: Record<string, unknown> = {
@@ -126,14 +137,17 @@ export const GlowContainer: React.FC<GlowContainerProps> = ({
       const shadowColor = interpolateColor(
         glowProgress.value,
         [0, 1],
-        [GLOW_COLORS[urgency].from, GLOW_COLORS[urgency].to],
+        [glowFrom, glowTo],
       );
       base.shadowColor = shadowColor;
       base.shadowOffset = { width: 0, height: 0 };
       base.shadowOpacity = 1;
       base.shadowRadius = elevated ? 16 : 10;
     } else {
-      base.elevation = urgency === 'critical' ? 10 : urgency === 'action' ? 6 : 2;
+      base.elevation =
+        urgency === 'critical' ? 10 :
+        urgency === 'important' ? 8 :
+        urgency === 'action' ? 6 : 2;
     }
 
     return base as ViewStyle;

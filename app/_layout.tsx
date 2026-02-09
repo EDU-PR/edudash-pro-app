@@ -47,7 +47,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import DashWakeWordListener from '../components/ai/DashWakeWordListener';
 import type { IDashAIAssistant } from '../services/dash-ai/DashAICompat';
 import { DraggableDashFAB } from '../components/ui/DraggableDashFAB';
-import { BottomTabBar } from '../components/navigation/BottomTabBar';
+import { BottomTabBar, ROLES_WITH_CENTER_TAB } from '../components/navigation/BottomTabBar';
 import { AnimatedSplash } from '../components/ui/AnimatedSplash';
 import { CallProvider } from '../components/calls/CallProvider';
 import { NotificationProvider } from '../contexts/NotificationContext';
@@ -89,7 +89,7 @@ const CONTENT_CONTAINER_STYLE = { paddingBottom: 0 };
 // Inner component with access to AuthContext
 function LayoutContent() {
   const pathname = usePathname();
-  const { loading: authLoading, profileLoading, user } = useAuth();
+  const { loading: authLoading, profileLoading, user, profile } = useAuth();
   const { isDark } = useTheme();
   const loadingOverlay = useLoadingOverlay();
   const [showFAB, setShowFAB] = useState(false);
@@ -97,7 +97,7 @@ function LayoutContent() {
   const pushRegistrationRef = useRef<{ userId: string; attempted: boolean } | null>(null);
   
   // App preferences for FAB visibility
-  const { showDashFAB, tutorialCompleted } = useAppPreferencesSafe();
+  const { showDashFAB, powerUserModeEnabled, tutorialCompleted } = useAppPreferencesSafe();
   
   // Route guards (auth + mobile web)
   useAuthGuard();
@@ -114,6 +114,10 @@ function LayoutContent() {
     if (Platform.OS === 'android') {
       const configureNavigationBar = async () => {
         try {
+          // Android 15+ (API 35) enforces edge-to-edge; these APIs are no-ops/deprecated
+          const apiLevel = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
+          if (apiLevel >= 35) return;
+
           // Set navigation bar background color to match theme
           await NavigationBar.setBackgroundColorAsync(isDark ? '#0a0a0f' : '#ffffff');
           // Set button style (light buttons for dark bg, dark buttons for light bg)
@@ -175,7 +179,11 @@ function LayoutContent() {
   }, [user?.id]);
   
   // Determine if FAB should be visible (user pref + route logic + must be logged in)
-  const shouldShowFAB = showFAB && !shouldHideFAB && showDashFAB && !!user;
+  const normalizedRole = String(profile?.role || '').toLowerCase();
+  const isPrincipalRole = normalizedRole === 'principal' || normalizedRole === 'principal_admin';
+  const shouldShowFAB = showFAB && !shouldHideFAB && powerUserModeEnabled && showDashFAB && !!user;
+  const hasCenterDashTab = ROLES_WITH_CENTER_TAB.includes(normalizedRole);
+  const shouldRenderFAB = shouldShowFAB && (!hasCenterDashTab || isPrincipalRole);
   
   return (
     <View style={styles.container}>
@@ -202,7 +210,8 @@ function LayoutContent() {
       </View>
       
       {/* Draggable Dash Chat FAB - visible on dashboards and main screens */}
-      {shouldShowFAB && (
+      {/* Hidden for center-tab roles, except principal power users */}
+      {shouldRenderFAB && (
         <DraggableDashFAB />
       )}
       

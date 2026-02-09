@@ -23,7 +23,6 @@ export function TeacherMobileNav({ isOpen, onClose, nav }: TeacherMobileNavProps
   if (!isOpen) return null;
 
   const handleNavClick = (href: string) => {
-    console.log('🔗 Navigating to:', href);
     onClose(); // Close drawer first
     setTimeout(() => {
       router.push(href);

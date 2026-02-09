@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, RefreshControl, Modal, TextInput, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, RefreshControl, Modal, TextInput, FlatList } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { Card } from '@/components/ui/Card';
 import { SuccessModal } from '@/components/ui/SuccessModal';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { assertSupabase } from '@/lib/supabase';
 import OrganizationDocumentService, {
   type DocumentFolder,
@@ -24,6 +25,7 @@ import OrganizationDocumentService, {
 } from '@/lib/services/organizationDocumentService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -54,6 +56,7 @@ export default function DocumentVaultScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { showAlert, alertProps } = useAlertModal();
 
   // State
   const [loading, setLoading] = useState(true);
@@ -96,7 +99,7 @@ export default function DocumentVaultScreen() {
           setOrganizationId(member.organization_id);
         }
       } catch (error) {
-        console.error('[DocVault] Error fetching org ID:', error);
+        logger.error('[DocVault] Error fetching org ID:', error);
       }
     };
     fetchOrgId();
@@ -107,23 +110,23 @@ export default function DocumentVaultScreen() {
     if (!organizationId) return;
     setLoading(true);
     try {
-      console.log('[DocVault] Loading data for folder:', currentFolderId);
+      logger.debug('[DocVault] Loading data for folder:', currentFolderId);
       const [foldersResult, docsResult] = await Promise.all([
         OrganizationDocumentService.getFolders(organizationId, currentFolderId),
         OrganizationDocumentService.getDocuments(organizationId, { folderId: currentFolderId }),
       ]);
       
-      console.log('[DocVault] Folders loaded:', foldersResult.data?.length || 0);
-      console.log('[DocVault] Documents loaded:', docsResult.data?.length || 0);
+      logger.debug('[DocVault] Folders loaded:', foldersResult.data?.length || 0);
+      logger.debug('[DocVault] Documents loaded:', docsResult.data?.length || 0);
       
       if (foldersResult.success) setFolders(foldersResult.data || []);
       if (docsResult.success) {
         setDocuments(docsResult.data || []);
       } else {
-        console.error('[DocVault] Documents load error:', docsResult.error);
+        logger.error('[DocVault] Documents load error:', docsResult.error);
       }
     } catch (error) {
-      console.error('[DocVault] Load error:', error);
+      logger.error('[DocVault] Load error:', error);
     } finally {
       setLoading(false);
     }
@@ -166,7 +169,7 @@ export default function DocumentVaultScreen() {
         setShowUploadModal(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick file');
+      showAlert({ title: 'Error', message: 'Failed to pick file' });
     }
   };
 
@@ -174,7 +177,7 @@ export default function DocumentVaultScreen() {
   const handleUpload = async () => {
     if (!selectedFile || !organizationId || !user?.id) return;
     if (!uploadName.trim()) {
-      Alert.alert('Error', 'Please enter a document name');
+      showAlert({ title: 'Error', message: 'Please enter a document name' });
       return;
     }
     if (uploadEncrypt && !encryptionPassword.trim()) {
@@ -303,10 +306,10 @@ export default function DocumentVaultScreen() {
 
   // Delete document
   const handleDeleteDocument = (doc: OrganizationDocument) => {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete "${doc.name}"?`,
-      [
+    showAlert({
+      title: 'Delete Document',
+      message: `Are you sure you want to delete "${doc.name}"?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -330,8 +333,8 @@ export default function DocumentVaultScreen() {
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const resetUploadForm = () => {
@@ -433,6 +436,7 @@ export default function DocumentVaultScreen() {
   };
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -757,6 +761,8 @@ export default function DocumentVaultScreen() {
         type="error"
       />
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

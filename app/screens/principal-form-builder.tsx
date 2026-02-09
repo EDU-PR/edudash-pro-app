@@ -1,16 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { z } from 'zod';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCapability } from '@/hooks/useCapability';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { FormBuilderService } from '@/features/forms/services/FormBuilderService';
-import { FIELD_TYPE_VALUES } from '@/features/forms/types/form.types';
 import type {
   CreateOrganizationFormInput,
   FormStatus,
@@ -18,44 +17,16 @@ import type {
   FormAudience,
   FormField,
 } from '@/features/forms/types/form.types';
+import {
+  FIELD_TYPES,
+  FormSchema,
+  getFormTemplates,
+  getSuggestedFields,
+  getFormInsights,
+  useFormProgress,
+} from '@/features/forms/helpers/formBuilderHelpers';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-type IoniconName = keyof typeof Ionicons.glyphMap;
-
-const FIELD_TYPES: Array<{ id: FieldType; label: string; icon: IoniconName }> = [
-  { id: 'short_text', label: 'Short Text', icon: 'text' },
-  { id: 'long_text', label: 'Long Text', icon: 'document-text' },
-  { id: 'number', label: 'Number', icon: 'calculator' },
-  { id: 'date', label: 'Date', icon: 'calendar' },
-  { id: 'dropdown', label: 'Dropdown', icon: 'list' },
-  { id: 'multi_select', label: 'Multi‑select', icon: 'options' },
-  { id: 'file', label: 'File Upload', icon: 'cloud-upload' },
-  { id: 'consent', label: 'Consent', icon: 'checkbox' },
-  { id: 'fee_item', label: 'Fee Item', icon: 'wallet' },
-];
-
-const createField = (label: string, type: FieldType, required = false, options?: string[]): FormField => ({
-  id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  type,
-  label,
-  required,
-  options,
-});
-
-const FormSchema = z.object({
-  title: z.string().min(2, 'Add a form title.'),
-  fields: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string().min(2, 'Each field needs a label.'),
-      type: z.enum(FIELD_TYPE_VALUES),
-      required: z.boolean(),
-      options: z.array(z.string()).optional(),
-    })
-  ).min(1, 'Add at least one field.'),
-});
-
-type ProgressStep = { id: string; label: string; status: 'pending' | 'active' | 'done' };
 
 export default function PrincipalFormBuilderScreen() {
   const { theme } = useTheme();
@@ -64,6 +35,7 @@ export default function PrincipalFormBuilderScreen() {
   const canUseBuilder = ready ? can('agent.workflows') : false;
   const { terminology } = useOrganizationTerminology();
   const { profile } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const organizationId = extractOrganizationId(profile);
 
   const [title, setTitle] = useState('');
@@ -71,10 +43,8 @@ export default function PrincipalFormBuilderScreen() {
   const [audience, setAudience] = useState<FormAudience[]>(['parents']);
   const [fields, setFields] = useState<FormField[]>([]);
   const [saving, setSaving] = useState(false);
-  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [formId, setFormId] = useState<string | null>(null);
-
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { progressSteps, startProgress, stopProgress, markAllDone } = useFormProgress();
 
   const audienceLabels: Record<FormAudience, string> = useMemo(
     () => ({
@@ -82,13 +52,13 @@ export default function PrincipalFormBuilderScreen() {
       teachers: terminology.instructors,
       staff: 'Staff',
     }),
-    [terminology.guardians, terminology.instructors]
+    [terminology.guardians, terminology.instructors],
   );
 
   const toggleAudience = (target: FormAudience) => {
-    setAudience((prev) => (
-      prev.includes(target) ? prev.filter((item) => item !== target) : [...prev, target]
-    ));
+    setAudience((prev) =>
+      prev.includes(target) ? prev.filter((item) => item !== target) : [...prev, target],
+    );
   };
 
   const addField = (type: FieldType) => {
@@ -103,77 +73,8 @@ export default function PrincipalFormBuilderScreen() {
   };
 
   const templates = useMemo(
-    () => [
-      {
-        id: 'my_school_1_3',
-        title: 'My School • Discovery Activity (Ages 1–3)',
-        description: 'Plan a simple discovery activity around the school theme with quick observation-based assessment.',
-        audience: ['teachers'] as FormAudience[],
-        fields: [
-          createField('Age group', 'dropdown', true, ['1-2', '2-3']),
-          createField('Learning goal', 'short_text', true),
-          createField('Materials needed', 'long_text'),
-          createField('Activity steps', 'long_text', true),
-          createField('Observation rubric', 'dropdown', true, ['Participation', 'Following instructions', 'Motor skills', 'Social interaction']),
-          createField('Photo / video evidence', 'file'),
-          createField('Homework included?', 'dropdown', false, ['No', 'Yes']),
-          createField('Parent note (optional)', 'long_text'),
-        ],
-      },
-      {
-        id: 'my_school_4_6',
-        title: 'My School • Explorer Activity (Ages 4–6)',
-        description: 'Create a structured lesson/homework plan with reflection prompts and optional homework.',
-        audience: ['teachers'] as FormAudience[],
-        fields: [
-          createField('Age group', 'dropdown', true, ['4-5', '5-6']),
-          createField('Learning goal', 'short_text', true),
-          createField('Warm-up prompt', 'long_text'),
-          createField('Activity steps', 'long_text', true),
-          createField('Assessment rubric', 'dropdown', true, ['Understanding', 'Creativity', 'Completion', 'Collaboration']),
-          createField('Homework included?', 'dropdown', false, ['No', 'Yes']),
-          createField('Homework instructions', 'long_text'),
-          createField('Evidence upload', 'file'),
-        ],
-      },
-      {
-        id: 'excursion',
-        title: 'Excursion Consent',
-        description: 'Capture consent, allergies, emergency contact details, and payment.',
-        audience: ['parents'] as FormAudience[],
-        fields: [
-          createField('Excursion date', 'date', true),
-          createField('Emergency contact', 'short_text', true),
-          createField('Allergies / medical notes', 'long_text'),
-          createField('Consent approval', 'consent', true),
-          createField('Excursion fee', 'fee_item'),
-        ],
-      },
-      {
-        id: 'parent_workshop',
-        title: `${terminology.guardians} Workshop RSVP`,
-        description: `Plan a workshop and capture attendance preferences and questions.`,
-        audience: ['parents'] as FormAudience[],
-        fields: [
-          createField('Workshop date', 'date', true),
-          createField('Number of attendees', 'number', true),
-          createField('Topics you want covered', 'multi_select', false, ['Behaviour', 'Literacy', 'Numeracy', 'Other']),
-          createField('Questions for the facilitator', 'long_text'),
-        ],
-      },
-      {
-        id: 'staff_training',
-        title: `${terminology.instructors} Training RSVP`,
-        description: `Collect training attendance, feedback, and availability.`,
-        audience: ['teachers', 'staff'] as FormAudience[],
-        fields: [
-          createField('Training date', 'date', true),
-          createField('Preferred session', 'dropdown', true, ['Morning', 'Afternoon']),
-          createField('Questions or focus areas', 'long_text'),
-        ],
-      },
-    ],
-    [terminology.guardians, terminology.instructors]
+    () => getFormTemplates(terminology),
+    [terminology.guardians, terminology.instructors],
   );
 
   const applyTemplate = (templateId: string) => {
@@ -185,46 +86,22 @@ export default function PrincipalFormBuilderScreen() {
     setFields(template.fields);
   };
 
-  const suggestedFields = useMemo(() => {
-    const text = `${title} ${description}`.toLowerCase();
-    const suggestions: FormField[] = [];
-    if (text.includes('excursion') || text.includes('trip')) {
-      suggestions.push(createField('Emergency contact', 'short_text', true));
-      suggestions.push(createField('Consent approval', 'consent', true));
-      suggestions.push(createField('Excursion fee', 'fee_item'));
-    }
-    if (text.includes('workshop') || text.includes('meeting')) {
-      suggestions.push(createField('Preferred time', 'dropdown', true, ['Morning', 'Afternoon', 'Evening']));
-      suggestions.push(createField('Questions for the host', 'long_text'));
-    }
-    if (text.includes('uniform')) {
-      suggestions.push(createField('Uniform size', 'dropdown', true, ['XS', 'S', 'M', 'L', 'XL']));
-      suggestions.push(createField('Uniform quantity', 'number'));
-    }
-    return suggestions;
-  }, [title, description]);
+  const suggestedFields = useMemo(
+    () => getSuggestedFields(title, description),
+    [title, description],
+  );
 
-  const insights = useMemo(() => {
-    const notes: string[] = [];
-    if (fields.length === 0) {
-      notes.push('Add at least one field so people know what to respond to.');
-    }
-    if (fields.length > 0 && !fields.some((field) => field.required)) {
-      notes.push('Mark at least one field as required to prevent empty submissions.');
-    }
-    if (description.toLowerCase().includes('fee') && !fields.some((field) => field.type === 'fee_item')) {
-      notes.push('Consider adding a Fee Item field to capture payment details.');
-    }
-    if (audience.length === 0) {
-      notes.push('Select at least one audience so we know who should receive the form.');
-    }
-    return notes;
-  }, [fields, description, audience.length]);
+  const insights = useMemo(
+    () => getFormInsights(fields, description, audience.length),
+    [fields, description, audience.length],
+  );
 
   const applySuggestions = () => {
     if (suggestedFields.length === 0) return;
     const existingLabels = new Set(fields.map((field) => field.label.toLowerCase().trim()));
-    const next = suggestedFields.filter((field) => !existingLabels.has(field.label.toLowerCase().trim()));
+    const next = suggestedFields.filter(
+      (field) => !existingLabels.has(field.label.toLowerCase().trim()),
+    );
     if (next.length === 0) return;
     setFields((prev) => [...prev, ...next]);
   };
@@ -237,50 +114,19 @@ export default function PrincipalFormBuilderScreen() {
     setFields((prev) => prev.filter((field) => field.id !== id));
   };
 
-  const startProgress = () => {
-    setProgressSteps([
-      { id: 'validate', label: 'Validating form', status: 'active' },
-      { id: 'save', label: 'Saving draft', status: 'pending' },
-      { id: 'notify', label: 'Preparing notifications', status: 'pending' },
-    ]);
-
-    progressTimerRef.current = setInterval(() => {
-      setProgressSteps((prev) => {
-        const next = [...prev];
-        const activeIndex = next.findIndex((step) => step.status === 'active');
-        if (activeIndex === -1) return next;
-        next[activeIndex] = { ...next[activeIndex], status: 'done' };
-        if (activeIndex + 1 < next.length) {
-          next[activeIndex + 1] = { ...next[activeIndex + 1], status: 'active' };
-        }
-        return next;
-      });
-    }, 1800);
-  };
-
-  const stopProgress = () => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => stopProgress();
-  }, []);
 
   const validateForm = useCallback(() => {
     const result = FormSchema.safeParse({ title, fields });
     if (!result.success) {
-      Alert.alert('Validation', result.error.errors[0]?.message || 'Please complete the form.');
+      showAlert({ title: 'Validation', message: result.error.errors[0]?.message || 'Please complete the form.' });
       return false;
     }
     if (audience.length === 0) {
-      Alert.alert('Validation', 'Select at least one audience.');
+      showAlert({ title: 'Validation', message: 'Select at least one audience.' });
       return false;
     }
     if (!organizationId) {
-      Alert.alert('Validation', 'Organization not found. Please refresh and try again.');
+      showAlert({ title: 'Validation', message: 'Organization not found. Please refresh and try again.' });
       return false;
     }
     return true;
@@ -297,7 +143,7 @@ export default function PrincipalFormBuilderScreen() {
 
   const persistForm = async (status: FormStatus) => {
     if (!canUseBuilder) {
-      Alert.alert('Premium Feature', 'Form Builder is available on Premium/Pro tiers.');
+      showAlert({ title: 'Premium Feature', message: 'Form Builder is available on Premium/Pro tiers.' });
       return;
     }
     if (!validateForm()) return;
@@ -323,19 +169,22 @@ export default function PrincipalFormBuilderScreen() {
       }
 
       stopProgress();
-      setProgressSteps((prev) => prev.map((step) => ({ ...step, status: 'done' })));
+      markAllDone();
       setSaving(false);
 
       if (status === 'published') {
-        Alert.alert('Published', `${terminology.guardians} and ${terminology.instructors} will see the form in their dashboards.`);
+        showAlert({
+          title: 'Published',
+          message: `${terminology.guardians} and ${terminology.instructors} will see the form in their dashboards.`,
+        });
       } else {
-        Alert.alert('Draft Saved', 'Your form draft is ready.');
+        showAlert({ title: 'Draft Saved', message: 'Your form draft is ready.' });
       }
     } catch (error) {
       stopProgress();
       setSaving(false);
       const message = error instanceof Error ? error.message : 'Failed to save the form.';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message });
     }
   };
 
@@ -374,7 +223,9 @@ export default function PrincipalFormBuilderScreen() {
         {!canUseBuilder && (
           <View style={[styles.card, { borderColor: theme.border }]}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>Premium Feature</Text>
-            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Form Builder is available on Premium/Pro tiers.</Text>
+            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+              Form Builder is available on Premium/Pro tiers.
+            </Text>
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: theme.primary }]}
               onPress={() => router.push('/screens/subscription-setup')}
@@ -386,7 +237,9 @@ export default function PrincipalFormBuilderScreen() {
 
         <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Start from a template</Text>
-          <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Kick‑start common workflows and customize from there.</Text>
+          <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+            Kick&#x2011;start common workflows and customize from there.
+          </Text>
           <View style={styles.templateRow}>
             {templates.map((template) => (
               <TouchableOpacity
@@ -395,23 +248,30 @@ export default function PrincipalFormBuilderScreen() {
                 onPress={() => applyTemplate(template.id)}
               >
                 <Text style={[styles.templateTitle, { color: theme.text }]}>{template.title}</Text>
-                <Text style={[styles.templateBody, { color: theme.textSecondary }]}>{template.description}</Text>
+                <Text style={[styles.templateBody, { color: theme.textSecondary }]}>
+                  {template.description}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
+        {/* Dash suggestions */}
         <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Dash suggestions</Text>
           {suggestedFields.length === 0 ? (
-            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Add a title or description to get smarter suggestions.</Text>
+            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+              Add a title or description to get smarter suggestions.
+            </Text>
           ) : (
             <>
               <View style={styles.suggestionRow}>
                 {suggestedFields.map((field) => (
                   <View key={field.id} style={[styles.suggestionPill, { borderColor: theme.border }]}>
                     <Text style={[styles.suggestionText, { color: theme.text }]}>{field.label}</Text>
-                    <Text style={[styles.suggestionMeta, { color: theme.textSecondary }]}>{field.type}</Text>
+                    <Text style={[styles.suggestionMeta, { color: theme.textSecondary }]}>
+                      {field.type}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -419,16 +279,21 @@ export default function PrincipalFormBuilderScreen() {
                 style={[styles.secondaryButton, { borderColor: theme.border, alignSelf: 'flex-start' }]}
                 onPress={applySuggestions}
               >
-                <Text style={[styles.secondaryButtonText, { color: theme.text }]}>Add suggestions</Text>
+                <Text style={[styles.secondaryButtonText, { color: theme.text }]}>
+                  Add suggestions
+                </Text>
               </TouchableOpacity>
             </>
           )}
         </View>
 
+        {/* Form health */}
         <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Form health</Text>
           {insights.length === 0 ? (
-            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Your form looks solid. Ready to publish.</Text>
+            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+              Your form looks solid. Ready to publish.
+            </Text>
           ) : (
             insights.map((note, index) => (
               <View key={`${note}-${index}`} style={styles.insightRow}>
@@ -439,7 +304,8 @@ export default function PrincipalFormBuilderScreen() {
           )}
         </View>
 
-        <View style={[styles.card, { borderColor: theme.border }]}> 
+        {/* Form details */}
+        <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Form details</Text>
           <Text style={[styles.label, { color: theme.textSecondary }]}>Title</Text>
           <TextInput
@@ -452,7 +318,11 @@ export default function PrincipalFormBuilderScreen() {
 
           <Text style={[styles.label, { color: theme.textSecondary }]}>Description</Text>
           <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+            style={[
+              styles.input,
+              styles.textArea,
+              { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border },
+            ]}
             value={description}
             onChangeText={setDescription}
             placeholder="Optional details"
@@ -467,17 +337,23 @@ export default function PrincipalFormBuilderScreen() {
               return (
                 <TouchableOpacity
                   key={role}
-                  style={[styles.chip, { backgroundColor: active ? theme.primary : theme.surface, borderColor: theme.border }]}
+                  style={[
+                    styles.chip,
+                    { backgroundColor: active ? theme.primary : theme.surface, borderColor: theme.border },
+                  ]}
                   onPress={() => toggleAudience(role)}
                 >
-                  <Text style={{ color: active ? theme.onPrimary : theme.text }}>{audienceLabels[role]}</Text>
+                  <Text style={{ color: active ? theme.onPrimary : theme.text }}>
+                    {audienceLabels[role]}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
         </View>
 
-        <View style={[styles.card, { borderColor: theme.border }]}> 
+        {/* Add fields palette */}
+        <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Add fields</Text>
           <View style={styles.fieldPalette}>
             {FIELD_TYPES.map((field) => (
@@ -493,21 +369,29 @@ export default function PrincipalFormBuilderScreen() {
           </View>
         </View>
 
-        <View style={[styles.card, { borderColor: theme.border }]}> 
+        {/* Fields list */}
+        <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Fields</Text>
           {fields.length === 0 ? (
-            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Add fields to build your form.</Text>
+            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+              Add fields to build your form.
+            </Text>
           ) : (
             fields.map((field) => (
-              <View key={field.id} style={[styles.fieldRow, { borderColor: theme.border }]}> 
+              <View key={field.id} style={[styles.fieldRow, { borderColor: theme.border }]}>
                 <View style={styles.fieldHeader}>
-                  <Text style={[styles.fieldType, { color: theme.primary }]}>{field.type.replace('_', ' ')}</Text>
+                  <Text style={[styles.fieldType, { color: theme.primary }]}>
+                    {field.type.replace('_', ' ')}
+                  </Text>
                   <TouchableOpacity onPress={() => removeField(field.id)}>
                     <Ionicons name="trash" size={16} color={theme.error} />
                   </TouchableOpacity>
                 </View>
                 <TextInput
-                  style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border },
+                  ]}
                   value={field.label}
                   onChangeText={(value) => updateField(field.id, { label: value })}
                   placeholder="Field label"
@@ -516,11 +400,17 @@ export default function PrincipalFormBuilderScreen() {
 
                 {(field.type === 'dropdown' || field.type === 'multi_select') && (
                   <TextInput
-                    style={[styles.input, { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border }]}
+                    style={[
+                      styles.input,
+                      { backgroundColor: theme.surface, color: theme.text, borderColor: theme.border },
+                    ]}
                     value={(field.options || []).join(', ')}
                     onChangeText={(value) =>
                       updateField(field.id, {
-                        options: value.split(',').map((v) => v.trim()).filter(Boolean),
+                        options: value
+                          .split(',')
+                          .map((v) => v.trim())
+                          .filter(Boolean),
                       })
                     }
                     placeholder="Options, comma separated"
@@ -544,21 +434,29 @@ export default function PrincipalFormBuilderScreen() {
           )}
         </View>
 
-        <View style={[styles.card, { borderColor: theme.border }]}> 
+        {/* Preview */}
+        <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Preview</Text>
           {fields.length === 0 ? (
-            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>Your preview will appear here.</Text>
+            <Text style={[styles.cardBody, { color: theme.textSecondary }]}>
+              Your preview will appear here.
+            </Text>
           ) : (
             fields.map((field) => (
               <View key={`preview_${field.id}`} style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: theme.text }]}>{field.label || 'Untitled field'}</Text>
-                <Text style={[styles.previewType, { color: theme.textSecondary }]}>{field.type}</Text>
+                <Text style={[styles.previewLabel, { color: theme.text }]}>
+                  {field.label || 'Untitled field'}
+                </Text>
+                <Text style={[styles.previewType, { color: theme.textSecondary }]}>
+                  {field.type}
+                </Text>
               </View>
             ))
           )}
         </View>
 
-        <View style={[styles.card, { borderColor: theme.border }]}> 
+        {/* Publishing */}
+        <View style={[styles.card, { borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.text }]}>Publishing</Text>
           {progressSteps.length > 0 && (
             <View style={styles.progressBlock}>
@@ -596,10 +494,12 @@ export default function PrincipalFormBuilderScreen() {
           </View>
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
 const createStyles = (theme: ThemeColors) =>
   StyleSheet.create({
     container: { flex: 1 },

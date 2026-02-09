@@ -9,6 +9,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { QuickCallModal } from '@/components/calls/QuickCallModal';
+import type { ResolvedSchoolType } from '@/lib/tenant/schoolTypeResolver';
 
 interface QuickAction {
   id: string;
@@ -22,6 +23,7 @@ interface QuickAction {
 
 interface QuickActionsGridProps {
   usageType?: 'preschool' | 'k12_school' | 'homeschool' | 'aftercare' | 'supplemental' | 'exploring' | 'independent';
+  resolvedSchoolType?: ResolvedSchoolType;
   hasOrganization: boolean;
   activeChildGrade?: number;
   isExamEligible?: boolean;
@@ -40,6 +42,7 @@ interface QuickActionsGridProps {
 
 export function QuickActionsGrid({
   usageType,
+  resolvedSchoolType = 'preschool',
   hasOrganization,
   activeChildGrade = 0,
   isExamEligible = false,
@@ -89,8 +92,10 @@ export function QuickActionsGrid({
 
     const feesGlow = Boolean(feesSubtitle);
     const normalizedUsage = String(usageType || '').toLowerCase();
-    const isEarlyLearner = isPreschool
-      || normalizedUsage === 'preschool'
+    const isPreschoolOrg = resolvedSchoolType === 'preschool' || normalizedUsage === 'preschool';
+    const isK12Org = resolvedSchoolType === 'k12_school';
+    const isEarlyLearner = isPreschoolOrg
+      || isPreschool
       || activeChildGrade < 1
       || (typeof childAgeYears === 'number' && childAgeYears > 0 && childAgeYears < 6);
     const hiddenIds = new Set<string>(
@@ -108,7 +113,7 @@ export function QuickActionsGrid({
       { id: 'attendance', icon: CheckCircle2, label: t('parent.attendance', { defaultValue: 'Attendance' }), href: '/dashboard/parent/attendance', color: '#22c55e' },
       { id: 'ebooks', icon: Library, label: t('dashboard.parent.quick_actions.ebooks', { defaultValue: 'E-Books' }), href: '/dashboard/parent/ebooks', color: '#3b82f6' },
       { id: 'robotics_lab', icon: Bot, label: t('dashboard.parent.quick_actions.robotics_lab', { defaultValue: 'Robotics Lab' }), href: '/dashboard/parent/robotics', color: '#f59e0b' },
-      ...(isExamEligible ? [
+      ...(isK12Org && isExamEligible ? [
         { id: 'exam_prep', icon: Target, label: t('dashboard.parent.quick_actions.exam_prep', { defaultValue: 'Exam Prep' }), href: '/dashboard/parent/generate-exam', color: '#10b981' },
         { id: 'my_exams', icon: FileCheck, label: t('dashboard.parent.quick_actions.my_exams', { defaultValue: 'My Exams' }), href: '/dashboard/parent/my-exams', color: '#0ea5e9' },
       ] : []),

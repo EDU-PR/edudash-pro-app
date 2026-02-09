@@ -41,6 +41,7 @@ import {
 } from '@/components/membership/add-member-modules';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 export default function AddMemberScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
@@ -132,7 +133,7 @@ export default function AddMemberScreen() {
                 buttons: [{ text: 'OK', style: 'default' }]
               });
             } catch (error) {
-              console.error('[AddMember] Failed to copy password:', error);
+              logger.error('[AddMember] Failed to copy password:', error);
             }
           }
         },
@@ -143,7 +144,7 @@ export default function AddMemberScreen() {
   }, [formData.first_name, formData.last_name, showAlert, resetForm]);
   
   const handleError = useCallback((errorMessage: string) => {
-    console.error('[AddMember] Registration error:', errorMessage);
+    logger.error('[AddMember] Registration error:', errorMessage);
   }, []);
   
   const {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Platform, StatusBar } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { useOrganizationTerminology } from '@/lib/hooks/useOrganizationTerminology';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StudentRow {
@@ -50,6 +51,7 @@ export default function PrincipalNewMessageScreen() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { terminology } = useOrganizationTerminology();
+  const { showAlert, alertProps } = useAlertModal();
 
   const organizationId = profile?.organization_id || profile?.preschool_id || null;
   const [activeTab, setActiveTab] = useState<TabKey>('parents');
@@ -112,10 +114,10 @@ export default function PrincipalNewMessageScreen() {
         setTeacherMap(map);
       }
     } catch (err) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        err instanceof Error ? err.message : t('principal.directoryError', { defaultValue: 'Failed to load contacts.' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: err instanceof Error ? err.message : t('principal.directoryError', { defaultValue: 'Failed to load contacts.' }),
+      });
     } finally {
       setLoading(false);
     }
@@ -200,10 +202,10 @@ export default function PrincipalNewMessageScreen() {
   const handleStartParentMessage = useCallback(async () => {
     const selectedStudent = parentOptions.find((student) => student.id === selectedParentStudentId) || null;
     if (!selectedStudent) {
-      Alert.alert(
-        t('principal.selectParentTitle', { defaultValue: `Select a ${terminology.guardian}` }),
-        t('principal.selectParentMessage', { defaultValue: 'Choose a family to message.' })
-      );
+      showAlert({
+        title: t('principal.selectParentTitle', { defaultValue: `Select a ${terminology.guardian}` }),
+        message: t('principal.selectParentMessage', { defaultValue: 'Choose a family to message.' }),
+      });
       return;
     }
 
@@ -230,10 +232,10 @@ export default function PrincipalNewMessageScreen() {
         params: { threadId, title: parentName },
       });
     } catch (err) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        err instanceof Error ? err.message : t('principal.threadCreateError', { defaultValue: 'Unable to start message.' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: err instanceof Error ? err.message : t('principal.threadCreateError', { defaultValue: 'Unable to start message.' }),
+      });
     }
   }, [createThread, parentMap, parentOptions, selectedParentStudentId, t, terminology.guardian, user?.id]);
 
@@ -241,10 +243,10 @@ export default function PrincipalNewMessageScreen() {
     if (!user?.id) return;
     const teacher = teacherOptions.find((item) => item.id === selectedTeacherId) || null;
     if (!teacher) {
-      Alert.alert(
-        t('principal.selectTeacherTitle', { defaultValue: `Select a ${terminology.instructor}` }),
-        t('principal.selectTeacherMessage', { defaultValue: 'Choose a teacher to message.' })
-      );
+      showAlert({
+        title: t('principal.selectTeacherTitle', { defaultValue: `Select a ${terminology.instructor}` }),
+        message: t('principal.selectTeacherMessage', { defaultValue: 'Choose a teacher to message.' }),
+      });
       return;
     }
 
@@ -266,10 +268,10 @@ export default function PrincipalNewMessageScreen() {
         params: { threadId, title: teacherName },
       });
     } catch (err) {
-      Alert.alert(
-        t('common.error', { defaultValue: 'Error' }),
-        err instanceof Error ? err.message : t('principal.threadCreateError', { defaultValue: 'Unable to start message.' })
-      );
+      showAlert({
+        title: t('common.error', { defaultValue: 'Error' }),
+        message: err instanceof Error ? err.message : t('principal.threadCreateError', { defaultValue: 'Unable to start message.' }),
+      });
     }
   }, [createThread, selectedTeacherId, t, teacherOptions, terminology.instructor, user?.id]);
 
@@ -506,6 +508,7 @@ export default function PrincipalNewMessageScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

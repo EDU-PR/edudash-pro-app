@@ -52,15 +52,6 @@ export default function ClaimChildPage() {
         // No preschool - redirect to register-child
         router.replace('/dashboard/parent/register-child');
         return;
-        
-        // Load available schools
-        const { data: schoolsData } = await supabase
-          .from('preschools')
-          .select('id, name')
-          .eq('is_active', true)
-          .order('name');
-        
-        setSchools(schoolsData || []);
       }
     })();
   }, [router, supabase]);
@@ -96,7 +87,6 @@ export default function ClaimChildPage() {
     setSubmitting(studentId);
     try {
       // Proactive duplicate check: query for existing pending requests
-      console.log('[ClaimChild] Checking for duplicate pending requests...');
       
       const { data: existingRequests, error: checkError } = await supabase
         .from('guardian_requests')
@@ -117,7 +107,7 @@ export default function ClaimChildPage() {
 
       // Update parent's preschool_id if not set
       if (!preschoolId && selectedSchoolId) {
-        console.log('✅ Setting parent preschool_id to:', selectedSchoolId);
+        // Set parent preschool_id to selected school
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ preschool_id: selectedSchoolId })
@@ -126,7 +116,7 @@ export default function ClaimChildPage() {
         if (updateError) {
           console.error('❌ Failed to update parent preschool_id:', updateError);
         } else {
-          console.log('✅ Parent preschool_id updated successfully');
+          // Parent preschool_id updated successfully
           setPreschoolId(selectedSchoolId);
         }
       }

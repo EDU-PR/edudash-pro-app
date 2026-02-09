@@ -10,7 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Linking, Platform } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -21,35 +21,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 import DashOrb from '@/components/super-admin/DashOrb';
-
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-interface Integration {
-  id: string;
-  name: string;
-  type: 'github' | 'eas' | 'vercel' | 'claude' | 'supabase' | 'posthog';
-  icon: string;
-  color: string;
-  status: 'connected' | 'disconnected' | 'error';
-  lastSync?: string;
-  url?: string;
-}
-
-interface GitHubCommit {
-  sha: string;
-  message: string;
-  author: string;
-  date: string;
-  branch: string;
-}
-
-interface EASBuild {
-  id: string;
-  platform: 'android' | 'ios';
-  status: 'success' | 'failed' | 'in-progress' | 'queued';
-  version: string;
-  createdAt: string;
-}
-
+import { logger } from '@/lib/logger';
+import {
+  type Integration,
+  type GitHubCommit,
+  type EASBuild,
+  createStyles,
+} from '@/lib/screen-styles/super-admin-devops.styles';
 const INTEGRATIONS: Integration[] = [
   {
     id: 'github',
@@ -110,6 +90,8 @@ const INTEGRATIONS: Integration[] = [
 export default function SuperAdminDevOpsScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS);
@@ -151,7 +133,7 @@ export default function SuperAdminDevOpsScreen() {
       // For now, showing static data with links to external dashboards
 
     } catch (error) {
-      console.error('Failed to fetch DevOps data:', error);
+      logger.error('Failed to fetch DevOps data:', error);
     } finally {
       setLoading(false);
     }
@@ -175,31 +157,31 @@ export default function SuperAdminDevOpsScreen() {
   };
 
   const handleTriggerBuild = (platform: 'android' | 'ios' | 'all') => {
-    Alert.alert(
-      'Trigger EAS Build',
-      `This will start a new ${platform === 'all' ? 'Android & iOS' : platform} build on EAS.\n\nNote: You can also run this from terminal:\neas build --platform ${platform}`,
-      [
+    showAlert({
+      title: 'Trigger EAS Build',
+      message: `This will start a new ${platform === 'all' ? 'Android & iOS' : platform} build on EAS.\n\nNote: You can also run this from terminal:\neas build --platform ${platform}`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Open EAS Dashboard',
           onPress: () => Linking.openURL('https://expo.dev/accounts/dashsoil/projects/edudash-pro/builds'),
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handlePublishUpdate = () => {
-    Alert.alert(
-      'Publish OTA Update',
-      'This will publish an over-the-air update to all users.\n\nNote: You can also run this from terminal:\neas update --branch production',
-      [
+    showAlert({
+      title: 'Publish OTA Update',
+      message: 'This will publish an over-the-air update to all users.\n\nNote: You can also run this from terminal:\neas update --branch production',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Open EAS Updates',
           onPress: () => Linking.openURL('https://expo.dev/accounts/dashsoil/projects/edudash-pro/updates'),
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (!profile || !isSuperAdmin(profile.role)) {
@@ -391,180 +373,7 @@ export default function SuperAdminDevOpsScreen() {
           track('dash_orb_command', { command: cmd });
         }}
       />
+      <AlertModal {...alertProps} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0b1220',
-  },
-  header: {
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    padding: 4,
-  },
-  refreshButton: {
-    padding: 4,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#111827',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#1f2937',
-    alignItems: 'center',
-  },
-  tabActive: {
-    backgroundColor: '#00f5ff20',
-    borderWidth: 1,
-    borderColor: '#00f5ff',
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9ca3af',
-  },
-  tabTextActive: {
-    color: '#00f5ff',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  loadingText: {
-    color: '#9ca3af',
-    marginTop: 12,
-    fontSize: 14,
-  },
-  deniedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0b1220',
-  },
-  deniedText: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 12,
-  },
-  integrationsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  integrationCard: {
-    width: '47%',
-    backgroundColor: '#1f2937',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 3,
-  },
-  integrationIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  integrationName: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  integrationStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    color: '#9ca3af',
-    fontSize: 12,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: '47%',
-    backgroundColor: '#1f2937',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionTitle: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionSubtitle: {
-    color: '#6b7280',
-    fontSize: 12,
-  },
-  linksList: {
-    gap: 8,
-  },
-  linkItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1f2937',
-    borderRadius: 10,
-    padding: 14,
-    gap: 12,
-  },
-  linkText: {
-    flex: 1,
-    color: '#ffffff',
-    fontSize: 14,
-  },
-  bottomPadding: {
-    height: 100,
-  },
-});

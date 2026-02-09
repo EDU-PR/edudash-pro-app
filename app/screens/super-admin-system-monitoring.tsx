@@ -1,56 +1,33 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
-import { track } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
-
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-interface SystemHealth {
-  database_status: 'healthy' | 'degraded' | 'down';
-  database_connections: number;
-  database_max_connections: number;
-  migration_status: 'up_to_date' | 'pending' | 'failed';
-  latest_migration: string | null;
-  failed_migrations: string[];
-  rls_enabled: boolean;
-  system_load: number;
-  memory_usage: number;
-  disk_usage: number;
-  uptime: string;
-  last_check: string;
-}
-
-interface ErrorLog {
-  id: string;
-  timestamp: string;
-  level: 'error' | 'warning' | 'info';
-  message: string;
-  source: string;
-  user_id?: string;
-  details?: Record<string, any>;
-}
-
-interface SystemMetrics {
-  total_requests_24h: number;
-  failed_requests_24h: number;
-  average_response_time: number;
-  active_users: number;
-  peak_concurrent_users: number;
-  storage_used_gb: number;
-  storage_limit_gb: number;
-  bandwidth_used_gb: number;
-}
-
+import { logger } from '@/lib/logger';
+import {
+  type SystemHealth,
+  type ErrorLog,
+  type SystemMetrics,
+  getStatusColor,
+  getLevelColor,
+  formatTimestamp,
+  formatBytes,
+  formatUptime,
+  createStyles,
+} from '@/lib/screen-styles/super-admin-system-monitoring.styles';
 export default function SuperAdminSystemMonitoringScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [systemHealth, setSystemHealth] = useState<SystemHealth>({
@@ -81,7 +58,7 @@ export default function SuperAdminSystemMonitoringScreen() {
   
   const fetchSystemHealth = useCallback(async () => {
     if (!isSuperAdmin(profile?.role)) {
-      Alert.alert('Access Denied', 'Super admin privileges required');
+      showAlert({ title: 'Access Denied', message: 'Super admin privileges required', buttons: [{ text: 'OK' }] });
       return;
     }
 
@@ -93,7 +70,7 @@ export default function SuperAdminSystemMonitoringScreen() {
         .rpc('get_system_health_metrics');
 
       if (healthError) {
-        console.error('Health metrics error:', healthError);
+        logger.error('Health metrics error:', healthError);
         // Fall back to basic data if health metrics fail
       }
 
@@ -102,7 +79,7 @@ export default function SuperAdminSystemMonitoringScreen() {
         .rpc('get_system_performance_metrics');
 
       if (performanceError) {
-        console.error('Performance metrics error:', performanceError);
+        logger.error('Performance metrics error:', performanceError);
       }
 
       // Fetch real migration status from database
@@ -110,7 +87,7 @@ export default function SuperAdminSystemMonitoringScreen() {
         .rpc('get_migration_status');
 
       if (migrationError) {
-        console.error('Migration status error:', migrationError);
+        logger.error('Migration status error:', migrationError);
       }
 
       // Fetch real error logs from database
@@ -118,7 +95,7 @@ export default function SuperAdminSystemMonitoringScreen() {
         .rpc('get_recent_error_logs', { hours_back: 24 });
 
       if (logsError) {
-        console.error('Error logs fetch error:', logsError);
+        logger.error('Error logs fetch error:', logsError);
       }
 
       // Process real system health data
@@ -165,8 +142,8 @@ export default function SuperAdminSystemMonitoringScreen() {
       setSystemMetrics(realSystemMetrics);
 
     } catch (error) {
-      console.error('Failed to fetch system health:', error);
-      Alert.alert('Error', 'Failed to load system monitoring data');
+      logger.error('Failed to fetch system health:', error);
+      showAlert({ title: 'Error', message: 'Failed to load system monitoring data', buttons: [{ text: 'OK' }] });
     } finally {
       setLoading(false);
     }
@@ -455,226 +432,7 @@ export default function SuperAdminSystemMonitoringScreen() {
           </>
         )}
       </ScrollView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0b1220',
-  },
-  deniedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0b1220',
-  },
-  deniedText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  header: {
-    backgroundColor: '#0b1220',
-    paddingHorizontal: 16,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  lastCheckContainer: {
-    paddingBottom: 16,
-  },
-  lastCheckText: {
-    color: '#9ca3af',
-    fontSize: 12,
-  },
-  content: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  loadingText: {
-    color: '#9ca3af',
-    marginTop: 16,
-  },
-  section: {
-    backgroundColor: '#1f2937',
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  sectionTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  healthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  healthCard: {
-    flex: 1,
-    minWidth: 120,
-    backgroundColor: '#374151',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  healthStatus: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  healthLabel: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  healthValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  healthDetail: {
-    color: '#6b7280',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  metricCard: {
-    flex: 1,
-    minWidth: 120,
-    backgroundColor: '#374151',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  metricValue: {
-    color: '#00f5ff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  metricLabel: {
-    color: '#9ca3af',
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  metricSubtext: {
-    color: '#6b7280',
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  resourceItem: {
-    marginBottom: 16,
-  },
-  resourceLabel: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  resourceValue: {
-    color: '#9ca3af',
-    fontSize: 12,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: '#4b5563',
-    borderRadius: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  progressFill: {
-    height: '100%',
-    position: 'absolute',
-    left: 0,
-    top: 0,
-  },
-  logItem: {
-    backgroundColor: '#374151',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  logHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  logLevel: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  logLevelText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  logTimestamp: {
-    color: '#9ca3af',
-    fontSize: 12,
-  },
-  logMessage: {
-    color: '#ffffff',
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  logSource: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  logDetails: {
-    backgroundColor: '#1f2937',
-    padding: 8,
-    borderRadius: 6,
-    borderLeftWidth: 2,
-    borderLeftColor: '#00f5ff',
-  },
-  logDetailsText: {
-    color: '#d1d5db',
-    fontSize: 10,
-    fontFamily: 'monospace',
-  },
-});

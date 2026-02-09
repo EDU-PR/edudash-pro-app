@@ -1,16 +1,6 @@
-/**
- * Petty Cash Reconciliation Screen
- * 
- * Allows principals to reconcile physical cash with recorded transactions
- * Features:
- * - Manual cash counting interface
- * - Transaction comparison
- * - Variance identification
- * - Reconciliation approval
- */
-
+/** Petty Cash Reconciliation — manual cash counting + variance identification */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +12,8 @@ import { navigateBack } from '@/lib/navigation';
 import { useTranslation } from 'react-i18next';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 interface CashCount {
   denomination: number;
   count: number;
@@ -56,6 +48,7 @@ export default function PettyCashReconcileScreen() {
   const routerInstance = useRouter();
   const { theme } = useTheme();
   const { t } = useTranslation('common');
+  const { showAlert, alertProps } = useAlertModal();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   
   // Guard against React StrictMode double-invoke in development
@@ -110,15 +103,13 @@ export default function PettyCashReconcileScreen() {
     // Decision 2: User exists but no organization -> onboarding
     if (!orgId) {
       navigationAttempted.current = true;
-      console.log('Petty Cash Reconcile: No school found, redirecting to onboarding', {
-        profile,
+      logger.debug('PettyCashReconcile', 'No school found, redirecting to onboarding', {
         organization_id: profile?.organization_id,
-        preschool_id: (profile as any)?.preschool_id,
       });
       try { 
         router.replace('/screens/principal-onboarding'); 
       } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
+        logger.debug('PettyCashReconcile', 'Redirect to onboarding failed', e);
       }
       return;
     }
@@ -195,8 +186,8 @@ export default function PettyCashReconcileScreen() {
       });
 
     } catch (error) {
-      console.error('Error loading reconciliation data:', error);
-      Alert.alert(t('common.error'), t('petty_cash_reconcile.load_error'));
+      logger.error('PettyCashReconcile', 'Error loading reconciliation data', error);
+      showAlert({ title: t('common.error'), message: t('petty_cash_reconcile.load_error') });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -257,18 +248,18 @@ export default function PettyCashReconcileScreen() {
         throw error;
       }
 
-      Alert.alert(
-        t('petty_cash_reconcile.save_success_title'),
-        t('petty_cash_reconcile.save_success_message', { variance: formatCurrency(reconciliationData.variance) }),
-        [
+      showAlert({
+        title: t('petty_cash_reconcile.save_success_title'),
+        message: t('petty_cash_reconcile.save_success_message', { variance: formatCurrency(reconciliationData.variance) }),
+        buttons: [
           { text: t('petty_cash_reconcile.view_history'), onPress: () => router.push('/screens/petty-cash') },
           { text: t('common.done'), onPress: () => navigateBack('/screens/petty-cash') },
-        ]
-      );
+        ],
+      });
 
     } catch (error) {
-      console.error('Error performing reconciliation:', error);
-      Alert.alert(t('common.error'), t('petty_cash_reconcile.save_error'));
+      logger.error('PettyCashReconcile', 'Error performing reconciliation', error);
+      showAlert({ title: t('common.error'), message: t('petty_cash_reconcile.save_error') });
     } finally {
       setIsReconciling(false);
     }
@@ -298,8 +289,8 @@ export default function PettyCashReconcileScreen() {
     loadReconciliationData();
   };
 
-  // Show loading state while auth/profile is loading
-  if (isStillLoading) {
+  // Show loading / guard states
+  if (isStillLoading || (!orgId && !user)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -310,25 +301,14 @@ export default function PettyCashReconcileScreen() {
     );
   }
 
-  // Show redirect message if no organization after loading is complete
   if (!orgId) {
-    if (!user) {
-      return (
-        <SafeAreaView style={styles.container}>
-          <View style={styles.loadingContainer}>
-            <EduDashSpinner size="large" color={theme?.primary || '#007AFF'} />
-            <Text style={styles.loadingText}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
-          </View>
-        </SafeAreaView>
-      );
-    }
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="calculator-outline" size={48} color={theme?.textSecondary || '#6B7280'} />
           <Text style={styles.loadingText}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
           <TouchableOpacity onPress={() => {
-            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
+            try { router.replace('/screens/principal-onboarding'); } catch (e) { logger.debug('PettyCashReconcile', 'Redirect failed', e); }
           }}>
             <Text style={[styles.loadingText, { color: theme?.primary || '#007AFF', textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
           </TouchableOpacity>
@@ -504,6 +484,7 @@ onPress={() => routerInstance.push('/screens/petty-cash')}
 
         <View style={{ height: 20 }} />
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

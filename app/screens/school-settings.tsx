@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { useEduDashAlert } from '@/components/ui/EduDashAlert';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BankDetails {
@@ -180,7 +181,7 @@ export default function SchoolSettingsScreen() {
 
       setSuccessModal({ visible: true, title: '✓ Saved', message: 'Banking details updated successfully. Parents will now see these details when making payments.' });
     } catch (e: any) {
-      console.error('Error saving bank details:', e);
+      logger.error('SchoolSettings', 'Error saving bank details:', e);
       showError('Error', e?.message || 'Failed to save banking details');
     } finally { setSavingBank(false); }
   };

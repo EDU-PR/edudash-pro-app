@@ -1,4 +1,5 @@
 import { assertSupabase } from '@/lib/supabase';
+import { createPendingApproval } from '@/lib/services/teacherApprovalService';
 
 function randomToken(len = 32) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -43,6 +44,7 @@ export class TeacherInviteService {
       .from('teacher_invites')
       .select('*')
       .eq('school_id', schoolId)
+      .in('status', ['pending', 'accepted'])
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []) as TeacherInvite[];
@@ -56,17 +58,47 @@ export class TeacherInviteService {
     if (error) throw error;
   }
 
-  static async deleteInvite(inviteId: string): Promise<void> {
-    const { error } = await assertSupabase()
+  static async deleteInvite(
+    inviteId: string,
+    options?: { schoolId?: string | null }
+  ): Promise<void> {
+    const supabase = assertSupabase();
+    const schoolId = options?.schoolId || null;
+
+    // Attempt hard-delete with .select() to verify rows were affected
+    let deleteQuery = supabase
       .from('teacher_invites')
       .delete()
       .eq('id', inviteId);
-    if (error) throw error;
+    if (schoolId) {
+      deleteQuery = deleteQuery.eq('school_id', schoolId);
+    }
+
+    const { data: deleted, error } = await deleteQuery.select('id');
+    if (!error && deleted && deleted.length > 0) return;
+
+    // Hard-delete failed or 0 rows affected — fallback to revoking status
+    let revokeQuery = supabase
+      .from('teacher_invites')
+      .update({ status: 'revoked' })
+      .eq('id', inviteId);
+    if (schoolId) {
+      revokeQuery = revokeQuery.eq('school_id', schoolId);
+    }
+
+    const { data: revoked, error: revokeError } = await revokeQuery.select('id');
+    if (!revokeError && revoked && revoked.length > 0) return;
+
+    // Both delete and revoke failed — throw with meaningful message
+    const reason = error?.message || revokeError?.message || 'Invite not found or access denied';
+    throw new Error(`Failed to delete invite: ${reason}`);
   }
 
   static async accept(params: { token: string; authUserId: string; email: string }): Promise<TeacherInviteAcceptResult> {
+    const supabase = assertSupabase();
+
     // Verify invite
-    const { data: invite, error: invErr } = await assertSupabase()
+    const { data: invite, error: invErr } = await supabase
       .from('teacher_invites')
       .select('*')
       .eq('token', params.token)
@@ -76,71 +108,81 @@ export class TeacherInviteService {
     if (invErr || !invite) throw new Error('Invalid or expired invite');
 
     // Mark accepted
-    await assertSupabase()
+    await supabase
       .from('teacher_invites')
       .update({ status: 'accepted', accepted_by: params.authUserId, accepted_at: new Date().toISOString() })
       .eq('id', invite.id);
 
-    // Ensure teacher profile linkage and active seat membership
+    // Check if the teacher is already linked to a different school
     let existingOrgId: string | null = null;
     let requiresSwitch = false;
     try {
-      // Use profiles table (not deprecated users table)
-      const { data: existing } = await assertSupabase()
+      const { data: existing } = await supabase
         .from('profiles')
-        .select('id, role, preschool_id, organization_id')
+        .select('id, role, preschool_id, organization_id, auth_user_id')
         .eq('id', params.authUserId)
         .maybeSingle();
       existingOrgId = (existing as any)?.organization_id || (existing as any)?.preschool_id || null;
       requiresSwitch = !!(existingOrgId && existingOrgId !== invite.school_id);
-      if (existing) {
-        if (!requiresSwitch) {
-          await assertSupabase()
-            .from('profiles')
-            .update({
-              role: 'teacher',
-              preschool_id: invite.school_id,
-              organization_id: invite.school_id,
-              auth_user_id: params.authUserId,
-            })
-            .eq('id', existing.id);
-        } else if (!(existing as any)?.auth_user_id) {
-          await assertSupabase()
-            .from('profiles')
-            .update({ auth_user_id: params.authUserId })
-            .eq('id', existing.id);
-        }
-      } else {
-        // Create new profile if doesn't exist
-        await assertSupabase()
+
+      // Ensure auth_user_id is linked (but DON'T set role/org yet — wait for principal approval)
+      if (existing && !(existing as any)?.auth_user_id) {
+        await supabase
+          .from('profiles')
+          .update({ auth_user_id: params.authUserId })
+          .eq('id', existing.id);
+      } else if (!existing) {
+        // Create a minimal profile if none exists (role stays unset until approval)
+        await supabase
           .from('profiles')
           .upsert({
             id: params.authUserId,
             auth_user_id: params.authUserId,
-            role: 'teacher',
-            preschool_id: invite.school_id,
-            organization_id: invite.school_id,
             email: params.email,
           });
         requiresSwitch = false;
       }
-      // Ensure organization membership with active seat
-      try {
-        // Upsert into organization_members (some envs may not have it; ignore errors)
-        await assertSupabase()
-          .from('organization_members')
-          .upsert({
-            id: crypto?.randomUUID ? crypto.randomUUID() : undefined,
-            organization_id: invite.school_id,
-            user_id: params.authUserId,
-            role: 'teacher',
-            seat_status: 'active',
-            invited_by: invite.invited_by || null,
-          } as any, { onConflict: 'organization_id,user_id' } as any);
-      } catch (e) {
-        // ignore if table not present
-      }
+      // NOTE: We do NOT set role='teacher', preschool_id, organization_id, or create
+      // organization_members here. These are set by approveTeacher() after principal approval.
     } catch { /* Intentional: non-fatal */ }
+
+    // Move teacher into pending principal-approval queue.
+    try {
+      const approvalResult = await createPendingApproval(params.authUserId, invite.school_id, invite.id);
+      if (!approvalResult.success) {
+        console.warn('[TeacherInviteService] Pending approval was not created:', approvalResult.error || approvalResult.message);
+      }
+    } catch (approvalError) {
+      console.warn('[TeacherInviteService] Failed to create pending approval:', approvalError);
+    }
+
+    // Notify principals that a teacher accepted the invite and needs final approval.
+    try {
+      const { data: teacherProfile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, email')
+        .eq('id', params.authUserId)
+        .maybeSingle();
+
+      const teacherName = `${teacherProfile?.first_name || ''} ${teacherProfile?.last_name || ''}`.trim() || params.email;
+
+      await supabase.functions.invoke('notifications-dispatcher', {
+        body: {
+          event_type: 'teacher_invite_accepted_pending_principal',
+          preschool_id: invite.school_id,
+          include_email: true,
+          send_immediately: true,
+          custom_payload: {
+            teacher_user_id: params.authUserId,
+            teacher_name: teacherName,
+            teacher_email: teacherProfile?.email || params.email,
+          },
+        },
+      });
+    } catch (notifyError) {
+      console.warn('[TeacherInviteService] Failed to notify principal approval queue:', notifyError);
+    }
+
     return {
       status: requiresSwitch ? 'requires_switch' : 'linked',
       schoolId: invite.school_id,

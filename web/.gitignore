@@ -43,3 +43,6 @@ next-env.d.ts
 
 # archived legacy code (not used, kept for reference only)
 /docs/archived-code/
+
+# Playwright recordings
+recordings/

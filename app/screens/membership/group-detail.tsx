@@ -3,7 +3,7 @@
  * View and manage a specific group - add/remove members, edit details
  */
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, FlatList, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, FlatList, RefreshControl } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Authorized member types that can manage groups
@@ -58,6 +59,7 @@ export default function GroupDetailScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const { showAlert, alertProps } = useAlertModal();
   const queryClient = useQueryClient();
   
   const groupId = typeof params.id === 'string' ? params.id : params.id?.[0] || null;
@@ -178,10 +180,10 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['group-detail', groupId] });
       queryClient.invalidateQueries({ queryKey: ['group-members', groupId] });
       queryClient.invalidateQueries({ queryKey: ['available-members'] });
-      Alert.alert('Success', 'Member added to group');
+      showAlert({ title: 'Success', message: 'Member added to group' });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to add member');
+      showAlert({ title: 'Error', message: error.message || 'Failed to add member' });
     },
   });
 
@@ -209,7 +211,7 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['available-members'] });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to remove member');
+      showAlert({ title: 'Error', message: error.message || 'Failed to remove member' });
     },
   });
 
@@ -234,10 +236,10 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['group-detail', groupId] });
       queryClient.invalidateQueries({ queryKey: ['member-groups'] });
       setShowEditModal(false);
-      Alert.alert('Success', 'Group updated');
+      showAlert({ title: 'Success', message: 'Group updated' });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to update group');
+      showAlert({ title: 'Error', message: error.message || 'Failed to update group' });
     },
   });
 
@@ -257,41 +259,41 @@ export default function GroupDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['member-groups'] });
       router.back();
-      Alert.alert('Success', 'Group deleted');
+      showAlert({ title: 'Success', message: 'Group deleted' });
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.message || 'Failed to delete group');
+      showAlert({ title: 'Error', message: error.message || 'Failed to delete group' });
     },
   });
 
   const handleRemoveMember = (member: GroupMember) => {
-    Alert.alert(
-      'Remove Member',
-      `Remove ${member.first_name} ${member.last_name} from this group?`,
-      [
+    showAlert({
+      title: 'Remove Member',
+      message: `Remove ${member.first_name} ${member.last_name} from this group?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Remove', 
           style: 'destructive',
           onPress: () => removeMemberMutation.mutate(member.id),
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleDeleteGroup = () => {
-    Alert.alert(
-      'Delete Group',
-      'Are you sure you want to delete this group? This action cannot be undone.',
-      [
+    showAlert({
+      title: 'Delete Group',
+      message: 'Are you sure you want to delete this group? This action cannot be undone.',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Delete', 
           style: 'destructive',
           onPress: () => deleteGroupMutation.mutate(),
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleEditPress = () => {
@@ -346,6 +348,7 @@ export default function GroupDetailScreen() {
   }
 
   return (
+    <>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen 
         options={{ 
@@ -600,6 +603,8 @@ export default function GroupDetailScreen() {
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

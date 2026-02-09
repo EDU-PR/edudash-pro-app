@@ -1,7 +1,9 @@
-const AI_ENABLED = (process.env.EXPO_PUBLIC_AI_ENABLED === 'true') || (process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES === 'true')
+import { isAIEnabled } from '@/lib/ai/aiConfig';
 import { assertSupabase } from '../supabase'
 import { track } from '../analytics'
 import { getCurrentLanguage } from '../i18n'
+
+const AI_ENABLED = isAIEnabled();
 
 /**
  * Convert app language code to proper locale for AI services
@@ -33,46 +35,78 @@ export class HomeworkService {
     try {
       if (!AI_ENABLED) {
         return {
-          score: 75,
-          feedback: 'Good effort on this assignment. Keep working hard!',
-          suggestions: ['Review the material again', 'Practice more examples'],
-          strengths: ['Shows understanding of basic concepts'],
-          areasForImprovement: ['Attention to detail', 'Following instructions']
+          score: null,
+          feedback: 'AI grading is not available. Please grade this submission manually.',
+          suggestions: [],
+          strengths: [],
+          areasForImprovement: [],
+          requiresManualReview: true,
         }
       }
 
       const ageMatch = String(gradeLevel || '').match(/(\d{1,2})/)
-      const _studentAge = ageMatch ? Math.max(3, Math.min(12, parseInt(ageMatch[1], 10))) : 5;
-      void _studentAge;
+      const studentAge = ageMatch ? Math.max(3, Math.min(12, parseInt(ageMatch[1], 10))) : 5;
 
-      // Placeholder AI grading call — integrate actual provider later
-      const score = 85
-      const feedback = 'Great effort! Solid understanding with minor gaps.'
-      const strengths: string[] = ['Understands core concept']
-      const areasForImprovement: string[] = ['Double-check counting sequence']
-      const suggestions: string[] = ['Practice with number lines']
+      // Call AI grading via ai-proxy edge function
+      track('edudash.ai.grading.started', { submissionId });
+      const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
+        body: {
+          scope: 'teacher',
+          service_type: 'grading_assistance',
+          payload: {
+            prompt: `Grade this homework submission for a ${studentAge}-year-old student.\n\nAssignment: ${assignmentTitle}\nGrade Level: ${gradeLevel}\n\nSubmission:\n${submissionContent}\n\nRespond with JSON: { "score": number 0-100, "feedback": string, "strengths": string[], "areasForImprovement": string[], "suggestions": string[] }`,
+          },
+          metadata: {
+            assignment_title: assignmentTitle,
+            grade_level: gradeLevel,
+            locale: getAILocale(),
+            language: getCurrentLanguage(),
+          },
+        },
+      });
 
-      try {
-        await assertSupabase()
-          .from('homework_submissions')
-          .update({
-            grade: Number(score),
-            feedback: feedback,
-            graded_at: new Date().toISOString(),
-            graded_by: 'ai',
-            status: 'reviewed'
-          })
-          .eq('id', submissionId)
-      } catch (e) { console.debug('homework_submissions update failed', e); }
+      if (error) throw error;
 
-      return { score, feedback, suggestions, strengths, areasForImprovement }
-    } catch {
+      const payload: any = data?.result || data || {};
+      if (typeof payload.score !== 'number') {
+        track('edudash.ai.grading.incomplete_response', { submissionId, payload: JSON.stringify(payload).slice(0, 200) });
+      }
+      const score = typeof payload.score === 'number' ? payload.score : null;
+      const feedback = payload.feedback || 'Submission reviewed. Please verify the grade.';
+      const strengths: string[] = Array.isArray(payload.strengths) ? payload.strengths : [];
+      const areasForImprovement: string[] = Array.isArray(payload.areasForImprovement) ? payload.areasForImprovement : [];
+      const suggestions: string[] = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+      const requiresManualReview = score === null;
+
+      track('edudash.ai.grading.completed', { submissionId, score, requiresManualReview });
+
+      if (score !== null) {
+        try {
+          await assertSupabase()
+            .from('homework_submissions')
+            .update({
+              grade: Number(score),
+              feedback: feedback,
+              graded_at: new Date().toISOString(),
+              graded_by: 'ai',
+              status: requiresManualReview ? 'needs_review' : 'reviewed'
+            })
+            .eq('id', submissionId)
+        } catch (e) {
+          if (__DEV__) console.debug('homework_submissions update failed', e);
+        }
+      }
+
+      return { score, feedback, suggestions, strengths, areasForImprovement, requiresManualReview }
+    } catch (err: unknown) {
+      track('edudash.ai.grading.error', { submissionId, error: String(err) });
       return {
-        score: 70,
-        feedback: 'Thank you for submitting your homework. Keep up the good work!',
-        suggestions: ['Review the lesson materials', 'Practice similar exercises'],
-        strengths: ['Completed the assignment'],
-        areasForImprovement: ['Follow instructions carefully']
+        score: null,
+        feedback: 'AI grading encountered an error. Please grade this submission manually.',
+        suggestions: [],
+        strengths: [],
+        areasForImprovement: [],
+        requiresManualReview: true,
       }
     }
   }
@@ -91,13 +125,7 @@ export class HomeworkService {
   ): Promise<void> {
     try {
       if (!AI_ENABLED) {
-        handlers.onFinal?.({
-          score: 75,
-          feedback: 'Good effort on this assignment. Keep working hard!',
-          suggestions: ['Review the material again', 'Practice more examples'],
-          strengths: ['Shows understanding of basic concepts'],
-          areasForImprovement: ['Attention to detail', 'Following instructions'],
-        })
+        handlers.onError?.({ message: 'AI grading is not available. Please grade manually.', code: 'ai_disabled' })
         return
       }
 
@@ -123,11 +151,14 @@ export class HomeworkService {
         if (error) throw error
 
         const payload: any = data?.result || data || {}
-        const score = typeof payload.score === 'number' ? payload.score : 85
-        const feedback = payload.feedback || 'Great effort! Solid understanding with minor gaps.'
-        const strengths: string[] = Array.isArray(payload.strengths) ? payload.strengths : ['Understands core concept']
-        const areasForImprovement: string[] = Array.isArray(payload.areasForImprovement) ? payload.areasForImprovement : ['Double-check counting sequence']
-        const suggestions: string[] = Array.isArray(payload.suggestions) ? payload.suggestions : ['Practice with number lines']
+        if (typeof payload.score !== 'number' || !payload.feedback) {
+          throw new Error('AI grading returned incomplete result — retrying via fallback')
+        }
+        const score = payload.score
+        const feedback = payload.feedback
+        const strengths: string[] = Array.isArray(payload.strengths) ? payload.strengths : []
+        const areasForImprovement: string[] = Array.isArray(payload.areasForImprovement) ? payload.areasForImprovement : []
+        const suggestions: string[] = Array.isArray(payload.suggestions) ? payload.suggestions : []
 
         handlers.onFinal?.({ score, feedback, suggestions, strengths, areasForImprovement })
         track('edudash.ai.grading.completed', { score })
@@ -143,7 +174,7 @@ export class HomeworkService {
               status: 'reviewed'
             })
             .eq('id', submissionId)
-        } catch (e) { console.debug('homework_submissions update failed', e); }
+        } catch (e) { if (__DEV__) console.debug('homework_submissions update failed', e); }
         return
       } catch (invokeError: any) {
         const msg = String(invokeError?.message || '')
@@ -155,39 +186,46 @@ export class HomeworkService {
         // Fallback to simulated streaming when server grading fails
       }
 
-      // Simulated streaming: emit a couple of JSON chunks, then final
-      const chunks = [
-        '{"grade":"Good","feedback":"Analyzing submission","strengths":[],',
-        '"areasForImprovement":[],"nextSteps":[]}',
-      ]
-      for (const c of chunks) {
-        handlers.onDelta?.(c)
-        await new Promise(r => setTimeout(r, 200))
-      }
-
-      const score = 85
-      const feedback = 'Great effort! Solid understanding with minor gaps.'
-      const strengths: string[] = ['Understands core concept']
-      const areasForImprovement: string[] = ['Double-check counting sequence']
-      const suggestions: string[] = ['Practice with number lines']
-
-      handlers.onFinal?.({ score, feedback, suggestions, strengths, areasForImprovement })
-      track('edudash.ai.grading.completed_fallback', { score })
-
+      // Fallback: retry via ai-gateway (different edge function) when ai-proxy fails
       try {
-        await assertSupabase()
-          .from('homework_submissions')
-          .update({
-            grade: Number(score),
-            feedback: feedback,
-            graded_at: new Date().toISOString(),
-            graded_by: 'ai',
-            status: 'reviewed'
-          })
-          .eq('id', submissionId)
-      } catch { /* noop */ void 0; }
-    } catch (e: any) {
-      handlers.onError?.({ message: e?.message || 'Streaming error' })
+        track('edudash.ai.grading.fallback_started', {})
+        const { data: fallbackData, error: fallbackError } = await assertSupabase().functions.invoke('ai-gateway', {
+          body: {
+            action: 'grading_assistance',
+            submission: submissionContent,
+            assignment_title: assignmentTitle,
+            grade_level: gradeLevel,
+            language: getCurrentLanguage(),
+          }
+        })
+        if (fallbackError) throw fallbackError
+        const fbPayload: any = fallbackData?.result || fallbackData || {}
+        const score = typeof fbPayload.score === 'number' ? fbPayload.score : 70
+        const feedback = fbPayload.feedback || 'Submission reviewed. See feedback below.'
+        const strengths: string[] = Array.isArray(fbPayload.strengths) ? fbPayload.strengths : []
+        const areasForImprovement: string[] = Array.isArray(fbPayload.areasForImprovement) ? fbPayload.areasForImprovement : []
+        const suggestions: string[] = Array.isArray(fbPayload.suggestions) ? fbPayload.suggestions : []
+
+        handlers.onFinal?.({ score, feedback, suggestions, strengths, areasForImprovement })
+        track('edudash.ai.grading.completed_fallback', { score })
+
+        try {
+          await assertSupabase()
+            .from('homework_submissions')
+            .update({
+              grade: Number(score),
+              feedback: feedback,
+              graded_at: new Date().toISOString(),
+              graded_by: 'ai',
+              status: 'reviewed'
+            })
+            .eq('id', submissionId)
+        } catch { /* noop */ void 0; }
+      } catch (e: any) {
+        handlers.onError?.({ message: e?.message || 'Grading failed. Please try again or grade manually.' })
+      }
+    } catch (outerErr: unknown) {
+      handlers.onError?.({ message: String(outerErr) || 'Unexpected grading error.' })
     }
   }
 }

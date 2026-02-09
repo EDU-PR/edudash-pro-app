@@ -22,6 +22,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 // Modular components
 import { PettyCashSummaryCard } from '@/components/petty-cash/PettyCashSummary';
@@ -89,14 +90,14 @@ export default function PettyCashScreen() {
       let blob: Blob;
       try {
         if (imageUri.startsWith('file://') && typeof window !== 'undefined') {
-          console.warn('File URI detected in web environment');
+          logger.warn('PettyCash', 'File URI detected in web environment');
           return null;
         }
         const response = await fetch(imageUri);
         if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
         blob = await response.blob();
       } catch (fetchError) {
-        console.error('Error fetching image:', fetchError);
+        logger.error('PettyCash', 'Error fetching image:', fetchError);
         return null;
       }
 
@@ -129,12 +130,12 @@ export default function PettyCashScreen() {
           throw receiptError;
         }
       } catch (e) {
-        console.warn('Failed to record petty cash receipt row:', e);
+        logger.warn('PettyCash', 'Failed to record petty cash receipt row:', e);
       }
       
       return data.path;
     } catch (error) {
-      console.error('Error uploading receipt:', error);
+      logger.error('PettyCash', 'Error uploading receipt:', error);
       return null;
     }
   };

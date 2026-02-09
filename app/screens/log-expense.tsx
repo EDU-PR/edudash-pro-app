@@ -28,6 +28,7 @@ import { SimpleHeader } from '@/components/ui/SimpleHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { normalizePaymentMethodCode } from '@/lib/utils/paymentMethod';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -125,7 +126,7 @@ export default function LogExpenseScreen() {
         description: description.trim(),
         category: selectedType.label,
         vendorName: isSalary && selectedStaff ? selectedStaff.name : vendorName.trim() || undefined,
-        paymentMethod: paymentMethod.trim() || undefined,
+        paymentMethod: paymentMethod.trim() ? normalizePaymentMethodCode(paymentMethod) : undefined,
         paymentReference: reference.trim() || undefined,
         metadata: {
           ...(isSalary && selectedStaff ? { staff_id: selectedStaff.id, staff_name: selectedStaff.name } : {}),
@@ -162,7 +163,14 @@ export default function LogExpenseScreen() {
     }
   }, [selectedType, amount, description, vendorName, paymentMethod, reference, preschoolId, user, isSalary, selectedStaff, showAlert]);
 
-  const paymentMethods = ['Cash', 'EFT / Bank Transfer', 'Card', 'Debit Order', 'Other'];
+  const paymentMethods = [
+    { code: 'cash', label: 'Cash' },
+    { code: 'bank_transfer', label: 'Bank Transfer' },
+    { code: 'eft', label: 'EFT' },
+    { code: 'card', label: 'Card' },
+    { code: 'debit_order', label: 'Debit Order' },
+    { code: 'other', label: 'Other' },
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -293,15 +301,15 @@ export default function LogExpenseScreen() {
             <Text style={styles.stepLabel}>How did you pay? (optional)</Text>
             <View style={styles.methodRow}>
               {paymentMethods.map((method) => {
-                const isSelected = paymentMethod === method;
+                const isSelected = paymentMethod === method.code;
                 return (
                   <TouchableOpacity
-                    key={method}
+                    key={method.code}
                     style={[styles.methodChip, isSelected && styles.methodChipActive]}
-                    onPress={() => setPaymentMethod(isSelected ? '' : method)}
+                    onPress={() => setPaymentMethod(isSelected ? '' : method.code)}
                   >
                     <Text style={[styles.methodText, isSelected && { color: 'white' }]}>
-                      {method}
+                      {method.label}
                     </Text>
                   </TouchableOpacity>
                 );

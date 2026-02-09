@@ -2,544 +2,339 @@
 
 ## Project Overview
 
-**EduDash Pro** is a multi-tenant, mobile-first educational platform with advanced security, agentic AI features, and strict role-based access control (RBAC).
+**EduDash Pro** is a multi-tenant, mobile-first educational platform (preschool/ECD sector, South Africa) with agentic AI, strict RBAC, and 5 user roles.
 
-**Architecture:**
-- **Mobile**: React Native + Expo (iOS/Android/Web via `expo-router`)
-- **Web**: Next.js 14 App Router (separate codebase in `/web`)
-- **Backend**: Supabase (PostgreSQL with RLS, Auth, Edge Functions)
-- **AI**: Claude (Anthropic), OpenAI GPT-4, Gemini
-- **Payments**: PayFast (South Africa)
-- **Video/Calls**: Daily.co WebRTC integration
-- **Analytics**: PostHog, custom telemetry
+**Architecture — two codebases, one backend:**
 
-**Multi-Tenant Model:**
-- Each preschool is a tenant (`preschool_id` / `organization_id`)
-- All tables enforce tenant isolation via RLS policies
-- Super-Admin role exists at platform level (bypasses RLS for monitoring)
+| Layer | Stack | Location |
+|-------|-------|----------|
+| Mobile | React Native 0.81.1 + Expo 54 + expo-router 6 | `/app`, `/components`, `/hooks`, `/services` |
+| Web | Next.js 16 + React 19 + TailwindCSS 4 | `/web/src` |
+| Backend | Supabase (PostgreSQL + RLS + Auth + Edge Functions) | `/supabase`, `/migrations` |
+| AI | Claude (Anthropic), GPT-4o, Gemini — all via Edge Function proxy | `/supabase/functions/ai-proxy` |
+| Payments | PayFast (South Africa) | `/supabase/functions/payfast-webhook` |
+| Video | Daily.co WebRTC | `/supabase/functions/daily-token`, `daily-rooms` |
+| i18n | 9 languages: en, af, zu, st, nso, fr, pt, es, de | `/locales` |
+
+**Multi-Tenant Model:** Every school is a tenant (`preschool_id` / `organization_id`). All tables enforce RLS. SQL helper `current_user_org_id()` derives tenant from JWT. Super-admins bypass RLS via service role.
+
+## Critical Developer Workflows
+
+```bash
+# Mobile development (Android-first)
+npm start                         # Expo dev server (localhost for port forwarding)
+npm run dev:android               # Start + open Android emulator
+npm run start:clear               # Clear cache (fixes most build issues)
+
+# Web development
+cd web && npm run dev             # Next.js dev server :3000
+
+# Type checking — MUST use elevated memory, script uses 4096 internally
+npm run typecheck                 # Runs: NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit
+npm run typecheck:strict          # Strict config for new code
+
+# Quality gates (run before committing)
+npm run lint:fix                  # ESLint with auto-fix
+npm run format                    # Prettier
+npm run check:console             # No console.log in production
+npm run check:file-sizes          # WARP.md compliance
+
+# Database migrations (NEVER use supabase start or local Docker)
+supabase migration new <name>     # Create migration
+npm run lint:sql                  # SQLFluff lint (REQUIRED)
+supabase db push                  # Push to remote (NO --local flag)
+supabase db diff                  # Verify no drift
+
+# RBAC validation
+npx tsx lib/rbac/validate.ts      # Expected: "All validations passed!"
+
+# Android builds
+npm run build:android:apk         # Local APK
+npm run build:android:aab         # Production AAB (EAS cloud)
+```
+
+## File Size Standards (WARP.md — NON-NEGOTIABLE)
+
+| File type | Max lines | Split strategy |
+|-----------|-----------|----------------|
+| Components | ≤400 (excl. StyleSheet) | Extract sub-components to `components/<domain>/` |
+| Screens | ≤500 (excl. StyleSheet) | Extract hooks + sub-components |
+| Hooks | ≤200 | Split into subfolder with barrel `index.ts` |
+| Services/Utilities | ≤500 | Split by concern |
+| Type definitions | ≤300 (except auto-generated `database.types.ts`) | Split by domain |
+| StyleSheet | Extract to `.styles.ts` if >200 lines | `createStyles(theme)` factory pattern |
 
 ## Key Architectural Patterns
 
-### 1. Hybrid Mobile + Web Architecture
-- **Mobile app** (`/app`, `/components`, `/services`): Expo Router, React Native
-- **Web app** (`/web/src`): Next.js 14 with App Router, TailwindCSS
-- **Shared logic**: Database types (`lib/database.types.ts`), RBAC utilities, AI service clients
-- Both platforms use same Supabase backend with identical auth flow
+### 1. Modular Hook Folders (established pattern)
+When a hook exceeds 200 lines, decompose into a subfolder with focused files and a barrel `index.ts`:
 
-### 2. Multi-Tenant with RLS
-- **Tenant Isolation**: Every sensitive table has `preschool_id` or `organization_id`
-- **RLS Policies**: SQL migrations enforce row-level security (see `migrations/`)
-- **Helper Function**: `current_user_org_id()` in SQL determines user's tenant from JWT
-- **Super-Admin Bypass**: Super-admins use service role for cross-tenant operations
+```
+hooks/principal-hub/           # Real example — was 1300 lines
+  ├── index.ts                 # Orchestrator (≤200 lines), composes fetch functions
+  ├── types.ts                 # Interfaces + constants + helper functions
+  ├── fetchPrincipalStats.ts   # One concern per file
+  ├── fetchPrincipalTeachers.ts
+  ├── fetchPrincipalFinancials.ts
+  └── ...
+```
+
+Other modular hook folders: `hooks/dash-assistant/`, `hooks/membership/`, `hooks/pop/`, `hooks/parent-messaging/`, `hooks/principal/`. The standalone `hooks/usePrincipalHub.ts` re-exports from the subfolder — consumers are unaffected.
+
+### 2. RBAC System
+- **Roles**: `super_admin`, `principal`, `teacher`, `parent`, `student`
+- **Permissions matrix**: `lib/rbac/roles-permissions.json`
+- **TypeScript helpers**: Import `roleHasPermission` from `@/lib/rbac/types`
+- **Enhanced profiles**: `fetchEnhancedUserProfile()` returns `hasRole()`, `hasCapability()` methods
+- **Always check permissions** before rendering UI or executing operations
 
 ### 3. Agentic AI System
-- **Orchestrator**: `services/AgentOrchestrator.ts` runs Plan-Act-Reflect loop
-- **Tool Registry**: `services/dash-ai/DashToolRegistry.ts` - all tools registered with risk levels
-- **AI Proxy**: `supabase/functions/ai-proxy/` - Edge Function proxies Claude API with quota/PII checks
-- **Streaming**: Web uses SSE; mobile uses HTTP polling (WebSocket planned Phase 2)
-- **Telemetry**: All AI actions logged to `ai_events`, `ai_task_runs` tables
 
-### 4. RBAC System
-- **Roles**: `super_admin`, `principal`, `teacher`, `parent`, `student`
-- **Permissions**: Defined in `lib/rbac/roles-permissions.json` (machine-readable)
-- **Usage**: Import `roleHasPermission` from `lib/rbac/types.ts`
-- **Enhanced Profiles**: `fetchEnhancedUserProfile()` returns profile with `hasRole()`, `hasCapability()` methods
-- **Validation**: Run `npx tsx lib/rbac/validate.ts` to verify system integrity
+**Golden Rule: NEVER call AI APIs directly from client** — always via `supabase/functions/ai-proxy/` Edge Function.
 
-### 5. Authentication Flow
-- **Context**: `contexts/AuthContext.tsx` manages `user`, `session`, `profile`, `permissions`
-- **Session Manager**: `lib/sessionManager.ts` handles login/logout/refresh
-- **Route Guards**: `hooks/useRouteGuard.ts` enforces auth + mobile-web restrictions
-- **Web Client**: `web/src/lib/supabase/client.ts` uses `@supabase/ssr` for Next.js (singleton)
-- **Mobile Client**: `lib/supabase.ts` uses standard `@supabase/supabase-js` (`assertSupabase()`)
+**Client SDK** (`services/dash-ai/DashAIClient.ts`):
+- `callAIService(params)` → routes to streaming or non-streaming
+- Streaming: SSE via `fetch` on web, WebSocket on React Native (feature-flagged: `EXPO_PUBLIC_USE_WEBSOCKET_STREAMING`)
+- Error mapping: 429 → quota exceeded, 401 → session expired, 503 → service unavailable
 
-### 6. Supabase Edge Functions
-All functions use `Deno.serve()` pattern with CORS handling:
-- **AI Services**: `ai-proxy` (Claude/OpenAI proxying with quota), `ai-gateway`, `ai-usage`
-- **Payment Webhooks**: `payfast-webhook`, `payments-webhook`, `revenuecat-webhook`
-- **Sync Services**: Bi-directional sync with external edusite platform
-- **Notifications**: `send-push`, `notifications-dispatcher`, `push-queue-processor`
-- **Daily.co**: `daily-token`, `daily-rooms` (video call token generation)
-- **Health**: Include `/health` endpoints for monitoring
+**AI Proxy Edge Function** (`supabase/functions/ai-proxy/index.ts`, ~1500 lines):
+- **Provider routing**: Default → Anthropic; `prefer_openai: true` → OpenAI; super-admins → always Anthropic with Sonnet 4 access
+- **Allowed Anthropic models**: `claude-sonnet-4-20250514`, `claude-3-5-haiku-20241022`, `claude-3-5-sonnet-20241022`, `claude-3-opus-20240229` (+ aliases resolved automatically)
+- **Allowed OpenAI models**: `gpt-4o`, `gpt-4o-mini`
+- **Service types & max tokens**: `chat_message` (2048), `lesson_generation` (4096), `homework_generation` (4096), `grading` (2048), `exam_generation` (4096), `agent_plan` (1024), `agent_reflection` (256), `image_analysis` (2048)
+- **Security**: PII redaction (SA phone, email, ID numbers, card numbers) before provider calls; JWT auth; org membership check
+- **Retries**: Automatic on 429/503/529 errors
 
-## Developer Workflows
+**Tool Registry** (`services/dash-ai/DashToolRegistry.ts`):
+- 9 registered tools: `query_database`, `caps_curriculum_query`, `textbook_content`, `exam_prep_generate`, `student_tutor`, `learning_progress`, `mistake_pattern_detector`, `user_context`, `context_aware_resources`
+- `web_search` tool runs server-side only (Brave Search API primary, DuckDuckGo fallback)
+- Risk levels: `low | medium | high` (all current tools are `low`)
+- Tier hierarchy: `free → starter → basic → premium → pro → enterprise`
+- **Tool continuation pattern**: Client sends `enable_tools: true` + tool definitions → Edge Function returns `pending_tool_calls` → client executes via `DashToolRegistry.executeTool()` → results sent back with `enable_tools: false` to prevent infinite loops
+- Security: guest block, role verification, tier verification, parameter validation (type, enum, min/max, pattern)
 
-### Mobile Development
-```bash
-# Install dependencies
-npm install
+**Agent Orchestrator** (`services/AgentOrchestrator.ts`) — Plan-Act-Reflect loop:
+1. **PERCEIVE**: Gather user profile, memories, tool specs, screen context
+2. **PLAN+ACT** (loop, max 4 steps / 5 tools / 20s timeout):
+   - THINK → `ai-proxy` with `service_type='agent_plan'`, model `claude-3-5-haiku-20241022` (temp 0.3)
+   - ACT → Execute returned tool calls via `ToolRegistry.execute()`
+   - Publish `TOOL_EXECUTED` via EventBus; break if no tool calls returned
+3. **REFLECT**: `service_type='agent_reflection'` for 1-2 sentence self-assessment
+4. **STORE**: Save to MemoryService (interaction + pattern memory, importance=5)
+- Cancellation via `cancelCurrentRun()` — checks `isRunning` flag each loop iteration
+- Singleton via DI container (`TOKENS.agentOrchestrator`)
 
-# Start Expo dev server (localhost only for Android port forwarding)
-npm start
+**Quota System**:
+- Tables: `user_ai_tiers` (user→tier mapping), `ai_usage_tiers` (tier limits), `user_ai_usage` (counters), `ai_request_log` (audit trail)
+- `check_ai_usage_limit` RPC: returns `{allowed, remaining, limit, current_tier, upgrade_available}`
+- Platform schools (Community School, EduDash Pro Main) get unlimited usage
+- Free/trial tier: 300 chat messages/month; others scale by `chat_messages_per_day * 30`
+- Client-side pre-check: `useDashAI` hook calls `checkAIQuota()` from `@/lib/ai/guards` before each send
+- Dev bypass: `AI_QUOTA_BYPASS=true` + `ENVIRONMENT=development|local`
+- Usage recorded after every request via `record_ai_usage` RPC (user_id, model, tokens_in/out, scope, org_id)
 
-# Android emulator (with automatic port forwarding + app launch)
-npm run dev:android
+**AI Hooks** (`hooks/dash-assistant/`):
+| Hook | Purpose |
+|------|---------|
+| `useDashAI` | Client lifecycle, model selection, quota check, `sendMessage()` |
+| `useDashConversation` | Conversation state (messages, history) |
+| `useDashTutorMode` | Tutor mode: Diagnose → Teach → Practice → Check |
+| `useDashVoice` | Voice input/output handling |
 
-# iOS simulator
-npm run ios
+### 4. Database Access
+- **Mobile**: `assertSupabase()` from `@/lib/supabase` (throws if unavailable)
+- **Web**: `createClient()` from `@/lib/supabase/client` (singleton via `@supabase/ssr`)
+- **Edge Functions**: New client per request with `SUPABASE_SERVICE_ROLE_KEY`
+- **Auto-generated types**: `lib/database.types.ts` (~35k lines, never edit manually)
+- **Storage**: Always store paths, never signed URLs (they expire in ~1 hour)
 
-# Clear cache and restart (fixes most build issues)
-npm run start:clear
+### 5. Supabase Edge Functions
+Two patterns coexist (majority uses imported `serve`):
+```typescript
+// Pattern A (27 functions) — imported serve
+import { serve } from 'https://deno.land/std@0.214.0/http/server.ts';
+import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
+serve(async (req) => { ... });
+
+// Pattern B (10 functions) — Deno.serve
+Deno.serve(async (req) => { ... });
 ```
 
-### Web Development
-```bash
-cd web
+All use: Zod for validation, `_shared/cors.ts` for CORS, Supabase client with service role. 40 Edge Functions total covering AI, payments, notifications, video, sync, and cron jobs.
 
-# Install dependencies
-npm install
-
-# Start Next.js dev server (port 3000)
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview build
-npm run preview
-```
-
-### Database Migrations
-```bash
-# Create new migration
-supabase migration new <descriptive_name>
-
-# Lint SQL (REQUIRED before push)
-npm run lint:sql
-
-# Push to remote (NO --local flag)
-supabase db push
-
-# Verify no drift
-supabase db diff
-```
-
-### RBAC Validation
-```bash
-# Validate roles and permissions
-npx tsx lib/rbac/validate.ts
-
-# Expected output: "🎉 All validations passed! RBAC system is ready."
-```
-
-### Build Android APK/AAB
-```bash
-# Development APK (local build)
-npm run build:android:apk
-
-# Production AAB (EAS cloud build)
-npm run build:android:aab
-
-# Preview build
-npm run build:android:preview
-```
-
-### Testing & Quality
-```bash
-# Run tests
-npm test
-
-# Type checking (ALWAYS use with elevated memory)
-NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck
-
-# Strict type checking (for new code)
-NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck:strict
-
-# Lint with auto-fix
-npm run lint:fix
-
-# Format code
-npm run format
-
-# Check for console.log statements
-npm run check:console
-
-# Check file sizes (WARP.md compliance)
-npm run check:file-sizes
-```
-
-**CRITICAL:** Always run typecheck with `NODE_OPTIONS='--max_old_space_size=8192'` before committing. The codebase is large and will run out of memory with default Node settings.
+### 6. Authentication & Context Providers
+- **Auth**: `contexts/AuthContext.tsx` → `user`, `session`, `profile`, `permissions`
+- **Session**: `lib/sessionManager.ts` handles login/logout/refresh
+- **Route guards**: `hooks/useRouteGuard.ts` enforces auth + role restrictions
+- **Key contexts**: `ThemeContext`, `SubscriptionContext`, `NotificationContext`, `OrganizationBrandingContext`, `TerminologyContext`, `OnboardingContext`
 
 ## Project-Specific Conventions
 
-### File Organization
-- **React Native components**: `/components/<domain>/<Component>.tsx`
-- **Next.js components**: `/web/src/components/<domain>/<Component>.tsx`
-- **Services**: `/services/<ServiceName>.ts` (mobile-focused, ≤500 lines)
-- **Hooks**: `/hooks/use<HookName>.ts` (≤200 lines)
-  - **Modular hooks**: For complex features (e.g., Dash AI), split into subfolder with focused hooks:
-    - `hooks/dash-assistant/useDashConversation.ts` - Message state & streaming
-    - `hooks/dash-assistant/useDashTutorMode.ts` - Quiz logic & grading
-    - `hooks/dash-assistant/useDashVoice.ts` - Voice recording & TTS
-    - `hooks/dash-assistant/useDashAI.ts` - AI client & prompts
-    - Main orchestrator hook imports and composes these
-- **Context**: `/contexts/<Name>Context.tsx`
-- **Types**: `/lib/database.types.ts` (auto-generated), custom types in service files
-- **Utilities**: `/lib/utils/<util-name>.ts`, `/web/src/lib/utils/<util-name>.ts`
+### Imports
+- Use `@/` alias for absolute imports from project root
+- Order: React → React Native → third-party → `@/` internal → relative
 
-### Styling Patterns
-- **Mobile**: React Native `StyleSheet.create()` at bottom of file
+### Styling
+- **Mobile**: `StyleSheet.create()` at bottom of file; extract to `.styles.ts` if >200 lines
 - **Web**: TailwindCSS utility classes
-- **Theming**: Use `useTheme()` context for mobile, Tailwind dark mode for web
-- **Split Large Styles**: If StyleSheet >200 lines, extract to `<Component>.styles.ts`
+- **Theming**: `useTheme()` hook for mobile, Tailwind dark mode for web
 
-### AI Integration
-- **NEVER call AI APIs directly from client** - always use Edge Functions
-- **Always use** `supabase/functions/ai-proxy/` Edge Function for AI calls
-- **Client SDK**: `services/dash-ai/DashAIClient.ts` wraps Edge Function calls
-- **Streaming**: Use `onChunk` callback for SSE streaming on web
-- **Tool Calls**: Register in `services/dash-ai/DashToolRegistry.ts` with `claudeToolDefinition`
-- **Quota**: Enforced at Edge Function level based on user tier
+### UI Rules
+- **NEVER use `Alert.alert`** — use `AlertModal` or `useAlertModal` hook
+- **Lists**: Use `@shopify/flash-list` (FlashList) instead of FlatList for 1000+ items
+- **Phone numbers (SA)**: Strip non-digits, replace leading `0` with `27` (see `lib/utils/phoneUtils.ts`)
 
-### Dash AI Architecture (Official Reference)
-**Core Components:**
-- **Orchestrator**: `services/AgentOrchestrator.ts` - Plan-Act-Reflect loop
-- **AI Client**: `services/dash-ai/DashAIClient.ts` - Unified API for Claude/OpenAI/Gemini
-- **Tool Registry**: `services/dash-ai/DashToolRegistry.ts` - All agent tools with risk levels
-- **Voice ORB**: `hooks/dash-assistant/useDashVoice.ts` - TTS/STT implementation
-- **Performance Doc**: `docs/features/DASH_AI_PERFORMANCE.md` - Required reading
+### Shared Utilities (avoid reinventing)
+- `lib/utils/feeUtils.ts` — `isUniformLabel()`, fee structure helpers
+- `lib/utils/payment-utils.ts` — `formatCurrencyCompact()` (1000→"R1k", 1M→"R1.0M")
+- `lib/utils/phoneUtils.ts` — SA phone format, WhatsApp URL generation
+- `lib/utils/dateUtils.ts` — Date formatting
+- `lib/utils/nameUtils.ts` — Name display helpers
+- `lib/logger.ts` — Structured logging (never `console.log` in production)
 
-**Modular Hook Architecture:**
-```typescript
-// hooks/dash-assistant/useDashConversation.ts - Message state, streaming, persistence
-// hooks/dash-assistant/useDashTutorMode.ts - Quiz/practice mode, grading
-// hooks/dash-assistant/useDashVoice.ts - Voice recording, TTS, budget tracking
-// hooks/dash-assistant/useDashAI.ts - AI client initialization, model selection
-// Main orchestrator composes these focused hooks
+### Database-First Problem Solving
+If code needs a DB column that doesn't exist, **add it via migration** — don't code workarounds with fallback chains like `message.sender_id || message.user_id || message.created_by`.
+
+### Security (non-negotiable)
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` client-side
+- Never call AI APIs directly from client — always via `ai-proxy` Edge Function
+- Always maintain RLS policies for tenant isolation
+- Never modify authentication flow without explicit approval
+
+## File Organization
+
 ```
-
-**Voice Features (TTS/STT):**
-- Voice recording: 60s limit for free tier, unlimited for paid
-- Budget tracking: Cached locally, synced every 5 minutes
-- Audio format: M4A for iOS, WebM for Android
-- Storage: Always store paths, not signed URLs (see Supabase Storage section)
-- TTS: Azure Speech Service via `supabase/functions/tts-proxy/`
-
-**When implementing Dash AI features:**
-1. ✅ Check `docs/features/DASH_AI_PERFORMANCE.md` for patterns
-2. ✅ Follow modular hook architecture (≤200 lines per hook)
-3. ✅ Use debounced streaming (50ms batches)
-4. ✅ Cache system prompts to avoid rebuilding
-5. ✅ Lazy load AI clients on first use
-6. ✅ Use FlashList for message lists (1000+ items)
-7. ✅ Batch analytics events (30s or 10 events)
-
-### Database Access
-- **Web (Next.js)**: Use `createClient()` from `@/lib/supabase/client` (singleton pattern)
-- **Mobile (Expo)**: Use `assertSupabase()` from `@/lib/supabase` (throws if unavailable)
-- **Edge Functions**: Create new client with `SUPABASE_SERVICE_ROLE_KEY`
-- **Always enforce RLS**: Use user's session token, never bypass unless super-admin operation
-
-### Multi-Tenant Queries
-```typescript
-// Always filter by user's organization (RLS enforces this, but be explicit)
-const { data } = await supabase
-  .from('lessons')
-  .select('*')
-  .eq('preschool_id', userProfile.organization_id);
+app/                              # Expo Router (file-based routing)
+  ├── (auth)/                     # Auth screens (sign-in, sign-up, etc.)
+  ├── (k12)/, (parent)/, (public)/ # Route groups
+  └── screens/                    # ~180 screen files (all roles)
+components/<domain>/              # React Native components by domain
+  ├── dashboard/, principal/, teacher/, parent/, admin/
+  ├── calls/, messaging/, ai/, voice/
+  └── ui/                         # Reusable primitives
+hooks/                            # Custom hooks (flat + modular subfolders)
+services/                         # Business logic + API service layer
+lib/                              # Utilities, types, RBAC, AI capabilities
+contexts/                         # React context providers
+web/src/                          # Separate Next.js codebase
+  ├── app/                        # App Router routes
+  ├── components/, hooks/, lib/   # Web-specific implementations
+  └── lib/supabase/               # client.ts (browser), server.ts (SSR)
+supabase/functions/               # 40 Deno Edge Functions
+locales/                          # i18n: en, af, zu, st, nso, fr, pt, es, de
+migrations/                       # SQL migration files
+docs/                             # All documentation (only README/WARP/ROAD-MAP in root)
 ```
-
-### Permission Checks
-```typescript
-import { roleHasPermission } from '@/lib/rbac/types';
-
-// Check permission before action
-if (!roleHasPermission(userRole, 'manage_courses')) {
-  throw new Error('Insufficient permissions');
-}
-
-// Or use enhanced profile methods
-if (!profile?.hasCapability('ai_lesson_generation')) {
-  return <UpgradePrompt />;
-}
-```
-
-### Error Handling
-- **Mobile**: Use `ErrorBoundary.tsx` for component-level errors
-- **Web**: Next.js error boundaries + custom error pages
-- **Sentry**: Errors auto-captured via `sentry-expo` (mobile) and `@sentry/nextjs` (web)
-- **Logging**: Use `lib/logger.ts` for structured logging (never `console.log`)
-
-### Code Quality Rules
-- **Always typecheck before committing**: Run `NODE_OPTIONS='--max_old_space_size=8192' npm run typecheck` to catch type errors
-- **Fix unrelated errors**: If you encounter bugs/issues while working, fix them immediately
-- **No console.log in production**: Use `logger` utilities (check with `npm run check:console`)
-- **Type safety**: Avoid `any`, use proper TypeScript types
-- **Component size limits**: See WARP.md section below - strictly enforced
-- **Extract hooks**: Move complex state/effects to custom hooks (≤200 lines each)
-- **Service layer**: Isolate all API calls in service files
-- **Performance patterns**: See `docs/features/DASH_AI_PERFORMANCE.md` for optimization techniques:
-  - Debounce streaming updates (50ms batches)
-  - Cache system prompts to avoid rebuilding
-  - Use FlashList for virtualized lists (1000+ items)
-  - Lazy load heavy components and AI clients
-  - Batch analytics events (every 30s or 10 events)
 
 ## Integration Points
 
-### Supabase
-- **Database**: PostgreSQL with RLS enabled on all sensitive tables
-- **Auth**: Email/password, Google OAuth, OTP, 2FA
-- **Storage**: User uploads, attachments, profile images
-- **Realtime**: Subscriptions for live updates (lessons, messages)
-- **Edge Functions**: 50+ functions for AI, payments, webhooks, sync
+### Daily.co Video Calls (complete call flow)
 
-### AI Services
-- **Anthropic Claude**: Primary AI model (Claude 3.5 Sonnet, Claude 3 Haiku)
-- **OpenAI**: GPT-4 for specific use cases
-- **Gemini**: Alternative model for certain features
-- **Quotas**: Managed in `user_ai_tiers` table by subscription tier
-- **Capabilities**: Defined in `lib/ai/capabilities.ts`
+**Architecture**: Supabase Realtime (Postgres Changes) for signaling → Daily.co WebRTC SDK for media transport. No custom WebSocket server.
 
-### Payment Integration
-- **PayFast**: South African payment gateway
-- **Webhooks**: `supabase/functions/payfast-webhook/`
-- **Subscription Tiers**: Free, Basic, Pro, Enterprise
-- **Billing**: Managed via PayFast dashboard + Supabase tables
+**Database Tables**:
+- `active_calls` — call lifecycle state (columns: `call_id`, `caller_id`, `callee_id`, `call_type`, `status`, `meeting_url`, `started_at`, `answered_at`, `ended_at`, `duration_seconds`)
+- `call_signals` — backup meeting URL delivery (columns: `call_id`, `from_user_id`, `to_user_id`, `signal_type`, `payload`)
 
-### Video Calls (Daily.co)
-- **Token Generation**: `supabase/functions/daily-token/`
-- **Room Management**: `supabase/functions/daily-rooms/`
-- **Components**: `components/calls/VideoCallInterface.tsx`, `VoiceCallInterface.tsx`
-- **Provider**: `components/calls/CallProvider.tsx` manages call state
+**Outgoing Call Flow**:
+1. `CallProvider.startVideoCall(userId, userName)` → sets `outgoingCall` state
+2. `WhatsAppStyleVideoCall` mounts → `initializeCall()`:
+   - Creates room: `POST /functions/v1/daily-rooms` (tier-based duration limits)
+   - Inserts `active_calls` record (status: `'ringing'`)
+   - Sends push notification via `notifications-dispatcher`
+   - Inserts `call_signals` record (signal_type: `'offer'`, payload: `{meeting_url, call_type, caller_name}`)
+   - Gets token: `POST /functions/v1/daily-token` (owner token for caller)
+   - Creates Daily object → `daily.join({url, token})`
+   - 30-second ring timeout → status `'missed'`
 
-### Notifications
-- **Push Notifications**: Expo Notifications (mobile), Web Push (web)
-- **Multi-Account**: `lib/NotificationRouter.ts` routes to correct user profile
-- **Queue**: `supabase/functions/push-queue-processor/` for batch sending
-- **Context**: `contexts/NotificationContext.tsx`
+**Incoming Call Detection** (triple redundancy):
+1. Supabase Realtime: `incoming-calls-${userId}` channel → INSERT on `active_calls` WHERE callee_id
+2. Push Notification: Expo Notifications listener → creates `ActiveCall` from data
+3. Call Signals: `call-signals-${userId}` channel → INSERT on `call_signals` WHERE to_user_id
 
-## References
+**Answer Flow**: `CallProvider.answerCall()` → cancel notifications → mount `WhatsAppStyleVideoCall` → skip room creation (URL from `active_calls`) → get token → `daily.join()` → callState `'connected'`
 
-### RBAC
-- `lib/rbac/README.md` - System overview
-- `lib/rbac/types.ts` - TypeScript helpers
-- `lib/rbac/roles-permissions.json` - Permission matrix
+**Teardown**: `endCall()` → UPDATE `active_calls` SET status=`'ended'` → `daily.leave()` + `daily.destroy()` → release `AudioModeCoordinator` → `InCallManager.stop()`. Other party detects via Realtime UPDATE.
 
-### Database
-- `scripts/README.md` - Setup order
-- `scripts/01_enhanced_security_system.sql` - Core security tables
-- `scripts/02_educational_schema.sql` - Educational platform tables
-- `migrations/` - All schema changes
+**Realtime Channels** (3 total):
+| Channel | Table | Event | Purpose |
+|---------|-------|-------|---------|
+| `incoming-calls-${userId}` | `active_calls` | INSERT | New incoming call |
+| `incoming-calls-${userId}` | `active_calls` | UPDATE | Call ended/rejected/missed |
+| `call-signals-${userId}` | `call_signals` | INSERT | Backup meeting URL delivery |
+| `video-status-${callId}` | `active_calls` | UPDATE | Remote hangup detection (in-call) |
 
-### Supabase
-- `supabase/README.md` - CLI usage
-- `supabase/functions/` - Edge Functions
-- `.env.example` - Required environment variables
+**Room Tier Limits** (enforced at creation in `daily-rooms` Edge Function):
+| Tier | Max Duration |
+|------|-------------|
+| `free` | 15 min |
+| `starter` | 30 min |
+| `basic` / `premium` / `pro` | 60 min |
+| `enterprise` | 24 hours |
 
-### Agentic AI
-- `services/AgentOrchestrator.ts` - Main agent loop
-- `services/dash-ai/DashToolRegistry.ts` - Tool registration
-- `services/dash-ai/DashAIClient.ts` - API client
-- `supabase/functions/ai-proxy/` - AI proxy Edge Function
+**Token Properties** (`daily-token` Edge Function): `is_owner` = true for caller + teachers/principals/superadmins; non-owners join muted; 3-hour expiry.
 
-### Capabilities & Features
-- `lib/ai/capabilities.ts` - Mobile AI capabilities
-- `web/src/lib/ai/capabilities.ts` - Web AI capabilities
-- `docs/features/DASH_AI_PERFORMANCE.md` - Performance optimization guide
+**Audio Management**: `AudioModeCoordinator` (session-based) → `InCallManager` (routing) → `expo-audio` (ringback tone, loops, earpiece). Earpiece enforced during ringing (500ms interval).
 
-## Development Best Practices
+**Key Components**:
+| Component | Purpose |
+|-----------|---------|
+| `CallProvider` (~1036 lines) | Context, state machine, Realtime subscriptions, notification handling |
+| `WhatsAppStyleVideoCall` (~2133 lines) | Full video UI: draggable local preview, PiP, screen share, recording |
+| `WhatsAppStyleIncomingCall` | Incoming overlay (answer/reject), vibration pattern |
+| `FloatingCallOverlay` | Minimized call bubble |
+| `VoiceCallInterface` | Voice-only call UI |
 
-### Supabase Storage
-**CRITICAL:** Always store storage paths, never signed URLs:
+**Call hooks** (`components/calls/hooks/`): `useCallBackgroundHandler` (foreground service), `useVoiceCallAudio`, `useVoiceCallDaily`, `useVoiceCallState`, `useVoiceCallTimeout`
+
+**CallContext API** (via `useCall()` hook):
 ```typescript
-// ✅ CORRECT - Store the path (permanent reference)
-await sendMessage({
-  voiceUrl: result.storagePath,  // e.g., "user-id/voice_123.m4a"
-});
-
-// ❌ WRONG - Signed URLs expire (typically 1 hour)
-await sendMessage({
-  voiceUrl: result.publicUrl,  // Will break after expiry!
-});
-
-// Generate signed URLs on-demand for playback
-const { data } = await supabase.storage
-  .from('bucket_name')
-  .createSignedUrl(storagePath, 3600);
+startVoiceCall(userId, userName?): void;
+startVideoCall(userId, userName?): void;
+answerCall(): void;
+rejectCall(): Promise<void>;
+endCall(): Promise<void>;
+isCallActive: boolean;
+callState: 'idle' | 'connecting' | 'ringing' | 'connected' | 'ended' | 'failed';
+incomingCall: ActiveCall | null;
+returnToCall(): void;
+isUserOnline(userId): boolean;
 ```
 
-### Hook Composition Pattern
-For complex features, split into focused hooks and compose:
-```typescript
-// hooks/dash-assistant/useDashConversation.ts (≤200 lines)
-export function useDashConversation() {
-  // Message state, streaming, persistence
-  return { messages, sendMessage, streamingContent };
-}
+**Feature flags**: Entire call system gated behind `video_calls_enabled` / `voice_calls_enabled`. CallKeep disabled (broken with Expo SDK 54+) — graceful fallback to custom UI.
 
-// hooks/dash-assistant/useDashAI.ts (≤300 lines)
-export function useDashAI() {
-  // AI client, model selection, prompt building
-  return { callAI, selectModel, buildPrompt };
-}
+### Other Integrations
 
-// Main orchestrator hook
-export function useDashAssistant() {
-  const conversation = useDashConversation();
-  const ai = useDashAI();
-  // Compose and coordinate
-}
-```
+| System | Key files | Notes |
+|--------|-----------|-------|
+| PayFast | `supabase/functions/payfast-webhook/` | SA payment gateway; tiers: Free, Basic, Pro, Enterprise |
+| Push Notifications | `contexts/NotificationContext.tsx`, `lib/NotificationRouter.ts` | Multi-account routing; Expo Notifications (mobile) + Web Push |
+| Edusite Sync | `supabase/functions/sync-*` | Bi-directional sync with external platform |
+| Sentry | `sentry-expo` (mobile), `@sentry/nextjs` (web) | Error tracking; ErrorBoundary for component-level |
 
-### Alert Modals
-**NEVER use `Alert.alert`** - always use `AlertModal` or `useAlertModal` hook for consistent UX across platforms.
+## Testing
 
-### Documentation References
-**ALWAYS consult official documentation** when working with:
-- **Dash AI Features**: See `docs/features/DASH_AI_PERFORMANCE.md` for architecture, patterns, and optimization techniques
-- **Voice ORB (TTS/STT)**: Check `hooks/dash-assistant/useDashVoice.ts` and related voice components for implementation patterns
-- **AI Integration**: Refer to `services/dash-ai/` and `supabase/functions/ai-proxy/` for proper API usage
-- **Performance Patterns**: Follow established patterns in `DASH_AI_PERFORMANCE.md` before inventing new approaches
-
-### Database-First Problem Solving
-**CRITICAL PRINCIPLE:** If code requires a database column that doesn't exist and that column is semantically important:
-
-```typescript
-// ❌ WRONG - Working around missing column
-const userId = message.sender_id || message.user_id || message.created_by;
-
-// ✅ CORRECT - Add the missing column via migration
-// 1. Create migration: supabase migration new add_user_id_to_messages
-// 2. Add column with proper constraints and indexes
-// 3. Update code to use the correct column
-const userId = message.user_id;
-```
-
-**Why this matters:**
-- Missing columns indicate incomplete schema design
-- Code workarounds create technical debt
-- Proper columns enable database-level constraints and indexing
-- RLS policies require correct columns for security
-
-**Process:**
-1. Identify the missing column (e.g., `user_id`, `organization_id`, `status`)
-2. Create migration with proper data type, constraints, and indexes
-3. Lint SQL: `npm run lint:sql`
-4. Push migration: `supabase db push`
-5. Update code to use the new column
-6. Remove any workarounds or fallbacks
-
-
-## WARP.md Standards (NON-NEGOTIABLE)
-
-### Database Operations
-- **NEVER** use `supabase start` or local Docker instances
-- **NEVER** execute SQL directly via Supabase Dashboard
-- **ALWAYS** use `supabase migration new` for schema changes
-- **ALWAYS** lint SQL with SQLFluff before push (`npm run lint:sql`)
-- **ALWAYS** use `supabase db push` (no --local flag)
-- **ALWAYS** verify no drift with `supabase db diff` after push
-
-### File Size Standards
-- Components: ≤400 lines (excluding StyleSheet)
-- Screens: ≤500 lines (excluding StyleSheet)
-- Services/Utilities: ≤500 lines
-- Hooks: ≤200 lines
-- Type definitions: ≤300 lines (except auto-generated)
-- StyleSheet definitions: Use separate `styles.ts` for components >200 lines
-
-### When to Split Files
-Split immediately if ANY apply:
-- File exceeds size limits
-- File has 3+ distinct responsibilities
-- StyleSheet exceeds 200 lines
-- Component has 5+ render/helper functions
-- Multiple developers frequently cause merge conflicts
-- Code review takes >30 minutes due to file size
-
-### Code Organization Patterns
-1. **Container/Presentational**: Extract logic into custom hooks, keep UI components pure
-2. **Hook Extraction**: Move complex state/effects to custom hooks
-3. **Service Layer**: Isolate all API calls in service files
-4. **Shared Components**: Extract reusable UI patterns to `components/`
-5. **Type Files**: Centralize related types, split by domain if needed
-
-### Documentation Organization
-- **ONLY** `README.md`, `WARP.md`, and `ROAD-MAP.md` in project root
-- **ALL** other markdown in `docs/` subdirectories:
-  - `docs/deployment/` - Build guides, CI/CD, environment config
-  - `docs/features/` - Feature specs, implementation guides
-  - `docs/security/` - RLS policies, authentication, RBAC
-  - `docs/database/` - Migration guides, schema docs
-  - `docs/governance/` - Development standards, workflows
-  - `docs/OBSOLETE/` - Archived documentation
-
-### Security & Authentication
-- **NEVER** modify authentication without approvals
-- **NEVER** expose service role keys client-side
-- **NEVER** call AI services directly from client
-- **ALWAYS** maintain RLS policies for tenant isolation
-- **ALWAYS** use `ai-proxy` Edge Function for AI calls
-
-### Development Environment
-- Production database used as development environment
-- AdMob test IDs enforced in development
-- Android-first testing approach
-- Feature flags via environment variables
-
-## Examples
-
-### Permission Check
-```typescript
-import { roleHasPermission } from '@/lib/rbac/types';
-
-// Before performing action
-if (!roleHasPermission(user.role, 'manage_courses')) {
-  throw new Error('Insufficient permissions');
-}
-```
-
-### Database Migration
 ```bash
-# 1. Create migration
-supabase migration new add_lesson_templates
-
-# 2. Edit SQL file in migrations/
-
-# 3. Lint
-npm run lint:sql
-
-# 4. Push
-supabase db push
-
-# 5. Verify
-supabase db diff
+npm test                          # Jest (roots: lib/, services/)
 ```
 
-### Splitting Oversized Component
-```typescript
-// Before: components/TeacherDashboard.tsx (800 lines)
-// After:
-// components/dashboard/teacher/TeacherDashboard.tsx (300 lines)
-// components/dashboard/teacher/TeacherStats.tsx (150 lines)
-// components/dashboard/teacher/TeacherActions.tsx (120 lines)
-// hooks/useTeacherDashboardState.ts (200 lines)
-```
+- Tests in `tests/unit/`, `tests/integration/`, `tests/sql/`, `tests/voice/`
+- Service-level tests: `services/dash-ai/__tests__/`
+- Component tests: `jest.config.components.js` (separate config)
+- Android-first manual testing approach
+- RBAC validation: `npx tsx lib/rbac/validate.ts`
 
-### AI Service Call
-```typescript
-import { DashAIClient } from '@/services/dash-ai/DashAIClient';
+## Scoped Instruction Files
 
-const aiClient = new DashAIClient({
-  supabaseClient: supabase,
-  getUserProfile: () => profile,
-});
+Additional context-specific rules are in `.github/instructions/` — these are auto-applied by file glob:
 
-const response = await aiClient.callAIService({
-  action: 'generate_lesson',
-  content: 'Create a lesson about photosynthesis',
-  stream: true,
-  onChunk: (chunk) => console.log(chunk),
-});
-```
-
-### Multi-Tenant Query
-```typescript
-// Supabase client automatically enforces RLS
-const { data: lessons } = await supabase
-  .from('lessons')
-  .select('*')
-  .eq('preschool_id', profile.organization_id) // Explicit filter
-  .eq('is_active', true);
-```
+| File | Applies to | Key rules |
+|------|-----------|-----------|
+| `react-native.instructions.md` | `components/**` | Component ≤400 lines, Container/Presentational |
+| `lib.instructions.md` | `lib/**/*.ts` | Service ≤500, Hook ≤200 lines; RBAC rules |
+| `typescript-services.instructions.md` | `services/**/*.ts` | ≤500 lines; storage paths not URLs |
+| `web.instructions.md` | `web/**` | Same limits; AI proxy rules |
+| `sql.instructions.md` | `**/*.sql` | RLS mandates, snake_case naming |
+| `supabase-migrations.instructions.md` | `supabase/migrations/**` | Full migration workflow |
+| `documentation.instructions.md` | `**/*.md` | Only README/WARP/ROAD-MAP in root |
+| `testing.instructions.md` | `tests/**` | Unit/integration structure |

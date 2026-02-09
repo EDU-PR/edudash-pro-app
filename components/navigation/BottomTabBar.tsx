@@ -6,14 +6,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 360;
 const isShortScreen = SCREEN_HEIGHT < 700;
 const isCompact = isSmallScreen || isShortScreen;
-
-// K-12 school types that should route to K-12 dashboards
-const K12_SCHOOL_TYPES = ['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school'];
 
 interface TabItem {
   id: string;
@@ -22,7 +21,12 @@ interface TabItem {
   activeIcon: string;
   route: string;
   roles?: string[];
+  /** When true, renders as a raised center orb button instead of a standard tab */
+  isCenterTab?: boolean;
 }
+
+/** Roles that have the Dash center tab in the bottom nav (FAB hidden for these) */
+export const ROLES_WITH_CENTER_TAB = ['parent', 'student', 'learner', 'principal', 'principal_admin'];
 
 const TAB_ITEMS: TabItem[] = [
   // Parent tabs
@@ -43,6 +47,15 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['parent'] 
   },
   { 
+    id: 'parent-dash', 
+    label: 'Dash', 
+    icon: 'sparkles-outline', 
+    activeIcon: 'sparkles', 
+    route: '/screens/dash-voice', 
+    roles: ['parent'],
+    isCenterTab: true,
+  },
+  { 
     id: 'parent-messages', 
     label: 'Messages', 
     icon: 'chatbubble-outline', 
@@ -56,14 +69,6 @@ const TAB_ITEMS: TabItem[] = [
     icon: 'calendar-outline', 
     activeIcon: 'calendar', 
     route: '/screens/calendar', 
-    roles: ['parent'] 
-  },
-  { 
-    id: 'parent-settings', 
-    label: 'Settings', 
-    icon: 'settings-outline', 
-    activeIcon: 'settings', 
-    route: '/screens/settings', 
     roles: ['parent'] 
   },
   
@@ -117,6 +122,15 @@ const TAB_ITEMS: TabItem[] = [
     activeIcon: 'home', 
     route: '/screens/principal-dashboard', 
     roles: ['principal', 'principal_admin'] 
+  },
+  {
+    id: 'principal-dash',
+    label: 'Dash',
+    icon: 'sparkles-outline',
+    activeIcon: 'sparkles',
+    route: '/screens/dash-voice',
+    roles: ['principal', 'principal_admin'],
+    isCenterTab: true,
   },
   
   // Org Admin tabs (Skills Development, Tertiary, etc.)
@@ -179,6 +193,15 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['student', 'learner'] 
   },
   { 
+    id: 'learner-dash', 
+    label: 'Dash', 
+    icon: 'sparkles-outline', 
+    activeIcon: 'sparkles', 
+    route: '/screens/dash-voice', 
+    roles: ['student', 'learner'],
+    isCenterTab: true,
+  },
+  { 
     id: 'student-submissions', 
     label: 'Work',
     icon: 'document-text-outline', 
@@ -215,15 +238,7 @@ const TAB_ITEMS: TabItem[] = [
     label: 'Fees', 
     icon: 'cash-outline', 
     activeIcon: 'cash', 
-    route: '/screens/principal-fee-overview', 
-    roles: ['principal', 'principal_admin'] 
-  },
-  { 
-    id: 'principal-settings', 
-    label: 'Settings', 
-    icon: 'settings-outline', 
-    activeIcon: 'settings', 
-    route: '/screens/settings', 
+    route: '/screens/finance-control-center', 
     roles: ['principal', 'principal_admin'] 
   },
 
@@ -491,8 +506,7 @@ export function BottomTabBar() {
   const isVeteransLeague = memberType?.startsWith('veterans_');
   
   // Check school type for K-12 routing (parents and students)
-  const schoolType = (profile as any)?.organization_membership?.school_type;
-  const isK12SchoolType = schoolType && K12_SCHOOL_TYPES.includes(schoolType);
+  const isK12SchoolType = resolveSchoolTypeFromProfile(profile) === 'k12_school';
   
   // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
@@ -566,6 +580,7 @@ export function BottomTabBar() {
     pathname.includes('learner-registration') ||
     pathname.includes('parent-registration') ||
     pathname.includes('teacher-registration') ||
+    pathname.includes('teacher-approval-pending') ||
     pathname.includes('/auth-callback') ||
     pathname.includes('/invite/') ||
     // Hide on any message thread view (parent/teacher/principal variants)
@@ -613,12 +628,81 @@ export function BottomTabBar() {
     labelActive: {
       color: theme.primary,
     },
+    // --- Center Dash tab (raised orb) ---
+    centerTab: {
+      flex: 1,
+      alignItems: 'center' as const,
+      justifyContent: 'flex-end' as const,
+      paddingBottom: isCompact ? 2 : 4,
+      minHeight: isCompact ? 44 : 50,
+    },
+    centerOrbWrapper: {
+      width: isCompact ? 48 : 54,
+      height: isCompact ? 48 : 54,
+      borderRadius: isCompact ? 24 : 27,
+      marginTop: isCompact ? -20 : -24,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      backgroundColor: theme.surface,
+      borderWidth: 3,
+      borderColor: theme.border,
+      shadowColor: '#8B5CF6',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    centerOrbWrapperActive: {
+      borderColor: theme.primary,
+      shadowOpacity: 0.6,
+    },
+    centerLabel: {
+      fontSize: isCompact ? 9 : 10,
+      fontWeight: '700' as const,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    centerLabelActive: {
+      color: theme.primary,
+    },
   });
 
+  // Sort tabs so the center tab (if any) is in the middle position
+  // NOTE: plain computation (not useMemo) because this runs after early returns
+  const centerTab = visibleTabs.find(t => t.isCenterTab);
+  const sortedTabs = (() => {
+    if (!centerTab) return visibleTabs;
+    const regularTabs = visibleTabs.filter(t => !t.isCenterTab);
+    const mid = Math.floor(regularTabs.length / 2);
+    const result = [...regularTabs];
+    result.splice(mid, 0, centerTab);
+    return result;
+  })();
+
   return (
-    <View style={styles.container}>
-      {visibleTabs.map((tab) => {
+    <View style={[styles.container, visibleTabs.some(t => t.isCenterTab) && { overflow: 'visible' as const }]}>
+      {sortedTabs.map((tab) => {
         const active = isActive(tab.route);
+
+        // Render raised center orb for Dash AI tab
+        if (tab.isCenterTab) {
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={styles.centerTab}
+              onPress={() => router.push(tab.route as any)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.centerOrbWrapper, active && styles.centerOrbWrapperActive]}>
+                <CosmicOrb size={isCompact ? 36 : 40} isProcessing={false} isSpeaking={false} />
+              </View>
+              <Text style={[styles.centerLabel, active && styles.centerLabelActive]} numberOfLines={1}>
+                {t('navigation.dash', { defaultValue: 'Dash' })}
+              </Text>
+            </TouchableOpacity>
+          );
+        }
+
         return (
           <TouchableOpacity
             key={tab.id}

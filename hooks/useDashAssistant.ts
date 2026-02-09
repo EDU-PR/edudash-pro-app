@@ -940,10 +940,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             });
 
             if (plan?.tool) {
+              const toolTraceId = `dash_assistant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
               const execution = await ToolRegistry.execute(plan.tool, plan.parameters || {}, {
                 profile,
                 user,
                 supabase: supabaseClient,
+                role: String(profile?.role || 'parent').toLowerCase(),
+                tier: tier || 'free',
+                organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+                hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+                isGuest: !user?.id,
+                trace_id: toolTraceId,
+                tool_plan: {
+                  source: 'useDashAssistant.auto_planner',
+                  tool: plan.tool,
+                },
               });
               const label = autoToolShortcuts.find((tool) => tool.name === plan.tool)?.label || plan.tool;
               const toolMessageContent = formatToolResultMessage(label, execution);
@@ -1338,6 +1349,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     canInteractiveLessons,
     user?.id,
     profile?.role,
+    tier,
   ]);
 
   // Process queue
@@ -1553,6 +1565,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         profile,
         user,
         supabase: supabaseClient,
+        role: String(profile?.role || 'parent').toLowerCase(),
+        tier: tier || 'free',
+        organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+        hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+        isGuest: !user?.id,
+        trace_id: `dash_assistant_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        tool_plan: {
+          source: 'useDashAssistant.runTool',
+          tool: toolName,
+        },
       };
 
       const execution = await ToolRegistry.execute(toolName, params, context);
@@ -1580,7 +1602,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
       }
     },
-    [dashInstance, profile, user, showAlert]
+    [dashInstance, profile, user, showAlert, tier]
   );
 
   // Initialize Dash AI

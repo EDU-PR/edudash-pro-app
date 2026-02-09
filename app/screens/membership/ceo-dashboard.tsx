@@ -4,7 +4,7 @@
  * Uses real Supabase data with original design layout
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +27,7 @@ import {
 } from '@/components/membership/dashboard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Executive Actions - keep static navigation items
@@ -38,6 +39,7 @@ export default function CEODashboard() {
   const insets = useSafeAreaInsets();
   const { refetch: refetchBranding } = useOrganizationBranding();
   const notificationCount = useNotificationBadgeCount();
+  const { showAlert, alertProps } = useAlertModal();
   
   // Real data from Supabase
   const { 
@@ -135,11 +137,11 @@ export default function CEODashboard() {
     if (item.route.includes('regional-manager')) {
       router.push('/screens/membership/regional-managers');
     } else {
-      Alert.alert(
-        item.title,
-        `${item.description}\n\nThis feature is coming soon.`,
-        [{ text: 'OK' }]
-      );
+      showAlert({
+        title: item.title,
+        message: `${item.description}\n\nThis feature is coming soon.`,
+        buttons: [{ text: 'OK' }],
+      });
     }
   };
 
@@ -184,6 +186,7 @@ export default function CEODashboard() {
   }
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* Mobile Navigation Drawer */}
       <MobileNavDrawer 
@@ -240,7 +243,7 @@ export default function CEODashboard() {
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => Alert.alert('Coming Soon', 'Email integration will be available in a future update.')}
+            onPress={() => showAlert({ title: 'Coming Soon', message: 'Email integration will be available in a future update.' })}
           >
             <Ionicons name="mail-outline" size={24} color={theme.text} />
           </TouchableOpacity>
@@ -398,6 +401,8 @@ export default function CEODashboard() {
         </ScrollView>
       </DashboardBackground>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

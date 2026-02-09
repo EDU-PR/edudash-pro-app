@@ -2,20 +2,44 @@
  * Tests for useVoiceCallAudio hook
  */
 
-import { renderHook, act } from '@testing-library/react-hooks';
-import { useVoiceCallAudio } from '../hooks/useVoiceCallAudio';
+import { renderHook, act, waitFor } from '@testing-library/react-native/pure';
 
-// Mock InCallManager
-const mockInCallManager = {
-  start: jest.fn(),
-  stop: jest.fn(),
-  stopRingback: jest.fn(),
-  setForceSpeakerphoneOn: jest.fn(),
-};
-
-jest.mock('react-native-incall-manager', () => ({
-  default: mockInCallManager,
+// Mock expo-audio
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn(() => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    remove: jest.fn(),
+    seekTo: jest.fn(),
+    currentTime: 0,
+    playing: false,
+  })),
+  setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
 }));
+
+// Mock expo-haptics
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn().mockResolvedValue(undefined),
+  ImpactFeedbackStyle: { Medium: 'medium', Light: 'light', Heavy: 'heavy' },
+}));
+
+// Mock InCallManager — define fns INSIDE factory to avoid hoisting issues
+jest.mock('react-native-incall-manager', () => ({
+  __esModule: true,
+  default: {
+    start: jest.fn(),
+    stop: jest.fn(),
+    stopRingback: jest.fn(),
+    setForceSpeakerphoneOn: jest.fn(),
+    setKeepScreenOn: jest.fn(),
+  },
+}));
+
+// Grab reference to the mock default AFTER mock is registered
+const mockInCallManager = require('react-native-incall-manager').default;
+
+// Import after mocks are set up
+import { useVoiceCallAudio } from '../hooks/useVoiceCallAudio';
 
 describe('useVoiceCallAudio', () => {
   const defaultOptions = {
@@ -71,18 +95,18 @@ describe('useVoiceCallAudio', () => {
     expect(setIsSpeakerEnabled).toHaveBeenCalledWith(false);
   });
 
-  it('should stop audio and cleanup', () => {
+  it('should stop audio and cleanup', async () => {
     const { result } = renderHook(() => useVoiceCallAudio(defaultOptions));
 
-    act(() => {
-      result.current.stopAudio();
+    await act(async () => {
+      await result.current.stopAudio();
     });
 
     expect(mockInCallManager.stopRingback).toHaveBeenCalled();
     expect(mockInCallManager.stop).toHaveBeenCalled();
   });
 
-  it('should start ringback for caller when connecting', () => {
+  it('should start ringback for caller when connecting', async () => {
     renderHook(() =>
       useVoiceCallAudio({
         ...defaultOptions,
@@ -91,14 +115,19 @@ describe('useVoiceCallAudio', () => {
       })
     );
 
+    await waitFor(() => {
+      expect(mockInCallManager.start).toHaveBeenCalled();
+    });
+
     expect(mockInCallManager.start).toHaveBeenCalledWith({
       media: 'audio',
-      ringback: '_DEFAULT_',
+      auto: false,
+      ringback: '',
     });
     expect(mockInCallManager.setForceSpeakerphoneOn).toHaveBeenCalledWith(false);
   });
 
-  it('should start audio without ringback for callee', () => {
+  it('should start audio without ringback for callee', async () => {
     renderHook(() =>
       useVoiceCallAudio({
         ...defaultOptions,
@@ -107,7 +136,15 @@ describe('useVoiceCallAudio', () => {
       })
     );
 
-    expect(mockInCallManager.start).toHaveBeenCalledWith({ media: 'audio' });
+    await waitFor(() => {
+      expect(mockInCallManager.start).toHaveBeenCalled();
+    });
+
+    expect(mockInCallManager.start).toHaveBeenCalledWith({
+      media: 'audio',
+      auto: false,
+      ringback: '',
+    });
   });
 
   it('should stop ringback when connected', () => {

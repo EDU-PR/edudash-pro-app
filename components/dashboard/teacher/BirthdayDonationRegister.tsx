@@ -467,7 +467,7 @@ export const BirthdayDonationRegister: React.FC<BirthdayDonationRegisterProps> =
               },
             });
         } catch (notifyError) {
-          console.warn('[BirthdayDonations] Failed to insert in-app notification:', notifyError);
+          if (__DEV__) console.warn('[BirthdayDonations] Failed to insert in-app notification:', notifyError);
         }
       }
 

@@ -1,3 +1,10 @@
+/**
+ * Simple single-field check: does this label/string mention "uniform"?
+ * Use for quick filtering of fee types, descriptions, or references.
+ */
+export const isUniformLabel = (value?: string | null): boolean =>
+  (value || '').toLowerCase().includes('uniform');
+
 export const isTuitionFee = (
   feeType?: string | null,
   name?: string | null,
@@ -65,3 +72,52 @@ export const inferPaymentCategory = (value?: string | null): string => {
   if (/\b(activity|event|camp)\b/.test(text)) return 'Activities';
   return 'Tuition';
 };
+
+export const normalizeFeeCategoryCode = (value?: string | null):
+  | 'tuition'
+  | 'registration'
+  | 'uniform'
+  | 'aftercare'
+  | 'transport'
+  | 'meal'
+  | 'ad_hoc' => {
+  const text = (value ?? '').toLowerCase().trim();
+  if (!text) return 'tuition';
+
+  if (
+    text === 'uniform_tshirt' ||
+    text === 'uniform_shorts' ||
+    text.startsWith('uniform') ||
+    /\buniform\b/.test(text)
+  ) {
+    return 'uniform';
+  }
+
+  if (/\b(registration|admission|enrolment|enrollment)\b/.test(text)) {
+    return 'registration';
+  }
+
+  if (/\b(aftercare|after care)\b/.test(text)) {
+    return 'aftercare';
+  }
+
+  if (/\b(transport|bus|shuttle)\b/.test(text)) {
+    return 'transport';
+  }
+
+  if (/\b(meal|food|catering|lunch|snack)\b/.test(text)) {
+    return 'meal';
+  }
+
+  if (/\b(tuition|school fee|monthly)\b/.test(text)) {
+    return 'tuition';
+  }
+
+  if (text === 'ad_hoc' || text === 'adhoc' || text === 'other') {
+    return 'ad_hoc';
+  }
+
+  return 'ad_hoc';
+};
+
+export const inferFeeCategoryCode = (value?: string | null) => normalizeFeeCategoryCode(value);

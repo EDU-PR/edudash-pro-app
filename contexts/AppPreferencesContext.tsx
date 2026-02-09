@@ -3,6 +3,7 @@
  * 
  * Manages user preferences for UI elements:
  * - FAB visibility and position
+ * - Power-user mode
  * - Tutorial/onboarding state
  * - Bottom nav auto-hide preference
  */
@@ -12,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {
   SHOW_DASH_FAB: '@app_prefs:show_dash_fab',
+  POWER_USER_MODE: '@app_prefs:power_user_mode',
   FAB_POSITION: '@app_prefs:fab_position',
   TUTORIAL_COMPLETED: '@app_prefs:tutorial_completed',
   BOTTOM_NAV_AUTO_HIDE: '@app_prefs:bottom_nav_auto_hide',
@@ -24,6 +26,7 @@ interface FABPosition {
 
 interface AppPreferencesState {
   showDashFAB: boolean;
+  powerUserModeEnabled: boolean;
   fabPosition: FABPosition | null; // null = use default
   tutorialCompleted: boolean;
   bottomNavAutoHide: boolean;
@@ -32,6 +35,7 @@ interface AppPreferencesState {
 
 interface AppPreferencesContextValue extends AppPreferencesState {
   setShowDashFAB: (visible: boolean) => void;
+  setPowerUserModeEnabled: (enabled: boolean) => void;
   setFabPosition: (position: FABPosition | null) => void;
   setTutorialCompleted: (completed: boolean) => void;
   setBottomNavAutoHide: (autoHide: boolean) => void;
@@ -44,6 +48,7 @@ const AppPreferencesContext = createContext<AppPreferencesContextValue | undefin
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppPreferencesState>({
     showDashFAB: true,
+    powerUserModeEnabled: false,
     fabPosition: null,
     tutorialCompleted: false,
     bottomNavAutoHide: true, // Default to auto-hide
@@ -54,16 +59,19 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadPreferences = async () => {
       try {
-        const [showDashFAB, fabPosition, tutorialCompleted, bottomNavAutoHide] = await Promise.all([
+        const [showDashFAB, powerUserMode, fabPosition, tutorialCompleted, bottomNavAutoHide] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.SHOW_DASH_FAB),
+          AsyncStorage.getItem(STORAGE_KEYS.POWER_USER_MODE),
           AsyncStorage.getItem(STORAGE_KEYS.FAB_POSITION),
           AsyncStorage.getItem(STORAGE_KEYS.TUTORIAL_COMPLETED),
           AsyncStorage.getItem(STORAGE_KEYS.BOTTOM_NAV_AUTO_HIDE),
         ]);
 
         const resolvedShowDashFAB = showDashFAB === null ? true : showDashFAB === 'true';
+        const resolvedPowerUserMode = powerUserMode === 'true';
         setState({
           showDashFAB: resolvedShowDashFAB, // Default true if unset
+          powerUserModeEnabled: resolvedPowerUserMode,
           fabPosition: fabPosition ? JSON.parse(fabPosition) : null,
           tutorialCompleted: tutorialCompleted === 'true',
           bottomNavAutoHide: bottomNavAutoHide !== 'false', // Default true
@@ -84,6 +92,15 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem(STORAGE_KEYS.SHOW_DASH_FAB, String(visible));
     } catch (error) {
       console.warn('[AppPreferences] Failed to save FAB visibility:', error);
+    }
+  }, []);
+
+  const setPowerUserModeEnabled = useCallback(async (enabled: boolean) => {
+    setState(prev => ({ ...prev, powerUserModeEnabled: enabled }));
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.POWER_USER_MODE, String(enabled));
+    } catch (error) {
+      console.warn('[AppPreferences] Failed to save power-user mode:', error);
     }
   }, []);
 
@@ -131,6 +148,7 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
       value={{
         ...state,
         setShowDashFAB,
+        setPowerUserModeEnabled,
         setFabPosition,
         setTutorialCompleted,
         setBottomNavAutoHide,
@@ -158,11 +176,13 @@ export function useAppPreferencesSafe() {
   } catch {
     return {
       showDashFAB: true,
+      powerUserModeEnabled: false,
       fabPosition: null,
       tutorialCompleted: true,
       bottomNavAutoHide: true,
       isLoaded: true,
       setShowDashFAB: () => {},
+      setPowerUserModeEnabled: () => {},
       setFabPosition: () => {},
       setTutorialCompleted: () => {},
       setBottomNavAutoHide: () => {},

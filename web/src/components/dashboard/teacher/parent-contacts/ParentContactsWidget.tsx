@@ -74,7 +74,7 @@ export function ParentContactsWidget({ preschoolId, teacherId, classIds }: Paren
 
       router.push(`/dashboard/teacher/messages?thread=${threadId}`);
     } catch (err: any) {
-      console.error('Error creating/finding thread:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Error creating/finding thread:', err);
       alert('Failed to open message thread. Please try again.');
     }
   };

@@ -12,7 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -20,104 +19,14 @@ import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import ClassPlacementService from '@/lib/services/ClassPlacementService';
-
-interface Grade {
-  id: string;
-  name: string;
-  capacity: number;
-  enrolled: number;
-  available: number;
-  fees: {
-    admission: number;
-    tuition: number;
-    books: number;
-    uniform: number;
-    activities: number;
-  };
-}
-
-interface StudentInfo {
-  // Basic Info
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: 'male' | 'female' | 'other' | '';
-  idNumber: string;
-  
-  // Contact Info
-  address: string;
-  city: string;
-  postalCode: string;
-  phone: string;
-  email: string;
-  
-  // Parent/Guardian Info
-  parentFirstName: string;
-  parentLastName: string;
-  parentPhone: string;
-  parentEmail: string;
-  parentIdNumber: string;
-  relationship: 'mother' | 'father' | 'guardian' | '';
-  
-  // Emergency Contact
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  emergencyContactRelationship: string;
-  
-  // Medical Info
-  allergies: string;
-  medicalConditions: string;
-  medications: string;
-  doctorName: string;
-  doctorPhone: string;
-  
-  // Previous School
-  previousSchool: string;
-  previousGrade: string;
-  reasonForLeaving: string;
-  
-  // Additional Notes
-  specialRequirements: string;
-  transportNeeds: 'none' | 'school_bus' | 'private' | '';
-}
-
-type EnrollmentStep = 'basic' | 'contact' | 'parent' | 'medical' | 'documents' | 'fees' | 'review';
-
-const initialStudentInfo: StudentInfo = {
-  firstName: '',
-  lastName: '',
-  dateOfBirth: '',
-  gender: '',
-  idNumber: '',
-  address: '',
-  city: '',
-  postalCode: '',
-  phone: '',
-  email: '',
-  parentFirstName: '',
-  parentLastName: '',
-  parentPhone: '',
-  parentEmail: '',
-  parentIdNumber: '',
-  relationship: '',
-  emergencyContactName: '',
-  emergencyContactPhone: '',
-  emergencyContactRelationship: '',
-  allergies: '',
-  medicalConditions: '',
-  medications: '',
-  doctorName: '',
-  doctorPhone: '',
-  previousSchool: '',
-  previousGrade: '',
-  reasonForLeaving: '',
-  specialRequirements: '',
-  transportNeeds: '',
-};
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
+import { Grade, StudentInfo, EnrollmentStep, initialStudentInfo, PRESCHOOL_GRADES, K12_GRADES, STEP_ORDER } from '@/lib/screen-data/student-enrollment.types';
 
 export default function StudentEnrollment() {
   const { user, profile } = useAuth();
   const { theme, isDark } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [selectedGrade, setSelectedGrade] = useState<string>('');
   const [currentStep, setCurrentStep] = useState<EnrollmentStep>('basic');
   const [studentInfo, setStudentInfo] = useState<StudentInfo>(initialStudentInfo);
@@ -138,101 +47,23 @@ export default function StudentEnrollment() {
     return user?.user_metadata?.preschool_id || null;
   }, [profile, user]);
 
-  // Define grade options based on school type
-  const preschoolGrades: Grade[] = [
-    { 
-      id: 'baby-class', name: 'Baby Class (6-12 months)', capacity: 8, enrolled: 6, available: 2,
-      fees: { admission: 300, tuition: 1800, books: 150, uniform: 200, activities: 100 }
-    },
-    { 
-      id: 'toddler-class', name: 'Toddler Class (1-2 years)', capacity: 12, enrolled: 10, available: 2,
-      fees: { admission: 350, tuition: 2000, books: 200, uniform: 220, activities: 120 }
-    },
-    { 
-      id: 'pre-k', name: 'Pre-K (3-4 years)', capacity: 15, enrolled: 14, available: 1,
-      fees: { admission: 400, tuition: 2200, books: 250, uniform: 250, activities: 150 }
-    },
-    { 
-      id: 'kindergarten', name: 'Kindergarten (4-5 years)', capacity: 18, enrolled: 16, available: 2,
-      fees: { admission: 450, tuition: 2400, books: 300, uniform: 280, activities: 170 }
-    },
-  ];
+  const grades = schoolType === 'preschool' ? PRESCHOOL_GRADES : K12_GRADES;
 
-  const k12Grades: Grade[] = [
-    { 
-      id: 'grade-r', name: 'Grade R (5-6 years)', capacity: 30, enrolled: 28, available: 2,
-      fees: { admission: 500, tuition: 2800, books: 450, uniform: 300, activities: 200 }
-    },
-    { 
-      id: 'grade-1', name: 'Grade 1', capacity: 30, enrolled: 25, available: 5,
-      fees: { admission: 500, tuition: 3200, books: 520, uniform: 350, activities: 250 }
-    },
-    { 
-      id: 'grade-2', name: 'Grade 2', capacity: 30, enrolled: 30, available: 0,
-      fees: { admission: 500, tuition: 3200, books: 520, uniform: 350, activities: 250 }
-    },
-    { 
-      id: 'grade-3', name: 'Grade 3', capacity: 30, enrolled: 27, available: 3,
-      fees: { admission: 500, tuition: 3500, books: 580, uniform: 380, activities: 300 }
-    },
-    { 
-      id: 'grade-4', name: 'Grade 4', capacity: 30, enrolled: 24, available: 6,
-      fees: { admission: 500, tuition: 3500, books: 580, uniform: 380, activities: 300 }
-    },
-    { 
-      id: 'grade-5', name: 'Grade 5', capacity: 30, enrolled: 29, available: 1,
-      fees: { admission: 500, tuition: 3800, books: 620, uniform: 400, activities: 350 }
-    },
-    { 
-      id: 'grade-6', name: 'Grade 6', capacity: 30, enrolled: 26, available: 4,
-      fees: { admission: 500, tuition: 3800, books: 620, uniform: 400, activities: 350 }
-    },
-    { 
-      id: 'grade-7', name: 'Grade 7', capacity: 30, enrolled: 23, available: 7,
-      fees: { admission: 500, tuition: 4200, books: 720, uniform: 450, activities: 400 }
-    },
-    { 
-      id: 'grade-8', name: 'Grade 8', capacity: 30, enrolled: 28, available: 2,
-      fees: { admission: 500, tuition: 4200, books: 720, uniform: 450, activities: 400 }
-    },
-    { 
-      id: 'grade-9', name: 'Grade 9', capacity: 30, enrolled: 25, available: 5,
-      fees: { admission: 600, tuition: 4500, books: 800, uniform: 500, activities: 450 }
-    },
-    { 
-      id: 'grade-10', name: 'Grade 10', capacity: 30, enrolled: 27, available: 3,
-      fees: { admission: 600, tuition: 4500, books: 800, uniform: 500, activities: 450 }
-    },
-    { 
-      id: 'grade-11', name: 'Grade 11', capacity: 30, enrolled: 22, available: 8,
-      fees: { admission: 600, tuition: 4800, books: 850, uniform: 520, activities: 480 }
-    },
-    { 
-      id: 'grade-12', name: 'Grade 12', capacity: 30, enrolled: 24, available: 6,
-      fees: { admission: 600, tuition: 4800, books: 850, uniform: 520, activities: 480 }
-    },
-  ];
-
-  // Get appropriate grades based on school type
-  const grades = schoolType === 'preschool' ? preschoolGrades : k12Grades;
-
-  const stepOrder: EnrollmentStep[] = ['basic', 'contact', 'parent', 'medical', 'documents', 'fees', 'review'];
-  
-  const updateStudentInfo = (field: keyof StudentInfo, value: string) => {
+  const updateStudentInfo= (field: keyof StudentInfo, value: string) => {
     setStudentInfo(prev => ({ ...prev, [field]: value }));
   };
   
   const goToNextStep = () => {
-    const currentIndex = stepOrder.indexOf(currentStep);
-    if (currentIndex < stepOrder.length - 1) {
-      setCurrentStep(stepOrder[currentIndex + 1]);
+    const currentIndex = STEP_ORDER.indexOf(currentStep);
+    if (currentIndex < STEP_ORDER.length - 1) {
+      setCurrentStep(STEP_ORDER[currentIndex + 1]);
     }
   };
   
   const goToPreviousStep = () => {
-    const currentIndex = stepOrder.indexOf(currentStep);
+    const currentIndex = STEP_ORDER.indexOf(currentStep);
     if (currentIndex > 0) {
-      setCurrentStep(stepOrder[currentIndex - 1]);
+      setCurrentStep(STEP_ORDER[currentIndex - 1]);
     }
   };
   
@@ -290,20 +121,21 @@ export default function StudentEnrollment() {
   const handleEnrollStudent = async () => {
     const studentFullName = `${studentInfo.firstName} ${studentInfo.lastName}`.trim();
     if (!studentFullName || !studentInfo.parentEmail.trim() || !selectedGrade) {
-      Alert.alert('Missing Information', 'Please fill in all required fields.');
+      showAlert({ title: 'Missing Information', message: 'Please fill in all required fields.', type: 'warning' });
       return;
     }
 
     const preschoolId = getPreschoolId();
     if (!preschoolId) {
-      Alert.alert('Error', 'Unable to enroll student. Please try again later.');
+      showAlert({ title: 'Error', message: 'Unable to enroll student. Please try again later.', type: 'error' });
       return;
     }
 
-    Alert.alert(
-      'Enroll Student',
-      `Ready to enroll ${studentFullName} in ${grades.find(g => g.id === selectedGrade)?.name}?`,
-      [
+    showAlert({
+      title: 'Enroll Student',
+      message: `Ready to enroll ${studentFullName} in ${grades.find(g => g.id === selectedGrade)?.name}?`,
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Enroll',
@@ -311,7 +143,7 @@ export default function StudentEnrollment() {
             try {
               setLoading(true);
               
-              console.log('📝 Enrolling student in database:', {
+              logger.info('Enrollment', 'Enrolling student in database:', {
                 firstName: studentInfo.firstName,
                 lastName: studentInfo.lastName,
                 parentEmail: studentInfo.parentEmail,
@@ -337,41 +169,33 @@ export default function StudentEnrollment() {
                 .single();
               
               if (insertError) {
-                console.error('Error enrolling student:', insertError);
-                Alert.alert('Enrollment Error', 'Failed to enroll student. Please try again.');
+                logger.error('Enrollment', 'Error enrolling student:', insertError);
+                showAlert({ title: 'Enrollment Error', message: 'Failed to enroll student. Please try again.', type: 'error' });
                 return;
               }
               
-              console.log('✅ Student enrolled successfully:', newStudent);
-              
-              Alert.alert(
-                'Success! 🎉', 
-                `${studentFullName} has been enrolled successfully!\n\nStudent ID: ${newStudent.id}\nParent will receive a welcome email at ${studentInfo.parentEmail}`,
-                [
-                  {
-                    text: 'Enroll Another',
-                    onPress: () => {
-                      setStudentInfo(initialStudentInfo);
-                      setSelectedGrade('');
-                    }
-                  },
-                  {
-                    text: 'View Students',
-                    onPress: () => router.push('/screens/students-detail')
-                  }
-                ]
-              );
+              logger.info('Enrollment', 'Student enrolled successfully:', newStudent);
+
+              showAlert({
+                title: 'Success!',
+                message: `${studentFullName} has been enrolled successfully!\n\nStudent ID: ${newStudent.id}\nParent will receive a welcome email at ${studentInfo.parentEmail}`,
+                type: 'success',
+                buttons: [
+                  { text: 'Enroll Another', onPress: () => { setStudentInfo(initialStudentInfo); setSelectedGrade(''); } },
+                  { text: 'View Students', onPress: () => router.push('/screens/students-detail') },
+                ],
+              });
               
             } catch (error) {
-              console.error('Failed to enroll student:', error);
-              Alert.alert('Error', 'Failed to enroll student. Please check your connection and try again.');
+              logger.error('Enrollment', 'Failed to enroll student:', error);
+              showAlert({ title: 'Error', message: 'Failed to enroll student. Please check your connection and try again.', type: 'error' });
             } finally {
               setLoading(false);
             }
           }
-        }
-      ]
-    );
+        },
+      ],
+    });
   };
 
   const renderGradeCard = (grade: Grade) => {
@@ -424,6 +248,7 @@ export default function StudentEnrollment() {
   };
 
   return (
+    <>
     <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.headerBackground, borderBottomColor: theme.border }]}>
@@ -505,7 +330,7 @@ export default function StudentEnrollment() {
                 try {
                   const preschoolId = getPreschoolId();
                   if (!preschoolId) {
-                    Alert.alert('Error', 'Missing preschool context.');
+                    showAlert({ title: 'Error', message: 'Missing preschool context.', type: 'error' });
                     return;
                   }
                   setSuggesting(true);
@@ -515,14 +340,14 @@ export default function StudentEnrollment() {
                     gradeLevel: undefined,
                   });
                   if (!suggestion) {
-                    Alert.alert('No Class Found', 'No suitable class suggestion is available.');
+                    showAlert({ title: 'No Class Found', message: 'No suitable class suggestion is available.', type: 'warning' });
                     setSuggestedClass(null);
                   } else {
                     setSuggestedClass({ classId: suggestion.classId, className: suggestion.className, reason: suggestion.reason });
                   }
                 } catch (e) {
-                  console.error('Auto-assign class failed', e);
-                  Alert.alert('Error', 'Could not suggest a class.');
+                  logger.error('Enrollment', 'Auto-assign class failed', e);
+                  showAlert({ title: 'Error', message: 'Could not suggest a class.', type: 'error' });
                 } finally {
                   setSuggesting(false);
                 }
@@ -637,6 +462,8 @@ export default function StudentEnrollment() {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

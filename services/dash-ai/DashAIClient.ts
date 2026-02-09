@@ -15,7 +15,7 @@
  * - React Native 0.79 WebSocket: https://reactnative.dev/docs/0.79/network#websocket-support
  */
 
-import { DashToolRegistry } from './DashToolRegistry';
+import { unifiedToolRegistry } from '@/services/tools/UnifiedToolRegistry';
 
 // Global declarations for React Native environment
 // Reference: https://reactnative.dev/docs/javascript-environment
@@ -50,6 +50,24 @@ export interface AIServiceResponse {
       cost?: number;
     };
     tool_results?: any[];
+    generated_images?: Array<{
+      id: string;
+      bucket: string;
+      path: string;
+      signed_url: string;
+      mime_type: string;
+      prompt: string;
+      width: number;
+      height: number;
+      provider: string;
+      model: string;
+      expires_at: string;
+    }>;
+    resolution_status?: 'resolved' | 'needs_clarification' | 'escalated';
+    confidence_score?: number;
+    escalation_offer?: boolean;
+    trace_id?: string;
+    continuation_limit_reached?: boolean;
   };
   error?: string;
 }
@@ -81,6 +99,106 @@ export class DashAIClient {
   constructor(config: DashAIClientConfig) {
     this.supabaseClient = config.supabaseClient;
     this.getUserProfile = config.getUserProfile;
+  }
+
+  private createTraceId(prefix = 'dash_ai'): string {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private parseIntegerEnv(
+    value: string | undefined,
+    fallback: number,
+    min: number,
+    max: number
+  ): number {
+    const parsed = Number.parseInt(String(value ?? ''), 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  }
+
+  private parseFloatEnv(
+    value: string | undefined,
+    fallback: number,
+    min: number,
+    max: number
+  ): number {
+    const parsed = Number.parseFloat(String(value ?? ''));
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  }
+
+  private getOrchestrationConfig(): {
+    orchestration_mode: string;
+    loop_budget: {
+      max_continuation_passes: number;
+      max_pending_tools_per_pass: number;
+      timeout_ms: number;
+    };
+    confidence_threshold: number;
+  } {
+    return {
+      orchestration_mode: process.env.EXPO_PUBLIC_DASH_ORCHESTRATION_MODE || 'bounded_two_pass',
+      loop_budget: {
+        max_continuation_passes: this.parseIntegerEnv(
+          process.env.EXPO_PUBLIC_DASH_CONTINUATION_PASSES,
+          2,
+          1,
+          4
+        ),
+        max_pending_tools_per_pass: this.parseIntegerEnv(
+          process.env.EXPO_PUBLIC_DASH_MAX_PENDING_TOOLS_PER_PASS,
+          6,
+          1,
+          20
+        ),
+        timeout_ms: this.parseIntegerEnv(
+          process.env.EXPO_PUBLIC_DASH_ORCHESTRATION_TIMEOUT_MS,
+          12000,
+          2000,
+          60000
+        ),
+      },
+      confidence_threshold: this.parseFloatEnv(
+        process.env.EXPO_PUBLIC_DASH_CONFIDENCE_THRESHOLD,
+        0.68,
+        0.05,
+        0.99
+      ),
+    };
+  }
+
+  private normalizeRoleAndScope(roleValue?: string | null): {
+    role: string;
+    scope: 'teacher' | 'principal' | 'parent' | 'student';
+  } {
+    const role = String(roleValue || 'teacher').toLowerCase();
+    const scope: 'teacher' | 'principal' | 'parent' | 'student' =
+      (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
+        ? (role === 'learner' ? 'student' : role)
+        : 'teacher') as any;
+    return { role, scope };
+  }
+
+  private getClientToolDefs(role: string, tier: string): Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }> | undefined {
+    const defs = unifiedToolRegistry.toClientToolDefs(role, tier);
+    return defs.length > 0 ? defs : undefined;
+  }
+
+  private buildToolPlanMetadata(role: string, tier: string): {
+    role: string;
+    tier: string;
+    tool_names: string[];
+  } {
+    const tools = unifiedToolRegistry.list(role, tier).map((tool) => tool.name);
+    return {
+      role,
+      tier,
+      tool_names: tools,
+    };
   }
 
   private buildAttachmentContext(attachments?: any[]): string | null {
@@ -162,22 +280,15 @@ export class DashAIClient {
         : this.buildAttachmentContext(params.attachments);
       const mergedContext = [params.context, attachmentContext].filter(Boolean).join('\n\n') || undefined;
       const images = this.buildImagePayloads(params.attachments, params.images);
-      const role = (this.getUserProfile()?.role || 'teacher').toString().toLowerCase();
-      const scope: 'teacher' | 'principal' | 'parent' | 'student' =
-        (['teacher', 'principal', 'parent', 'student', 'learner'].includes(role)
-          ? (role === 'learner' ? 'student' : role)
-          : 'teacher') as any;
-      
-      // Get client-side tool definitions for the AI to use
-      const userTier = (this.getUserProfile() as any)?.tier || 'free';
-      const claudeTools = DashToolRegistry.getClaudeTools(role, userTier);
-      const clientToolDefs = claudeTools.length > 0
-        ? claudeTools.map(t => ({
-            name: t.name,
-            description: t.description,
-            input_schema: t.input_schema as Record<string, unknown>,
-          }))
-        : undefined;
+      const profile = this.getUserProfile() as any;
+      const { role, scope } = this.normalizeRoleAndScope(profile?.role);
+      const userTier = (profile?.tier || 'free') as string;
+      const traceId = this.createTraceId('dash_ai_client');
+      const orchestration = this.getOrchestrationConfig();
+
+      // Canonical client tool inventory (shared with Dash Assistant/Tutor/ORB).
+      const clientToolDefs = this.getClientToolDefs(role, userTier);
+      const toolPlan = this.buildToolPlanMetadata(role, userTier);
       
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
@@ -196,6 +307,11 @@ export class DashAIClient {
           metadata: {
             role: scope,
             model: params.model || undefined,
+            trace_id: traceId,
+            tool_plan: toolPlan,
+            orchestration_mode: orchestration.orchestration_mode,
+            loop_budget: orchestration.loop_budget,
+            confidence_threshold: orchestration.confidence_threshold,
           }
         },
       });
@@ -215,20 +331,53 @@ export class DashAIClient {
       }
       
       // Handle response with potential tool use
-      const assistantContent = data?.content || '';
-      const toolResults = data?.tool_results || [];
-      const pendingToolCalls = data?.pending_tool_calls || [];
+      let assistantContent = data?.content || '';
+      const toolResults = Array.isArray(data?.tool_results) ? [...data.tool_results] : [];
+      let pendingToolCalls = Array.isArray(data?.pending_tool_calls) ? [...data.pending_tool_calls] : [];
+      let usage = data?.usage;
+      let generatedImages = data?.generated_images || [];
+      let resolutionStatus = data?.resolution_status as
+        | 'resolved'
+        | 'needs_clarification'
+        | 'escalated'
+        | undefined;
+      let confidenceScore = typeof data?.confidence_score === 'number'
+        ? data.confidence_score
+        : undefined;
+      let escalationOffer = typeof data?.escalation_offer === 'boolean'
+        ? data.escalation_offer
+        : undefined;
 
       if (__DEV__ && toolResults.length > 0) {
         console.log('[DashAIClient] Server-side tool calls executed:', toolResults.length);
       }
 
       // Execute client-side tools that the AI requested
-      if (pendingToolCalls.length > 0) {
+      const baseMessages = messagesArr.length > 0
+        ? [...messagesArr]
+        : [{ role: 'user', content: promptText }];
+      let continuationMessages = [...baseMessages];
+      let continuationPass = 0;
+      let continuationLimitReached = false;
+
+      while (
+        pendingToolCalls.length > 0 &&
+        continuationPass < orchestration.loop_budget.max_continuation_passes
+      ) {
+        continuationPass += 1;
+        const currentBatch = pendingToolCalls.slice(
+          0,
+          orchestration.loop_budget.max_pending_tools_per_pass
+        );
+        const overflow = pendingToolCalls.slice(orchestration.loop_budget.max_pending_tools_per_pass);
+
         if (__DEV__) {
-          console.log('[DashAIClient] Executing client-side tools:', pendingToolCalls.map((t: any) => t.name));
+          console.log('[DashAIClient] Executing client-side tools (pass):', {
+            pass: continuationPass,
+            tools: currentBatch.map((t: any) => t?.name),
+          });
         }
-        const profile = this.getUserProfile() as any;
+
         const executionContext = {
           userId: profile?.id || '',
           role: role,
@@ -237,21 +386,29 @@ export class DashAIClient {
           hasOrganization: !!(profile?.organization_id || profile?.preschool_id),
           isGuest: !profile?.id,
           supabaseClient: this.supabaseClient,
+          trace_id: traceId,
+          tool_plan: {
+            source: 'ai-proxy.pending_tool_calls',
+            continuation_pass: continuationPass,
+            requested_tool_names: currentBatch.map((call: any) => call?.name).filter(Boolean),
+          },
         };
+
         const toolResultMessages: Array<{ role: string; content: string; tool_use_id?: string }> = [];
-        for (const toolCall of pendingToolCalls) {
+        for (const toolCall of currentBatch) {
           try {
-            const result = await DashToolRegistry.executeTool(
+            const result = await unifiedToolRegistry.execute(
               toolCall.name,
               toolCall.input || {},
               executionContext
             );
-            const output = result.data || result.error || 'No output';
+            const output = result.result || result.error || 'No output';
             toolResults.push({
               name: toolCall.name,
               input: toolCall.input,
               output,
               success: result.success,
+              trace_id: result.trace_id || traceId,
             });
             toolResultMessages.push({
               role: 'user',
@@ -259,64 +416,120 @@ export class DashAIClient {
               tool_use_id: toolCall.id,
             });
           } catch (toolError: any) {
+            const message = toolError?.message || 'Unknown tool execution error';
             toolResults.push({
               name: toolCall.name,
               input: toolCall.input,
-              output: `Tool execution error: ${toolError.message}`,
+              output: `Tool execution error: ${message}`,
               success: false,
+              trace_id: traceId,
             });
             toolResultMessages.push({
               role: 'user',
-              content: `[Tool Result for ${toolCall.name}]: Error - ${toolError.message}`,
+              content: `[Tool Result for ${toolCall.name}]: Error - ${message}`,
               tool_use_id: toolCall.id,
             });
           }
         }
 
-        // Continuation: Send tool results back to AI for a follow-up response
-        if (toolResultMessages.length > 0) {
-          try {
-            const continuationMessages = [
-              ...(messagesArr.length > 0 ? messagesArr : [{ role: 'user', content: promptText }]),
-              { role: 'assistant', content: assistantContent || 'I used the following tools to help you.' },
-              ...toolResultMessages,
-            ];
-            const { data: followUp } = await this.supabaseClient.functions.invoke('ai-proxy', {
-              body: {
-                scope,
-                service_type: params.serviceType || 'chat_message',
-                payload: {
-                  context: mergedContext,
-                  messages: continuationMessages,
-                  model: params.model || undefined,
-                },
-                stream: false,
-                enable_tools: false, // Prevent infinite tool loops
-                metadata: { role: scope, continuation: true },
+        if (toolResultMessages.length === 0) {
+          break;
+        }
+
+        continuationMessages = [
+          ...continuationMessages,
+          { role: 'assistant', content: assistantContent || 'I used the following tools to help you.' },
+          ...toolResultMessages,
+        ];
+
+        try {
+          const { data: followUp, error: followUpError } = await this.supabaseClient.functions.invoke('ai-proxy', {
+            body: {
+              scope,
+              service_type: params.serviceType || 'chat_message',
+              payload: {
+                context: mergedContext,
+                messages: continuationMessages,
+                model: params.model || undefined,
               },
-            });
-            if (followUp?.content) {
-              return {
-                content: followUp.content,
-                metadata: { usage: followUp.usage, tool_results: toolResults },
-              };
-            }
-          } catch (contError) {
-            console.warn('[DashAIClient] Tool continuation call failed:', contError);
-            // Fall through to return original content + tool results
+              stream: false,
+              enable_tools: continuationPass < orchestration.loop_budget.max_continuation_passes,
+              client_tools: clientToolDefs,
+              metadata: {
+                role: scope,
+                continuation: true,
+                trace_id: traceId,
+                orchestration_mode: orchestration.orchestration_mode,
+                loop_budget: orchestration.loop_budget,
+                confidence_threshold: orchestration.confidence_threshold,
+                tool_plan: {
+                  source: 'ai-proxy.continuation',
+                  continuation_pass: continuationPass,
+                  executed_tool_names: currentBatch.map((call: any) => call?.name).filter(Boolean),
+                },
+              },
+            },
+          });
+
+          if (followUpError) {
+            throw followUpError;
           }
+
+          assistantContent = followUp?.content || assistantContent;
+          usage = followUp?.usage || usage;
+          generatedImages = followUp?.generated_images || generatedImages;
+          resolutionStatus = (followUp?.resolution_status as any) || resolutionStatus;
+          confidenceScore = typeof followUp?.confidence_score === 'number'
+            ? followUp.confidence_score
+            : confidenceScore;
+          escalationOffer = typeof followUp?.escalation_offer === 'boolean'
+            ? followUp.escalation_offer
+            : escalationOffer;
+
+          const followUpPending = Array.isArray(followUp?.pending_tool_calls)
+            ? followUp.pending_tool_calls
+            : [];
+          pendingToolCalls = [...overflow, ...followUpPending];
+        } catch (contError) {
+          console.warn('[DashAIClient] Tool continuation call failed:', contError);
+          pendingToolCalls = [];
+          break;
         }
       }
 
+      if (pendingToolCalls.length > 0) {
+        continuationLimitReached = true;
+        resolutionStatus = resolutionStatus || 'needs_clarification';
+        escalationOffer = escalationOffer ?? true;
+      }
+
       if (!data?.success) {
-        return { content: assistantContent };
+        return {
+          content: assistantContent,
+          metadata: {
+            usage,
+            tool_results: toolResults,
+            generated_images: generatedImages,
+            resolution_status: resolutionStatus,
+            confidence_score: confidenceScore,
+            escalation_offer: escalationOffer,
+            trace_id: traceId,
+            continuation_limit_reached: continuationLimitReached,
+          },
+        };
       }
       
       return { 
-        content: data.content, 
+        content: assistantContent || data.content, 
         metadata: { 
-          usage: data.usage,
-          tool_results: toolResults
+          usage,
+          tool_results: toolResults,
+          generated_images: generatedImages,
+          resolution_status: resolutionStatus,
+          confidence_score: confidenceScore,
+          escalation_offer: escalationOffer,
+          trace_id: traceId,
+          continuation_limit_reached: continuationLimitReached,
         } 
       };
     } catch (error) {
@@ -443,24 +656,13 @@ export class DashAIClient {
       
       const url = `${supabaseUrl}/functions/v1/ai-proxy`;
       
-      // Get actual user role from profile, default to 'student' for standalone users
-      const userProfile = this.getUserProfile();
-      const userRole = userProfile?.role?.toLowerCase() || 'student';
-      // Map student/learner roles to appropriate scope
-      const scope = ['teacher','principal','parent','admin'].includes(userRole)
-        ? userRole
-        : 'student'; // Use 'student' scope for students/learners, not 'teacher'
-
-      // Get client-side tool definitions for the AI to use
-      const userTier = (userProfile as any)?.tier || 'free';
-      const claudeTools = DashToolRegistry.getClaudeTools(userRole, userTier);
-      const clientToolDefs = claudeTools.length > 0
-        ? claudeTools.map(t => ({
-            name: t.name,
-            description: t.description,
-            input_schema: t.input_schema as Record<string, unknown>,
-          }))
-        : undefined;
+      const userProfile = this.getUserProfile() as any;
+      const { role: userRole, scope } = this.normalizeRoleAndScope(userProfile?.role || 'student');
+      const userTier = (userProfile?.tier || 'free') as string;
+      const clientToolDefs = this.getClientToolDefs(userRole, userTier);
+      const traceId = this.createTraceId('dash_ai_stream');
+      const toolPlan = this.buildToolPlanMetadata(userRole, userTier);
+      const orchestration = this.getOrchestrationConfig();
 
       const response = await fetch(url, {
         method: 'POST',
@@ -482,6 +684,11 @@ export class DashAIClient {
           metadata: {
             role: userRole, // Use actual role, not default to teacher
             model: params.model || undefined,
+            trace_id: traceId,
+            tool_plan: toolPlan,
+            orchestration_mode: orchestration.orchestration_mode,
+            loop_budget: orchestration.loop_budget,
+            confidence_threshold: orchestration.confidence_threshold,
           }
         }),
       });
@@ -676,6 +883,13 @@ export class DashAIClient {
       try {
         // Build WebSocket URL
         const wsUrl = `${supabaseUrl.replace('https', 'wss')}/functions/v1/ai-proxy-ws`;
+        const profile = this.getUserProfile() as any;
+        const { role, scope } = this.normalizeRoleAndScope(profile?.role || 'teacher');
+        const userTier = (profile?.tier || 'free') as string;
+        const traceId = this.createTraceId('dash_ai_ws');
+        const toolPlan = this.buildToolPlanMetadata(role, userTier);
+        const clientTools = this.getClientToolDefs(role, userTier);
+        const orchestration = this.getOrchestrationConfig();
         
         // Create WebSocket connection
         // Reference: https://reactnative.dev/docs/0.79/network#websocket-support
@@ -686,9 +900,7 @@ export class DashAIClient {
         ws.onopen = () => {
           // Send request payload
           const payload = {
-            scope: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
-              ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
-              : 'teacher'),
+            scope,
             service_type: params.serviceType || 'chat_message',
             payload: {
               prompt: params.promptText,
@@ -696,11 +908,15 @@ export class DashAIClient {
               model: params.model || undefined,
             },
             enable_tools: true,
+            client_tools: clientTools,
             metadata: {
-              role: (['teacher','principal','parent'].includes((this.getUserProfile()?.role || 'teacher').toString().toLowerCase())
-                ? (this.getUserProfile()?.role || 'teacher').toString().toLowerCase()
-                : 'teacher'),
+              role,
               model: params.model || undefined,
+              trace_id: traceId,
+              tool_plan: toolPlan,
+              orchestration_mode: orchestration.orchestration_mode,
+              loop_budget: orchestration.loop_budget,
+              confidence_threshold: orchestration.confidence_threshold,
             }
           };
           

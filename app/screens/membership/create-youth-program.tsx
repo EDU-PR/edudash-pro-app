@@ -3,7 +3,7 @@
  * Allows Youth President and delegated office bearers to create programs
  */
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -11,9 +11,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useQueryClient } from '@tanstack/react-query';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const PROGRAM_CATEGORIES = [
   'Leadership',
   'Education',
@@ -33,6 +35,7 @@ export default function CreateYouthProgramScreen() {
   const queryClient = useQueryClient();
   const orgId = profile?.organization_id;
   const userId = user?.id;
+  const { showAlert, alertProps } = useAlertModal();
 
   // Check if user has permission to create programs
   // Youth President, Deputy, Secretary, and Treasurer can create programs
@@ -45,11 +48,11 @@ export default function CreateYouthProgramScreen() {
 
   useEffect(() => {
     if (!canCreatePrograms && profile) {
-      Alert.alert(
-        'Access Restricted',
-        'Only Youth President and delegated office bearers can create programs.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      showAlert({
+        title: 'Access Restricted',
+        message: 'Only Youth President and delegated office bearers can create programs.',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     }
   }, [canCreatePrograms, profile]);
 
@@ -71,12 +74,12 @@ export default function CreateYouthProgramScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Program title is required');
+      showAlert({ title: 'Error', message: 'Program title is required' });
       return;
     }
 
     if (!orgId || !userId) {
-      Alert.alert('Error', 'Organization or user information missing');
+      showAlert({ title: 'Error', message: 'Organization or user information missing' });
       return;
     }
 
@@ -113,10 +116,10 @@ export default function CreateYouthProgramScreen() {
       // Invalidate queries to refresh programs list
       queryClient.invalidateQueries({ queryKey: ['youth-programs'] });
 
-      Alert.alert(
-        'Program Created!',
-        `${newProgram.title} has been created successfully.\n\nCourse Code: ${newProgram.course_code}`,
-        [
+      showAlert({
+        title: 'Program Created!',
+        message: `${newProgram.title} has been created successfully.\n\nCourse Code: ${newProgram.course_code}`,
+        buttons: [
           {
             text: 'Create Another',
             style: 'cancel',
@@ -135,11 +138,11 @@ export default function CreateYouthProgramScreen() {
             text: 'View Programs',
             onPress: () => router.back(),
           },
-        ]
-      );
+        ],
+      });
     } catch (error: any) {
-      console.error('Error creating program:', error);
-      Alert.alert('Error', error.message || 'Failed to create program');
+      logger.error('Error creating program:', error);
+      showAlert({ title: 'Error', message: error.message || 'Failed to create program' });
     } finally {
       setSaving(false);
     }
@@ -280,6 +283,7 @@ export default function CreateYouthProgramScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

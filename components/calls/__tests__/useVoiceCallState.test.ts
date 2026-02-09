@@ -2,7 +2,7 @@
  * Tests for useVoiceCallState hook
  */
 
-import { renderHook, act } from '@testing-library/react-hooks';
+import { renderHook, act } from '@testing-library/react-native/pure';
 import { useVoiceCallState } from '../hooks/useVoiceCallState';
 
 describe('useVoiceCallState', () => {

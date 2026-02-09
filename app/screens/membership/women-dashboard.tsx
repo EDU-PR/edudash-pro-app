@@ -4,7 +4,7 @@
  * Adapted from Youth President dashboard design
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import {
   DashboardBackground,
   DashboardWallpaperBackground,
@@ -21,6 +22,7 @@ import {
 } from '@/components/membership/dashboard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Women's League specific stats interface
@@ -54,6 +56,7 @@ export default function WomenDashboard() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
+  const { showAlert, alertProps } = useAlertModal();
   
   const [stats, setStats] = useState<WomenStats | null>(null);
   const [recentMembers, setRecentMembers] = useState<any[]>([]);
@@ -130,7 +133,7 @@ export default function WomenDashboard() {
       setRecentMembers(recent || []);
 
     } catch (error) {
-      console.error('Error fetching women stats:', error);
+      logger.error('Error fetching women stats:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -288,7 +291,7 @@ export default function WomenDashboard() {
                       onPress={() => {
                         // For routes that don't exist yet, show coming soon
                         if (action.route.includes('women-invite') || action.route.includes('women-executive')) {
-                          Alert.alert('Coming Soon', 'Women\'s League invite system is being set up.');
+                          showAlert({ title: 'Coming Soon', message: 'Women\'s League invite system is being set up.' });
                         } else {
                           router.push(action.route as any);
                         }
@@ -403,6 +406,7 @@ export default function WomenDashboard() {
           </ScrollView>
         </DashboardBackground>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

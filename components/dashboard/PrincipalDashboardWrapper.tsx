@@ -6,13 +6,13 @@ import { K12AdminDashboard } from './K12AdminDashboard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
+import {
+  normalizeResolvedSchoolType,
+  resolveSchoolTypeFromProfile,
+  type ResolvedSchoolType,
+} from '@/lib/schoolTypeResolver';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-// EduDash Pro schools use K-12 dashboard (not preschool)
-const K12_SCHOOL_IDS = [
-  '00000000-0000-0000-0000-000000000001', // EduDash Pro Community School
-  '00000000-0000-0000-0000-000000000003', // EduDash Pro Main School
-];
 
 interface PrincipalDashboardWrapperProps {
   refreshTrigger?: number;
@@ -35,54 +35,80 @@ const PrincipalDashboardWrapperComponent: React.FC<PrincipalDashboardWrapperProp
 }) => {
   const { profile } = useAuth();
   const { theme } = useTheme();
-  const [orgType, setOrgType] = useState<string | null>(null);
+  const [resolvedSchoolType, setResolvedSchoolType] = useState<ResolvedSchoolType>(
+    resolveSchoolTypeFromProfile(profile)
+  );
   const [loading, setLoading] = useState(true);
   
   const organizationId = profile?.organization_id || profile?.preschool_id;
-  
-  // Check if this is a K-12 school by ID (fast path)
-  const isK12ById = organizationId && K12_SCHOOL_IDS.includes(organizationId);
-  
-  // For non-hardcoded schools, check the organizations table
+
+  // Resolve school type from authoritative org metadata first, then profile fallback.
   useEffect(() => {
+    let cancelled = false;
+
     const checkOrgType = async () => {
+      const fallbackType = resolveSchoolTypeFromProfile(profile);
       if (!organizationId) {
-        setLoading(false);
+        if (!cancelled) {
+          setResolvedSchoolType(fallbackType);
+          setLoading(false);
+        }
         return;
       }
-      
-      // Fast path: known K-12 schools
-      if (isK12ById) {
-        setOrgType('k12_school');
-        setLoading(false);
-        return;
+
+      if (!cancelled) {
+        setLoading(true);
       }
-      
-      // Check organizations table for type
+
       try {
         const supabase = assertSupabase();
-        const { data, error } = await supabase
-          .from('organizations')
-          .select('type')
-          .eq('id', organizationId)
-          .single();
-        
-        if (!error && data?.type) {
-          setOrgType(data.type);
-        } else {
-          // Default to preschool if not found
-          setOrgType('preschool');
+
+        const [{ data: orgData, error: orgError }, { data: preschoolData, error: preschoolError }] =
+          await Promise.all([
+            supabase
+              .from('organizations')
+              .select('type')
+              .eq('id', organizationId)
+              .maybeSingle(),
+            supabase
+              .from('preschools')
+              .select('school_type')
+              .eq('id', organizationId)
+              .maybeSingle(),
+          ]);
+
+        const normalizedOrgType = normalizeResolvedSchoolType(orgData?.type);
+        const normalizedPreschoolType = normalizeResolvedSchoolType((preschoolData as any)?.school_type);
+        const resolvedType = normalizedOrgType || normalizedPreschoolType || fallbackType;
+
+        if (!cancelled) {
+          setResolvedSchoolType(resolvedType);
+        }
+
+        if (orgError && orgError.code !== 'PGRST116') {
+          console.debug('[DashboardWrapper] Organization type lookup warning:', orgError.message);
+        }
+        if (preschoolError && preschoolError.code !== 'PGRST116') {
+          console.debug('[DashboardWrapper] Preschool type lookup warning:', preschoolError.message);
         }
       } catch (e) {
-        console.debug('[DashboardWrapper] Org type check failed, defaulting to preschool');
-        setOrgType('preschool');
+        if (!cancelled) {
+          console.debug('[DashboardWrapper] Org type check failed, using profile fallback');
+          setResolvedSchoolType(fallbackType);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     
     checkOrgType();
-  }, [organizationId, isK12ById]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, profile]);
   
   // Show loading while checking org type
   if (loading) {
@@ -97,7 +123,7 @@ const PrincipalDashboardWrapperComponent: React.FC<PrincipalDashboardWrapperProp
   }
   
   // Route to K-12 dashboard for K-12 schools
-  if (orgType === 'k12_school' || isK12ById) {
+  if (resolvedSchoolType === 'k12_school') {
     return <K12AdminDashboard />;
   }
   

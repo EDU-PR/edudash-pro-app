@@ -38,9 +38,11 @@ export interface StudentFee {
   id: string;
   student_id: string;
   fee_type: string;
+  category_code?: string;
   description: string;
   amount: number;
   due_date: string;
+  billing_month?: string;
   grace_period_days?: number;
   paid_date?: string;
   status: 'pending' | 'partially_paid' | 'paid' | 'overdue' | 'waived' | 'pending_verification';
@@ -82,6 +84,7 @@ export interface POPUpload {
   upload_type: string;
   title: string;
   description?: string;
+  category_code?: string;
   file_path: string;
   file_name: string;
   status: 'pending' | 'approved' | 'rejected' | 'needs_revision';

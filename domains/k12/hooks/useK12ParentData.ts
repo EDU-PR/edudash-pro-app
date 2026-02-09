@@ -8,6 +8,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
+import { sanitizeAvatarUrl } from '@/lib/utils/avatar';
 import type { Child } from '@/domains/k12/components/K12ParentChildCard';
 
 export interface RecentUpdate {
@@ -140,6 +141,7 @@ export function useK12ParentData(profileId: string | undefined, organizationId: 
             name: `${student.first_name || ''} ${student.last_name || ''}`.trim(),
             grade: displayGrade,
             avatar: (student.first_name?.[0] || 'S').toUpperCase(),
+            avatarUrl: sanitizeAvatarUrl(student.avatar_url ?? null),
             avgGrade,
             attendance: attendance || 0,
             pendingAssignments,

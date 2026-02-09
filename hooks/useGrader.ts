@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
-import { DashAIAssistant } from '@/services/dash-ai/DashAICompat';
+import { isAIEnabled } from '@/lib/ai/aiConfig';
 
 export type GraderOptions = {
   submissionText: string;
@@ -20,18 +20,37 @@ export function useGrader() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  /** Cancel any in-flight grading request */
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
 
   const grade = useCallback(async (opts: GraderOptions, callOpts?: GraderCallOptions) => {
+    // Cancel previous request if still in-flight
+    cancel();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
     setResult(null);
     try {
+      if (!isAIEnabled()) {
+        const fallback = { score: 75, feedback: 'AI grading is currently disabled. Please enable AI features to use this tool.' };
+        setResult(fallback);
+        callOpts?.onFinal?.(fallback);
+        return fallback.feedback;
+      }
+
       const basePayload: any = {
         submission: opts.submissionText,
         rubric: opts.rubric || [],
         gradeLevel: opts.gradeLevel || null,
         language: opts.language || 'en',
-        model: callOpts?.model || 'claude-3-5-sonnet-20241022',
+        model: callOpts?.model || 'claude-sonnet-4-20250514',
       };
 
       if (callOpts?.streaming) {
@@ -48,6 +67,7 @@ export function useGrader() {
             'Accept': 'text/event-stream',
           },
           body: JSON.stringify({ action: 'grading_assistance_stream', ...basePayload }),
+          signal: controller.signal,
         });
         if (!res.ok) throw new Error(`Streaming request failed: ${res.status}`);
         // If streaming not supported in this environment, fall back to non-stream
@@ -56,13 +76,15 @@ export function useGrader() {
           if (error) throw error;
           const text: string = (data && data.content) || '';
           setResult({ text, __fallbackUsed: !!(data && (data as any).provider_error) });
-          callOpts?.onFinal?.({ score: 0, feedback: text });
+          callOpts?.onFinal?.({ feedback: text });
           return text;
         }
         const reader = (res.body as any).getReader();
         const decoder = new TextDecoder('utf-8');
         let done = false; let buffer = '';
+        let accumulatedContent = '';
         while (!done) {
+          if (controller.signal.aborted) break;
           const chunk = await reader.read();
           done = chunk.done;
           if (chunk.value) {
@@ -76,24 +98,45 @@ export function useGrader() {
               if (line.startsWith('data:')) {
                 const payload = line.slice(5).trim();
                 if (payload === '[DONE]') {
-                  // finalize
-                  callOpts?.onFinal?.({ score: 0, feedback: '' });
+                  // Parse accumulated content for final structured result
+                  let finalResult: any = { feedback: accumulatedContent };
+                  try {
+                    const parsed = JSON.parse(accumulatedContent);
+                    finalResult = {
+                      score: typeof parsed.score === 'number' ? parsed.score : undefined,
+                      feedback: parsed.feedback || accumulatedContent,
+                      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : undefined,
+                      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : undefined,
+                      areasForImprovement: Array.isArray(parsed.areasForImprovement) ? parsed.areasForImprovement : undefined,
+                    };
+                  } catch {
+                    // Content wasn't JSON — use as plain text feedback
+                  }
+                  setResult(finalResult);
+                  callOpts?.onFinal?.(finalResult);
                 } else {
+                  accumulatedContent += payload;
                   callOpts?.onDelta?.(payload);
                 }
               }
             }
           }
         }
-        return '';
+        return accumulatedContent;
       } else {
         const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: { action: 'grading_assistance', ...basePayload } as any });
         if (error) throw error;
         const text: string = (data && data.content) || '';
-        setResult({ text, __fallbackUsed: !!(data && (data as any).provider_error) });
+        const parsed = { text, __fallbackUsed: !!(data && (data as any).provider_error) };
+        setResult(parsed);
+        callOpts?.onFinal?.({ feedback: text });
         return text;
       }
       } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        setError('Grading cancelled');
+        return '';
+      }
       // Fallback to Dash assistant
       try {
         const { getAssistant } = await import('@/services/core/getAssistant');
@@ -106,6 +149,7 @@ export function useGrader() {
         const response = await dash.sendMessage(prompt);
         const text = response.content || '';
         setResult({ text, __fallbackUsed: true });
+        callOpts?.onFinal?.({ feedback: text });
         return text;
       } catch {
         setError(e?.message || 'Failed to grade submission');
@@ -113,8 +157,9 @@ export function useGrader() {
       }
     } finally {
       setLoading(false);
+      abortRef.current = null;
     }
-  }, []);
+  }, [cancel]);
 
-  return { loading, error, result, grade } as const;
+  return { loading, error, result, grade, cancel } as const;
 }

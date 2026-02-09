@@ -4,7 +4,7 @@
  * WARP.md compliant: <500 lines, separate styles, React Query
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -14,6 +14,8 @@ import { usePendingApprovals, useApprovalStats, useProcessApproval, APPROVAL_TYP
 import { styles } from '@/components/membership/styles/pending-approvals.styles';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 const TABS = [
   { id: 'pending', label: 'Pending' },
   { id: 'history', label: 'History' },
@@ -23,18 +25,17 @@ export default function PendingApprovalsScreen() {
   const { colors } = useTheme();
   const { profile } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
-
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');  const { showAlert, alertProps } = useAlertModal();
   // Route guard: Only youth_president can access approvals
   useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
     if (profile && memberType !== 'youth_president') {
-      console.log('[PendingApprovals] Access denied - member_type:', memberType, '- redirecting');
-      Alert.alert(
-        'Access Restricted',
-        'Only Youth President can access approvals.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      logger.debug('[PendingApprovals] Access denied - member_type:', memberType, '- redirecting');
+      showAlert({
+        title: 'Access Restricted',
+        message: 'Only Youth President can access approvals.',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     }
   }, [profile]);
   
@@ -69,10 +70,10 @@ export default function PendingApprovalsScreen() {
       buttonText = action === 'approve' ? 'Approve' : 'Reject';
     }
     
-    Alert.alert(
+    showAlert({
       title,
       message,
-      [
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: buttonText,
@@ -86,13 +87,13 @@ export default function PendingApprovalsScreen() {
                 approvalType: item.type, // Pass the approval type to distinguish removal vs membership
               });
             } catch (error) {
-              console.error('[PendingApprovals] Error processing approval:', error);
-              Alert.alert('Error', 'Failed to process approval. Please try again.');
+              logger.error('[PendingApprovals] Error processing approval:', error);
+              showAlert({ title: 'Error', message: 'Failed to process approval. Please try again.' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const formatDate = (date: Date) => {
@@ -197,6 +198,7 @@ export default function PendingApprovalsScreen() {
   }
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.container}>
         {/* Header */}
@@ -266,5 +268,7 @@ export default function PendingApprovalsScreen() {
         />
       </View>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }

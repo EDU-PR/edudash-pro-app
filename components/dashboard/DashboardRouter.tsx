@@ -9,6 +9,11 @@ import { DASHBOARD_CARDS } from './cards';
 import type { OrganizationType } from '@/lib/types/organization';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+/**
+ * @deprecated Legacy dynamic widget router.
+ * The active #NEXT-GEN flows use role + resolved school-type wrappers directly.
+ */
 interface DashboardRouterProps {
   /** Hub type to render (learner, guardian, instructor, admin, financial) */
   hubType: 'learner' | 'guardian' | 'instructor' | 'admin' | 'financial';

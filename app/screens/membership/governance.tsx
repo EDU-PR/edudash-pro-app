@@ -4,7 +4,7 @@
  * Refactored to comply with WARP.md (< 500 lines)
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 // Extracted components
 import { 
@@ -44,6 +45,7 @@ export default function GovernanceScreen() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<{ id: string; title: string } | null>(null);
+  const { showAlert, alertProps } = useAlertModal();
 
   // Board positions hook
   const {
@@ -111,22 +113,22 @@ export default function GovernanceScreen() {
       setShowAppointmentModal(true);
     } else {
       // For vacant positions from default list, we need to initialize first
-      Alert.alert(
-        'Initialize Board',
-        'Board positions need to be set up first. Would you like to initialize the default positions?',
-        [
+      showAlert({
+        title: 'Initialize Board',
+        message: 'Board positions need to be set up first. Would you like to initialize the default positions?',
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Initialize', 
             onPress: async () => {
               const success = await initializePositions();
               if (success) {
-                Alert.alert('Success', 'Board positions have been initialized. You can now appoint members.');
+                showAlert({ title: 'Success', message: 'Board positions have been initialized. You can now appoint members.' });
               }
             }
           },
-        ]
-      );
+        ],
+      });
     }
   };
 
@@ -136,13 +138,14 @@ export default function GovernanceScreen() {
     if (success) {
       setShowAppointmentModal(false);
       setSelectedPosition(null);
-      Alert.alert('Success', 'Member has been appointed successfully.');
+      showAlert({ title: 'Success', message: 'Member has been appointed successfully.' });
     } else {
-      Alert.alert('Error', 'Failed to appoint member. Please try again.');
+      showAlert({ title: 'Error', message: 'Failed to appoint member. Please try again.' });
     }
   };
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <DashboardWallpaperBackground>
         {/* Custom Header */}
@@ -261,8 +264,8 @@ export default function GovernanceScreen() {
             <MeetingsSection
               meetings={UPCOMING_MEETINGS}
               theme={theme}
-              onMeetingPress={(meeting) => Alert.alert('Meeting', meeting.title)}
-              onAddPress={() => Alert.alert('Add Meeting', 'Meeting scheduling coming soon')}
+              onMeetingPress={(meeting) => showAlert({ title: 'Meeting', message: meeting.title })}
+              onAddPress={() => showAlert({ title: 'Add Meeting', message: 'Meeting scheduling coming soon' })}
             />
           )}
         </ScrollView>
@@ -290,6 +293,8 @@ export default function GovernanceScreen() {
         onAppoint={handleAppointMember}
       />
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

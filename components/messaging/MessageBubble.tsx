@@ -115,7 +115,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   const activeReactions = msg.reactions?.filter(r => r.count > 0) || [];
 
   return (
-    <View style={[styles.container, isOwn ? styles.own : styles.other]}>
+    <View style={[styles.container, activeReactions.length > 0 && styles.containerWithReactions, isOwn ? styles.own : styles.other]}>
       {!isOwn && (
         <Text style={styles.name}>{name}</Text>
       )}
@@ -254,18 +254,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 });
 
 const styles = StyleSheet.create({
-  container: { marginVertical: 3, maxWidth: '98%' },
-  own: { alignSelf: 'flex-end' },
-  other: { alignSelf: 'flex-start' },
+  container: {
+    marginVertical: 4,
+    width: '100%',
+    maxWidth: '100%',
+  },
+  containerWithReactions: {
+    marginBottom: 8,
+  },
+  own: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
+  },
+  other: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+  },
   pressableBubble: {
-    maxWidth: '88%',
+    maxWidth: '84%',
     flexShrink: 1,
   },
   bubbleRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 6,
-    maxWidth: '100%',
+    width: '100%',
   },
   bubbleRowOwn: {
     justifyContent: 'flex-end',
@@ -274,13 +287,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   voiceBubbleWrapper: {
-    maxWidth: '88%',
+    maxWidth: '84%',
     flexShrink: 1,
   },
   name: { 
     fontSize: 12, 
     fontWeight: '600', 
-    marginBottom: 4, 
+    marginBottom: 6, 
     marginLeft: 12,
     color: '#a78bfa',
   },
@@ -294,19 +307,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 4,
     borderColor: 'rgba(59, 130, 246, 0.3)',
     shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    elevation: 1,
   },
   bubbleOther: {
     borderTopLeftRadius: 4,
     borderColor: 'rgba(148, 163, 184, 0.2)',
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
   },
   voiceBubble: {
     minWidth: 260,
@@ -366,7 +379,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: -6,
+    marginTop: 6,
+    marginBottom: 2,
   },
   reactionsBelowOwn: {
     justifyContent: 'flex-end',
