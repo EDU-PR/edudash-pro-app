@@ -13,7 +13,6 @@
 
 import {
   ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import type { VoiceProvider, VoiceSession, VoiceStartOptions } from './unifiedProvider';
 
@@ -228,6 +227,44 @@ class ExpoSpeechSession implements VoiceSession {
   }
 }
 
+export const isSpeechRecognitionStateAvailable = (state: unknown): boolean => {
+  if (typeof state === 'boolean') {
+    return state;
+  }
+
+  if (typeof state === 'string') {
+    const normalized = state.toLowerCase();
+    return !(
+      normalized.includes('unavailable') ||
+      normalized.includes('denied') ||
+      normalized.includes('disabled')
+    );
+  }
+
+  if (state && typeof state === 'object') {
+    const record = state as Record<string, unknown>;
+    if (typeof record.isAvailable === 'boolean') {
+      return record.isAvailable;
+    }
+    if (typeof record.available === 'boolean') {
+      return record.available;
+    }
+    if (typeof record.canRecognize === 'boolean') {
+      return record.canRecognize;
+    }
+    if (typeof record.status === 'string') {
+      const status = record.status.toLowerCase();
+      return !(
+        status.includes('unavailable') ||
+        status.includes('denied') ||
+        status.includes('disabled')
+      );
+    }
+  }
+
+  return false;
+};
+
 /**
  * Expo Speech Recognition Provider
  */
@@ -243,13 +280,14 @@ export const expoSpeech: VoiceProvider = {
       }
       
       // Check if speech recognition is supported on device
-      const isAvailable = await ExpoSpeechRecognitionModule.getStateAsync();
+      const state = await ExpoSpeechRecognitionModule.getStateAsync();
+      const isAvailable = isSpeechRecognitionStateAvailable(state);
       
       if (__DEV__) {
-        console.log('[ExpoProvider] Availability check:', isAvailable);
+        console.log('[ExpoProvider] Availability check:', { state, isAvailable });
       }
       
-      return true;
+      return isAvailable;
     } catch (e) {
       if (__DEV__) console.warn('[ExpoProvider] Availability check failed:', e);
       return false;

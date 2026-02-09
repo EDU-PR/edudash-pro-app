@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, RefreshControl } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { Card } from '@/components/ui/Card';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import OrganizationAnnouncementService, {
   type CreateAnnouncementInput,
   type OrganizationAnnouncement,
@@ -21,6 +22,7 @@ import OrganizationAnnouncementService, {
 } from '@/lib/services/organizationAnnouncementService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -56,6 +58,7 @@ export default function BroadcastScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -90,7 +93,7 @@ export default function BroadcastScreen() {
           loadRecentAnnouncements(member.organization_id);
         }
       } catch (error) {
-        console.error('[Broadcast] Error fetching org ID:', error);
+        logger.error('[Broadcast] Error fetching org ID:', error);
       }
     };
     
@@ -106,7 +109,7 @@ export default function BroadcastScreen() {
         setRecentAnnouncements(result.data);
       }
     } catch (error) {
-      console.error('[Broadcast] Error loading announcements:', error);
+      logger.error('[Broadcast] Error loading announcements:', error);
     } finally {
       setLoading(false);
     }
@@ -122,22 +125,22 @@ export default function BroadcastScreen() {
   // Send announcement
   const handleSend = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter an announcement title');
+      showAlert({ title: 'Error', message: 'Please enter an announcement title' });
       return;
     }
     if (!content.trim()) {
-      Alert.alert('Error', 'Please enter the announcement content');
+      showAlert({ title: 'Error', message: 'Please enter the announcement content' });
       return;
     }
     if (!organizationId || !user?.id) {
-      Alert.alert('Error', 'Unable to send announcement. Please try again.');
+      showAlert({ title: 'Error', message: 'Unable to send announcement. Please try again.' });
       return;
     }
 
-    Alert.alert(
-      'Send Announcement',
-      `Send this announcement to ${TARGET_AUDIENCES.find(t => t.value === targetAudience)?.label}?`,
-      [
+    showAlert({
+      title: 'Send Announcement',
+      message: `Send this announcement to ${TARGET_AUDIENCES.find(t => t.value === targetAudience)?.label}?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Send',
@@ -159,7 +162,7 @@ export default function BroadcastScreen() {
               );
 
               if (result.success) {
-                Alert.alert('Success', 'Announcement sent successfully!');
+                showAlert({ title: 'Success', message: 'Announcement sent successfully!' });
                 setTitle('');
                 setContent('');
                 setTargetAudience('all');
@@ -168,26 +171,26 @@ export default function BroadcastScreen() {
                 loadRecentAnnouncements(organizationId);
                 setShowComposer(false);
               } else {
-                Alert.alert('Error', result.error || 'Failed to send announcement');
+                showAlert({ title: 'Error', message: result.error || 'Failed to send announcement' });
               }
             } catch (error) {
-              console.error('[Broadcast] Send error:', error);
-              Alert.alert('Error', 'An unexpected error occurred');
+              logger.error('[Broadcast] Send error:', error);
+              showAlert({ title: 'Error', message: 'An unexpected error occurred' });
             } finally {
               setSending(false);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   // Delete announcement
   const handleDelete = (announcementId: string) => {
-    Alert.alert(
-      'Delete Announcement',
-      'Are you sure you want to delete this announcement?',
-      [
+    showAlert({
+      title: 'Delete Announcement',
+      message: 'Are you sure you want to delete this announcement?',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -197,12 +200,12 @@ export default function BroadcastScreen() {
             if (result.success && organizationId) {
               loadRecentAnnouncements(organizationId);
             } else {
-              Alert.alert('Error', result.error || 'Failed to delete');
+              showAlert({ title: 'Error', message: result.error || 'Failed to delete' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const getPriorityColor = (p: AnnouncementPriority) => {
@@ -221,6 +224,7 @@ export default function BroadcastScreen() {
   };
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
@@ -455,6 +459,8 @@ export default function BroadcastScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

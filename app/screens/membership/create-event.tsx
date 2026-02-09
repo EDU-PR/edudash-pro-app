@@ -3,7 +3,7 @@
  * Allows Youth President and executives to create events
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -11,10 +11,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useQueryClient } from '@tanstack/react-query';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const EVENT_TYPES = [
   { value: 'meeting', label: 'Meeting', icon: 'people' },
   { value: 'workshop', label: 'Workshop', icon: 'construct' },
@@ -30,6 +32,7 @@ export default function CreateEventScreen() {
   const queryClient = useQueryClient();
   const orgId = profile?.organization_id;
   const userId = user?.id;
+  const { showAlert, alertProps } = useAlertModal();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -49,12 +52,12 @@ export default function CreateEventScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert('Error', 'Event title is required');
+      showAlert({ title: 'Error', message: 'Event title is required' });
       return;
     }
 
     if (!orgId || !userId) {
-      Alert.alert('Error', 'Organization or user information missing');
+      showAlert({ title: 'Error', message: 'Organization or user information missing' });
       return;
     }
 
@@ -91,10 +94,10 @@ export default function CreateEventScreen() {
       queryClient.invalidateQueries({ queryKey: ['youth-events'] });
       queryClient.invalidateQueries({ queryKey: ['organization-events'] });
 
-      Alert.alert(
-        'Event Created!',
-        `${newEvent.title} has been created successfully.`,
-        [
+      showAlert({
+        title: 'Event Created!',
+        message: `${newEvent.title} has been created successfully.`,
+        buttons: [
           {
             text: 'Create Another',
             style: 'cancel',
@@ -118,11 +121,11 @@ export default function CreateEventScreen() {
             text: 'View Events',
             onPress: () => router.back(),
           },
-        ]
-      );
+        ],
+      });
     } catch (error: any) {
-      console.error('Error creating event:', error);
-      Alert.alert('Error', error.message || 'Failed to create event');
+      logger.error('Error creating event:', error);
+      showAlert({ title: 'Error', message: error.message || 'Failed to create event' });
     } finally {
       setSaving(false);
     }
@@ -324,6 +327,7 @@ export default function CreateEventScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

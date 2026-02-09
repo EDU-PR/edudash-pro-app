@@ -22,9 +22,11 @@ import {
 } from '@/components/subscription';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 export default function SubscriptionUpgradePostScreen() {
   const rawParams = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Extract parameters
   const currentTier = (takeFirst(rawParams.currentTier) || 'free').toString();
@@ -48,7 +50,7 @@ export default function SubscriptionUpgradePostScreen() {
     handleUpgrade,
     isLaunchPromoActive,
     promoPercentOff,
-  } = useSubscriptionUpgrade({ currentTier, reasonKey, feature });
+  } = useSubscriptionUpgrade({ currentTier, reasonKey, feature, showAlert });
 
   // Error state
   if (renderError) {
@@ -141,6 +143,7 @@ export default function SubscriptionUpgradePostScreen() {
           </View>
         )}
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

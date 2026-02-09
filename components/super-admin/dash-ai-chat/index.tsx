@@ -13,7 +13,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
+  Share,
   TouchableOpacity,
   Platform,
 } from 'react-native';
@@ -27,6 +27,9 @@ import { ChatMessage, ChatMessageData } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DASH_WELCOME_MESSAGE, TOOL_MESSAGES } from '../../../lib/ai/constants';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import * as Clipboard from 'expo-clipboard';
+import { toast } from '@/components/ui/ToastProvider';
 
 // Storage keys
 const CHAT_HISTORY_KEY = '@dash_ai_chat_history';
@@ -73,9 +76,10 @@ export default function DashAIChat({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlashListRef<ChatMessageData> | null>(null);
   const voiceOrbRef = useRef<VoiceOrbRefType>(null);
   const isVoiceModeRef = useRef(false);
+  const actionDebounceRef = useRef<Record<string, number>>({});
 
   // Welcome message content
   const welcomeMessage: ChatMessageData = {
@@ -163,7 +167,7 @@ export default function DashAIChat({
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
+      listRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
 
@@ -344,59 +348,72 @@ export default function DashAIChat({
     let fullResponse = '';
     let sentenceBuffer = '';
     let hasStartedSpeaking = false;
+    let sseCarry = '';
 
     try {
+      const handleStreamData = (rawData: string) => {
+        if (!rawData || rawData === '[DONE]') return;
+
+        try {
+          const parsed = JSON.parse(rawData);
+          const content = parsed.delta || parsed.content || '';
+
+          // Check if AI is using a tool
+          if (parsed.type === 'tool_use' || parsed.tool_name) {
+            const toolName = parsed.tool_name || parsed.name || 'a tool';
+            console.log('[DashAIChat] AI using tool:', toolName);
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantId
+                ? { ...msg, content: `🔍 Searching (${toolName})...`, isStreaming: true }
+                : msg
+            ));
+            return;
+          }
+
+          fullResponse += content;
+          sentenceBuffer += content;
+
+          // Update message progressively
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantId
+              ? { ...msg, content: fullResponse, isStreaming: true }
+              : msg
+          ));
+
+          // Check if we have a complete sentence for TTS
+          const sentenceEnd = /[.!?]\s/.test(sentenceBuffer);
+          if (sentenceEnd && sentenceBuffer.trim().length > 20 && !hasStartedSpeaking) {
+            const firstSentence = sentenceBuffer.trim();
+            console.log('[DashAIChat] Starting TTS with first sentence:', firstSentence.substring(0, 50) + '...');
+            speakResponse(firstSentence);
+            hasStartedSpeaking = true;
+            sentenceBuffer = '';
+          }
+        } catch {
+          // Ignore non-JSON or partial lines
+        }
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        sseCarry += decoder.decode(value, { stream: true });
+        const lines = sseCarry.split('\n');
+        sseCarry = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (!line.trim() || !line.startsWith('data: ')) continue;
-          
-          const data = line.substring(6).trim();
-          if (data === '[DONE]') continue;
-
-            try {
-            const parsed = JSON.parse(data);
-            const content = parsed.delta || parsed.content || '';
-            
-            // Check if AI is using a tool
-            if (parsed.type === 'tool_use' || parsed.tool_name) {
-              const toolName = parsed.tool_name || parsed.name || 'a tool';
-              console.log('[DashAIChat] AI using tool:', toolName);
-              setMessages(prev => prev.map(msg =>
-                msg.id === assistantId
-                  ? { ...msg, content: `🔍 Searching (${toolName})...`, isStreaming: true }
-                  : msg
-              ));
-              continue; // Don't add tool usage to response text
-            }
-            
-            fullResponse += content;
-            sentenceBuffer += content;
-
-            // Update message progressively
-            setMessages(prev => prev.map(msg =>
-              msg.id === assistantId
-                ? { ...msg, content: fullResponse, isStreaming: true }
-                : msg
-            ));            // Check if we have a complete sentence for TTS
-            const sentenceEnd = /[.!?]\s/.test(sentenceBuffer);
-            if (sentenceEnd && sentenceBuffer.trim().length > 20 && !hasStartedSpeaking) {
-              // Start speaking first sentence ASAP
-              const firstSentence = sentenceBuffer.trim();
-              console.log('[DashAIChat] Starting TTS with first sentence:', firstSentence.substring(0, 50) + '...');
-              speakResponse(firstSentence);
-              hasStartedSpeaking = true;
-              sentenceBuffer = '';
-            }
-          } catch (e) {
-            // Skip invalid JSON
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data:')) {
+            continue;
           }
+          handleStreamData(trimmed.slice(5).trim());
         }
+      }
+
+      const tail = sseCarry.trim();
+      if (tail.startsWith('data:')) {
+        handleStreamData(tail.slice(5).trim());
       }
 
       // Mark as complete
@@ -469,6 +486,67 @@ export default function DashAIChat({
     }
   }, []); // No deps - uses refs for latest values
 
+  const runDebouncedMessageAction = useCallback(async (key: string, action: () => Promise<void> | void) => {
+    const now = Date.now();
+    const last = actionDebounceRef.current[key] ?? 0;
+    if (now - last < 500) {
+      return;
+    }
+    actionDebounceRef.current[key] = now;
+    await action();
+  }, []);
+
+  const handleCopyMessage = useCallback(async (message: ChatMessageData) => {
+    await runDebouncedMessageAction(`copy:${message.id}`, async () => {
+      try {
+        await Clipboard.setStringAsync(message.content || '');
+        toast.success('Message copied');
+      } catch (err) {
+        console.warn('[DashAIChat] Copy failed:', err);
+        toast.error('Copy failed');
+      }
+    });
+  }, [runDebouncedMessageAction]);
+
+  const handleShareMessage = useCallback(async (message: ChatMessageData) => {
+    await runDebouncedMessageAction(`share:${message.id}`, async () => {
+      try {
+        await Share.share({ message: message.content || '' });
+      } catch (err) {
+        console.warn('[DashAIChat] Share failed:', err);
+      }
+    });
+  }, [runDebouncedMessageAction]);
+
+  const handleRegenerateMessage = useCallback(async (message: ChatMessageData) => {
+    await runDebouncedMessageAction(`regen:${message.id}`, async () => {
+      if (isProcessing) return;
+      const targetIndex = messages.findIndex((m) => m.id === message.id);
+      if (targetIndex === -1) return;
+
+      let userIndex = -1;
+      for (let i = targetIndex; i >= 0; i -= 1) {
+        if (messages[i].role === 'user') {
+          userIndex = i;
+          break;
+        }
+      }
+      if (userIndex < 0) return;
+
+      await sendMessage(messages[userIndex].content);
+    });
+  }, [isProcessing, messages, runDebouncedMessageAction]);
+
+  const renderMessage = useCallback(({ item }: { item: ChatMessageData }) => (
+    <ChatMessage
+      message={item}
+      onCopy={handleCopyMessage}
+      onShare={handleShareMessage}
+      onRegenerate={item.role === 'assistant' ? handleRegenerateMessage : undefined}
+      disableActions={isProcessing}
+    />
+  ), [handleCopyMessage, handleRegenerateMessage, handleShareMessage, isProcessing]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
@@ -501,18 +579,17 @@ export default function DashAIChat({
       </View>
 
       {/* Messages */}
-      <ScrollView
-        ref={scrollViewRef}
+      <FlashList
+        ref={listRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id}
         style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
+        contentContainerStyle={[styles.messagesContent, { paddingBottom: 20 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-      >
-        {messages.map(message => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        <View style={{ height: 20 }} />
-      </ScrollView>
+        extraData={{ isProcessing }}
+      />
 
       {/* Voice Mode Overlay - Only on native platforms */}
       {isVoiceMode && VoiceOrb && (

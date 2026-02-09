@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -20,11 +20,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { fetchParentChildren } from '@/lib/parent-children';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
-// TODO: Re-enable after build - WeeklyReportDetail component causing EAS build issues
-// import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
+import { WeeklyReportDetail } from '@/components/reports/WeeklyReportDetail';
 import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 interface WeeklyReport {
   id: string;
   student_id: string;
@@ -64,6 +65,7 @@ interface Student {
 export default function ParentWeeklyReportScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [students, setStudents] = useState<Student[]>([]);
@@ -101,8 +103,8 @@ export default function ParentWeeklyReportScreen() {
         setSelectedStudent(children[0].id);
       }
     } catch (error) {
-      console.error('[ParentWeeklyReport] Error loading students:', error);
-      Alert.alert('Error', 'Failed to load your children');
+      logger.error('[ParentWeeklyReport] Error loading students:', error);
+      showAlert({ title: 'Error', message: 'Failed to load your children' });
     } finally {
       setLoadingReports(false);
     }
@@ -139,7 +141,7 @@ export default function ParentWeeklyReportScreen() {
           .eq('id', data.id);
       }
     } catch (error) {
-      console.error('[ParentWeeklyReport] Error loading report:', error);
+      logger.error('[ParentWeeklyReport] Error loading report:', error);
       setReport(null);
     } finally {
       setLoading(false);
@@ -298,23 +300,11 @@ export default function ParentWeeklyReportScreen() {
             </Text>
           </View>
         ) : report ? (
-          /* TODO: Re-enable WeeklyReportDetail after build
           <WeeklyReportDetail
             report={report}
             studentName={selectedStudentData ? `${selectedStudentData.first_name} ${selectedStudentData.last_name}` : 'Your Child'}
             theme={theme}
           />
-          */
-          <View style={[styles.noReportCard, { backgroundColor: theme.card }]}>
-            <Ionicons name="checkmark-circle" size={60} color={theme.success || '#10B981'} />
-            <Text style={[styles.noReportTitle, { color: theme.text }]}>
-              Report Available
-            </Text>
-            <Text style={[styles.noReportSubtitle, { color: theme.textSecondary }]}>
-              Weekly report for {selectedStudentData ? selectedStudentData.first_name : 'your child'} is ready.{'\n'}
-              Full report details coming in the next update!
-            </Text>
-          </View>
         ) : (
           <View style={[styles.noReportCard, { backgroundColor: theme.card }]}>
             <Ionicons name="calendar-outline" size={60} color={theme.textTertiary} />
@@ -330,6 +320,7 @@ export default function ParentWeeklyReportScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      <AlertModal {...alertProps} />
     </DesktopLayout>
   );
 }

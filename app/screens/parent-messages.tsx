@@ -1,19 +1,12 @@
 /**
  * Parent Messages Screen
- * Modern, clean messaging list with improved UX
+ * Modern messaging list with thread search, Dash AI entry, and FABs.
+ *
+ * Sub-components extracted → components/messaging/ParentThreadItem, DashAIItem
+ * Styles extracted → parent-messages.styles.ts
  */
-
-import React, { useState, useCallback, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
-  Animated,
-  Platform,
-} from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,368 +14,15 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
+import { ParentThreadItem } from '@/components/messaging/ParentThreadItem';
+import { DashAIItem } from '@/components/messaging/DashAIItem';
 import { useParentThreads, useMarkAllDelivered, MessageThread } from '@/hooks/useParentMessaging';
 import { useConversationListTyping } from '@/hooks/useConversationListTyping';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
-import { getMessageDisplayText } from '@/lib/utils/messageContent';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
-
-// Format timestamp for message threads
-const formatMessageTime = (timestamp: string): string => {
-  const now = new Date();
-  const messageTime = new Date(timestamp);
-  const diffInHours = Math.abs(now.getTime() - messageTime.getTime()) / (1000 * 60 * 60);
-  
-  if (diffInHours < 1) {
-    return 'Just now';
-  } else if (diffInHours < 24) {
-    return messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } else if (diffInHours < 168) { // 7 days
-    return messageTime.toLocaleDateString([], { weekday: 'short' });
-  } else {
-    return messageTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  }
-};
-
-// Thread item component - Modernized
-interface ThreadItemProps {
-  thread: MessageThread;
-  onPress: () => void;
-  /** If someone is currently typing in this thread, display this text */
-  typingText?: string | null;
-}
-
-const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, typingText }) => {
-  const { theme } = useTheme();
-  const { t } = useTranslation();
-  
-  const { user } = useAuth();
-  
-  // Handle group threads and parent-parent threads
-  const isGroup = thread.is_group || ['class_group', 'parent_group', 'announcement'].includes(thread.type);
-  const isParentDM = thread.type === 'parent-parent';
-  
-  // Get the other participant (teacher/principal/parent)
-  const otherParticipant = isParentDM
-    ? thread.participants?.find((p: any) => p.user_id !== user?.id)
-    : thread.participants?.find((p: any) => p.role !== 'parent');
-  const participantName = isGroup
-    ? ((thread as any).group_name || thread.subject || 'Group')
-    : otherParticipant?.user_profile
-      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-      : isParentDM ? 'Parent' : 'Teacher';
-    
-  const participantRole = isGroup
-    ? (thread.type === 'announcement' ? 'announcement' : 'group')
-    : otherParticipant?.user_profile?.role || (isParentDM ? 'parent' : 'teacher');
-  
-  // Student name for context
-  const studentName = thread.student ? 
-    `${thread.student.first_name} ${thread.student.last_name}`.trim() :
-    null;
-  
-  const hasUnread = (thread.unread_count || 0) > 0;
-  
-  // Get initials for avatar
-  const initials = participantName
-    .split(' ')
-    .map(n => n.charAt(0))
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-  
-  const styles = StyleSheet.create({
-    container: {
-      backgroundColor: theme.surface,
-      marginHorizontal: 16,
-      marginBottom: 8,
-      borderRadius: 16,
-      overflow: 'hidden',
-      ...Platform.select({
-        ios: {
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 2,
-        },
-      }),
-    },
-    inner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-    },
-    avatar: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: hasUnread ? theme.primary : theme.primary + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 14,
-    },
-    avatarText: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: hasUnread ? theme.onPrimary : theme.primary,
-    },
-    content: {
-      flex: 1,
-    },
-    topRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 4,
-    },
-    name: {
-      fontSize: 16,
-      fontWeight: hasUnread ? '700' : '500',
-      color: theme.text,
-      flex: 1,
-    },
-    time: {
-      fontSize: 12,
-      color: hasUnread ? theme.primary : theme.textSecondary,
-      fontWeight: hasUnread ? '600' : '400',
-      marginLeft: 8,
-    },
-    contextRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 6,
-    },
-    roleBadge: {
-      backgroundColor: theme.primary + '15',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 10,
-    },
-    roleText: {
-      fontSize: 11,
-      color: theme.primary,
-      fontWeight: '600',
-      textTransform: 'capitalize',
-    },
-    studentText: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      marginLeft: 8,
-    },
-    messagePreview: {
-      fontSize: 14,
-      color: hasUnread ? theme.text : theme.textSecondary,
-      fontWeight: hasUnread ? '500' : '400',
-      lineHeight: 20,
-    },
-    bottomRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: 2,
-    },
-    unreadBadge: {
-      backgroundColor: theme.primary,
-      borderRadius: 12,
-      minWidth: 24,
-      height: 24,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 8,
-    },
-    unreadText: {
-      color: theme.onPrimary,
-      fontSize: 12,
-      fontWeight: '700',
-    },
-  });
-  
-  return (
-    <TouchableOpacity 
-      style={styles.container} 
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.inner}>
-        <View style={styles.avatar}>
-          {isGroup ? (
-            <Ionicons name="people" size={24} color={hasUnread ? theme.onPrimary : theme.primary} />
-          ) : (
-            <Text style={styles.avatarText}>{initials}</Text>
-          )}
-        </View>
-        
-        <View style={styles.content}>
-          <View style={styles.topRow}>
-            <Text style={styles.name} numberOfLines={1}>{participantName}</Text>
-            {thread.last_message && (
-              <Text style={styles.time}>
-                {formatMessageTime(thread.last_message.created_at)}
-              </Text>
-            )}
-          </View>
-          
-          <View style={styles.contextRow}>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>{participantRole}</Text>
-            </View>
-            {studentName && (
-              <Text style={styles.studentText}>• {studentName}</Text>
-            )}
-          </View>
-          
-          <View style={styles.bottomRow}>
-            {typingText ? (
-              <Text style={[styles.messagePreview, { color: theme.primary, fontStyle: 'italic' }]} numberOfLines={1}>
-                {typingText}
-              </Text>
-            ) : thread.last_message ? (
-              <Text style={styles.messagePreview} numberOfLines={1}>
-                {getMessageDisplayText(thread.last_message.content)}
-              </Text>
-            ) : (
-              <Text style={[styles.messagePreview, { fontStyle: 'italic' }]} numberOfLines={1}>
-                {t('parent.noMessagesYet', { defaultValue: 'No messages yet' })}
-              </Text>
-            )}
-            
-            {hasUnread && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>
-                  {thread.unread_count && thread.unread_count > 99 ? '99+' : thread.unread_count}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
-
-// Dash AI Chat Item - Special entry for AI assistant
-const DashAIItem: React.FC<{ onPress: () => void; title: string; subtitle: string; description: string }> = React.memo(({ onPress, title, subtitle, description }) => {
-  const { theme } = useTheme();
-  
-  const styles = StyleSheet.create({
-    container: {
-      backgroundColor: theme.surface,
-      marginHorizontal: 16,
-      marginBottom: 8,
-      borderRadius: 16,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: '#8B5CF6' + '40',
-      ...Platform.select({
-        ios: {
-          shadowColor: '#8B5CF6',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.15,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 3,
-        },
-      }),
-    },
-    inner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-    },
-    avatarGlow: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: '#8B5CF6' + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 14,
-    },
-    avatarInner: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: '#8B5CF6',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    content: {
-      flex: 1,
-    },
-    topRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    name: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.text,
-    },
-    sparkle: {
-      marginLeft: 6,
-    },
-    aiBadge: {
-      backgroundColor: '#8B5CF6' + '20',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 10,
-      marginLeft: 8,
-    },
-    aiBadgeText: {
-      fontSize: 11,
-      color: '#8B5CF6',
-      fontWeight: '600',
-    },
-    subtitle: {
-      fontSize: 13,
-      color: '#8B5CF6',
-      fontWeight: '500',
-      marginBottom: 4,
-    },
-    description: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      lineHeight: 20,
-    },
-  });
-  
-  return (
-    <TouchableOpacity 
-      style={styles.container} 
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.inner}>
-        <View style={styles.avatarGlow}>
-          <View style={styles.avatarInner}>
-            <Ionicons name="sparkles" size={24} color="white" />
-          </View>
-        </View>
-        
-        <View style={styles.content}>
-          <View style={styles.topRow}>
-            <Text style={styles.name}>{title}</Text>
-            <Ionicons name="sparkles" size={14} color="#8B5CF6" style={styles.sparkle} />
-            <View style={styles.aiBadge}>
-              <Text style={styles.aiBadgeText}>AI</Text>
-            </View>
-          </View>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-          <Text style={styles.description} numberOfLines={1}>
-            {description}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
+import { createParentMessagesStyles } from '@/lib/screen-styles/parent-messages.styles';
 
 export default function ParentMessagesScreen() {
   const { theme } = useTheme();
@@ -392,377 +32,120 @@ export default function ParentMessagesScreen() {
   const dashCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
+  const styles = useMemo(() => createParentMessagesStyles(theme, insets), [theme, insets]);
+
   const tierLower = String(tier || 'free').toLowerCase();
   const isDashOrbUnlocked = [
-    'parent_plus',
-    'premium',
-    'pro',
-    'enterprise',
-    'school_premium',
-    'school_pro',
-    'school_enterprise',
+    'parent_plus', 'premium', 'pro', 'enterprise',
+    'school_premium', 'school_pro', 'school_enterprise',
   ].includes(tierLower);
-  
-  const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
 
-  // Mark all incoming messages as delivered when conversation list is viewed
+  const { data: threads, isLoading, error, refetch, isRefetching } = useParentThreads();
   useMarkAllDelivered(threads);
 
-  // Subscribe to typing indicators across all threads
-  const threadIds = React.useMemo(() => (threads ?? []).map((t) => t.id), [threads]);
+  const threadIds = useMemo(() => (threads ?? []).map((t) => t.id), [threads]);
   const typingMap = useConversationListTyping(threadIds, profile?.id ?? null);
-  
-  // Refetch threads when screen gains focus to update unread badges
-  useFocusEffect(
-    useCallback(() => {
-      refetch();
-    }, [refetch])
-  );
-  
+
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+
   const handleThreadPress = useCallback((thread: MessageThread) => {
     const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
-    const participantName = otherParticipant?.user_profile ? 
-      `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim() :
-      'Teacher';
-    
+    const participantName = otherParticipant?.user_profile
+      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+      : 'Teacher';
     router.push({
       pathname: '/screens/parent-message-thread',
-      params: {
-        threadId: thread.id,
-        title: participantName,
-        teacherId: otherParticipant?.user_id || '',
-        teacherName: participantName,
-      },
+      params: { threadId: thread.id, title: participantName, teacherId: otherParticipant?.user_id || '', teacherName: participantName },
     });
   }, []);
-  
-  const handleStartNewMessage = useCallback(() => {
-    router.push('/screens/parent-new-message');
-  }, []);
-  
-  const handleOpenDashAI = useCallback(() => {
-    router.push('/screens/dash-assistant');
-  }, []);
-  
-  const handleMarkAllRead = useCallback(() => {
-    // Mark all threads as read — re-use the delivery hook logic
-    refetch();
-  }, [refetch]);
 
-  // Dropdown menu items for the header
-  const headerMenuItems = React.useMemo(() => [
-    {
-      icon: 'notifications-outline' as keyof typeof Ionicons.glyphMap,
-      label: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }),
-      onPress: () => router.push('/screens/settings'),
-    },
-    {
-      icon: 'checkmark-done-outline' as keyof typeof Ionicons.glyphMap,
-      label: t('parent.markAllRead', { defaultValue: 'Mark All as Read' }),
-      onPress: handleMarkAllRead,
-    },
-    {
-      icon: 'archive-outline' as keyof typeof Ionicons.glyphMap,
-      label: t('parent.archivedChats', { defaultValue: 'Archived Chats' }),
-      onPress: () => router.push('/screens/settings'),
-    },
-    {
-      icon: 'star-outline' as keyof typeof Ionicons.glyphMap,
-      label: t('parent.starredMessages', { defaultValue: 'Starred Messages' }),
-      onPress: () => router.push('/screens/settings'),
-    },
+  const handleStartNewMessage = useCallback(() => router.push('/screens/parent-new-message'), []);
+  const handleOpenDashAI = useCallback(() => router.push('/screens/dash-assistant'), []);
+  const handleMarkAllRead = useCallback(() => { refetch(); }, [refetch]);
+
+  const headerMenuItems = useMemo(() => [
+    { icon: 'notifications-outline' as const, label: t('parent.notificationSettings', { defaultValue: 'Notification Settings' }), onPress: () => router.push('/screens/settings') },
+    { icon: 'checkmark-done-outline' as const, label: t('parent.markAllRead', { defaultValue: 'Mark All as Read' }), onPress: handleMarkAllRead },
+    { icon: 'archive-outline' as const, label: t('parent.archivedChats', { defaultValue: 'Archived Chats' }), onPress: () => router.push('/screens/settings') },
+    { icon: 'star-outline' as const, label: t('parent.starredMessages', { defaultValue: 'Starred Messages' }), onPress: () => router.push('/screens/settings') },
   ], [t, handleMarkAllRead]);
-  
-  // Filter threads by search
-  const filteredThreads = React.useMemo(() => {
+
+  const filteredThreads = useMemo(() => {
     if (!threads || !searchQuery.trim()) return threads || [];
-    
     const query = searchQuery.toLowerCase();
     return threads.filter(thread => {
-      const otherParticipant = thread.participants?.find((p: any) => p.role !== 'parent');
-      const name = otherParticipant?.user_profile 
-        ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`
-        : '';
-      const studentNameStr = thread.student 
-        ? `${thread.student.first_name} ${thread.student.last_name}`
-        : '';
-      const lastMessage = thread.last_message?.content || '';
-      
-      return (
-        name.toLowerCase().includes(query) ||
-        studentNameStr.toLowerCase().includes(query) ||
-        lastMessage.toLowerCase().includes(query)
-      );
+      const other = thread.participants?.find((p: any) => p.role !== 'parent');
+      const name = other?.user_profile ? `${other.user_profile.first_name} ${other.user_profile.last_name}` : '';
+      const student = thread.student ? `${thread.student.first_name} ${thread.student.last_name}` : '';
+      const lastMsg = thread.last_message?.content || '';
+      return name.toLowerCase().includes(query) || student.toLowerCase().includes(query) || lastMsg.toLowerCase().includes(query);
     });
   }, [threads, searchQuery]);
-  
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    loadingContainer: {
-      flex: 1,
-      padding: 16,
-    },
-    skeletonItem: {
-      marginBottom: 12,
-    },
-    errorContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 40,
-    },
-    errorIcon: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: theme.error + '15',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 20,
-    },
-    errorTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: theme.text,
-      marginBottom: 8,
-      textAlign: 'center',
-    },
-    errorText: {
-      fontSize: 15,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      lineHeight: 22,
-      marginBottom: 24,
-      paddingHorizontal: 20,
-    },
-    retryButton: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 32,
-      paddingVertical: 14,
-      borderRadius: 12,
-    },
-    retryButtonText: {
-      color: theme.onPrimary,
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    emptyContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 40,
-    },
-    emptyIcon: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: theme.primary + '10',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 24,
-    },
-    emptyTitle: {
-      fontSize: 22,
-      fontWeight: '700',
-      color: theme.text,
-      marginBottom: 12,
-      textAlign: 'center',
-    },
-    emptySubtitle: {
-      fontSize: 15,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      lineHeight: 22,
-      marginBottom: 28,
-      paddingHorizontal: 20,
-    },
-    emptyButton: {
-      backgroundColor: theme.primary,
-      paddingHorizontal: 32,
-      paddingVertical: 14,
-      borderRadius: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    emptyButtonText: {
-      color: theme.onPrimary,
-      fontSize: 16,
-      fontWeight: '600',
-      marginLeft: 8,
-    },
-    // Search bar
-    searchContainer: {
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      backgroundColor: theme.background,
-    },
-    searchInputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      height: 44,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    searchIcon: {
-      marginRight: 10,
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: 15,
-      color: theme.text,
-      paddingVertical: 0,
-    },
-    searchClear: {
-      padding: 4,
-      marginLeft: 4,
-    },
-    listContent: {
-      paddingTop: 8,
-      paddingBottom: insets.bottom + 160,
-    },
-    // Floating Action Button
-    fab: {
-      position: 'absolute',
-      right: 20,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 8,
-        },
-      }),
-    },
-    fabPrimary: {
-      backgroundColor: theme.primary,
-      bottom: insets.bottom + 20,
-    },
-    fabSecondary: {
-      backgroundColor: theme.surface,
-      borderWidth: 2,
-      borderColor: theme.primary,
-      bottom: insets.bottom + 90,
-    },
-  });
-  
-  // Loading state
+
+  // --- Loading ---
   if (isLoading && !threads) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader
-          title={t('parent.messages', { defaultValue: 'Messages' })}
-          menuItems={headerMenuItems}
-        />
+        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
         <View style={styles.loadingContainer}>
           {[1, 2, 3, 4].map(i => (
-            <View key={i} style={styles.skeletonItem}>
-              <SkeletonLoader width="100%" height={90} borderRadius={16} />
-            </View>
+            <View key={i} style={styles.skeletonItem}><SkeletonLoader width="100%" height={90} borderRadius={16} /></View>
           ))}
         </View>
-        {/* FAB visible even during loading */}
-        <TouchableOpacity
-          style={[styles.fab, styles.fabPrimary]}
-          onPress={handleStartNewMessage}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={handleStartNewMessage} activeOpacity={0.8}>
           <Ionicons name="add" size={28} color={theme.onPrimary} />
         </TouchableOpacity>
       </View>
     );
   }
-  
-  // Error state
+
+  // --- Error ---
   if (error && !threads) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
-    
     return (
       <View style={styles.container}>
-        <MessagesListHeader
-          title={t('parent.messages', { defaultValue: 'Messages' })}
-          menuItems={headerMenuItems}
-        />
+        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
         <View style={styles.errorContainer}>
-          <View style={styles.errorIcon}>
-            <Ionicons name="cloud-offline-outline" size={40} color={theme.error} />
-          </View>
-          <Text style={styles.errorTitle}>
-            {t('parent.messagesError', { defaultValue: 'Failed to Load Messages' })}
-          </Text>
-          <Text style={styles.errorText}>
-            {t('parent.messagesErrorDesc', { defaultValue: 'Unable to load your messages. Please check your connection and try again.' })}
-          </Text>
-          {isDev && errorMessage && (
-            <Text style={[styles.errorText, { fontSize: 12, color: theme.textSecondary, marginTop: 8 }]}>
-              Debug: {errorMessage}
-            </Text>
+          <View style={styles.errorIcon}><Ionicons name="cloud-offline-outline" size={40} color={theme.error} /></View>
+          <Text style={styles.errorTitle}>{t('parent.messagesError', { defaultValue: 'Failed to Load Messages' })}</Text>
+          <Text style={styles.errorText}>{t('parent.messagesErrorDesc', { defaultValue: 'Unable to load your messages. Please check your connection and try again.' })}</Text>
+          {__DEV__ && errorMessage && (
+            <Text style={[styles.errorText, { fontSize: 12, color: theme.textSecondary, marginTop: 8 }]}>Debug: {errorMessage}</Text>
           )}
           <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>
-              {t('common.retry', { defaultValue: 'Retry' })}
-            </Text>
+            <Text style={styles.retryButtonText}>{t('common.retry', { defaultValue: 'Retry' })}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
-  
-  // Empty state
+
+  // --- Empty ---
   if (!filteredThreads || filteredThreads.length === 0) {
     return (
       <View style={styles.container}>
-        <MessagesListHeader
-          title={t('parent.messages', { defaultValue: 'Messages' })}
-          menuItems={headerMenuItems}
-        />
-        {/* Still show Dash AI even when no messages */}
+        <MessagesListHeader title={t('parent.messages', { defaultValue: 'Messages' })} menuItems={headerMenuItems} />
         {!isDashOrbUnlocked && (
           <View style={{ paddingTop: 8 }}>
-            <DashAIItem
-              onPress={handleOpenDashAI}
-              title={dashCopy.navLabel}
+            <DashAIItem onPress={handleOpenDashAI} title={dashCopy.navLabel}
               subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
-              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
-            />
+              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })} />
           </View>
         )}
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="chatbubbles-outline" size={48} color={theme.primary} />
-          </View>
-          <Text style={styles.emptyTitle}>
-            {t('parent.noMessagesTitle', { defaultValue: 'No Messages Yet' })}
-          </Text>
-          <Text style={styles.emptySubtitle}>
-            {t('parent.noMessagesDesc', { defaultValue: 'Start a conversation with your child\'s teacher to stay connected and informed.' })}
-          </Text>
+          <View style={styles.emptyIcon}><Ionicons name="chatbubbles-outline" size={48} color={theme.primary} /></View>
+          <Text style={styles.emptyTitle}>{t('parent.noMessagesTitle', { defaultValue: 'No Messages Yet' })}</Text>
+          <Text style={styles.emptySubtitle}>{t('parent.noMessagesDesc', { defaultValue: "Start a conversation with your child's teacher to stay connected and informed." })}</Text>
           <TouchableOpacity style={styles.emptyButton} onPress={handleStartNewMessage}>
             <Ionicons name="chatbubble-outline" size={20} color={theme.onPrimary} />
-            <Text style={styles.emptyButtonText}>
-              {t('parent.startNewMessage', { defaultValue: 'Start a Conversation' })}
-            </Text>
+            <Text style={styles.emptyButtonText}>{t('parent.startNewMessage', { defaultValue: 'Start a Conversation' })}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
-  
-  // Thread list
+
+  // --- Thread list ---
   return (
     <View style={styles.container}>
       <MessagesListHeader
@@ -770,8 +153,6 @@ export default function ParentMessagesScreen() {
         subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
         menuItems={headerMenuItems}
       />
-      
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
           <Ionicons name="search" size={18} color={theme.textSecondary} style={styles.searchIcon} />
@@ -779,9 +160,7 @@ export default function ParentMessagesScreen() {
             style={styles.searchInput}
             placeholder={t('parent.searchMessages', { defaultValue: 'Search conversations...' })}
             placeholderTextColor={theme.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
+            value={searchQuery} onChangeText={setSearchQuery} returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity style={styles.searchClear} onPress={() => setSearchQuery('')}>
@@ -790,52 +169,27 @@ export default function ParentMessagesScreen() {
           )}
         </View>
       </View>
-      
       <FlashList
         data={filteredThreads}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ThreadItem
-            thread={item}
-            onPress={() => handleThreadPress(item)}
-            typingText={typingMap[item.id]}
-          />
+          <ParentThreadItem thread={item} onPress={() => handleThreadPress(item)} typingText={typingMap[item.id]} />
         )}
         ListHeaderComponent={
           !isDashOrbUnlocked ? (
-            <DashAIItem
-              onPress={handleOpenDashAI}
-              title={dashCopy.navLabel}
+            <DashAIItem onPress={handleOpenDashAI} title={dashCopy.navLabel}
               subtitle={t('parent.aiAssistantSubtitle', { defaultValue: dashCopy.messageSubtitle })}
-              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })}
-            />
+              description={t('parent.aiAssistantDesc', { defaultValue: dashCopy.messageDescription })} />
           ) : null
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={refetch}
-            tintColor={theme.primary}
-            colors={[theme.primary]}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.primary} colors={[theme.primary]} />}
       />
-      
-      {/* Floating Action Buttons */}
-      <TouchableOpacity 
-        style={[styles.fab, styles.fabSecondary]}
-        onPress={() => router.push('/screens/create-group')}
-        activeOpacity={0.8}
-      >
+      <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={() => router.push('/screens/create-group')} activeOpacity={0.8}>
         <Ionicons name="people" size={24} color={theme.primary} />
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={[styles.fab, styles.fabPrimary]}
-        onPress={handleStartNewMessage}
-        activeOpacity={0.8}
-      >
+      <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={handleStartNewMessage} activeOpacity={0.8}>
         <Ionicons name="add" size={28} color={theme.onPrimary} />
       </TouchableOpacity>
     </View>

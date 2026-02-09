@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { TeacherReputationService } from '@/lib/services/TeacherReputationService';
 import { TeacherMarketProfileUpdateSchema } from '@/types/teacher-reputation';
 import type { TeacherMarketProfileUpdate } from '@/types/teacher-reputation';
+import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type ExpoLocationModule = typeof import('expo-location');
@@ -24,6 +25,7 @@ export default function TeacherHiringProfileScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { showAlert, alertProps } = useAlertModal();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,17 +65,18 @@ export default function TeacherHiringProfileScreen() {
   const handleUseGps = useCallback(async () => {
     const Location = loadExpoLocation();
     if (!Location) {
-      Alert.alert(
-        'GPS unavailable',
-        'Location services are not available in this build yet. Please update the app or enter your location manually.'
-      );
+      showAlert({
+        title: 'GPS unavailable',
+        message: 'Location services are not available in this build yet. Please update the app or enter your location manually.',
+        type: 'warning',
+      });
       return;
     }
 
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Allow location access to use GPS.');
+        showAlert({ title: 'Permission needed', message: 'Allow location access to use GPS.', type: 'warning' });
         return;
       }
 
@@ -92,9 +95,9 @@ export default function TeacherHiringProfileScreen() {
         setProvince(best.region || province);
       }
     } catch (_e) {
-      Alert.alert('GPS error', 'Could not access your location. Please enter it manually.');
+      showAlert({ title: 'GPS error', message: 'Could not access your location. Please enter it manually.', type: 'error' });
     }
-  }, [city, province]);
+  }, [city, province, showAlert]);
 
   const handleSave = useCallback(async () => {
     if (!user?.id) return;
@@ -121,14 +124,14 @@ export default function TeacherHiringProfileScreen() {
       const validated = TeacherMarketProfileUpdateSchema.safeParse(payload);
       if (!validated.success) {
         const message = validated.error.issues[0]?.message || 'Check your location details and try again.';
-        Alert.alert('Invalid details', message);
+        showAlert({ title: 'Invalid details', message, type: 'warning' });
         return;
       }
       await TeacherReputationService.upsertMarketProfile(user.id, validated.data);
-      Alert.alert('Saved', 'Your hiring profile has been updated.');
+      showAlert({ title: 'Saved', message: 'Your hiring profile has been updated.', type: 'success' });
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to save profile.';
-      Alert.alert('Error', message);
+      showAlert({ title: 'Error', message, type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -230,6 +233,7 @@ export default function TeacherHiringProfileScreen() {
           {saving ? <EduDashSpinner color={theme.onPrimary} /> : <Text style={styles.saveButtonText}>Save Profile</Text>}
         </TouchableOpacity>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

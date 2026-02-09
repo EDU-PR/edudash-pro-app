@@ -6,8 +6,24 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { FINANCE_MONTH_CUTOFF_DAY } from '@/lib/config/finance';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
-import { inferPaymentCategory, isTuitionFee, isUniformFee } from '@/lib/utils/feeUtils';
+import {
+  inferFeeCategoryCode,
+  inferPaymentCategory,
+  isTuitionFee,
+  isUniformFee,
+} from '@/lib/utils/feeUtils';
+import { normalizePaymentMethodCode } from '@/lib/utils/paymentMethod';
+import { isLikelyUtcMonthBoundaryShift, parseDateValue } from '@/lib/utils/dateUtils';
+import { PayrollService } from '@/services/PayrollService';
+import type {
+  ApprovePopPaymentPayload,
+  FinanceControlCenterBundle,
+  FinanceMonthSnapshot,
+  FinanceReceivableStudentRow,
+  FinanceReceivablesSummary,
+} from '@/types/finance';
 
 type FinanceTenantColumn = 'preschool_id' | 'organization_id' | 'school_id';
 
@@ -116,7 +132,214 @@ export interface FinanceOverviewData {
   isSample?: boolean;
 }
 
+export interface FinanceMonthPaymentBreakdown {
+  month: string;
+  total_collected: number;
+  categories: Array<{
+    category_code: string;
+    amount: number;
+    count: number;
+  }>;
+  methods: Array<{
+    payment_method: string;
+    amount: number;
+    count: number;
+  }>;
+  purposes: Array<{
+    purpose: string;
+    amount: number;
+    count: number;
+  }>;
+}
+
 export class FinancialDataService {
+  private static CATEGORY_LABELS: Record<string, string> = {
+    tuition: 'Tuition',
+    registration: 'Registration',
+    uniform: 'Uniform',
+    aftercare: 'Aftercare',
+    transport: 'Transport',
+    meal: 'Meals',
+    ad_hoc: 'Other',
+  };
+
+  private static monthStartIsoFromDate(
+    date: Date,
+    options?: { shiftToNextMonth?: boolean },
+  ): string {
+    const normalized = options?.shiftToNextMonth
+      ? new Date(date.getFullYear(), date.getMonth() + 1, 1)
+      : new Date(date.getFullYear(), date.getMonth(), 1);
+    return `${normalized.getFullYear()}-${String(normalized.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  private static monthStartIsoWithCutoff(
+    value?: string | null,
+    options?: { recoverUtcMonthBoundary?: boolean; applyCutoff?: boolean },
+  ): string | null {
+    if (!value) return null;
+    const parsed = parseDateValue(value);
+    if (!parsed) return null;
+    const shouldRecover = Boolean(options?.recoverUtcMonthBoundary) &&
+      isLikelyUtcMonthBoundaryShift(value, parsed);
+    if (shouldRecover) {
+      return this.monthStartIsoFromDate(parsed, { shiftToNextMonth: true });
+    }
+    const shouldShiftByCutoff = Boolean(options?.applyCutoff) &&
+      parsed.getDate() >= FINANCE_MONTH_CUTOFF_DAY;
+    return this.monthStartIsoFromDate(parsed, { shiftToNextMonth: shouldShiftByCutoff });
+  }
+
+  private static monthStartIsoFromValue(
+    value?: string | null,
+    options?: { recoverUtcMonthBoundary?: boolean },
+  ): string | null {
+    return this.monthStartIsoWithCutoff(value, {
+      recoverUtcMonthBoundary: options?.recoverUtcMonthBoundary,
+      applyCutoff: false,
+    });
+  }
+
+  private static normalizeMonthIso(value?: string): string {
+    const fallbackNow = new Date();
+    return this.monthStartIsoFromValue(value || fallbackNow.toISOString()) ||
+      `${fallbackNow.getFullYear()}-${String(fallbackNow.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  private static nextMonthIso(monthIso: string): string {
+    const base = new Date(monthIso);
+    const date = Number.isNaN(base.getTime()) ? new Date() : base;
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+  }
+
+  private static normalizeReference(value?: string | null): string {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+  }
+
+  private static normalizePurposeLabel(raw: unknown): string {
+    const value = String(raw || '').trim().toLowerCase();
+    if (!value) return 'General';
+    if (value.includes('tuition') || value === 'fees' || value.includes('school fee')) return 'Tuition';
+    if (value.includes('registration') || value.includes('admission') || value.includes('enrol')) return 'Registration';
+    if (value.includes('uniform')) return 'Uniform';
+    if (value.includes('aftercare')) return 'Aftercare';
+    if (value.includes('transport') || value.includes('bus') || value.includes('shuttle')) return 'Transport';
+    if (value.includes('meal') || value.includes('food') || value.includes('lunch') || value.includes('snack')) return 'Meals';
+    if (value.includes('book') || value.includes('stationery') || value.includes('material')) return 'Learning Materials';
+    if (value.includes('trip') || value.includes('excursion') || value.includes('event')) return 'Excursions & Events';
+    return value
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  private static resolvePaymentPurposeLabel(payment: any): string {
+    const metadata = payment?.metadata && typeof payment.metadata === 'object'
+      ? payment.metadata
+      : {};
+    const categoryCode = inferFeeCategoryCode(
+      payment?.category_code ||
+      metadata?.category_code ||
+      metadata?.fee_category ||
+      metadata?.category ||
+      payment?.description ||
+      metadata?.payment_context ||
+      'tuition',
+    );
+    const categoryLabel = this.CATEGORY_LABELS[categoryCode];
+    if (categoryLabel) return categoryLabel;
+    const firstCandidate = [
+      metadata?.payment_context,
+      metadata?.payment_purpose,
+      metadata?.purpose,
+      metadata?.fee_type,
+      payment?.description,
+    ].find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
+    return this.normalizePurposeLabel(firstCandidate || categoryCode);
+  }
+
+  private static resolvePopPurposeLabel(upload: any): string {
+    const categoryCode = inferFeeCategoryCode(
+      upload?.category_code ||
+      upload?.description ||
+      upload?.title ||
+      'tuition',
+    );
+    const categoryLabel = this.CATEGORY_LABELS[categoryCode];
+    if (categoryLabel) return categoryLabel;
+    return this.normalizePurposeLabel(upload?.description || upload?.title || 'General');
+  }
+
+  private static resolvePaymentAccountingMonth(payment: any): string | null {
+    const metadata = payment?.metadata && typeof payment.metadata === 'object'
+      ? payment.metadata
+      : {};
+    const explicitValues: Array<{ value: string | null | undefined; recoverUtcMonthBoundary?: boolean }> = [
+      { value: metadata?.payment_for_month, recoverUtcMonthBoundary: true },
+      { value: metadata?.billing_month, recoverUtcMonthBoundary: true },
+      { value: metadata?.payment_month, recoverUtcMonthBoundary: true },
+      { value: payment?.billing_month, recoverUtcMonthBoundary: true },
+    ];
+
+    for (const candidate of explicitValues) {
+      const monthIso = this.monthStartIsoFromValue(
+        typeof candidate.value === 'string' ? candidate.value : null,
+        { recoverUtcMonthBoundary: candidate.recoverUtcMonthBoundary },
+      );
+      if (monthIso) return monthIso;
+    }
+
+    const fallbackDates = [
+      payment?.transaction_date,
+      metadata?.payment_date,
+      payment?.created_at,
+    ];
+    for (const dateValue of fallbackDates) {
+      const monthIso = this.monthStartIsoWithCutoff(
+        typeof dateValue === 'string' ? dateValue : null,
+        { applyCutoff: true },
+      );
+      if (monthIso) return monthIso;
+    }
+
+    return null;
+  }
+
+  private static resolvePopAccountingMonth(upload: any): string | null {
+    const explicit = this.monthStartIsoFromValue(
+      upload?.payment_for_month || upload?.billing_month,
+      { recoverUtcMonthBoundary: true },
+    );
+    if (explicit) return explicit;
+
+    const fallback = [
+      upload?.payment_date,
+      upload?.created_at,
+    ];
+    for (const value of fallback) {
+      const monthIso = this.monthStartIsoWithCutoff(
+        typeof value === 'string' ? value : null,
+        { applyCutoff: true },
+      );
+      if (monthIso) return monthIso;
+    }
+
+    return null;
+  }
+
+  private static resolvePaymentAmount(payment: any): number {
+    const amount = Number(payment?.amount);
+    if (Number.isFinite(amount) && amount > 0) return amount;
+    const cents = Number(payment?.amount_cents);
+    if (Number.isFinite(cents) && cents > 0) return cents / 100;
+    return 0;
+  }
+
   private static async fetchStudentFees(
     preschoolId: string,
     options: { from: string; to: string; useDueDate: boolean }
@@ -148,6 +371,8 @@ export class FinancialDataService {
   }
   /**
    * Get financial metrics for a preschool
+   * @deprecated Principal finance now uses getFinanceControlCenterBundle().
+   * Kept for legacy screens/routes that soft-redirect during migration.
    */
   static async getFinancialMetrics(preschoolId: string): Promise<FinancialMetrics> {
     try {
@@ -514,6 +739,8 @@ export class FinancialDataService {
 
   /**
    * Get financial overview data for dashboard
+   * @deprecated Principal finance now uses getFinanceControlCenterBundle().
+   * Kept for legacy screens/routes that soft-redirect during migration.
    */
   static async getOverview(preschoolId?: string): Promise<FinanceOverviewData> {
     try {
@@ -617,10 +844,22 @@ export class FinancialDataService {
             .gte('created_at', rangeStartIso)
             .lt('created_at', rangeEndIso);
 
-      const [feesDueResult, feesFallbackResult, financialExpenseResult] = await Promise.allSettled([
-        feesDuePromise,
-        feesFallbackPromise,
-        financialExpensePromise,
+      type SettledResult<T> =
+        | { status: 'fulfilled'; value: T }
+        | { status: 'rejected'; reason: unknown };
+      const settle = async <T>(promise: PromiseLike<T>): Promise<SettledResult<T>> => {
+        try {
+          const value = await promise;
+          return { status: 'fulfilled', value };
+        } catch (reason) {
+          return { status: 'rejected', reason };
+        }
+      };
+
+      const [feesDueResult, feesFallbackResult, financialExpenseResult] = await Promise.all([
+        settle(feesDuePromise),
+        settle(feesFallbackPromise),
+        settle(financialExpensePromise as PromiseLike<any>),
       ]);
 
       type FeeRow = {
@@ -649,16 +888,17 @@ export class FinancialDataService {
         return index === undefined ? null : index;
       };
 
-      const feesDueData: FeeRow[] = feesDueResult.status === 'fulfilled'
-        ? ('data' in feesDueResult.value ? (feesDueResult.value.data as FeeRow[] | null) || [] : (feesDueResult.value as FeeRow[] | null) || [])
-        : [];
-      const feesFallbackData: FeeRow[] = feesFallbackResult.status === 'fulfilled'
-        ? ('data' in feesFallbackResult.value ? (feesFallbackResult.value.data as FeeRow[] | null) || [] : (feesFallbackResult.value as FeeRow[] | null) || [])
-        : [];
+      const feesDueValue: any = feesDueResult.status === 'fulfilled' ? feesDueResult.value : null;
+      const feesFallbackValue: any = feesFallbackResult.status === 'fulfilled' ? feesFallbackResult.value : null;
+      const financialExpenseValue: any = financialExpenseResult.status === 'fulfilled'
+        ? financialExpenseResult.value
+        : null;
+
+      const feesDueData: FeeRow[] = (feesDueValue?.data as FeeRow[] | null) || [];
+      const feesFallbackData: FeeRow[] = (feesFallbackValue?.data as FeeRow[] | null) || [];
       const pettyCashData: PettyCashRow[] = (pettyCashResult.data as PettyCashRow[] | null) || [];
-      const financialExpenseData: FinancialExpenseRow[] = financialExpenseResult.status === 'fulfilled'
-        ? ('data' in financialExpenseResult.value ? (financialExpenseResult.value.data as FinancialExpenseRow[] | null) || [] : (financialExpenseResult.value as FinancialExpenseRow[] | null) || [])
-        : [];
+      const financialExpenseData: FinancialExpenseRow[] =
+        (financialExpenseValue?.data as FinancialExpenseRow[] | null) || [];
 
       const feesData = [...feesDueData, ...feesFallbackData];
 
@@ -1224,13 +1464,15 @@ export class FinancialDataService {
   }
 
   private static getOutstandingAmountForFee(fee: any): number {
-    const outstanding = Number(fee?.amount_outstanding ?? 0);
-    if (outstanding > 0) return outstanding;
-    const unpaidStatuses = new Set(['pending', 'overdue', 'partially_paid']);
-    if (unpaidStatuses.has(String(fee?.status))) {
-      return Number(fee?.final_amount ?? fee?.amount ?? 0);
-    }
-    return 0;
+    const explicitOutstanding = fee?.amount_outstanding;
+    const finalAmount = Number(fee?.final_amount ?? fee?.amount ?? 0);
+    const paidAmount = Number(fee?.amount_paid ?? 0);
+    const fallbackOutstanding = finalAmount - (Number.isFinite(paidAmount) ? paidAmount : 0);
+    const resolvedOutstanding = explicitOutstanding === null || explicitOutstanding === undefined
+      ? fallbackOutstanding
+      : Number(explicitOutstanding);
+    if (!Number.isFinite(resolvedOutstanding)) return 0;
+    return Math.max(resolvedOutstanding, 0);
   }
 
   private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
@@ -1284,6 +1526,511 @@ export class FinancialDataService {
       default:
         return status.charAt(0).toUpperCase() + status.slice(1);
     }
+  }
+
+  /**
+   * Approve POP using explicit billing month/category and allocations.
+   * Uses DB RPC to ensure payment + allocation + fee updates happen atomically.
+   */
+  static async approvePOPWithAllocations(payload: ApprovePopPaymentPayload): Promise<{
+    paymentId?: string;
+    allocatedAmount: number;
+    overpaymentAmount: number;
+  }> {
+    const supabase = assertSupabase();
+    const { data, error } = await supabase.rpc('approve_pop_payment', {
+      p_upload_id: payload.uploadId,
+      p_billing_month: payload.billingMonth,
+      p_category_code: payload.categoryCode,
+      p_allocations: payload.allocations || [],
+      p_notes: payload.notes || null,
+    });
+
+    if (error) {
+      console.error('[FinancialDataService] approve_pop_payment RPC failed:', error);
+      throw new Error(error.message || 'Failed to approve payment proof');
+    }
+
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to approve payment proof');
+    }
+
+    return {
+      paymentId: data.payment_id,
+      allocatedAmount: Number(data.allocated_amount || 0),
+      overpaymentAmount: Number(data.overpayment_amount || 0),
+    };
+  }
+
+  /**
+   * Finance control-center snapshot for a selected month.
+   */
+  static async getMonthSnapshot(orgId: string, monthIso?: string): Promise<FinanceMonthSnapshot> {
+    const supabase = assertSupabase();
+    const month = this.normalizeMonthIso(monthIso);
+
+    const { data, error } = await supabase.rpc('get_finance_month_snapshot', {
+      p_org_id: orgId,
+      p_month: month,
+    });
+
+    if (error) {
+      console.error('[FinancialDataService] get_finance_month_snapshot RPC failed:', error);
+      throw new Error(error.message || 'Failed to load finance month snapshot');
+    }
+
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to load finance month snapshot');
+    }
+
+    return {
+      success: true,
+      organization_id: data.organization_id,
+      month: data.month,
+      month_locked: Boolean(data.month_locked),
+      due_this_month: Number(data.due_this_month || 0),
+      collected_this_month: Number(data.collected_this_month || 0),
+      still_outstanding: Number(data.still_outstanding || 0),
+      pending_amount: Number(data.pending_amount || 0),
+      overdue_amount: Number(data.overdue_amount || 0),
+      pending_count: Number(data.pending_count || 0),
+      overdue_count: Number(data.overdue_count || 0),
+      pending_students: Number(data.pending_students || 0),
+      overdue_students: Number(data.overdue_students || 0),
+      prepaid_for_future_months: Number(data.prepaid_for_future_months || 0),
+      payroll_due: Number(data.payroll_due || 0),
+      payroll_paid: Number(data.payroll_paid || 0),
+      pending_pop_reviews: Number(data.pending_pop_reviews || 0),
+      categories: Array.isArray(data.categories) ? data.categories : [],
+      as_of_date: String(data.as_of_date || data.generated_at || new Date().toISOString()),
+      generated_at: data.generated_at || new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Detailed payment breakdown for a selected month.
+   * Used by Finance Control Center to show "what for" and "how paid".
+   */
+  static async getMonthPaymentBreakdown(
+    orgId: string,
+    monthIso?: string,
+  ): Promise<FinanceMonthPaymentBreakdown> {
+    const supabase = assertSupabase();
+    const month = this.normalizeMonthIso(monthIso);
+    const monthDate = new Date(month);
+    const extendedStartDate = new Date(monthDate.getFullYear(), monthDate.getMonth() - 2, 1);
+    const extendedEndDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 3, 1);
+    const extendedStart = `${extendedStartDate.getFullYear()}-${String(extendedStartDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const extendedEnd = `${extendedEndDate.getFullYear()}-${String(extendedEndDate.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const [paymentsResult, popResult] = await Promise.all([
+      supabase
+        .from('payments')
+        .select(
+          'id, student_id, amount, amount_cents, status, billing_month, transaction_date, category_code, payment_method, payment_reference, metadata, description, created_at',
+        )
+        .eq('preschool_id', orgId)
+        .in('status', ['completed', 'approved', 'paid', 'successful'])
+        .gte('transaction_date', extendedStart)
+        .lt('transaction_date', extendedEnd)
+        .order('transaction_date', { ascending: false })
+        .limit(2000),
+      supabase
+        .from('pop_uploads')
+        .select(
+          'id, student_id, payment_amount, payment_for_month, payment_date, payment_method, payment_reference, category_code, description, title, created_at, status',
+        )
+        .eq('preschool_id', orgId)
+        .eq('upload_type', 'proof_of_payment')
+        .in('status', ['approved', 'completed', 'verified'])
+        .gte('created_at', extendedStart)
+        .lt('created_at', extendedEnd)
+        .order('created_at', { ascending: false })
+        .limit(2000),
+    ]);
+
+    const data = paymentsResult.data;
+    const error = paymentsResult.error;
+
+    if (error) {
+      console.error('[FinancialDataService] payment breakdown query failed:', error);
+      throw new Error(error.message || 'Failed to load month payment breakdown');
+    }
+
+    const categoryMap = new Map<string, { amount: number; count: number }>();
+    const methodMap = new Map<string, { amount: number; count: number }>();
+    const purposeMap = new Map<string, { amount: number; count: number }>();
+    const seenSignatures = new Set<string>();
+    let totalCollected = 0;
+
+    for (const payment of data || []) {
+      const accountingMonth = this.resolvePaymentAccountingMonth(payment);
+      if (accountingMonth !== month) continue;
+
+      const amount = this.resolvePaymentAmount(payment);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const signatureMonth = accountingMonth || month;
+
+      const metadata = payment?.metadata && typeof payment.metadata === 'object'
+        ? payment.metadata
+        : {};
+      const categoryCode = inferFeeCategoryCode(
+        payment?.category_code ||
+        metadata?.category_code ||
+        metadata?.fee_category ||
+        metadata?.category ||
+        payment?.description ||
+        'tuition',
+      );
+      const methodCode = normalizePaymentMethodCode(
+        payment?.payment_method ||
+        metadata?.payment_method ||
+        metadata?.method ||
+        'other',
+      );
+      const purposeLabel = this.resolvePaymentPurposeLabel(payment);
+      const paymentStudentSig = String(payment?.student_id || '').trim();
+      const paymentRefSig = this.normalizeReference(
+        payment?.payment_reference ||
+        metadata?.payment_reference ||
+        metadata?.reference ||
+        '',
+      );
+      if (paymentStudentSig || paymentRefSig) {
+        const signature = [
+          paymentStudentSig,
+          paymentRefSig,
+          String(Math.round(amount * 100)),
+          signatureMonth,
+        ].join('|');
+        seenSignatures.add(signature);
+      }
+
+      const existingCategory = categoryMap.get(categoryCode) || { amount: 0, count: 0 };
+      existingCategory.amount += amount;
+      existingCategory.count += 1;
+      categoryMap.set(categoryCode, existingCategory);
+
+      const existingMethod = methodMap.get(methodCode) || { amount: 0, count: 0 };
+      existingMethod.amount += amount;
+      existingMethod.count += 1;
+      methodMap.set(methodCode, existingMethod);
+
+      const existingPurpose = purposeMap.get(purposeLabel) || { amount: 0, count: 0 };
+      existingPurpose.amount += amount;
+      existingPurpose.count += 1;
+      purposeMap.set(purposeLabel, existingPurpose);
+
+      totalCollected += amount;
+    }
+
+    if (popResult.error) {
+      console.warn('[FinancialDataService] pop fallback query failed:', popResult.error);
+    } else {
+      for (const upload of popResult.data || []) {
+        const accountingMonth = this.resolvePopAccountingMonth(upload);
+        if (accountingMonth !== month) continue;
+
+        const amount = Number(upload?.payment_amount || 0);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        const signatureMonth = accountingMonth || month;
+
+        const popStudentSig = String(upload?.student_id || '').trim();
+        const popRefSig = this.normalizeReference(upload?.payment_reference || '');
+        if (popStudentSig || popRefSig) {
+          const signature = [
+            popStudentSig,
+            popRefSig,
+            String(Math.round(amount * 100)),
+            signatureMonth,
+          ].join('|');
+          if (seenSignatures.has(signature)) continue;
+        }
+
+        const categoryCode = inferFeeCategoryCode(
+          upload?.category_code || upload?.description || upload?.title || 'tuition',
+        );
+        const methodCode = normalizePaymentMethodCode(upload?.payment_method || 'other');
+        const purposeLabel = this.resolvePopPurposeLabel(upload);
+
+        const existingCategory = categoryMap.get(categoryCode) || { amount: 0, count: 0 };
+        existingCategory.amount += amount;
+        existingCategory.count += 1;
+        categoryMap.set(categoryCode, existingCategory);
+
+        const existingMethod = methodMap.get(methodCode) || { amount: 0, count: 0 };
+        existingMethod.amount += amount;
+        existingMethod.count += 1;
+        methodMap.set(methodCode, existingMethod);
+
+        const existingPurpose = purposeMap.get(purposeLabel) || { amount: 0, count: 0 };
+        existingPurpose.amount += amount;
+        existingPurpose.count += 1;
+        purposeMap.set(purposeLabel, existingPurpose);
+
+        totalCollected += amount;
+      }
+    }
+
+    const categories = Array.from(categoryMap.entries())
+      .map(([category_code, values]) => ({
+        category_code,
+        amount: Number(values.amount.toFixed(2)),
+        count: values.count,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const methods = Array.from(methodMap.entries())
+      .map(([payment_method, values]) => ({
+        payment_method,
+        amount: Number(values.amount.toFixed(2)),
+        count: values.count,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const purposes = Array.from(purposeMap.entries())
+      .map(([purpose, values]) => ({
+        purpose,
+        amount: Number(values.amount.toFixed(2)),
+        count: values.count,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return {
+      month,
+      total_collected: Number(totalCollected.toFixed(2)),
+      categories,
+      methods,
+      purposes,
+    };
+  }
+
+  static async getReceivablesSnapshot(
+    orgId: string,
+    monthIso?: string,
+  ): Promise<{ summary: FinanceReceivablesSummary; students: FinanceReceivableStudentRow[] }> {
+    const month = this.normalizeMonthIso(monthIso);
+    const nextMonth = this.nextMonthIso(month);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const unpaidStatuses = ['pending', 'overdue', 'partially_paid', 'pending_verification'];
+
+    let feesData: any[] = [];
+
+    const monthScopedQuery = await assertSupabase()
+      .from('student_fees')
+      .select(`
+        id,
+        student_id,
+        status,
+        due_date,
+        billing_month,
+        amount,
+        final_amount,
+        amount_paid,
+        amount_outstanding,
+        students!inner(
+          id,
+          first_name,
+          last_name,
+          preschool_id,
+          organization_id
+        )
+      `)
+      .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
+      .eq('billing_month', month)
+      .in('status', unpaidStatuses);
+
+    const missingBillingMonth = Boolean(monthScopedQuery.error) && (
+      monthScopedQuery.error?.code === '42703' ||
+      String(monthScopedQuery.error?.message || '').toLowerCase().includes('billing_month')
+    );
+
+    if (missingBillingMonth) {
+      const fallbackQuery = await assertSupabase()
+        .from('student_fees')
+        .select(`
+          id,
+          student_id,
+          status,
+          due_date,
+          amount,
+          final_amount,
+          amount_paid,
+          amount_outstanding,
+          students!inner(
+            id,
+            first_name,
+            last_name,
+            preschool_id,
+            organization_id
+          )
+        `)
+        .or(`preschool_id.eq.${orgId},organization_id.eq.${orgId}`, { foreignTable: 'students' })
+        .gte('due_date', month)
+        .lt('due_date', nextMonth)
+        .in('status', unpaidStatuses);
+      if (fallbackQuery.error) {
+        throw new Error(fallbackQuery.error.message || 'Failed to load receivables');
+      }
+      feesData = fallbackQuery.data || [];
+    } else if (monthScopedQuery.error) {
+      throw new Error(monthScopedQuery.error.message || 'Failed to load receivables');
+    } else {
+      feesData = monthScopedQuery.data || [];
+    }
+
+    const studentMap = new Map<string, FinanceReceivableStudentRow>();
+    const overdueStudents = new Set<string>();
+    const pendingStudents = new Set<string>();
+    let overdueAmount = 0;
+    let pendingAmount = 0;
+    let overdueCount = 0;
+    let pendingCount = 0;
+
+    for (const fee of feesData) {
+      const status = String(fee?.status || '').toLowerCase();
+      if (!unpaidStatuses.includes(status)) continue;
+
+      const studentData = Array.isArray(fee?.students) ? fee.students[0] : fee?.students;
+      const studentId = String(fee?.student_id || studentData?.id || '').trim();
+      if (!studentId) continue;
+
+      const amount = this.getOutstandingAmountForFee(fee);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const dueDate = fee?.due_date ? new Date(fee.due_date) : null;
+      const isOverdue = status === 'overdue' ||
+        (dueDate instanceof Date &&
+          !Number.isNaN(dueDate.getTime()) &&
+          dueDate < todayStart);
+
+      if (isOverdue) {
+        overdueAmount += amount;
+        overdueCount += 1;
+        overdueStudents.add(studentId);
+      } else {
+        pendingAmount += amount;
+        pendingCount += 1;
+        pendingStudents.add(studentId);
+      }
+
+      const existing = studentMap.get(studentId) || {
+        student_id: studentId,
+        first_name: String(studentData?.first_name || 'Student'),
+        last_name: String(studentData?.last_name || ''),
+        class_name: null,
+        outstanding_amount: 0,
+        pending_count: 0,
+        overdue_count: 0,
+      };
+
+      existing.outstanding_amount += amount;
+      if (isOverdue) existing.overdue_count += 1;
+      else existing.pending_count += 1;
+      studentMap.set(studentId, existing);
+    }
+
+    const students = Array.from(studentMap.values())
+      .sort((a, b) => {
+        if (b.outstanding_amount !== a.outstanding_amount) {
+          return b.outstanding_amount - a.outstanding_amount;
+        }
+        if (b.overdue_count !== a.overdue_count) {
+          return b.overdue_count - a.overdue_count;
+        }
+        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
+      })
+      .slice(0, 60)
+      .map((row) => ({
+        ...row,
+        outstanding_amount: Number(row.outstanding_amount.toFixed(2)),
+      }));
+
+    return {
+      summary: {
+        month,
+        pending_amount: Number(pendingAmount.toFixed(2)),
+        overdue_amount: Number(overdueAmount.toFixed(2)),
+        pending_count: pendingCount,
+        overdue_count: overdueCount,
+        pending_students: pendingStudents.size,
+        overdue_students: overdueStudents.size,
+        outstanding_students: studentMap.size,
+        outstanding_amount: Number((pendingAmount + overdueAmount).toFixed(2)),
+      },
+      students,
+    };
+  }
+
+  static async getFinanceControlCenterBundle(
+    orgId: string,
+    monthIso?: string,
+  ): Promise<FinanceControlCenterBundle> {
+    const month = this.normalizeMonthIso(monthIso);
+    const supabase = assertSupabase();
+
+    const settle = async <T>(promise: Promise<T>) => {
+      try {
+        const value = await promise;
+        return { value, error: null as string | null };
+      } catch (err: any) {
+        return { value: null as T | null, error: err?.message || 'Failed to load section data' };
+      }
+    };
+
+    const queuePromise = (async () => {
+      const { data, error } = await supabase
+        .from('pop_uploads')
+        .select(`
+          id,
+          student_id,
+          preschool_id,
+          payment_amount,
+          payment_date,
+          payment_for_month,
+          category_code,
+          payment_reference,
+          status,
+          description,
+          title,
+          created_at,
+          student:students(first_name,last_name)
+        `)
+        .eq('preschool_id', orgId)
+        .eq('upload_type', 'proof_of_payment')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (error) throw new Error(error.message || 'Failed to load payment queue');
+      return data || [];
+    })();
+
+    const [snapshotRes, receivablesRes, breakdownRes, queueRes, payrollRes] = await Promise.all([
+      settle(this.getMonthSnapshot(orgId, month)),
+      settle(this.getReceivablesSnapshot(orgId, month)),
+      settle(this.getMonthPaymentBreakdown(orgId, month)),
+      settle(queuePromise),
+      settle(PayrollService.getRoster(orgId, month)),
+    ]);
+
+    const errors: FinanceControlCenterBundle['errors'] = {};
+    if (snapshotRes.error) errors.snapshot = snapshotRes.error;
+    if (receivablesRes.error) errors.receivables = receivablesRes.error;
+    if (breakdownRes.error) errors.breakdown = breakdownRes.error;
+    if (queueRes.error) errors.queue = queueRes.error;
+    if (payrollRes.error) errors.payroll = payrollRes.error;
+
+    return {
+      month,
+      snapshot: snapshotRes.value,
+      receivables: receivablesRes.value,
+      payment_breakdown: breakdownRes.value,
+      pending_pops: (queueRes.value || []) as any[],
+      payroll: payrollRes.value,
+      payroll_fallback_used: Boolean(payrollRes.value?.fallback_used),
+      errors: Object.keys(errors).length ? errors : undefined,
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════

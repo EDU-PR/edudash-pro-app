@@ -3,9 +3,18 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native/pure';
 import { Animated } from 'react-native';
 import { VoiceCallInfo } from '../VoiceCallInfo';
+
+// Mock EduDashSpinner (uses useTheme which requires ThemeProvider)
+jest.mock('@/components/ui/EduDashSpinner', () => {
+  const { View } = require('react-native');
+  return {
+    __esModule: true,
+    default: (props: any) => <View testID="spinner" {...props} />,
+  };
+});
 
 describe('VoiceCallInfo', () => {
   const defaultProps = {

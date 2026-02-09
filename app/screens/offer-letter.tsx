@@ -105,7 +105,7 @@ export default function OfferLetterScreen() {
 
     showAlert({
       title: 'Send Offer Letter',
-      message: `Send an offer of R${Number(salary).toLocaleString()} to ${application?.candidate_name}?\n\nThis will update the application status to "Offered" and the candidate will be notified.`,
+      message: `Send an offer of R${Number(salary).toLocaleString()} to ${application?.candidate_name}?\n\nThis will update the application status to "Offer Sent".`,
       type: 'info',
       icon: 'document-text',
       buttons: [
@@ -141,7 +141,7 @@ export default function OfferLetterScreen() {
 
               showAlert({
                 title: 'Offer Sent!',
-                message: `The offer letter has been sent to ${application?.candidate_name}. They will receive a notification to review and accept.`,
+                message: `The offer is saved for ${application?.candidate_name} and notifications are being sent.`,
                 type: 'success',
                 icon: 'checkmark-circle',
                 buttons: [{ text: 'Done', onPress: () => router.back() }],

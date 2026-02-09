@@ -1,0 +1,400 @@
+import { StyleSheet } from 'react-native';
+
+export const createStyles = (theme: any, isDark: boolean, insets: any, width: number) => {
+  const isCompact = width < 380;
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: insets.bottom + 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: theme.textSecondary,
+  },
+  headerButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  summarySection: {
+    marginBottom: 20,
+  },
+  summaryHeader: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    marginBottom: 12,
+    gap: 10,
+  },
+  summaryTitleBlock: {
+    width: '100%',
+  },
+  summaryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    width: '100%',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 4,
+  },
+  panelCard: {
+    marginTop: 12,
+    backgroundColor: theme.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginBottom: 10,
+  },
+  expensesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  expensesButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  manageFeesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  timeFilterRow: {
+    marginBottom: 14,
+  },
+  timeFilterGroup: {
+    flexDirection: 'row',
+    gap: 6,
+    alignSelf: 'flex-start',
+    padding: 4,
+    borderRadius: 18,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  timeChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: 'transparent',
+  },
+  timeChipActive: {
+    backgroundColor: theme.primary,
+  },
+  timeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  timeChipTextActive: {
+    color: '#FFFFFF',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 6,
+  },
+  mainStatsRow: {
+    flexDirection: isCompact ? 'column' : 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  mainStatCard: {
+    flex: 1,
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderLeftWidth: 4,
+  },
+  mainStatValue: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  mainStatLabel: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    marginTop: 4,
+  },
+  subStatsRow: {
+    flexDirection: isCompact ? 'column' : 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  subStatCard: {
+    flex: 1,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+    minHeight: 86,
+    justifyContent: 'center',
+  },
+  subStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginTop: 4,
+  },
+  subStatLabel: {
+    fontSize: 11,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  insightColumns: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  insightColumn: {
+    flex: 1,
+    gap: 6,
+  },
+  insightHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  insightItem: {
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  breakdownSection: {
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  breakdownValues: {
+    alignItems: 'flex-end',
+  },
+  breakdownValue: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  breakdownItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  breakdownItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  breakdownItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+    flex: 1,
+    marginRight: 8,
+  },
+  breakdownItemAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  breakdownItemMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  breakdownItemSub: {
+    fontSize: 11,
+    color: theme.textSecondary,
+  },
+  breakdownItemStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  breakdownItemStat: {
+    fontSize: 11,
+    color: theme.textSecondary,
+  },
+  searchSection: {
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    marginLeft: 8,
+    fontSize: 15,
+    color: theme.text,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  filterChipActive: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: theme.text,
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  studentsSection: {
+    marginBottom: 16,
+  },
+  studentCard: {
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  studentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  studentAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.primary,
+  },
+  studentInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  studentName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  studentMeta: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  feeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  feeBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyState: {
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: theme.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  });
+};

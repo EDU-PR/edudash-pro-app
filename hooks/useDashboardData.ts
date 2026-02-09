@@ -7,13 +7,11 @@
  * Architecture:
  * - types/dashboard.ts: Type definitions and factory functions
  * - lib/dashboard/utils.ts: Shared utility functions
- * - hooks/usePrincipalDashboard.ts: Principal-specific data fetching
  * - hooks/useTeacherDashboard.ts: Teacher-specific data fetching
  * - hooks/useParentDashboard.ts: Parent-specific data fetching
  */
 
 // Re-export all dashboard hooks
-export { usePrincipalDashboard } from './usePrincipalDashboard';
 export { useTeacherDashboard } from './useTeacherDashboard';
 export { useParentDashboard } from './useParentDashboard';
 

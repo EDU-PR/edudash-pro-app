@@ -11,8 +11,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import type { POPUpload, StudentFee } from '@/types/payments';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-
-const isUniformLabel = (value?: string | null) => (value || '').toLowerCase().includes('uniform');
+import { isUniformLabel } from '@/lib/utils/feeUtils';
 
 const isUniformUpload = (upload: POPUpload) =>
   isUniformLabel(upload.description) ||

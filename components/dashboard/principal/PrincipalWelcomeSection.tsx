@@ -60,7 +60,7 @@ export const PrincipalWelcomeSection: React.FC<PrincipalWelcomeSectionProps> = (
   const nextAction = useMemo(() => {
     if (pendingRegistrations > 0) return { label: t('dashboard.review_registrations', { defaultValue: 'Review registrations' }), route: '/screens/principal-registrations' };
     if (pendingPOPUploads > 0) return { label: t('dashboard.verify', { defaultValue: 'Verify POPs' }), route: '/screens/pop-review' };
-    if (pendingPayments > 0) return { label: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid fees' }), route: '/screens/principal-fee-overview' };
+    if (pendingPayments > 0) return { label: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid fees' }), route: '/screens/finance-control-center?tab=receivables' };
     if (unreadMessages > 0) return { label: t('dashboard.messages', { defaultValue: 'Messages' }), route: '/screens/principal-messages' };
     return { label: t('dashboard.open_dashboard', { defaultValue: 'Open dashboard' }), route: '/screens/principal-dashboard' };
   }, [pendingPayments, pendingPOPUploads, pendingRegistrations, t, unreadMessages]);

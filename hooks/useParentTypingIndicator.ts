@@ -1,38 +1,11 @@
-/**
- * useParentTypingIndicator Hook
- * Real-time typing indicator using Supabase broadcast channels (no DB writes)
- * Implements throttling and auto-timeout like WhatsApp
- */
-
+/** useParentTypingIndicator — real-time typing indicator via Supabase broadcast */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { RealtimeChannel } from '@supabase/supabase-js';
-
-interface TypingUser {
-  userId: string;
-  userName: string;
-  timestamp: number;
-}
-
-interface UseTypingIndicatorOptions {
-  throttleMs?: number; // Min time between typing broadcasts (default: 2000ms)
-  timeoutMs?: number;  // Auto-clear typing after this (default: 3000ms)
-}
-
-interface UseTypingIndicatorReturn {
-  /** Users currently typing (excluding self) */
-  typingUsers: TypingUser[];
-  /** Formatted text like "John is typing..." or "John, Jane are typing..." */
-  typingText: string | null;
-  /** Call this when user starts typing (throttled) */
-  startTyping: () => void;
-  /** Call this when user stops typing (e.g., on blur or send) */
-  stopTyping: () => void;
-  /** Whether anyone is typing */
-  isTyping: boolean;
-}
-
+import { logger } from '@/lib/logger';
+import type { TypingUser, UseTypingIndicatorOptions, UseTypingIndicatorReturn } from './useParentTypingIndicator.types';
+export type { TypingUser, UseTypingIndicatorOptions, UseTypingIndicatorReturn } from './useParentTypingIndicator.types';
 export function useParentTypingIndicator(
   threadId: string | null,
   options: UseTypingIndicatorOptions = {}
@@ -46,16 +19,13 @@ export function useParentTypingIndicator(
   const lastBroadcastRef = useRef<number>(0);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanupIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Get user's display name
   const userName = profile 
     ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'User'
     : 'User';
-
   // Broadcast typing status
   const broadcastTyping = useCallback((isTyping: boolean) => {
     if (!threadId || !user?.id || !channelRef.current) return;
-
     channelRef.current.send({
       type: 'broadcast',
       event: 'typing',
@@ -67,7 +37,6 @@ export function useParentTypingIndicator(
       },
     });
   }, [threadId, user?.id, userName]);
-
   // Start typing (throttled)
   const startTyping = useCallback(() => {
     const now = Date.now();
@@ -83,10 +52,8 @@ export function useParentTypingIndicator(
       }, timeoutMs);
       return;
     }
-
     lastBroadcastRef.current = now;
     broadcastTyping(true);
-
     // Auto-stop after timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -95,7 +62,6 @@ export function useParentTypingIndicator(
       broadcastTyping(false);
     }, timeoutMs);
   }, [broadcastTyping, throttleMs, timeoutMs]);
-
   // Stop typing immediately
   const stopTyping = useCallback(() => {
     if (typingTimeoutRef.current) {
@@ -105,7 +71,6 @@ export function useParentTypingIndicator(
     broadcastTyping(false);
     lastBroadcastRef.current = 0;
   }, [broadcastTyping]);
-
   // Setup channel subscription
   // Cache for looked up user names
   const userNameCacheRef = useRef<Record<string, string>>({});
@@ -131,29 +96,24 @@ export function useParentTypingIndicator(
         return name;
       }
     } catch (e) {
-      console.log('Failed to lookup user name:', e);
+      logger.debug('Failed to lookup user name:', e);
     }
     
     return 'Teacher';
   }, []);
-
   useEffect(() => {
     if (!threadId) {
       setTypingUsers([]);
       return;
     }
-
     const supabase = assertSupabase();
     const channelName = `typing-${threadId}`;
-
     // Create and subscribe to channel
     const channel = supabase.channel(channelName);
     channelRef.current = channel;
-
     channel
       .on('broadcast', { event: 'typing' }, async ({ payload }: { payload: { userId?: string; userName?: string; isTyping?: boolean; timestamp?: number } }) => {
         if (!payload || !payload.userId || payload.userId === user?.id) return;
-
         const userId = payload.userId; // Now guaranteed to be string
         const timestamp = payload.timestamp || Date.now();
         
@@ -189,7 +149,6 @@ export function useParentTypingIndicator(
         });
       })
       .subscribe();
-
     // Cleanup stale typing indicators every 2 seconds
     cleanupIntervalRef.current = setInterval(() => {
       const now = Date.now();
@@ -197,7 +156,6 @@ export function useParentTypingIndicator(
         prev.filter((u) => now - u.timestamp < timeoutMs + 1000)
       );
     }, 2000);
-
     return () => {
       // Stop typing on unmount
       if (channelRef.current) {
@@ -213,7 +171,6 @@ export function useParentTypingIndicator(
       }
     };
   }, [threadId, user?.id, timeoutMs, broadcastTyping]);
-
   // Format typing text
   const typingText = useMemo(() => {
     if (typingUsers.length === 0) return null;
@@ -228,9 +185,7 @@ export function useParentTypingIndicator(
     
     return `${typingUsers.length} people are typing...`;
   }, [typingUsers]);
-
   const isTyping = typingUsers.length > 0;
-
   return {
     typingUsers,
     typingText,
@@ -239,5 +194,4 @@ export function useParentTypingIndicator(
     isTyping,
   };
 }
-
 export default useParentTypingIndicator;

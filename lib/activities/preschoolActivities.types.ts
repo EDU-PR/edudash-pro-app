@@ -68,6 +68,8 @@ export interface ActivityRound {
   celebration?: string;
   /** Hint text shown after wrong answer */
   hint?: string;
+  /** Wrong attempts required before showing hint */
+  minWrongForHint?: number;
   /** Image URL if applicable */
   image?: string;
 }

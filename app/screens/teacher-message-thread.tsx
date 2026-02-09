@@ -79,6 +79,8 @@ const defaultTheme = {
 };
 
 const COMPOSER_OVERLAY_HEIGHT = 84;
+const COMPOSER_FLOAT_MARGIN = 10;
+const COMPOSER_FLOAT_GAP = 8;
 const WALLPAPER_ACCENTS: Record<string, string> = {
   'purple-glow': '#a78bfa',
   midnight: '#60a5fa',
@@ -560,18 +562,19 @@ export default function TeacherMessageThreadScreen() {
   const messageViewportInset =
     composerKeyboardOffset +
     composerBottomInset +
-    safeComposerHeight;
+    safeComposerHeight +
+    COMPOSER_FLOAT_GAP;
   const messageBottomReserve = 24;
   const wallpaperAccent =
     wallpaper?.type === 'preset' ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
   const composerSurfaceColor = bgSource
-    ? 'rgba(15, 23, 42, 0.96)'
+    ? 'rgba(15, 23, 42, 0.62)'
     : wallpaper?.type === 'preset'
-    ? hexToRgba(wallpaperAccent, 0.28, 'rgba(15, 23, 42, 0.88)')
-    : theme.background;
+    ? hexToRgba(wallpaperAccent, 0.2, 'rgba(15, 23, 42, 0.66)')
+    : 'rgba(15, 23, 42, 0.68)';
   const composerBorderColor = wallpaper?.type === 'preset'
-    ? hexToRgba(wallpaperAccent, 0.45, 'rgba(148, 163, 184, 0.18)')
-    : 'rgba(148, 163, 184, 0.18)';
+    ? hexToRgba(wallpaperAccent, 0.32, 'rgba(148, 163, 184, 0.18)')
+    : 'rgba(148, 163, 184, 0.16)';
   
   // Loading state
   if (isLoading) {
@@ -635,6 +638,7 @@ export default function TeacherMessageThreadScreen() {
               data={rowsAsc}
               renderItem={renderRow}
               keyExtractor={(item) => item.key}
+              getItemType={(item) => item.type}
               onScroll={handleScroll}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
@@ -659,6 +663,7 @@ export default function TeacherMessageThreadScreen() {
               data={rowsAsc}
               renderItem={renderRow}
               keyExtractor={(item) => item.key}
+              getItemType={(item) => item.type}
               onScroll={handleScroll}
               scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
@@ -682,6 +687,7 @@ export default function TeacherMessageThreadScreen() {
             data={rowsAsc}
             renderItem={renderRow}
             keyExtractor={(item) => item.key}
+            getItemType={(item) => item.type}
             onScroll={handleScroll}
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
@@ -711,7 +717,9 @@ export default function TeacherMessageThreadScreen() {
           { 
             paddingBottom: keyboardHeight > 0 ? 8 : composerBottomInset,
             backgroundColor: composerSurfaceColor,
-            borderTopColor: composerBorderColor,
+            borderColor: composerBorderColor,
+            marginHorizontal: COMPOSER_FLOAT_MARGIN,
+            marginBottom: COMPOSER_FLOAT_GAP,
           }
         ]}
           onLayout={handleComposerLayout}
@@ -924,7 +932,13 @@ const styles = StyleSheet.create({
   composerArea: {
     paddingHorizontal: 0,
     paddingTop: 0,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148, 163, 184, 0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#020617',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
   },
 });

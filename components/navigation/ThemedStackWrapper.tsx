@@ -70,7 +70,7 @@ export function ThemedStackWrapper() {
           'a': '/screens/dash-assistant',
           'd': '/screens/teacher-dashboard',
           'p': '/screens/principal-dashboard',
-          'f': '/screens/financial-dashboard',
+          'f': '/screens/finance-control-center?tab=overview',
           'h': '/screens/dash-conversations-history',
         };
         const route = map[lower];

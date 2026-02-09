@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 
 /**
  * Mobile web guard - currently no-op
@@ -135,12 +136,9 @@ export const useAuthGuard = () => {
       
       // Route based on role + school type
       const role = profile?.role || (user.user_metadata as any)?.role;
-      const schoolType =
-        profile?.organization_membership?.school_type ||
-        (user.user_metadata as any)?.school_type ||
-        (user.user_metadata as any)?.organization_type;
-      const k12Types = new Set(['k12', 'k12_school', 'combined', 'primary', 'secondary', 'community_school']);
-      const isK12 = schoolType ? k12Types.has(String(schoolType).toLowerCase()) : false;
+      const isK12 = resolveSchoolTypeFromProfile(
+        profile || (user.user_metadata as any) || {}
+      ) === 'k12_school';
 
       switch (role) {
         case 'super_admin':

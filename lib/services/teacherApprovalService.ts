@@ -7,6 +7,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { ensureTeacherRecordAfterApproval, notifyTeacherApprovalDecision } from './teacherApprovalHelpers';
 
 export interface PendingTeacher {
   id: string;
@@ -277,7 +278,13 @@ export async function approveTeacher(
       console.warn('[TeacherApproval] Profile linkage RPC warning:', profileError);
     }
 
-    // 3. Assign seat if requested
+    // 3. Ensure canonical teacher row exists for downstream screens that still read `teachers`.
+    await ensureTeacherRecordAfterApproval({
+      teacherId,
+      preschoolId,
+    });
+
+    // 4. Assign seat if requested
     let seatAssigned = false;
     if (options?.assignSeat !== false) {
       try {
@@ -302,14 +309,14 @@ export async function approveTeacher(
       }
     }
 
-    // 4. Update teacher_invites if applicable
+    // 5. Update teacher_invites if applicable
     await supabase
       .from('teacher_invites')
       .update({ status: 'approved' })
       .eq('school_id', preschoolId)
       .eq('accepted_by', teacherId);
 
-    // 5. Track employment history (for references & reputation)
+    // 6. Track employment history (for references & reputation)
     const { data: existingEmployment, error: employmentError } = await supabase
       .from('teacher_employment_history')
       .select('id')
@@ -331,6 +338,12 @@ export async function approveTeacher(
           start_date: new Date().toISOString().split('T')[0],
         });
     }
+
+    await notifyTeacherApprovalDecision({
+      eventType: 'teacher_account_approved',
+      teacherId,
+      preschoolId,
+    });
 
     return {
       success: true,
@@ -404,6 +417,47 @@ export async function rejectTeacher(
       .update({ status: 'rejected' })
       .eq('school_id', preschoolId)
       .eq('accepted_by', teacherId);
+
+    // Clean up: revert profile linkage if it was set (legacy data or direct hires)
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id, organization_id, preschool_id')
+        .eq('id', teacherId)
+        .maybeSingle();
+
+      if (prof && (prof.organization_id === preschoolId || prof.preschool_id === preschoolId)) {
+        await supabase
+          .from('profiles')
+          .update({ organization_id: null, preschool_id: null })
+          .eq('id', teacherId);
+      }
+    } catch { /* Non-fatal cleanup */ }
+
+    // Clean up: remove/deactivate organization membership seat
+    try {
+      await supabase
+        .from('organization_members')
+        .update({ seat_status: 'revoked' } as any)
+        .eq('organization_id', preschoolId)
+        .eq('user_id', teacherId);
+    } catch { /* Non-fatal cleanup */ }
+
+    // Clean up: deactivate teachers table record
+    try {
+      await supabase
+        .from('teachers')
+        .update({ is_active: false } as any)
+        .eq('user_id', teacherId)
+        .eq('preschool_id', preschoolId);
+    } catch { /* Non-fatal cleanup */ }
+
+    await notifyTeacherApprovalDecision({
+      eventType: 'teacher_account_rejected',
+      teacherId,
+      preschoolId,
+      rejectionReason: reason,
+    });
 
     return {
       success: true,

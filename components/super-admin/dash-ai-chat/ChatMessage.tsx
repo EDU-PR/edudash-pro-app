@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Platform, ScrollView } from 'react-native';
+import { View, Text, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -236,9 +236,19 @@ export interface ChatMessageData {
 
 interface ChatMessageProps {
   message: ChatMessageData;
+  onCopy?: (message: ChatMessageData) => void;
+  onRegenerate?: (message: ChatMessageData) => void;
+  onShare?: (message: ChatMessageData) => void;
+  disableActions?: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({
+  message,
+  onCopy,
+  onRegenerate,
+  onShare,
+  disableActions = false,
+}) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const isUser = message.role === 'user';
@@ -294,6 +304,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             <Text style={[styles.toolsText, { color: theme.textSecondary }]}>
               Used: {message.toolsUsed.join(', ')}
             </Text>
+          </View>
+        )}
+        {!message.isStreaming && !disableActions && (onCopy || onRegenerate || onShare) && (
+          <View style={styles.messageActionsRow}>
+            {onCopy && (
+              <TouchableOpacity style={styles.messageAction} onPress={() => onCopy(message)}>
+                <Ionicons name="copy-outline" size={14} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
+            {!isUser && onRegenerate && (
+              <TouchableOpacity style={styles.messageAction} onPress={() => onRegenerate(message)}>
+                <Ionicons name="refresh-outline" size={14} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
+            {onShare && (
+              <TouchableOpacity style={styles.messageAction} onPress={() => onShare(message)}>
+                <Ionicons name="share-social-outline" size={14} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>

@@ -38,9 +38,7 @@ export default function PrincipalParentRequestsScreen() {
   }, [schoolId]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    setParentLookupStatus('idle');
-  }, [manualParentEmail]);
+  useEffect(() => { setParentLookupStatus('idle'); }, [manualParentEmail]);
 
   const updateSelectionFromResults = useCallback((results: SearchedStudent[]) => {
     setSelectedStudent((prev) => {
@@ -106,11 +104,7 @@ export default function PrincipalParentRequestsScreen() {
   const approve = async (req: GuardianRequest) => {
     const studentId = studentIdMap[req.id] || req.student_id || '';
     if (!studentId) {
-      showAlert({
-        title: 'Student required',
-        message: 'Enter the student ID to link the parent.',
-        type: 'warning',
-      });
+      showAlert({ title: 'Student required', message: 'Enter the student ID to link the parent.', type: 'warning' });
       return;
     }
     try {
@@ -245,11 +239,7 @@ export default function PrincipalParentRequestsScreen() {
 
       const studentCode = student.student_id || student.id.slice(0, 8).toUpperCase();
       toast.success(`${student.first_name} (${studentCode}) linked`, 'Parent Connected');
-      showAlert({
-        title: 'Linked',
-        message: `Parent can now access ${student.first_name}'s profile.`,
-        type: 'success',
-      });
+      showAlert({ title: 'Linked', message: `Parent can now access ${student.first_name}'s profile.`, type: 'success' });
       setManualParentEmail('');
       setManualSearchQuery('');
       setManualSearchResults([]);

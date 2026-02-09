@@ -25,6 +25,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+import { fetchStudentData, markPaymentReceived } from '@/lib/screen-data/student-detail.helpers';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme, type ThemeColors } from '@/contexts/ThemeContext';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
@@ -35,7 +37,6 @@ import {
   StudentDetail,
   Class,
   Transaction,
-  calculateAge,
   ProfileCard,
   StudentDetailsSection,
   ClassInfoSection,
@@ -48,6 +49,7 @@ import {
 } from '@/components/student-detail';
 
 export default function StudentDetailScreen() {
+  const TAG = 'StudentDetail';
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
@@ -117,267 +119,27 @@ export default function StudentDetailScreen() {
 
     try {
       setLoading(true);
-
-      // Get user's preschool by auth_user_id (NOT profiles.id!)
-      const { data: userProfile, error: profileError } = await assertSupabase()
-        .from('profiles')
-        .select('id, preschool_id, organization_id, role')
-        .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error('Error loading profile:', profileError);
-      }
-
-      const schoolId =
-        userProfile?.preschool_id ||
-        userProfile?.organization_id ||
-        profile?.preschool_id ||
-        profile?.organization_id;
-      if (!schoolId) {
-        showAlert('Error', 'No school assigned to your account', 'error');
-        setLoading(false);
-        return;
-      }
-
-      const viewerProfileId = userProfile?.id || profile?.id || user.id;
-
-      // Get student details with class info (simpler query - avoids nested FK issues)
-      // Note: We avoid stacking multiple `.or()` calls because Supabase will overwrite the prior OR filter.
-      let studentQuery = assertSupabase()
-        .from('students')
-        .select(`
-          *,
-          classes!students_class_id_fkey(id, name, grade_level, teacher_id)
-        `)
-        .eq('id', studentId);
-
-      // Parent safeguard: only allow viewing linked children (supports legacy auth-user-id links too)
-      if (isParent) {
-        const parentFilterIds = Array.from(new Set([viewerProfileId, user.id].filter(Boolean)));
-        if (parentFilterIds.length > 0) {
-          const parentFilters = parentFilterIds.flatMap((id) => [`parent_id.eq.${id}`, `guardian_id.eq.${id}`]);
-          studentQuery = studentQuery.or(parentFilters.join(','));
-        }
-      } else {
-        // Non-parents: scope to the viewer's school (supports both org/preschool columns).
-        studentQuery = studentQuery.or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`);
-      }
-
-      const { data: studentData, error: studentError } = await studentQuery.single();
-
-      if (studentError) {
-        console.error('Error loading student:', studentError);
-        showAlert('Access denied', isParent
-          ? 'You can only view your linked child profiles.'
-          : 'Student not found', 'error', [
-          { text: 'OK', style: 'default', onPress: () => router.back() },
-        ]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch teacher info separately if class has teacher
-      let teacherName: string | undefined;
-      if (studentData.classes?.teacher_id) {
-        const { data: teacherData } = await assertSupabase()
-          .from('profiles')
-          .select('first_name, last_name')
-          .or(`id.eq.${studentData.classes.teacher_id},auth_user_id.eq.${studentData.classes.teacher_id}`)
-          .single();
-        if (teacherData) {
-          teacherName = `${teacherData.first_name || ''} ${teacherData.last_name || ''}`.trim();
-        }
-      }
-
-      // Fetch parent/guardian info separately if student has parent_id or guardian_id
-      const contactIds = Array.from(new Set([studentData.parent_id, studentData.guardian_id].filter(Boolean)));
-      const contactMap: Record<string, { name?: string; email?: string; phone?: string }> = {};
-
-      if (contactIds.length > 0) {
-        const supabase = assertSupabase();
-        const { data: contactProfilesById } = await supabase
-          .from('profiles')
-          .select('id, auth_user_id, first_name, last_name, email, phone')
-          .in('id', contactIds);
-
-        (contactProfilesById || []).forEach((contactProfile) => {
-          const normalized = {
-            name: `${contactProfile.first_name || ''} ${contactProfile.last_name || ''}`.trim(),
-            email: contactProfile.email || undefined,
-            phone: contactProfile.phone || undefined,
-          };
-          contactMap[contactProfile.id] = normalized;
-          if (contactProfile.auth_user_id) {
-            contactMap[contactProfile.auth_user_id] = normalized;
-          }
-        });
-
-        const unresolvedIds = contactIds.filter((id) => !contactMap[id]);
-        if (unresolvedIds.length > 0) {
-          const { data: contactProfilesByAuth } = await supabase
-            .from('profiles')
-            .select('id, auth_user_id, first_name, last_name, email, phone')
-            .in('auth_user_id', unresolvedIds);
-
-          (contactProfilesByAuth || []).forEach((contactProfile) => {
-            const normalized = {
-              name: `${contactProfile.first_name || ''} ${contactProfile.last_name || ''}`.trim(),
-              email: contactProfile.email || undefined,
-              phone: contactProfile.phone || undefined,
-            };
-            contactMap[contactProfile.id] = normalized;
-            if (contactProfile.auth_user_id) {
-              contactMap[contactProfile.auth_user_id] = normalized;
-            }
-          });
-        }
-      }
-
-      const parentInfo = studentData.parent_id ? contactMap[studentData.parent_id] || {} : {};
-      const guardianInfo = studentData.guardian_id ? contactMap[studentData.guardian_id] || {} : {};
-
-      // Fetch age group info if student has age_group_id
-      let ageGroupName: string | undefined;
-      if (studentData.age_group_id) {
-        const { data: ageGroupData } = await assertSupabase()
-          .from('age_groups')
-          .select('name')
-          .eq('id', studentData.age_group_id)
-          .single();
-        ageGroupName = ageGroupData?.name;
-      }
-
-      // Calculate age information
-      const ageInfo = calculateAge(studentData.date_of_birth);
-      
-      // Get attendance data
-      const { data: attendanceData } = await assertSupabase()
-        .from('attendance')
-        .select('status, attendance_date')
-        .eq('student_id', studentId)
-        .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-        .order('attendance_date', { ascending: false });
-
-      const totalRecords = attendanceData?.length || 0;
-      const presentRecords = attendanceData?.filter(a => a.status === 'present').length || 0;
-      const attendanceRate = totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
-      const lastAttendance = attendanceData?.[0]?.attendance_date;
-
-      let outstandingFees = 0;
-      if (canViewFinancial) {
-        // Get financial data - outstanding fees from student_fees (source of truth)
-        const { data: feeData, error: feeError } = await assertSupabase()
-          .from('student_fees')
-          .select('amount_outstanding, status, final_amount')
-          .eq('student_id', studentId);
-
-        if (feeError) {
-          console.error('Error loading student fees:', feeError);
-        }
-
-        outstandingFees = (feeData || []).reduce((sum, fee) => {
-          const outstanding = fee.amount_outstanding ?? 0;
-          return sum + outstanding;
-        }, 0);
-
-        // Get child-specific transaction history (last 10)
-        const { data: transactionsData } = await assertSupabase()
-          .from('financial_transactions')
-          .select('*')
-          .eq('student_id', studentId)
-          .eq('preschool_id', schoolId)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        setChildTransactions(transactionsData || []);
-      } else {
-        setChildTransactions([]);
-      }
-
-      const processedStudent: StudentDetail = {
-        ...studentData,
-        age_months: ageInfo.months,
-        age_years: ageInfo.years,
-        status: studentData.status || (studentData.is_active ? 'active' : 'inactive') || 'active',
-        class_name: studentData.classes?.name,
-        teacher_name: teacherName,
-        parent_name: parentInfo.name,
-        parent_email: parentInfo.email,
-        parent_phone: parentInfo.phone,
-        guardian_name: guardianInfo.name,
-        guardian_email: guardianInfo.email,
-        guardian_phone: guardianInfo.phone,
-        profile_photo: studentData.avatar_url || studentData.profile_photo,
-        age_group_name: ageGroupName,
-        attendance_rate: attendanceRate,
-        last_attendance: lastAttendance,
-        outstanding_fees: outstandingFees,
-        payment_status: outstandingFees > 0 ? 'overdue' : 'current',
-      };
-
-      setStudent(processedStudent);
-
-      // Load available classes for assignment (Principal only)
-      if (canAssignClass || ['principal', 'principal_admin', 'admin'].includes(userProfile?.role || profile?.role || '')) {
-        const { data: classesData } = await assertSupabase()
-          .from('classes')
-          .select(`
-            id,
-            name,
-            grade_level,
-            teacher_id,
-            max_capacity
-          `)
-          .or(`preschool_id.eq.${schoolId},organization_id.eq.${schoolId}`)
-          .eq('active', true);
-
-        // Get teacher names for each class
-        const teacherIds = [...new Set((classesData || []).map(c => c.teacher_id).filter(Boolean))];
-        let teacherMap: Record<string, string> = {};
-        
-        if (teacherIds.length > 0) {
-          const { data: teachersData } = await assertSupabase()
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', teacherIds);
-          
-          teacherMap = (teachersData || []).reduce((acc, t) => {
-            acc[t.id] = `${t.first_name} ${t.last_name}`;
-            return acc;
-          }, {} as Record<string, string>);
-        }
-
-        // Get enrollment counts
-        const { data: enrollmentData } = await assertSupabase()
-          .from('students')
-          .select('class_id')
-          .eq('preschool_id', schoolId)
-          .eq('is_active', true);
-        
-        const enrollmentMap = (enrollmentData || []).reduce((acc, s) => {
-          if (s.class_id) {
-            acc[s.class_id] = (acc[s.class_id] || 0) + 1;
-          }
-          return acc;
-        }, {} as Record<string, number>);
-
-        const processedClasses = (classesData || []).map(cls => ({
-          id: cls.id,
-          name: cls.name,
-          grade_level: cls.grade_level,
-          teacher_id: cls.teacher_id || null,
-          teacher_name: cls.teacher_id ? teacherMap[cls.teacher_id] : undefined,
-          capacity: cls.max_capacity || 25,
-          current_enrollment: enrollmentMap[cls.id] || 0,
-        }));
-
-        setClasses(processedClasses);
-      }
-
-    } catch (error) {
-      console.error('Error loading student data:', error);
-      showAlert('Error', 'Failed to load student information', 'error');
+      const result = await fetchStudentData({
+        studentId,
+        userId: user.id,
+        profileId: profile?.id,
+        preschoolId: profile?.preschool_id,
+        organizationId: profile?.organization_id,
+        isParent,
+        canAssignClass,
+        canViewFinancial,
+        profileRole: profile?.role,
+      });
+      setStudent(result.student);
+      setClasses(result.classes);
+      setChildTransactions(result.transactions);
+    } catch (error: any) {
+      logger.error(TAG, 'Error loading student data:', error);
+      showAlert('Error', error.message || 'Failed to load student information', 'error',
+        error.message === 'No school assigned to your account'
+          ? [{ text: 'OK', style: 'default' as const }]
+          : [{ text: 'OK', style: 'default' as const, onPress: () => router.back() }]
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -457,7 +219,7 @@ export default function StudentDetailScreen() {
       setEditedStudent({});
       loadStudentData();
     } catch (error) {
-      console.error('Error saving student:', error);
+      logger.error(TAG, 'Error saving student:', error);
       showAlert('Error', 'Failed to save student details', 'error');
     } finally {
       setSaving(false);
@@ -488,7 +250,7 @@ export default function StudentDetailScreen() {
                 });
 
               if (error) {
-                console.warn('RPC deactivate_student failed, falling back to direct update:', error);
+                logger.warn(TAG, 'RPC deactivate_student failed, falling back to direct update:', error);
                 const { error: updateError } = await assertSupabase()
                   .from('students')
                   .update({
@@ -500,7 +262,7 @@ export default function StudentDetailScreen() {
                   .eq('id', student.id);
 
                 if (updateError) {
-                  console.error('Error deactivating student (fallback):', updateError);
+                  logger.error(TAG, 'Error deactivating student (fallback):', updateError);
                   showAlert('Error', 'Failed to remove student. Please try again.', 'error');
                   return;
                 }
@@ -519,7 +281,7 @@ export default function StudentDetailScreen() {
                 ]
               );
             } catch (error) {
-              console.error('Error removing student:', error);
+              logger.error(TAG, 'Error removing student:', error);
               showAlert('Error', 'Failed to remove student. Please try again.', 'error');
             } finally {
               setSaving(false);
@@ -535,52 +297,7 @@ export default function StudentDetailScreen() {
     if (!student || !user || !isPrincipal) {
       throw new Error('Unauthorized or missing data');
     }
-
-    // Get user's preschool by auth_user_id
-    const { data: userProfile } = await assertSupabase()
-      .from('profiles')
-      .select('preschool_id, organization_id')
-      .eq('auth_user_id', user.id)
-      .single();
-
-    const schoolId = userProfile?.preschool_id || userProfile?.organization_id;
-    if (!schoolId) {
-      throw new Error('No school assigned');
-    }
-
-    // Create a financial transaction record
-    const { error: transactionError } = await assertSupabase()
-      .from('financial_transactions')
-      .insert({
-        student_id: student.id,
-        preschool_id: schoolId,
-        type: 'fee_payment',
-        amount: amount,
-        status: 'completed',
-        payment_method: paymentMethod,
-        description: notes ? `Manual payment recorded by principal: ${notes}` : 'Manual payment recorded by principal',
-        created_by: user.id,
-        created_at: new Date().toISOString(),
-      });
-
-    if (transactionError) {
-      console.error('Error recording payment:', transactionError);
-      throw transactionError;
-    }
-
-    // Update any pending parent_payments records for this student if they exist
-    await assertSupabase()
-      .from('parent_payments')
-      .update({ 
-        status: 'verified',
-        verified_by: user.id,
-        verified_at: new Date().toISOString(),
-        notes: `Marked as paid by principal (${paymentMethod}): ${notes || 'No additional notes'}`
-      })
-      .eq('student_id', student.id)
-      .eq('status', 'pending');
-
-    // Reload the student data to reflect changes
+    await markPaymentReceived(student.id, user.id, amount, paymentMethod, notes);
     await loadStudentData();
   };
 

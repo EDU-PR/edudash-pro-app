@@ -7,6 +7,19 @@ import { useRouter } from "next/navigation";
 import { Space_Grotesk, Fraunces } from "next/font/google";
 import { useIsPWA } from "@/lib/hooks/useIsPWA";
 import { createClient } from "@/lib/supabase/client";
+import {
+  Building2,
+  Users,
+  Sparkles,
+  CreditCard,
+  Cpu,
+  Phone,
+  WifiOff,
+  Shield,
+  GraduationCap,
+  Heart,
+  type LucideIcon,
+} from "lucide-react";
 import styles from "./page.module.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -87,36 +100,43 @@ export default function Home() {
         title: "Unified School OS",
         copy: "Attendance, fees, messaging, and reporting in one streamlined workspace.",
         tag: "Operations",
+        icon: Building2,
       },
       {
         title: "Parent Engagement",
         copy: "Real-time updates, progress snapshots, and two-way communication that actually gets read.",
         tag: "Community",
+        icon: Users,
       },
       {
         title: "AI Learning Studio",
         copy: "Generate lessons, activities, and summaries in minutes with teacher-in-the-loop controls.",
         tag: "Dash AI",
+        icon: Sparkles,
       },
       {
         title: "Secure Billing",
         copy: "PayFast-ready invoicing, proof-of-payment review, and automated reminders.",
         tag: "Payments",
+        icon: CreditCard,
       },
       {
         title: "STEM + Robotics",
         copy: "Robotics, coding, and computer skills packs available as optional curriculum add‑ons.",
         tag: "STEM",
+        icon: Cpu,
       },
       {
         title: "Voice & Video Calls",
         copy: "Run parent calls, class check-ins, and voice notes with the same dashboard tools.",
         tag: "Comms",
+        icon: Phone,
       },
       {
         title: "Offline Ready",
         copy: "Critical dashboards stay available even with unstable connectivity.",
         tag: "Resilience",
+        icon: WifiOff,
       },
     ],
     []
@@ -128,16 +148,19 @@ export default function Home() {
         title: "Principals & Owners",
         copy: "Manage staff, billing, and performance from a single command center.",
         items: ["School-wide analytics", "Seat management", "Financial oversight"],
+        icon: Shield,
       },
       {
         title: "Teachers",
         copy: "Plan, teach, and report faster with AI support and smart class tools.",
         items: ["Lesson creation", "Attendance + homework", "Parent communication"],
+        icon: GraduationCap,
       },
       {
         title: "Parents",
         copy: "Stay connected to progress, payments, and daily updates without friction.",
         items: ["Daily summaries", "Messaging & calls", "Payment visibility"],
+        icon: Heart,
       },
     ],
     []
@@ -241,6 +264,7 @@ export default function Home() {
   }, [isPWA, isPWALoading, router]);
 
   useEffect(() => {
+    if (checking || isPWALoading) return;
     if (typeof window === "undefined") return;
     const elements = Array.from(document.querySelectorAll("[data-reveal]"));
     if (!elements.length) return;
@@ -270,7 +294,7 @@ export default function Home() {
 
     elements.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, []);
+  }, [checking, isPWALoading]);
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -519,12 +543,73 @@ export default function Home() {
                 />
               </div>
             ) : (
-              <div className={styles.videoPlaceholder}>
-                Add your demo video URL in <strong>NEXT_PUBLIC_DEMO_VIDEO_URL</strong>.
+              <div className={styles.dashboardPreview}>
+                <div className={styles.previewHeader}>
+                  <div className={styles.previewDots}>
+                    <span /><span /><span />
+                  </div>
+                  <span className={styles.previewTitle}>EduDash Pro — Teacher Dashboard</span>
+                </div>
+                <div className={styles.previewBody}>
+                  <div className={styles.previewSidebar}>
+                    <div className={styles.previewNavItem} style={{ opacity: 1 }}>Dashboard</div>
+                    <div className={styles.previewNavItem}>Students</div>
+                    <div className={styles.previewNavItem}>Lessons</div>
+                    <div className={styles.previewNavItem}>Attendance</div>
+                    <div className={styles.previewNavItem}>Messages</div>
+                    <div className={styles.previewNavItem}>Dash AI</div>
+                  </div>
+                  <div className={styles.previewContent}>
+                    <div className={styles.previewStatRow}>
+                      <div className={styles.previewStat}>
+                        <span>32</span>
+                        <small>Students</small>
+                      </div>
+                      <div className={styles.previewStat}>
+                        <span>94%</span>
+                        <small>Attendance</small>
+                      </div>
+                      <div className={styles.previewStat}>
+                        <span>12</span>
+                        <small>Lessons</small>
+                      </div>
+                      <div className={styles.previewStat}>
+                        <span>5</span>
+                        <small>Messages</small>
+                      </div>
+                    </div>
+                    <div className={styles.previewChartArea}>
+                      <div className={styles.previewChartLabel}>Weekly Engagement</div>
+                      <div className={styles.previewBars}>
+                        <div style={{ height: '60%' }} />
+                        <div style={{ height: '75%' }} />
+                        <div style={{ height: '50%' }} />
+                        <div style={{ height: '90%' }} />
+                        <div style={{ height: '85%' }} />
+                      </div>
+                    </div>
+                    <div className={styles.previewActivityRow}>
+                      <div className={styles.previewActivity}>
+                        <div className={styles.previewActivityDot} />
+                        <span>Grade R — Sensory Math submitted</span>
+                      </div>
+                      <div className={styles.previewActivity}>
+                        <div className={styles.previewActivityDot} style={{ background: '#22d3ee' }} />
+                        <span>Dash AI — 3 new lesson suggestions</span>
+                      </div>
+                      <div className={styles.previewActivity}>
+                        <div className={styles.previewActivityDot} style={{ background: '#22c55e' }} />
+                        <span>Payment confirmed — R. Ndlovu</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             <p className={styles.videoCaption}>
-              A quick product walkthrough covering the parent app, teacher workflows, and Dash AI.
+              {DEMO_VIDEO_URL
+                ? "A quick product walkthrough covering the parent app, teacher workflows, and Dash AI."
+                : "Live teacher dashboard — attendance, lessons, Dash AI, and billing in one unified view."}
             </p>
           </div>
         </section>
@@ -539,18 +624,26 @@ export default function Home() {
             </p>
           </div>
           <div className={styles.featureGrid}>
-            {featureCards.map((card, index) => (
-              <div
-                key={card.title}
-                className={`${styles.featureCard} ${styles.reveal}`}
-                data-reveal
-                style={{ transitionDelay: `${index * 80}ms` }}
-              >
-                <div className={styles.featureTag}>{card.tag}</div>
-                <h3>{card.title}</h3>
-                <p>{card.copy}</p>
-              </div>
-            ))}
+            {featureCards.map((card, index) => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={card.title}
+                  className={`${styles.featureCard} ${styles.reveal}`}
+                  data-reveal
+                  style={{ transitionDelay: `${index * 80}ms` }}
+                >
+                  <div className={styles.featureCardTop}>
+                    <div className={styles.featureIcon}>
+                      <Icon size={22} strokeWidth={1.8} />
+                    </div>
+                    <div className={styles.featureTag}>{card.tag}</div>
+                  </div>
+                  <h3>{card.title}</h3>
+                  <p>{card.copy}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -595,22 +688,30 @@ export default function Home() {
             <p>EduDash Pro adapts to principals, teachers, and parents without fragmenting the system.</p>
           </div>
           <div className={styles.roleGrid}>
-            {roleCards.map((role, index) => (
-              <div
-                key={role.title}
-                className={`${styles.roleCard} ${styles.reveal}`}
-                data-reveal
-                style={{ transitionDelay: `${index * 100}ms` }}
-              >
-                <h3>{role.title}</h3>
-                <p>{role.copy}</p>
-                <ul>
-                  {role.items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {roleCards.map((role, index) => {
+              const Icon = role.icon;
+              return (
+                <div
+                  key={role.title}
+                  className={`${styles.roleCard} ${styles.reveal}`}
+                  data-reveal
+                  style={{ transitionDelay: `${index * 100}ms` }}
+                >
+                  <div className={styles.roleCardHeader}>
+                    <div className={styles.roleIcon}>
+                      <Icon size={24} strokeWidth={1.8} />
+                    </div>
+                    <h3>{role.title}</h3>
+                  </div>
+                  <p>{role.copy}</p>
+                  <ul>
+                    {role.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
           </div>
         </section>
 

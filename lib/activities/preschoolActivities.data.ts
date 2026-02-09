@@ -97,6 +97,13 @@ export const PRESCHOOL_ACTIVITIES: PreschoolActivity[] = [
       {
         id: 'r6',
         prompt: 'Now count ALL the farm animals out loud! Touch each one as you count. Tap Done when finished!',
+        emojiGrid: [
+          '🐄', '🐄', '🐄',
+          '🐔', '🐔', '🐔', '🐔', '🐔',
+          '🐷', '🐷',
+          '🐑', '🐑', '🐑', '🐑',
+          '🦆', '🦆', '🦆',
+        ],
         confirmOnly: true,
         celebration: "Amazing counting! You're a real farm helper! 🌟🐄",
       },

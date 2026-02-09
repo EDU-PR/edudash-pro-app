@@ -27,7 +27,7 @@ import {
   DashAINavigationFacade,
 } from './facades';
 
-import type { DashMessage, DashPersonality, DashUserProfile } from './types';
+import type { DashAttachment, DashMessage, DashPersonality, DashUserProfile } from './types';
 
 /**
  * Default personality configuration
@@ -488,6 +488,45 @@ export class DashAICore {
     });
   }
 
+  private mapGeneratedImagesToAttachments(
+    generatedImages?: Array<{
+      id: string;
+      bucket: string;
+      path: string;
+      signed_url: string;
+      mime_type: string;
+      prompt: string;
+      width: number;
+      height: number;
+      provider: string;
+      model: string;
+      expires_at: string;
+    }>,
+  ): DashAttachment[] | undefined {
+    if (!Array.isArray(generatedImages) || generatedImages.length === 0) {
+      return undefined;
+    }
+
+    return generatedImages.map((image): DashAttachment => ({
+      id: `generated_${image.id}`,
+      name: `Dash Image ${image.width}x${image.height}`,
+      mimeType: image.mime_type || 'image/png',
+      size: 0,
+      bucket: image.bucket,
+      storagePath: image.path,
+      kind: 'image',
+      status: 'ready',
+      previewUri: image.signed_url,
+      meta: {
+        source: 'dash_image_generation',
+        prompt: image.prompt,
+        model: image.model,
+        provider: image.provider,
+        expires_at: image.expires_at,
+      },
+    }));
+  }
+
   public async sendMessage(
     content: string,
     conversationId?: string,
@@ -581,12 +620,23 @@ export class DashAICore {
         model: modelOverride || undefined,
       });
 
+      const generatedImages = response.metadata?.generated_images || [];
+      const generatedAttachments = this.mapGeneratedImagesToAttachments(generatedImages);
+      const responseMetadata: Record<string, unknown> = {};
+      if (languageOverride) {
+        responseMetadata.detected_language = languageOverride;
+      }
+      if (generatedImages.length > 0) {
+        responseMetadata.generated_images = generatedImages;
+      }
+
       return {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'assistant',
         content: response.content || 'I ran into a hiccup while preparing your help. Please try again or add a bit more detail.',
         timestamp: Date.now(),
-        metadata: languageOverride ? { detected_language: languageOverride } : undefined,
+        attachments: generatedAttachments,
+        metadata: Object.keys(responseMetadata).length > 0 ? responseMetadata as any : undefined,
       };
     } catch (error) {
       console.error('[DashAICore] Failed to generate response:', error);

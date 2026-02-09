@@ -10,6 +10,9 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { filterActionsByDashboardPolicy } from '@/lib/dashboard/dashboardPolicy';
+import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
 export type ParentQuickAction = {
   id: string;
@@ -28,7 +31,7 @@ export type ActionSection = {
 };
 
 interface UseParentQuickActionsOptions {
-  isK12School: boolean;
+  resolvedSchoolType: ResolvedSchoolType;
   isEarlyLearner: boolean;
   isFeesDueSoon: boolean;
   feesDueSubtitle?: string;
@@ -37,9 +40,12 @@ interface UseParentQuickActionsOptions {
 }
 
 export function useParentQuickActions(options: UseParentQuickActionsOptions) {
-  const { isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked, isDev } = options;
+  const { resolvedSchoolType, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked, isDev } = options;
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const flags = getFeatureFlagsSync();
+  const isK12School = resolvedSchoolType === 'k12_school';
+  const applyNextGenPolicy = flags.NEXT_GEN_DASH_POLICY_V1;
 
   const quickActions = useMemo<ParentQuickAction[]>(() => {
     const dashTutorSubtitle = isDashOrbUnlocked
@@ -60,6 +66,7 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
       { id: 'calls', title: t('parent.calls', { defaultValue: 'Call Teacher' }), icon: 'call', color: '#10B981' },
       { id: 'homework_history', title: t('parent.homework_history', { defaultValue: 'Homework History' }), icon: 'time', color: '#6366F1' },
       { id: 'ai_help', title: t('parent.ai_help', { defaultValue: 'AI Help Hub' }), icon: 'sparkles', color: '#8B5CF6' },
+      { id: 'generate_image', title: t('parent.generate_image', { defaultValue: 'Generate Image' }), icon: 'image-outline', color: '#2563EB', subtitle: t('parent.generate_image_subtitle', { defaultValue: 'Create learning visuals with Dash.' }) },
       { id: 'my_exams', title: t('parent.my_exams', { defaultValue: 'My Exams' }), icon: 'school', color: '#F59E0B' },
       { id: 'upgrade', title: t('parent.upgrade', { defaultValue: 'Upgrade Plan' }), icon: 'arrow-up-circle', color: '#10B981', subtitle: t('parent.upgrade_subtitle', { defaultValue: 'Unlock premium features' }) },
       { id: 'payments', title: t('parent.payments', { defaultValue: 'Fees & Payments' }), icon: 'card', color: isFeesDueSoon ? theme.warning : '#059669', subtitle: feesDueSubtitle, glow: isFeesDueSoon },
@@ -104,12 +111,27 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
       });
     }
 
+    let scopedActions = actions;
     if (isEarlyLearner) {
       const hiddenForPreschool = new Set(['view_grades', 'my_exams', 'homework_history']);
-      return actions.filter((action) => !hiddenForPreschool.has(action.id));
+      scopedActions = actions.filter((action) => !hiddenForPreschool.has(action.id));
     }
-    return actions;
-  }, [t, theme, isK12School, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked, isDev]);
+    if (!applyNextGenPolicy) {
+      return scopedActions;
+    }
+    return filterActionsByDashboardPolicy(scopedActions, 'parent', resolvedSchoolType);
+  }, [
+    applyNextGenPolicy,
+    t,
+    theme,
+    isK12School,
+    isEarlyLearner,
+    isFeesDueSoon,
+    feesDueSubtitle,
+    isDashOrbUnlocked,
+    isDev,
+    resolvedSchoolType,
+  ]);
 
   const hasLockedActions = useMemo(() => quickActions.some((a) => a.disabled), [quickActions]);
 
@@ -148,6 +170,7 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
       payments: 'payments',
       dash_grade_test: 'ai',
       dash_tutor: 'ai',
+      generate_image: 'ai',
       ai_homework_help: 'ai',
       ask_dash: 'ai',
       dash_explain: 'ai',

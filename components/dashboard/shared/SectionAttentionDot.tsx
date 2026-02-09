@@ -6,6 +6,7 @@
  * 
  * Priority tiers:
  *  - critical: Red breathing glow, 2s cycle
+ *  - important: Amber breathing glow, 2.2s cycle
  *  - action:   Amber pulse, 2.5s cycle  
  *  - info:     Blue static dot (no animation)
  *  - none:     Hidden
@@ -26,10 +27,11 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 
-export type AttentionPriority = 'critical' | 'action' | 'info' | 'none';
+export type AttentionPriority = 'critical' | 'important' | 'action' | 'info' | 'none';
 
 const PRIORITY_COLORS: Record<AttentionPriority, string> = {
   critical: '#EF4444',
+  important: '#F59E0B',
   action: '#F59E0B',
   info: '#3B82F6',
   none: 'transparent',
@@ -37,6 +39,7 @@ const PRIORITY_COLORS: Record<AttentionPriority, string> = {
 
 const CYCLE_MS: Record<AttentionPriority, number> = {
   critical: 1000,
+  important: 1100,
   action: 1250,
   info: 0,
   none: 0,

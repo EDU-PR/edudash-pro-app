@@ -31,7 +31,8 @@
     "programs": "Programs",
     "regions": "Regions",
     "students": "Students",
-    "work": "Work"
+    "work": "Work",
+    "dash": "Dash"
   },
   "auth": {
     "signIn": "Anmelden",
@@ -1103,6 +1104,8 @@
           "tshirt_size": "Select a T-shirt size."
         }
       },
+      "generate_image": "Generate Image",
+      "generate_image_subtitle": "Create learning visuals with Dash.",
       "upgrade_description": "Get homework help, progress insights, and remove ads by upgrading.",
       "upgrade_title": "Unlock more parent tools",
       "welcome_subtitle": "Welcome to your parent dashboard"

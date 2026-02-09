@@ -102,7 +102,7 @@ export const PrincipalSchoolPulse: React.FC<PrincipalSchoolPulseProps> = ({ stat
         value: unpaidFees > 0 ? String(unpaidFees) : t('common.none', { defaultValue: 'None' }),
         caption: t('dashboard.review_fees', { defaultValue: 'Review fees' }),
         tone: toneForCount(unpaidFees),
-        route: '/screens/principal-fee-overview',
+        route: '/screens/finance-control-center?tab=receivables',
       },
       {
         id: 'pops',
@@ -239,4 +239,3 @@ const createStyles = (theme: any) => {
 };
 
 export default PrincipalSchoolPulse;
-

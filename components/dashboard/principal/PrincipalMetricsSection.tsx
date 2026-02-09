@@ -34,7 +34,7 @@ interface PrincipalMetricsSectionProps {
   studentsCount?: number;
   classesCount?: number;
   collapsedSections: Set<string>;
-  onToggleSection: (sectionId: string) => void;
+  onToggleSection: (sectionId: string, isCollapsed?: boolean) => void;
 }
 
 export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = ({
@@ -185,7 +185,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         break;
       case 'pending_payments':
       case 'outstanding':
-        router.push('/screens/financial-dashboard');
+        router.push('/screens/finance-control-center?tab=receivables');
         break;
       case 'pop_uploads':
         try {
@@ -195,7 +195,7 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
         }
         break;
       case 'fees_collected':
-        router.push('/screens/financial-dashboard');
+        router.push('/screens/finance-control-center?tab=overview');
         break;
     }
   };

@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, RefreshControl, Modal, Image, ScrollView } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, TextInput, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -17,59 +17,21 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { router } from 'expo-router';
 import { CacheIndicator } from '@/components/ui/CacheIndicator';
 import { EmptyStudentsState } from '@/components/ui/EmptyState';
-import { offlineCacheService } from '@/lib/services/offlineCacheService';
-import { assertSupabase } from '@/lib/supabase';
 import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import { derivePreschoolId, isPrincipalOrAbove } from '@/lib/roleUtils';
+import { logger } from '@/lib/logger';
+import {
+  type Student, type FilterOptions, type AlertState,
+  DEFAULT_FILTERS, calculateAge, getStatusColor, getPaymentStatusColor,
+} from '@/lib/screen-data/students-detail.types';
+import { loadStudentsData, softDeleteStudent, permanentDeleteStudent } from '@/lib/screen-data/students-detail.helpers';
+import { FilterModal } from '@/components/students-detail/FilterModal';
+import { StudentDetailModal } from '@/components/students-detail/StudentDetailModal';
 
-// Alert modal state interface
-interface AlertState {
-  visible: boolean;
-  title: string;
-  message: string;
-  type: 'info' | 'warning' | 'success' | 'error';
-  buttons: AlertButton[];
-}
-
-interface Student {
-  id: string;
-  studentId: string;
-  firstName: string;
-  lastName: string;
-  grade: string;
-  dateOfBirth: string;
-  guardianName: string;
-  guardianPhone: string;
-  guardianEmail: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-  medicalConditions?: string;
-  allergies?: string;
-  enrollmentDate: string;
-  status: 'active' | 'inactive' | 'pending';
-  profilePhoto?: string;
-  attendanceRate: number;
-  lastAttendance: string;
-  assignedTeacher?: string;
-  fees: {
-    outstanding: number;
-    lastPayment: string;
-    paymentStatus: 'current' | 'overdue' | 'pending';
-  };
-  schoolId: string;
-  classId?: string;
-}
-
-interface FilterOptions {
-  grade: string[];
-  status: string[];
-  teacher: string[];
-  paymentStatus: string[];
-  search: string;
-}
+const TAG = 'StudentsDetailScreen';
 
 export default function StudentsDetailScreen() {
-  const { t } = useTranslation();  
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const { theme, isDark } = useTheme();
   const [students, setStudents] = useState<Student[]>([]);
@@ -77,397 +39,126 @@ export default function StudentsDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [showStudentModal, setShowStudentModal] = useState(false);  
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);  
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
+  const [includeInactive, setIncludeInactive] = useState(false);
 
   // Alert modal state
   const [alertState, setAlertState] = useState<AlertState>({
-    visible: false,
-    title: '',
-    message: '',
-    type: 'info',
-    buttons: [],
+    visible: false, title: '', message: '', type: 'info', buttons: [],
   });
 
   const showAlert = (title: string, message: string, type: AlertState['type'] = 'info', buttons: AlertButton[] = [{ text: 'OK', style: 'default' }]) => {
     setAlertState({ visible: true, title, message, type, buttons });
   };
 
-  const hideAlert = () => {
-    setAlertState(prev => ({ ...prev, visible: false }));
-  };
+  const hideAlert = () => setAlertState(prev => ({ ...prev, visible: false }));
 
-  // State for delete confirmation
-  const [pendingDeleteStudent, setPendingDeleteStudent] = useState<{ id: string; name: string } | null>(null);
-  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<{ id: string; name: string } | null>(null);
-
-  const [filters, setFilters] = useState<FilterOptions>({
-    grade: [],
-    status: ['active'], // Default to showing only active students
-    teacher: [],
-    paymentStatus: [],
-    search: '',
-  });
-
-  // Track whether to include inactive students in the database query
-  const [includeInactive, setIncludeInactive] = useState(false);
-
-  // Get preschool ID from user context
   const getPreschoolId = useCallback((): string | null => {
     const profileOrgId = derivePreschoolId(profile as any);
     if (profileOrgId) return profileOrgId;
     return (user?.user_metadata as any)?.organization_id || (user?.user_metadata as any)?.preschool_id || null;
   }, [profile, user]);
 
+  // ---------- Data Loading ----------
   const loadStudents = async (forceRefresh = false) => {
     const preschoolId = getPreschoolId();
-    
-if (!preschoolId) {
-      console.warn('No preschool ID available or Supabase not initialized');
+    if (!preschoolId) {
+      logger.warn(TAG, 'No preschool ID available');
       setLoading(false);
       return;
     }
-    
+
     try {
       setLoading(!forceRefresh);
       if (forceRefresh) setRefreshing(true);
 
       const userRole = profile?.role || 'parent';
+      if (!forceRefresh && user?.id) setIsLoadingFromCache(true);
 
-      // Try cache first
-      if (!forceRefresh && user?.id) {
-        setIsLoadingFromCache(true);
-        const identifier = isPrincipalOrAbove(userRole)
-          ? `${preschoolId}` 
-          : `${preschoolId}_${user.id}`;
-        
-        const cached = await offlineCacheService.get<Student[]>(
-          'student_data_',
-          identifier,
-          user.id
-        );
-        
-        if (cached) {
-          setStudents(cached);
-          setIsLoadingFromCache(false);
-          // Continue to fetch fresh data in background
-          setTimeout(() => loadStudents(true), 100);
-          return;
-        }
-        setIsLoadingFromCache(false);
-      }
-
-      console.log('🔍 Fetching real students for preschool:', preschoolId);
-      
-      // **FETCH REAL STUDENTS FROM DATABASE**
-      // Include inactive students if filter allows it
-      // Join parent profile via parent_id or guardian_id
-      let query = assertSupabase()
-        .from('students')
-        .select(`
-          id,
-          student_id,
-          first_name,
-          last_name,
-          date_of_birth,
-          parent_id,
-          guardian_id,
-          class_id,
-          is_active,
-          preschool_id,
-          avatar_url,
-          created_at,
-          status,
-          grade_level,
-          gender,
-          medical_conditions,
-          allergies,
-          emergency_contact_name,
-          emergency_contact_phone,
-          classes!students_class_id_fkey(name, teacher_id, teacher:profiles!classes_teacher_id_fkey(first_name, last_name)),
-          parent:profiles!students_parent_id_fkey(first_name, last_name, email, phone),
-          guardian:profiles!students_guardian_id_fkey(first_name, last_name, email, phone)
-        `)
-        .eq('preschool_id', preschoolId);
-      
-      // Only filter by is_active if we're not including inactive students
-      if (!includeInactive) {
-        query = query.eq('is_active', true);
-      }
-        
-      const { data: studentsData, error: studentsError } = await query;
-        
-      if (studentsError) {
-        console.error('Error fetching students:', studentsError);
-        Alert.alert('Error', 'Failed to load students. Please try again.');
-        return;
-      }
-      
-      console.log('✅ Real students fetched:', studentsData?.length || 0);
-      
-      // Fetch attendance rates in batch for all students
-      const studentIds = (studentsData || []).map((s: any) => s.id);
-      let attendanceMap: Record<string, { total: number; present: number; lastDate: string }> = {};
-      
-      if (studentIds.length > 0) {
-        // Get attendance for last 90 days
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-        const sinceDate = ninetyDaysAgo.toISOString().slice(0, 10);
-        
-        const { data: attendanceData } = await assertSupabase()
-          .from('attendance')
-          .select('student_id, status, attendance_date')
-          .in('student_id', studentIds)
-          .gte('attendance_date', sinceDate)
-          .order('attendance_date', { ascending: false });
-        
-        if (attendanceData) {
-          for (const row of attendanceData) {
-            if (!attendanceMap[row.student_id]) {
-              attendanceMap[row.student_id] = { total: 0, present: 0, lastDate: row.attendance_date };
-            }
-            attendanceMap[row.student_id].total++;
-            if (row.status === 'present' || row.status === 'late') {
-              attendanceMap[row.student_id].present++;
-            }
-          }
-        }
-      }
-      
-      const getClassRecord = (classesValue: any): any => {
-        if (Array.isArray(classesValue)) return classesValue[0] || null;
-        return classesValue || null;
-      };
-
-      const getTeacherRecord = (teacherValue: any): any => {
-        if (Array.isArray(teacherValue)) return teacherValue[0] || null;
-        return teacherValue || null;
-      };
-
-      // Transform database data to match Student interface
-      const transformedStudents: Student[] = (studentsData || []).map((dbStudent: any, index: number) => {
-        // Get parent/guardian info - prefer parent, fallback to guardian
-        const parentInfo = dbStudent.parent || dbStudent.guardian;
-        const guardianName = parentInfo 
-          ? `${parentInfo.first_name || ''} ${parentInfo.last_name || ''}`.trim() || 'Not provided'
-          : 'Not provided';
-        const guardianPhone = parentInfo?.phone || dbStudent.emergency_contact_phone || 'Not provided';
-        const guardianEmail = parentInfo?.email || 'Not provided';
-        
-        const classRecord = getClassRecord(dbStudent.classes);
-        const teacherRecord = getTeacherRecord(classRecord?.teacher);
-
-        // Get class name
-        const className = classRecord?.name || null;
-        
-        const gradeLevel = dbStudent.grade_level || className || 'Not Assigned';
-        return {
-          id: dbStudent.id,
-          studentId: dbStudent.student_id || dbStudent.id,
-          firstName: dbStudent.first_name || 'Unknown',
-          lastName: dbStudent.last_name || 'Student',
-          grade: gradeLevel,
-          dateOfBirth: dbStudent.date_of_birth || '',
-          guardianName,
-          guardianPhone,
-          guardianEmail,
-          emergencyContact: dbStudent.emergency_contact_name || 'Not provided',
-          emergencyPhone: dbStudent.emergency_contact_phone || 'Not provided',
-          medicalConditions: dbStudent.medical_conditions || '',
-          allergies: dbStudent.allergies || '',
-          enrollmentDate: dbStudent.created_at?.split('T')[0] || '',
-          status: (dbStudent.status || 'active') as 'active' | 'inactive' | 'pending',
-          profilePhoto: dbStudent.avatar_url || undefined,
-          attendanceRate: attendanceMap[dbStudent.id]
-            ? Math.round((attendanceMap[dbStudent.id].present / attendanceMap[dbStudent.id].total) * 100)
-            : 0,
-          lastAttendance: attendanceMap[dbStudent.id]?.lastDate || '',
-          assignedTeacher: teacherRecord
-            ? `${teacherRecord.first_name || ''} ${teacherRecord.last_name || ''}`.trim()
-            : 'Not Assigned',
-          fees: {
-            outstanding: 0,
-            lastPayment: '',
-            paymentStatus: 'current' as const,
-          },
-          schoolId: preschoolId,
-          classId: dbStudent.class_id,
-        };
+      const result = await loadStudentsData({
+        preschoolId,
+        userId: user?.id || '',
+        userEmail: user?.email || undefined,
+        userRole,
+        includeInactive,
+        forceRefresh,
       });
-      
-      // Filter based on user role and permissions (same logic as before)
-      let filteredStudents = transformedStudents;
-      if (isPrincipalOrAbove(userRole)) {
-        // Principals see all school students
-        filteredStudents = transformedStudents;
-      } else if (userRole === 'teacher') {
-        // Teachers see students in their assigned classes
-        filteredStudents = transformedStudents.filter(student => {
-          const matchingDb = (studentsData || []).find((s: any) => s.id === student.id);
-          const classRecord = getClassRecord(matchingDb?.classes);
-          return classRecord?.teacher_id === user?.id;
-        });
-        // If no class assignment found, show all (fallback)
-        if (filteredStudents.length === 0) filteredStudents = transformedStudents;
-      } else {
-        // Parents see only their children via parent_id or guardian_id
-        filteredStudents = transformedStudents.filter(student => {
-          const matchingDb = (studentsData || []).find((s: any) => s.id === student.id);
-          return matchingDb?.parent_id === user?.id || matchingDb?.guardian_id === user?.id;
-        });
-        // Fallback to email matching if no parent_id/guardian_id link
-        if (filteredStudents.length === 0) {
-          filteredStudents = transformedStudents.filter(student => 
-            student.guardianEmail === user?.email
-          );
-        }
-      }
-      
-      setStudents(filteredStudents);
 
-      // Cache the fresh data
-      if (user?.id) {
-        const identifier = isPrincipalOrAbove(userRole)
-          ? `${preschoolId}` 
-          : `${preschoolId}_${user.id}`;
-        
-        await offlineCacheService.set<Student[]>(
-          'student_data_',
-          identifier,
-          filteredStudents,
-          user.id,
-          preschoolId
-        );
-      }
+      setIsLoadingFromCache(false);
+      setStudents(result.students);
 
-    } catch (error) {
-      console.error('Failed to load students:', error);
-      Alert.alert('Error', 'Failed to load students directory');
+      // If data came from cache, background-refresh
+      if (result.fromCache) {
+        setTimeout(() => loadStudents(true), 100);
+      }
+    } catch (error: any) {
+      logger.error(TAG, 'Failed to load students:', error);
+      showAlert('Error', error.message || 'Failed to load students directory', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setIsLoadingFromCache(false);
     }
   };
 
-  useEffect(() => {
-    loadStudents();
-  }, []);
+  // ---------- Effects ----------
+  useEffect(() => { loadStudents(); }, []);
 
-  // When filter changes to include 'inactive', we need to refetch with includeInactive
   useEffect(() => {
     const shouldIncludeInactive = filters.status.includes('inactive');
-    if (shouldIncludeInactive !== includeInactive) {
-      setIncludeInactive(shouldIncludeInactive);
-    }
+    if (shouldIncludeInactive !== includeInactive) setIncludeInactive(shouldIncludeInactive);
   }, [filters.status]);
 
-  // Refetch when includeInactive changes
   useEffect(() => {
-    if (students.length > 0) {
-      loadStudents(true);
-    }
+    if (students.length > 0) loadStudents(true);
   }, [includeInactive]);
 
-  useEffect(() => {
-    applyFilters();
-  }, [students, filters]);
+  useEffect(() => { applyFilters(); }, [students, filters]);
 
+  // ---------- Filtering ----------
   const applyFilters = () => {
     let filtered = students;
 
-    // Filter by grade
     if (filters.grade.length > 0) {
-      filtered = filtered.filter(student => filters.grade.includes(student.grade));
+      filtered = filtered.filter(s => filters.grade.includes(s.grade));
     }
-
-    // Filter by status
     if (filters.status.length > 0) {
-      filtered = filtered.filter(student => filters.status.includes(student.status));
+      filtered = filtered.filter(s => filters.status.includes(s.status));
     }
-
-    // Filter by payment status
     if (filters.paymentStatus.length > 0) {
-      filtered = filtered.filter(student => filters.paymentStatus.includes(student.fees.paymentStatus));
+      filtered = filtered.filter(s => filters.paymentStatus.includes(s.fees.paymentStatus));
     }
-
-    // Filter by search
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(student =>
-        student.firstName.toLowerCase().includes(searchLower) ||
-        student.lastName.toLowerCase().includes(searchLower) ||
-        student.studentId.toLowerCase().includes(searchLower) ||
-        student.guardianName.toLowerCase().includes(searchLower)
+      const q = filters.search.toLowerCase();
+      filtered = filtered.filter(s =>
+        s.firstName.toLowerCase().includes(q) ||
+        s.lastName.toLowerCase().includes(q) ||
+        s.studentId.toLowerCase().includes(q) ||
+        s.guardianName.toLowerCase().includes(q)
       );
     }
-
-    // Sort by last name
     filtered.sort((a, b) => a.lastName.localeCompare(b.lastName));
-
     setFilteredStudents(filtered);
   };
 
-  const calculateAge = (dateOfBirth: string): number => {
-    const today = new Date();
-    const birthDate = new Date(dateOfBirth);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    
-    return age;
+  // ---------- Permissions ----------
+  const canManageStudent = (): boolean => isPrincipalOrAbove(profile?.role);
+
+  const canEditStudent = (_student: Student): boolean => {
+    const role = profile?.role || 'parent';
+    return isPrincipalOrAbove(role) || role === 'teacher';
   };
 
-  // formatDate function removed - not currently used
-  // const formatDate = (dateString: string): string => {
-  //   return new Date(dateString).toLocaleDateString('en-ZA', {
-  //     year: 'numeric',
-  //     month: 'short',
-  //     day: 'numeric'
-  //   });
-  // };
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'active': return '#059669';
-      case 'inactive': return '#DC2626';
-      case 'pending': return '#EA580C';
-      default: return '#6B7280';
-    }
-  };
-
-  const getPaymentStatusColor = (status: string): string => {
-    switch (status) {
-      case 'current': return '#059669';
-      case 'overdue': return '#DC2626';
-      case 'pending': return '#EA580C';
-      default: return '#6B7280';
-    }
-  };
-
-  const canManageStudent = (): boolean => {
-    return isPrincipalOrAbove(profile?.role);
-  };
-
- 
-const canEditStudent = (_student: Student): boolean => {
-    const userRole = profile?.role || 'parent';
-    if (isPrincipalOrAbove(userRole)) return true;
-    if (userRole === 'teacher') return true; // Teachers can edit basic info
-    return false; // Parents can only view
-  };
-
+  // ---------- Handlers ----------
   const handleEditStudent = (student: Student) => {
     if (!canEditStudent(student)) {
       showAlert('Access Denied', 'You do not have permission to edit student information.', 'error');
       return;
     }
-    
     setSelectedStudent(student);
     setShowStudentModal(true);
   };
@@ -477,130 +168,59 @@ const canEditStudent = (_student: Student): boolean => {
       showAlert('Access Denied', 'Only principals can delete students.', 'error');
       return;
     }
-
-    setPendingDeleteStudent({ id: studentId, name: studentName });
     showAlert(
       'Remove Student',
-      `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n• Mark the student as inactive\n• Keep historical records\n• Notify the parent (if applicable)`,
+      `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n\u2022 Mark the student as inactive\n\u2022 Keep historical records\n\u2022 Notify the parent (if applicable)`,
       'warning',
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => setPendingDeleteStudent(null) },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove Student',
           style: 'destructive',
-          onPress: () => confirmDeleteStudent(studentId, studentName),
-        }
+          onPress: async () => {
+            try {
+              const preschoolId = getPreschoolId();
+              await softDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');
+              setStudents(prev => prev.filter(s => s.id !== studentId));
+              showAlert('Success', `${studentName} has been removed from the active students list.`, 'success');
+            } catch (error: any) {
+              logger.error(TAG, 'Error soft-deleting student:', error);
+              showAlert('Error', error.message || 'Failed to remove student. Please try again.', 'error');
+            }
+          },
+        },
       ]
     );
   };
 
-  // Actual delete operation after confirmation
-  const confirmDeleteStudent = async (studentId: string, studentName: string) => {
-    try {
-      const supabase = assertSupabase();
-      
-      // Update student to inactive (soft delete)
-      const { error: updateError } = await supabase
-        .from('students')
-        .update({ 
-          is_active: false, 
-          status: 'inactive',
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', studentId);
-      
-      if (updateError) {
-        throw updateError;
-      }
-      
-      // Remove from local state
-      setStudents(prev => prev.filter(s => s.id !== studentId));
-      
-      // Invalidate cache so deleted student doesn't reappear on reload
-      const preschoolId = getPreschoolId();
-      if (user?.id && preschoolId) {
-        const userRole = profile?.role || 'parent';
-        const identifier = isPrincipalOrAbove(userRole)
-          ? `${preschoolId}` 
-          : `${preschoolId}_${user.id}`;
-        await offlineCacheService.remove('student_data_', identifier);
-        console.log('✅ Student cache invalidated after soft delete');
-      }
-      
-      setPendingDeleteStudent(null);
-      showAlert('Success', `${studentName} has been removed from the active students list.`, 'success');
-    } catch (error: any) {
-      console.error('Error deleting student:', error);
-      setPendingDeleteStudent(null);
-      showAlert('Error', error.message || 'Failed to remove student. Please try again.', 'error');
-    }
-  };
-
-  // Permanently delete student (for principals only - use with caution)
   const handlePermanentDelete = async (studentId: string, studentName: string) => {
     if (!canManageStudent()) {
       showAlert('Access Denied', 'Only principals can permanently delete students.', 'error');
       return;
     }
-
-    setPendingPermanentDelete({ id: studentId, name: studentName });
     showAlert(
-      '⚠️ Permanent Delete',
+      '\u26A0\uFE0F Permanent Delete',
       `This will PERMANENTLY delete ${studentName} and all associated records.\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?`,
       'error',
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => setPendingPermanentDelete(null) },
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Permanently',
           style: 'destructive',
-          onPress: () => confirmPermanentDelete(studentId, studentName),
-        }
+          onPress: async () => {
+            try {
+              const preschoolId = getPreschoolId();
+              await permanentDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');
+              setStudents(prev => prev.filter(s => s.id !== studentId));
+              showAlert('Deleted', `${studentName} has been permanently deleted.`, 'success');
+            } catch (error: any) {
+              logger.error(TAG, 'Error permanently deleting student:', error);
+              showAlert('Error', error.message || 'Failed to delete student. Please try again.', 'error');
+            }
+          },
+        },
       ]
     );
-  };
-
-  // Actual permanent delete operation after confirmation
-  const confirmPermanentDelete = async (studentId: string, studentName: string) => {
-    try {
-      const supabase = assertSupabase();
-      
-      // First update any registration_requests to remove the reference
-      await supabase
-        .from('registration_requests')
-        .update({ edudash_student_id: null })
-        .eq('edudash_student_id', studentId);
-      
-      // Permanently delete student
-      const { error: deleteError } = await supabase
-        .from('students')
-        .delete()
-        .eq('id', studentId);
-      
-      if (deleteError) {
-        throw deleteError;
-      }
-      
-      // Remove from local state
-      setStudents(prev => prev.filter(s => s.id !== studentId));
-      
-      // Invalidate cache so deleted student doesn't reappear on reload
-      const preschoolId = getPreschoolId();
-      if (user?.id && preschoolId) {
-        const userRole = profile?.role || 'parent';
-        const identifier = isPrincipalOrAbove(userRole)
-          ? `${preschoolId}` 
-          : `${preschoolId}_${user.id}`;
-        await offlineCacheService.remove('student_data_', identifier);
-        console.log('✅ Student cache invalidated after permanent delete');
-      }
-      
-      setPendingPermanentDelete(null);
-      showAlert('Deleted', `${studentName} has been permanently deleted.`, 'success');
-    } catch (error: any) {
-      console.error('Error permanently deleting student:', error);
-      setPendingPermanentDelete(null);
-      showAlert('Error', error.message || 'Failed to delete student. Please try again.', 'error');
-    }
   };
 
   const toggleStudentStatus = (studentId: string, currentStatus: string) => {
@@ -608,23 +228,17 @@ const canEditStudent = (_student: Student): boolean => {
       showAlert('Access Denied', 'Only principals can change student status.', 'error');
       return;
     }
-
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    setStudents(prev => prev.map(student => 
-      student.id === studentId 
-        ? { ...student, status: newStatus as any }
-        : student
+    setStudents(prev => prev.map(s =>
+      s.id === studentId ? { ...s, status: newStatus as any } : s
     ));
   };
 
+  // ---------- Render Helpers ----------
   const renderStudentCard = ({ item }: { item: Student }) => {
     const age = calculateAge(item.dateOfBirth);
-    
     return (
-      <TouchableOpacity 
-        style={styles.studentCard}
-        onPress={() => handleEditStudent(item)}
-      >
+      <TouchableOpacity style={styles.studentCard} onPress={() => handleEditStudent(item)}>
         <View style={styles.studentHeader}>
           <View style={styles.studentPhotoContainer}>
             {item.profilePhoto ? (
@@ -635,66 +249,39 @@ const canEditStudent = (_student: Student): boolean => {
               </View>
             )}
           </View>
-          
+
           <View style={styles.studentInfo}>
             <View style={styles.studentNameRow}>
-              <Text style={styles.studentName}>
-                {item.firstName} {item.lastName}
-              </Text>
+              <Text style={styles.studentName}>{item.firstName} {item.lastName}</Text>
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                  {item.status}
-                </Text>
+                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
               </View>
             </View>
-            
-            <Text style={styles.studentDetails}>
-              {item.studentId} • {item.grade} • Age {age}
-            </Text>
-            
-            <Text style={styles.studentDetails}>
-              Guardian: {item.guardianName}
-            </Text>
-            
+            <Text style={styles.studentDetails}>{item.studentId} {'\u2022'} {item.grade} {'\u2022'} Age {age}</Text>
+            <Text style={styles.studentDetails}>Guardian: {item.guardianName}</Text>
             <View style={styles.studentMetrics}>
               <View style={styles.metricItem}>
                 <Ionicons name="checkmark-circle" size={16} color="#059669" />
                 <Text style={styles.metricText}>{item.attendanceRate}%</Text>
               </View>
               <View style={styles.metricItem}>
-                <Ionicons 
-                  name="card" 
-                  size={16} 
-                  color={getPaymentStatusColor(item.fees.paymentStatus)} 
-                />
+                <Ionicons name="card" size={16} color={getPaymentStatusColor(item.fees.paymentStatus)} />
                 <Text style={[styles.metricText, { color: getPaymentStatusColor(item.fees.paymentStatus) }]}>
                   {item.fees.paymentStatus}
                 </Text>
               </View>
               {item.fees.outstanding > 0 && (
-                <Text style={styles.outstandingFees}>
-                  R{item.fees.outstanding.toLocaleString()} outstanding
-                </Text>
+                <Text style={styles.outstandingFees}>R{item.fees.outstanding.toLocaleString()} outstanding</Text>
               )}
             </View>
           </View>
 
           {canManageStudent() && (
             <View style={styles.studentActions}>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => toggleStudentStatus(item.id, item.status)}
-              >
-                <Ionicons 
-                  name={item.status === 'active' ? 'pause' : 'play'} 
-                  size={16} 
-                  color={theme.colors.text} 
-                />
+              <TouchableOpacity style={styles.actionButton} onPress={() => toggleStudentStatus(item.id, item.status)}>
+                <Ionicons name={item.status === 'active' ? 'pause' : 'play'} size={16} color={theme.colors.text} />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => handleDeleteStudent(item.id, `${item.firstName} ${item.lastName}`)}
-              >
+              <TouchableOpacity style={styles.actionButton} onPress={() => handleDeleteStudent(item.id, `${item.firstName} ${item.lastName}`)}>
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
               </TouchableOpacity>
             </View>
@@ -704,265 +291,8 @@ const canEditStudent = (_student: Student): boolean => {
     );
   };
 
-  const renderFilterModal = () => (
-    <Modal visible={showFilters} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Filter Students</Text>
-            <TouchableOpacity onPress={() => setShowFilters(false)}>
-              <Ionicons name="close" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Grade</Text>
-            <View style={styles.filterOptions}>
-              {['Grade R-A', 'Grade R-B', 'Grade 1-A', 'Grade 1-B', 'Grade 2-A'].map(grade => (
-                <TouchableOpacity
-                  key={grade}
-                  style={[styles.filterOption, filters.grade.includes(grade) && styles.filterOptionSelected]}
-                  onPress={() => {
-                    setFilters(prev => ({
-                      ...prev,
-                      grade: prev.grade.includes(grade)
-                        ? prev.grade.filter(g => g !== grade)
-                        : [...prev.grade, grade]
-                    }));
-                  }}
-                >
-                  <Text style={[
-                    styles.filterOptionText,
-                    filters.grade.includes(grade) && styles.filterOptionTextSelected
-                  ]}>
-                    {grade}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionTitle}>Status</Text>
-            <View style={styles.filterOptions}>
-              {['active', 'inactive', 'pending'].map(status => (
-                <TouchableOpacity
-                  key={status}
-                  style={[styles.filterOption, filters.status.includes(status) && styles.filterOptionSelected]}
-                  onPress={() => {
-                    setFilters(prev => ({
-                      ...prev,
-                      status: prev.status.includes(status)
-                        ? prev.status.filter(s => s !== status)
-                        : [...prev.status, status]
-                    }));
-                  }}
-                >
-                  <Text style={[
-                    styles.filterOptionText,
-                    filters.status.includes(status) && styles.filterOptionTextSelected
-                  ]}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity 
-              style={styles.clearFiltersButton}
-              onPress={() => setFilters({ grade: [], status: ['active'], teacher: [], paymentStatus: [], search: '' })}
-            >
-              <Text style={styles.clearFiltersText}>Clear All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.applyFiltersButton}
-              onPress={() => setShowFilters(false)}
-            >
-              <Text style={styles.applyFiltersText}>Apply Filters</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Student Detail Modal
-  const renderStudentDetailModal = () => {
-    if (!selectedStudent) return null;
-    
-    const age = calculateAge(selectedStudent.dateOfBirth);
-    
-    return (
-      <Modal visible={showStudentModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, styles.studentDetailModal]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Student Details</Text>
-              <TouchableOpacity onPress={() => {
-                setShowStudentModal(false);
-                setSelectedStudent(null);
-              }}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.studentDetailContent} showsVerticalScrollIndicator={false}>
-              {/* Student Profile Header */}
-              <View style={styles.studentDetailHeader}>
-                <View style={styles.studentPhotoLarge}>
-                  {selectedStudent.profilePhoto ? (
-                    <Image source={{ uri: selectedStudent.profilePhoto }} style={styles.studentPhotoLargeImg} />
-                  ) : (
-                    <View style={styles.studentPhotoLargePlaceholder}>
-                      <Ionicons name="person" size={40} color={theme.colors.text} />
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.studentDetailName}>
-                  {selectedStudent.firstName} {selectedStudent.lastName}
-                </Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedStudent.status) + '20' }]}>
-                  <Text style={[styles.statusText, { color: getStatusColor(selectedStudent.status) }]}>
-                    {selectedStudent.status}
-                  </Text>
-                </View>
-              </View>
-              
-              {/* Student Info Sections */}
-              <View style={styles.studentDetailSection}>
-                <Text style={styles.studentDetailSectionTitle}>Basic Information</Text>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Student ID:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.studentId}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Grade:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.grade}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Age:</Text>
-                  <Text style={styles.studentDetailValue}>{age} years old</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Date of Birth:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.dateOfBirth}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Enrollment Date:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.enrollmentDate}</Text>
-                </View>
-              </View>
-              
-              <View style={styles.studentDetailSection}>
-                <Text style={styles.studentDetailSectionTitle}>Guardian Information</Text>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Guardian:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianName}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Phone:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianPhone}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Email:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.guardianEmail}</Text>
-                </View>
-              </View>
-              
-              <View style={styles.studentDetailSection}>
-                <Text style={styles.studentDetailSectionTitle}>Emergency Contact</Text>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Name:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.emergencyContact}</Text>
-                </View>
-                <View style={styles.studentDetailRow}>
-                  <Text style={styles.studentDetailLabel}>Phone:</Text>
-                  <Text style={styles.studentDetailValue}>{selectedStudent.emergencyPhone}</Text>
-                </View>
-              </View>
-              
-              {(selectedStudent.medicalConditions || selectedStudent.allergies) && (
-                <View style={styles.studentDetailSection}>
-                  <Text style={styles.studentDetailSectionTitle}>Medical Information</Text>
-                  {selectedStudent.medicalConditions && (
-                    <View style={styles.studentDetailRow}>
-                      <Text style={styles.studentDetailLabel}>Conditions:</Text>
-                      <Text style={styles.studentDetailValue}>{selectedStudent.medicalConditions}</Text>
-                    </View>
-                  )}
-                  {selectedStudent.allergies && (
-                    <View style={styles.studentDetailRow}>
-                      <Text style={styles.studentDetailLabel}>Allergies:</Text>
-                      <Text style={[styles.studentDetailValue, { color: '#DC2626' }]}>{selectedStudent.allergies}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-              
-              {/* Action Buttons */}
-              <TouchableOpacity
-                style={[styles.studentDetailButton, styles.studentDetailButtonPrimary]}
-                onPress={() => {
-                  setShowStudentModal(false);
-                  router.push(`/screens/student-detail?id=${selectedStudent.id}` as any);
-                }}
-              >
-                <Ionicons name="open-outline" size={20} color="white" />
-                <Text style={styles.studentDetailButtonTextWhite}>Open Full Profile</Text>
-              </TouchableOpacity>
-
-              {canManageStudent() && (
-                <View style={styles.studentDetailActions}>
-                  {selectedStudent.status === 'inactive' ? (
-                    <>
-                      <TouchableOpacity 
-                        style={[styles.studentDetailButton, styles.studentDetailButtonPrimary]}
-                        onPress={() => {
-                          toggleStudentStatus(selectedStudent.id, selectedStudent.status);
-                          setShowStudentModal(false);
-                        }}
-                      >
-                        <Ionicons name="checkmark-circle" size={20} color="white" />
-                        <Text style={styles.studentDetailButtonTextWhite}>Reactivate Student</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[styles.studentDetailButton, styles.studentDetailButtonDanger]}
-                        onPress={() => {
-                          setShowStudentModal(false);
-                          handlePermanentDelete(selectedStudent.id, `${selectedStudent.firstName} ${selectedStudent.lastName}`);
-                        }}
-                      >
-                        <Ionicons name="trash" size={20} color="white" />
-                        <Text style={styles.studentDetailButtonTextWhite}>Delete Permanently</Text>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[styles.studentDetailButton, styles.studentDetailButtonWarning]}
-                      onPress={() => {
-                        setShowStudentModal(false);
-                        handleDeleteStudent(selectedStudent.id, `${selectedStudent.firstName} ${selectedStudent.lastName}`);
-                      }}
-                    >
-                      <Ionicons name="close-circle" size={20} color="white" />
-                      <Text style={styles.studentDetailButtonTextWhite}>Remove Student</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  const getActiveFiltersCount = (): number => {
-    return filters.grade.length + filters.status.length + filters.paymentStatus.length + 
-           (filters.search ? 1 : 0);
-  };
+  const getActiveFiltersCount = (): number =>
+    filters.grade.length + filters.status.length + filters.paymentStatus.length + (filters.search ? 1 : 0);
 
   // Create dynamic styles with theme
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -976,16 +306,10 @@ const canEditStudent = (_student: Student): boolean => {
         </TouchableOpacity>
         <Text style={styles.title}>Students Directory</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.viewToggle}
-            onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-          >
+          <TouchableOpacity style={styles.viewToggle} onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
             <Ionicons name={viewMode === 'list' ? 'grid' : 'list'} size={20} color={theme.colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.filterButton}
-            onPress={() => setShowFilters(true)}
-          >
+          <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
             <Ionicons name="filter" size={20} color={theme.colors.primary} />
             {getActiveFiltersCount() > 0 && (
               <View style={styles.filterBadge}>
@@ -997,11 +321,7 @@ const canEditStudent = (_student: Student): boolean => {
       </View>
 
       {/* Cache Indicator */}
-      <CacheIndicator 
-        isLoadingFromCache={isLoadingFromCache}
-        onRefresh={() => loadStudents(true)}
-        compact={true}
-      />
+      <CacheIndicator isLoadingFromCache={isLoadingFromCache} onRefresh={() => loadStudents(true)} compact />
 
       {/* Search */}
       <View style={styles.searchContainer}>
@@ -1017,9 +337,7 @@ const canEditStudent = (_student: Student): boolean => {
 
       {/* Students Summary */}
       <View style={styles.summaryContainer}>
-        <Text style={styles.summaryText}>
-          {filteredStudents.length} of {students.length} students
-        </Text>
+        <Text style={styles.summaryText}>{filteredStudents.length} of {students.length} students</Text>
         {canManageStudent() && (
           <TouchableOpacity style={styles.addButton}>
             <Ionicons name="person-add" size={16} color={theme.colors.primary} />
@@ -1034,20 +352,31 @@ const canEditStudent = (_student: Student): boolean => {
         renderItem={renderStudentCard}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => loadStudents(true)} />
-        }
-        ListEmptyComponent={() => (
-          loading ? null : <EmptyStudentsState />
-        )}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadStudents(true)} />}
+        ListEmptyComponent={() => (loading ? null : <EmptyStudentsState />)}
         showsVerticalScrollIndicator={false}
       />
 
       {/* Filter Modal */}
-      {renderFilterModal()}
+      <FilterModal
+        visible={showFilters}
+        filters={filters}
+        onFiltersChange={setFilters}
+        onClose={() => setShowFilters(false)}
+        theme={theme}
+      />
 
       {/* Student Detail Modal */}
-      {renderStudentDetailModal()}
+      <StudentDetailModal
+        visible={showStudentModal}
+        student={selectedStudent}
+        canManage={canManageStudent()}
+        onClose={() => { setShowStudentModal(false); setSelectedStudent(null); }}
+        onToggleStatus={toggleStudentStatus}
+        onDelete={handleDeleteStudent}
+        onPermanentDelete={handlePermanentDelete}
+        theme={theme}
+      />
 
       {/* Alert Modal */}
       <AlertModal

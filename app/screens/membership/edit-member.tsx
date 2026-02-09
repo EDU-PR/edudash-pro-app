@@ -4,7 +4,7 @@
  * to edit member details
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMemberDetail } from '@/hooks/membership/useMemberDetail';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { MemberType, MembershipTier, MEMBER_TYPE_LABELS, MEMBERSHIP_TIER_LABELS } from '@/components/membership/types';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -58,6 +59,7 @@ export default function EditMemberScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const memberId = typeof params.memberId === 'string' ? params.memberId : params.memberId?.[0] || null;
+  const { showAlert, alertProps } = useAlertModal();
   
   const { member, loading, error, updateMember, refetch } = useMemberDetail(memberId);
   
@@ -113,11 +115,11 @@ export default function EditMemberScreen() {
     
     // Validation
     if (!formData.first_name.trim()) {
-      Alert.alert('Validation Error', 'First name is required');
+      showAlert({ title: 'Validation Error', message: 'First name is required' });
       return;
     }
     if (!formData.last_name.trim()) {
-      Alert.alert('Validation Error', 'Last name is required');
+      showAlert({ title: 'Validation Error', message: 'Last name is required' });
       return;
     }
     
@@ -134,14 +136,14 @@ export default function EditMemberScreen() {
       });
       
       if (success) {
-        Alert.alert('Success', 'Member details updated successfully', [
+        showAlert({ title: 'Success', message: 'Member details updated successfully', buttons: [
           { text: 'OK', onPress: () => router.back() }
-        ]);
+        ]});
       } else {
-        Alert.alert('Error', 'Failed to update member details');
+        showAlert({ title: 'Error', message: 'Failed to update member details' });
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to update member');
+      showAlert({ title: 'Error', message: err.message || 'Failed to update member' });
     } finally {
       setSaving(false);
     }
@@ -149,14 +151,14 @@ export default function EditMemberScreen() {
   
   const handleCancel = () => {
     if (hasChanges) {
-      Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Are you sure you want to go back?',
-        [
+      showAlert({
+        title: 'Discard Changes?',
+        message: 'You have unsaved changes. Are you sure you want to go back?',
+        buttons: [
           { text: 'Keep Editing', style: 'cancel' },
           { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-        ]
-      );
+        ],
+      });
     } else {
       router.back();
     }
@@ -219,6 +221,7 @@ export default function EditMemberScreen() {
   const selectedProvince = PROVINCES.find(p => p.value === formData.province);
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       
@@ -475,6 +478,8 @@ export default function EditMemberScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

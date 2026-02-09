@@ -32,6 +32,9 @@ export type FeatureFlag =
   | 'AI_MEMORY_PERSISTENCE'      // Long-term conversation memory
   | 'AI_ROBOTICS_CURRICULUM'     // Phase 4: Robotics expert capabilities
   | 'AI_WAKE_WORD_V2'            // Improved wake word detection
+  | 'ENABLE_DASH_IMAGE_GEN'      // Dash image generation for dashboards
+  | 'ENABLE_IMAGE_PROVIDER_FALLBACK' // Imagen fallback in ai-proxy for image generation
+  | 'ENABLE_PARENT_TEMP_LESSONS' // Parent temporary AI lessons
   
   // Communication Features (Dev 9)
   | 'GROUP_CHAT'                 // Group messaging between teachers/parents
@@ -100,14 +103,14 @@ const FEATURE_FLAGS: Record<FeatureFlag, FeatureFlagConfig> = {
   // PARENT FEATURES (Dev 6)
   // ============================================
   PARENT_WEEKLY_REPORTS: {
-    enabled: false,
+    enabled: true,
     owner: 'Dev 6',
     description: 'AI-generated weekly child progress reports sent to parents',
     addedDate: '2026-01-06',
     expectedStableDate: '2026-02-01',
   },
   PARENT_DAILY_FEED: {
-    enabled: false,
+    enabled: true,
     owner: 'Dev 6',
     description: 'Real-time daily activity feed showing child activities',
     addedDate: '2026-01-06',
@@ -146,6 +149,24 @@ const FEATURE_FLAGS: Record<FeatureFlag, FeatureFlagConfig> = {
     owner: 'Dev 3',
     description: 'Improved wake word detection accuracy',
     addedDate: '2026-01-06',
+  },
+  ENABLE_DASH_IMAGE_GEN: {
+    enabled: true,
+    owner: 'AI Team',
+    description: 'Enable Dash image generation in parent/teacher dashboards',
+    addedDate: '2026-02-12',
+  },
+  ENABLE_IMAGE_PROVIDER_FALLBACK: {
+    enabled: false,
+    owner: 'AI Team',
+    description: 'Enable OpenAI -> Imagen fallback chain for Dash image generation',
+    addedDate: '2026-02-12',
+  },
+  ENABLE_PARENT_TEMP_LESSONS: {
+    enabled: true,
+    owner: 'Parent Team',
+    description: 'Enable parent-generated temporary interactive lessons',
+    addedDate: '2026-02-12',
   },
 
   // ============================================

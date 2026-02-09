@@ -1,700 +1,90 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, TextInput, Modal, FlatList, Dimensions } from 'react-native';
+import React from 'react';
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity, TextInput, Modal, FlatList, Dimensions } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { Ionicons } from '@expo/vector-icons';
-import { assertSupabase } from '@/lib/supabase';
-import { track } from '@/lib/analytics';
-import { useAuth } from '@/contexts/AuthContext';
-import { isSuperAdmin } from '@/lib/roleUtils';
-import { getTierDisplayName, normalizeTierName, VALID_ORGANIZATION_TIERS } from '@/lib/tiers';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { useSuperAdminOrganizations } from '@/hooks/super-admin-organizations';
+import type {
+  OrganizationType,
+  OrganizationStatus,
+  Organization,
+} from '@/lib/screen-styles/super-admin-organizations.styles';
+import {
+  theme,
+  statusColors,
+  typeColors,
+  formatTierLabel,
+  formatStatusLabel,
+  createStyles,
+} from '@/lib/screen-styles/super-admin-organizations.styles';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Organization types
-type OrganizationType = 'preschool' | 'k12' | 'skills' | 'org' | 'all';
-type OrganizationStatus = 'active' | 'pending' | 'suspended' | 'inactive' | 'all';
-
-interface Organization {
-  id: string;
-  name: string;
-  type: OrganizationType;
-  status: OrganizationStatus;
-  contact_email: string;
-  contact_phone?: string;
-  address?: string;
-  city?: string;
-  province?: string;
-  country?: string;
-  student_count: number;
-  teacher_count: number;
-  subscription_tier?: string;
-  subscription_status?: string;
-  created_at: string;
-  last_active_at?: string;
-  principal_name?: string;
-  principal_email?: string;
-  logo_url?: string;
-  is_verified: boolean;
-  metadata?: Record<string, any>;
-  subscription_plan_id?: string | null;
-}
-
-interface OrganizationStats {
-  total: number;
-  preschools: number;
-  k12_schools: number;
-  skills_centers: number;
-  other_orgs: number;
-  active: number;
-  pending: number;
-  suspended: number;
-  verified: number;
-  with_subscription: number;
-}
-
-// Theme (dark mode)
-const theme = {
-  background: '#0a0a0f',
-  card: '#1a1a2e',
-  cardHover: '#252540',
-  primary: '#6366f1',
-  primaryLight: '#818cf8',
-  secondary: '#10b981',
-  text: '#ffffff',
-  textSecondary: '#9ca3af',
-  textMuted: '#6b7280',
-  border: '#374151',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
-};
-
-// Status colors
-const statusColors: Record<string, string> = {
-  active: '#10b981',
-  pending: '#f59e0b',
-  suspended: '#ef4444',
-  inactive: '#6b7280',
-};
-
-// Organization type colors
-const typeColors: Record<string, string> = {
-  preschool: '#8b5cf6',
-  k12: '#3b82f6',
-  skills: '#f59e0b',
-  org: '#10b981',
-};
+const styles = createStyles(theme);
 
 export default function SuperAdminOrganizations() {
-  const { profile } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [filteredOrgs, setFilteredOrgs] = useState<Organization[]>([]);
-  const [stats, setStats] = useState<OrganizationStats | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<OrganizationType>('all');
-  const [selectedStatus, setSelectedStatus] = useState<OrganizationStatus>('all');
-  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showActionsModal, setShowActionsModal] = useState(false);
-  const [updatingSubscription, setUpdatingSubscription] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
 
-  // Check access
-  useEffect(() => {
-    if (!isSuperAdmin(profile?.role)) {
-      Alert.alert('Access Denied', 'Super admin access required');
-      router.back();
-    }
-  }, [profile]);
+  const {
+    filteredOrgs,
+    stats,
+    loading,
+    refreshing,
+    updatingSubscription,
+    searchQuery,
+    setSearchQuery,
+    selectedType,
+    setSelectedType,
+    selectedStatus,
+    setSelectedStatus,
+    selectedOrg,
+    setSelectedOrg,
+    showDetailModal,
+    setShowDetailModal,
+    showActionsModal,
+    setShowActionsModal,
+    onRefresh,
+    handleOrgPress,
+    handleOrgAction,
+    openTierPicker,
+    openStatusPicker,
+  } = useSuperAdminOrganizations({ showAlert });
 
-  // Fetch organizations from all sources
-  const fetchOrganizations = useCallback(async () => {
-    try {
-      setLoading(true);
-      const supabase = assertSupabase();
-
-      console.log('[Organizations] Fetching organizations...');
-
-      // Fetch from multiple tables in parallel
-      const [preschoolsRes, schoolsRes, orgsRes] = await Promise.all([
-        // Preschools
-        supabase
-          .from('preschools')
-          .select(`
-            id,
-            name,
-            email,
-            phone,
-            address,
-            city,
-            province,
-            country,
-            is_active,
-            is_verified,
-            created_at,
-            updated_at,
-            metadata,
-            principal_id,
-            logo_url,
-            subscription_tier,
-            subscription_status,
-            subscription_plan_id
-          `)
-          .order('created_at', { ascending: false }),
-        
-        // K-12 Schools
-        supabase
-          .from('schools')
-          .select(`
-            id,
-            name,
-            email,
-            phone,
-            address,
-            city,
-            province,
-            country,
-            is_active,
-            created_at,
-            updated_at,
-            metadata,
-            logo_url,
-            subscription_tier,
-            subscription_status
-          `)
-          .order('created_at', { ascending: false }),
-        
-        // Generic organizations (if table exists)
-        supabase
-          .from('organizations')
-          .select(`
-            id,
-            name,
-            contact_email,
-            contact_phone,
-            address,
-            city,
-            province,
-            country,
-            is_active,
-            organization_type,
-            created_at,
-            updated_at,
-            metadata,
-            logo_url,
-            subscription_tier,
-            subscription_status,
-            plan_tier
-          `)
-          .order('created_at', { ascending: false })
-          .limit(100),
-      ]);
-
-      // Debug logging
-      console.log('[Organizations] Preschools response:', {
-        count: preschoolsRes.data?.length || 0,
-        error: preschoolsRes.error?.message,
-      });
-      console.log('[Organizations] Schools response:', {
-        count: schoolsRes.data?.length || 0,
-        error: schoolsRes.error?.message,
-      });
-      console.log('[Organizations] Orgs response:', {
-        count: orgsRes.data?.length || 0,
-        error: orgsRes.error?.message,
-      });
-
-      // Process preschools - prefix ID to avoid duplicates with organizations table
-      const preschools: Organization[] = (preschoolsRes.data || []).map((p: any) => ({
-        id: `preschool_${p.id}`,
-        name: p.name || 'Unnamed Preschool',
-        type: 'preschool' as OrganizationType,
-        status: p.is_active ? 'active' : 'inactive',
-        contact_email: p.email || '',
-        contact_phone: p.phone,
-        address: p.address,
-        city: p.city,
-        province: p.province,
-        country: p.country || 'South Africa',
-        student_count: 0, // Will fetch separately if needed
-        teacher_count: 0,
-        created_at: p.created_at,
-        last_active_at: p.updated_at,
-        is_verified: p.is_verified || false,
-        logo_url: p.logo_url,
-        metadata: p.metadata,
-        subscription_tier: p.subscription_tier || null,
-        subscription_status: p.subscription_status || null,
-        subscription_plan_id: p.subscription_plan_id || null,
-      }));
-
-      // Process K-12 schools - prefix ID to avoid duplicates
-      const k12Schools: Organization[] = (schoolsRes.data || []).map((s: any) => ({
-        id: `school_${s.id}`,
-        name: s.name || 'Unnamed School',
-        type: 'k12' as OrganizationType,
-        status: s.is_active ? 'active' : 'inactive',
-        contact_email: s.email || '',
-        contact_phone: s.phone,
-        address: s.address,
-        city: s.city,
-        province: s.province,
-        country: s.country || 'South Africa',
-        student_count: 0,
-        teacher_count: 0,
-        created_at: s.created_at,
-        last_active_at: s.updated_at,
-        is_verified: false,
-        logo_url: s.logo_url,
-        metadata: s.metadata,
-        subscription_tier: s.subscription_tier || null,
-        subscription_status: s.subscription_status || null,
-      }));
-
-      // Process generic organizations - prefix ID to avoid duplicates
-      const otherOrgs: Organization[] = (orgsRes.data || []).map((o: any) => ({
-        id: `org_${o.id}`,
-        name: o.name || 'Unnamed Organization',
-        type: (o.organization_type || 'org') as OrganizationType,
-        status: o.is_active ? 'active' : 'inactive',
-        contact_email: o.contact_email || '',
-        contact_phone: o.contact_phone,
-        address: o.address,
-        city: o.city,
-        province: o.province,
-        country: o.country || 'South Africa',
-        student_count: 0,
-        teacher_count: 0,
-        created_at: o.created_at,
-        last_active_at: o.updated_at,
-        is_verified: false,
-        logo_url: o.logo_url,
-        metadata: o.metadata,
-        subscription_tier: o.subscription_tier || o.plan_tier || null,
-        subscription_status: o.subscription_status || null,
-      }));
-
-      // Combine all organizations
-      const allOrgs = [...preschools, ...k12Schools, ...otherOrgs];
-      setOrganizations(allOrgs);
-      setFilteredOrgs(allOrgs);
-
-      // Calculate stats
-      const calculatedStats: OrganizationStats = {
-        total: allOrgs.length,
-        preschools: preschools.length,
-        k12_schools: k12Schools.length,
-        skills_centers: allOrgs.filter(o => o.type === 'skills').length,
-        other_orgs: otherOrgs.length,
-        active: allOrgs.filter(o => o.status === 'active').length,
-        pending: allOrgs.filter(o => o.status === 'pending').length,
-        suspended: allOrgs.filter(o => o.status === 'suspended').length,
-        verified: allOrgs.filter(o => o.is_verified).length,
-        with_subscription: 0,
-      };
-
-      // Fetch subscription counts to enhance stats
-      try {
-        const { data: subscriptions, error: subErr } = await supabase
-          .from('subscriptions')
-          .select('school_id, user_id, status')
-          .eq('status', 'active');
-        
-        if (subErr) {
-          console.log('[Organizations] Subscription query error:', subErr.message);
-        } else if (subscriptions) {
-          const orgsWithSubs = new Set<string>();
-          subscriptions.forEach((sub: any) => {
-            if (sub.school_id) orgsWithSubs.add(sub.school_id);
-          });
-          calculatedStats.with_subscription = orgsWithSubs.size;
-        }
-      } catch (subError) {
-        console.log('Could not fetch subscription counts:', subError);
-      }
-
-      setStats(calculatedStats);
-
-      track('superadmin_organizations_viewed', {
-        total_count: allOrgs.length,
-        preschool_count: preschools.length,
-        k12_count: k12Schools.length,
-      });
-
-    } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-      // Don't show error for missing tables
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchOrganizations();
-  }, [fetchOrganizations]);
-
-  // Filter organizations
-  useEffect(() => {
-    let filtered = [...organizations];
-
-    // Filter by type
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(o => o.type === selectedType);
-    }
-
-    // Filter by status
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(o => o.status === selectedStatus);
-    }
-
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(o =>
-        o.name.toLowerCase().includes(query) ||
-        o.contact_email.toLowerCase().includes(query) ||
-        o.city?.toLowerCase().includes(query) ||
-        o.province?.toLowerCase().includes(query)
-      );
-    }
-
-    setFilteredOrgs(filtered);
-  }, [organizations, selectedType, selectedStatus, searchQuery]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchOrganizations();
-    setRefreshing(false);
-  }, [fetchOrganizations]);
-
-  const getEntityMeta = (org: Organization) => {
-    const idParts = org.id.split('_');
-    const sourceType = idParts[0];
-    const actualId = idParts.slice(1).join('_');
-    const entityType =
-      sourceType === 'preschool' ? 'preschool' : sourceType === 'school' ? 'school' : 'organization';
-    return { entityType, actualId };
-  };
-
-  const formatTierLabel = (tier?: string | null) => {
-    if (!tier) return 'Free';
-    const normalized = normalizeTierName(tier);
-    return `${getTierDisplayName(normalized)} (${normalized.replace(/_/g, ' ')})`;
-  };
-
-  const formatStatusLabel = (status?: string | null) => {
-    if (!status) return 'active';
-    return status.replace(/_/g, ' ');
-  };
-
-  const updateEntitySubscription = async (
-    org: Organization,
-    nextTier: string,
-    nextStatus: string
-  ) => {
-    const { entityType, actualId } = getEntityMeta(org);
-    setUpdatingSubscription(true);
-    try {
-      const { data, error } = await assertSupabase().rpc('superadmin_update_entity_subscription', {
-        p_entity_type: entityType,
-        p_entity_id: actualId,
-        p_subscription_tier: nextTier,
-        p_subscription_status: nextStatus,
-        p_subscription_plan_id: org.subscription_plan_id || null,
-      });
-
-      if (error) throw error;
-      if (!data) {
-        throw new Error('Update failed');
-      }
-
-      track('superadmin_subscription_updated', {
-        org_id: actualId,
-        org_type: entityType,
-        subscription_tier: nextTier,
-        subscription_status: nextStatus,
-      });
-
-      Alert.alert('Success', 'Subscription updated successfully');
-      await fetchOrganizations();
-    } catch (error: any) {
-      console.error('Failed to update subscription:', error);
-      Alert.alert('Error', error?.message || 'Failed to update subscription');
-    } finally {
-      setUpdatingSubscription(false);
-    }
-  };
-
-  const openTierPicker = (org: Organization) => {
-    const currentStatus = org.subscription_status || 'active';
-    Alert.alert(
-      'Select Subscription Tier',
-      `Choose a tier for ${org.name}:`,
-      [
-        ...VALID_ORGANIZATION_TIERS.map((tier) => ({
-          text: formatTierLabel(tier),
-          onPress: () => updateEntitySubscription(org, tier, currentStatus),
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const openStatusPicker = (org: Organization) => {
-    const currentTier = normalizeTierName(org.subscription_tier || 'free');
-    const statuses = ['active', 'pending', 'trialing', 'past_due', 'suspended', 'canceled'];
-    Alert.alert(
-      'Select Subscription Status',
-      `Set status for ${org.name}:`,
-      [
-        ...statuses.map((status) => ({
-          text: formatStatusLabel(status),
-          onPress: () => updateEntitySubscription(org, currentTier, status),
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleOrgPress = (org: Organization) => {
-    setSelectedOrg(org);
-    setShowDetailModal(true);
-  };
-
-  const handleOrgAction = (action: string) => {
-    if (!selectedOrg) return;
-
-    switch (action) {
-      case 'view':
-        setShowActionsModal(false);
-        setShowDetailModal(true);
-        break;
-      case 'edit':
-        Alert.alert('Edit Organization', 'Organization editing coming soon');
-        break;
-      case 'suspend':
-        Alert.alert(
-          'Suspend Organization',
-          `Are you sure you want to suspend ${selectedOrg.name}?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Suspend',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  const idParts = selectedOrg.id.split('_');
-                  const sourceType = idParts[0];
-                  const actualId = idParts.slice(1).join('_');
-                  
-                  let table: string;
-                  if (sourceType === 'preschool') {
-                    table = 'preschools';
-                  } else if (sourceType === 'school') {
-                    table = 'schools';
-                  } else {
-                    table = 'organizations';
-                  }
-                  
-                  const { error } = await assertSupabase()
-                    .from(table)
-                    .update({ is_active: false })
-                    .eq('id', actualId);
-                  
-                  if (error) throw error;
-                  
-                  track('superadmin_org_suspended', { org_id: actualId });
-                  Alert.alert('Success', 'Organization suspended');
-                  setShowActionsModal(false);
-                  await fetchOrganizations();
-                } catch (error: any) {
-                  Alert.alert('Error', error?.message || 'Failed to suspend organization');
-                }
-              },
-            },
-          ]
-        );
-        break;
-      case 'verify':
-        Alert.alert('Verify Organization', `Mark ${selectedOrg.name} as verified?`, [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Verify',
-            onPress: async () => {
-              try {
-                const idParts = selectedOrg.id.split('_');
-                const sourceType = idParts[0];
-                const actualId = idParts.slice(1).join('_');
-                
-                let table: string;
-                if (sourceType === 'preschool') {
-                  table = 'preschools';
-                } else if (sourceType === 'school') {
-                  table = 'schools';
-                } else {
-                  table = 'organizations';
-                }
-                
-                const { error } = await assertSupabase()
-                  .from(table)
-                  .update({ is_verified: true })
-                  .eq('id', actualId);
-                
-                if (error) throw error;
-                
-                track('superadmin_org_verified', { org_id: actualId });
-                Alert.alert('Success', 'Organization verified');
-                setShowActionsModal(false);
-                await fetchOrganizations();
-              } catch (error: any) {
-                Alert.alert('Error', error?.message || 'Failed to verify organization');
-              }
-            },
-          },
-        ]);
-        break;
-      case 'delete':
-        Alert.alert(
-          'Delete Organization',
-          `⚠️ This action cannot be undone!\n\nThis will permanently delete "${selectedOrg.name}" and unlink all associated users.\n\nAre you absolutely sure?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Delete Forever',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  // Determine which table to delete from based on ID prefix
-                  const idParts = selectedOrg.id.split('_');
-                  const sourceType = idParts[0]; // preschool, school, or org
-                  const actualId = idParts.slice(1).join('_'); // The actual UUID
-                  
-                  let table: string;
-                  let profileColumn: string;
-                  if (sourceType === 'preschool') {
-                    table = 'preschools';
-                    profileColumn = 'preschool_id';
-                  } else if (sourceType === 'school') {
-                    table = 'schools';
-                    profileColumn = 'preschool_id'; // schools may also use preschool_id
-                  } else {
-                    table = 'organizations';
-                    profileColumn = 'organization_id';
-                  }
-                  
-                  console.log('[Organizations] Deleting from table:', table, 'id:', actualId);
-                  
-                  const supabase = assertSupabase();
-                  
-                  // Step 1: Unlink profiles from this organization
-                  console.log('[Organizations] Unlinking profiles with', profileColumn, '=', actualId);
-                  const { error: unlinkError } = await supabase
-                    .from('profiles')
-                    .update({ [profileColumn]: null })
-                    .eq(profileColumn, actualId);
-                  
-                  if (unlinkError) {
-                    console.log('[Organizations] Profile unlink error (non-fatal):', unlinkError.message);
-                  }
-                  
-                  // Step 2: Also unlink from users table if it has the column
-                  try {
-                    await supabase
-                      .from('users')
-                      .update({ [profileColumn]: null })
-                      .eq(profileColumn, actualId);
-                  } catch {
-                    // Users table might not have this column
-                  }
-                  
-                  // Step 3: Delete the organization
-                  const { error } = await supabase
-                    .from(table)
-                    .delete()
-                    .eq('id', actualId);
-                  
-                  if (error) throw error;
-                  
-                  track('superadmin_org_deleted', { 
-                    org_id: actualId, 
-                    org_name: selectedOrg.name,
-                    org_type: selectedOrg.type 
-                  });
-                  Alert.alert('Deleted', `${selectedOrg.name} has been permanently deleted.`);
-                  setShowActionsModal(false);
-                  setSelectedOrg(null);
-                  await fetchOrganizations();
-                } catch (error: any) {
-                  console.error('[Organizations] Delete error:', error);
-                  
-                  // Provide more helpful error messages
-                  let errorMessage = error?.message || 'Failed to delete organization.';
-                  if (error?.code === '23503') {
-                    errorMessage = 'Cannot delete: This organization still has linked data (students, classes, lessons, etc.). Please remove or reassign that data first.';
-                  }
-                  Alert.alert('Error', errorMessage);
-                }
-              },
-            },
-          ]
-        );
-        break;
-    }
-  };
+  const renderStatCell = (bg: string, value: number, label: string) => (
+    <View style={[styles.statCard, { backgroundColor: bg + '20' }]}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
 
   const renderStatsCard = () => {
     if (!stats) return null;
-
     return (
       <View style={styles.statsContainer}>
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: theme.primary + '20' }]}>
-            <Text style={styles.statValue}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#8b5cf6' + '20' }]}>
-            <Text style={styles.statValue}>{stats.preschools}</Text>
-            <Text style={styles.statLabel}>Preschools</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#3b82f6' + '20' }]}>
-            <Text style={styles.statValue}>{stats.k12_schools}</Text>
-            <Text style={styles.statLabel}>K-12</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#10b981' + '20' }]}>
-            <Text style={styles.statValue}>{stats.other_orgs}</Text>
-            <Text style={styles.statLabel}>Organizations</Text>
-          </View>
+          {renderStatCell(theme.primary, stats.total, 'Total')}
+          {renderStatCell('#8b5cf6', stats.preschools, 'Preschools')}
+          {renderStatCell('#3b82f6', stats.k12_schools, 'K-12')}
+          {renderStatCell('#10b981', stats.other_orgs, 'Organizations')}
         </View>
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: theme.success + '20' }]}>
-            <Text style={styles.statValue}>{stats.active}</Text>
-            <Text style={styles.statLabel}>Active</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: theme.warning + '20' }]}>
-            <Text style={styles.statValue}>{stats.pending}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: theme.info + '20' }]}>
-            <Text style={styles.statValue}>{stats.verified}</Text>
-            <Text style={styles.statLabel}>Verified</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#f59e0b' + '20' }]}>
-            <Text style={styles.statValue}>{stats.with_subscription}</Text>
-            <Text style={styles.statLabel}>Subscribed</Text>
-          </View>
+          {renderStatCell(theme.success, stats.active, 'Active')}
+          {renderStatCell(theme.warning, stats.pending, 'Pending')}
+          {renderStatCell(theme.info, stats.verified, 'Verified')}
+          {renderStatCell('#f59e0b', stats.with_subscription, 'Subscribed')}
         </View>
       </View>
     );
   };
 
+  const typeLabel = (t: OrganizationType) =>
+    t === 'all' ? 'All Types' : t === 'k12' ? 'K-12' : t.charAt(0).toUpperCase() + t.slice(1);
+
   const renderFilters = () => (
     <View style={styles.filtersContainer}>
-      {/* Search */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={theme.textSecondary} />
         <TextInput
@@ -710,31 +100,19 @@ export default function SuperAdminOrganizations() {
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Type filter */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
         {(['all', 'preschool', 'k12', 'skills', 'org'] as OrganizationType[]).map(type => (
           <TouchableOpacity
             key={type}
-            style={[
-              styles.filterChip,
-              selectedType === type && styles.filterChipActive,
-            ]}
+            style={[styles.filterChip, selectedType === type && styles.filterChipActive]}
             onPress={() => setSelectedType(type)}
           >
-            <Text style={[
-              styles.filterChipText,
-              selectedType === type && styles.filterChipTextActive,
-            ]}>
-              {type === 'all' ? 'All Types' : 
-               type === 'k12' ? 'K-12' : 
-               type.charAt(0).toUpperCase() + type.slice(1)}
+            <Text style={[styles.filterChipText, selectedType === type && styles.filterChipTextActive]}>
+              {typeLabel(type)}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-
-      {/* Status filter */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
         {(['all', 'active', 'pending', 'suspended', 'inactive'] as OrganizationStatus[]).map(status => (
           <TouchableOpacity
@@ -746,10 +124,7 @@ export default function SuperAdminOrganizations() {
             ]}
             onPress={() => setSelectedStatus(status)}
           >
-            <Text style={[
-              styles.filterChipText,
-              selectedStatus === status && styles.filterChipTextActive,
-            ]}>
+            <Text style={[styles.filterChipText, selectedStatus === status && styles.filterChipTextActive]}>
               {status === 'all' ? 'All Status' : status.charAt(0).toUpperCase() + status.slice(1)}
             </Text>
           </TouchableOpacity>
@@ -841,7 +216,6 @@ export default function SuperAdminOrganizations() {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              {/* Status & Type */}
               <View style={styles.modalSection}>
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Type</Text>
@@ -868,8 +242,6 @@ export default function SuperAdminOrganizations() {
                   </Text>
                 </View>
               </View>
-
-              {/* Contact Info */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionTitle}>Contact Information</Text>
                 <View style={styles.modalRow}>
@@ -881,8 +253,6 @@ export default function SuperAdminOrganizations() {
                   <Text style={styles.modalValue}>{selectedOrg.contact_phone || '-'}</Text>
                 </View>
               </View>
-
-              {/* Location */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionTitle}>Location</Text>
                 <View style={styles.modalRow}>
@@ -902,8 +272,6 @@ export default function SuperAdminOrganizations() {
                   <Text style={styles.modalValue}>{selectedOrg.country || '-'}</Text>
                 </View>
               </View>
-
-              {/* Dates */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionTitle}>Activity</Text>
                 <View style={styles.modalRow}>
@@ -921,7 +289,6 @@ export default function SuperAdminOrganizations() {
                   </Text>
                 </View>
               </View>
-
               <View style={styles.modalSection}>
                 <Text style={styles.sectionTitle}>Subscription</Text>
                 <View style={styles.modalRow}>
@@ -956,20 +323,14 @@ export default function SuperAdminOrganizations() {
                 </View>
               </View>
 
-              {/* Quick Actions */}
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={[styles.modalActionBtn, { backgroundColor: theme.primary }]}
-                  onPress={() => {
-                    setShowDetailModal(false);
-                    // Navigate to edit screen
-                    Alert.alert('Edit', 'Edit functionality coming soon');
-                  }}
+                  onPress={() => handleOrgAction('edit')}
                 >
                   <Ionicons name="create-outline" size={20} color="#fff" />
                   <Text style={styles.modalActionText}>Edit</Text>
                 </TouchableOpacity>
-
                 {!selectedOrg.is_verified && (
                   <TouchableOpacity
                     style={[styles.modalActionBtn, { backgroundColor: theme.success }]}
@@ -979,7 +340,6 @@ export default function SuperAdminOrganizations() {
                     <Text style={styles.modalActionText}>Verify</Text>
                   </TouchableOpacity>
                 )}
-
                 <TouchableOpacity
                   style={[styles.modalActionBtn, { backgroundColor: theme.warning }]}
                   onPress={() => handleOrgAction('suspend')}
@@ -1130,361 +490,7 @@ export default function SuperAdminOrganizations() {
 
       {renderDetailModal()}
       {renderActionsModal()}
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: theme.textSecondary,
-    marginTop: 12,
-    fontSize: 16,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  statsContainer: {
-    marginBottom: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: theme.background,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  headerButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  statCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.text,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    marginTop: 4,
-  },
-  filtersContainer: {
-    marginBottom: 16,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.card,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-    color: theme.text,
-  },
-  filterScroll: {
-    marginBottom: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme.card,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  filterChipActive: {
-    backgroundColor: theme.primary,
-    borderColor: theme.primary,
-  },
-  filterChipText: {
-    color: theme.textSecondary,
-    fontSize: 14,
-  },
-  filterChipTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  resultsHeader: {
-    marginBottom: 12,
-  },
-  resultsCount: {
-    color: theme.textSecondary,
-    fontSize: 14,
-  },
-  orgCard: {
-    flex: 1,
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    padding: 16,
-    margin: 4,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  orgHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  orgTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  orgName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 12,
-  },
-  orgDetails: {
-    gap: 6,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    flex: 1,
-  },
-  orgFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: theme.text,
-    marginTop: 16,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 24,
-    gap: 8,
-  },
-  emptyButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: theme.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: theme.text,
-    flex: 1,
-  },
-  modalBody: {
-    padding: 20,
-  },
-  modalSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.textSecondary,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-  },
-  modalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border + '40',
-  },
-  modalLabel: {
-    fontSize: 14,
-    color: theme.textSecondary,
-  },
-  modalValue: {
-    fontSize: 14,
-    color: theme.text,
-    fontWeight: '500',
-    maxWidth: '60%',
-    textAlign: 'right',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-    marginBottom: 40,
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
-  },
-  modalActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  modalActionText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  actionsOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  actionsContent: {
-    backgroundColor: theme.card,
-    borderRadius: 20,
-    padding: 20,
-    width: '100%',
-    maxWidth: 340,
-  },
-  actionsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-    textAlign: 'center',
-  },
-  actionsSubtitle: {
-    fontSize: 14,
-    color: theme.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: theme.background,
-    marginBottom: 8,
-    gap: 12,
-  },
-  actionItemText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  cancelButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  cancelButtonText: {
-    color: theme.textSecondary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});

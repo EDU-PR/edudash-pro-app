@@ -1,14 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
+import { verifyProgramCode, registerLearner } from '@/lib/screen-data/learner-registration.helpers';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+const TAG = 'LearnerReg';
 export default function LearnerRegistrationScreen() {
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const params = useLocalSearchParams();
   const getParam = (key: string): string | undefined => {
     const value = (params as Record<string, string | string[] | undefined>)[key];
@@ -56,7 +62,7 @@ export default function LearnerRegistrationScreen() {
       });
 
       if (error) {
-        console.error('Email check error:', error);
+        logger.error(TAG, 'Email check error:', error);
         // Don't show error to user if check fails - let signup proceed
         setEmailError(null);
         return;
@@ -68,7 +74,7 @@ export default function LearnerRegistrationScreen() {
         setEmailError(null);
       }
     } catch (error) {
-      console.error('Email validation error:', error);
+      logger.error(TAG, 'Email validation error:', error);
       setEmailError(null);
     } finally {
       setCheckingEmail(false);
@@ -105,195 +111,29 @@ export default function LearnerRegistrationScreen() {
   }, []);
 
   const handleProgramCodeSubmit = async () => {
-    if (!programCode.trim()) {
-      Alert.alert('Error', 'Please enter a program code');
-      return;
-    }
-
     setLoading(true);
     try {
-      const supabase = assertSupabase();
-      // Preferred: public RPC (works even when unauthenticated and RLS blocks direct SELECT)
-      let program: any | null = null;
-      try {
-        const { data, error } = await supabase.rpc('validate_program_code', { p_code: programCode.trim() });
-        if (!error && data && typeof data === 'object' && (data as any).valid) {
-          const course = (data as any).course;
-          const org = (data as any).organization;
-          program = {
-            id: String(course?.id ?? ''),
-            title: String(course?.title ?? ''),
-            description: course?.description ?? null,
-            course_code: String(course?.course_code ?? ''),
-            organizations: org?.id ? { id: String(org.id), name: String(org.name ?? ''), slug: org.slug ?? null } : null,
-          };
-        }
-      } catch {
-        // ignore and fall back below
+      const program = await verifyProgramCode(programCode, showAlert);
+      if (program) {
+        setProgramInfo(program);
+        setMode('program');
       }
-
-      // Fallback: direct query (works for authenticated users with RLS access)
-      if (!program?.id) {
-        const { data, error } = await supabase
-          .from('courses')
-          .select(`
-            id,
-            title,
-            description,
-            course_code,
-            organizations (
-              id,
-              name,
-              slug
-            )
-          `)
-          .or(`course_code.eq.${programCode.trim()},id.eq.${programCode.trim()}`)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (!error && data) program = data;
-      }
-
-      if (!program?.id) {
-        Alert.alert('Invalid Code', 'The program code you entered is invalid or the program is no longer active.');
-        return;
-      }
-
-      setProgramInfo(program);
-      setMode('program');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to verify program code');
+      showAlert({ title: 'Error', message: error.message || 'Failed to verify program code', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegister = async (withProgram: boolean = false) => {
-    // Validation
-    if (!email || !firstName || !lastName || !password) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters');
-      return;
-    }
-
-    if (withProgram && !programInfo) {
-      Alert.alert('Error', 'Please enter a valid program code first');
-      return;
-    }
-
     setLoading(true);
     try {
-      const supabase = assertSupabase();
-
-      // Double-check if email exists using RPC (checks profiles table - source of truth)
-      const { data: emailExists, error: checkError } = await supabase.rpc('check_email_exists', {
-        p_email: email.trim().toLowerCase(),
-      });
-
-      if (emailExists) {
-        Alert.alert(
-          'Email Already Registered',
-          'This email is already registered. Would you like to sign in instead?',
-          [
-            { text: 'Use Different Email', style: 'cancel' },
-            {
-              text: 'Sign In',
-              style: 'default',
-              onPress: () => router.replace('/(auth)/sign-in'),
-            },
-          ]
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Sign up user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            phone: phone.trim() || null,
-            role: 'student',
-            organization_id: withProgram ? programInfo?.organizations?.id : null,
-          },
-          emailRedirectTo: 'https://www.edudashpro.org.za/landing?flow=email-confirm',
-        },
-      });
-
-      if (authError) {
-        // Handle specific Supabase errors
-        if (authError.message?.includes('already registered') || 
-            authError.message?.includes('email already') ||
-            authError.message?.includes('User already registered')) {
-          Alert.alert(
-            'Email Already Registered',
-            'This email is already registered. Would you like to sign in instead?',
-            [
-              { text: 'Use Different Email', style: 'cancel' },
-              {
-                text: 'Sign In',
-                style: 'default',
-                onPress: () => router.replace('/(auth)/sign-in'),
-              },
-            ]
-          );
-          setLoading(false);
-          return;
-        }
-        throw authError;
-      }
-
-      // If confirmations are enabled, Supabase returns no session until the email is verified
-      if (!authData.session) {
-        // Email confirmation required - route to verify email screen
-        router.replace({
-          pathname: '/screens/verify-your-email',
-          params: { email: email.trim() }
-        } as any);
-        return;
-      }
-
-      // Auto-enroll in program if applicable
-      if (authData.user && withProgram && programInfo) {
-        const { error: enrollError } = await supabase
-          .from('enrollments')
-          .insert({
-            student_id: authData.user.id,
-            course_id: programInfo.id,
-            enrollment_method: 'join_code',
-            is_active: true,
-            enrolled_at: new Date().toISOString(),
-          });
-
-        if (enrollError) {
-          console.error('Enrollment error:', enrollError);
-        }
-      }
-
-      // Account created and user can log in immediately (email confirmation disabled or already verified)
-      Alert.alert(
-        'Registration Successful!',
-        'Your account has been created successfully. You can now sign in.',
-        [
-          {
-            text: 'Go to Sign In',
-            onPress: () => router.replace('/(auth)/sign-in'),
-          },
-        ]
+      await registerLearner(
+        { email, firstName, lastName, phone, password, confirmPassword, programInfo, withProgram },
+        showAlert
       );
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.message || 'Failed to create account');
+      showAlert({ title: 'Registration Failed', message: error.message || 'Failed to create account', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -372,6 +212,7 @@ export default function LearnerRegistrationScreen() {
             </TouchableOpacity>
           </View>
         </ScrollView>
+        <AlertModal {...alertProps} />
       </SafeAreaView>
     );
   }
@@ -445,6 +286,7 @@ export default function LearnerRegistrationScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        <AlertModal {...alertProps} />
       </SafeAreaView>
     );
   }
@@ -651,6 +493,7 @@ export default function LearnerRegistrationScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

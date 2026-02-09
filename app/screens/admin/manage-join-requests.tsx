@@ -22,6 +22,10 @@ import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type TabType = 'pending' | 'approved' | 'rejected' | 'all';
 
 interface JoinRequestWithProfile extends JoinRequest {
+  screening_status?: 'not_screened' | 'recommended' | 'hold' | 'reject_recommended' | string | null;
+  screening_notes?: string | null;
+  screened_at?: string | null;
+  principal_decision_required?: boolean | null;
   requester_profile?: {
     first_name: string | null;
     last_name: string | null;
@@ -236,6 +240,22 @@ export default function ManageJoinRequestsScreen() {
     });
   };
 
+  const formatDateTime = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-ZA', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatScreeningStatus = (value: string | null | undefined): string => {
+    if (!value) return '';
+    return value.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+  };
+
   const renderTab = (tab: TabType, label: string) => (
     <TouchableOpacity
       style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -297,6 +317,22 @@ export default function ManageJoinRequestsScreen() {
             {item.relationship && (
               <Text style={styles.relationshipText}>Relationship: {item.relationship}</Text>
             )}
+
+            {item.screening_status && item.screening_status !== 'not_screened' ? (
+              <View style={styles.screeningMetaContainer}>
+                <Text style={styles.screeningMetaLabel}>
+                  Admin Screening: {formatScreeningStatus(item.screening_status)}
+                </Text>
+                {item.screened_at ? (
+                  <Text style={styles.screeningMetaTime}>Screened: {formatDateTime(item.screened_at)}</Text>
+                ) : null}
+                {item.screening_notes ? (
+                  <Text style={styles.screeningMetaNotes} numberOfLines={3}>
+                    {item.screening_notes}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
           {isPending && !showScreeningActions && (
@@ -631,6 +667,31 @@ function createStyles(theme: any) {
       fontSize: 13,
       color: theme?.textSecondary || '#888',
       marginTop: 8,
+    },
+    screeningMetaContainer: {
+      marginTop: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme?.border || '#2a2a4a',
+      backgroundColor: theme?.background || '#0d0d1a',
+      padding: 10,
+      gap: 2,
+    },
+    screeningMetaLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme?.text || '#fff',
+    },
+    screeningMetaTime: {
+      fontSize: 11,
+      color: theme?.textSecondary || '#888',
+      fontWeight: '600',
+    },
+    screeningMetaNotes: {
+      marginTop: 4,
+      fontSize: 12,
+      color: theme?.textSecondary || '#888',
+      lineHeight: 16,
     },
     cardFooter: {
       flexDirection: 'row',

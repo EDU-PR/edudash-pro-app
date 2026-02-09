@@ -216,6 +216,17 @@ export class ParentJoinService {
   }
 
   /**
+   * Search students in a school by name or student ID
+   * Alias retained for newer screen APIs.
+   */
+  static async searchStudents(
+    schoolId: string,
+    query: string
+  ): Promise<SearchedStudent[]> {
+    return this.searchChild(schoolId, query);
+  }
+
+  /**
    * Get a single request with full student details
    */
   static async getRequestWithStudent(

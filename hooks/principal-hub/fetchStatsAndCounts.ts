@@ -1,0 +1,223 @@
+/**
+ * Principal Hub — Stats & Counts Fetcher
+ *
+ * Executes the main batch of Supabase queries for student, class,
+ * application, attendance, capacity, registration, and approval counts.
+ * Returns raw numeric data for the orchestrator to assemble.
+ */
+import { logger } from '@/lib/logger';
+import { assertSupabase } from '@/lib/supabase';
+import { FinancialDataService } from '@/services/FinancialDataService';
+import type { RegistrationFeeRow } from './types';
+
+export interface StatsRawResult {
+  studentsCount: number;
+  teachersData: any[];
+  classesCount: number;
+  applicationsCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  waitlistedCount: number;
+  attendanceRate: number;
+  preschoolCapacity: any;
+  schoolName: string;
+  pendingReportsCount: number;
+  pendingRegistrationsCount: number;
+  pendingPaymentsCount: number;
+  pendingPOPUploadsCount: number;
+  pendingActivityApprovalsCount: number;
+  pendingHomeworkApprovalsCount: number;
+  registrationFeesCollected: number;
+  pendingRegistrationPayments: number;
+  combinedPendingPayments: number;
+}
+
+export async function fetchStatsAndCounts(
+  preschoolId: string,
+  fallbackSchoolName: string,
+): Promise<StatsRawResult> {
+  const supabase = assertSupabase();
+
+  // Helper: wrap each query so it never rejects (Hermes lacks Promise.allSettled).
+  // Supabase query builders are thenables — use .then() which they do support.
+  const safe = <T>(p: PromiseLike<T> | T): Promise<T | { count: 0; data: null }> =>
+    new Promise((resolve) => {
+      Promise.resolve(p).then(
+        (val) => resolve(val),
+        () => resolve({ count: 0, data: null } as any),
+      );
+    });
+
+  const [
+    studentsResult,
+    teachersResult,
+    classesResult,
+    applicationsResult,
+    approvedAppsResult,
+    rejectedAppsResult,
+    waitlistedAppsResult,
+    attendanceResult,
+    capacityResult,
+    preschoolResult,
+    pendingReportsResult,
+    pendingRegistrationsResult,
+    pendingChildRegistrationsResult,
+    pendingPaymentsResult,
+    registrationFeesResult,
+    childRegistrationFeesResult,
+    pendingPOPUploadsResult,
+    pendingActivityApprovalsResult,
+    pendingHomeworkApprovalsResult,
+  ] = await Promise.all([
+    safe(supabase.from('students').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).or('is_active.eq.true,is_active.is.null')),
+
+    safe(supabase.from('teachers').select(`
+      id, user_id, email, first_name, last_name, phone,
+      subject_specialization, preschool_id, is_active, created_at
+    `).eq('preschool_id', preschoolId).or('is_active.eq.true,is_active.is.null')),
+
+    safe(supabase.from('classes').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).or('active.eq.true,active.is.null')),
+
+    safe(supabase.from('enrollment_applications').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).in('status', ['pending', 'under_review', 'interview_scheduled'])),
+    safe(supabase.from('enrollment_applications').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'approved')),
+    safe(supabase.from('enrollment_applications').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'rejected')),
+    safe(supabase.from('enrollment_applications').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'waitlisted')),
+
+    safe(supabase.from('attendance').select('status')
+      .eq('organization_id', preschoolId)
+      .gte('attendance_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .limit(1000)),
+
+    safe(supabase.from('preschools').select('capacity:max_students, name').eq('id', preschoolId).single()),
+    safe(supabase.from('preschools').select('name').eq('id', preschoolId).single()),
+
+    safe(supabase.from('progress_reports').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).or('approval_status.eq.pending_review,status.eq.pending_review')),
+
+    safe(supabase.from('registration_requests').select('id', { count: 'exact', head: true })
+      .eq('organization_id', preschoolId).eq('status', 'pending')),
+    safe(supabase.from('child_registration_requests').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'pending')),
+
+    safe(supabase.from('parent_payments').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'pending')),
+
+    safe(supabase.from('registration_requests')
+      .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
+      .eq('organization_id', preschoolId)),
+    safe(supabase.from('child_registration_requests')
+      .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
+      .eq('preschool_id', preschoolId)),
+
+    safe(supabase.from('pop_uploads').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('status', 'pending').eq('upload_type', 'proof_of_payment')),
+
+    safe(supabase.from('interactive_activities').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('approval_status', 'pending')),
+
+    safe(supabase.from('homework_assignments').select('id', { count: 'exact', head: true })
+      .eq('preschool_id', preschoolId).eq('is_published', false).eq('status', 'draft')),
+  ]);
+
+  // Extract counts with safe fallbacks
+  const v = (r: any) => r ?? { count: 0, data: null };
+
+  const studentsCount = v(studentsResult).count || 0;
+  const teachersData = v(teachersResult).data || [];
+  const classesCount = v(classesResult).count || 0;
+  const applicationsCount = v(applicationsResult).count || 0;
+  const approvedCount = v(approvedAppsResult).count || 0;
+  const rejectedCount = v(rejectedAppsResult).count || 0;
+  const waitlistedCount = v(waitlistedAppsResult).count || 0;
+  const attendanceData = v(attendanceResult).data || [];
+  const preschoolCapacity = v(capacityResult).data || {};
+  const preschoolInfo = v(preschoolResult).data || {};
+  const pendingReportsCount = v(pendingReportsResult).count || 0;
+  const pendingRegistrationsCount =
+    (v(pendingRegistrationsResult).count || 0) +
+    (v(pendingChildRegistrationsResult).count || 0);
+  const legacyPendingPaymentsCount = v(pendingPaymentsResult).count || 0;
+  const pendingPOPUploadsCount = v(pendingPOPUploadsResult).count || 0;
+  const pendingActivityApprovalsCount = v(pendingActivityApprovalsResult).count || 0;
+  const pendingHomeworkApprovalsCount = v(pendingHomeworkApprovalsResult).count || 0;
+
+  // Calculate attendance rate
+  let attendanceRate = 0;
+  if (attendanceData.length > 0) {
+    const presentCount = attendanceData.filter((r: any) => r.status === 'present').length;
+    attendanceRate = Math.round((presentCount / attendanceData.length) * 100);
+  }
+
+  // Compute registration fees from both request tables
+  const regFees: RegistrationFeeRow[] = [
+    ...((v(registrationFeesResult).data as RegistrationFeeRow[] | null) || []),
+    ...((v(childRegistrationFeesResult).data as RegistrationFeeRow[] | null) || []),
+  ];
+  let registrationFeesCollected = 0;
+  let pendingRegistrationPayments = 0;
+  if (regFees.length > 0) {
+    const paid = regFees.filter((r) => Boolean(r.payment_verified) && r.status === 'approved');
+    const pending = regFees.filter(
+      (r) => !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected',
+    );
+    registrationFeesCollected = paid.reduce((sum, r) => {
+      const n = typeof r.registration_fee_amount === 'number'
+        ? r.registration_fee_amount
+        : parseFloat(r.registration_fee_amount ?? '0');
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0);
+    pendingRegistrationPayments = pending.length;
+  }
+
+  let pendingPaymentsCount = legacyPendingPaymentsCount;
+  try {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const receivables = await FinancialDataService.getReceivablesSnapshot(preschoolId, currentMonth);
+    pendingPaymentsCount = Number(receivables?.summary?.outstanding_students || 0);
+  } catch (receivablesError: any) {
+    logger.info('Using legacy pending payments count fallback', {
+      reason: receivablesError?.message || 'Unknown receivables error',
+      legacyPendingPaymentsCount,
+    });
+  }
+
+  const combinedPendingPayments =
+    pendingPaymentsCount + pendingRegistrationPayments + pendingPOPUploadsCount;
+
+  const schoolName =
+    preschoolInfo.name || preschoolCapacity.name || fallbackSchoolName;
+
+  logger.info('📊 Stats batch complete', {
+    studentsCount, classesCount, applicationsCount,
+    pendingReportsCount, pendingRegistrationsCount, combinedPendingPayments,
+  });
+
+  return {
+    studentsCount,
+    teachersData,
+    classesCount,
+    applicationsCount,
+    approvedCount,
+    rejectedCount,
+    waitlistedCount,
+    attendanceRate,
+    preschoolCapacity,
+    schoolName,
+    pendingReportsCount,
+    pendingRegistrationsCount,
+    pendingPaymentsCount,
+    pendingPOPUploadsCount,
+    pendingActivityApprovalsCount,
+    pendingHomeworkApprovalsCount,
+    registrationFeesCollected,
+    pendingRegistrationPayments,
+    combinedPendingPayments,
+  };
+}

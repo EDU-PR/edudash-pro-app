@@ -3030,6 +3030,7 @@ export type Database = {
           exams_per_month: number
           explanations_per_month: number
           id: string
+          images_per_month: number
           is_active: boolean | null
           monthly_price_zar: number | null
           priority_queue: boolean | null
@@ -3044,6 +3045,7 @@ export type Database = {
           exams_per_month: number
           explanations_per_month: number
           id?: string
+          images_per_month?: number
           is_active?: boolean | null
           monthly_price_zar?: number | null
           priority_queue?: boolean | null
@@ -3058,6 +3060,7 @@ export type Database = {
           exams_per_month?: number
           explanations_per_month?: number
           id?: string
+          images_per_month?: number
           is_active?: boolean | null
           monthly_price_zar?: number | null
           priority_queue?: boolean | null
@@ -19133,6 +19136,8 @@ export type Database = {
           amount: number | null
           amount_cents: number
           attachment_url: string | null
+          billing_month: string
+          category_code: string
           created_at: string | null
           currency: string | null
           description: string | null
@@ -19151,12 +19156,15 @@ export type Database = {
           status: string | null
           student_id: string | null
           submitted_at: string | null
+          transaction_date: string
           updated_at: string | null
         }
         Insert: {
           amount?: number | null
           amount_cents: number
           attachment_url?: string | null
+          billing_month?: string
+          category_code?: string
           created_at?: string | null
           currency?: string | null
           description?: string | null
@@ -19175,12 +19183,15 @@ export type Database = {
           status?: string | null
           student_id?: string | null
           submitted_at?: string | null
+          transaction_date?: string
           updated_at?: string | null
         }
         Update: {
           amount?: number | null
           amount_cents?: number
           attachment_url?: string | null
+          billing_month?: string
+          category_code?: string
           created_at?: string | null
           currency?: string | null
           description?: string | null
@@ -19199,6 +19210,7 @@ export type Database = {
           status?: string | null
           student_id?: string | null
           submitted_at?: string | null
+          transaction_date?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -20031,6 +20043,7 @@ export type Database = {
       pop_uploads: {
         Row: {
           achievement_level: string | null
+          category_code: string | null
           created_at: string | null
           description: string | null
           file_name: string
@@ -20041,6 +20054,7 @@ export type Database = {
           learning_area: string | null
           payment_amount: number | null
           payment_date: string | null
+          payment_for_month: string | null
           payment_method: string | null
           payment_reference: string | null
           preschool_id: string
@@ -20057,6 +20071,7 @@ export type Database = {
         }
         Insert: {
           achievement_level?: string | null
+          category_code?: string | null
           created_at?: string | null
           description?: string | null
           file_name: string
@@ -20067,6 +20082,7 @@ export type Database = {
           learning_area?: string | null
           payment_amount?: number | null
           payment_date?: string | null
+          payment_for_month?: string | null
           payment_method?: string | null
           payment_reference?: string | null
           preschool_id: string
@@ -20083,6 +20099,7 @@ export type Database = {
         }
         Update: {
           achievement_level?: string | null
+          category_code?: string | null
           created_at?: string | null
           description?: string | null
           file_name?: string
@@ -20093,6 +20110,7 @@ export type Database = {
           learning_area?: string | null
           payment_amount?: number | null
           payment_date?: string | null
+          payment_for_month?: string | null
           payment_method?: string | null
           payment_reference?: string | null
           preschool_id?: string
@@ -24363,6 +24381,8 @@ export type Database = {
           amount: number | null
           amount_outstanding: number
           amount_paid: number | null
+          billing_month: string
+          category_code: string
           created_at: string | null
           discount_amount: number | null
           due_date: string | null
@@ -24378,6 +24398,8 @@ export type Database = {
           amount?: number | null
           amount_outstanding?: number
           amount_paid?: number | null
+          billing_month?: string
+          category_code?: string
           created_at?: string | null
           discount_amount?: number | null
           due_date?: string | null
@@ -24393,6 +24415,8 @@ export type Database = {
           amount?: number | null
           amount_outstanding?: number
           amount_paid?: number | null
+          billing_month?: string
+          category_code?: string
           created_at?: string | null
           discount_amount?: number | null
           due_date?: string | null
@@ -28347,11 +28371,13 @@ export type Database = {
           exams_generated_this_month: number | null
           explanations_requested_this_month: number | null
           id: string
+          images_generated_this_month: number | null
           last_daily_reset_at: string | null
           last_monthly_reset_at: string | null
           total_chat_messages: number | null
           total_exams_generated: number | null
           total_explanations_requested: number | null
+          total_images_generated: number | null
           updated_at: string | null
           user_id: string
         }
@@ -28363,11 +28389,13 @@ export type Database = {
           exams_generated_this_month?: number | null
           explanations_requested_this_month?: number | null
           id?: string
+          images_generated_this_month?: number | null
           last_daily_reset_at?: string | null
           last_monthly_reset_at?: string | null
           total_chat_messages?: number | null
           total_exams_generated?: number | null
           total_explanations_requested?: number | null
+          total_images_generated?: number | null
           updated_at?: string | null
           user_id: string
         }
@@ -28379,11 +28407,13 @@ export type Database = {
           exams_generated_this_month?: number | null
           explanations_requested_this_month?: number | null
           id?: string
+          images_generated_this_month?: number | null
           last_daily_reset_at?: string | null
           last_monthly_reset_at?: string | null
           total_chat_messages?: number | null
           total_exams_generated?: number | null
           total_explanations_requested?: number | null
+          total_images_generated?: number | null
           updated_at?: string | null
           user_id?: string
         }
@@ -30988,6 +31018,16 @@ export type Database = {
         Args: { p_pop_id: string; p_reviewer_notes?: string }
         Returns: Json
       }
+      approve_pop_payment: {
+        Args: {
+          p_allocations?: Json
+          p_billing_month: string
+          p_category_code: string
+          p_notes?: string | null
+          p_upload_id: string
+        }
+        Returns: Json
+      }
       assign_all_teachers_to_subscription: {
         Args: { p_school_id: string; p_subscription_id: string }
         Returns: {
@@ -31202,6 +31242,10 @@ export type Database = {
         }
         Returns: Json
       }
+      close_finance_month: {
+        Args: { p_month: string; p_org_id: string }
+        Returns: Json
+      }
       cleanup_expired_dash_storage: { Args: never; Returns: number }
       cleanup_old_call_signals: { Args: never; Returns: undefined }
       cleanup_old_guest_logs: { Args: never; Returns: number }
@@ -31291,6 +31335,20 @@ export type Database = {
           status: string
           type: string
         }[]
+      }
+      create_parent_temp_lesson: {
+        Args: {
+          p_activity_id: string
+          p_activity_type?: string
+          p_child_id: string
+          p_difficulty?: string
+          p_domain: string
+          p_duration_minutes?: number
+          p_reason?: string
+          p_snapshot?: Json
+          p_title?: string
+        }
+        Returns: string
       }
       create_school_with_admin: {
         Args: {
@@ -32123,6 +32181,14 @@ export type Database = {
       get_platform_stats_for_superadmin: { Args: never; Returns: Json }
       get_pop_upload_stats: {
         Args: { target_preschool_id?: string; target_student_id?: string }
+        Returns: Json
+      }
+      get_finance_month_snapshot: {
+        Args: { p_month: string; p_org_id: string }
+        Returns: Json
+      }
+      get_payroll_roster: {
+        Args: { p_month: string; p_org_id: string }
         Returns: Json
       }
       get_promotional_price:
@@ -33057,6 +33123,17 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      record_payroll_payment: {
+        Args: {
+          p_amount: number
+          p_notes?: string | null
+          p_payment_method: string
+          p_payment_month: string
+          p_payroll_recipient_id: string
+          p_reference?: string | null
+        }
+        Returns: Json
       }
       record_promotional_subscription: {
         Args: {

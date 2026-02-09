@@ -3,7 +3,7 @@
  * Invite Secretary, Treasurer, Deputy President, and other office bearers
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView, Share, Linking, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, Share, Linking, Modal } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
-import { useAlert } from '@/components/ui/StyledAlert';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { createStyles } from '@/components/membership/styles/youth-executive-invite.styles';
 import { 
   EXECUTIVE_POSITIONS, 
@@ -22,25 +22,26 @@ import {
 } from '@/components/membership/styles/youth-executive-invite.constants';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 let Clipboard: any = null;
 try { Clipboard = require('expo-clipboard'); } catch (e) { /* optional */ }
 
 export default function YouthExecutiveInviteScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
-  const alert = useAlert();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Route guard: Only youth_president can invite executives
   useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
     if (profile && memberType !== 'youth_president') {
-      console.log('[YouthExecutiveInvite] Access denied - member_type:', memberType, '- redirecting');
-      Alert.alert(
-        'Access Restricted',
-        'Only Youth President can invite executive members.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      logger.debug('[YouthExecutiveInvite] Access denied - member_type:', memberType, '- redirecting');
+      showAlert({
+        title: 'Access Restricted',
+        message: 'Only Youth President can invite executive members.',
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     }
   }, [profile]);
 
@@ -87,7 +88,7 @@ export default function YouthExecutiveInviteScreen() {
       });
       setInvites(mapped);
     } catch (e: any) {
-      console.error('Failed to load executive invites:', e);
+      logger.error('Failed to load executive invites:', e);
     } finally {
       setInitialLoading(false);
     }
@@ -378,6 +379,7 @@ export default function YouthExecutiveInviteScreen() {
           </View>
         </Modal>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

@@ -5,11 +5,13 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { View, Modal, Image, StyleSheet, Dimensions, TouchableOpacity, Text, StatusBar, Platform, Share, Alert, Animated, PanResponder } from 'react-native';
+import { View, Modal, Image, StyleSheet, Dimensions, TouchableOpacity, Text, StatusBar, Platform, Share, Animated, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { toast } from '@/components/ui/ToastProvider';
+import type { ParentAlertApi } from '@/components/ui/parentAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -22,6 +24,7 @@ interface ImageViewerProps {
   onClose: () => void;
   senderName?: string;
   timestamp?: string;
+  showAlert?: ParentAlertApi;
 }
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({
@@ -31,11 +34,28 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   onClose,
   senderName,
   timestamp,
+  showAlert,
 }) => {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showControls, setShowControls] = useState(true);
+
+  const showImageAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'info') => {
+    if (showAlert) {
+      showAlert({ title, message, type });
+      return;
+    }
+    if (type === 'error') {
+      toast.error(message, title);
+      return;
+    }
+    if (type === 'warning') {
+      toast.warn(message, title);
+      return;
+    }
+    toast.info(message, title);
+  };
   
   // Animation values
   const translateY = useRef(new Animated.Value(0)).current;
@@ -118,7 +138,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Error', 'Sharing is not available on this device');
+        showImageAlert('Error', 'Sharing is not available on this device', 'warning');
         return;
       }
       
@@ -133,7 +153,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       });
     } catch (error) {
       console.error('Error saving image:', error);
-      Alert.alert('Error', 'Failed to save image');
+      showImageAlert('Error', 'Failed to save image', 'error');
     } finally {
       setSaving(false);
     }

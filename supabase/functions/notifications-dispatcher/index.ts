@@ -90,6 +90,11 @@ interface NotificationContext {
   job_title?: string;
   candidate_name?: string;
   candidate_email?: string;
+  stage_label?: string;
+  interview_date?: string;
+  interview_time?: string;
+  teacher_name?: string;
+  teacher_email?: string;
   // Forms
   form_id?: string;
   form_title?: string;
@@ -154,6 +159,7 @@ interface NotificationRequest {
   job_title?: string;
   candidate_name?: string;
   candidate_email?: string;
+  teacher_user_id?: string;
   recipient_email?: string;
   recipient_emails?: string[];
   context?: Record<string, unknown>;
@@ -941,6 +947,145 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'high',
       channelId: 'admin'
+    },
+    job_application_under_review: {
+      title: 'Application Under Review',
+      body: context.job_title
+        ? `Your application for ${context.job_title} is now under review`
+        : 'Your application is now under review',
+      data: {
+        type: 'hiring',
+        screen: 'application-status',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'career'
+    },
+    job_application_shortlisted: {
+      title: 'You Were Shortlisted',
+      body: context.job_title
+        ? `Great news! You were shortlisted for ${context.job_title}`
+        : 'Great news! You were shortlisted',
+      data: {
+        type: 'hiring',
+        screen: 'application-status',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'career'
+    },
+    job_interview_scheduled: {
+      title: 'Interview Scheduled',
+      body: context.job_title
+        ? `Interview scheduled for ${context.job_title}${context.interview_date ? ` on ${context.interview_date}` : ''}`
+        : 'Your interview has been scheduled',
+      data: {
+        type: 'hiring',
+        screen: 'application-status',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+        interview_date: context.interview_date,
+        interview_time: context.interview_time,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'career'
+    },
+    job_offer_sent: {
+      title: 'Job Offer Sent',
+      body: context.job_title
+        ? `An offer was sent for ${context.job_title}`
+        : 'A job offer has been sent to you',
+      data: {
+        type: 'hiring',
+        screen: 'offer-letter',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'career'
+    },
+    job_application_rejected: {
+      title: 'Application Update',
+      body: context.job_title
+        ? `Your application for ${context.job_title} was not selected this time`
+        : 'Your application was not selected this time',
+      data: {
+        type: 'hiring',
+        screen: 'application-status',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'career'
+    },
+    job_application_hired: {
+      title: 'You Were Selected',
+      body: context.job_title
+        ? `You were selected for ${context.job_title}. Onboarding has started`
+        : 'You were selected. Onboarding has started',
+      data: {
+        type: 'hiring',
+        screen: 'application-status',
+        job_application_id: context.job_application_id,
+        job_posting_id: context.job_posting_id,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'career'
+    },
+    teacher_invite_accepted_pending_principal: {
+      title: 'Teacher Awaiting Approval',
+      body: context.teacher_name
+        ? `${context.teacher_name} accepted the invite and is waiting for final approval`
+        : 'A teacher accepted an invite and is waiting for approval',
+      data: {
+        type: 'hiring',
+        screen: 'teacher-approval-dashboard',
+        teacher_name: context.teacher_name,
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
+    },
+    teacher_account_approved: {
+      title: 'Teacher Account Approved',
+      body: 'Your teacher account has been approved. You can now access your dashboard.',
+      data: {
+        type: 'hiring',
+        screen: 'teacher-dashboard',
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
+    },
+    teacher_account_rejected: {
+      title: 'Teacher Account Update',
+      body: context.rejection_reason
+        ? `Your teacher account approval was declined: ${context.rejection_reason}`
+        : 'Your teacher account approval was declined. Please contact the principal.',
+      data: {
+        type: 'hiring',
+        screen: 'teacher-approval-pending',
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'admin'
     }
   };
 
@@ -1410,6 +1555,66 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         }
       }
       break;
+
+    case 'job_application_under_review':
+    case 'job_application_shortlisted':
+    case 'job_interview_scheduled':
+    case 'job_offer_sent':
+    case 'job_application_rejected':
+    case 'job_application_hired':
+      if (request.job_application_id) {
+        const { data: appData } = await supabase
+          .from('job_applications')
+          .select('candidate_profile_id')
+          .eq('id', request.job_application_id)
+          .maybeSingle();
+
+        if (appData?.candidate_profile_id) {
+          const { data: candidate } = await supabase
+            .from('candidate_profiles')
+            .select('user_id, email')
+            .eq('id', appData.candidate_profile_id)
+            .maybeSingle();
+
+          if (candidate?.user_id) {
+            userIds.push(candidate.user_id);
+          } else if (candidate?.email) {
+            const { data: candidateProfile } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', candidate.email.toLowerCase())
+              .limit(1)
+              .maybeSingle();
+            if (candidateProfile?.id) {
+              userIds.push(candidateProfile.id);
+            }
+          }
+        }
+      }
+      break;
+
+    case 'teacher_invite_accepted_pending_principal':
+      if (request.preschool_id) {
+        const { data: principals } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`preschool_id.eq.${request.preschool_id},organization_id.eq.${request.preschool_id}`)
+          .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
+          .eq('is_active', true);
+        if (principals) {
+          userIds.push(...principals.map((p: { id: string }) => p.id));
+        }
+      }
+      break;
+
+    case 'teacher_account_approved':
+    case 'teacher_account_rejected': {
+      const teacherUserId = request.teacher_user_id || String(request.custom_payload?.teacher_user_id || '');
+      if (teacherUserId) {
+        userIds.push(teacherUserId);
+      }
+      break;
+    }
 
     // Child registration notifications
     case 'child_registration_submitted':
@@ -1995,7 +2200,13 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
           }
         }
         break;
-      case 'new_job_application': {
+      case 'new_job_application':
+      case 'job_application_under_review':
+      case 'job_application_shortlisted':
+      case 'job_interview_scheduled':
+      case 'job_offer_sent':
+      case 'job_application_rejected':
+      case 'job_application_hired': {
         // Enrich with job posting and candidate details
         if (request.job_posting_id) {
           const { data: jobPost } = await supabase
@@ -2043,10 +2254,55 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         context.candidate_name = (request.custom_payload?.candidate_name as string | undefined) ?? context.candidate_name;
         context.candidate_email = (request.custom_payload?.candidate_email as string | undefined) ?? context.candidate_email;
         context.job_title = (request.custom_payload?.job_title as string | undefined) ?? context.job_title;
+        context.stage_label = (request.custom_payload?.stage_label as string | undefined) ?? context.stage_label;
+        context.interview_date = (request.custom_payload?.interview_date as string | undefined) ?? context.interview_date;
+        context.interview_time = (request.custom_payload?.interview_time as string | undefined) ?? context.interview_time;
+        context.rejection_reason = (request.custom_payload?.rejection_reason as string | undefined)
+          ?? request.rejection_reason
+          ?? context.rejection_reason;
 
         if (!context.school_name && request.preschool_id) {
           const { data: sch } = await supabase.from('preschools').select('name').eq('id', request.preschool_id).single();
           if (sch) context.school_name = sch.name;
+        }
+        break;
+      }
+      case 'teacher_invite_accepted_pending_principal':
+      case 'teacher_account_approved':
+      case 'teacher_account_rejected': {
+        const teacherUserId = request.teacher_user_id || String(request.custom_payload?.teacher_user_id || '');
+        context.teacher_name = (request.custom_payload?.teacher_name as string | undefined) ?? context.teacher_name;
+        context.teacher_email = (request.custom_payload?.teacher_email as string | undefined) ?? context.teacher_email;
+        context.rejection_reason = (request.custom_payload?.rejection_reason as string | undefined)
+          ?? request.rejection_reason
+          ?? context.rejection_reason;
+
+        if ((!context.teacher_name || !context.teacher_email) && teacherUserId) {
+          const { data: teacher } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, email')
+            .eq('id', teacherUserId)
+            .maybeSingle();
+          if (teacher) {
+            if (!context.teacher_name) {
+              const fullName = `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim();
+              context.teacher_name = fullName || teacher.email || 'Teacher';
+            }
+            if (!context.teacher_email) {
+              context.teacher_email = teacher.email || undefined;
+            }
+          }
+        }
+
+        if (request.preschool_id && !context.school_name) {
+          const { data: school } = await supabase
+            .from('preschools')
+            .select('name')
+            .eq('id', request.preschool_id)
+            .maybeSingle();
+          if (school?.name) {
+            context.school_name = school.name;
+          }
         }
         break;
       }
@@ -2262,6 +2518,13 @@ function mapEventTypeToNotificationType(
   ) {
     return 'payment';
   }
+  if (
+    normalized.startsWith('job_') ||
+    normalized.includes('teacher_account') ||
+    normalized.includes('teacher_invite')
+  ) {
+    return 'reminder';
+  }
   if (normalized.includes('emergency')) return 'emergency';
   if (normalized.includes('reminder') || normalized.includes('birthday')) {
     if (
@@ -2284,7 +2547,27 @@ function mapEventTypeToNotificationType(
 function getNotificationCategory(eventType: string): string {
   const schoolEvents = ['school_event_created', 'school_event_updated', 'school_event_cancelled', 'school_event_reminder', 'announcement', 'form_published'];
   const homeworkEvents = ['homework_assigned', 'homework_due', 'homework_graded', 'assignment_graded', 'homework_submitted'];
-  const systemEvents = ['payment_received', 'payment_overdue', 'payment_failed', 'fee_due_soon', 'registration_approved', 'registration_rejected', 'parent_invite', 'parent_linked', 'pop_uploaded', 'new_job_application'];
+  const systemEvents = [
+    'payment_received',
+    'payment_overdue',
+    'payment_failed',
+    'fee_due_soon',
+    'registration_approved',
+    'registration_rejected',
+    'parent_invite',
+    'parent_linked',
+    'pop_uploaded',
+    'new_job_application',
+    'job_application_under_review',
+    'job_application_shortlisted',
+    'job_interview_scheduled',
+    'job_offer_sent',
+    'job_application_rejected',
+    'job_application_hired',
+    'teacher_invite_accepted_pending_principal',
+    'teacher_account_approved',
+    'teacher_account_rejected',
+  ];
   
   if (schoolEvents.includes(eventType)) return 'school';
   if (homeworkEvents.includes(eventType)) return 'homework';

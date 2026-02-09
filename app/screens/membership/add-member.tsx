@@ -24,6 +24,7 @@ import {
 } from '@/lib/memberRegistrationUtils';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Regions
@@ -265,7 +266,7 @@ export default function AddMemberScreen() {
       const tempPassword = generateTemporaryPassword();
       const memberNumber = generateMemberNumber(selectedRegion?.code || 'ZA');
       
-      console.log('[AddMember] Creating member:', { email: formData.email, memberNumber });
+      logger.debug('[AddMember] Creating member:', { email: formData.email, memberNumber });
       
       // 2. Look up actual region_id from organization_regions if we have a region code
       // The REGIONS array uses codes like 'GP', 'WC', etc., which match province_code in the database
@@ -280,15 +281,15 @@ export default function AddMemberScreen() {
             .maybeSingle();
           
           if (regionError) {
-            console.error('[AddMember] Error looking up region:', regionError);
+            logger.error('[AddMember] Error looking up region:', regionError);
           } else if (regionData?.id) {
             actualRegionId = regionData.id;
-            console.log('[AddMember] Found region UUID:', actualRegionId, 'for code:', selectedRegion.code);
+            logger.debug('[AddMember] Found region UUID:', actualRegionId, 'for code:', selectedRegion.code);
           } else {
-            console.warn('[AddMember] No region found for code:', selectedRegion.code);
+            logger.warn('[AddMember] No region found for code:', selectedRegion.code);
           }
         } catch (error) {
-          console.error('[AddMember] Exception looking up region:', error);
+          logger.error('[AddMember] Exception looking up region:', error);
         }
       }
       
@@ -353,7 +354,7 @@ export default function AddMemberScreen() {
             // Network errors can be retried
             retries++;
             if (retries < maxRetries) {
-              console.log(`[AddMember] Edge Function error, retrying... (${retries}/${maxRetries})`);
+              logger.debug(`[AddMember] Edge Function error, retrying... (${retries}/${maxRetries})`);
               const delay = retryDelays[retries - 1] || 5000;
               // Don't show error message during retries, keep positive status
               await new Promise(resolve => setTimeout(resolve, delay));
@@ -377,7 +378,7 @@ export default function AddMemberScreen() {
             // Retry for USER_NOT_FOUND or RPC_ERROR (timing issues)
             retries++;
             if (retries < maxRetries) {
-              console.log(`[AddMember] Edge Function returned error, retrying... (${retries}/${maxRetries}):`, edgeFunctionResult);
+              logger.debug(`[AddMember] Edge Function returned error, retrying... (${retries}/${maxRetries}):`, edgeFunctionResult);
               const delay = retryDelays[retries - 1] || 5000;
               // Don't show error during retries
               await new Promise(resolve => setTimeout(resolve, delay));
@@ -392,7 +393,7 @@ export default function AddMemberScreen() {
             break;
           }
         } catch (fetchError: any) {
-          console.error('[AddMember] Edge Function invoke error:', fetchError);
+          logger.error('[AddMember] Edge Function invoke error:', fetchError);
           edgeFunctionError = {
             message: fetchError.message || 'Network error',
             code: 'NETWORK_ERROR',
@@ -401,7 +402,7 @@ export default function AddMemberScreen() {
           // Network errors can be retried
           retries++;
           if (retries < maxRetries) {
-            console.log(`[AddMember] Edge Function exception, retrying... (${retries}/${maxRetries})`);
+            logger.debug(`[AddMember] Edge Function exception, retrying... (${retries}/${maxRetries})`);
             const delay = retryDelays[retries - 1] || 5000;
             // Don't show error during retries
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -412,9 +413,9 @@ export default function AddMemberScreen() {
       }
       
       if (edgeFunctionError || !edgeFunctionResult?.success) {
-        console.error('[AddMember] Edge Function error after retries:', edgeFunctionError || edgeFunctionResult);
-        console.error('[AddMember] Error code:', edgeFunctionError?.code || edgeFunctionResult?.code);
-        console.error('[AddMember] Error message:', edgeFunctionError?.message || edgeFunctionResult?.error);
+        logger.error('[AddMember] Edge Function error after retries:', edgeFunctionError || edgeFunctionResult);
+        logger.error('[AddMember] Error code:', edgeFunctionError?.code || edgeFunctionResult?.code);
+        logger.error('[AddMember] Error message:', edgeFunctionError?.message || edgeFunctionResult?.error);
         
         setRegistrationStatus('error');
         
@@ -452,7 +453,7 @@ export default function AddMemberScreen() {
         const errorMsg = edgeFunctionError?.message || edgeFunctionResult?.error || `Registration failed: ${edgeFunctionError?.code || edgeFunctionResult?.code || 'Unknown error'}`;
         const extraDetails = edgeFunctionResult?.details || edgeFunctionResult?.hint || edgeFunctionResult?.pgCode || '';
         const fullErrorMsg = extraDetails ? `${errorMsg}\n\nDetails: ${extraDetails}` : errorMsg;
-        console.error('[AddMember] Full error details:', JSON.stringify(edgeFunctionResult || edgeFunctionError, null, 2));
+        logger.error('[AddMember] Full error details:', JSON.stringify(edgeFunctionResult || edgeFunctionError, null, 2));
         setErrorMessage(`Registration error: ${fullErrorMsg}`);
         setRetryStatus(null);
         setIsSubmitting(false);
@@ -465,7 +466,7 @@ export default function AddMemberScreen() {
       setRetryStatus(null);
       setRegistrationStatus('success');
       
-      console.log('[AddMember] Member created successfully via Edge Function:', edgeFunctionResult);
+      logger.debug('[AddMember] Member created successfully via Edge Function:', edgeFunctionResult);
       
       // Use result from Edge Function (which includes user_id and member info)
       const createdUserId = edgeFunctionResult.user_id;
@@ -509,7 +510,7 @@ export default function AddMemberScreen() {
                   buttons: [{ text: 'OK', style: 'default' }]
                 });
               } catch (error) {
-                console.error('[AddMember] Failed to copy password:', error);
+                logger.error('[AddMember] Failed to copy password:', error);
               }
             }
           },
@@ -518,7 +519,7 @@ export default function AddMemberScreen() {
         ]
       });
     } catch (error: any) {
-      console.error('[AddMember] Registration error:', error);
+      logger.error('[AddMember] Registration error:', error);
       setRegistrationStatus('error');
       
       let errorMsg = 'Failed to add member. Please try again.';

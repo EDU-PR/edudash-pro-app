@@ -30,6 +30,7 @@ import {
 import type { Message } from '@/components/messaging/types';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 export default function SOAChatScreen() {
   const { theme } = useTheme();
   const { profile, user } = useAuth();
@@ -164,7 +165,7 @@ export default function SOAChatScreen() {
   const handleVoiceRecording = async (uri: string, duration: number) => {
     // TODO: Upload to Supabase Storage first, then send
     // For now, we'll just send a placeholder
-    console.log('Voice recording:', uri, duration);
+    logger.debug('Voice recording:', uri, duration);
     await sendVoiceMessage(uri, duration);
   };
 
@@ -187,7 +188,7 @@ export default function SOAChatScreen() {
         await addReaction(messageId, emoji);
       }
     } catch (err) {
-      console.error('Error handling reaction:', err);
+      logger.error('Error handling reaction:', err);
     }
   };
 

@@ -9,13 +9,15 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Alert, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { toast } from '@/components/ui/ToastProvider';
+import type { ParentAlertApi } from '@/components/ui/parentAlert';
 import {
   useAudioRecorder,
   useAudioRecorderState,
@@ -42,6 +44,7 @@ interface MessageAttachmentBarProps {
   disabled?: boolean;
   maxAttachments?: number;
   currentAttachments?: MessageAttachment[];
+  showAlert?: ParentAlertApi;
 }
 
 export function MessageAttachmentBar({
@@ -51,6 +54,7 @@ export function MessageAttachmentBar({
   disabled = false,
   maxAttachments = 5,
   currentAttachments = [],
+  showAlert,
 }: MessageAttachmentBarProps) {
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -71,6 +75,26 @@ export function MessageAttachmentBar({
   const micScaleAnim = useRef(new Animated.Value(1)).current;
   
   const canAddMore = currentAttachments.length < maxAttachments;
+
+  const showAttachmentAlert = useCallback((
+    title: string,
+    message: string,
+    type: 'info' | 'warning' | 'error' | 'success' = 'info',
+  ) => {
+    if (showAlert) {
+      showAlert({ title, message, type });
+      return;
+    }
+    if (type === 'error') {
+      toast.error(message, title);
+      return;
+    }
+    if (type === 'warning') {
+      toast.warn(message, title);
+      return;
+    }
+    toast.info(message, title);
+  }, [showAlert]);
   
   // Pulse animation for recording indicator
   const startPulseAnimation = () => {
@@ -146,12 +170,13 @@ export function MessageAttachmentBar({
   // Pick images from gallery
   const pickImages = async () => {
     if (!canAddMore) {
-      Alert.alert(
+      showAttachmentAlert(
         t('messages.maxAttachments', { defaultValue: 'Maximum Attachments' }),
         t('messages.maxAttachmentsDesc', { 
           defaultValue: `You can only attach up to ${maxAttachments} files.`,
           count: maxAttachments 
-        })
+        }),
+        'warning',
       );
       return;
     }
@@ -163,9 +188,10 @@ export function MessageAttachmentBar({
       const hasPermission = await ensureImageLibraryPermission();
       
       if (!hasPermission) {
-        Alert.alert(
+        showAttachmentAlert(
           t('common.permissionRequired', { defaultValue: 'Permission Required' }),
-          t('messages.galleryPermission', { defaultValue: 'Please grant gallery access to attach images.' })
+          t('messages.galleryPermission', { defaultValue: 'Please grant gallery access to attach images.' }),
+          'warning',
         );
         return;
       }
@@ -192,9 +218,10 @@ export function MessageAttachmentBar({
       }
     } catch (error) {
       console.error('[MessageAttachment] Pick images error:', error);
-      Alert.alert(
+      showAttachmentAlert(
         t('common.error', { defaultValue: 'Error' }),
-        t('messages.pickImageError', { defaultValue: 'Failed to pick images. Please try again.' })
+        t('messages.pickImageError', { defaultValue: 'Failed to pick images. Please try again.' }),
+        'error',
       );
     } finally {
       setIsLoading(false);
@@ -204,12 +231,13 @@ export function MessageAttachmentBar({
   // Take photo with camera
   const takePhoto = async () => {
     if (!canAddMore) {
-      Alert.alert(
+      showAttachmentAlert(
         t('messages.maxAttachments', { defaultValue: 'Maximum Attachments' }),
         t('messages.maxAttachmentsDesc', { 
           defaultValue: `You can only attach up to ${maxAttachments} files.`,
           count: maxAttachments 
-        })
+        }),
+        'warning',
       );
       return;
     }
@@ -221,9 +249,10 @@ export function MessageAttachmentBar({
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert(
+        showAttachmentAlert(
           t('common.permissionRequired', { defaultValue: 'Permission Required' }),
-          t('messages.cameraPermission', { defaultValue: 'Please grant camera access to take photos.' })
+          t('messages.cameraPermission', { defaultValue: 'Please grant camera access to take photos.' }),
+          'warning',
         );
         return;
       }
@@ -250,9 +279,10 @@ export function MessageAttachmentBar({
       }
     } catch (error) {
       console.error('[MessageAttachment] Take photo error:', error);
-      Alert.alert(
+      showAttachmentAlert(
         t('common.error', { defaultValue: 'Error' }),
-        t('messages.cameraError', { defaultValue: 'Failed to take photo. Please try again.' })
+        t('messages.cameraError', { defaultValue: 'Failed to take photo. Please try again.' }),
+        'error',
       );
     } finally {
       setIsLoading(false);
@@ -262,12 +292,13 @@ export function MessageAttachmentBar({
   // Pick documents
   const pickDocument = async () => {
     if (!canAddMore) {
-      Alert.alert(
+      showAttachmentAlert(
         t('messages.maxAttachments', { defaultValue: 'Maximum Attachments' }),
         t('messages.maxAttachmentsDesc', { 
           defaultValue: `You can only attach up to ${maxAttachments} files.`,
           count: maxAttachments 
-        })
+        }),
+        'warning',
       );
       return;
     }
@@ -298,9 +329,10 @@ export function MessageAttachmentBar({
       }
     } catch (error) {
       console.error('[MessageAttachment] Pick document error:', error);
-      Alert.alert(
+      showAttachmentAlert(
         t('common.error', { defaultValue: 'Error' }),
-        t('messages.pickDocumentError', { defaultValue: 'Failed to pick document. Please try again.' })
+        t('messages.pickDocumentError', { defaultValue: 'Failed to pick document. Please try again.' }),
+        'error',
       );
     } finally {
       setIsLoading(false);
@@ -317,9 +349,10 @@ export function MessageAttachmentBar({
         const { granted } = await requestRecordingPermissionsAsync();
         
         if (!granted) {
-          Alert.alert(
+          showAttachmentAlert(
             t('common.permissionRequired', { defaultValue: 'Permission Required' }),
-            t('messages.micPermission', { defaultValue: 'Please grant microphone access to record audio.' })
+            t('messages.micPermission', { defaultValue: 'Please grant microphone access to record audio.' }),
+            'warning',
           );
           return;
         }
@@ -350,12 +383,13 @@ export function MessageAttachmentBar({
       }
     } catch (error) {
       console.error('[MessageAttachment] Start recording error:', error);
-      Alert.alert(
+      showAttachmentAlert(
         t('common.error', { defaultValue: 'Error' }),
-        t('messages.recordingError', { defaultValue: 'Failed to start recording. Please try again.' })
+        t('messages.recordingError', { defaultValue: 'Failed to start recording. Please try again.' }),
+        'error',
       );
     }
-  }, [recorder, hasPermission, onStartRecording, t]);
+  }, [recorder, hasPermission, onStartRecording, showAttachmentAlert, t]);
   
   // Stop audio recording using expo-audio hook
   const stopRecording = useCallback(async () => {

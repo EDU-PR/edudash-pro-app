@@ -135,9 +135,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     const fetchSubscriptionData = async () => {
       console.log('[SubscriptionContext] Fetching subscription data...');
       try {
-        if (mounted) {
-          setReady(false);
-        }
+        // Note: setReady(false) is NOT called here to avoid double re-render.
+        // The account-switching effect above already resets ready when user?.id changes.
         const { data: userRes, error: userError } = await assertSupabase().auth.getUser();
         
         if (userError || !userRes.user) {

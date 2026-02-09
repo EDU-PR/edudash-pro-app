@@ -10,11 +10,23 @@ interface PWASplashScreenProps {
 }
 
 export function PWASplashScreen({ onComplete, duration = 4000 }: PWASplashScreenProps) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Only show splash screen for PWA (standalone) mode — not regular browser visits
+    const isPWA =
+      typeof window !== 'undefined' &&
+      (window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true);
+
+    if (!isPWA) {
+      onComplete?.();
+      return;
+    }
+
+    setIsVisible(true);
     // Smooth progress bar animation
     const progressInterval = setInterval(() => {
       setProgress(prev => {

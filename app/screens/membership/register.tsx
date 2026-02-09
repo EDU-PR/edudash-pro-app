@@ -5,13 +5,14 @@
  * Refactored to use modular step components following WARP.md standards
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, KeyboardAvoidingView, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import {
   OrganizationStep,
   RegionStep,
@@ -28,6 +29,7 @@ import {
 } from '@/components/membership/registration';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 // Default organization ID (Soil Of Africa) - used as fallback if no org selected
 const DEFAULT_ORG_ID = '63b6139a-e21f-447c-b322-376fb0828992';
 
@@ -35,6 +37,7 @@ export default function MemberRegistrationScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ inviteCode?: string; orgId?: string }>();
+  const { showAlert, alertProps } = useAlertModal();
   
   const [currentStep, setCurrentStep] = useState<StepType>('organization');
   const [formData, setFormData] = useState<RegistrationData>(initialRegistrationData);
@@ -149,7 +152,7 @@ export default function MemberRegistrationScreen() {
           }));
         }
       } catch (e) {
-        console.error('Error fetching invite details:', e);
+        logger.error('Error fetching invite details:', e);
       }
     }
     
@@ -188,33 +191,33 @@ export default function MemberRegistrationScreen() {
     switch (currentStep) {
       case 'organization':
         if (!formData.organization_id) {
-          Alert.alert('Required', 'Please select an organization to join');
+          showAlert({ title: 'Required', message: 'Please select an organization to join' });
           return false;
         }
         return true;
       case 'region':
         if (!formData.region_id) {
-          Alert.alert('Required', 'Please select your region');
+          showAlert({ title: 'Required', message: 'Please select your region' });
           return false;
         }
         return true;
       case 'personal':
         if (!formData.first_name || !formData.last_name || !formData.email || !formData.phone) {
-          Alert.alert('Required', 'Please fill in all required fields');
+          showAlert({ title: 'Required', message: 'Please fill in all required fields' });
           return false;
         }
         // Validate email format properly
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
-          Alert.alert('Invalid Email', 'Please enter a valid email address (e.g., user@example.com)');
+          showAlert({ title: 'Invalid Email', message: 'Please enter a valid email address (e.g., user@example.com)' });
           return false;
         }
         if (!formData.password || formData.password.length < 8) {
-          Alert.alert('Password Required', 'Please enter a password with at least 8 characters');
+          showAlert({ title: 'Password Required', message: 'Please enter a password with at least 8 characters' });
           return false;
         }
         if (formData.password !== formData.confirm_password) {
-          Alert.alert('Password Mismatch', 'Passwords do not match');
+          showAlert({ title: 'Password Mismatch', message: 'Passwords do not match' });
           return false;
         }
         return true;
@@ -257,7 +260,7 @@ export default function MemberRegistrationScreen() {
       
       // If not logged in, create a new account with the provided credentials
       if (!user) {
-        console.log('[Register] Creating new user account...');
+        logger.debug('[Register] Creating new user account...');
         isNewSignup = true;
         
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -275,9 +278,9 @@ export default function MemberRegistrationScreen() {
         });
         
         if (signUpError) {
-          console.error('[Register] Sign up error:', signUpError);
-          console.error('[Register] Error message:', signUpError.message);
-          console.error('[Register] Error code:', signUpError.status);
+          logger.error('[Register] Sign up error:', signUpError);
+          logger.error('[Register] Error message:', signUpError.message);
+          logger.error('[Register] Error code:', signUpError.status);
           
           // Check various "already exists" error patterns
           const errorMsg = signUpError.message?.toLowerCase() || '';
@@ -290,49 +293,49 @@ export default function MemberRegistrationScreen() {
             
           if (isAlreadyRegistered) {
             // Try to sign in with the provided credentials
-            console.log('[Register] User already exists, attempting sign in...');
+            logger.debug('[Register] User already exists, attempting sign in...');
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
               email: formData.email,
               password: formData.password,
             });
             
             if (signInError) {
-              console.error('[Register] Sign in failed:', signInError);
-              Alert.alert(
-                'Account Exists',
-                'An account with this email already exists but the password doesn\'t match. Please sign in with your existing password to add your Soil of Africa membership.',
-                [
+              logger.error('[Register] Sign in failed:', signInError);
+              showAlert({
+                title: 'Account Exists',
+                message: 'An account with this email already exists but the password doesn\'t match. Please sign in with your existing password to add your Soil of Africa membership.',
+                buttons: [
                   { text: 'Cancel', style: 'cancel' },
                   { 
                     text: 'Sign In', 
                     onPress: () => router.push(`/(auth)/sign-in?email=${encodeURIComponent(formData.email)}&returnTo=/screens/membership/register`)
                   }
-                ]
-              );
+                ],
+              });
               setIsSubmitting(false);
               return;
             }
             
             // Sign in successful! Continue with membership creation
             if (signInData.user) {
-              console.log('[Register] Sign in successful, continuing with membership creation');
+              logger.debug('[Register] Sign in successful, continuing with membership creation');
               user = signInData.user;
               isNewSignup = false; // This is an existing user adding membership
               // Don't return - fall through to create membership
             } else {
-              Alert.alert('Error', 'Sign in succeeded but no user returned. Please try again.');
+              showAlert({ title: 'Error', message: 'Sign in succeeded but no user returned. Please try again.' });
               setIsSubmitting(false);
               return;
             }
           } else {
-            Alert.alert('Sign Up Failed', signUpError.message || 'Unable to create account. Please try again.');
+            showAlert({ title: 'Sign Up Failed', message: signUpError.message || 'Unable to create account. Please try again.' });
             setIsSubmitting(false);
             return;
           }
         } else {
           // Sign up succeeded
           if (!signUpData.user) {
-            Alert.alert('Error', 'Failed to create account. Please try again.');
+            showAlert({ title: 'Error', message: 'Failed to create account. Please try again.' });
             setIsSubmitting(false);
             return;
           }
@@ -340,14 +343,14 @@ export default function MemberRegistrationScreen() {
           // Validate the user ID is a proper UUID (accepts any UUID-formatted string)
           const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (!signUpData.user.id || !uuidRegex.test(signUpData.user.id)) {
-            console.error('[Register] Invalid user ID returned from signUp:', signUpData.user.id);
-            Alert.alert('Error', 'Invalid user ID returned. Please try again.');
+            logger.error('[Register] Invalid user ID returned from signUp:', signUpData.user.id);
+            showAlert({ title: 'Error', message: 'Invalid user ID returned. Please try again.' });
             setIsSubmitting(false);
             return;
           }
           
           user = signUpData.user;
-          console.log('[Register] User created successfully:', user.id);
+          logger.debug('[Register] User created successfully:', user.id);
           
           // Small delay to ensure user is fully committed to auth.users
           // This helps prevent foreign key constraint violations
@@ -390,7 +393,7 @@ export default function MemberRegistrationScreen() {
         // This uses SECURITY DEFINER to bypass RLS when session is null (email not confirmed)
         const membershipStatus = signUpData.session ? 'active' : 'pending_verification';
         
-        console.log('[Register] Creating membership with RPC:', {
+        logger.debug('[Register] Creating membership with RPC:', {
           org_id: targetOrgId,
           user_id: user.id,
           user_email: user.email,
@@ -419,24 +422,24 @@ export default function MemberRegistrationScreen() {
           });
 
         if (rpcError) {
-          console.error('[Register] Error creating member via RPC:', rpcError);
+          logger.error('[Register] Error creating member via RPC:', rpcError);
           throw rpcError;
         }
         
         // Check RPC result
         if (!rpcResult?.success) {
-          console.error('[Register] RPC returned error:', rpcResult);
+          logger.error('[Register] RPC returned error:', rpcResult);
           
           // Handle specific error codes
           if (rpcResult?.code === 'USER_NOT_FOUND' || rpcResult?.code === 'NULL_USER_ID') {
-            Alert.alert(
-              'Account Creation Issue',
-              'Your account is being set up. Please wait a moment and try again, or check your email for a confirmation link.',
-              [
+            showAlert({
+              title: 'Account Creation Issue',
+              message: 'Your account is being set up. Please wait a moment and try again, or check your email for a confirmation link.',
+              buttons: [
                 { text: 'Try Again', onPress: () => setIsSubmitting(false) },
                 { text: 'Sign In', onPress: () => router.push('/(auth)/sign-in') }
-              ]
-            );
+              ],
+            });
             setIsSubmitting(false);
             return;
           }
@@ -444,11 +447,11 @@ export default function MemberRegistrationScreen() {
           throw new Error(rpcResult?.error || 'Failed to register member');
         }
         
-        console.log('[Register] Member registration result:', rpcResult);
+        logger.debug('[Register] Member registration result:', rpcResult);
         
         // Handle existing member case
         if (rpcResult.action === 'existing') {
-          Alert.alert('Already Registered', 'You are already a member of this organization.');
+          showAlert({ title: 'Already Registered', message: 'You are already a member of this organization.' });
           return;
         }
         
@@ -466,10 +469,10 @@ export default function MemberRegistrationScreen() {
           .eq('auth_user_id', user.id);
         
         if (profileUpdateError) {
-          console.error('[Register] Error updating profile with org:', profileUpdateError);
+          logger.error('[Register] Error updating profile with org:', profileUpdateError);
           // Non-fatal - continue with registration
         } else {
-          console.log('[Register] Profile updated with organization_id');
+          logger.debug('[Register] Profile updated with organization_id');
         }
         
         // If invite code was used, mark it as used
@@ -488,18 +491,18 @@ export default function MemberRegistrationScreen() {
         
         // Check if we have a session - if not, email confirmation is required
         if (!signUpData.session) {
-          console.log('[Register] No session after signup - email confirmation required');
+          logger.debug('[Register] No session after signup - email confirmation required');
           // Email confirmation is required
-          Alert.alert(
-            'Account Created! 🎉',
-            `Your account was created successfully!\n\nYour Member Number: ${memberNumber}\n\nPlease check your email to confirm your account, then sign in.`,
-            [{ text: 'OK', onPress: () => router.push('/(auth)/sign-in') }]
-          );
+          showAlert({
+            title: 'Account Created! 🎉',
+            message: `Your account was created successfully!\n\nYour Member Number: ${memberNumber}\n\nPlease check your email to confirm your account, then sign in.`,
+            buttons: [{ text: 'OK', onPress: () => router.push('/(auth)/sign-in') }],
+          });
           setIsSubmitting(false);
           return;
         }
         
-        console.log('[Register] Session available after signup - membership setup complete');
+        logger.debug('[Register] Session available after signup - membership setup complete');
       }
 
       // If user already exists (was signed in), we still need to create membership
@@ -553,20 +556,20 @@ export default function MemberRegistrationScreen() {
           });
 
         if (existingRpcError) {
-          console.error('[Register] Error creating member via RPC:', existingRpcError);
+          logger.error('[Register] Error creating member via RPC:', existingRpcError);
           throw existingRpcError;
         }
         
         if (!existingRpcResult?.success) {
-          console.error('[Register] RPC returned error:', existingRpcResult);
+          logger.error('[Register] RPC returned error:', existingRpcResult);
           
           // Handle specific error codes
           if (existingRpcResult?.code === 'USER_NOT_FOUND' || existingRpcResult?.code === 'NULL_USER_ID') {
-            Alert.alert(
-              'Account Issue',
-              'There was an issue with your account. Please try signing out and signing back in.',
-              [{ text: 'OK' }]
-            );
+            showAlert({
+              title: 'Account Issue',
+              message: 'There was an issue with your account. Please try signing out and signing back in.',
+              buttons: [{ text: 'OK' }],
+            });
             setIsSubmitting(false);
             return;
           }
@@ -576,7 +579,7 @@ export default function MemberRegistrationScreen() {
         
         // Handle existing member case
         if (existingRpcResult.action === 'existing') {
-          Alert.alert('Already Registered', 'You are already a member of this organization.');
+          showAlert({ title: 'Already Registered', message: 'You are already a member of this organization.' });
           return;
         }
         
@@ -597,12 +600,12 @@ export default function MemberRegistrationScreen() {
 
       setCurrentStep('complete');
     } catch (error: any) {
-      console.error('[Register] Registration error:', error);
-      console.error('[Register] Error details:', JSON.stringify(error, null, 2));
+      logger.error('[Register] Registration error:', error);
+      logger.error('[Register] Error details:', JSON.stringify(error, null, 2));
       
       // Show more specific error message if available
       const errorMessage = error?.message || error?.error || 'Registration failed. Please try again.';
-      Alert.alert('Error', errorMessage);
+      showAlert({ title: 'Error', message: errorMessage });
     } finally {
       setIsSubmitting(false);
     }
@@ -667,6 +670,7 @@ export default function MemberRegistrationScreen() {
   };
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
@@ -779,6 +783,8 @@ export default function MemberRegistrationScreen() {
         </View>
       )}
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }
 

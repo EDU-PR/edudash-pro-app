@@ -12,23 +12,20 @@
  * 
  * @module usePictureInPicture
  */
-
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform, NativeModules } from 'react-native';
-
+import { logger } from '@/lib/logger';
 // Import react-native-pip-android for programmatic PiP control
 let PipHandler: {
   enterPipMode: (width?: number, height?: number) => Promise<void>;
   isPipSupported: () => Promise<boolean>;
 } | null = null;
-
 try {
   // react-native-pip-android provides enterPipMode and isPipSupported
   PipHandler = require('react-native-pip-android').default;
 } catch (err) {
-  console.warn('[PiP] react-native-pip-android not available:', err);
+  logger.warn('[PiP] react-native-pip-android not available:', err);
 }
-
 export interface UsePictureInPictureOptions {
   /** Whether to auto-enter PiP when app goes to background */
   autoEnterOnBackground?: boolean;
@@ -41,7 +38,6 @@ export interface UsePictureInPictureOptions {
   /** Aspect ratio height (default: 9) */
   aspectRatioHeight?: number;
 }
-
 export interface UsePictureInPictureReturn {
   /** Whether PiP is supported on this device */
   isPipSupported: boolean;
@@ -54,7 +50,6 @@ export interface UsePictureInPictureReturn {
   /** Current app state */
   appState: AppStateStatus;
 }
-
 /**
  * Hook to manage Picture-in-Picture mode for calls
  * 
@@ -65,8 +60,8 @@ export interface UsePictureInPictureReturn {
  * ```tsx
  * const { isInPipMode, isPipSupported, enterPipMode, appState } = usePictureInPicture({
  *   autoEnterOnBackground: isCallActive,
- *   onEnterPiP: () => console.log('Entered PiP mode'),
- *   onExitPiP: () => console.log('Exited PiP mode'),
+ *   onEnterPiP: () => logger.debug('Entered PiP mode'),
+ *   onExitPiP: () => logger.debug('Exited PiP mode'),
  *   aspectRatioWidth: 16,
  *   aspectRatioHeight: 9,
  * });
@@ -83,7 +78,6 @@ export function usePictureInPicture({
   const [isPipSupportedState, setIsPipSupportedState] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const [currentAppState, setCurrentAppState] = useState<AppStateStatus>(AppState.currentState);
-
   // Check if PiP is supported on device
   useEffect(() => {
     const checkSupport = async () => {
@@ -96,9 +90,9 @@ export function usePictureInPicture({
         try {
           const supported = await PipHandler.isPipSupported();
           setIsPipSupportedState(supported);
-          console.log('[PiP] Device PiP support:', supported);
+          logger.debug('[PiP] Device PiP support:', supported);
         } catch (err) {
-          console.warn('[PiP] Error checking PiP support:', err);
+          logger.warn('[PiP] Error checking PiP support:', err);
           // Fallback: assume supported on Android 8.0+
           setIsPipSupportedState(true);
         }
@@ -110,39 +104,34 @@ export function usePictureInPicture({
     
     checkSupport();
   }, []);
-
   /**
    * Enter Picture-in-Picture mode programmatically
    */
   const enterPipMode = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== 'android') {
-      console.log('[PiP] PiP not available on iOS');
+      logger.debug('[PiP] PiP not available on iOS');
       return false;
     }
-
     if (!isPipSupportedState) {
-      console.log('[PiP] PiP not supported on this device');
+      logger.debug('[PiP] PiP not supported on this device');
       return false;
     }
-
     if (!PipHandler?.enterPipMode) {
-      console.warn('[PiP] PipHandler.enterPipMode not available');
+      logger.warn('[PiP] PipHandler.enterPipMode not available');
       return false;
     }
-
     try {
-      console.log('[PiP] Entering PiP mode with aspect ratio:', aspectRatioWidth, 'x', aspectRatioHeight);
+      logger.debug('[PiP] Entering PiP mode with aspect ratio:', aspectRatioWidth, 'x', aspectRatioHeight);
       await PipHandler.enterPipMode(aspectRatioWidth, aspectRatioHeight);
       setIsInPipMode(true);
       onEnterPiP?.();
-      console.log('[PiP] ✅ Entered PiP mode successfully');
+      logger.debug('[PiP] ✅ Entered PiP mode successfully');
       return true;
     } catch (err) {
-      console.error('[PiP] Failed to enter PiP mode:', err);
+      logger.error('[PiP] Failed to enter PiP mode:', err);
       return false;
     }
   }, [isPipSupportedState, aspectRatioWidth, aspectRatioHeight, onEnterPiP]);
-
   /**
    * Exit PiP mode (bring app back to full screen)
    * Note: On Android, user typically taps PiP window to exit
@@ -152,23 +141,19 @@ export function usePictureInPicture({
     
     setIsInPipMode(false);
     onExitPiP?.();
-    console.log('[PiP] Exited Picture-in-Picture mode');
+    logger.debug('[PiP] Exited Picture-in-Picture mode');
   }, [isInPipMode, onExitPiP]);
-
   // Auto-enter PiP when app goes to background during active call
   useEffect(() => {
     if (!autoEnterOnBackground || !isPipSupportedState) return;
-
     const handleAppStateChange = async (nextAppState: AppStateStatus) => {
       const previousState = appStateRef.current;
       appStateRef.current = nextAppState;
       setCurrentAppState(nextAppState);
-
-      console.log('[PiP] App state change:', previousState, '->', nextAppState);
-
+      logger.debug('[PiP] App state change:', previousState, '->', nextAppState);
       // App going to background - enter PiP mode
       if (previousState === 'active' && nextAppState === 'background') {
-        console.log('[PiP] App backgrounding - attempting to enter PiP mode');
+        logger.debug('[PiP] App backgrounding - attempting to enter PiP mode');
         
         // Programmatically enter PiP mode
         if (PipHandler?.enterPipMode) {
@@ -176,9 +161,9 @@ export function usePictureInPicture({
             await PipHandler.enterPipMode(aspectRatioWidth, aspectRatioHeight);
             setIsInPipMode(true);
             onEnterPiP?.();
-            console.log('[PiP] ✅ Auto-entered PiP mode on background');
+            logger.debug('[PiP] ✅ Auto-entered PiP mode on background');
           } catch (err) {
-            console.warn('[PiP] Failed to auto-enter PiP:', err);
+            logger.warn('[PiP] Failed to auto-enter PiP:', err);
           }
         } else {
           // Fallback: just track state (Android may auto-PiP)
@@ -186,22 +171,19 @@ export function usePictureInPicture({
           onEnterPiP?.();
         }
       }
-
       // App coming back to foreground
       if ((previousState === 'background' || previousState === 'inactive') && nextAppState === 'active') {
-        console.log('[PiP] App foregrounded');
+        logger.debug('[PiP] App foregrounded');
         setIsInPipMode(false);
         onExitPiP?.();
       }
     };
-
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     
     return () => {
       subscription.remove();
     };
   }, [autoEnterOnBackground, isPipSupportedState, aspectRatioWidth, aspectRatioHeight, onEnterPiP, onExitPiP]);
-
   return {
     isPipSupported: isPipSupportedState,
     isInPipMode,
@@ -210,5 +192,4 @@ export function usePictureInPicture({
     appState: currentAppState,
   };
 }
-
 export default usePictureInPicture;

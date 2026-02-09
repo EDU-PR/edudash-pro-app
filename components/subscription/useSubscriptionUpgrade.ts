@@ -2,7 +2,6 @@
  * Hook for subscription upgrade management
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,12 +14,16 @@ import { navigateTo } from '@/lib/navigation/router-utils';
 import { getReturnUrl, getCancelUrl } from '@/lib/payments/urls';
 import { SubscriptionPlan, UPGRADE_REASONS, DEFAULT_REASON, UpgradeReason } from './types';
 import { takeFirst } from './utils';
+import { logger } from '@/lib/logger';
 // RevenueCat removed - all payments now use PayFast
+
+type ShowAlert = (cfg: { title: string; message: string; buttons?: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> }) => void;
 
 interface UseSubscriptionUpgradeParams {
   currentTier: string;
   reasonKey: string;
   feature?: string;
+  showAlert: ShowAlert;
 }
 
 interface UseSubscriptionUpgradeReturn {
@@ -44,7 +47,8 @@ interface UseSubscriptionUpgradeReturn {
 export function useSubscriptionUpgrade({
   currentTier,
   reasonKey,
-  feature
+  feature,
+  showAlert,
 }: UseSubscriptionUpgradeParams): UseSubscriptionUpgradeReturn {
   const { profile } = useAuth();
   const { refresh: refreshSubscription } = useSubscription();
@@ -80,7 +84,7 @@ export function useSubscriptionUpgrade({
       clearTimeout(timeoutId);
 
       if (timedOut) {
-        console.warn('loadPlans timed out');
+        logger.warn('loadPlans timed out');
         return;
       }
 
@@ -124,7 +128,7 @@ export function useSubscriptionUpgrade({
       
     } catch (error: any) {
       clearTimeout(timeoutId);
-      console.error('Plans loading failed:', error);
+      logger.error('Plans loading failed:', error);
       setPlans([]);
       track('upgrade_post_load_failed', { 
         error: error?.message || String(error),
@@ -148,7 +152,7 @@ export function useSubscriptionUpgrade({
           user_role: profile?.role,
         });
       } catch (error: any) {
-        console.error('❌ Screen initialization failed:', error);
+        logger.error('Screen initialization failed:', error);
         setRenderError(error.message || 'Initialization failed');
         setLoading(false);
       }
@@ -160,18 +164,18 @@ export function useSubscriptionUpgrade({
 
   const handleUpgrade = useCallback(async (planId: string) => {
     if (!planId) {
-      Alert.alert('Error', 'No plan selected');
+      showAlert({ title: 'Error', message: 'No plan selected' });
       return;
     }
     
     const plan = plans.find(p => p.id === planId);
     if (!plan) {
-      Alert.alert('Error', 'Selected plan not found');
+      showAlert({ title: 'Error', message: 'Selected plan not found' });
       return;
     }
 
     if (!profile) {
-      Alert.alert('Error', 'User profile not loaded. Please try again.');
+      showAlert({ title: 'Error', message: 'User profile not loaded. Please try again.' });
       return;
     }
 
@@ -183,20 +187,20 @@ export function useSubscriptionUpgrade({
       const price = annual ? plan.price_annual : plan.price_monthly;
 
       if (isEnterprise) {
-        Alert.alert(
-          'Enterprise Upgrade',
-          'Enterprise plans require custom setup. Our sales team will contact you.',
-          [
+        showAlert({
+          title: 'Enterprise Upgrade',
+          message: 'Enterprise plans require custom setup. Our sales team will contact you.',
+          buttons: [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Contact Sales', 
+            {
+              text: 'Contact Sales',
               onPress: () => {
                 track('enterprise_upgrade_contact', { from_tier: currentTier, reason: reasonKey });
                 navigateTo.contact();
-              }
+              },
             },
-          ]
-        );
+          ],
+        });
         return;
       }
 
@@ -221,7 +225,7 @@ export function useSubscriptionUpgrade({
           metadata: { changed_via: 'principal_upgrade_screen', payment_required: false, downgrade: true },
         });
 
-        Alert.alert('Plan Updated', 'Your subscription has been changed to the Free plan.');
+        showAlert({ title: 'Plan Updated', message: 'Your subscription has been changed to the Free plan.' });
         track('downgrade_succeeded', { to_tier: plan.tier });
         try { router.back(); } catch { router.replace('/screens/principal-dashboard'); }
         return;
@@ -270,13 +274,13 @@ export function useSubscriptionUpgrade({
         if (canOpen) {
           await Linking.openURL(result.redirect_url);
         } else {
-          Alert.alert('Unable to Open Payment', 'Cannot open the payment page.');
+          showAlert({ title: 'Unable to Open Payment', message: 'Cannot open the payment page.' });
         }
       }
       
     } catch (error: any) {
       const errorMessage = error?.message || 'Failed to start upgrade';
-      Alert.alert('Upgrade Failed', errorMessage);
+      showAlert({ title: 'Upgrade Failed', message: errorMessage });
       track('upgrade_failed', { to_tier: plan.tier, error: errorMessage });
     } finally {
       if (screenMounted) setUpgrading(false);

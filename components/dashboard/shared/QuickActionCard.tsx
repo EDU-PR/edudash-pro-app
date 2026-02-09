@@ -80,11 +80,7 @@ export const QuickActionCard: React.FC<QuickActionCardProps> = ({
 };
 
 const createStyles = (theme: any, customCardWidth?: number) => {
-  const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
   const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-  const containerWidth = width - (cardPadding * 2);
-  const defaultCardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
-  const cardWidth = customCardWidth || defaultCardWidth;
 
   return StyleSheet.create({
     actionCard: {
@@ -92,8 +88,7 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       borderRadius: isSmallScreen ? 12 : 16,
       padding: isSmallScreen ? 12 : 16,
       alignItems: 'center',
-      width: cardWidth,
-      marginHorizontal: cardGap / 2,
+      ...(customCardWidth ? { width: customCardWidth } : { flex: 1 }),
       marginBottom: cardGap,
       shadowColor: theme.shadow,
       shadowOffset: { width: 0, height: 2 },

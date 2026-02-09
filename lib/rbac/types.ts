@@ -7,7 +7,7 @@
 /**
  * Role identifiers - these match the database enum values
  */
-export type RoleId = 'admin' | 'instructor' | 'student';
+export type RoleId = 'admin' | 'instructor' | 'student' | 'parent' | 'parent_level_2';
 
 /**
  * Permission identifiers - these match the permission IDs in the matrix
@@ -62,7 +62,26 @@ export type PermissionId =
   // Dashboard Access
   | 'access_admin_dashboard'
   | 'access_instructor_dashboard'
-  | 'access_student_dashboard';
+  | 'access_student_dashboard'
+  | 'access_parent_dashboard'
+  
+  // Parent-specific
+  | 'view_child_progress'
+  | 'view_child_reports'
+  | 'view_child_attendance'
+  | 'view_child_grades'
+  | 'view_child_homework'
+  | 'view_weekly_reports'
+  | 'make_payments'
+  | 'view_payment_history'
+  | 'upload_documents'
+  | 'communicate_with_teachers'
+  | 'link_child'
+  | 'manage_child_profile'
+  | 'use_ai_insights'
+  | 'view_daily_activities'
+  | 'view_announcements'
+  | 'join_live_classes';
 
 /**
  * Permission categories
@@ -75,13 +94,14 @@ export type PermissionCategoryType =
   | 'communication'
   | 'analytics'
   | 'admin'
+  | 'billing'
   | 'ai'
   | 'ui';
 
 /**
  * Access scopes
  */
-export type AccessScope = 'global' | 'organization' | 'self';
+export type AccessScope = 'global' | 'organization' | 'self' | 'children';
 
 /**
  * CRUD actions
@@ -292,6 +312,8 @@ export const ROLES = {
   ADMIN: 'admin' as const,
   INSTRUCTOR: 'instructor' as const,
   STUDENT: 'student' as const,
+  PARENT: 'parent' as const,
+  PARENT_LEVEL_2: 'parent_level_2' as const,
 } satisfies Record<string, RoleId>;
 
 export const PERMISSIONS = {

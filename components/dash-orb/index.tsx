@@ -14,7 +14,7 @@
  * Connects to superadmin-ai Edge Function for secure API access.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Animated,
   Easing,
@@ -119,10 +119,12 @@ export default function DashOrb({
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [pendingTutorIntent, setPendingTutorIntent] = useState<{ prompt: string; label?: string } | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [whisperModeEnabled, setWhisperModeEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isListeningForCommand, setIsListeningForCommand] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [lastDetectedLanguage, setLastDetectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA' | null>(null);
+  const [memorySnapshot, setMemorySnapshot] = useState('');
   const [quickActionAge, setQuickActionAge] = useState('auto');
   const [quickActionPrompt, setQuickActionPrompt] = useState('');
   const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
@@ -137,6 +139,9 @@ export default function DashOrb({
   const dragStartRef = useRef({ x: 0, y: 0 });
   const onDeviceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isListeningForCommandRef = useRef(false);
+  const whisperModeEnabledRef = useRef(true);
+  const shouldRestartListeningRef = useRef(false);
+  const triggerListeningRef = useRef<(() => void) | null>(null);
   const handleSendRef = useRef<(text: string) => Promise<void>>(async () => {});
 
   const normalizeSupportedLanguage = (lang?: string | null): 'en-ZA' | 'af-ZA' | 'zu-ZA' | null => {
@@ -177,6 +182,10 @@ export default function DashOrb({
   useEffect(() => {
     isListeningForCommandRef.current = isListeningForCommand;
   }, [isListeningForCommand]);
+
+  useEffect(() => {
+    whisperModeEnabledRef.current = whisperModeEnabled;
+  }, [whisperModeEnabled]);
 
   const toolShortcuts = useMemo(() => {
     const shortcuts = getDashToolShortcutsForRole(normalizedRole);
@@ -241,6 +250,7 @@ export default function DashOrb({
       setIsListeningForCommand(false);
       const language = normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA';
       const formatted = formatTranscript(text, language);
+      shouldRestartListeningRef.current = whisperModeEnabledRef.current;
       await handleSendRef.current(formatted);
     },
     onError: (errorMsg) => {
@@ -265,7 +275,7 @@ export default function DashOrb({
     if (!err) return;
     if (lastTTSErrorRef.current === err) return;
     lastTTSErrorRef.current = err;
-    toast.info('Dash voice had a service issue. Switched to device voice where available.');
+    toast.info(err, 'Dash Voice');
     console.warn('[DashOrb] TTS warning:', err);
   }, [voiceEnabled, voiceTTS.error]);
   
@@ -336,17 +346,31 @@ export default function DashOrb({
   }, [locked, upgradeAnim]);
 
   const chatStorageKey = user?.id ? `@dash_orb_chat_${user.id}` : '@dash_orb_chat_guest';
+  const memoryStorageKey = user?.id ? `@dash_orb_memory_${user.id}` : '@dash_orb_memory_guest';
 
   useEffect(() => {
     if (!AsyncStorage) return;
     let isMounted = true;
     const loadHistory = async () => {
       try {
-        const stored = await AsyncStorage.getItem(chatStorageKey);
-        if (!stored) {
+        const [storedChat, storedMemory] = await Promise.all([
+          AsyncStorage.getItem(chatStorageKey),
+          AsyncStorage.getItem(memoryStorageKey),
+        ]);
+
+        if (storedMemory && isMounted) {
+          try {
+            const parsedMemory = JSON.parse(storedMemory) as { summary?: string };
+            setMemorySnapshot(typeof parsedMemory?.summary === 'string' ? parsedMemory.summary : '');
+          } catch {
+            setMemorySnapshot('');
+          }
+        }
+
+        if (!storedChat) {
           return;
         }
-        const parsed = JSON.parse(stored) as Array<Omit<ChatMessage, 'timestamp'> & { timestamp: string }>;
+        const parsed = JSON.parse(storedChat) as Array<Omit<ChatMessage, 'timestamp'> & { timestamp: string }>;
         if (!Array.isArray(parsed)) return;
         const hydrated = parsed.map((msg) => ({
           ...msg,
@@ -366,7 +390,7 @@ export default function DashOrb({
     return () => {
       isMounted = false;
     };
-  }, [chatStorageKey]);
+  }, [chatStorageKey, memoryStorageKey]);
 
   useEffect(() => {
     if (!AsyncStorage) return;
@@ -397,6 +421,31 @@ export default function DashOrb({
       }
     };
   }, [messages, chatStorageKey]);
+
+  useEffect(() => {
+    const summary = messages
+      .filter((msg) => (msg.role === 'user' || msg.role === 'assistant') && !msg.isLoading)
+      .slice(-6)
+      .map((msg) => `${msg.role === 'user' ? 'Parent/Child' : 'Dash'}: ${msg.content}`)
+      .join(' | ')
+      .slice(0, 500);
+
+    setMemorySnapshot((prev) => (prev === summary ? prev : summary));
+
+    if (!AsyncStorage) return;
+    const timer = setTimeout(async () => {
+      try {
+        await AsyncStorage.setItem(memoryStorageKey, JSON.stringify({
+          summary,
+          updatedAt: new Date().toISOString(),
+        }));
+      } catch (err) {
+        console.warn('[DashOrb] Failed to save conversation memory:', err);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [messages, memoryStorageKey]);
 
   useEffect(() => {
     return () => {
@@ -656,10 +705,12 @@ export default function DashOrb({
     if (isSpeaking) {
       console.log('[DashOrb] User interrupted TTS - restarting voice input');
       await stopSpeaking();
-      // Give user time to start speaking
       setTimeout(() => {
+        if (!voiceEnabled) return;
+        if (isListeningForCommandRef.current) return;
+        if (isProcessing) return;
         handleMicPress();
-      }, 300);
+      }, 260);
       return;
     }
     
@@ -768,6 +819,7 @@ export default function DashOrb({
                   transcriptResult.text,
                   transcriptResult.language || normalized || undefined
                 );
+                shouldRestartListeningRef.current = whisperModeEnabledRef.current;
                 await handleSend(formatted);
               }
             }
@@ -792,10 +844,17 @@ export default function DashOrb({
     }
   };
 
+  useEffect(() => {
+    triggerListeningRef.current = () => {
+      void handleWakeWordDetected();
+    };
+  }, [handleWakeWordDetected]);
+
   const handleMicPress = async () => {
     // Manual voice input (push-to-talk)
     if (isListeningForCommand) {
       // Stop listening
+      shouldRestartListeningRef.current = false;
       if (onDeviceTimeoutRef.current) {
         clearTimeout(onDeviceTimeoutRef.current);
         onDeviceTimeoutRef.current = null;
@@ -815,6 +874,21 @@ export default function DashOrb({
       await handleWakeWordDetected();
     }
   };
+
+  useEffect(() => {
+    if (!whisperModeEnabled) return;
+    if (!shouldRestartListeningRef.current) return;
+    if (isProcessing || isSpeaking || isListeningForCommand) return;
+
+    const timer = setTimeout(() => {
+      if (!whisperModeEnabledRef.current) return;
+      if (isProcessing || isSpeaking || isListeningForCommandRef.current) return;
+      shouldRestartListeningRef.current = false;
+      triggerListeningRef.current?.();
+    }, 650);
+
+    return () => clearTimeout(timer);
+  }, [whisperModeEnabled, isProcessing, isSpeaking, isListeningForCommand]);
 
   const handleOrbAttach = () => {
     toast.info('Attachments are available in the full Dash Tutor screen for now.');
@@ -851,6 +925,34 @@ export default function DashOrb({
   useEffect(() => {
     handleSendRef.current = handleSend;
   }, [handleSend]);
+
+  const quickIntents = useMemo(() => ([
+    { id: 'ask_homework', label: 'Ask homework', prompt: 'Help us with today\'s homework task.' },
+    { id: 'translate', label: 'Translate', prompt: 'Translate this clearly for a young learner.' },
+    { id: 'summarize', label: 'Summarize', prompt: 'Summarize this in simple points.' },
+  ]), []);
+
+  const handleQuickIntent = useCallback((intent: { id: string; label: string; prompt: string }) => {
+    if (isProcessing) return;
+
+    if (intent.id === 'summarize') {
+      const lastAssistant = [...messages].reverse().find((msg) => msg.role === 'assistant' && !msg.isLoading);
+      if (lastAssistant?.content) {
+        void handleSend(`Summarize this response for parent and child:\n${lastAssistant.content}`);
+        return;
+      }
+    }
+
+    if (intent.id === 'translate') {
+      const lastAssistant = [...messages].reverse().find((msg) => msg.role === 'assistant' && !msg.isLoading);
+      if (lastAssistant?.content) {
+        void handleSend(`Translate this into simpler language for a parent and child:\n${lastAssistant.content}`);
+        return;
+      }
+    }
+
+    void handleSend(intent.prompt);
+  }, [isProcessing, messages, handleSend]);
 
   const processCommand = async (
     command: string,
@@ -949,10 +1051,15 @@ export default function DashOrb({
         )
       );
       
-      // Speak the response if voice is enabled
+      // Speak the response if voice is enabled (isolated try/catch so TTS
+      // failures never replace the successfully-rendered AI response)
       if (voiceEnabled && Platform.OS !== 'web') {
         const ttsLanguage = lastDetectedLanguage || 'en-ZA';
-        await speak(result, ttsLanguage);
+        try {
+          await speak(result, ttsLanguage);
+        } catch (ttsErr) {
+          console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
+        }
       }
       
       onCommandExecuted?.(command, result);
@@ -1041,6 +1148,16 @@ export default function DashOrb({
       profile,
       user,
       supabase: supabaseClient,
+      role: normalizedRole || 'parent',
+      tier: (profile as any)?.tier || 'free',
+      organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+      hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+      isGuest: !user?.id,
+      trace_id: `dash_orb_manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      tool_plan: {
+        source: 'dash_orb.run_tool',
+        tool: toolName,
+      },
     };
 
     const result = await ToolRegistry.execute(toolName, params, context);
@@ -1082,6 +1199,16 @@ export default function DashOrb({
       profile,
       user,
       supabase: supabaseClient,
+      role: normalizedRole || 'parent',
+      tier: (profile as any)?.tier || 'free',
+      organizationId: (profile as any)?.organization_id || (profile as any)?.preschool_id || null,
+      hasOrganization: Boolean((profile as any)?.organization_id || (profile as any)?.preschool_id),
+      isGuest: !user?.id,
+      trace_id: `dash_orb_auto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      tool_plan: {
+        source: 'dash_orb.auto_planner',
+        tool: toolName,
+      },
     });
 
     const label = autoToolShortcuts.find((tool) => tool.name === toolName)?.label || toolName;
@@ -1105,7 +1232,7 @@ export default function DashOrb({
 
   /**
    * Execute command via AI Edge Function
-   * Uses superadmin-ai for super admins, ai-proxy for regular users
+   * Uses superadmin-ai for super admins with runtime fallback to ai-proxy.
    */
   const executeCommand = async (command: string, history: Array<{role: string, content: string}> = []): Promise<string> => {
     try {
@@ -1115,13 +1242,7 @@ export default function DashOrb({
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please log in again.');
       }
-      
-      // Choose endpoint based on user role
-      const endpoint = isUserSuperAdmin 
-        ? `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`
-        : `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
-      
-      // Build request body based on endpoint
+
       const isLearnerRole = ['student', 'learner'].includes(normalizedRole);
       const ageYears = isLearnerRole
         ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
@@ -1142,112 +1263,141 @@ export default function DashOrb({
         ? 'If asked for a lesson plan, output a learner-ready mini-lesson with examples, practice, and a quick check question. Add 1-2 tips for parents to help at home.'
         : undefined;
 
-      const requestBody = isUserSuperAdmin
-        ? {
-            action: 'chat',
-            message: command,
-            history: history,
-            max_tokens: 1024,
-          }
-        : {
-            scope: normalizedRole || 'parent',
-            service_type: 'dash_conversation',
-            payload: {
-              prompt: command,
-              context: [
-                history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
-                nameContext,
-                gradeContext,
-                schoolTypeContext,
-                ageContext,
-                roleContext,
-                lessonContext,
-              ].filter(Boolean).join('\n\n') || undefined,
-            },
-            stream: false,
-            enable_tools: true,
-            metadata: {
-              role: normalizedRole,
-              source: 'dash_orb',
-              age_years: ageYears ?? undefined,
-            }
-          };
-      
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+      const traceId = `dash_orb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const superAdminEndpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`;
+      const aiProxyEndpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
+
+      const aiProxyBody = {
+        scope: normalizedRole || 'parent',
+        service_type: 'dash_conversation',
+        payload: {
+          prompt: command,
+          context: [
+            history.length > 0 ? history.map((h) => `${h.role}: ${h.content}`).join('\n') : null,
+            memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
+            nameContext,
+            gradeContext,
+            schoolTypeContext,
+            ageContext,
+            roleContext,
+            lessonContext,
+          ].filter(Boolean).join('\n\n') || undefined,
         },
-        body: JSON.stringify(requestBody),
-      });
-      
+        stream: false,
+        enable_tools: true,
+        metadata: {
+          role: normalizedRole,
+          source: 'dash_orb',
+          age_years: ageYears ?? undefined,
+          trace_id: traceId,
+          tool_plan: {
+            source: 'dash_orb.executeCommand',
+            history_count: history.length,
+          },
+        },
+      };
+
+      const superAdminBody = {
+        action: 'chat',
+        message: command,
+        history,
+        max_tokens: 1024,
+      };
+
+      const parseAiProxyResponse = (data: any): string => {
+        if (typeof data?.content === 'string') return data.content;
+        if (Array.isArray(data?.content) && data.content[0]?.text) return data.content[0].text;
+        if (typeof data?.message?.content === 'string') return data.message.content;
+        if (typeof data?.text === 'string') return data.text;
+        if (typeof data?.response === 'string') return data.response;
+        if (data?.success && data?.content) return typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+        console.warn('[DashOrb] Unknown ai-proxy response format:', Object.keys(data || {}));
+        return 'I received your message but could not parse the response.';
+      };
+
+      const isFallbackWorthy = (status: number, message: string): boolean => {
+        const lower = message.toLowerCase();
+        return (
+          status === 404 ||
+          status === 502 ||
+          status === 503 ||
+          lower.includes('function not found') ||
+          lower.includes('superadmin-ai') ||
+          lower.includes('not deployed')
+        );
+      };
+
+      const invoke = async (
+        endpoint: string,
+        body: Record<string, unknown>
+      ): Promise<{ ok: boolean; status: number; data: any }> => {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        return { ok: response.ok, status: response.status, data };
+      };
+
+      let mode: 'superadmin' | 'ai_proxy' = isUserSuperAdmin ? 'superadmin' : 'ai_proxy';
+      let response = await invoke(
+        mode === 'superadmin' ? superAdminEndpoint : aiProxyEndpoint,
+        mode === 'superadmin' ? superAdminBody : aiProxyBody
+      );
+
+      if (!response.ok && mode === 'superadmin') {
+        const message = String(response.data?.error || response.data?.message || `Request failed: ${response.status}`);
+        if (isFallbackWorthy(response.status, message)) {
+          console.warn('[DashOrb] superadmin-ai unavailable, falling back to ai-proxy', {
+            status: response.status,
+            message,
+          });
+          mode = 'ai_proxy';
+          response = await invoke(aiProxyEndpoint, aiProxyBody);
+        }
+      }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const rawError = errorData.error || errorData.message || `Request failed: ${response.status}`;
-        console.warn('[DashOrb] AI proxy error payload:', errorData);
+        const rawError = response.data?.error || response.data?.message || `Request failed: ${response.status}`;
+        console.warn('[DashOrb] AI error payload:', response.data);
         if (typeof rawError === 'string' && rawError.toLowerCase().includes('ai_proxy_error')) {
           throw new Error('AI service is temporarily unavailable. Please try again shortly.');
         }
         throw new Error(rawError);
       }
-      
-      const data = await response.json();
-      
-      // Debug logging for response format
-      console.log('[DashOrb] AI Response data:', JSON.stringify(data, null, 2).substring(0, 500));
-      
-      // Handle response format based on endpoint
-      if (isUserSuperAdmin) {
-        if (!data.success) {
-          throw new Error(data.error || 'Unknown error occurred');
+
+      console.log('[DashOrb] AI Response data:', JSON.stringify(response.data, null, 2).substring(0, 500));
+
+      if (mode === 'superadmin') {
+        if (!response.data?.success) {
+          const fallbackError = String(response.data?.error || response.data?.message || 'Unknown error occurred');
+          if (isFallbackWorthy(200, fallbackError)) {
+            const fallback = await invoke(aiProxyEndpoint, aiProxyBody);
+            if (!fallback.ok) {
+              throw new Error(fallback.data?.error || fallback.data?.message || 'Fallback ai-proxy request failed');
+            }
+            return parseAiProxyResponse(fallback.data);
+          }
+          throw new Error(fallbackError);
         }
-        
-        let formattedResponse = data.response;
-        
-        if (data.tool_calls && data.tool_calls.length > 0) {
-          const toolNames = data.tool_calls.map((t: any) => t.name).join(', ');
+
+        let formattedResponse = String(response.data?.response || '');
+        if (Array.isArray(response.data?.tool_calls) && response.data.tool_calls.length > 0) {
+          const toolNames = response.data.tool_calls.map((t: any) => t.name).join(', ');
           formattedResponse += `\n\n🔧 _Tools used: ${toolNames}_`;
         }
-        
-        if (data.tokens_used && data.tokens_used > 1000) {
-          formattedResponse += `\n📊 _${data.tokens_used.toLocaleString()} tokens used_`;
+        if (response.data?.tokens_used && response.data.tokens_used > 1000) {
+          formattedResponse += `\n📊 _${response.data.tokens_used.toLocaleString()} tokens used_`;
         }
-        
         return formattedResponse;
-      } else {
-        // ai-proxy response format - handle multiple possible response shapes
-        // 1. Direct string content (most common)
-        // 2. Anthropic format: content[0].text
-        // 3. OpenAI format: message.content
-        // 4. Legacy: text or response field
-        let content: string;
-        
-        if (typeof data.content === 'string') {
-          // Direct string content from ai-proxy
-          content = data.content;
-        } else if (Array.isArray(data.content) && data.content[0]?.text) {
-          // Anthropic API format: content[0].text
-          content = data.content[0].text;
-        } else if (data.message?.content) {
-          // OpenAI format
-          content = data.message.content;
-        } else if (data.text) {
-          // Simple text field
-          content = data.text;
-        } else if (data.response) {
-          // Legacy response field
-          content = data.response;
-        } else if (data.success && data.content) {
-          // Success wrapper with content
-          content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
-        } else {
-          console.warn('[DashOrb] Unknown response format:', Object.keys(data));
-          content = 'I received your message but couldn\'t parse the response.';
-        }
-        
-        return content;
       }
+
+      return parseAiProxyResponse(response.data);
       
     } catch (error) {
       console.error('[DashOrb] Command execution error:', error);
@@ -1549,6 +1699,11 @@ export default function DashOrb({
         }}
         isSpeaking={isSpeaking}
         voiceEnabled={voiceEnabled}
+        whisperModeEnabled={whisperModeEnabled}
+        onToggleWhisperMode={() => {
+          setWhisperModeEnabled((prev) => !prev);
+          shouldRestartListeningRef.current = false;
+        }}
         onToggleVoice={() => {
           setVoiceEnabled(!voiceEnabled);
           if (isSpeaking) stopSpeaking();
@@ -1579,6 +1734,9 @@ export default function DashOrb({
         onAttachFile={handleOrbAttach}
         onTakePhoto={handleOrbCamera}
         attachmentCount={0}
+        quickIntents={quickIntents}
+        onQuickIntent={handleQuickIntent}
+        memorySnapshot={memorySnapshot}
         inlineReplyEnabled={isTutorRole}
         onCopyMessage={async (message) => {
           try {

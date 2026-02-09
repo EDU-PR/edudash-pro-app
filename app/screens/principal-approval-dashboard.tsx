@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { ApprovalWorkflowService, type ProofOfPayment, type PettyCashRequest, type ApprovalSummary } from '@/services/ApprovalWorkflowService';
 import { assertSupabase } from '@/lib/supabase';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 type TabType = 'summary' | 'pops' | 'petty_cash' | 'history';
 
@@ -32,13 +33,8 @@ export default function PrincipalApprovalDashboard() {
   const { t } = useTranslation();
   const { showAlert, alertProps } = useAlertModal();
 
-  // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
-
-  // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
-  
-  // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;
 
   const [school, setSchool] = useState<School | null>(null);
@@ -62,42 +58,17 @@ export default function PrincipalApprovalDashboard() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [approvedAmount, setApprovedAmount] = useState('');
 
-  // CONSOLIDATED NAVIGATION EFFECT: Single source of truth for all routing decisions
   useEffect(() => {
-    // Skip if still loading data
-    if (isStillLoading) return;
-    
-    // Guard against double navigation (React StrictMode in dev)
-    if (navigationAttempted.current) return;
-    
-    // Decision 1: No user -> sign in
+    if (isStillLoading || navigationAttempted.current) return;
     if (!user) {
       navigationAttempted.current = true;
-      try { 
-        router.replace('/(auth)/sign-in'); 
-      } catch (e) {
-        try { router.replace('/sign-in'); } catch { /* Intentional: non-fatal */ }
-      }
+      try { router.replace('/(auth)/sign-in'); } catch { try { router.replace('/sign-in'); } catch { /* non-fatal */ } }
       return;
     }
-    
-    // Decision 2: User exists but no organization -> onboarding
     if (!orgId) {
       navigationAttempted.current = true;
-      console.log('Principal Approval dashboard: No school found, redirecting to onboarding', {
-        profile,
-        organization_id: profile?.organization_id,
-        preschool_id: (profile as any)?.preschool_id,
-      });
-      try { 
-        router.replace('/screens/principal-onboarding'); 
-      } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
-      }
-      return;
+      try { router.replace('/screens/principal-onboarding'); } catch { /* non-fatal */ }
     }
-    
-    // Decision 3: All good, stay on dashboard (no navigation needed)
   }, [isStillLoading, user, orgId, profile]);
 
   const loadApprovalData = async () => {
@@ -116,7 +87,7 @@ export default function PrincipalApprovalDashboard() {
         .single();
 
       if (schoolError) {
-        console.error('Error loading school:', schoolError);
+        logger.error('ApprovalDashboard', 'Error loading school:', schoolError);
         return;
       }
 
@@ -132,7 +103,7 @@ export default function PrincipalApprovalDashboard() {
       setPendingPettyCash(pettyCashRequests);
 
     } catch (error) {
-      console.error('Error loading approval data:', error);
+      logger.error('ApprovalDashboard', 'Error loading approval data:', error);
       showAlert({
         title: 'Error',
         message: 'Failed to load approval data',
@@ -291,8 +262,7 @@ export default function PrincipalApprovalDashboard() {
 
   const styles = createStyles(theme);
 
-  // Show loading state while auth/profile is loading
-  if (isStillLoading) {
+  if (isStillLoading || !user) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
@@ -303,27 +273,13 @@ export default function PrincipalApprovalDashboard() {
     );
   }
 
-  // Show redirect message if no organization after loading is complete
   if (!orgId) {
-    // If not authenticated, show loading state
-    if (!user) {
-      return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
-          <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
-          <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
-          </View>
-        </SafeAreaView>
-      );
-    }
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
-          <TouchableOpacity onPress={() => {
-            try { router.replace('/screens/principal-onboarding'); } catch (e) { console.debug('Redirect failed', e); }
-          }}>
+          <TouchableOpacity onPress={() => { try { router.replace('/screens/principal-onboarding'); } catch { /* non-fatal */ } }}>
             <Text style={[styles.loadingText, { color: theme.primary, textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
           </TouchableOpacity>
         </View>

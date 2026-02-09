@@ -14,7 +14,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 export interface AlertButton {
   text: string;
-  onPress?: () => void;
+  onPress?: () => void | Promise<void>;
   style?: 'default' | 'cancel' | 'destructive';
 }
 
@@ -76,9 +76,12 @@ export const AlertModal: React.FC<AlertModalProps> = ({
 
   const finalIconColor = iconColor || getTypeColor();
 
-  const handleButtonPress = (button: AlertButton) => {
-    button.onPress?.();
-    onClose();
+  const handleButtonPress = async (button: AlertButton) => {
+    try {
+      await button.onPress?.();
+    } finally {
+      onClose();
+    }
   };
 
   const getButtonStyle = (button: AlertButton, index: number) => {

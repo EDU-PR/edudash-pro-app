@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,52 +7,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-// Form data interface
-interface RegistrationData {
-  schoolName: string;
-  schoolType: 'preschool' | 'k12_school' | 'hybrid';
-  gradelevels: string[];
-  contactEmail: string;
-  contactPhone: string;
-  physicalAddress: string;
-  principalName: string;
-  principalEmail: string;
-  selectedPlanId?: string;
-}
-
-// Separate error type allowing string messages per field
-type RegistrationErrors = Partial<Record<keyof RegistrationData, string | string[]>>;
-
-// Grade level options by school type
-const GRADE_LEVELS = {
-  preschool: [
-    { id: 'infants', label: 'Infants (6m-12m)', description: 'Infant care programs' },
-    { id: 'toddlers', label: 'Toddlers (1-2 years)', description: 'Toddler development programs' },
-    { id: 'pre_k', label: 'Pre-K (3-4 years)', description: 'Pre-kindergarten preparation' },
-    { id: 'reception', label: 'Reception (4-5 years)', description: 'School readiness programs' }
-  ],
-  k12_school: [
-    { id: 'foundation', label: 'Foundation Phase (Grade R-3)', description: 'Ages 5-9' },
-    { id: 'intermediate', label: 'Intermediate Phase (Grade 4-6)', description: 'Ages 9-12' },
-    { id: 'senior', label: 'Senior Phase (Grade 7-9)', description: 'Ages 12-15' },
-    { id: 'fet', label: 'FET Phase (Grade 10-12)', description: 'Ages 15-18' }
-  ],
-  hybrid: [
-    { id: 'infants', label: 'Infants (6m-12m)', description: 'Infant care programs' },
-    { id: 'toddlers', label: 'Toddlers (1-2 years)', description: 'Toddler development programs' },
-    { id: 'pre_k', label: 'Pre-K (3-4 years)', description: 'Pre-kindergarten preparation' },
-    { id: 'foundation', label: 'Foundation Phase (Grade R-3)', description: 'Ages 5-9' },
-    { id: 'intermediate', label: 'Intermediate Phase (Grade 4-6)', description: 'Ages 9-12' },
-    { id: 'senior', label: 'Senior Phase (Grade 7-9)', description: 'Ages 12-15' },
-    { id: 'fet', label: 'FET Phase (Grade 10-12)', description: 'Ages 15-18' }
-  ]
-};
+import { RegistrationData, RegistrationErrors, GRADE_LEVELS, getRegistrationErrorMessage } from '@/lib/screen-data/school-registration.types';
 
 export default function SchoolRegistrationScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const params = useLocalSearchParams<{ schoolType?: string; from?: string }>();
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -90,7 +54,7 @@ export default function SchoolRegistrationScreen() {
           }
         }
       } catch (e) {
-        if (__DEV__) console.debug('Failed to load saved registration data', e);
+        if (__DEV__) logger.debug('SchoolReg', 'Failed to load saved registration data', e);
       }
     };
     loadSavedData();
@@ -105,7 +69,7 @@ export default function SchoolRegistrationScreen() {
         await AsyncStorage.setItem('school_registration_data', JSON.stringify(updatedData));
       }
     } catch (e) {
-      if (__DEV__) console.debug('Failed to save registration data', e);
+      if (__DEV__) logger.debug('SchoolReg', 'Failed to save registration data', e);
     }
   };
 
@@ -224,69 +188,32 @@ export default function SchoolRegistrationScreen() {
         school_id: data.school_id
       });
 
-      Alert.alert(
-        'School Registered Successfully!',
-        'Your school registration is complete. You will receive an email verification shortly. After verification, you can set up your subscription and start using the platform.',
-        [
-          {
-            text: 'Continue to Verification',
-            onPress: () => {
-              router.push({
-                pathname: '/screens/email-verification',
-                params: {
-                  schoolId: data.school_id,
-                  email: formData.contactEmail,
-                  verificationId: data.verification_id
-                }
-              });
-            }
-          }
-        ]
-      );
+      showAlert({
+        title: 'School Registered Successfully!',
+        message: 'Your school registration is complete. You will receive an email verification shortly.',
+        type: 'success',
+        buttons: [{
+          text: 'Continue to Verification',
+          onPress: () => {
+            router.push({
+              pathname: '/screens/email-verification',
+              params: { schoolId: data.school_id, email: formData.contactEmail, verificationId: data.verification_id },
+            });
+          },
+        }],
+      });
 
     } catch (error: any) {
       if (__DEV__) {
-        console.error('Registration failed:', error);
-        console.error('Error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-        });
+        logger.error('SchoolReg', 'Registration failed:', error);
       }
-      
-      // Extract error details for better user feedback
-      const errorCode = error.code;
-      const errorMessage = error.message || 'Failed to register school. Please try again.';
-      const errorDetails = error.details;
-      const errorHint = error.hint;
-      
-      let userMessage = errorMessage;
-      
-      // Handle specific error cases
-      if (errorCode === '23505' || errorMessage?.includes('duplicate') || errorMessage?.includes('already exists')) {
-        userMessage = 'A school with this name or email already exists. Please use a different name or contact support if you believe this is an error.';
-      } else if (errorCode === '42501' || errorMessage?.includes('permission denied') || errorMessage?.includes('row-level security')) {
-        userMessage = 'Permission denied. Please ensure you are logged in and have the necessary permissions to register a school.';
-      } else if (errorCode === '23503' || errorMessage?.includes('foreign key')) {
-        userMessage = 'Invalid data provided. Please check your information and try again.';
-      } else if (errorCode === 'PGRST116' || errorMessage?.includes('relation') && errorMessage?.includes('does not exist')) {
-        userMessage = 'System error: Registration service is unavailable. Please contact support.';
-      } else if (errorDetails) {
-        userMessage = `${errorMessage}\n\nDetails: ${errorDetails}`;
-      } else if (errorHint) {
-        userMessage = `${errorMessage}\n\nHint: ${errorHint}`;
-      }
-      
-      Alert.alert(
-        'Registration Failed',
-        userMessage,
-        [{ text: 'OK' }]
-      );
-      
+
+      const userMessage = getRegistrationErrorMessage(error);
+      showAlert({ title: 'Registration Failed', message: userMessage, type: 'error' });
+
       track('school_registration_failed', {
-        error: errorMessage,
-        error_code: errorCode,
+        error: error.message,
+        error_code: error.code,
         school_type: formData.schoolType
       });
     } finally {
@@ -553,6 +480,7 @@ export default function SchoolRegistrationScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }

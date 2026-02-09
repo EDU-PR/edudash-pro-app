@@ -48,6 +48,7 @@ export type DashCapability =
   
   // Multimodal capabilities
   | 'multimodal.vision'             // Image analysis and understanding
+  | 'multimodal.image_generation'   // AI image generation
   | 'multimodal.ocr'                // Optical character recognition
   | 'multimodal.documents'          // PDF/DOCX processing
   | 'multimodal.handwriting'        // Handwriting recognition
@@ -136,6 +137,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'memory.lite',
     // Multimodal (limited via daily budget)
     'multimodal.vision',
+    'multimodal.image_generation',
     // Voice (limited)
     'voice.input',
     'voice.output',
@@ -161,6 +163,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'memory.standard',
     // Multimodal
     'multimodal.vision',
+    'multimodal.image_generation',
     'multimodal.documents',
     // Voice
     'voice.input',
@@ -208,6 +211,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'memory.semantic',
     // Multimodal
     'multimodal.vision',
+    'multimodal.image_generation',
     'multimodal.ocr',
     'multimodal.documents',
     'multimodal.handwriting',
@@ -287,6 +291,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'memory.semantic',
     // Multimodal - All capabilities
     'multimodal.vision',
+    'multimodal.image_generation',
     'multimodal.ocr',
     'multimodal.documents',
     'multimodal.handwriting',

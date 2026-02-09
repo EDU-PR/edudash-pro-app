@@ -9,13 +9,12 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { assertSupabase } from '@/lib/supabase';
+import { isAIEnabled } from '@/lib/ai/aiConfig';
 import type { OrgLimits } from '@/components/dashboard/teacher/types';
 
 export const useTeacherDashboardState = () => {
   const flags = getFeatureFlagsSync();
-  const AI_ENABLED =
-    (process.env.EXPO_PUBLIC_AI_ENABLED !== "false") &&
-    (process.env.EXPO_PUBLIC_ENABLE_AI_FEATURES !== "false");
+  const AI_ENABLED = isAIEnabled();
 
   const { user, profile, refreshProfile } = useAuth();
   const { ready: subscriptionReady, tier } = useSubscription();
@@ -88,10 +87,9 @@ export const useTeacherDashboardState = () => {
     String(profile.role).toLowerCase().includes("teacher") &&
     (profile?.seat_status === "pending" || !hasActiveSeat);
 
-  // Debug logging
+  // Debug logging — only in development
   React.useEffect(() => {
-    const show = true;
-    if (!show) return;
+    if (!__DEV__) return;
     try {
       const caps = Array.isArray((profile as any)?.capabilities) ? (profile as any).capabilities : [];
       console.log('[TeacherDashboard debug]', {

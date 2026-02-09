@@ -8,8 +8,9 @@
  */
 
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as Speech from 'expo-speech';
-import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { assertSupabase } from '../../../lib/supabase';
 import { SupportedLanguage } from './useVoiceSTT';
 
@@ -26,6 +27,13 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
+export type TTSErrorCategory =
+  | 'auth_missing'
+  | 'service_unconfigured'
+  | 'network_error'
+  | 'playback_error'
+  | 'unknown';
+
 const mapToDeviceLocale = (language: string): string => {
   const normalized = (language || 'en-ZA').toLowerCase();
   if (normalized.startsWith('af')) return 'af-ZA';
@@ -34,14 +42,75 @@ const mapToDeviceLocale = (language: string): string => {
   return 'en-ZA';
 };
 
+export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('auth_missing') ||
+    normalized.includes('no session') ||
+    normalized.includes('401') ||
+    normalized.includes('403')
+  ) {
+    return 'auth_missing';
+  }
+
+  if (
+    normalized.includes('service_unconfigured') ||
+    normalized.includes('tts unavailable') ||
+    normalized.includes('supabase_url') ||
+    normalized.includes('fallback') ||
+    normalized.includes('not configured')
+  ) {
+    return 'service_unconfigured';
+  }
+
+  if (
+    normalized.includes('audio_player') ||
+    normalized.includes('playback') ||
+    normalized.includes('device_tts_failed')
+  ) {
+    return 'playback_error';
+  }
+
+  if (
+    normalized.includes('network') ||
+    normalized.includes('fetch') ||
+    normalized.includes('timeout') ||
+    normalized.includes('econn') ||
+    normalized.includes('enotfound')
+  ) {
+    return 'network_error';
+  }
+
+  return 'unknown';
+};
+
+export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
+  switch (category) {
+    case 'auth_missing':
+      return 'Voice needs an active login session.';
+    case 'service_unconfigured':
+      return 'Voice service is unavailable. Using device voice.';
+    case 'network_error':
+      return 'Network issue detected. Using device voice.';
+    case 'playback_error':
+      return 'Audio playback failed. Using device voice.';
+    default:
+      return 'Voice is temporarily unavailable.';
+  }
+};
+
 export function useVoiceTTS(): UseVoiceTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
   const stopRequestedRef = useRef(false);
+  const reportedErrorCategoriesRef = useRef<Set<TTSErrorCategory>>(new Set());
   const playbackIdRef = useRef(0);
   const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioModeConfiguredRef = useRef(false);
 
   const clearPlaybackTimers = useCallback(() => {
     if (playbackIntervalRef.current) {
@@ -97,8 +166,32 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     setIsSpeaking(false);
   }, [stopPlayback]);
 
+  const reportTTSError = useCallback((reason: unknown) => {
+    const category = categorizeTTSError(reason);
+    if (reportedErrorCategoriesRef.current.has(category)) {
+      return category;
+    }
+    reportedErrorCategoriesRef.current.add(category);
+    setError(getTTSErrorMessage(category));
+    return category;
+  }, []);
+
   const playAudioUrl = useCallback((audioUrl: string, timeoutMs: number): Promise<void> => {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<void>(async (resolve, reject) => {
+      // Configure audio mode on first use (ensures playback works on Android)
+      if (!audioModeConfiguredRef.current) {
+        try {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            shouldPlayInBackground: false,
+            interruptionMode: 'duckOthers',
+          });
+          audioModeConfiguredRef.current = true;
+        } catch (modeErr) {
+          console.warn('[VoiceTTS] Audio mode config failed (non-fatal):', modeErr);
+        }
+      }
+
       let settled = false;
       let hasStarted = false;
       const playbackId = playbackIdRef.current + 1;
@@ -168,14 +261,26 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   const speakWithDeviceTTS = useCallback(async (text: string, language: string): Promise<void> => {
     const locale = mapToDeviceLocale(language);
     await stopPlayback();
+    // Delay after Speech.stop() to prevent Android race condition where
+    // an immediate Speech.speak() call is silently ignored.
+    if (Platform.OS === 'android') {
+      await new Promise(r => setTimeout(r, 350));
+    }
     await new Promise<void>((resolve, reject) => {
+      // Safety timeout: if neither onDone nor onError fires within 30s, resolve
+      const safetyTimer = setTimeout(() => {
+        console.warn('[VoiceTTS] Device TTS safety timeout — resolving');
+        resolve();
+      }, 30000);
+
       Speech.speak(text, {
         language: locale,
         rate: 1.0,
         pitch: 1.0,
-        onDone: () => resolve(),
-        onStopped: () => resolve(),
+        onDone: () => { clearTimeout(safetyTimer); resolve(); },
+        onStopped: () => { clearTimeout(safetyTimer); resolve(); },
         onError: (err) => {
+          clearTimeout(safetyTimer);
           reject(err instanceof Error ? err : new Error('DEVICE_TTS_FAILED'));
         },
       });
@@ -186,111 +291,64 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
    * Speak using Azure TTS (primary method)
    */
   const speakWithAzure = useCallback(async (cleanText: string, language: SupportedLanguage): Promise<void> => {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('SERVICE_UNCONFIGURED_SUPABASE_URL');
+    }
+
+    const supabase = assertSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error('AUTH_MISSING');
+    }
+
+    const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
+    const endpoint = `${supabaseUrl}/functions/v1/tts-proxy`;
+
+    let response: Response;
     try {
-      const supabase = assertSupabase();
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        console.log('[VoiceTTS] No session, Azure TTS unavailable');
-        throw new Error('TTS unavailable right now');
-      }
-
-      console.log('[VoiceTTS] Calling Azure TTS via Edge Function');
-      
-      // Map language to short code (en-ZA -> en)
-      const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
-      
-      console.log('[VoiceTTS] Sending TTS request:', {
-        language: language,
-        langCode: langCode,
-        textLength: cleanText.length,
-        textPreview: cleanText.substring(0, 50),
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          text: cleanText,
+          lang: langCode,
+          style: 'friendly',
+          format: 'mp3',
+        }),
       });
-      
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/tts-proxy`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            text: cleanText,
-            lang: langCode,
-            style: 'friendly',
-            format: 'mp3',
-          }),
-        }
-      );
+    } catch (networkError) {
+      throw new Error(`NETWORK_ERROR:${networkError instanceof Error ? networkError.message : String(networkError)}`);
+    }
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        console.log('[VoiceTTS] Azure TTS failed', {
-          status: response.status,
-          body: errText,
-        });
-        throw new Error('TTS unavailable right now');
+    if (!response.ok) {
+      const status = response.status;
+      if (status === 401 || status === 403) {
+        throw new Error(`AUTH_MISSING_${status}`);
       }
+      if (status >= 500 || status === 404 || status === 422) {
+        throw new Error(`SERVICE_UNCONFIGURED_${status}`);
+      }
+      throw new Error(`NETWORK_ERROR_STATUS_${status}`);
+    }
 
-      const data = await response.json();
-      
-      // Handle fallback instruction from server
-      if (data.fallback === 'device') {
-        console.log('[VoiceTTS] Server instructed device fallback (blocked)');
-        throw new Error('TTS unavailable right now');
-      }
-      
-      if (!data.audio_url) {
-        console.log('[VoiceTTS] No audio URL in response');
-        throw new Error('TTS unavailable right now');
-      }
+    const data = await response.json();
+    if (data?.fallback === 'device') {
+      throw new Error('SERVICE_UNCONFIGURED_DEVICE_FALLBACK');
+    }
 
-      console.log('[VoiceTTS] Got audio URL from', data.provider, '- playing...');
-      
-      // Play the audio URL directly
-      await playAudioUrl(data.audio_url, 60000);
-      console.log('[VoiceTTS] Azure playback finished');
-      return;
-      
-    } catch (err) {
-      console.error('[VoiceTTS] Azure TTS error:', err);
-      // Only fallback to device after network/server errors, not for all errors
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      if (errorMsg.includes('network') || errorMsg.includes('fetch') || errorMsg.includes('timeout')) {
-        console.log('[VoiceTTS] Network error, retrying Azure once before device fallback...');
-        // One retry for network issues
-        try {
-          const supabase = assertSupabase();
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) {
-            const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
-            const retryResponse = await fetch(
-              `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/tts-proxy`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({ text: cleanText, lang: langCode, style: 'friendly', format: 'mp3' }),
-              }
-            );
-            if (retryResponse.ok) {
-              const retryData = await retryResponse.json();
-              if (retryData.audio_url) {
-                console.log('[VoiceTTS] Retry successful - playing Azure audio');
-                await playAudioUrl(retryData.audio_url, 30000);
-                setIsSpeaking(false);
-                return;
-              }
-            }
-          }
-        } catch (retryErr) {
-          console.error('[VoiceTTS] Retry failed:', retryErr);
-        }
-      }
-      throw err instanceof Error ? err : new Error('TTS unavailable for this language');
+    if (!data?.audio_url) {
+      throw new Error('SERVICE_UNCONFIGURED_NO_AUDIO_URL');
+    }
+
+    try {
+      await playAudioUrl(data.audio_url, 15000);
+    } catch (playbackError) {
+      throw new Error(`PLAYBACK_ERROR:${playbackError instanceof Error ? playbackError.message : String(playbackError)}`);
     }
   }, [playAudioUrl]);
 
@@ -349,6 +407,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     stopRequestedRef.current = false;
     setIsSpeaking(true);
     setError(null);
+    // Reset error dedup each invocation so persistent failures aren't silenced
+    reportedErrorCategoriesRef.current.clear();
     
     try {
       // Stop any current playback without cancelling this session
@@ -445,18 +505,23 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           await speakWithAzure(chunk, effectiveLanguage);
         } catch (azureErr) {
           console.warn('[VoiceTTS] Azure chunk failed; using device fallback for this chunk:', azureErr);
-          await speakWithDeviceTTS(chunk, effectiveLanguage);
+          reportTTSError(azureErr);
+          try {
+            await speakWithDeviceTTS(chunk, effectiveLanguage);
+          } catch (deviceErr) {
+            reportTTSError(deviceErr);
+            throw deviceErr;
+          }
         }
       }
       
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'TTS failed';
-      console.error('[VoiceTTS] Error:', message);
-      setError(message);
+      console.error('[VoiceTTS] Error:', err);
+      reportTTSError(err);
     } finally {
       setIsSpeaking(false);
     }
-  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS]);
+  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS, reportTTSError]);
 
   return { speak, stop, isSpeaking, error };
 }

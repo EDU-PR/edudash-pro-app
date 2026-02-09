@@ -6,6 +6,7 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { assertSupabase } from '@/lib/supabase';
 
 export default function TeacherDashboardScreen() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -15,6 +16,7 @@ export default function TeacherDashboardScreen() {
   
   // Guard against React StrictMode double-invoke in development
   const navigationAttempted = useRef(false);
+  const [approvalGateLoading, setApprovalGateLoading] = React.useState(false);
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = profile?.organization_id || (profile as any)?.preschool_id;
@@ -43,17 +45,60 @@ export default function TeacherDashboardScreen() {
     
     // Decision 2: User exists but no organization -> allow standalone access
     // Teachers can use the dashboard without an organization (standalone mode)
-    // No redirect needed - dashboard will show appropriate prompts
-    
-    // Decision 3: All good, stay on dashboard (no navigation needed)
+    if (!orgId) return;
+
+    // Decision 3: Enforce principal approval gate for school-linked teachers
+    let cancelled = false;
+    const checkTeacherApproval = async () => {
+      try {
+        setApprovalGateLoading(true);
+        const { data: approval, error } = await assertSupabase()
+          .from('teacher_approvals')
+          .select('status')
+          .eq('teacher_id', user.id)
+          .eq('preschool_id', orgId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (cancelled || error || !approval?.status || approval.status === 'approved') {
+          return;
+        }
+
+        navigationAttempted.current = true;
+        if (approval.status === 'rejected') {
+          router.replace({ pathname: '/screens/teacher-approval-pending', params: { state: 'rejected' } } as any);
+          return;
+        }
+
+        if (approval.status === 'pending') {
+          router.replace('/screens/teacher-approval-pending');
+        }
+      } catch (approvalError) {
+        console.warn('[TeacherDashboard] Approval gate check failed:', approvalError);
+      } finally {
+        if (!cancelled) {
+          setApprovalGateLoading(false);
+        }
+      }
+    };
+
+    void checkTeacherApproval();
+    return () => {
+      cancelled = true;
+    };
   }, [isStillLoading, user, orgId, profile]);
 
   // Show loading state while auth/profile is loading
-  if (isStillLoading) {
+  if (isStillLoading || approvalGateLoading) {
     return (
       <View style={styles.empty}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Text style={styles.text}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
+        <Text style={styles.text}>
+          {approvalGateLoading
+            ? t('dashboard.checking_access', { defaultValue: 'Checking your access...' })
+            : t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}
+        </Text>
       </View>
     );
   }

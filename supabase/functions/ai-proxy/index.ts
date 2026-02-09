@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.214.0/http/server.ts';
 import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.48.1';
 import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
+import { callImagenImageGeneration, isImagenConfigured } from './providers/imagen.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -10,6 +11,20 @@ type ToolResult = {
   input: JsonRecord;
   output: JsonRecord;
   success: boolean;
+};
+
+type GeneratedImage = {
+  id: string;
+  bucket: string;
+  path: string;
+  signed_url: string;
+  mime_type: string;
+  prompt: string;
+  width: number;
+  height: number;
+  provider: 'openai' | 'google';
+  model: string;
+  expires_at: string;
 };
 
 type ProviderResponse = {
@@ -21,9 +36,15 @@ type ProviderResponse = {
   };
   model?: string;
   tool_results?: ToolResult[];
+  generated_images?: GeneratedImage[];
+  provider?: 'openai' | 'google';
+  fallback_used?: boolean;
+  fallback_reason?: string;
   /** Client-side tool calls that the AI requested but the server cannot execute */
   pending_tool_calls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 };
+
+type ResolutionStatus = 'resolved' | 'needs_clarification' | 'escalated';
 
 const DEFAULT_OPENAI_ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o'];
 const DEFAULT_ANTHROPIC_ALLOWED_MODELS = [
@@ -45,6 +66,16 @@ const DEFAULT_SUPERADMIN_ALLOWED_MODELS = [
 const ImageSchema = z.object({
   data: z.string(),
   media_type: z.string(),
+});
+
+const ImageOptionsSchema = z.object({
+  size: z.enum(['1024x1024', '1536x1024', '1024x1536']).optional(),
+  quality: z.enum(['low', 'medium', 'high']).optional(),
+  style: z.enum(['natural', 'vivid']).optional(),
+  background: z.enum(['auto', 'transparent', 'opaque']).optional(),
+  moderation: z.enum(['auto', 'low']).optional(),
+  cost_mode: z.enum(['eco', 'balanced', 'premium']).optional(),
+  provider_preference: z.enum(['auto', 'openai', 'imagen']).optional(),
 });
 
 const ConversationMessageSchema = z.object({
@@ -79,6 +110,7 @@ const RequestSchema = z.object({
       conversationHistory: z.array(ConversationMessageSchema).optional(),
       messages: z.array(ConversationMessageSchema).optional(),
       images: z.array(ImageSchema).optional(),
+      image_options: ImageOptionsSchema.optional(),
       image_context: z.record(z.unknown()).optional(),
       voice_data: z.record(z.unknown()).optional(),
       model: z.string().optional(),
@@ -94,6 +126,56 @@ const RequestSchema = z.object({
   })).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+
+function normalizeResolutionStatus(value: unknown): ResolutionStatus | null {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw === 'resolved' || raw === 'needs_clarification' || raw === 'escalated') {
+    return raw;
+  }
+  return null;
+}
+
+function clampConfidence(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number.parseFloat(value)
+        : Number.NaN;
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function deriveResolutionMetadata(
+  requestMetadata: Record<string, unknown> | undefined,
+  pendingToolCallCount: number
+): {
+  resolution_status: ResolutionStatus;
+  confidence_score: number;
+  escalation_offer: boolean;
+} {
+  const fromRequest = requestMetadata || {};
+  const explicitStatus = normalizeResolutionStatus(fromRequest.resolution_status);
+  const explicitConfidence = clampConfidence(fromRequest.confidence_score);
+  const explicitEscalationOffer = typeof fromRequest.escalation_offer === 'boolean'
+    ? fromRequest.escalation_offer
+    : null;
+
+  const defaultStatus: ResolutionStatus = pendingToolCallCount > 0 ? 'needs_clarification' : 'resolved';
+  const status = explicitStatus || defaultStatus;
+  const confidence =
+    explicitConfidence ??
+    (status === 'escalated' ? 0.42 : status === 'needs_clarification' ? 0.58 : 0.82);
+  const escalationOffer =
+    explicitEscalationOffer ??
+    (status === 'escalated' || status === 'needs_clarification');
+
+  return {
+    resolution_status: status,
+    confidence_score: Number(confidence.toFixed(2)),
+    escalation_offer: escalationOffer,
+  };
+}
 
 function normalizeServiceType(serviceType?: string): string {
   if (!serviceType) return 'chat_message';
@@ -115,6 +197,7 @@ const MAX_TOKENS_BY_SERVICE: Record<string, number> = {
   agent_reflection: 256,
   web_search: 1024,
   image_analysis: 2048,
+  image_generation: 512,
 };
 const DEFAULT_MAX_TOKENS = 2048;
 
@@ -193,6 +276,479 @@ function getOpenAIApiKey(): string | null {
     getEnv('SERVER_OPENAI_API_KEY') ||
     getEnv('OPENAI_API_KEY_2')
   );
+}
+
+const IMAGE_BUCKET = 'dash-generated-images';
+const IMAGE_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24; // 24 hours
+
+type ImageProvider = 'openai' | 'google';
+type ImageOptions = z.infer<typeof ImageOptionsSchema>;
+type ImageProviderErrorCode =
+  | 'config_missing'
+  | 'network_error'
+  | 'provider_error'
+  | 'rate_limited'
+  | 'content_policy_violation'
+  | 'invalid_request'
+  | 'storage_error';
+
+type ImageProviderError = Error & {
+  provider: ImageProvider;
+  code: ImageProviderErrorCode;
+  status?: number;
+  retryable: boolean;
+  details?: JsonRecord;
+};
+
+function parseImageSize(size?: string): { width: number; height: number } {
+  if (!size) return { width: 1024, height: 1024 };
+  const [wRaw, hRaw] = size.split('x');
+  const width = Number.parseInt(wRaw || '1024', 10);
+  const height = Number.parseInt(hRaw || '1024', 10);
+  return {
+    width: Number.isFinite(width) ? width : 1024,
+    height: Number.isFinite(height) ? height : 1024,
+  };
+}
+
+function toPngBytes(base64Image: string): Uint8Array {
+  const binary = atob(base64Image);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function createImageProviderError(params: {
+  provider: ImageProvider;
+  code: ImageProviderErrorCode;
+  message: string;
+  status?: number;
+  retryable?: boolean;
+  details?: JsonRecord;
+}): ImageProviderError {
+  const error = new Error(params.message) as ImageProviderError;
+  error.provider = params.provider;
+  error.code = params.code;
+  if (typeof params.status === 'number') {
+    error.status = params.status;
+  }
+  error.retryable = params.retryable === true;
+  if (params.details) {
+    error.details = params.details;
+  }
+  return error;
+}
+
+function isImageProviderError(value: unknown): value is ImageProviderError {
+  if (!value || typeof value !== 'object') return false;
+  const maybe = value as Partial<ImageProviderError>;
+  return (
+    (maybe.provider === 'openai' || maybe.provider === 'google') &&
+    typeof maybe.code === 'string' &&
+    typeof maybe.retryable === 'boolean'
+  );
+}
+
+function hasContentPolicySignal(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('moderation') ||
+    lower.includes('policy') ||
+    lower.includes('safety') ||
+    lower.includes('content')
+  );
+}
+
+function inferStatusFromText(message: string): number | undefined {
+  const match = message.match(/\b(4\d\d|5\d\d)\b/);
+  if (!match) return undefined;
+  const status = Number.parseInt(match[1], 10);
+  return Number.isFinite(status) ? status : undefined;
+}
+
+function normalizeImageProviderError(error: unknown, provider: ImageProvider): ImageProviderError {
+  if (isImageProviderError(error)) {
+    return error;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  const status = inferStatusFromText(message);
+  const lower = message.toLowerCase();
+  if (hasContentPolicySignal(message)) {
+    return createImageProviderError({
+      provider,
+      code: 'content_policy_violation',
+      message,
+      status: status || 400,
+      retryable: false,
+    });
+  }
+  const retryable = status === 429 || (typeof status === 'number' && status >= 500) ||
+    lower.includes('timeout') || lower.includes('network') || lower.includes('temporarily');
+  return createImageProviderError({
+    provider,
+    code: retryable ? (status === 429 ? 'rate_limited' : 'provider_error') : 'invalid_request',
+    message,
+    status,
+    retryable,
+  });
+}
+
+function normalizeTierName(input: unknown): string {
+  return String(input || 'free').trim().toLowerCase();
+}
+
+function isFreeOrTrialTier(tier: string): boolean {
+  return tier === 'free' || tier === 'trial' || tier.includes('free') || tier.includes('trial');
+}
+
+function isStarterTier(tier: string): boolean {
+  return tier.includes('starter');
+}
+
+function isPremiumTier(tier: string): boolean {
+  return (
+    tier.includes('plus') ||
+    tier.includes('pro') ||
+    tier.includes('premium') ||
+    tier.includes('enterprise')
+  );
+}
+
+function coerceImageOptionsForTier(options?: ImageOptions, tierRaw?: string | null): Required<ImageOptions> {
+  const tier = normalizeTierName(tierRaw);
+  const normalized: Required<ImageOptions> = {
+    size: options?.size || '1024x1024',
+    quality: options?.quality || 'medium',
+    style: options?.style || 'vivid',
+    background: options?.background || 'auto',
+    moderation: options?.moderation || 'auto',
+    cost_mode: options?.cost_mode || 'balanced',
+    provider_preference: options?.provider_preference || 'auto',
+  };
+
+  if (isFreeOrTrialTier(tier) || isStarterTier(tier)) {
+    normalized.size = '1024x1024';
+  }
+
+  if (normalized.quality === 'high' && (isFreeOrTrialTier(tier) || isStarterTier(tier))) {
+    normalized.quality = 'medium';
+  }
+
+  if (normalized.cost_mode === 'eco') {
+    normalized.quality = normalized.quality === 'high' ? 'medium' : normalized.quality;
+    if (!options?.quality) {
+      normalized.quality = 'low';
+    }
+  }
+
+  if (normalized.cost_mode === 'premium' && !options?.quality && isPremiumTier(tier)) {
+    normalized.quality = 'high';
+  }
+
+  return normalized;
+}
+
+function isImageFallbackEnabled(): boolean {
+  const value = (
+    getEnv('ENABLE_IMAGE_PROVIDER_FALLBACK') ||
+    getEnv('EXPO_PUBLIC_ENABLE_IMAGE_PROVIDER_FALLBACK') ||
+    'false'
+  ).toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+function buildImageProviderChain(params: {
+  options: Required<ImageOptions>;
+  hasOpenAI: boolean;
+  hasImagen: boolean;
+  fallbackEnabled: boolean;
+}): ImageProvider[] {
+  const { options, hasOpenAI, hasImagen, fallbackEnabled } = params;
+  if (!hasOpenAI && !hasImagen) return [];
+
+  let primary: ImageProvider = 'openai';
+  if (options.provider_preference === 'openai') {
+    primary = 'openai';
+  } else if (options.provider_preference === 'imagen') {
+    primary = 'google';
+  } else if (options.cost_mode === 'eco') {
+    primary = 'google';
+  } else {
+    primary = 'openai';
+  }
+
+  if (primary === 'openai' && !hasOpenAI) {
+    primary = 'google';
+  } else if (primary === 'google' && !hasImagen) {
+    primary = 'openai';
+  }
+
+  const chain: ImageProvider[] = [primary];
+  if (!fallbackEnabled) return chain;
+
+  const secondary: ImageProvider = primary === 'openai' ? 'google' : 'openai';
+  if ((secondary === 'openai' && hasOpenAI) || (secondary === 'google' && hasImagen)) {
+    chain.push(secondary);
+  }
+  return chain;
+}
+
+function estimateImageCostUsd(params: {
+  provider: ImageProvider;
+  size: string;
+  quality: 'low' | 'medium' | 'high';
+  imageCount: number;
+  model?: string;
+}): number {
+  const dims = parseImageSize(params.size);
+  const areaScale = (dims.width * dims.height) / (1024 * 1024);
+  const providerBase = params.provider === 'google'
+    ? (String(params.model || '').toLowerCase().includes('fast') ? 0.02 : 0.04)
+    : params.quality === 'high'
+      ? 0.08
+      : params.quality === 'low'
+        ? 0.02
+        : 0.04;
+
+  const images = Math.max(1, params.imageCount || 1);
+  return Number((providerBase * areaScale * images).toFixed(4));
+}
+
+async function moderateImagePrompt(apiKey: string, prompt: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'omni-moderation-latest',
+        input: prompt,
+      }),
+    });
+  } catch (error) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: 'network_error',
+      message: `OpenAI moderation request failed: ${error instanceof Error ? error.message : String(error)}`,
+      retryable: true,
+    });
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw createImageProviderError({
+      provider: 'openai',
+      code: response.status === 429 ? 'rate_limited' : 'provider_error',
+      message: `OpenAI moderation error: ${response.status} ${text}`,
+      status: response.status,
+      retryable: response.status === 429 || response.status >= 500,
+      details: { raw_error: text },
+    });
+  }
+
+  const data = (await response.json()) as JsonRecord;
+  const result = Array.isArray(data.results) ? data.results[0] : null;
+  const flagged = !!(result && typeof result === 'object' && (result as JsonRecord).flagged);
+  if (flagged) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: 'content_policy_violation',
+      message: 'Image prompt blocked by moderation policy',
+      status: 400,
+      retryable: false,
+    });
+  }
+}
+
+async function callOpenAIImageGeneration(params: {
+  supabase: ReturnType<typeof createClient>;
+  userId: string;
+  prompt: string;
+  options?: z.infer<typeof ImageOptionsSchema>;
+  requestedModel?: string | null;
+}): Promise<ProviderResponse> {
+  const { supabase, userId, prompt, options, requestedModel } = params;
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: 'config_missing',
+      message: 'OPENAI_API_KEY is not configured.',
+      status: 503,
+      retryable: true,
+    });
+  }
+
+  const model = requestedModel || getEnv('OPENAI_IMAGE_MODEL') || 'gpt-image-1';
+  await moderateImagePrompt(apiKey, prompt);
+
+  const size = options?.size || '1024x1024';
+  const quality = options?.quality || 'medium';
+  const preferredParams: Record<string, unknown> = {
+    size,
+    quality,
+    style: options?.style || 'vivid',
+    background: options?.background || 'auto',
+    moderation: options?.moderation || 'auto',
+    output_format: 'png',
+  };
+
+  const omittedParams = new Set<string>();
+  let response: Response | null = null;
+  let lastErrorText = '';
+  let lastStatus = 500;
+
+  // OpenAI image APIs can reject model-specific fields.
+  // Retry by removing only unsupported parameters so generation still succeeds.
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const body: Record<string, unknown> = { model, prompt };
+    for (const [key, value] of Object.entries(preferredParams)) {
+      if (value === undefined || omittedParams.has(key)) continue;
+      body[key] = value;
+    }
+
+    try {
+      response = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      throw createImageProviderError({
+        provider: 'openai',
+        code: 'network_error',
+        message: `OpenAI image generation request failed: ${error instanceof Error ? error.message : String(error)}`,
+        retryable: true,
+      });
+    }
+
+    if (response.ok) break;
+
+    const errorText = await response.text();
+    lastErrorText = errorText;
+    lastStatus = response.status;
+    const unknownParam = errorText.match(/Unknown parameter:\s*'([^']+)'/i)?.[1];
+    if (unknownParam) {
+      omittedParams.add(unknownParam);
+      continue;
+    }
+
+    if (response.status === 400 && hasContentPolicySignal(errorText)) {
+      throw createImageProviderError({
+        provider: 'openai',
+        code: 'content_policy_violation',
+        message: `OpenAI image generation blocked by policy: ${errorText}`,
+        status: 400,
+        retryable: false,
+      });
+    }
+
+    throw createImageProviderError({
+      provider: 'openai',
+      code: response.status === 429 ? 'rate_limited' : response.status >= 500 ? 'provider_error' : 'invalid_request',
+      message: `OpenAI image generation error: ${response.status} ${errorText}`,
+      status: response.status,
+      retryable: response.status === 429 || response.status >= 500,
+      details: { raw_error: errorText },
+    });
+  }
+
+  if (!response || !response.ok) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: lastStatus === 429 ? 'rate_limited' : lastStatus >= 500 ? 'provider_error' : 'invalid_request',
+      message: `OpenAI image generation error: ${lastStatus} ${lastErrorText}`,
+      status: lastStatus,
+      retryable: lastStatus === 429 || lastStatus >= 500,
+      details: { raw_error: lastErrorText },
+    });
+  }
+
+  const result = (await response.json()) as JsonRecord;
+  const imageRows = Array.isArray(result.data) ? result.data : [];
+  if (imageRows.length === 0) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: 'provider_error',
+      message: 'OpenAI image generation returned no data',
+      retryable: true,
+    });
+  }
+
+  const dims = parseImageSize(size);
+  const now = new Date();
+  const generatedImages: GeneratedImage[] = [];
+  for (let i = 0; i < imageRows.length; i += 1) {
+    const item = imageRows[i] as JsonRecord;
+    const b64 = typeof item.b64_json === 'string' ? item.b64_json : null;
+    if (!b64) continue;
+
+    const bytes = toPngBytes(b64);
+    const imageId = crypto.randomUUID();
+    const path = `${userId}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${imageId}.png`;
+
+    const upload = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
+      upsert: false,
+      contentType: 'image/png',
+      cacheControl: '3600',
+    });
+    if (upload.error) {
+      throw createImageProviderError({
+        provider: 'openai',
+        code: 'storage_error',
+        message: `Failed to store generated image: ${upload.error.message}`,
+        retryable: false,
+      });
+    }
+
+    const signed = await supabase.storage.from(IMAGE_BUCKET).createSignedUrl(path, IMAGE_SIGNED_URL_TTL_SECONDS);
+    if (signed.error || !signed.data?.signedUrl) {
+      throw createImageProviderError({
+        provider: 'openai',
+        code: 'storage_error',
+        message: `Failed to sign generated image URL: ${signed.error?.message || 'Unknown error'}`,
+        retryable: false,
+      });
+    }
+
+    generatedImages.push({
+      id: imageId,
+      bucket: IMAGE_BUCKET,
+      path,
+      signed_url: signed.data.signedUrl,
+      mime_type: 'image/png',
+      prompt,
+      width: dims.width,
+      height: dims.height,
+      provider: 'openai',
+      model,
+      expires_at: new Date(Date.now() + IMAGE_SIGNED_URL_TTL_SECONDS * 1000).toISOString(),
+    });
+  }
+
+  if (generatedImages.length === 0) {
+    throw createImageProviderError({
+      provider: 'openai',
+      code: 'provider_error',
+      message: 'Generated image payload was empty after processing',
+      retryable: true,
+    });
+  }
+
+  return {
+    content: 'Image generated successfully.',
+    model,
+    generated_images: generatedImages,
+    provider: 'openai',
+  };
 }
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([429, 503, 529]);
@@ -1252,6 +1808,7 @@ serve(async (req) => {
       console.warn('[ai-proxy] ⚠️ QUOTA BYPASS ACTIVE - Development mode only');
     }
     
+    let quotaDataForRequest: JsonRecord | null = null;
     if (!devModeBypass) {
       const quota = await supabase.rpc('check_ai_usage_limit', {
         p_user_id: userData.user.id,
@@ -1262,6 +1819,7 @@ serve(async (req) => {
         console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
       } else {
         const quotaData = quota.data as JsonRecord | null;
+        quotaDataForRequest = quotaData;
         if (quotaData && typeof quotaData.allowed === 'boolean' && !quotaData.allowed) {
           return new Response(JSON.stringify({
             error: 'quota_exceeded',
@@ -1293,8 +1851,9 @@ serve(async (req) => {
     const enableTools = payload.enable_tools ?? false;
     const hasOpenAI = !!getOpenAIApiKey();
     const hasAnthropic = !!getAnthropicApiKey();
+    const hasImagen = isImagenConfigured();
 
-    if (!hasOpenAI && !hasAnthropic) {
+    if (serviceType !== 'image_generation' && !hasOpenAI && !hasAnthropic) {
       return new Response(JSON.stringify({
         error: 'provider_not_configured',
         message: 'No AI provider keys are configured (OPENAI_API_KEY / ANTHROPIC_API_KEY).',
@@ -1313,6 +1872,203 @@ serve(async (req) => {
     const requestedIsOpenAI = requestedModel ? openaiAllowed.includes(requestedModel) : false;
     const requestedIsAnthropic = requestedModel ? anthropicAllowed.includes(requestedModel) : false;
     const shouldPreferOpenAI = requestedIsOpenAI ? true : requestedIsAnthropic ? false : preferOpenAI;
+
+    if (serviceType === 'image_generation') {
+      const prompt = payload.payload.prompt?.trim();
+      if (!prompt) {
+        return new Response(JSON.stringify({
+          error: 'invalid_prompt',
+          message: 'Prompt is required for image generation',
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!hasOpenAI && !hasImagen) {
+        return new Response(JSON.stringify({
+          error: 'provider_not_configured',
+          message: 'No image provider is configured (OPENAI_API_KEY or Imagen credentials).',
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const tierName = normalizeTierName(quotaDataForRequest?.current_tier);
+      const imageOptions = coerceImageOptionsForTier(payload.payload.image_options, tierName);
+      const imageFallbackEnabled = isImageFallbackEnabled();
+      const hasImagenForRequest = hasImagen && imageFallbackEnabled;
+      const providerChain = buildImageProviderChain({
+        options: imageOptions,
+        hasOpenAI,
+        hasImagen: hasImagenForRequest,
+        fallbackEnabled: imageFallbackEnabled,
+      });
+
+      if (providerChain.length === 0) {
+        return new Response(JSON.stringify({
+          error: 'provider_not_configured',
+          message: 'No usable image provider is configured for this request.',
+        }), {
+          status: 503,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      let providerResponse: ProviderResponse | null = null;
+      let providerUsed: ImageProvider | null = null;
+      let fallbackUsed = false;
+      let fallbackReason: string | undefined;
+      let terminalError: ImageProviderError | null = null;
+      const requestedLower = String(requestedModel || '').toLowerCase();
+      const openAIRequestedModel = requestedLower.includes('gpt') ? requestedModel : null;
+      const imagenRequestedModel = requestedLower.includes('imagen') ? requestedModel : null;
+
+      for (let i = 0; i < providerChain.length; i += 1) {
+        const provider = providerChain[i];
+        try {
+          providerResponse = provider === 'openai'
+            ? await callOpenAIImageGeneration({
+              supabase,
+              userId: userData.user.id,
+              prompt,
+              options: imageOptions,
+              requestedModel: provider === 'openai' ? openAIRequestedModel : null,
+            })
+            : await callImagenImageGeneration({
+              supabase,
+              userId: userData.user.id,
+              prompt,
+              options: imageOptions,
+              requestedModel: provider === 'google' ? imagenRequestedModel : null,
+            });
+          providerUsed = provider;
+          break;
+        } catch (error) {
+          const normalizedError = normalizeImageProviderError(error, provider);
+          terminalError = normalizedError;
+          const hasAnotherProvider = i < providerChain.length - 1;
+          const shouldFallback = hasAnotherProvider && normalizedError.retryable;
+          if (shouldFallback) {
+            fallbackUsed = true;
+            fallbackReason = `${provider}:${normalizedError.code}`;
+            console.warn('[ai-proxy] Image provider failed, trying fallback:', {
+              provider,
+              code: normalizedError.code,
+              status: normalizedError.status,
+            });
+            continue;
+          }
+
+          const status = normalizedError.code === 'content_policy_violation'
+            ? 400
+            : normalizedError.status && normalizedError.status >= 400 && normalizedError.status < 600
+              ? normalizedError.status
+              : 502;
+          return new Response(JSON.stringify({
+            error: normalizedError.code,
+            message: normalizedError.message,
+            details: {
+              provider: normalizedError.provider,
+              fallback_used: fallbackUsed,
+              fallback_reason: fallbackReason || null,
+              tier: tierName,
+            },
+          }), {
+            status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      if (!providerResponse || !providerUsed) {
+        const last = terminalError || createImageProviderError({
+          provider: 'openai',
+          code: 'provider_error',
+          message: 'No image provider produced a response.',
+          retryable: false,
+        });
+        return new Response(JSON.stringify({
+          error: last.code,
+          message: last.message,
+          details: {
+            provider: last.provider,
+            fallback_used: fallbackUsed,
+            fallback_reason: fallbackReason || null,
+          },
+        }), {
+          status: last.status && last.status >= 400 ? last.status : 502,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const generatedImages = providerResponse.generated_images || [];
+      const estimatedCostUsd = estimateImageCostUsd({
+        provider: providerUsed,
+        size: imageOptions.size,
+        quality: imageOptions.quality,
+        imageCount: generatedImages.length,
+        model: providerResponse.model,
+      });
+
+      try {
+        const usageResult = await supabase.rpc('record_ai_usage', {
+          p_user_id: userData.user.id,
+          p_feature_used: 'image_generation',
+          p_model_used: providerResponse.model || (providerUsed === 'openai' ? 'gpt-image-1' : 'imagen'),
+          p_tokens_used: 0,
+          p_request_tokens: 0,
+          p_response_tokens: 0,
+          p_success: true,
+          p_metadata: {
+            scope: payload.scope,
+            organization_id: profile.organization_id || profile.preschool_id || null,
+            provider_used: providerUsed,
+            fallback_used: fallbackUsed,
+            fallback_reason: fallbackReason || null,
+            fallback_feature_enabled: imageFallbackEnabled,
+            estimated_cost_usd: estimatedCostUsd,
+            size: imageOptions.size,
+            quality: imageOptions.quality,
+            generated_images: generatedImages.map((img) => ({
+              id: img.id,
+              bucket: img.bucket,
+              path: img.path,
+              provider: img.provider,
+            })),
+            request_metadata: payload.metadata || {},
+            request_image_options: imageOptions,
+            provider_chain: providerChain,
+            current_tier: tierName,
+          },
+        });
+        if (usageResult.error) {
+          console.warn('[ai-proxy] record_ai_usage returned error (non-fatal):', usageResult.error);
+        }
+      } catch (usageError) {
+        console.warn('[ai-proxy] record_ai_usage failed (non-fatal):', usageError);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        content: providerResponse.content,
+        usage: providerResponse.usage,
+        model: providerResponse.model,
+        generated_images: generatedImages,
+        provider: providerUsed,
+        fallback_used: fallbackUsed,
+        fallback_reason: fallbackReason,
+        tool_results: [],
+        pending_tool_calls: [],
+        resolution_status: 'resolved',
+        confidence_score: 0.95,
+        escalation_offer: false,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // ── TRUE STREAMING (Anthropic, including tool calls) ──────────────
     // When the client wants streaming AND we're using Anthropic,
@@ -1470,13 +2226,23 @@ serve(async (req) => {
       });
     }
 
+    const requestMetadata = (payload.metadata || {}) as Record<string, unknown>;
+    const resolutionMeta = deriveResolutionMetadata(
+      requestMetadata,
+      providerResponse.pending_tool_calls?.length || 0
+    );
+
     return new Response(JSON.stringify({
       success: true,
       content: providerResponse.content,
       usage: providerResponse.usage,
       model: providerResponse.model,
+      generated_images: providerResponse.generated_images || [],
       tool_results: providerResponse.tool_results || [],
       pending_tool_calls: providerResponse.pending_tool_calls || [],
+      resolution_status: resolutionMeta.resolution_status,
+      confidence_score: resolutionMeta.confidence_score,
+      escalation_offer: resolutionMeta.escalation_offer,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

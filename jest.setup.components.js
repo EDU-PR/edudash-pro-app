@@ -11,6 +11,61 @@ jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => ({
   get: jest.fn(() => null),
 }));
 
+const mockDimensions = {
+  window: { width: 390, height: 844, scale: 2, fontScale: 2 },
+  screen: { width: 390, height: 844, scale: 2, fontScale: 2 },
+};
+
+// Some RN internals call NativeDeviceInfo.getConstants() during style/layout resolution.
+jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativeDeviceInfo', () => ({
+  getConstants: jest.fn(() => ({
+    Dimensions: mockDimensions,
+    isTesting: true,
+  })),
+}));
+
+jest.mock('react-native/src/private/animated/NativeAnimatedHelper', () => ({
+  API: {
+    flushQueue: jest.fn(),
+    queueOperation: jest.fn(),
+  },
+  default: {
+    API: {
+      flushQueue: jest.fn(),
+      queueOperation: jest.fn(),
+    },
+  },
+}));
+
+jest.mock('react-native/Libraries/Utilities/NativePlatformConstantsIOS', () => ({
+  __esModule: true,
+  default: {
+    getConstants: jest.fn(() => ({
+      forceTouchAvailable: false,
+      interfaceIdiom: 'phone',
+      osVersion: '17.0',
+      systemName: 'iOS',
+      isTesting: true,
+      reactNativeVersion: { major: 0, minor: 79, patch: 0 },
+    })),
+  },
+}));
+
+jest.mock('react-native/Libraries/Utilities/NativePlatformConstantsAndroid', () => ({
+  __esModule: true,
+  default: {
+    getConstants: jest.fn(() => ({
+      Version: 34,
+      Release: '14',
+      Serial: 'unknown',
+      Fingerprint: 'test',
+      uiMode: 'normal',
+      isTesting: true,
+      reactNativeVersion: { major: 0, minor: 79, patch: 0 },
+    })),
+  },
+}));
+
 // Mock NativeDevMenu
 jest.mock('react-native/src/private/devsupport/devmenu/specs/NativeDevMenu', () => ({
   __esModule: true,

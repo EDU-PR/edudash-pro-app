@@ -15,7 +15,9 @@ export function AppPreferencesSection() {
   const { t } = useTranslation('common');
   const { 
     showDashFAB, 
+    powerUserModeEnabled,
     setShowDashFAB, 
+    setPowerUserModeEnabled,
     tutorialCompleted, 
     setTutorialCompleted,
     isLoaded 
@@ -96,13 +98,39 @@ export function AppPreferencesSection() {
       </Text>
       
       <View style={prefStyles.settingsCard}>
+        {/* Power User Mode Toggle */}
+        <View style={prefStyles.settingItem}>
+          <View style={prefStyles.settingLeft}>
+            <Ionicons
+              name="flash"
+              size={24}
+              color={powerUserModeEnabled ? theme.primary : theme.textSecondary}
+              style={prefStyles.settingIcon}
+            />
+            <View style={prefStyles.settingContent}>
+              <Text style={prefStyles.settingTitle}>
+                {t('settings.app_preferences.power_user_title', { defaultValue: 'Power User Mode' })}
+              </Text>
+              <Text style={prefStyles.settingSubtitle}>
+                {t('settings.app_preferences.power_user_subtitle', { defaultValue: 'Enable advanced controls like the floating Dash FAB' })}
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={powerUserModeEnabled}
+            onValueChange={setPowerUserModeEnabled}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={powerUserModeEnabled ? '#FFFFFF' : theme.textTertiary}
+          />
+        </View>
+
         {/* Dash AI FAB Toggle */}
         <View style={prefStyles.settingItem}>
           <View style={prefStyles.settingLeft}>
             <Ionicons 
               name="sparkles" 
               size={24} 
-              color={showDashFAB ? '#8B5CF6' : theme.textSecondary} 
+              color={showDashFAB && powerUserModeEnabled ? '#8B5CF6' : theme.textSecondary} 
               style={prefStyles.settingIcon} 
             />
             <View style={prefStyles.settingContent}>
@@ -110,13 +138,16 @@ export function AppPreferencesSection() {
                 {t('settings.app_preferences.dash_fab_title', { defaultValue: 'Show Dash AI Button' })}
               </Text>
               <Text style={prefStyles.settingSubtitle}>
-                {t('settings.app_preferences.dash_fab_subtitle', { defaultValue: 'Floating button to chat with Dash AI' })}
+                {powerUserModeEnabled
+                  ? t('settings.app_preferences.dash_fab_subtitle', { defaultValue: 'Floating button to chat with Dash AI' })
+                  : t('settings.app_preferences.dash_fab_locked', { defaultValue: 'Turn on Power User Mode to use this' })}
               </Text>
             </View>
           </View>
           <Switch
             value={showDashFAB}
             onValueChange={setShowDashFAB}
+            disabled={!powerUserModeEnabled}
             trackColor={{ false: theme.border, true: '#8B5CF6' }}
             thumbColor={showDashFAB ? '#FFFFFF' : theme.textTertiary}
           />

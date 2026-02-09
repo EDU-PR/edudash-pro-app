@@ -158,7 +158,8 @@
     "work": "Work",
     "regions": "Regions",
     "finance": "Finance",
-    "members": "Members"
+    "members": "Members",
+    "dash": "Dash"
   },
   "dashChat": {
     "welcomeTitle": "Hi! I'm Dash",
@@ -597,6 +598,7 @@
       "principal_quick_actions": "Approve, message, and jump to key workflows",
       "birthdays": "Upcoming class birthdays and reminders.",
       "daily_activities": "Daily class activities, photos, and updates.",
+      "insights": "AI-powered observations about your child's progress.",
       "live_classes": "Join live lessons and events when they start.",
       "overview": "Attendance, fees, messages, and highlights at a glance.",
       "parent_requests": "Approve parent links and registration requests.",
@@ -1005,6 +1007,8 @@
     "parent": {
       "welcome_subtitle": "Welcome to your parent dashboard",
       "search_placeholder": "Search homework, messages, children...",
+      "generate_image": "Generate Image",
+      "generate_image_subtitle": "Create learning visuals with Dash.",
       "upgrade_title": "Unlock more parent tools",
       "upgrade_description": "Get homework help, progress insights, and remove ads by upgrading.",
       "hint": {
@@ -1024,6 +1028,7 @@
         "homework": "Homework",
         "live_classes": "Live Classes",
         "teacher_notes": "Teacher Notes",
+        "insights": "AI Insights",
         "progress": "Progress & Achievements",
         "birthdays": "Upcoming Birthdays",
         "daily_activity": "Daily Activity",

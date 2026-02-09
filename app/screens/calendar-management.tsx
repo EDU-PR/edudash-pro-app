@@ -6,10 +6,9 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, RefreshControl, Modal, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
@@ -19,6 +18,9 @@ import { extractOrganizationId } from '@/lib/tenant/compat';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
+import CalendarEventFormModal from '@/components/principal/CalendarEventFormModal';
 const EVENT_TYPES = [
   { value: 'holiday', label: 'Holiday', icon: 'sunny-outline', color: '#EF4444' },
   { value: 'parent_meeting', label: 'Parent Meeting', icon: 'people-outline', color: '#8B5CF6' },
@@ -33,12 +35,7 @@ const EVENT_TYPES = [
   { value: 'other', label: 'Other', icon: 'calendar-outline', color: '#6B7280' },
 ];
 
-const TARGET_AUDIENCES = [
-  { value: 'all', label: 'Everyone' },
-  { value: 'parents', label: 'Parents' },
-  { value: 'teachers', label: 'Teachers' },
-  { value: 'students', label: 'Students' },
-];
+
 
 interface SchoolEvent {
   id: string;
@@ -59,6 +56,7 @@ export default function CalendarManagementScreen() {
   const { profile, user } = useAuth();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { showAlert, alertProps } = useAlertModal();
   const styles = createStyles(theme, insets);
   
   const orgId = extractOrganizationId(profile);
@@ -83,10 +81,6 @@ export default function CalendarManagementScreen() {
     target_audience: ['all'] as string[],
     send_notifications: true,
   });
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch events
@@ -104,8 +98,8 @@ export default function CalendarManagementScreen() {
       if (error) throw error;
       setEvents(data || []);
     } catch (error: any) {
-      console.error('Error fetching events:', error);
-      Alert.alert('Error', 'Failed to load events');
+      logger.error('CalendarMgmt', 'Error fetching events', error);
+      showAlert({ title: 'Error', message: 'Failed to load events' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -178,12 +172,12 @@ export default function CalendarManagementScreen() {
   // Submit form
   const handleSubmit = async () => {
     if (!formData.title.trim()) {
-      Alert.alert('Validation Error', 'Please enter an event title');
+      showAlert({ title: 'Validation Error', message: 'Please enter an event title' });
       return;
     }
 
     if (!orgId || !user?.id) {
-      Alert.alert('Error', 'Organization or user not found');
+      showAlert({ title: 'Error', message: 'Organization or user not found' });
       return;
     }
 
@@ -248,11 +242,11 @@ export default function CalendarManagementScreen() {
               }
             });
           } catch (notifyError) {
-            console.error('Failed to send event notification:', notifyError);
+            logger.error('CalendarMgmt', 'Failed to send event notification', notifyError);
           }
         }
         
-        Alert.alert('Success', 'Event updated successfully');
+        showAlert({ title: 'Success', message: 'Event updated successfully' });
       } else {
         // Create new event
         const { data: newEvent, error } = await supabase
@@ -274,20 +268,20 @@ export default function CalendarManagementScreen() {
                 target_audience: formData.target_audience,
               }
             });
-            console.log('✅ Event notification sent to target audience');
+            logger.debug('CalendarMgmt', 'Event notification sent to target audience');
           } catch (notifyError) {
-            console.error('Failed to send event notification:', notifyError);
+            logger.error('CalendarMgmt', 'Failed to send create notification', notifyError);
           }
         }
         
-        Alert.alert('Success', 'Event created successfully');
+        showAlert({ title: 'Success', message: 'Event created successfully' });
       }
 
       setShowCreateModal(false);
       fetchEvents();
     } catch (error: any) {
-      console.error('Error saving event:', error);
-      Alert.alert('Error', error.message || 'Failed to save event');
+      logger.error('CalendarMgmt', 'Error saving event', error);
+      showAlert({ title: 'Error', message: error.message || 'Failed to save event' });
     } finally {
       setSubmitting(false);
     }
@@ -295,10 +289,10 @@ export default function CalendarManagementScreen() {
 
   // Delete event
   const handleDelete = (event: SchoolEvent) => {
-    Alert.alert(
-      'Delete Event',
-      `Are you sure you want to delete "${event.title}"?`,
-      [
+    showAlert({
+      title: 'Delete Event',
+      message: `Are you sure you want to delete "${event.title}"?`,
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -310,18 +304,17 @@ export default function CalendarManagementScreen() {
                 .from('school_events')
                 .delete()
                 .eq('id', event.id);
-              
               if (error) throw error;
-              Alert.alert('Success', 'Event deleted successfully');
+              showAlert({ title: 'Success', message: 'Event deleted successfully' });
               fetchEvents();
             } catch (error: any) {
-              console.error('Error deleting event:', error);
-              Alert.alert('Error', 'Failed to delete event');
+              logger.error('CalendarMgmt', 'Error deleting event', error);
+              showAlert({ title: 'Error', message: 'Failed to delete event' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const formatDate = (date: Date) => {
@@ -454,270 +447,21 @@ export default function CalendarManagementScreen() {
           </ScrollView>
         )}
 
-        {/* Create/Edit Modal */}
-        <Modal
+        <CalendarEventFormModal
           visible={showCreateModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowCreateModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {editingEvent ? 'Edit Event' : 'Create Event'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setShowCreateModal(false)}
-                  style={styles.closeButton}
-                >
-                  <Ionicons name="close" size={24} color={theme.text} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                {/* Title */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Event Title *</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.title}
-                    onChangeText={(text) => setFormData({ ...formData, title: text })}
-                    placeholder="Enter event title"
-                    placeholderTextColor={theme.textSecondary}
-                  />
-                </View>
-
-                {/* Description */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Description</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={formData.description}
-                    onChangeText={(text) => setFormData({ ...formData, description: text })}
-                    placeholder="Enter event description"
-                    placeholderTextColor={theme.textSecondary}
-                    multiline
-                    numberOfLines={4}
-                  />
-                </View>
-
-                {/* Event Type */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Event Type *</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeScroll}>
-                    {EVENT_TYPES.map((type) => (
-                      <TouchableOpacity
-                        key={type.value}
-                        style={[
-                          styles.typeChip,
-                          formData.event_type === type.value && { 
-                            backgroundColor: type.color + '20',
-                            borderColor: type.color 
-                          }
-                        ]}
-                        onPress={() => setFormData({ ...formData, event_type: type.value })}
-                      >
-                        <Ionicons 
-                          name={type.icon as any} 
-                          size={16} 
-                          color={formData.event_type === type.value ? type.color : theme.textSecondary} 
-                        />
-                        <Text style={[
-                          styles.typeChipText,
-                          formData.event_type === type.value && { color: type.color }
-                        ]}>
-                          {type.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                {/* All Day Toggle */}
-                <View style={styles.formGroup}>
-                  <View style={styles.switchRow}>
-                    <Text style={styles.label}>All Day Event</Text>
-                    <Switch
-                      value={formData.all_day}
-                      onValueChange={(value) => setFormData({ ...formData, all_day: value })}
-                      trackColor={{ false: theme.border, true: theme.primary }}
-                      thumbColor="#fff"
-                    />
-                  </View>
-                </View>
-
-                {/* Start Date */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Start Date *</Text>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowStartDatePicker(true)}
-                  >
-                    <Ionicons name="calendar-outline" size={20} color={theme.primary} />
-                    <Text style={styles.dateButtonText}>{formatDate(formData.startDate)}</Text>
-                  </TouchableOpacity>
-                  {showStartDatePicker && (
-                    <DateTimePicker
-                      value={formData.startDate}
-                      mode="date"
-                      display="default"
-                      onChange={(event, date) => {
-                        setShowStartDatePicker(false);
-                        if (date) setFormData({ ...formData, startDate: date });
-                      }}
-                    />
-                  )}
-                </View>
-
-                {/* Start Time (if not all day) */}
-                {!formData.all_day && (
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>Start Time</Text>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowStartTimePicker(true)}
-                    >
-                      <Ionicons name="time-outline" size={20} color={theme.primary} />
-                      <Text style={styles.dateButtonText}>{formatTime(formData.startTime)}</Text>
-                    </TouchableOpacity>
-                    {showStartTimePicker && (
-                      <DateTimePicker
-                        value={formData.startTime}
-                        mode="time"
-                        display="default"
-                        onChange={(event, date) => {
-                          setShowStartTimePicker(false);
-                          if (date) setFormData({ ...formData, startTime: date });
-                        }}
-                      />
-                    )}
-                  </View>
-                )}
-
-                {/* End Date */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>End Date *</Text>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowEndDatePicker(true)}
-                  >
-                    <Ionicons name="calendar-outline" size={20} color={theme.primary} />
-                    <Text style={styles.dateButtonText}>{formatDate(formData.endDate)}</Text>
-                  </TouchableOpacity>
-                  {showEndDatePicker && (
-                    <DateTimePicker
-                      value={formData.endDate}
-                      mode="date"
-                      display="default"
-                      onChange={(event, date) => {
-                        setShowEndDatePicker(false);
-                        if (date) setFormData({ ...formData, endDate: date });
-                      }}
-                    />
-                  )}
-                </View>
-
-                {/* End Time (if not all day) */}
-                {!formData.all_day && (
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>End Time</Text>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowEndTimePicker(true)}
-                    >
-                      <Ionicons name="time-outline" size={20} color={theme.primary} />
-                      <Text style={styles.dateButtonText}>{formatTime(formData.endTime)}</Text>
-                    </TouchableOpacity>
-                    {showEndTimePicker && (
-                      <DateTimePicker
-                        value={formData.endTime}
-                        mode="time"
-                        display="default"
-                        onChange={(event, date) => {
-                          setShowEndTimePicker(false);
-                          if (date) setFormData({ ...formData, endTime: date });
-                        }}
-                      />
-                    )}
-                  </View>
-                )}
-
-                {/* Location */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Location</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={formData.location}
-                    onChangeText={(text) => setFormData({ ...formData, location: text })}
-                    placeholder="Enter location"
-                    placeholderTextColor={theme.textSecondary}
-                  />
-                </View>
-
-                {/* Target Audience */}
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Target Audience</Text>
-                  <View style={styles.audienceRow}>
-                    {TARGET_AUDIENCES.map((audience) => (
-                      <TouchableOpacity
-                        key={audience.value}
-                        style={[
-                          styles.audienceChip,
-                          formData.target_audience.includes(audience.value) && styles.audienceChipActive
-                        ]}
-                        onPress={() => toggleAudience(audience.value)}
-                      >
-                        <Text style={[
-                          styles.audienceChipText,
-                          formData.target_audience.includes(audience.value) && styles.audienceChipTextActive
-                        ]}>
-                          {audience.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Send Notifications */}
-                <View style={styles.formGroup}>
-                  <View style={styles.switchRow}>
-                    <Text style={styles.label}>Send Notifications</Text>
-                    <Switch
-                      value={formData.send_notifications}
-                      onValueChange={(value) => setFormData({ ...formData, send_notifications: value })}
-                      trackColor={{ false: theme.border, true: theme.primary }}
-                      thumbColor="#fff"
-                    />
-                  </View>
-                </View>
-              </ScrollView>
-
-              {/* Modal Footer */}
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setShowCreateModal(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.submitButton]}
-                  onPress={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <EduDashSpinner size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.submitButtonText}>
-                      {editingEvent ? 'Update' : 'Create'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          onClose={() => setShowCreateModal(false)}
+          isEditing={!!editingEvent}
+          formData={formData}
+          setFormData={setFormData}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          toggleAudience={toggleAudience}
+          formatDate={formatDate}
+          formatTime={formatTime}
+          theme={theme}
+          styles={styles}
+        />
+        <AlertModal {...alertProps} />
       </View>
     </DesktopLayout>
   );

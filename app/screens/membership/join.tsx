@@ -19,6 +19,7 @@ import { AlertModal, type AlertButton } from '@/components/ui/AlertModal';
 import { MembershipNotificationService } from '@/services/membership/MembershipNotificationService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Organization info returned from code lookup
@@ -342,7 +343,7 @@ export default function JoinByCodeScreen() {
         }),
       ]).start();
     } catch (error) {
-      console.error('[JoinByCode] Error verifying code:', error);
+      logger.error('[JoinByCode] Error verifying code:', error);
       setCodeError('Failed to verify code. Please try again.');
     } finally {
       setIsVerifying(false);
@@ -402,7 +403,7 @@ export default function JoinByCodeScreen() {
       
       // If user is not authenticated, create account with user-provided password
       if (!user) {
-        console.log('[JoinByCode] Creating account with user-provided password');
+        logger.debug('[JoinByCode] Creating account with user-provided password');
         
         // Create auth account with user's chosen password
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -419,7 +420,7 @@ export default function JoinByCodeScreen() {
         });
         
         if (signUpError) {
-          console.error('[JoinByCode] Auth signup error:', signUpError);
+          logger.error('[JoinByCode] Auth signup error:', signUpError);
           
           // If user already exists, prompt them to sign in
           if (signUpError.message.includes('already registered') || signUpError.message.includes('already exists')) {
@@ -444,7 +445,7 @@ export default function JoinByCodeScreen() {
         }
         
         user = signUpData.user;
-        console.log('[JoinByCode] Account created successfully:', user.id);
+        logger.debug('[JoinByCode] Account created successfully:', user.id);
         
         // Wait for user to be committed to auth.users (timing issue fix)
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -484,17 +485,17 @@ export default function JoinByCodeScreen() {
         });
 
       if (rpcError) {
-        console.error('[JoinByCode] Error creating member via RPC:', rpcError);
+        logger.error('[JoinByCode] Error creating member via RPC:', rpcError);
         throw rpcError;
       }
       
       // Check RPC result
       if (!rpcResult?.success) {
-        console.error('[JoinByCode] RPC returned error:', rpcResult);
+        logger.error('[JoinByCode] RPC returned error:', rpcResult);
         throw new Error(rpcResult?.error || 'Failed to register member');
       }
       
-      console.log('[JoinByCode] Member registration result:', rpcResult);
+      logger.debug('[JoinByCode] Member registration result:', rpcResult);
       
       // Handle existing member case
       if (rpcResult.action === 'existing') {
@@ -539,7 +540,7 @@ export default function JoinByCodeScreen() {
         region_name: orgInfo.region,
         requested_role: orgInfo.requested_role || formData.member_type,
       }, wing).catch(err => {
-        console.warn('[JoinByCode] Failed to notify president (non-blocking):', err);
+        logger.warn('[JoinByCode] Failed to notify president (non-blocking):', err);
       });
       
       // Show success message - membership pending approval
@@ -560,7 +561,7 @@ export default function JoinByCodeScreen() {
         ]
       );
     } catch (error) {
-      console.error('[JoinByCode] Error joining:', error);
+      logger.error('[JoinByCode] Error joining:', error);
       showAlert('Error', 'Failed to complete registration. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);

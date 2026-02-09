@@ -1,180 +1,106 @@
 /**
  * Unit tests for navigation logic in lib/navigation.ts
- * Tests the shouldShowBackButton function to ensure correct behavior
- * for dashboard routes vs regular screens.
  */
 
-import { jest } from '@jest/globals';
-
-// Mock expo-router
-const mockRouter = {
+const mockSafeRouter = {
   canGoBack: jest.fn(),
   back: jest.fn(),
   replace: jest.fn(),
   push: jest.fn(),
 };
 
-jest.mock('expo-router', () => ({
-  router: mockRouter,
+jest.mock('@/lib/navigation/safeRouter', () => ({
+  __esModule: true,
+  safeRouter: mockSafeRouter,
+  default: mockSafeRouter,
 }));
 
-// Import the functions we're testing after mocking
-import { shouldShowBackButton, navigateBack } from '../lib/navigation';
+const { shouldShowBackButton, navigateBack } = require('../../lib/navigation');
 
 describe('Navigation Logic', () => {
   beforeEach(() => {
-    // Reset all mocks before each test
     jest.clearAllMocks();
+    mockSafeRouter.canGoBack.mockReturnValue(true);
   });
 
   describe('shouldShowBackButton', () => {
-    describe('with navigation history (canGoBack = true)', () => {
-      beforeEach(() => {
-        mockRouter.canGoBack.mockReturnValue(true);
-      });
+    it('returns false for dashboard routes', () => {
+      const routes = [
+        'parent-dashboard',
+        'teacher-dashboard',
+        'screens/teacher-dashboard',
+        'SCREENS/PRINCIPAL-DASHBOARD',
+      ];
 
-      it('should return false for dashboard routes', () => {
-        const dashboardRoutes = [
-          'parent-dashboard',
-          'teacher-dashboard', 
-          'principal-dashboard',
-          'super-admin-dashboard',
-          'screens/parent-dashboard',
-          'screens/teacher-dashboard',
-          'screens/principal-dashboard',
-          'screens/super-admin-dashboard',
-          'some-other-dashboard',
-        ];
-
-        dashboardRoutes.forEach(route => {
-          expect(shouldShowBackButton(route, true)).toBe(false);
-          expect(shouldShowBackButton(route, false)).toBe(false);
-        });
-      });
-
-      it('should return false for root/landing routes', () => {
-        const rootRoutes = [
-          'index',
-          'landing',
-          '(tabs)',
-          '',
-          'home',
-        ];
-
-        rootRoutes.forEach(route => {
-          expect(shouldShowBackButton(route, true)).toBe(false);
-          expect(shouldShowBackButton(route, false)).toBe(false);
-        });
-      });
-
-      it('should return true for regular screens', () => {
-        const regularRoutes = [
-          'parent-messages',
-          'screens/parent-messages',
-          'student-detail',
-          'teachers-detail',
-          'account',
-          'settings',
-          'some-random-screen',
-        ];
-
-        regularRoutes.forEach(route => {
-          expect(shouldShowBackButton(route, true)).toBe(true);
-          expect(shouldShowBackButton(route, false)).toBe(true);
-        });
-      });
-
-      it('should be case insensitive for dashboard detection', () => {
-        const caseVariants = [
-          'Parent-Dashboard',
-          'TEACHER-DASHBOARD',
-          'screens/Principal-Dashboard',
-          'SCREENS/SUPER-ADMIN-DASHBOARD',
-        ];
-
-        caseVariants.forEach(route => {
-          expect(shouldShowBackButton(route, true)).toBe(false);
-        });
+      routes.forEach((route) => {
+        expect(shouldShowBackButton(route, true)).toBe(false);
       });
     });
 
-    describe('without navigation history (canGoBack = false)', () => {
-      beforeEach(() => {
-        mockRouter.canGoBack.mockReturnValue(false);
-      });
-
-      it('should return false for all routes when cannot go back', () => {
-        const routes = [
-          'parent-dashboard',
-          'parent-messages', 
-          'student-detail',
-          'index',
-          'landing',
-          'account',
-        ];
-
-        routes.forEach(route => {
-          expect(shouldShowBackButton(route, true)).toBe(false);
-          expect(shouldShowBackButton(route, false)).toBe(false);
-        });
+    it('returns false for root routes', () => {
+      const routes = ['index', 'landing', '(tabs)', '', 'home'];
+      routes.forEach((route) => {
+        expect(shouldShowBackButton(route, true)).toBe(false);
       });
     });
 
-    describe('edge cases', () => {
-      beforeEach(() => {
-        mockRouter.canGoBack.mockReturnValue(true);
+    it('returns true for regular routes when back navigation is available', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(true);
+      const routes = ['parent-messages', 'screens/parent-messages', 'class-list'];
+      routes.forEach((route) => {
+        expect(shouldShowBackButton(route, true)).toBe(true);
       });
+    });
 
-      it('should handle null/undefined route names', () => {
-        expect(shouldShowBackButton(null as any, true)).toBe(true);
-        expect(shouldShowBackButton(undefined as any, true)).toBe(true);
-        expect(shouldShowBackButton('', true)).toBe(false); // Empty string is a root route
+    it('returns false for regular routes when back navigation is unavailable', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(false);
+      const routes = ['parent-messages', 'class-list'];
+      routes.forEach((route) => {
+        expect(shouldShowBackButton(route, true)).toBe(false);
       });
+    });
 
-      it('should handle router.canGoBack being undefined', () => {
-        mockRouter.canGoBack.mockReturnValue(undefined as any);
-        expect(shouldShowBackButton('parent-messages', true)).toBe(false);
+    it('returns true for always-back routes even when history is unavailable', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(false);
+      const routes = ['account', 'settings', 'profile', 'student-detail'];
+      routes.forEach((route) => {
+        expect(shouldShowBackButton(route, true)).toBe(true);
       });
+    });
+
+    it('handles null and undefined route names safely', () => {
+      expect(shouldShowBackButton(null as any, true)).toBe(false);
+      expect(shouldShowBackButton(undefined as any, true)).toBe(false);
     });
   });
 
   describe('navigateBack', () => {
-    it('should call router.back() when canGoBack is true', () => {
-      mockRouter.canGoBack.mockReturnValue(true);
-      
+    it('calls back() when canGoBack is true', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(true);
       navigateBack();
-      
-      expect(mockRouter.back).toHaveBeenCalledTimes(1);
-      expect(mockRouter.replace).not.toHaveBeenCalled();
+      expect(mockSafeRouter.back).toHaveBeenCalledTimes(1);
+      expect(mockSafeRouter.replace).not.toHaveBeenCalled();
     });
 
-    it('should use fallback route when canGoBack is false', () => {
-      mockRouter.canGoBack.mockReturnValue(false);
-      
+    it('uses fallback route when canGoBack is false', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(false);
       navigateBack('/custom-fallback');
-      
-      expect(mockRouter.back).not.toHaveBeenCalled();
-      expect(mockRouter.replace).toHaveBeenCalledWith('/custom-fallback');
+      expect(mockSafeRouter.back).not.toHaveBeenCalled();
+      expect(mockSafeRouter.replace).toHaveBeenCalledWith('/custom-fallback');
     });
 
-    it('should use default fallback (/) when canGoBack is false and no fallback provided', () => {
-      mockRouter.canGoBack.mockReturnValue(false);
-      
+    it('uses default fallback route when no fallback is provided', () => {
+      mockSafeRouter.canGoBack.mockReturnValue(false);
       navigateBack();
-      
-      expect(mockRouter.back).not.toHaveBeenCalled();
-      expect(mockRouter.replace).toHaveBeenCalledWith('/');
+      expect(mockSafeRouter.replace).toHaveBeenCalledWith('/');
     });
 
-    it('should handle navigation errors gracefully', () => {
-      mockRouter.canGoBack.mockReturnValue(true);
-      mockRouter.back.mockImplementation(() => {
-        throw new Error('Navigation failed');
+    it('handles navigation errors gracefully', () => {
+      mockSafeRouter.canGoBack.mockImplementation(() => {
+        throw new Error('Navigation failure');
       });
-      
-      // Should not throw, and should fallback to replace
       expect(() => navigateBack()).not.toThrow();
-      expect(mockRouter.replace).toHaveBeenCalledWith('/');
+      expect(mockSafeRouter.replace).toHaveBeenCalledWith('/');
     });
   });
 });

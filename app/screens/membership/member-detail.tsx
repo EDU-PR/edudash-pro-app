@@ -5,12 +5,14 @@
  * Refactored to use modular components following WARP.md standards
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useMemberDetail } from '@/hooks/membership/useMemberDetail';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { createStyles } from '@/lib/screen-styles/membership/member-detail.styles';
 import { DashboardWallpaperBackground } from '@/components/membership/dashboard';
 import { 
   ProfileHeader,
@@ -24,6 +26,8 @@ import {
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function MemberDetailScreen() {
   const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { showAlert, alertProps } = useAlertModal();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const memberId = typeof params.id === 'string' ? params.id : params.id?.[0] || null;
@@ -81,10 +85,10 @@ export default function MemberDetailScreen() {
 
   const handleAction = (action: string) => {
     if (action === 'Suspend' || action === 'Suspend Membership') {
-      Alert.alert(
-        'Suspend Member',
-        `Are you sure you want to suspend ${member.first_name}'s membership?`,
-        [
+      showAlert({
+        title: 'Suspend Member',
+        message: `Are you sure you want to suspend ${member.first_name}'s membership?`,
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Suspend', 
@@ -92,44 +96,44 @@ export default function MemberDetailScreen() {
             onPress: async () => {
               const success = await suspendMember();
               if (success) {
-                Alert.alert('Success', 'Member has been suspended');
+                showAlert({ title: 'Success', message: 'Member has been suspended', buttons: [{ text: 'OK' }] });
               }
             }
           },
-        ]
-      );
+        ],
+      });
     } else if (action === 'Activate') {
-      Alert.alert(
-        'Activate Member',
-        `Are you sure you want to activate ${member.first_name}'s membership?`,
-        [
+      showAlert({
+        title: 'Activate Member',
+        message: `Are you sure you want to activate ${member.first_name}'s membership?`,
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Activate', 
             onPress: async () => {
               const success = await activateMember();
               if (success) {
-                Alert.alert('Success', 'Member has been activated');
+                showAlert({ title: 'Success', message: 'Member has been activated', buttons: [{ text: 'OK' }] });
               }
             }
           },
-        ]
-      );
+        ],
+      });
     } else if (action === 'Delete' || action === 'Remove Member') {
       // Check if member is an executive (protected from deletion)
       if (!canRemoveMember) {
-        Alert.alert(
-          'Cannot Remove Executive',
-          `${member.first_name} is a ${member.member_type?.replace(/_/g, ' ')}.\n\nExecutive members cannot be removed directly. You must first demote them to a regular member role.`,
-          [{ text: 'OK', style: 'cancel' }]
-        );
+        showAlert({
+          title: 'Cannot Remove Executive',
+          message: `${member.first_name} is a ${member.member_type?.replace(/_/g, ' ')}.\n\nExecutive members cannot be removed directly. You must first demote them to a regular member role.`,
+          buttons: [{ text: 'OK', style: 'cancel' }],
+        });
         return;
       }
 
-      Alert.alert(
-        'Remove Member',
-        `Are you sure you want to remove ${member.first_name || ''} ${member.last_name || ''} from the organization?\n\nThis will revoke their membership but their account will remain.`,
-        [
+      showAlert({
+        title: 'Remove Member',
+        message: `Are you sure you want to remove ${member.first_name || ''} ${member.last_name || ''} from the organization?\n\nThis will revoke their membership but their account will remain.`,
+        buttons: [
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Remove', 
@@ -138,26 +142,26 @@ export default function MemberDetailScreen() {
               try {
                 const success = await deleteMember();
                 if (success) {
-                  Alert.alert('Success', 'Member has been removed', [
+                  showAlert({ title: 'Success', message: 'Member has been removed', buttons: [
                     { text: 'OK', onPress: () => router.back() }
-                  ]);
+                  ] });
                 } else {
-                  Alert.alert('Error', 'Failed to remove member. You may not have permission to perform this action.');
+                  showAlert({ title: 'Error', message: 'Failed to remove member. You may not have permission to perform this action.', buttons: [{ text: 'OK' }] });
                 }
               } catch (err: any) {
-                Alert.alert('Error', err.message || 'Failed to remove member');
+                showAlert({ title: 'Error', message: err.message || 'Failed to remove member', buttons: [{ text: 'OK' }] });
               }
             }
           },
-        ]
-      );
+        ],
+      });
     } else if (action === 'Message') {
       // Navigate to message screen or open email/SMS
       if (member.phone) {
-        Alert.alert(
-          'Contact Member',
-          `How would you like to contact ${member.first_name}?`,
-          [
+        showAlert({
+          title: 'Contact Member',
+          message: `How would you like to contact ${member.first_name}?`,
+          buttons: [
             { text: 'Cancel', style: 'cancel' },
             { 
               text: 'WhatsApp', 
@@ -173,12 +177,12 @@ export default function MemberDetailScreen() {
                 import('react-native').then(({ Linking }) => Linking.openURL(`tel:${member.phone}`));
               }
             },
-          ]
-        );
+          ],
+        });
       } else if (member.email) {
         import('react-native').then(({ Linking }) => Linking.openURL(`mailto:${member.email}`));
       } else {
-        Alert.alert('No Contact', 'This member has no contact details on file.');
+        showAlert({ title: 'No Contact', message: 'This member has no contact details on file.', buttons: [{ text: 'OK' }] });
       }
     } else if (action === 'Invoice') {
       // Navigate to invoice/payment screen
@@ -197,22 +201,26 @@ export default function MemberDetailScreen() {
         moreOptions.push({ text: 'Remove Member', style: 'destructive', onPress: () => handleAction('Remove Member') });
       }
       
-      Alert.alert(
-        'More Actions',
-        `Select an action for ${member.first_name}${isExecutive ? ' (Executive)' : ''}`,
-        moreOptions
-      );
+      showAlert({
+        title: 'More Actions',
+        message: `Select an action for ${member.first_name}${isExecutive ? ' (Executive)' : ''}`,
+        buttons: moreOptions,
+      });
     } else if (action === 'Change Role') {
-      Alert.alert('Coming Soon', 'Role change functionality will be available soon.');
+      showAlert({ title: 'Coming Soon', message: 'Role change functionality will be available soon.', buttons: [{ text: 'OK' }] });
     } else if (action === 'Transfer Region') {
-      Alert.alert('Coming Soon', 'Region transfer functionality will be available soon.');
+      showAlert({ title: 'Coming Soon', message: 'Region transfer functionality will be available soon.', buttons: [{ text: 'OK' }] });
     } else if (action === 'Renew Membership') {
-      Alert.alert('Renew Membership', `Renew ${member.first_name}'s membership for another year?`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Renew', onPress: () => Alert.alert('Coming Soon', 'Payment integration coming soon.') },
-      ]);
+      showAlert({
+        title: 'Renew Membership',
+        message: `Renew ${member.first_name}'s membership for another year?`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Renew', onPress: () => showAlert({ title: 'Coming Soon', message: 'Payment integration coming soon.', buttons: [{ text: 'OK' }] }) },
+        ],
+      });
     } else {
-      Alert.alert(action, `Action "${action}" is not yet implemented.`);
+      showAlert({ title: action, message: `Action "${action}" is not yet implemented.`, buttons: [{ text: 'OK' }] });
     }
   };
 
@@ -257,10 +265,10 @@ export default function MemberDetailScreen() {
                 <TouchableOpacity
                   style={[styles.pendingRemovalButton, { backgroundColor: '#EF4444' }]}
                   onPress={() => {
-                    Alert.alert(
-                      'Confirm Removal',
-                      `Are you sure you want to approve the removal of ${member.first_name} ${member.last_name}? This action cannot be undone.`,
-                      [
+                    showAlert({
+                      title: 'Confirm Removal',
+                      message: `Are you sure you want to approve the removal of ${member.first_name} ${member.last_name}? This action cannot be undone.`,
+                      buttons: [
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Approve Removal',
@@ -268,14 +276,14 @@ export default function MemberDetailScreen() {
                           onPress: async () => {
                             const success = await approveRemoval();
                             if (success) {
-                              Alert.alert('Removed', 'Member has been removed from the organization.', [
+                              showAlert({ title: 'Removed', message: 'Member has been removed from the organization.', buttons: [
                                 { text: 'OK', onPress: () => router.back() }
-                              ]);
+                              ] });
                             }
                           },
                         },
-                      ]
-                    );
+                      ],
+                    });
                   }}
                 >
                   <Ionicons name="checkmark" size={16} color="#fff" />
@@ -284,22 +292,22 @@ export default function MemberDetailScreen() {
                 <TouchableOpacity
                   style={[styles.pendingRemovalButton, { backgroundColor: '#10B981' }]}
                   onPress={() => {
-                    Alert.alert(
-                      'Restore Member',
-                      `Are you sure you want to reject the removal request and restore ${member.first_name} ${member.last_name}'s membership?`,
-                      [
+                    showAlert({
+                      title: 'Restore Member',
+                      message: `Are you sure you want to reject the removal request and restore ${member.first_name} ${member.last_name}'s membership?`,
+                      buttons: [
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Restore',
                           onPress: async () => {
                             const success = await rejectRemoval();
                             if (success) {
-                              Alert.alert('Restored', 'Member has been restored to active status.');
+                              showAlert({ title: 'Restored', message: 'Member has been restored to active status.', buttons: [{ text: 'OK' }] });
                             }
                           },
                         },
-                      ]
-                    );
+                      ],
+                    });
                   }}
                 >
                   <Ionicons name="close" size={16} color="#fff" />
@@ -415,151 +423,7 @@ export default function MemberDetailScreen() {
         </TouchableOpacity>
       </View>
       </DashboardWallpaperBackground>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  headerButton: {
-    marginRight: 16,
-  },
-  content: {
-    flex: 1,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    gap: 10,
-  },
-  quickAction: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 6,
-  },
-  quickActionText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 20,
-    padding: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  tabContent: {
-    padding: 16,
-  },
-  bottomActions: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  bottomAction: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-  },
-  bottomActionText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    fontSize: 14,
-    marginTop: 12,
-  },
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  // Pending Removal Banner Styles
-  pendingRemovalBanner: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  pendingRemovalContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  pendingRemovalText: {
-    flex: 1,
-  },
-  pendingRemovalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  pendingRemovalSubtitle: {
-    fontSize: 13,
-  },
-  pendingRemovalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  pendingRemovalButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  pendingRemovalButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-});

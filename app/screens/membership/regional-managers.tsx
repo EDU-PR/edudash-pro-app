@@ -3,7 +3,7 @@
  * Display and manage regional managers - REAL DATA from Supabase
  */
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { DashboardWallpaperBackground, PROVINCE_COLORS } from '@/components/membership/dashboard';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { useOrganizationStats, type RegionWithStats } from '@/hooks/membership/useOrganizationStats';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -32,6 +33,7 @@ export default function RegionalManagersScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
   
   // Get member type to filter for youth president
   const memberType = (profile as any)?.organization_membership?.member_type;
@@ -83,14 +85,14 @@ export default function RegionalManagersScreen() {
           if (!isVacant) {
             router.push(`/screens/membership/member-detail?id=${region.manager_id}`);
           } else {
-            Alert.alert(
-              'Vacant Position',
-              `The ${region.name} region needs a Regional Manager. Would you like to appoint someone?`,
-              [
+            showAlert({
+              title: 'Vacant Position',
+              message: `The ${region.name} region needs a Regional Manager. Would you like to appoint someone?`,
+              buttons: [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'View Members', onPress: () => router.push(`/screens/membership/members?region=${region.id}`) },
-              ]
-            );
+              ],
+            });
           }
         }}
       >
@@ -196,7 +198,7 @@ export default function RegionalManagersScreen() {
           </View>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => Alert.alert('Coming Soon', 'Invite link generation will be available soon.')}
+            onPress={() => showAlert({ title: 'Coming Soon', message: 'Invite link generation will be available soon.' })}
           >
             <Ionicons name="share-outline" size={24} color={theme.primary} />
           </TouchableOpacity>
@@ -253,6 +255,7 @@ export default function RegionalManagersScreen() {
           )}
         </ScrollView>
       </DashboardWallpaperBackground>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

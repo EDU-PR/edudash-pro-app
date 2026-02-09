@@ -10,9 +10,12 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAlert } from '@/components/ui/StyledAlert';
+import { logger } from '@/lib/logger';
 import { QuickActionCard } from '../shared/QuickActionCard';
 import { CollapsibleSection } from '../shared/CollapsibleSection';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
+import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
 const { width } = Dimensions.get('window');
 const isTablet = width > 768;
@@ -30,9 +33,11 @@ interface PrincipalQuickActionsProps {
   pendingRegistrationsCount?: number;
   pendingPaymentsCount?: number;
   pendingPOPUploadsCount?: number;
+  pendingTeacherApprovalsCount?: number;
   collapsedSections: Set<string>;
-  onToggleSection: (sectionId: string) => void;
+  onToggleSection: (sectionId: string, isCollapsed?: boolean) => void;
   onAction?: (actionId: string) => void;
+  resolvedSchoolType?: ResolvedSchoolType;
 }
 
 export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
@@ -40,9 +45,11 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   pendingRegistrationsCount = 0,
   pendingPaymentsCount = 0,
   pendingPOPUploadsCount = 0,
+  pendingTeacherApprovalsCount = 0,
   collapsedSections,
   onToggleSection,
   onAction,
+  resolvedSchoolType = 'preschool',
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -116,7 +123,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'parent-links', title: t('dashboard.parent_links', { defaultValue: 'Connect Parents' }), icon: 'link', color: '#14B8A6' },
         { id: 'classes', title: t('dashboard.manage_classes', { defaultValue: 'Classes' }), icon: 'library', color: '#14B8A6' },
         { id: 'groups', title: t('dashboard.manage_groups', { defaultValue: 'Groups' }), icon: 'people-circle', color: '#14B8A6' },
-        { id: 'teacher-approval', title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }), icon: 'checkmark-circle', color: '#06B6D4' },
+        { id: 'teacher-approval', title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }), icon: 'checkmark-circle', color: '#06B6D4', badge: pendingTeacherApprovalsCount },
         { id: 'seat-management', title: t('dashboard.seat_management', { defaultValue: 'Seats' }), icon: 'people-circle', color: '#8B5CF6' },
         { id: 'registrations', title: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', color: '#6366F1', badge: registrationsBadge },
       ],
@@ -152,8 +159,19 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'weekly-plans', title: t('dashboard.weekly_plans', { defaultValue: 'Weekly Plans' }), icon: 'list', color: '#64748B' },
       ],
     };
+
+    if (!flags.NEXT_GEN_DASH_POLICY_V1) {
+      return groups;
+    }
+
+    (Object.keys(groups) as QuickActionGroup[]).forEach((groupKey) => {
+      groups[groupKey] = groups[groupKey].filter((action) =>
+        isDashboardActionAllowed('principal', resolvedSchoolType, action.id)
+      );
+    });
+
     return groups;
-  }, [canLiveLessons, popBadge, registrationsBadge, t, unpaidBadge]);
+  }, [canLiveLessons, flags.NEXT_GEN_DASH_POLICY_V1, popBadge, registrationsBadge, resolvedSchoolType, t, unpaidBadge]);
 
   const handleActionPress = (actionId: string) => {
     // Allow custom handler first
@@ -176,7 +194,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         try {
           router.push('/screens/pop-review' as any);
         } catch (error) {
-          console.error('[PrincipalQuickActions] Failed to navigate to pop-review:', error);
+          logger.error('PrincipalQuickActions', 'Failed to navigate to pop-review:', error);
           alert.show(
             'Navigation Error',
             'Could not open payment reviews. Please try again.',
@@ -186,7 +204,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         }
         break;
       case 'unpaid-fees':
-        router.push('/screens/principal-fee-overview');
+        router.push('/screens/finance-control-center?tab=receivables');
         break;
       case 'teacher-approval':
         router.push('/screens/teacher-approval');
@@ -198,7 +216,11 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/teacher-lessons');
         break;
       case 'create-lesson':
-        router.push('/screens/ai-lesson-generator');
+        router.push(
+          resolvedSchoolType === 'k12_school'
+            ? '/screens/ai-lesson-generator'
+            : '/screens/preschool-lesson-generator'
+        );
         break;
       case 'assign-lessons':
         router.push('/screens/assign-lesson');
@@ -282,7 +304,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/birthday-chart');
         break;
       case 'fee-management':
-        router.push('/screens/principal-fee-overview');
+        router.push('/screens/finance-control-center?tab=overview');
         break;
       case 'log-expense':
         router.push('/screens/log-expense');
@@ -311,14 +333,15 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
     >
       <View style={styles.coreGrid}>
         {coreShortcuts.map((action) => (
-          <QuickActionCard
-            key={action.id}
-            title={action.title}
-            icon={action.icon}
-            color={action.color}
-            badgeCount={action.badge}
-            onPress={() => handleActionPress(action.id)}
-          />
+          <View key={action.id} style={styles.gridItem}>
+            <QuickActionCard
+              title={action.title}
+              icon={action.icon}
+              color={action.color}
+              badgeCount={action.badge}
+              onPress={() => handleActionPress(action.id)}
+            />
+          </View>
         ))}
       </View>
 
@@ -349,14 +372,15 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
 
       <View style={styles.actionsGrid}>
         {(actionsByGroup[activeGroup] || []).map((action) => (
-          <QuickActionCard
-            key={action.id}
-            title={action.title}
-            icon={action.icon}
-            color={action.color}
-            badgeCount={action.badge}
-            onPress={() => handleActionPress(action.id)}
-          />
+          <View key={action.id} style={styles.gridItem}>
+            <QuickActionCard
+              title={action.title}
+              icon={action.icon}
+              color={action.color}
+              badgeCount={action.badge}
+              onPress={() => handleActionPress(action.id)}
+            />
+          </View>
         ))}
       </View>
     </CollapsibleSection>
@@ -367,9 +391,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   coreGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginHorizontal: -cardGap / 2,
+    gap: cardGap,
     marginBottom: 4,
+  },
+  gridItem: {
+    width: isTablet ? '23%' : '48%',
+    flexGrow: 1,
   },
   groupTabs: {
     flexDirection: 'row',
@@ -409,8 +436,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginHorizontal: -cardGap / 2,
+    gap: cardGap,
   },
 });
 

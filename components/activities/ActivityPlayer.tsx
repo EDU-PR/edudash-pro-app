@@ -180,9 +180,13 @@ export function ActivityPlayer({ activity, childId, onComplete, onClose, onSpeak
       if (onSpeak && currentRound?.celebration) onSpeak(currentRound.celebration);
     } else {
       const newWrong = wrongAttempts + 1;
+      const hintThreshold = currentRound?.minWrongForHint ?? 1;
+      const shouldShowHint = newWrong >= hintThreshold;
       setWrongAttempts(newWrong);
-      setShowHint(true);
-      setUsedHints(true);
+      setShowHint(shouldShowHint);
+      if (shouldShowHint) {
+        setUsedHints(true);
+      }
       errorHaptic();
 
       // AnimatedOptions handles its own shake animation

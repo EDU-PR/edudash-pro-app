@@ -60,6 +60,8 @@ interface ChatModalProps {
   isSpeaking?: boolean;
   voiceEnabled?: boolean;
   onToggleVoice?: () => void;
+  whisperModeEnabled?: boolean;
+  onToggleWhisperMode?: () => void;
   isListeningForCommand?: boolean;
   onMicPress?: () => void;
   wakeWordEnabled?: boolean;
@@ -69,6 +71,9 @@ interface ChatModalProps {
   onAttachFile?: () => void;
   onTakePhoto?: () => void;
   attachmentCount?: number;
+  quickIntents?: Array<{ id: string; label: string; prompt: string }>;
+  onQuickIntent?: (intent: { id: string; label: string; prompt: string }) => void;
+  memorySnapshot?: string;
   inlineReplyEnabled?: boolean;
   onCopyMessage?: (message: ChatMessage) => void;
   onRegenerateMessage?: (message: ChatMessage) => void;
@@ -101,6 +106,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   isSpeaking = false,
   voiceEnabled = true,
   onToggleVoice,
+  whisperModeEnabled = true,
+  onToggleWhisperMode,
   isListeningForCommand = false,
   onMicPress,
   wakeWordEnabled = false,
@@ -110,6 +117,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onAttachFile,
   onTakePhoto,
   attachmentCount = 0,
+  quickIntents = [],
+  onQuickIntent,
+  memorySnapshot = '',
   inlineReplyEnabled = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -413,6 +423,67 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             </View>
           )}
 
+          <View style={styles.nextGenRow}>
+            {onToggleVoice && Platform.OS !== 'web' && (
+              <TouchableOpacity
+                style={[
+                  styles.nextGenChip,
+                  {
+                    borderColor: voiceEnabled ? theme.primary : theme.border,
+                    backgroundColor: voiceEnabled ? `${theme.primary}22` : theme.background,
+                  },
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onToggleVoice();
+                }}
+                accessibilityLabel={`Voice ${voiceEnabled ? 'on' : 'off'}`}
+                accessibilityRole="switch"
+              >
+                <Ionicons
+                  name={voiceEnabled ? 'volume-high' : 'volume-mute'}
+                  size={13}
+                  color={voiceEnabled ? theme.primary : theme.textSecondary}
+                />
+                <Text style={[styles.nextGenChipText, { color: voiceEnabled ? theme.primary : theme.textSecondary }]}>
+                  Voice {voiceEnabled ? 'On' : 'Off'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onToggleWhisperMode && (
+              <TouchableOpacity
+                style={[
+                  styles.nextGenChip,
+                  {
+                    borderColor: whisperModeEnabled ? theme.primary : theme.border,
+                    backgroundColor: whisperModeEnabled ? `${theme.primary}22` : theme.background,
+                  },
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onToggleWhisperMode();
+                }}
+              >
+                <Ionicons
+                  name={whisperModeEnabled ? 'radio' : 'radio-outline'}
+                  size={13}
+                  color={whisperModeEnabled ? theme.primary : theme.textSecondary}
+                />
+                <Text style={[styles.nextGenChipText, { color: whisperModeEnabled ? theme.primary : theme.textSecondary }]}>
+                  Whisper {whisperModeEnabled ? 'On' : 'Off'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!!memorySnapshot && (
+              <View style={[styles.nextGenMemoryChip, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                <Ionicons name="layers-outline" size={13} color={theme.textSecondary} />
+                <Text style={[styles.nextGenMemoryText, { color: theme.textSecondary }]} numberOfLines={1}>
+                  Memory: {memorySnapshot}
+                </Text>
+              </View>
+            )}
+          </View>
+
           {/* Content */}
           {showQuickActions ? (
             <ScrollView
@@ -639,6 +710,28 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 </TouchableOpacity>
               )}
             </View>
+          )}
+          {!!quickIntents.length && onQuickIntent && !showQuickActions && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickIntentRow}
+            >
+              {quickIntents.map((intent) => (
+                <TouchableOpacity
+                  key={intent.id}
+                  style={[styles.quickIntentChip, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                  onPress={() => {
+                    if (isProcessing) return;
+                    onQuickIntent(intent);
+                  }}
+                >
+                  <Text style={[styles.quickIntentText, { color: theme.textSecondary }]}>
+                    {intent.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
           )}
           {/* Input */}
           <View style={[styles.inputContainer, { borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom) }]}>

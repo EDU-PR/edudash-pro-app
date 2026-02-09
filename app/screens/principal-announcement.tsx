@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, Alert, StyleSheet } from 'react-native'
+import { View, Text, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useTheme } from '@/contexts/ThemeContext'
 import { router, useLocalSearchParams } from 'expo-router'
@@ -7,10 +7,12 @@ import { AnnouncementModal, AnnouncementData } from '@/components/modals/Announc
 import AnnouncementService from '@/lib/services/announcementService'
 import { assertSupabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal'
 
 export default function PrincipalAnnouncementScreen() {
   const { theme } = useTheme()
   const { profile } = useAuth()
+  const { showAlert, alertProps } = useAlertModal()
   const params = useLocalSearchParams<{ title?: string; content?: string; audience?: string; priority?: string; compose?: string }>()
   const [visible, setVisible] = useState(false)
 
@@ -28,7 +30,7 @@ export default function PrincipalAnnouncementScreen() {
     try {
       const { data: auth } = await assertSupabase().auth.getUser()
       const authUserId = auth?.user?.id
-      if (!authUserId) { Alert.alert('Error', 'Not signed in'); return }
+      if (!authUserId) { showAlert({ title: 'Error', message: 'Not signed in' }); return }
 
       // Resolve teacher/user record to get preschool (school) id
       let preschoolId: string | undefined = (profile as any)?.preschool_id || (profile as any)?.organization_id;
@@ -41,13 +43,13 @@ export default function PrincipalAnnouncementScreen() {
           .maybeSingle()
         preschoolId = profileRow?.preschool_id || profileRow?.organization_id;
       }
-      if (!preschoolId) { Alert.alert('Error', 'No school found for your profile'); return }
+      if (!preschoolId) { showAlert({ title: 'Error', message: 'No school found for your profile' }); return }
 
       const res = await AnnouncementService.createAnnouncement(preschoolId, authUserId, announcement)
-      if (!res.success) { Alert.alert('Error', res.error || 'Failed to create announcement'); return }
-      Alert.alert('Success', 'Announcement created', [{ text: 'OK', onPress: onClose }])
+      if (!res.success) { showAlert({ title: 'Error', message: res.error || 'Failed to create announcement' }); return }
+      showAlert({ title: 'Success', message: 'Announcement created', buttons: [{ text: 'OK', onPress: onClose }] })
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create announcement')
+      showAlert({ title: 'Error', message: e?.message || 'Failed to create announcement' })
     }
   }
 
@@ -75,6 +77,7 @@ export default function PrincipalAnnouncementScreen() {
         onClose={onClose}
         onSend={onSend}
       />
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   )
 }

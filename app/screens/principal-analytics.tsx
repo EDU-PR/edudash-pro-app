@@ -6,20 +6,21 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Linking } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { 
   usePrincipalAnalytics, 
   formatCurrency, 
   getStatusColor,
   type AnalyticsData 
 } from '@/hooks/usePrincipalAnalytics';
-
+import { exportAnalyticsPdf } from '@/lib/services/analytics/exportAnalyticsPdf';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Period options for analytics
 const PERIODS = ['week', 'month', 'quarter', 'year'] as const;
@@ -32,6 +33,7 @@ export default function PrincipalAnalyticsScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>('month');
   
   const { analytics, loading, refreshing, error, refresh } = usePrincipalAnalytics();
+  const { showAlert, alertProps } = useAlertModal();
   
   // Check premium access
   const isPremiumOrHigher = ['premium', 'school_premium', 'pro', 'school_pro', 'enterprise', 'school_enterprise'].includes(String(tier || ''));
@@ -75,7 +77,11 @@ export default function PrincipalAnalyticsScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>School Analytics</Text>
-        <TouchableOpacity onPress={() => Alert.alert('Export', 'Export feature coming soon')}>
+        <TouchableOpacity onPress={() => {
+          if (!analytics) { showAlert({ title: 'Export', message: 'No data to export yet.' }); return; }
+          const name = (profile as any)?.school_name || (profile as any)?.preschool_name || 'School';
+          exportAnalyticsPdf(analytics, name).catch(() => showAlert({ title: 'Error', message: 'Failed to export PDF.' }));
+        }}>
           <Ionicons name="download-outline" size={24} color={theme.primary} />
         </TouchableOpacity>
       </View>
@@ -114,7 +120,7 @@ export default function PrincipalAnalyticsScreen() {
         <FinancialSection analytics={analytics} theme={theme} />
 
         {/* Academic Insights */}
-        <AcademicSection theme={theme} />
+        <AcademicSection theme={theme} showAlert={showAlert} />
 
         {/* Recommended Actions */}
         <ActionsSection analytics={analytics} theme={theme} />
@@ -122,6 +128,7 @@ export default function PrincipalAnalyticsScreen() {
         {/* Bottom padding */}
         <View style={{ height: insets.bottom + 20 }} />
       </ScrollView>
+      <AlertModal {...alertProps} />
     </View>
   );
 }
@@ -232,7 +239,7 @@ const FinancialSection: React.FC<{ analytics: AnalyticsData; theme: any }> = ({ 
   </View>
 );
 
-const AcademicSection: React.FC<{ theme: any }> = ({ theme }) => {
+const AcademicSection: React.FC<{ theme: any; showAlert: (cfg: { title: string; message: string }) => void }> = ({ theme, showAlert }) => {
   const handleContactSupport = () => {
     const message = encodeURIComponent('Hi, I need help setting up academic insights and assessment tracking for my school.');
     const waUrl = `whatsapp://send?phone=27674770975&text=${message}`;
@@ -241,7 +248,7 @@ const AcademicSection: React.FC<{ theme: any }> = ({ theme }) => {
     Linking.canOpenURL('whatsapp://send').then(supported => {
       Linking.openURL(supported ? waUrl : webUrl);
     }).catch(() => {
-      Alert.alert('Error', 'Unable to open WhatsApp. Please contact support@edudashpro.com');
+      showAlert({ title: 'Error', message: 'Unable to open WhatsApp. Please contact support@edudashpro.com' });
     });
   };
 

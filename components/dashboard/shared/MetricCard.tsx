@@ -148,6 +148,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <Animated.View
       style={[
+        customCardWidth
+          ? { flexBasis: customCardWidth, flexGrow: 1, flexShrink: 0 }
+          : undefined,
         glow && {
           shadowColor: color,
           shadowOffset: { width: 0, height: 0 },
@@ -218,6 +221,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
 const createStyles = (theme: any, customCardWidth?: number) => {
   const cardPadding = isTablet ? 20 : isSmallScreen ? 10 : 14;
   const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
+  const horizontalCardMargin = customCardWidth ? 0 : cardGap / 2;
   const containerWidth = width - (cardPadding * 2);
   const defaultCardWidth = isTablet ? (containerWidth - (cardGap * 3)) / 4 : (containerWidth - cardGap) / 2;
   const cardWidth = customCardWidth || defaultCardWidth;
@@ -234,9 +238,9 @@ const createStyles = (theme: any, customCardWidth?: number) => {
       backgroundColor: theme.cardBackground,
       borderRadius: isSmallScreen ? 12 : 16,
       padding: isSmallScreen ? 14 : 18,
-      width: cardWidth,
-      marginHorizontal: cardGap / 2,
-      marginBottom: cardGap,
+      width: customCardWidth ? '100%' : cardWidth,
+      marginHorizontal: horizontalCardMargin,
+      marginBottom: customCardWidth ? 0 : cardGap,
       shadowColor: theme.shadow,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,

@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ParentDashboardWrapper from '@/components/dashboard/ParentDashboardWrapper';
 import { track } from '@/lib/analytics';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 
 export default function ParentDashboardScreen() {
   const { t } = useTranslation();
@@ -21,6 +22,7 @@ export default function ParentDashboardScreen() {
   const { focus } = useLocalSearchParams<{ focus?: string | string[] }>();
   const focusSection = Array.isArray(focus) ? focus[0] : focus;
   const isAuthMissing = !user?.id;
+  const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
 
   // Enforce RBAC: must be parent role with dashboard access
   // Add defensive checks to handle initialization states
@@ -69,9 +71,20 @@ export default function ParentDashboardScreen() {
           reason: !hasAccess ? 'no_mobile_access' : 'role_mismatch',
         });
         router.replace('/profiles-gate');
+        return;
+      }
+      if (resolvedSchoolType === 'k12_school') {
+        hasRedirectedRef.current = true;
+        track('edudash.dashboard.route_resolution', {
+          user_id: user?.id,
+          role: profile?.role,
+          resolved_school_type: resolvedSchoolType,
+          target_dashboard: '/(k12)/parent/dashboard',
+        });
+        router.replace('/(k12)/parent/dashboard');
       }
     }
-  }, [authLoading, profileLoading, isAuthMissing, canView, hasAccess, user?.id, profile?.role]);
+  }, [authLoading, profileLoading, isAuthMissing, canView, hasAccess, user?.id, profile?.role, resolvedSchoolType]);
 
   // Create styles hook before any conditional returns
   const deniedStyles = React.useMemo(() => StyleSheet.create({
@@ -148,6 +161,21 @@ export default function ParentDashboardScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </LinearGradient>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  if (resolvedSchoolType === 'k12_school') {
+    return (
+      <View style={{ flex: 1 }}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1, backgroundColor: theme.background }}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: theme.textSecondary, fontSize: 16 }}>
+              {t('dashboard.loading', { defaultValue: 'Loading dashboard...' })}
+            </Text>
+          </View>
         </SafeAreaView>
       </View>
     );

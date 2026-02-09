@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     minWidth: 220,
     maxWidth: 300,
-    marginVertical: 2,
+    marginVertical: 5,
   },
   contentRow: {
     flexDirection: 'row',
@@ -733,7 +733,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: -4,
+    marginTop: 4,
+    marginBottom: 2,
   },
   reactionsBelowOwn: {
     justifyContent: 'flex-end',

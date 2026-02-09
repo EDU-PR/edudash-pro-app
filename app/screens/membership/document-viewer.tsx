@@ -3,7 +3,7 @@
  * View, read, and share organizational documents and policies
  */
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, Share, Platform, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Share, Platform, Linking } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,8 +13,10 @@ import { assertSupabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import * as Sharing from 'expo-sharing';
 import { documentViewerStyles as styles } from '@/components/membership/styles/document-viewer.styles';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 interface DocumentData {
   id: string;
   name: string;
@@ -41,6 +43,7 @@ export default function DocumentViewerScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const { showAlert, alertProps } = useAlertModal();
 
   useEffect(() => {
     if (params.documentId) {
@@ -87,7 +90,7 @@ export default function DocumentViewerScreen() {
         uploader_name: data.profiles?.full_name,
       });
     } catch (err) {
-      console.error('Error fetching document:', err);
+      logger.error('Error fetching document:', err);
       setError('Failed to load document');
     } finally {
       setLoading(false);
@@ -96,7 +99,7 @@ export default function DocumentViewerScreen() {
 
   const handleOpenDocument = async () => {
     if (!document?.file_url) {
-      Alert.alert('Coming Soon', 'Document viewing will be available once documents are uploaded to the system.');
+      showAlert({ title: 'Coming Soon', message: 'Document viewing will be available once documents are uploaded to the system.' });
       return;
     }
 
@@ -107,13 +110,13 @@ export default function DocumentViewerScreen() {
         await WebBrowser.openBrowserAsync(document.file_url);
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to open document');
+      showAlert({ title: 'Error', message: 'Failed to open document' });
     }
   };
 
   const handleDownload = async () => {
     if (!document?.file_url) {
-      Alert.alert('Coming Soon', 'Document download will be available once documents are uploaded to the system.');
+      showAlert({ title: 'Coming Soon', message: 'Document download will be available once documents are uploaded to the system.' });
       return;
     }
 
@@ -128,8 +131,8 @@ export default function DocumentViewerScreen() {
         await WebBrowser.openBrowserAsync(document.file_url);
       }
     } catch (err) {
-      console.error('Download error:', err);
-      Alert.alert('Error', 'Failed to download document');
+      logger.error('Download error:', err);
+      showAlert({ title: 'Error', message: 'Failed to download document' });
     } finally {
       setDownloading(false);
     }
@@ -151,14 +154,14 @@ export default function DocumentViewerScreen() {
         } else {
           // Fallback: copy to clipboard
           await navigator.clipboard.writeText(`${document.name}\n${document.description || ''}`);
-          Alert.alert('Copied', 'Document info copied to clipboard');
+          showAlert({ title: 'Copied', message: 'Document info copied to clipboard' });
         }
       } else {
         await Share.share(shareContent);
       }
     } catch (err) {
       if ((err as Error).message !== 'Share canceled') {
-        console.error('Share error:', err);
+        logger.error('Share error:', err);
       }
     }
   };
@@ -219,6 +222,7 @@ export default function DocumentViewerScreen() {
   }
 
   return (
+    <>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
@@ -365,5 +369,7 @@ export default function DocumentViewerScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    <AlertModal {...alertProps} />
+    </>
   );
 }

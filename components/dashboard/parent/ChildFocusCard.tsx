@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 interface ChildDisplayData {
   fullName: string;
   initials: string;
+  avatarUrl?: string | null;
   className: string;
   teacherName: string;
   grade?: string;
@@ -40,9 +41,13 @@ export const ChildFocusCard: React.FC<ChildFocusCardProps> = ({
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.borderLight }, style]}>
       <View style={styles.header}>
-        <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
-          <Text style={[styles.avatarText, { color: theme.primary }]}>{child.initials}</Text>
-        </View>
+        {child.avatarUrl ? (
+          <Image source={{ uri: child.avatarUrl }} style={styles.avatarImage} />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
+            <Text style={[styles.avatarText, { color: theme.primary }]}>{child.initials}</Text>
+          </View>
+        )}
         <View style={styles.info}>
           <Text style={[styles.name, { color: theme.text }]}>{child.fullName}</Text>
           <Text style={[styles.meta, { color: theme.textSecondary }]}>
@@ -106,6 +111,11 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   info: { flex: 1 },
   name: { fontSize: 16, fontWeight: '700', marginBottom: 2 },

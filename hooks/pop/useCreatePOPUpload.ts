@@ -1,26 +1,21 @@
-/**
- * useCreatePOPUpload Hook
- * Handles POP file upload creation with validation
- */
+/** useCreatePOPUpload — POP file upload creation with validation */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { uploadPOPFile, UploadResult } from '@/lib/popUpload';
 import { logger } from '@/lib/logger';
+import { inferFeeCategoryCode } from '@/lib/utils/feeUtils';
+import { getDateOnlyISO, getMonthEndISO, getMonthStartISO, parseDateValue } from '@/lib/utils/dateUtils';
 import { POP_QUERY_KEYS } from './queryKeys';
 import type { POPUpload, CreatePOPUploadData } from './types';
-
 export const useCreatePOPUpload = () => {
   const queryClient = useQueryClient();
-  
   return useMutation({
     mutationFn: async (data: CreatePOPUploadData): Promise<POPUpload> => {
-      // Get current user
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         throw new Error('Authentication required');
       }
       
-      // Get user's preschool_id
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('preschool_id')
@@ -31,14 +26,12 @@ export const useCreatePOPUpload = () => {
         throw new Error('User profile not found');
       }
       
-      // Validate payment uploads
       if (data.upload_type === 'proof_of_payment') {
         await validatePaymentUpload(data);
       }
       
       logger.info('Starting POP upload process...');
       
-      // Upload file to storage
       const uploadResult: UploadResult = await uploadPOPFile(
         data.file_uri,
         data.upload_type,
@@ -53,7 +46,6 @@ export const useCreatePOPUpload = () => {
       
       logger.info('File uploaded successfully, creating database record...');
       
-      // Create database record
       const dbData = buildDatabaseRecord(data, uploadResult, user.id, profile.preschool_id);
       
       const { data: newUpload, error: dbError } = await supabase
@@ -69,7 +61,7 @@ export const useCreatePOPUpload = () => {
         .single();
         
       if (dbError) {
-        console.error('Database insert failed:', dbError);
+        logger.error('Database insert failed:', dbError);
         throw new Error(`Failed to save upload: ${dbError.message}`);
       }
       
@@ -98,7 +90,6 @@ export const useCreatePOPUpload = () => {
           logger.warn('POPUpload', 'Failed to notify POP upload:', notifyError);
         }
       }
-
       logger.info('POP upload completed successfully');
       return newUpload;
     },
@@ -108,19 +99,31 @@ export const useCreatePOPUpload = () => {
       logger.info('POP upload successful, queries invalidated');
     },
     onError: (error) => {
-      console.error('POP upload failed:', error);
+      logger.error('POP upload failed:', error);
     },
   });
 };
-
 // Validate payment-specific rules
 async function validatePaymentUpload(data: CreatePOPUploadData): Promise<void> {
+  if (!data.payment_for_month && !data.payment_date) {
+    throw new Error('Please select the billing month for this payment.');
+  }
+  if (!data.category_code) {
+    throw new Error('Please select a payment category.');
+  }
   // Check if fee for this period is already paid
   const periodDateValue = data.payment_for_month || data.payment_date;
   if (periodDateValue) {
-    const paymentDate = new Date(periodDateValue);
-    const monthStart = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), 1).toISOString();
-    const monthEnd = new Date(paymentDate.getFullYear(), paymentDate.getMonth() + 1, 0).toISOString();
+    const paymentDate = parseDateValue(periodDateValue);
+    if (!paymentDate) {
+      throw new Error('Invalid billing month selected.');
+    }
+    const monthStart = getMonthStartISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
+    const monthEnd = getMonthEndISO(periodDateValue, {
+      recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+    });
     
     const { data: paidFees } = await supabase
       .from('student_fees')
@@ -168,7 +171,6 @@ async function validatePaymentUpload(data: CreatePOPUploadData): Promise<void> {
     }
   }
 }
-
 // Build database record from upload data
 function buildDatabaseRecord(
   data: CreatePOPUploadData,
@@ -191,8 +193,11 @@ function buildDatabaseRecord(
     ...(data.upload_type === 'proof_of_payment' && {
       payment_amount: data.payment_amount ?? 0,
       payment_method: data.payment_method,
-      payment_date: data.payment_date || new Date().toISOString().split('T')[0],
-      payment_for_month: data.payment_for_month || data.payment_date || new Date().toISOString().split('T')[0],
+      payment_date: getDateOnlyISO(data.payment_date),
+      payment_for_month: getMonthStartISO(data.payment_for_month || data.payment_date, {
+        recoverUtcMonthBoundary: Boolean(data.payment_for_month),
+      }),
+      category_code: data.category_code || inferFeeCategoryCode(data.description || data.title || 'tuition'),
       payment_reference: data.payment_reference,
     }),
     

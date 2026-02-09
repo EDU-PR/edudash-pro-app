@@ -89,6 +89,9 @@ export function useParentDashboardNavigation({ activeChild, children, showAlert 
       case 'my_exams':
         router.push('/screens/parent-my-exams');
         break;
+      case 'generate_image':
+        router.push('/screens/dash-image-studio');
+        break;
       case 'search':
         router.push('/screens/parent-search');
         break;

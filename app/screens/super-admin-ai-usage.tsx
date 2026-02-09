@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, TextInput } from 'react-native';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
@@ -9,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSuperAdmin } from '@/lib/roleUtils';
 import { useTheme } from '@/contexts/ThemeContext';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 
 interface AiUsageRow {
   user_id: string;
@@ -49,6 +51,7 @@ const formatDate = (value?: string | null) => {
 export default function SuperAdminAIUsageScreen() {
   const { profile } = useAuth();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [usageRows, setUsageRows] = useState<AiUsageRow[]>([]);
@@ -58,7 +61,7 @@ export default function SuperAdminAIUsageScreen() {
 
   const loadUsage = useCallback(async (isRefresh = false) => {
     if (!isSuperAdmin(profile?.role)) {
-      Alert.alert('Access Denied', 'Super admin privileges required');
+      showAlert({ title: 'Access Denied', message: 'Super admin privileges required' });
       return;
     }
 
@@ -80,8 +83,8 @@ export default function SuperAdminAIUsageScreen() {
       setUsageRows((usageResponse.data as AiUsageRow[]) || []);
       setImageRows((imageResponse.data as ImageUsageRow[]) || []);
     } catch (error: any) {
-      console.error('[SuperAdminAIUsage] Load failed:', error);
-      Alert.alert('Error', error?.message || 'Failed to load AI usage data');
+      logger.error('[SuperAdminAIUsage] Load failed:', error);
+      showAlert({ title: 'Error', message: error?.message || 'Failed to load AI usage data' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -256,6 +259,7 @@ export default function SuperAdminAIUsageScreen() {
           )}
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

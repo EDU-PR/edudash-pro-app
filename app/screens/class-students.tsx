@@ -4,13 +4,15 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Student {
@@ -35,6 +37,7 @@ export default function ClassStudentsScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const { classId } = useLocalSearchParams<{ classId: string }>();
+  const { showAlert, alertProps } = useAlertModal();
   
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
@@ -122,8 +125,8 @@ export default function ClassStudentsScreen() {
 
       setStudents(transformedStudents);
     } catch (error: any) {
-      console.error('Error fetching class students:', error);
-      Alert.alert('Error', 'Failed to load class information');
+      logger.error('ClassStudents', 'Error fetching class students:', error);
+      showAlert({ title: 'Error', message: 'Failed to load class information' });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -281,6 +284,7 @@ export default function ClassStudentsScreen() {
           )}
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

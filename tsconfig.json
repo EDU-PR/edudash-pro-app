@@ -8,6 +8,7 @@
         "./*"
       ]
     },
+    "types": ["react", "react-native", "jest"],
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -62,13 +63,15 @@
     "services/DashWhatsAppIntegration.ts",
     "lib/security/validation.ts",
     "lib/visibilityHandler.ts",
-    "contexts/TerminologyContext.tsx"
+    "contexts/TerminologyContext.tsx",
+    "hooks/useDocumentUpload.ts",
+    "app/screens/super-admin-analytics.tsx",
+    "app/screens/super-admin-whatsapp.tsx"
   ],
   "include": [
     "types/deno-std.d.ts",
     "types/**/*.d.ts",
-    "components/ai/**/*",
-    "components/ui/HolographicOrb.tsx",
+    "components/**/*",
     "lib/voice/**/*",
     "services/**/*",
     "lib/**/*",

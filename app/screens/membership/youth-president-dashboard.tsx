@@ -4,7 +4,7 @@
  * Tailored from National President dashboard design
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/Card';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useNotificationBadgeCount } from '@/hooks/useNotificationCount';
 import { assertSupabase } from '@/lib/supabase';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import {
   DashboardBackground,
   DashboardWallpaperBackground,
@@ -23,6 +24,7 @@ import { useAds } from '@/contexts/AdsContext';
 import { PLACEMENT_KEYS } from '@/lib/ads/placements';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { logger } from '@/lib/logger';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Youth Wing specific stats interface
@@ -58,12 +60,13 @@ export default function YouthPresidentDashboard() {
   const insets = useSafeAreaInsets();
   const notificationCount = useNotificationBadgeCount();
   const { maybeShowInterstitial } = useAds();
+  const { showAlert, alertProps } = useAlertModal();
 
   // Route guard: Ensure youth_secretary is redirected to their own dashboard
   React.useEffect(() => {
     const memberType = (profile as any)?.organization_membership?.member_type;
     if (profile && memberType === 'youth_secretary') {
-      console.log('[YouthPresidentDashboard] Access denied - youth_secretary detected - redirecting to secretary dashboard');
+      logger.debug('[YouthPresidentDashboard] Access denied - youth_secretary detected - redirecting to secretary dashboard');
       router.replace('/screens/membership/youth-secretary-dashboard');
     }
   }, [profile]);
@@ -149,13 +152,13 @@ export default function YouthPresidentDashboard() {
         
         if (error) {
           // If status filter fails (e.g., constraint not applied), return 0
-          console.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
+          logger.warn('Events status filter failed - ensure migration 20260110_fix_events_status_constraint.sql is applied:', error.message);
           pendingEventProposalsCount = 0;
         } else {
           pendingEventProposalsCount = count || 0;
         }
       } catch (err) {
-        console.warn('Error fetching pending event proposals:', err);
+        logger.warn('Error fetching pending event proposals:', err);
         pendingEventProposalsCount = 0;
       }
 
@@ -192,7 +195,7 @@ export default function YouthPresidentDashboard() {
               }
             }
           } catch (e) {
-            console.warn('Error parsing date_of_birth:', m.date_of_birth, e);
+            logger.warn('Error parsing date_of_birth:', m.date_of_birth, e);
           }
         }
         
@@ -243,7 +246,7 @@ export default function YouthPresidentDashboard() {
       setRecentMembers(recent || []);
 
     } catch (error) {
-      console.error('Error fetching youth stats:', error);
+      logger.error('Error fetching youth stats:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -278,7 +281,7 @@ export default function YouthPresidentDashboard() {
     if (type === 'members') {
       router.push('/screens/membership/pending-approvals');
     } else {
-      Alert.alert('Coming Soon', 'This feature will be available soon.');
+      showAlert({ title: 'Coming Soon', message: 'This feature will be available soon.' });
     }
   };
 
@@ -625,6 +628,7 @@ export default function YouthPresidentDashboard() {
       {/* Note: Youth President uses organization branding from OrganizationBrandingContext */}
       {/* Wallpaper settings are managed at the organization level by CEO/National Admin */}
     </SafeAreaView>
+    <AlertModal {...alertProps} />
     </DashboardWallpaperBackground>
   );
 }

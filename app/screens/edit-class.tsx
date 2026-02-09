@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { Picker } from '@react-native-picker/picker';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface Teacher {
@@ -35,6 +37,7 @@ export default function EditClassScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const { classId } = useLocalSearchParams<{ classId: string }>();
+  const { showAlert, alertProps } = useAlertModal();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,8 +79,8 @@ export default function EditClassScreen() {
         setTeachers(transformedTeachers);
       }
     } catch (error: any) {
-      console.error('Error fetching class:', error);
-      Alert.alert('Error', 'Failed to load class information');
+      logger.error('EditClass', 'Error fetching class:', error);
+      showAlert({ title: 'Error', message: 'Failed to load class information' });
     } finally {
       setLoading(false);
     }
@@ -99,12 +102,12 @@ export default function EditClassScreen() {
     if (!formData) return;
 
     if (!formData.name.trim()) {
-      Alert.alert('Validation Error', 'Class name is required');
+      showAlert({ title: 'Validation Error', message: 'Class name is required' });
       return;
     }
 
     if (!formData.grade_level.trim()) {
-      Alert.alert('Validation Error', 'Grade level is required');
+      showAlert({ title: 'Validation Error', message: 'Grade level is required' });
       return;
     }
 
@@ -126,22 +129,22 @@ export default function EditClassScreen() {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Class updated successfully', [
+      showAlert({ title: 'Success', message: 'Class updated successfully', buttons: [
         { text: 'OK', onPress: navigateBack },
-      ]);
+      ] });
     } catch (error: any) {
-      console.error('Error updating class:', error);
-      Alert.alert('Error', 'Failed to update class');
+      logger.error('EditClass', 'Error updating class:', error);
+      showAlert({ title: 'Error', message: 'Failed to update class' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Class',
-      'Are you sure you want to delete this class? This action cannot be undone.',
-      [
+    showAlert({
+      title: 'Delete Class',
+      message: 'Are you sure you want to delete this class? This action cannot be undone.',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -156,17 +159,17 @@ export default function EditClassScreen() {
 
               if (error) throw error;
 
-              Alert.alert('Success', 'Class deleted successfully', [
+              showAlert({ title: 'Success', message: 'Class deleted successfully', buttons: [
                 { text: 'OK', onPress: navigateBack },
-              ]);
+              ] });
             } catch (error: any) {
-              console.error('Error deleting class:', error);
-              Alert.alert('Error', 'Failed to delete class');
+              logger.error('EditClass', 'Error deleting class:', error);
+              showAlert({ title: 'Error', message: 'Failed to delete class' });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   if (loading) {
@@ -323,6 +326,7 @@ export default function EditClassScreen() {
           </View>
         </View>
       </ScrollView>
+      <AlertModal {...alertProps} />
     </SafeAreaView>
   );
 }

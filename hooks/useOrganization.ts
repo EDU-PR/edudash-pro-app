@@ -28,14 +28,41 @@ export function useOrganization() {
         .from('organizations')
         .select('id, name, slug, type, phone, email, status, settings')
         .eq('id', orgId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Failed to fetch organization:', error);
-        return null;
+      if (!error && data) {
+        return data as OrganizationDetails;
       }
 
-      return data as OrganizationDetails;
+      // Backward compatibility: some school tenants still exist only in preschools.
+      const { data: preschool, error: preschoolError } = await supabase
+        .from('preschools')
+        .select('id, name, settings, is_active')
+        .eq('id', orgId)
+        .maybeSingle();
+
+      if (preschoolError && preschoolError.code !== 'PGRST116') {
+        console.error('Failed to fetch organization from preschools fallback:', preschoolError);
+      }
+
+      if (preschool) {
+        return {
+          id: String((preschool as any).id),
+          name: String((preschool as any).name || 'Preschool'),
+          slug: null,
+          type: 'preschool',
+          phone: null,
+          email: null,
+          status: (preschool as any).is_active === false ? 'inactive' : 'active',
+          settings: ((preschool as any).settings as Record<string, unknown> | null) || null,
+        };
+      }
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Failed to fetch organization:', error);
+      }
+
+      return null;
     },
     enabled: !!orgId,
     staleTime: 300000, // 5 minutes

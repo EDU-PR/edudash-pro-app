@@ -1,10 +1,12 @@
 /**
  * Custom hook for managing teachers directory state and logic
+ * Now backed by Supabase — fetches real teacher data from organization_members + profiles
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Alert, Linking } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { assertSupabase } from '@/lib/supabase';
 import { offlineCacheService } from '@/lib/services/offlineCacheService';
 import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 import {
@@ -96,12 +98,102 @@ export function useTeachersDirectory(): UseTeachersDirectoryReturn {
         setIsLoadingFromCache(false);
       }
 
-      // TODO: Implement real Supabase-backed fetch for teachers directory.
-      // For now, do not include mock data in production builds.
-      setTeachers([]);
+      // Fetch teachers from Supabase: join organization_members + profiles
+      const client = assertSupabase();
+
+      const { data: members, error: membersError } = await client
+        .from('organization_members')
+        .select(`
+          id,
+          user_id,
+          member_type,
+          membership_status,
+          joined_at,
+          profile:profiles!user_id(
+            id,
+            first_name,
+            last_name,
+            email,
+            phone,
+            avatar_url,
+            role
+          )
+        `)
+        .eq('organization_id', schoolId)
+        .in('member_type', ['teacher', 'lead_teacher', 'head_of_department'])
+        .neq('membership_status', 'removed');
+
+      if (membersError) {
+        throw membersError;
+      }
+
+      // Also fetch class assignments for these teachers
+      const teacherUserIds = (members || []).map((m: any) => m.user_id).filter(Boolean);
+      let classAssignmentsMap = new Map<string, string[]>();
+
+      if (teacherUserIds.length > 0) {
+        const { data: classData } = await client
+          .from('classes')
+          .select('id, name, teacher_id')
+          .in('teacher_id', teacherUserIds);
+
+        (classData || []).forEach((cls: any) => {
+          const existing = classAssignmentsMap.get(cls.teacher_id) || [];
+          existing.push(cls.name || cls.id);
+          classAssignmentsMap.set(cls.teacher_id, existing);
+        });
+      }
+
+      // Map to Teacher interface
+      const mappedTeachers: Teacher[] = (members || [])
+        .filter((m: any) => m.profile)
+        .map((m: any) => {
+          const p = m.profile;
+          const statusMap: Record<string, Teacher['employmentStatus']> = {
+            active: 'full-time',
+            suspended: 'inactive',
+            on_leave: 'inactive',
+          };
+
+          return {
+            id: m.user_id,
+            teacherId: m.id, // organization_members PK
+            firstName: p.first_name || '',
+            lastName: p.last_name || '',
+            email: p.email || '',
+            phone: p.phone || '',
+            subjects: [], // Populated from teacher_subjects table if available
+            grades: [],
+            qualifications: [],
+            experienceYears: 0,
+            employmentStatus: statusMap[m.membership_status] || 'full-time',
+            hireDate: m.joined_at || '',
+            profilePhoto: p.avatar_url || undefined,
+            emergencyContact: '',
+            emergencyPhone: '',
+            classroomNumber: undefined,
+            specializations: [],
+            performanceRating: 0,
+            lastPerformanceReview: '',
+            salary: undefined, // Only fetched for principal role
+            bankDetails: undefined,
+            leaveBalance: 0,
+            schoolId: schoolId,
+            isClassTeacher: classAssignmentsMap.has(m.user_id),
+            assignedClasses: classAssignmentsMap.get(m.user_id) || [],
+          } satisfies Teacher;
+        });
+
+      setTeachers(mappedTeachers);
+
+      // Persist to offline cache
+      if (user?.id) {
+        const identifier = userRole === 'principal_admin' ? schoolId : `${schoolId}_${userRole}`;
+        await offlineCacheService.set('teacher_data_', identifier, mappedTeachers, user.id);
+      }
 
     } catch (error) {
-      console.error('Failed to load teachers:', error);
+      if (__DEV__) console.error('Failed to load teachers:', error);
       Alert.alert('Error', 'Failed to load teachers directory');
     } finally {
       setLoading(false);
@@ -237,7 +329,7 @@ export function useTeachersDirectory(): UseTeachersDirectoryReturn {
               setTeachers(prev => prev.filter(t => t.id !== teacherId));
               loadTeachers(true);
             } catch (error) {
-              console.error('Failed to delete teacher:', error);
+              if (__DEV__) console.error('Failed to delete teacher:', error);
               Alert.alert('Error', 'Failed to delete teacher');
             }
           },

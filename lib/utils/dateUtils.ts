@@ -85,3 +85,56 @@ export function formatRelativeTime(dateString: string | Date): string {
   
   return date.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
 }
+
+export function parseDateValue(value?: string | Date | null): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatLocalDateISO(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function isLikelyUtcMonthBoundaryShift(rawValue?: string | null, parsedDate?: Date | null): boolean {
+  if (!rawValue || rawValue.includes('T')) return false;
+  const date = parsedDate || parseDateValue(rawValue);
+  if (!date) return false;
+  const day = date.getDate();
+  if (day < 28) return false;
+  const monthEndDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  return day === monthEndDay;
+}
+
+type MonthISOOptions = {
+  recoverUtcMonthBoundary?: boolean;
+  fallbackDate?: Date | null;
+};
+
+function resolveMonthAnchorDate(value: string | Date | null | undefined, options?: MonthISOOptions): Date {
+  const fallback = options?.fallbackDate === undefined ? new Date() : options.fallbackDate;
+  const parsed = parseDateValue(value) || fallback || new Date();
+  const rawValue = typeof value === 'string' ? value : null;
+  const shouldRecover = Boolean(options?.recoverUtcMonthBoundary) && isLikelyUtcMonthBoundaryShift(rawValue, parsed);
+
+  if (shouldRecover) {
+    return new Date(parsed.getFullYear(), parsed.getMonth() + 1, 1);
+  }
+  return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+}
+
+export function getMonthStartISO(value?: string | Date | null, options?: MonthISOOptions): string {
+  const anchor = resolveMonthAnchorDate(value, options);
+  return formatLocalDateISO(anchor);
+}
+
+export function getMonthEndISO(value?: string | Date | null, options?: MonthISOOptions): string {
+  const anchor = resolveMonthAnchorDate(value, options);
+  const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  return formatLocalDateISO(monthEnd);
+}
+
+export function getDateOnlyISO(value?: string | Date | null, fallbackDate?: Date): string {
+  const parsed = parseDateValue(value) || fallbackDate || new Date();
+  return formatLocalDateISO(parsed);
+}
