@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
-import { styles, getMarkdownStyles } from './DashOrb.styles';
+import { createDashOrbStyles, getMarkdownStyles } from './DashOrb.styles';
 import { QuickActions, QuickAction } from './QuickActions';
 import { CosmicOrb } from './CosmicOrb';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
@@ -133,6 +133,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onCancelEdit,
 }) => {
   const { theme } = useTheme();
+  const styles = useMemo(() => createDashOrbStyles(theme), [theme]);
   const { profile } = useAuth();
   const roleCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
@@ -144,7 +145,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
     : null;
-  const statusLabel = isSpeaking ? 'Speaking...' : isProcessing ? 'Thinking...' : 'Online';
+  const statusLabel = isSpeaking ? '🔊 Speaking...' : isProcessing ? 'Thinking...' : 'Online';
   const headerSubtitle = roleCopy.subtitle
     ? `${roleCopy.subtitle} • ${statusLabel}`
     : statusLabel;
@@ -290,7 +291,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
             <View style={[styles.chatHeader, { borderBottomColor: theme.border }]}>
               <View style={styles.headerLeft}>
                 <LinearGradient
-                  colors={['#8b5cf6', '#6366f1']}
+                  colors={[theme.accent, theme.primary]}
                   style={styles.headerOrb}
                 >
                   <Ionicons name="sparkles" size={20} color="#fff" />

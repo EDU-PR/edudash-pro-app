@@ -11,30 +11,24 @@ export type ToolPlanResult = {
 };
 
 const KEYWORD_HINTS = [
-  'caps',
-  'curriculum',
-  'syllabus',
-  'assignment',
-  'assignments',
-  'homework',
-  'schedule',
-  'timetable',
-  'event',
-  'events',
-  'due',
-  'attendance',
-  'progress',
-  'student',
-  'class',
-  'classes',
-  'stats',
-  'statistics',
-  'report',
-  'export',
-  'pdf',
-  'document',
-  'open',
-  'link',
+  // Curriculum & education
+  'caps', 'curriculum', 'syllabus', 'lesson', 'subject', 'grade',
+  // Assignments & homework
+  'assignment', 'assignments', 'homework', 'worksheet', 'activity',
+  // Schedule & events
+  'schedule', 'timetable', 'event', 'events', 'due', 'calendar',
+  // Students & classes
+  'attendance', 'progress', 'student', 'learner', 'class', 'classes',
+  // Analytics & reports
+  'stats', 'statistics', 'report', 'analytics', 'performance',
+  // Documents & export
+  'export', 'pdf', 'document', 'open', 'link',
+  // Communication
+  'message', 'email', 'compose', 'send', 'notify',
+  // Support
+  'help', 'support', 'ticket', 'issue',
+  // Members
+  'teacher', 'parent', 'member', 'list',
 ];
 
 export function shouldAttemptToolPlan(message: string): boolean {

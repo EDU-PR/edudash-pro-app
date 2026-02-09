@@ -31,7 +31,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { assertSupabase } from '../../lib/supabase';
 import { getWelcomeMessage } from '../../lib/ai/constants';
-import { styles } from './DashOrb.styles';
+import { createDashOrbStyles } from './DashOrb.styles';
 import { ChatModal, ChatMessage } from './ChatModal';
 import { QuickAction } from './QuickActions';
 import { DashToolsModal } from '@/components/ai/DashToolsModal';
@@ -44,6 +44,7 @@ import { useWakeWord } from '../../hooks/useWakeWord';
 import { CosmicOrb } from './CosmicOrb';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { isSuperAdmin } from '../../lib/roleUtils';
 import { calculateAge } from '../../lib/date-utils';
 import * as Clipboard from 'expo-clipboard';
@@ -104,6 +105,8 @@ export default function DashOrb({
 }: DashOrbProps) {
   // Get user profile for role-based AI endpoint selection
   const { profile, user } = useAuth();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createDashOrbStyles(theme), [theme]);
   const userRole = profile?.role?.toLowerCase() || '';
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
@@ -193,11 +196,13 @@ export default function DashOrb({
   }, [normalizedRole]);
 
   const autoToolShortcuts = useMemo(() => {
+    // Include all tool categories that should be auto-invoked when relevant
     return toolShortcuts.filter((tool) =>
       tool.category === 'caps' ||
       tool.category === 'data' ||
       tool.category === 'navigation' ||
-      (tool.category === 'communication' && tool.name === 'export_pdf')
+      tool.category === 'communication' ||
+      tool.category === 'support'
     );
   }, [toolShortcuts]);
 
@@ -401,7 +406,7 @@ export default function DashOrb({
     saveTimerRef.current = setTimeout(async () => {
       try {
         const serializable = messages
-          .filter((msg) => !msg.isLoading)
+          .filter((msg) => !msg.isLoading && !msg.isStreaming)
           .map((msg) => ({
             ...msg,
             isLoading: false,
@@ -413,7 +418,7 @@ export default function DashOrb({
       } catch (err) {
         console.warn('[DashOrb] Failed to save chat history:', err);
       }
-    }, 400);
+    }, 1200);
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
@@ -475,14 +480,17 @@ export default function DashOrb({
       return;
     }
 
+    // Use larger chunks and longer intervals to reduce re-renders
+    // and prevent flickering/bouncing. ~8 updates/sec max.
     const total = fullText.length;
-    const step = 24;
-    const intervalMs = 18;
+    const step = 80;
+    const intervalMs = 35;
     let index = 0;
 
     return new Promise<void>((resolve) => {
       const tick = () => {
         index = Math.min(total, index + step);
+        const isComplete = index >= total;
         setMessages(prev =>
           prev.map(msg =>
             msg.id === messageId
@@ -490,12 +498,12 @@ export default function DashOrb({
                   ...msg,
                   content: fullText.slice(0, index),
                   isLoading: false,
-                  isStreaming: index < total,
+                  isStreaming: !isComplete,
                 }
               : msg
           )
         );
-        if (index >= total) {
+        if (isComplete) {
           streamingTimerRef.current = null;
           resolve();
           return;
@@ -607,14 +615,14 @@ export default function DashOrb({
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1500,
+          toValue: 1.05,
+          duration: 2000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: false, // Must match PanResponder setting
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1500,
+          duration: 2000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: false, // Must match PanResponder setting
         }),
@@ -625,13 +633,13 @@ export default function DashOrb({
       Animated.sequence([
         Animated.timing(glowAnim, {
           toValue: 1,
-          duration: 2000,
+          duration: 3000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: false, // Must match PanResponder setting
         }),
         Animated.timing(glowAnim, {
           toValue: 0,
-          duration: 2000,
+          duration: 3000,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: false, // Must match PanResponder setting
         }),
@@ -656,7 +664,7 @@ export default function DashOrb({
       const rotation = Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1,
-          duration: 2000,
+          duration: 3000,
           easing: Easing.linear,
           useNativeDriver: false, // Consistent with all other animations
         })
@@ -1055,10 +1063,19 @@ export default function DashOrb({
       // failures never replace the successfully-rendered AI response)
       if (voiceEnabled && Platform.OS !== 'web') {
         const ttsLanguage = lastDetectedLanguage || 'en-ZA';
+        // Reset error dedup so toast fires on every new TTS attempt
+        lastTTSErrorRef.current = '';
         try {
           await speak(result, ttsLanguage);
         } catch (ttsErr) {
           console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
+          // Surface TTS failure as a system message so user knows
+          setMessages(prev => [...prev, {
+            id: `tts-fail-${Date.now()}`,
+            role: 'system',
+            content: '🔇 Voice playback failed. Tap the speaker icon to toggle voice on/off, or check volume settings.',
+            timestamp: new Date(),
+          }]);
         }
       }
       
