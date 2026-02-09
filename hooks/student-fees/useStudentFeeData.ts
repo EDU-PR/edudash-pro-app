@@ -195,12 +195,21 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
       return Number.isNaN(due.getTime()) || due <= todayStart;
     });
     const paid = fees.filter(f => f.status === 'paid');
-    const waived = fees.filter(f => f.status === 'waived' || f.waived_amount);
+    const waived = fees.filter(f => f.status === 'waived' || (f.discount_amount || f.waived_amount));
 
     return {
-      outstanding: pending.reduce((sum, f) => sum + f.final_amount, 0),
-      paid: paid.reduce((sum, f) => sum + f.final_amount, 0),
-      waived: waived.reduce((sum, f) => sum + (f.waived_amount || 0), 0),
+      outstanding: pending.reduce((sum, f) => {
+        const amountOutstanding = Number(f.amount_outstanding);
+        if (Number.isFinite(amountOutstanding)) return sum + amountOutstanding;
+        const amountPaid = Number(f.amount_paid || 0);
+        return sum + Math.max(0, f.final_amount - amountPaid);
+      }, 0),
+      paid: paid.reduce((sum, f) => {
+        const amountPaid = Number(f.amount_paid);
+        if (Number.isFinite(amountPaid) && amountPaid > 0) return sum + amountPaid;
+        return sum + f.final_amount;
+      }, 0),
+      waived: waived.reduce((sum, f) => sum + Number(f.discount_amount || f.waived_amount || 0), 0),
     };
   }, [fees, student?.enrollment_date]);
 

@@ -20,6 +20,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -96,6 +97,7 @@ export default function StudentDetailScreen() {
   const [editMode, setEditMode] = useState(false);
   const [editedStudent, setEditedStudent] = useState<Partial<StudentDetail>>({});
   const [saving, setSaving] = useState(false);
+  const [savingMessage, setSavingMessage] = useState('Processing...');
   
   // Financial details state
   const [showFinancialDetails, setShowFinancialDetails] = useState(false);
@@ -150,6 +152,8 @@ export default function StudentDetailScreen() {
     if (!selectedClassId || !student) return;
 
     try {
+      setSavingMessage('Updating class assignment...');
+      setSaving(true);
       const { error } = await assertSupabase()
         .from('students')
         .update({ class_id: selectedClassId })
@@ -165,6 +169,8 @@ export default function StudentDetailScreen() {
       loadStudentData();
     } catch {
       showAlert('Error', 'Failed to assign class', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -193,6 +199,7 @@ export default function StudentDetailScreen() {
     if (!student || !editedStudent) return;
 
     try {
+      setSavingMessage('Saving student details...');
       setSaving(true);
 
       const { error } = await assertSupabase()
@@ -240,6 +247,7 @@ export default function StudentDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setSavingMessage('Removing student...');
               setSaving(true);
 
               // Call the deactivate_student function
@@ -474,6 +482,15 @@ export default function StudentDetailScreen() {
         />
       )}
 
+      {saving && (
+        <View style={styles.savingOverlay} pointerEvents="auto">
+          <View style={styles.savingCard}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.savingMessage}>{savingMessage}</Text>
+          </View>
+        </View>
+      )}
+
       <AlertModal
         visible={alertState.visible}
         title={alertState.title}
@@ -523,6 +540,30 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  savingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  savingCard: {
+    minWidth: 220,
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  savingMessage: {
+    marginTop: 12,
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
