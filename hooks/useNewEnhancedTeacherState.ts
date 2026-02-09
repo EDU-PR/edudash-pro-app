@@ -13,9 +13,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAlert } from '@/components/ui/StyledAlert';
 import Feedback from '@/lib/feedback';
 import { track } from '@/lib/analytics';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { getFeatureFlagsSync, isNextGenDashPolicyEnabled } from '@/lib/featureFlags';
 import { normalizePersonName } from '@/lib/utils/nameUtils';
-import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
 import { 
   TEACHER_ROUTES, 
@@ -63,6 +63,7 @@ export const useNewEnhancedTeacherState = () => {
 
   // Check if user is from a preschool (used to tailor quick lesson actions)
   const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+  const organizationId = resolveOrganizationId(profile);
   const isPreschool = resolvedSchoolType === 'preschool';
 
   /**
@@ -144,7 +145,10 @@ export const useNewEnhancedTeacherState = () => {
   const buildQuickActions = () => {
     const flags = getFeatureFlagsSync();
     const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
-    const applyNextGenPolicy = flags.NEXT_GEN_DASH_POLICY_V1;
+    const applyNextGenPolicy = isNextGenDashPolicyEnabled({
+      organizationId,
+      resolvedSchoolType,
+    });
     const actionKeys = TEACHER_QUICK_ACTIONS.filter(actionKey => {
       if (actionKey === 'start_live_lesson' && !canLiveLessons) return false;
       if (actionKey === 'call_parent' && !(flags.voice_calls_enabled || flags.video_calls_enabled)) return false;

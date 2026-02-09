@@ -102,6 +102,7 @@ export const NewEnhancedParentDashboard: React.FC<NewEnhancedParentDashboardProp
   // Quick Actions
   const { quickActions, hasLockedActions, missionControlSections, groupedQuickActions } = useParentQuickActions({
     resolvedSchoolType: ds.resolvedSchoolType,
+    organizationId: ds.resolvedOrganizationId,
     isEarlyLearner: ds.isEarlyLearner,
     isFeesDueSoon: ds.isFeesDueSoon,
     feesDueSubtitle: ds.feesDueSubtitle,

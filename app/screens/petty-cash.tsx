@@ -150,7 +150,7 @@ export default function PettyCashScreen() {
         {
           text: t('petty_cash.reset_cash', { defaultValue: 'Reset Cash to Zero' }),
           style: 'destructive',
-          onPress: () => resetPettyCash(),
+          onPress: async () => { await resetPettyCash(); },
         },
       ],
     });

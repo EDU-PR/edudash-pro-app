@@ -1,4 +1,5 @@
 import type { SettingsSection } from '@/lib/screen-styles/super-admin-settings.styles';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 // ── Alert callback ─────────────────────────────────────────────────────────
 
@@ -6,8 +7,8 @@ export interface ShowAlertFn {
   (opts: {
     title: string;
     message: string;
-    type?: string;
-    buttons?: Array<{ text: string; style?: string; onPress?: () => void | Promise<void> }>;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
   }): void;
 }
 

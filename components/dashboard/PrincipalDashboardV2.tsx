@@ -633,6 +633,7 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             collapsedSections={collapsedSections as Set<string>}
             onToggleSection={handleQuickActionsToggle}
             resolvedSchoolType={resolvedSchoolType}
+            organizationId={organizationId}
           />
         </View>
 

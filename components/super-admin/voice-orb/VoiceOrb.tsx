@@ -534,7 +534,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     transform: [
       { scale: coreScale.value * corePulse.value * voiceAmplitude.value },
       { rotate: `${coreRotation.value}deg` },
-    ],
+    ] as any,
   }));
 
   // Handle recording start - BLOCKS while TTS is playing to prevent feedback

@@ -191,7 +191,7 @@ describe('HiringHubService regressions', () => {
     expect(result).not.toBeNull();
     expect(result.candidate_name).toContain('Candidate');
     expect(result.job_title).toBe('Aftercare Teacher');
-    expect(result.created_at).toBe('2026-02-08T08:00:00.000Z');
-    expect(result.resume_url).toBeUndefined();
+    expect(result.applied_at).toBe('2026-02-08T08:00:00.000Z');
+    expect(result.has_resume).toBe(false);
   });
 });

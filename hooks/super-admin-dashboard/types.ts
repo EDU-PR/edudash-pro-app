@@ -6,6 +6,7 @@ import type {
   QuickAction,
 } from '@/lib/screen-styles/super-admin-dashboard.styles';
 import type { SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 // Re-export for consumer convenience
 export type { DashboardStats, RecentAlert, SystemStatus, FeatureFlag, QuickAction };
@@ -34,7 +35,7 @@ export type ShowAlertFn = (opts: {
   title: string;
   message: string;
   type?: 'success' | 'error' | 'warning' | 'info';
-  buttons?: Array<{ text: string; onPress?: () => void; style?: string }>;
+  buttons?: AlertButton[];
 }) => void;
 
 /** Full return type of useSuperAdminDashboard */

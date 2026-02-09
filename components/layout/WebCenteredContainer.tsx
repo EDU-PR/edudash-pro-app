@@ -40,7 +40,7 @@ export function WebCenteredContainer({
 
   const keyboardViewStyle = [
     styles.keyboardView,
-    Platform.OS === 'web' && { maxWidth, alignSelf: 'center' as const, width: '100%' },
+    Platform.OS === 'web' && { maxWidth, alignSelf: 'center' as const, width: '100%' as const },
   ];
 
   const scrollContentStyle = [

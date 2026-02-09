@@ -202,7 +202,7 @@ export default function ParentDashboard() {
   }
 
   // Active child and age calculations
-  const activeChild = childrenCards.find((c) => c.id === activeChildId);
+  const activeChild = childrenCards.find((c) => c.id === activeChildId) || null;
   const featuredChild = activeChild || childrenCards[0] || null;
   
   // Calculate age of active child (for age-appropriate content)

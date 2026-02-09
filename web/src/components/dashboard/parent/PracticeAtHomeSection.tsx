@@ -40,7 +40,6 @@ function SectionEmptyState({ title, description, actionLabel, onAction }: Sectio
 interface ActiveChild {
   firstName: string;
   grade?: string;
-  [key: string]: unknown;
 }
 
 interface PracticeAtHomeSectionProps {

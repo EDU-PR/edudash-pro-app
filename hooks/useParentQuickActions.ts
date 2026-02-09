@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { isNextGenDashPolicyEnabled } from '@/lib/featureFlags';
 import { filterActionsByDashboardPolicy } from '@/lib/dashboard/dashboardPolicy';
 import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
@@ -32,6 +32,7 @@ export type ActionSection = {
 
 interface UseParentQuickActionsOptions {
   resolvedSchoolType: ResolvedSchoolType;
+  organizationId?: string | null;
   isEarlyLearner: boolean;
   isFeesDueSoon: boolean;
   feesDueSubtitle?: string;
@@ -40,12 +41,14 @@ interface UseParentQuickActionsOptions {
 }
 
 export function useParentQuickActions(options: UseParentQuickActionsOptions) {
-  const { resolvedSchoolType, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked, isDev } = options;
+  const { resolvedSchoolType, organizationId, isEarlyLearner, isFeesDueSoon, feesDueSubtitle, isDashOrbUnlocked, isDev } = options;
   const { t } = useTranslation();
   const { theme } = useTheme();
-  const flags = getFeatureFlagsSync();
   const isK12School = resolvedSchoolType === 'k12_school';
-  const applyNextGenPolicy = flags.NEXT_GEN_DASH_POLICY_V1;
+  const applyNextGenPolicy = isNextGenDashPolicyEnabled({
+    organizationId,
+    resolvedSchoolType,
+  });
 
   const quickActions = useMemo<ParentQuickAction[]>(() => {
     const dashTutorSubtitle = isDashOrbUnlocked
@@ -130,6 +133,7 @@ export function useParentQuickActions(options: UseParentQuickActionsOptions) {
     feesDueSubtitle,
     isDashOrbUnlocked,
     isDev,
+    organizationId,
     resolvedSchoolType,
   ]);
 

@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
-import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 360;
@@ -505,8 +506,12 @@ export function BottomTabBar() {
   // Check if user is Veterans League member
   const isVeteransLeague = memberType?.startsWith('veterans_');
   
-  // Check school type for K-12 routing (parents and students)
-  const isK12SchoolType = resolveSchoolTypeFromProfile(profile) === 'k12_school';
+  const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+  const homeDashboardRoute = getDashboardRouteForRole({
+    role: userRole,
+    resolvedSchoolType,
+    hasOrganization: Boolean(resolveOrganizationId(profile)),
+  });
   
   // Filter tabs by role - special member types get their dedicated tabs
   const visibleTabs = TAB_ITEMS.filter(item => {
@@ -545,16 +550,11 @@ export function BottomTabBar() {
            !item.roles.includes('women_league') &&
            !item.roles.includes('veterans_league');
   }).map(item => {
-    // Override home routes for K-12 parents and students
-    if (isK12SchoolType) {
-      // K-12 Parent: route to K-12 parent dashboard
-      if (item.id === 'parent-dashboard' && userRole === 'parent') {
-        return { ...item, route: '/(k12)/parent/dashboard' };
-      }
-      // K-12 Student: route to K-12 student dashboard
-      if (item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
-        return { ...item, route: '/(k12)/student/dashboard' };
-      }
+    if (homeDashboardRoute && item.id === 'parent-dashboard' && userRole === 'parent') {
+      return { ...item, route: homeDashboardRoute };
+    }
+    if (homeDashboardRoute && item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
+      return { ...item, route: homeDashboardRoute };
     }
     return item;
   });

@@ -43,6 +43,9 @@ export interface FinanceMonthSnapshot {
   month_locked: boolean;
   due_this_month: number;
   collected_this_month: number;
+  collected_allocated_amount?: number;
+  collected_source?: 'allocations' | 'fee_ledger';
+  kpi_delta?: number;
   still_outstanding: number;
   pending_amount: number;
   overdue_amount: number;

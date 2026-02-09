@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import type { JobPostingAISuggestions } from '@/lib/services/JobPostingAIService';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 interface Props {
   visible: boolean;
@@ -13,7 +14,12 @@ interface Props {
   aiUseSuggestedTitle: boolean;
   setAiUseSuggestedTitle: (v: boolean) => void;
   applyAISuggestions: (mode: 'replace' | 'fill_empty') => void;
-  showAlert: (cfg: { title: string; message: string; type?: string }) => void;
+  showAlert: (cfg: {
+    title: string;
+    message: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
   theme: any;
   styles: any;
 }

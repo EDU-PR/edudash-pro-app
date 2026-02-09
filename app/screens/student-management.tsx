@@ -24,6 +24,14 @@ export default function StudentManagementScreen() {
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
+  const showAlertLegacy = React.useCallback((
+    title: string,
+    message: string,
+    type?: 'success' | 'error' | 'warning' | 'info',
+    buttons?: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }>,
+  ) => {
+    showAlert({ title, message, type, buttons });
+  }, [showAlert]);
 
   const {
     user,
@@ -46,7 +54,7 @@ export default function StudentManagementScreen() {
     handleAutoAssignByDob,
     handleStudentPress,
     handleAddStudent,
-  } = useStudentManagement({ showAlert });
+  } = useStudentManagement({ showAlert: showAlertLegacy });
 
   // ---------- Early returns ----------
 

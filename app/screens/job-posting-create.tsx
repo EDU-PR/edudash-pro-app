@@ -5,6 +5,7 @@ import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { formatEmploymentType } from '@/lib/hiring/jobPostingShare';
+import { EmploymentType } from '@/types/hiring';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { ImageConfirmModal } from '@/components/ui/ImageConfirmModal';
 import { LinearGradient } from 'expo-linear-gradient';

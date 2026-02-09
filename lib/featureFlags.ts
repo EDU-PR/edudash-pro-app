@@ -354,6 +354,60 @@ export function getFeatureFlagsSync(): FeatureFlags {
   return cachedFlags || { ...DEFAULT_FLAGS };
 }
 
+type NextGenDashPolicyStage = 'internal' | 'pilot' | 'all';
+
+function parseOrgAllowList(value: string | undefined): Set<string> {
+  return new Set(
+    String(value || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+}
+
+/**
+ * Phased rollout helper for #NEXT-GEN preschool dashboard policy.
+ *
+ * Environment controls:
+ * - EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_ROLLOUT: internal | pilot | all (default: all)
+ * - EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_QA_ORGS: comma-separated org IDs
+ * - EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_PILOT_ORGS: comma-separated org IDs
+ */
+export function isNextGenDashPolicyEnabled(options?: {
+  organizationId?: string | null;
+  resolvedSchoolType?: string | null;
+}): boolean {
+  const flags = getFeatureFlagsSync();
+  if (!flags.NEXT_GEN_DASH_POLICY_V1) return false;
+
+  const resolvedSchoolType = String(options?.resolvedSchoolType || 'preschool').toLowerCase();
+  if (resolvedSchoolType !== 'preschool') {
+    // Preschool-first rollout: keep K-12 flow isolated in dedicated route family.
+    return false;
+  }
+
+  const stageRaw = String(process.env.EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_ROLLOUT || 'all').toLowerCase();
+  const stage: NextGenDashPolicyStage =
+    stageRaw === 'internal' || stageRaw === 'pilot' || stageRaw === 'all'
+      ? stageRaw
+      : 'all';
+
+  if (stage === 'all') return true;
+
+  const orgId = options?.organizationId || null;
+  if (!orgId) return false;
+
+  const qaOrgIds = parseOrgAllowList(process.env.EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_QA_ORGS);
+  const pilotOrgIds = parseOrgAllowList(process.env.EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_PILOT_ORGS);
+
+  if (stage === 'internal') {
+    return qaOrgIds.has(orgId);
+  }
+
+  // pilot stage includes internal + pilot lists
+  return qaOrgIds.has(orgId) || pilotOrgIds.has(orgId);
+}
+
 /**
  * Identify user for feature flag targeting
  */

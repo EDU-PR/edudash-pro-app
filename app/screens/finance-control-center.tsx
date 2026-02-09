@@ -176,14 +176,20 @@ export default function FinanceControlCenterScreen() {
   const derivedOverview = React.useMemo(() => {
     const due = Number(snapshot?.due_this_month || 0);
     const collected = Number(snapshot?.collected_this_month || 0);
+    const collectedAllocated = Number(snapshot?.collected_allocated_amount || 0);
     const outstanding = Number(snapshot?.still_outstanding || 0);
     const pendingAmount = Number(snapshot?.pending_amount || 0);
     const overdueAmount = Number(snapshot?.overdue_amount || 0);
     const equationDelta = Math.abs((due - collected) - outstanding);
+    const allocationGap = Number.isFinite(Number(snapshot?.kpi_delta))
+      ? Number(snapshot?.kpi_delta || 0)
+      : Math.abs((due - outstanding) - collectedAllocated);
 
     return {
       due,
       collected,
+      collectedAllocated,
+      collectedSource: snapshot?.collected_source || 'allocations',
       outstanding,
       pendingAmount,
       overdueAmount,
@@ -196,6 +202,8 @@ export default function FinanceControlCenterScreen() {
       payrollDue: Number(snapshot?.payroll_due || 0),
       payrollPaid: Number(snapshot?.payroll_paid || 0),
       kpiCorrelated: equationDelta < 0.01,
+      kpiDelta: equationDelta,
+      allocationGap,
       snapshotAsOf: snapshot?.as_of_date || snapshot?.generated_at || null,
     };
   }, [snapshot, receivables, pendingPOPs.length]);
@@ -511,11 +519,20 @@ export default function FinanceControlCenterScreen() {
         </View>
       )}
 
+      {snapshot && derivedOverview.collectedSource === 'fee_ledger' && (
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Collected is temporarily using fee-ledger math ({formatCurrency(derivedOverview.collected)}) while
+            allocation sync catches up ({formatCurrency(derivedOverview.collectedAllocated)} allocated, gap {formatCurrency(derivedOverview.allocationGap)}).
+          </Text>
+        </View>
+      )}
+
       {snapshot && !derivedOverview.kpiCorrelated && (
         <View style={styles.errorCard}>
           <Ionicons name="analytics-outline" size={16} color={theme.warning || '#F59E0B'} />
           <Text style={styles.errorText}>
-            KPI correlation warning: Due - Collected does not yet match Outstanding for this billing month.
+            KPI correlation warning: Due - Collected differs from Outstanding by {formatCurrency(derivedOverview.kpiDelta)}.
           </Text>
         </View>
       )}

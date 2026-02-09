@@ -89,7 +89,7 @@ export const NebulaCloud: React.FC<NebulaCloudProps> = ({
     transform: [
       { rotate: `${rotation.value}deg` },
       { scale: scale.value }
-    ],
+    ] as any,
     opacity: opacity.value,
   }));
 

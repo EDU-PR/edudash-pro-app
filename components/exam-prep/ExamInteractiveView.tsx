@@ -26,7 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ParsedExam, ExamQuestion, ExamSection } from '@/lib/examParser';
 import { useExamSession, StudentAnswer } from '@/hooks/useExamSession';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useUserProfile } from '@/hooks/useUserProfile';
+import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 
 interface ExamInteractiveViewProps {
@@ -54,7 +54,7 @@ export function ExamInteractiveView({
   onExit,
 }: ExamInteractiveViewProps) {
   const { theme } = useTheme();
-  const { profile } = useUserProfile();
+  const { user, profile } = useAuth();
   const {
     session,
     loading: sessionLoading,
@@ -66,7 +66,7 @@ export function ExamInteractiveView({
   } = useExamSession({
     examId,
     exam,
-    userId: profile?.id,
+    userId: profile?.id || user?.id,
     autoSave: true,
   });
 
@@ -245,9 +245,9 @@ export function ExamInteractiveView({
   // Loading state
   if (sessionLoading || !session || !currentQuestion) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading exam...
         </Text>
       </View>
@@ -259,35 +259,35 @@ export function ExamInteractiveView({
   const totalQuestions = allQuestions.length;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.header, { backgroundColor: theme.surface }]}>
         <TouchableOpacity onPress={handleExit} style={styles.exitButton}>
-          <Ionicons name="close" size={24} color={theme.colors.text.primary} />
+          <Ionicons name="close" size={24} color={theme.text} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={[styles.examTitle, { color: theme.colors.text.primary }]}>
+          <Text style={[styles.examTitle, { color: theme.text }]}>
             {exam.title}
           </Text>
-          <Text style={[styles.examSubtitle, { color: theme.colors.text.secondary }]}>
+          <Text style={[styles.examSubtitle, { color: theme.textSecondary }]}>
             Question {currentIndex + 1} of {totalQuestions}
           </Text>
         </View>
 
         <View style={styles.headerRight}>
-          <Text style={[styles.marksText, { color: theme.colors.text.secondary }]}>
+          <Text style={[styles.marksText, { color: theme.textSecondary }]}>
             {session.earnedMarks}/{session.totalMarks}
           </Text>
         </View>
       </View>
 
       {/* Progress Bar */}
-      <View style={[styles.progressBar, { backgroundColor: theme.colors.border }]}>
+      <View style={[styles.progressBar, { backgroundColor: theme.border }]}>
         <View
           style={[
             styles.progressFill,
-            { backgroundColor: theme.colors.primary, width: `${progress}%` },
+            { backgroundColor: theme.primary, width: `${progress}%` },
           ]}
         />
       </View>
@@ -296,30 +296,30 @@ export function ExamInteractiveView({
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* Section Title */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+          <Text style={[styles.sectionTitle, { color: theme.primary }]}>
             {currentSection.title}
           </Text>
           {currentSection.instructions && (
-            <Text style={[styles.sectionInstructions, { color: theme.colors.text.secondary }]}>
+            <Text style={[styles.sectionInstructions, { color: theme.textSecondary }]}>
               {currentSection.instructions}
             </Text>
           )}
         </View>
 
         {/* Question */}
-        <View style={[styles.questionCard, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.questionCard, { backgroundColor: theme.surface }]}>
           <View style={styles.questionHeader}>
-            <Text style={[styles.questionNumber, { color: theme.colors.text.secondary }]}>
+            <Text style={[styles.questionNumber, { color: theme.textSecondary }]}>
               Question {currentIndex + 1}
             </Text>
-            <View style={[styles.marksBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-              <Text style={[styles.marksLabel, { color: theme.colors.primary }]}>
+            <View style={[styles.marksBadge, { backgroundColor: theme.primary + '20' }]}>
+              <Text style={[styles.marksLabel, { color: theme.primary }]}>
                 {currentQuestion.marks} {currentQuestion.marks === 1 ? 'mark' : 'marks'}
               </Text>
             </View>
           </View>
 
-          <Text style={[styles.questionText, { color: theme.colors.text.primary }]}>
+          <Text style={[styles.questionText, { color: theme.text }]}>
             {currentQuestion.question}
           </Text>
 
@@ -337,11 +337,11 @@ export function ExamInteractiveView({
                       styles.optionButton,
                       {
                         backgroundColor: isSelected
-                          ? theme.colors.primary + '20'
-                          : theme.colors.background,
+                          ? theme.primary + '20'
+                          : theme.background,
                         borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
+                          ? theme.primary
+                          : theme.border,
                       },
                     ]}
                     onPress={() => setCurrentAnswer(option)}
@@ -351,8 +351,8 @@ export function ExamInteractiveView({
                         styles.optionCircle,
                         {
                           borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
+                            ? theme.primary
+                            : theme.border,
                         },
                       ]}
                     >
@@ -360,7 +360,7 @@ export function ExamInteractiveView({
                         <View
                           style={[
                             styles.optionCircleFill,
-                            { backgroundColor: theme.colors.primary },
+                            { backgroundColor: theme.primary },
                           ]}
                         />
                       )}
@@ -370,8 +370,8 @@ export function ExamInteractiveView({
                         styles.optionText,
                         {
                           color: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.text.primary,
+                            ? theme.primary
+                            : theme.text,
                         },
                       ]}
                     >
@@ -390,15 +390,15 @@ export function ExamInteractiveView({
                 styles.answerInput,
                 currentQuestion.type === 'essay' && styles.essayInput,
                 {
-                  backgroundColor: theme.colors.background,
-                  borderColor: theme.colors.border,
-                  color: theme.colors.text.primary,
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  color: theme.text,
                 },
               ]}
               value={currentAnswer}
               onChangeText={setCurrentAnswer}
               placeholder="Type your answer here..."
-              placeholderTextColor={theme.colors.text.tertiary}
+              placeholderTextColor={theme.textTertiary}
               multiline={currentQuestion.type === 'essay'}
               numberOfLines={currentQuestion.type === 'essay' ? 6 : 2}
               editable={!currentStudentAnswer}
@@ -435,7 +435,7 @@ export function ExamInteractiveView({
                   {currentStudentAnswer.isCorrect ? 'Correct!' : 'Incorrect'}
                 </Text>
               </View>
-              <Text style={[styles.feedbackText, { color: theme.colors.text.primary }]}>
+              <Text style={[styles.feedbackText, { color: theme.text }]}>
                 {currentStudentAnswer.feedback}
               </Text>
             </View>
@@ -444,12 +444,12 @@ export function ExamInteractiveView({
       </ScrollView>
 
       {/* Footer Navigation */}
-      <View style={[styles.footer, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.footer, { backgroundColor: theme.surface }]}>
         <View style={styles.footerRow}>
           <TouchableOpacity
             style={[
               styles.navButton,
-              { backgroundColor: theme.colors.background },
+              { backgroundColor: theme.background },
               currentIndex === 0 && styles.navButtonDisabled,
             ]}
             onPress={handlePrevious}
@@ -458,14 +458,14 @@ export function ExamInteractiveView({
             <Ionicons
               name="chevron-back"
               size={20}
-              color={currentIndex === 0 ? theme.colors.text.tertiary : theme.colors.text.primary}
+              color={currentIndex === 0 ? theme.textTertiary : theme.text}
             />
             <Text
               style={[
                 styles.navButtonText,
                 {
                   color:
-                    currentIndex === 0 ? theme.colors.text.tertiary : theme.colors.text.primary,
+                    currentIndex === 0 ? theme.textTertiary : theme.text,
                 },
               ]}
             >
@@ -477,7 +477,7 @@ export function ExamInteractiveView({
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                { backgroundColor: theme.colors.primary },
+                { backgroundColor: theme.primary },
                 (!currentAnswer.trim() || submitting) && styles.submitButtonDisabled,
               ]}
               onPress={handleSubmitAnswer}
@@ -506,7 +506,7 @@ export function ExamInteractiveView({
             <TouchableOpacity
               style={[
                 styles.navButton,
-                { backgroundColor: theme.colors.background },
+                { backgroundColor: theme.background },
                 currentIndex === totalQuestions - 1 && styles.navButtonDisabled,
               ]}
               onPress={handleNext}
@@ -518,8 +518,8 @@ export function ExamInteractiveView({
                   {
                     color:
                       currentIndex === totalQuestions - 1
-                        ? theme.colors.text.tertiary
-                        : theme.colors.text.primary,
+                        ? theme.textTertiary
+                        : theme.text,
                   },
                 ]}
               >
@@ -530,8 +530,8 @@ export function ExamInteractiveView({
                 size={20}
                 color={
                   currentIndex === totalQuestions - 1
-                    ? theme.colors.text.tertiary
-                    : theme.colors.text.primary
+                    ? theme.textTertiary
+                    : theme.text
                 }
               />
             </TouchableOpacity>

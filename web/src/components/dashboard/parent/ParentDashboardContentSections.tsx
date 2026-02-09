@@ -51,7 +51,6 @@ interface ActiveChild {
   id: string;
   firstName: string;
   classId?: string;
-  [key: string]: unknown;
 }
 
 interface ParentDashboardContentSectionsProps {

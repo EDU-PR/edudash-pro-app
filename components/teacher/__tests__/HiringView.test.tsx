@@ -62,6 +62,7 @@ function renderView(overrides: Partial<React.ComponentProps<typeof HiringView>> 
     onRadiusChange: jest.fn(),
     onRefresh: jest.fn(),
     onLoadInvites: jest.fn(async () => undefined),
+    showAlert: mockShowAlert,
     ...overrides,
   };
 

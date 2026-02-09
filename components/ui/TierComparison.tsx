@@ -242,14 +242,14 @@ const TierCard: React.FC<{
             value={tier.quotas.homework_help} 
             theme={theme} 
           />
-          {tier.quotas.lesson_generation > 0 && (
+          {typeof tier.quotas.lesson_generation === 'number' && tier.quotas.lesson_generation > 0 && (
             <QuotaItem 
               label="Lessons" 
               value={tier.quotas.lesson_generation} 
               theme={theme} 
             />
           )}
-          {tier.quotas.grading_assistance > 0 && (
+          {typeof tier.quotas.grading_assistance === 'number' && tier.quotas.grading_assistance > 0 && (
             <QuotaItem 
               label="Grading" 
               value={tier.quotas.grading_assistance} 

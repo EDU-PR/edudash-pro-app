@@ -21,7 +21,10 @@ DECLARE
   v_month date := date_trunc('month', coalesce(p_month, current_date))::date;
   v_due numeric(12,2) := 0;
   v_collected numeric(12,2) := 0;
+  v_collected_allocation numeric(12,2) := 0;
   v_outstanding numeric(12,2) := 0;
+  v_kpi_delta numeric(12,2) := 0;
+  v_collected_source text := 'allocations';
   v_pending_amount numeric(12,2) := 0;
   v_overdue_amount numeric(12,2) := 0;
   v_pending_count int := 0;
@@ -66,7 +69,7 @@ BEGIN
       sf.student_id,
       COALESCE(NULLIF(sf.category_code, ''), 'tuition') AS category_code,
       round(greatest(coalesce(sf.final_amount, sf.amount, 0), 0), 2) AS final_amount,
-      round(greatest(coalesce(sf.amount_outstanding, coalesce(sf.final_amount, sf.amount, 0) - coalesce(sf.amount_paid, 0), 0), 0), 2) AS outstanding_amount,
+      round(greatest(coalesce(sf.final_amount, sf.amount, 0) - coalesce(sf.amount_paid, 0), 0), 2) AS outstanding_amount,
       lower(coalesce(sf.status, '')) AS status,
       sf.due_date
     FROM public.student_fees sf
@@ -113,7 +116,7 @@ BEGIN
     count(DISTINCT fwf.student_id) FILTER (WHERE fwf.outstanding_amount > 0 AND fwf.is_overdue)
   INTO
     v_due,
-    v_collected,
+    v_collected_allocation,
     v_outstanding,
     v_pending_amount,
     v_overdue_amount,
@@ -123,12 +126,20 @@ BEGIN
     v_overdue_students
   FROM fee_with_flags fwf;
 
+  v_kpi_delta := round(abs((coalesce(v_due, 0) - coalesce(v_outstanding, 0)) - coalesce(v_collected_allocation, 0)), 2);
+  IF v_kpi_delta > 0.01 THEN
+    v_collected := round(greatest(coalesce(v_due, 0) - coalesce(v_outstanding, 0), 0), 2);
+    v_collected_source := 'fee_ledger';
+  ELSE
+    v_collected := round(coalesce(v_collected_allocation, 0), 2);
+  END IF;
+
   WITH fee_rows AS (
     SELECT
       sf.id,
       COALESCE(NULLIF(sf.category_code, ''), 'tuition') AS category_code,
       round(greatest(coalesce(sf.final_amount, sf.amount, 0), 0), 2) AS final_amount,
-      round(greatest(coalesce(sf.amount_outstanding, coalesce(sf.final_amount, sf.amount, 0) - coalesce(sf.amount_paid, 0), 0), 0), 2) AS outstanding_amount
+      round(greatest(coalesce(sf.final_amount, sf.amount, 0) - coalesce(sf.amount_paid, 0), 0), 2) AS outstanding_amount
     FROM public.student_fees sf
     JOIN public.students s ON s.id = sf.student_id
     WHERE COALESCE(s.organization_id, s.preschool_id) = p_org_id
@@ -222,6 +233,9 @@ BEGIN
     'month_locked', v_month_locked,
     'due_this_month', round(coalesce(v_due, 0), 2),
     'collected_this_month', round(coalesce(v_collected, 0), 2),
+    'collected_allocated_amount', round(coalesce(v_collected_allocation, 0), 2),
+    'collected_source', v_collected_source,
+    'kpi_delta', round(coalesce(v_kpi_delta, 0), 2),
     'still_outstanding', round(coalesce(v_outstanding, 0), 2),
     'pending_amount', round(coalesce(v_pending_amount, 0), 2),
     'overdue_amount', round(coalesce(v_overdue_amount, 0), 2),

@@ -4,6 +4,7 @@
 
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { ScrollView } from 'react-native';
+import type { AlertButton } from '@/components/ui/AlertModal';
 import type {
   AIAgent,
   AutonomousTask,
@@ -19,8 +20,8 @@ export type SetState<T> = Dispatch<SetStateAction<T>>;
 export interface ShowAlertOptions {
   title: string;
   message: string;
-  type: string;
-  buttons?: Array<{ text: string; style?: string; onPress?: () => void | Promise<void> }>;
+  type?: 'info' | 'warning' | 'success' | 'error';
+  buttons?: AlertButton[];
 }
 
 export type ShowAlertFn = (opts: ShowAlertOptions) => void;

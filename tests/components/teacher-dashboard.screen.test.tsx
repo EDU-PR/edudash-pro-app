@@ -1,4 +1,4 @@
-import React from 'react';
+/* eslint-disable i18next/no-literal-string */
 import { render, waitFor } from '@testing-library/react-native/pure';
 import TeacherDashboardScreen from '@/app/screens/teacher-dashboard';
 
@@ -36,7 +36,6 @@ jest.mock('react-i18next', () => ({
 
 jest.mock('@/components/layout/DesktopLayout', () => ({
   DesktopLayout: ({ children }: any) => {
-    const React = require('react');
     const { Text, View } = require('react-native');
     return (
       <View>
@@ -48,7 +47,6 @@ jest.mock('@/components/layout/DesktopLayout', () => ({
 }));
 
 jest.mock('@/components/dashboard/TeacherDashboardWrapper', () => () => {
-  const React = require('react');
   const { Text } = require('react-native');
   return <Text>Teacher Dashboard Wrapper</Text>;
 });

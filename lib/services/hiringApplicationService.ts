@@ -28,6 +28,8 @@ import {
   getApplicationsForSchoolWithoutCandidateJoin,
 } from './hiringApplicationHelpers';
 
+type ApplicationStageNotificationMetadata = Record<string, unknown>;
+
 // ---------------------------------------------------------------------------
 // Candidate profiles
 // ---------------------------------------------------------------------------
