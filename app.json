@@ -73,7 +73,7 @@
       "blockedPermissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "versionCode": 36,
+      "versionCode": 37,
       "intentFilters": [
         {
           "action": "VIEW",
