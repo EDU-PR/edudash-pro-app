@@ -1272,6 +1272,10 @@ export async function signOut(): Promise<void> {
       sessionRefreshTimer = null;
     }
 
+    // Reset module-level state that persists across sign-out/sign-in cycles
+    pendingRefresh = null;
+    _isPasswordRecoveryInProgress = false;
+
     // Best-effort: clear user-scoped offline cache to prevent cross-account data bleed
     if (currentUserId) {
       try {

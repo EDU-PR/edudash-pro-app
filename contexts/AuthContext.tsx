@@ -224,6 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null);
       setPermissions(createPermissionChecker(null));
       setProfileLoading(false);
+      lastUserIdRef.current = null;
       
       // Clear TanStack Query cache
       try {
@@ -594,6 +595,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             //    Supabase fires SIGNED_IN on token refresh, realtime reconnect,
             //    etc. – these should NOT trigger a full profile re-fetch + re-nav.
             const alreadyResolved =
+              profileRef.current !== null &&
               profileRef.current?.id === s.user.id &&
               !profileLoadingRef.current &&
               lastUserIdRef.current === s.user.id;
@@ -982,6 +984,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
             setSession(null);
             setProfileLoading(false);
+            lastUserIdRef.current = null;
             
             // Deregister push device
             try {
