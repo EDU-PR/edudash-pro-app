@@ -10,7 +10,7 @@ import { isSuperAdmin } from '@/lib/roleUtils';
 import { TIER_HIERARCHY, type SubscriptionTier } from '@/lib/ai/models';
 import { normalizeRole } from '@/lib/rbac';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
-import { styles } from './DashOrb.styles';
+import { createDashOrbStyles } from './DashOrb.styles';
 
 export interface QuickAction {
   id: string;
@@ -91,6 +91,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   onSendPrompt,
 }) => {
   const { theme } = useTheme();
+  const styles = React.useMemo(() => createDashOrbStyles(theme), [theme]);
   const { profile } = useAuth();
   const { tierStatus } = useRealtimeTier();
   const roleCopy = getDashAIRoleCopy(profile?.role);
@@ -220,7 +221,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   return (
     <View style={styles.quickActionsContainer}>
       <LinearGradient
-        colors={['#0b1220', '#101b2d', '#0b1220']}
+        colors={[theme.background, theme.surface, theme.background]}
         style={[styles.quickActionsHeroCard, { borderColor: theme.border }]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

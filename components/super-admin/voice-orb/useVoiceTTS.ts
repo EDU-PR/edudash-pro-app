@@ -499,20 +499,32 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       const chunks = splitIntoChunks(cleanText, 1200);
       
       // Speak chunks sequentially so speech never cuts off mid-sentence
+      let anyChunkSucceeded = false;
+      let lastErr: Error | null = null;
+
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
         try {
           await speakWithAzure(chunk, effectiveLanguage);
+          anyChunkSucceeded = true;
         } catch (azureErr) {
-          console.warn('[VoiceTTS] Azure chunk failed; using device fallback for this chunk:', azureErr);
+          console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', azureErr);
           reportTTSError(azureErr);
           try {
             await speakWithDeviceTTS(chunk, effectiveLanguage);
+            anyChunkSucceeded = true;
           } catch (deviceErr) {
+            console.warn('[VoiceTTS] Device fallback also failed:', deviceErr);
             reportTTSError(deviceErr);
-            throw deviceErr;
+            lastErr = deviceErr instanceof Error ? deviceErr : new Error(String(deviceErr));
+            // Continue — partial speech is better than none
           }
         }
+      }
+
+      // If no chunks played, rethrow so the caller can show a user-facing message
+      if (!anyChunkSucceeded && lastErr) {
+        throw lastErr;
       }
       
     } catch (err) {
