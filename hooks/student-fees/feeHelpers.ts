@@ -29,16 +29,29 @@ export function getEnrollmentMonthStart(date?: string | null): Date | null {
 }
 
 export function mapFeeRow(f: any): StudentFee {
+  const amount = Number(f.amount || 0);
+  const finalAmount = Number(f.final_amount || amount);
+  const discountAmount = Number(f.discount_amount || 0);
+  const amountPaid = Number(f.amount_paid || 0);
+  const explicitOutstanding = Number(f.amount_outstanding);
+  const amountOutstanding = Number.isFinite(explicitOutstanding)
+    ? explicitOutstanding
+    : Math.max(0, finalAmount - amountPaid);
+
   return {
     id: f.id,
     student_id: f.student_id,
-    amount: f.amount,
-    final_amount: f.final_amount || f.amount,
+    amount,
+    final_amount: finalAmount,
+    discount_amount: discountAmount,
+    amount_paid: amountPaid,
+    amount_outstanding: amountOutstanding,
+    category_code: f.category_code || undefined,
     status: f.status,
     due_date: f.due_date,
-    fee_type: f.fee_structures?.fee_type || f.fee_type || 'tuition',
+    fee_type: f.fee_structures?.fee_type || f.fee_type || f.category_code || 'tuition',
     description: f.fee_structures?.description || f.fee_structures?.name,
-    waived_amount: f.waived_amount,
+    waived_amount: discountAmount,
     waived_reason: f.waived_reason,
     waived_at: f.waived_at,
     waived_by: f.waived_by,
@@ -259,19 +272,21 @@ export async function upsertPaymentRecord(
     .maybeSingle();
 
   if (existing?.id) {
+    const dbStatus = status === 'reversed' ? 'refunded' : status;
     await supabase
       .from('payments')
-      .update({ status, amount, amount_cents: Math.round(amount * 100), reviewed_at: nowIso, reviewed_by: profileId, updated_at: nowIso })
+      .update({ status: dbStatus, amount, amount_cents: Math.round(amount * 100), reviewed_at: nowIso, reviewed_by: profileId, updated_at: nowIso })
       .eq('id', existing.id);
     return;
   }
 
+  const dbStatus = status === 'reversed' ? 'refunded' : status;
   await supabase.from('payments').insert({
     amount,
     amount_cents: Math.round(amount * 100),
     currency: 'ZAR',
-    status,
-    payment_method: 'manual',
+    status: dbStatus,
+    payment_method: 'other',
     payment_reference: paymentReference,
     description: fee.description || fee.fee_type || 'School fees payment',
     preschool_id: preschoolId,
@@ -306,10 +321,11 @@ export async function upsertFinancialTransaction(
     .maybeSingle();
 
   if (existing?.id) {
+    const dbStatus = status === 'voided' ? 'cancelled' : status;
     await supabase
       .from('financial_transactions')
       .update({
-        status, amount,
+        status: dbStatus, amount,
         approved_at: status === 'completed' ? nowIso : null,
         approved_by: status === 'completed' ? profileId : null,
         updated_at: nowIso,
@@ -322,15 +338,15 @@ export async function upsertFinancialTransaction(
     amount,
     description: fee.description || fee.fee_type || 'School fees payment',
     type: 'fee_payment',
-    status,
-    payment_method: 'manual',
+    status: status === 'voided' ? 'cancelled' : status,
+    payment_method: 'other',
     payment_reference: reference,
     preschool_id: preschoolId,
     student_id: student.id,
     created_by: profileId,
     approved_by: status === 'completed' ? profileId : null,
     approved_at: status === 'completed' ? nowIso : null,
-    metadata: { source: 'manual_principal_update', fee_id: fee.id },
+    metadata: { source: 'manual_principal_update', fee_id: fee.id, original_status: status },
   });
 }
 

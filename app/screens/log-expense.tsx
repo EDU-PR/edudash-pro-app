@@ -115,8 +115,9 @@ export default function LogExpenseScreen() {
 
     setSaving(true);
     try {
-      // Map composite keys back to DB types
-      const dbType = selectedType.key.startsWith('expense_') ? 'expense' : selectedType.key;
+      // Map all expense subtypes to the DB-allowed 'expense' type.
+      // The original key is preserved in metadata.expense_sub_type for categorisation.
+      const dbType = selectedType.key === 'fee_payment' ? 'fee_payment' : 'expense';
 
       await FinancialDataService.logExpense({
         preschoolId,
