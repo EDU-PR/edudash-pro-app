@@ -2,20 +2,15 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { FeatureFlag, FeatureFlagForm } from '@/lib/screen-styles/super-admin-feature-flags.styles';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 // ─── Alert Types ──────────────────────────────────────────────────────
-
-export interface AlertButton {
-  text: string;
-  style?: 'cancel' | 'destructive' | 'default' | string;
-  onPress?: () => void | Promise<void>;
-}
 
 export interface ShowAlertFn {
   (opts: {
     title: string;
     message: string;
-    type?: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
     buttons?: AlertButton[];
   }): void;
 }

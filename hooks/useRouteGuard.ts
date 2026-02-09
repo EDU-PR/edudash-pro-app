@@ -13,7 +13,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
-import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole, isDashboardRouteMismatch } from '@/lib/dashboard/routeMatrix';
+import {
+  trackDashboardRouteMismatch,
+  trackDashboardRouteResolution,
+} from '@/lib/dashboard/dashboardRoutingTelemetry';
 
 /**
  * Mobile web guard - currently no-op
@@ -32,6 +37,7 @@ export const useAuthGuard = () => {
   const hasNavigated = useRef(false);
   const lastAttemptAt = useRef(0);
   const lastUserId = useRef<string | null>(null);
+  const lastMismatchKey = useRef<string | null>(null);
   const signingOut = isSignOutInProgress();
   
   useEffect(() => {
@@ -134,37 +140,76 @@ export const useAuthGuard = () => {
       hasNavigated.current = true;
       lastAttemptAt.current = now;
       
-      // Route based on role + school type
-      const role = profile?.role || (user.user_metadata as any)?.role;
-      const isK12 = resolveSchoolTypeFromProfile(
+      // Route based on role + school type from shared route matrix
+      const role = profile?.role || (user.user_metadata as any)?.role || null;
+      const resolvedSchoolType = resolveSchoolTypeFromProfile(
         profile || (user.user_metadata as any) || {}
-      ) === 'k12_school';
+      );
+      const hasOrganization = Boolean(
+        resolveOrganizationId(profile || (user.user_metadata as any) || {})
+      );
+      const normalizedRole = String(role || '').toLowerCase();
 
-      switch (role) {
-        case 'super_admin':
-        case 'superadmin':
-          router.replace('/screens/super-admin-dashboard');
-          break;
-        case 'principal':
-        case 'principal_admin':
-          router.replace('/screens/principal-dashboard');
-          break;
-        case 'teacher':
-          router.replace('/screens/teacher-dashboard');
-          break;
-        case 'student':
-        case 'learner':
-          router.replace(isK12 ? '/(k12)/student/dashboard' : '/screens/learner-dashboard');
-          break;
-        case 'parent':
-        default:
-          router.replace(isK12 ? '/(k12)/parent/dashboard' : '/screens/parent-dashboard');
-          break;
+      let targetDashboard = getDashboardRouteForRole({
+        role,
+        resolvedSchoolType,
+        hasOrganization,
+      });
+      if (!targetDashboard) {
+        if (normalizedRole === 'super_admin' || normalizedRole === 'superadmin') {
+          targetDashboard = '/screens/super-admin-dashboard';
+        } else if (normalizedRole === 'admin') {
+          targetDashboard = '/screens/org-admin-dashboard';
+        } else {
+          targetDashboard = '/screens/parent-dashboard';
+        }
+      }
+
+      trackDashboardRouteResolution({
+        userId: user.id,
+        role,
+        resolvedSchoolType,
+        targetDashboard,
+        source: 'useAuthGuard.auth-route',
+        organizationId: resolveOrganizationId(profile || (user.user_metadata as any) || {}),
+      });
+
+      router.replace(targetDashboard as any);
+      return;
+    }
+
+    if (user && profile && !profileLoading && !isAuthRoute && typeof pathname === 'string') {
+      const role = profile.role || (user.user_metadata as any)?.role || null;
+      const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+      const expectedDashboard = getDashboardRouteForRole({
+        role,
+        resolvedSchoolType,
+        hasOrganization: Boolean(resolveOrganizationId(profile)),
+      });
+
+      const isDashboardPath = pathname.includes('dashboard');
+      if (isDashboardPath && expectedDashboard && isDashboardRouteMismatch(pathname, expectedDashboard)) {
+        const mismatchKey = `${user.id}:${pathname}:${expectedDashboard}`;
+        if (lastMismatchKey.current !== mismatchKey) {
+          lastMismatchKey.current = mismatchKey;
+          trackDashboardRouteMismatch({
+            userId: user.id,
+            role,
+            resolvedSchoolType,
+            currentPath: pathname,
+            targetDashboard: expectedDashboard,
+            source: 'useAuthGuard.passive-check',
+            organizationId: resolveOrganizationId(profile),
+            reason: 'dashboard_family_mismatch',
+          });
+        }
+      } else if (!isDashboardRouteMismatch(pathname, expectedDashboard || pathname)) {
+        lastMismatchKey.current = null;
       }
     }
     
     // NOTE: Do NOT reset hasNavigated in cleanup — it resets on user change (line above).
     // Resetting on every re-run caused an infinite re-render loop because:
     // setProfileLoading(false) → effect re-runs → cleanup resets hasNavigated → navigates → pathname changes → loop
-  }, [pathname, user, loading, profile?.role, profile?.id, profileLoading, signingOut]);
+  }, [pathname, user, loading, profile?.role, profile?.id, profile?.organization_id, profile?.preschool_id, profileLoading, signingOut]);
 };

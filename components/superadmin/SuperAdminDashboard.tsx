@@ -317,5 +317,3 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ loading, setL
 };
 
 export default SuperAdminDashboard;
-
-export default SuperAdminDashboard;

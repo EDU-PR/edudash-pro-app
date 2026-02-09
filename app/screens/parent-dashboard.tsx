@@ -11,7 +11,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ParentDashboardWrapper from '@/components/dashboard/ParentDashboardWrapper';
 import { track } from '@/lib/analytics';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
-import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
+import {
+  trackDashboardRouteMismatch,
+  trackDashboardRouteResolution,
+} from '@/lib/dashboard/dashboardRoutingTelemetry';
 
 export default function ParentDashboardScreen() {
   const { t } = useTranslation();
@@ -23,6 +28,13 @@ export default function ParentDashboardScreen() {
   const focusSection = Array.isArray(focus) ? focus[0] : focus;
   const isAuthMissing = !user?.id;
   const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+  const organizationId = resolveOrganizationId(profile);
+  const expectedParentDashboard =
+    getDashboardRouteForRole({
+      role: 'parent',
+      resolvedSchoolType,
+      hasOrganization: Boolean(organizationId),
+    }) || '/screens/parent-dashboard';
 
   // Enforce RBAC: must be parent role with dashboard access
   // Add defensive checks to handle initialization states
@@ -73,18 +85,30 @@ export default function ParentDashboardScreen() {
         router.replace('/profiles-gate');
         return;
       }
-      if (resolvedSchoolType === 'k12_school') {
+      if (expectedParentDashboard !== '/screens/parent-dashboard') {
         hasRedirectedRef.current = true;
-        track('edudash.dashboard.route_resolution', {
-          user_id: user?.id,
+        trackDashboardRouteMismatch({
+          userId: user?.id,
           role: profile?.role,
-          resolved_school_type: resolvedSchoolType,
-          target_dashboard: '/(k12)/parent/dashboard',
+          resolvedSchoolType,
+          currentPath: '/screens/parent-dashboard',
+          targetDashboard: expectedParentDashboard,
+          source: 'parent-dashboard-screen',
+          organizationId,
+          reason: 'role_school_type_dashboard_family',
         });
-        router.replace('/(k12)/parent/dashboard');
+        trackDashboardRouteResolution({
+          userId: user?.id,
+          role: profile?.role,
+          resolvedSchoolType,
+          targetDashboard: expectedParentDashboard,
+          source: 'parent-dashboard-screen',
+          organizationId,
+        });
+        router.replace(expectedParentDashboard as any);
       }
     }
-  }, [authLoading, profileLoading, isAuthMissing, canView, hasAccess, user?.id, profile?.role, resolvedSchoolType]);
+  }, [authLoading, profileLoading, isAuthMissing, canView, hasAccess, user?.id, profile?.role, resolvedSchoolType, expectedParentDashboard, organizationId]);
 
   // Create styles hook before any conditional returns
   const deniedStyles = React.useMemo(() => StyleSheet.create({
@@ -166,7 +190,7 @@ export default function ParentDashboardScreen() {
     );
   }
 
-  if (resolvedSchoolType === 'k12_school') {
+  if (expectedParentDashboard !== '/screens/parent-dashboard') {
     return (
       <View style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />

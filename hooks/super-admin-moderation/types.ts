@@ -1,9 +1,15 @@
 import type { ModerationItem, ModerationFilters } from '@/lib/screen-styles/super-admin-moderation.styles';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 // ── Alert callback ─────────────────────────────────────────────────────────
 
 export interface ShowAlertFn {
-  (opts: { title: string; message: string; buttons?: Array<{ text: string; style?: string }> }): void;
+  (opts: {
+    title: string;
+    message: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }): void;
 }
 
 // ── Hook return type ───────────────────────────────────────────────────────

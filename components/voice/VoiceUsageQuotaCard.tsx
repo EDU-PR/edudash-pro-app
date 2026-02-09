@@ -20,14 +20,14 @@ interface VoiceUsageQuotaCardProps {
 
 export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps) {
   const { quota, loading, error, isNearDailyLimit, isNearMonthlyLimit, canUseVoice, refresh } = useVoiceUsageLimits();
-  const { colors } = useTheme();
+  const { theme } = useTheme();
   const { t } = useTranslation();
   
   if (loading) {
     return (
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <EduDashSpinner size="small" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <EduDashSpinner size="small" color={theme.primary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
           Loading usage information...
         </Text>
       </View>
@@ -36,13 +36,13 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
   
   if (error || !quota) {
     return (
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
-        <MaterialCommunityIcons name="alert-circle" size={24} color={colors.error} />
-        <Text style={[styles.errorText, { color: colors.error }]}>
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <MaterialCommunityIcons name="alert-circle" size={24} color={theme.error} />
+        <Text style={[styles.errorText, { color: theme.error }]}>
           {error || 'Unable to load usage information'}
         </Text>
         <TouchableOpacity onPress={refresh} style={styles.retryButton}>
-          <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
+          <Text style={[styles.retryText, { color: theme.primary }]}>Retry</Text>
         </TouchableOpacity>
       </View>
     );
@@ -50,10 +50,10 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
   
   // Determine tier color and badge
   const tierColors = {
-    free: colors.textSecondary,
-    starter: colors.info,
-    professional: colors.primary,
-    enterprise: colors.success,
+    free: theme.textSecondary,
+    starter: theme.info,
+    professional: theme.primary,
+    enterprise: theme.success,
   };
   
   const tierColor = tierColors[quota.tier];
@@ -67,12 +67,12 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
   const showError = !canUseVoice;
   
   return (
-    <View style={[styles.card, { backgroundColor: colors.card }]}>
+    <View style={[styles.card, { backgroundColor: theme.card }]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <MaterialCommunityIcons name="microphone" size={24} color={tierColor} />
-          <Text style={[styles.title, { color: colors.text }]}>Voice Usage</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Voice Usage</Text>
         </View>
         <View style={[styles.tierBadge, { backgroundColor: `${tierColor}20` }]}>
           <Text style={[styles.tierText, { color: tierColor }]}>
@@ -83,18 +83,18 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
       
       {/* Warning Banner */}
       {showError && (
-        <View style={[styles.banner, { backgroundColor: `${colors.error}20` }]}>
-          <MaterialCommunityIcons name="alert-circle" size={20} color={colors.error} />
-          <Text style={[styles.bannerText, { color: colors.error }]}>
+        <View style={[styles.banner, { backgroundColor: `${theme.error}20` }]}>
+          <MaterialCommunityIcons name="alert-circle" size={20} color={theme.error} />
+          <Text style={[styles.bannerText, { color: theme.error }]}>
             Daily or monthly limit reached. Voice features unavailable until reset.
           </Text>
         </View>
       )}
       
       {showWarning && !showError && (
-        <View style={[styles.banner, { backgroundColor: `${colors.warning}20` }]}>
-          <MaterialCommunityIcons name="alert" size={20} color={colors.warning} />
-          <Text style={[styles.bannerText, { color: colors.warning }]}>
+        <View style={[styles.banner, { backgroundColor: `${theme.warning}20` }]}>
+          <MaterialCommunityIcons name="alert" size={20} color={theme.warning} />
+          <Text style={[styles.bannerText, { color: theme.warning }]}>
             Approaching voice usage limit. Consider upgrading for more capacity.
           </Text>
         </View>
@@ -102,11 +102,11 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
       
       {/* Daily Usage */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Today's Usage</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Today's Usage</Text>
         
         <View style={styles.usageRow}>
-          <Text style={[styles.usageLabel, { color: colors.text }]}>Speech-to-Text</Text>
-          <Text style={[styles.usageValue, { color: colors.text }]}>
+          <Text style={[styles.usageLabel, { color: theme.text }]}>Speech-to-Text</Text>
+          <Text style={[styles.usageValue, { color: theme.text }]}>
             {quota.daily.stt_minutes_remaining.toFixed(1)} / {quota.daily.stt_minutes_total} min
           </Text>
         </View>
@@ -117,15 +117,15 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
               styles.progressBarFill, 
               { 
                 width: `${dailySttUsagePercent}%`,
-                backgroundColor: showError ? colors.error : showWarning ? colors.warning : colors.success
+                backgroundColor: showError ? theme.error : showWarning ? theme.warning : theme.success
               }
             ]} 
           />
         </View>
         
         <View style={styles.usageRow}>
-          <Text style={[styles.usageLabel, { color: colors.text }]}>Text-to-Speech</Text>
-          <Text style={[styles.usageValue, { color: colors.text }]}>
+          <Text style={[styles.usageLabel, { color: theme.text }]}>Text-to-Speech</Text>
+          <Text style={[styles.usageValue, { color: theme.text }]}>
             {Math.floor(quota.daily.tts_characters_remaining).toLocaleString()} / {quota.daily.tts_characters_total.toLocaleString()} chars
           </Text>
         </View>
@@ -133,11 +133,11 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
       
       {/* Monthly Usage */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>This Month</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>This Month</Text>
         
         <View style={styles.usageRow}>
-          <Text style={[styles.usageLabel, { color: colors.text }]}>Speech-to-Text</Text>
-          <Text style={[styles.usageValue, { color: colors.text }]}>
+          <Text style={[styles.usageLabel, { color: theme.text }]}>Speech-to-Text</Text>
+          <Text style={[styles.usageValue, { color: theme.text }]}>
             {quota.monthly.stt_minutes_remaining.toFixed(1)} / {quota.monthly.stt_minutes_total} min
           </Text>
         </View>
@@ -148,15 +148,15 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
               styles.progressBarFill, 
               { 
                 width: `${monthlySttUsagePercent}%`,
-                backgroundColor: showError ? colors.error : showWarning ? colors.warning : colors.success
+                backgroundColor: showError ? theme.error : showWarning ? theme.warning : theme.success
               }
             ]} 
           />
         </View>
         
         <View style={styles.usageRow}>
-          <Text style={[styles.usageLabel, { color: colors.text }]}>Text-to-Speech</Text>
-          <Text style={[styles.usageValue, { color: colors.text }]}>
+          <Text style={[styles.usageLabel, { color: theme.text }]}>Text-to-Speech</Text>
+          <Text style={[styles.usageValue, { color: theme.text }]}>
             {Math.floor(quota.monthly.tts_characters_remaining).toLocaleString()} / {quota.monthly.tts_characters_total.toLocaleString()} chars
           </Text>
         </View>
@@ -165,7 +165,7 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
       {/* Upgrade Button for Free/Starter */}
       {(quota.tier === 'free' || quota.tier === 'starter') && onUpgradePress && (
         <TouchableOpacity 
-          style={[styles.upgradeButton, { backgroundColor: colors.primary }]}
+          style={[styles.upgradeButton, { backgroundColor: theme.primary }]}
           onPress={onUpgradePress}
         >
           <MaterialCommunityIcons name="arrow-up-circle" size={20} color="#FFFFFF" />
@@ -176,7 +176,7 @@ export function VoiceUsageQuotaCard({ onUpgradePress }: VoiceUsageQuotaCardProps
       )}
       
       {/* Info Text */}
-      <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+      <Text style={[styles.infoText, { color: theme.textSecondary }]}>
         Voice usage resets daily at midnight UTC and monthly on the 1st.
         {quota.tier === 'free' && ' Upgrade for higher limits and premium voices.'}
       </Text>

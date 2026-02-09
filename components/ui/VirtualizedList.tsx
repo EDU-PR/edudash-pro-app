@@ -131,7 +131,7 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
       refreshControl={refreshControl}
       onEndReached={handleEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
-      style={style}
+      style={style as any}
       contentContainerStyle={contentContainerStyle as any}
       testID={testID}
       ListEmptyComponent={EmptyComponent}
@@ -144,12 +144,15 @@ export const UltraFastList = memo(<T extends { id: string | number }>(
       // maxToRenderPerBatch not supported by FlashList
       // windowSize not supported by FlashList
       // removeClippedSubviews not supported by FlashList
-      // FlashList specific optimizations
-      estimatedFirstItemOffset={0}
-      overrideItemLayout={(layout, item, index) => {
-        // Override for known fixed heights to improve performance
-        if (typeof item === 'object' && item && 'height' in item) {
-          layout.size = (item as any).height;
+      overrideItemLayout={(layout, item) => {
+        // Override span when data provides it.
+        if (
+          typeof item === 'object' &&
+          item &&
+          'span' in item &&
+          typeof (item as { span?: unknown }).span === 'number'
+        ) {
+          layout.span = (item as { span?: number }).span;
         }
       }}
     />

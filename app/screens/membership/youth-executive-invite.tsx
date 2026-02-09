@@ -30,6 +30,28 @@ export default function YouthExecutiveInviteScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const { showAlert, alertProps } = useAlertModal();
+  const alert = useMemo(() => ({
+    show: (
+      title: string,
+      message: string,
+      buttons?: Array<{ text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void | Promise<void> }>,
+      opts?: { type?: 'info' | 'warning' | 'success' | 'error' },
+    ) => showAlert({ title, message, type: opts?.type, buttons }),
+    showError: (title: string, message: string) =>
+      showAlert({ title, message, type: 'error' }),
+    showSuccess: (title: string, message: string) =>
+      showAlert({ title, message, type: 'success' }),
+    showConfirm: (title: string, message: string, onConfirm: () => void | Promise<void>) =>
+      showAlert({
+        title,
+        message,
+        type: 'warning',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Confirm', onPress: onConfirm },
+        ],
+      }),
+  }), [showAlert]);
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Route guard: Only youth_president can invite executives

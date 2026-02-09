@@ -10,6 +10,8 @@ import {
   resolveSchoolTypeFromProfile,
   type ResolvedSchoolType,
 } from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
+import { trackDashboardRouteResolution } from '@/lib/dashboard/dashboardRoutingTelemetry';
 
 const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 const debugLog = (...args: unknown[]) => {
@@ -32,6 +34,9 @@ try { AsyncStorage = require('@react-native-async-storage/async-storage').defaul
 // Module-level navigation lock (works on both web and React Native)
 const navigationLocks: Map<string, number> = new Map();
 const NAVIGATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
+
+// Legacy constant reused by registration and fallback screens.
+export const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
 
 function resolveAdminSchoolType(profile: EnhancedUserProfile): ResolvedSchoolType | null {
   const fromMembership = normalizeResolvedSchoolType((profile as any)?.organization_membership?.school_type);
@@ -361,6 +366,15 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
       has_params: !!route.params,
     });
 
+    trackDashboardRouteResolution({
+      userId,
+      role: enhancedProfile.role,
+      resolvedSchoolType,
+      targetDashboard,
+      source: 'routeAfterLogin',
+      organizationId: enhancedProfile.organization_id,
+    });
+
     // Also set window flags for backward compatibility (web only)
     if (typeof window !== 'undefined') {
       (window as any).dashboardSwitching = true;
@@ -673,6 +687,14 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
   }));
   // #endregion
   
+  const resolvedDashboardSchoolType = resolveSchoolTypeFromProfile(profile);
+  const resolveDashboardPathForRole = (roleValue: string): string | null =>
+    getDashboardRouteForRole({
+      role: roleValue,
+      resolvedSchoolType: resolvedDashboardSchoolType,
+      hasOrganization,
+    });
+
   switch (role) {
     case 'super_admin':
       return { path: '/screens/super-admin-dashboard' };
@@ -713,17 +735,17 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       if (isSkillsLike) {
         return { path: '/screens/org-admin-dashboard' };
       }
-      return { path: '/screens/principal-dashboard' };
+      return { path: resolveDashboardPathForRole('principal_admin') || '/screens/principal-dashboard' };
 
     case 'teacher':
-      return { path: '/screens/teacher-dashboard' };
+      return { path: resolveDashboardPathForRole('teacher') || '/screens/teacher-dashboard' };
 
     case 'parent':
       // Route to dashboard family from a single school-type resolver
-      const resolvedParentSchoolType = resolveSchoolTypeFromProfile(profile);
+      const parentDashboardPath = resolveDashboardPathForRole('parent') || '/screens/parent-dashboard';
       // #region agent log
       debugLog('[DEBUG_AGENT] Parent-ROUTING', JSON.stringify({
-        resolvedParentSchoolType,
+        resolvedParentSchoolType: resolvedDashboardSchoolType,
         organization_membership: (profile as any)?.organization_membership,
         organization_id: profile.organization_id,
         hasOrgMembership: !!(profile as any)?.organization_membership,
@@ -731,38 +753,39 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
         timestamp: Date.now()
       }));
       // #endregion
-      debugLog('[ROUTE DEBUG] Parent routing - resolved school type:', resolvedParentSchoolType);
+      debugLog('[ROUTE DEBUG] Parent routing - resolved school type:', resolvedDashboardSchoolType);
       
-      if (resolvedParentSchoolType === 'k12_school') {
+      if (parentDashboardPath === '/(k12)/parent/dashboard') {
         debugLog('[ROUTE DEBUG] K-12/Combined school detected - routing to K-12 parent dashboard');
         return {
-          path: '/(k12)/parent/dashboard',
+          path: parentDashboardPath,
           params: { schoolType: 'k12_school', mode: 'k12' },
         };
       }
       // Default to preschool parent dashboard
-      return { path: '/screens/parent-dashboard' };
+      return { path: parentDashboardPath };
 
     case 'student':
-      const resolvedStudentSchoolType = resolveSchoolTypeFromProfile(profile);
-      debugLog('[ROUTE DEBUG] Student routing - resolved school type:', resolvedStudentSchoolType);
-      
-      // Students with organization_id go to appropriate dashboard
-      if (hasOrganization) {
-        if (resolvedStudentSchoolType === 'k12_school') {
-          debugLog('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
-          return {
-            path: '/(k12)/student/dashboard',
-            params: { schoolType: 'k12_school', mode: 'k12' },
-          };
-        }
-        // Default to learner dashboard for preschool/other types
-        debugLog('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
-        return { path: '/screens/learner-dashboard' };
+      const studentDashboardPath =
+        resolveDashboardPathForRole('student') ||
+        (hasOrganization ? '/screens/learner-dashboard' : '/screens/student-dashboard');
+      debugLog('[ROUTE DEBUG] Student routing - resolved school type:', resolvedDashboardSchoolType);
+
+      if (studentDashboardPath === '/(k12)/student/dashboard') {
+        debugLog('[ROUTE DEBUG] K-12/Combined school student detected - routing to K-12 student dashboard');
+        return {
+          path: studentDashboardPath,
+          params: { schoolType: 'k12_school', mode: 'k12' },
+        };
       }
-      // Standalone students (no organization) go to student-dashboard
-      debugLog('[ROUTE DEBUG] Standalone student (no organization) - routing to student-dashboard');
-      return { path: '/screens/student-dashboard' };
+
+      if (studentDashboardPath === '/screens/student-dashboard') {
+        debugLog('[ROUTE DEBUG] Standalone student (no organization) - routing to student-dashboard');
+        return { path: studentDashboardPath };
+      }
+
+      debugLog('[ROUTE DEBUG] Student with organization_id detected - routing to learner-dashboard');
+      return { path: studentDashboardPath };
   }
 
   // Default fallback

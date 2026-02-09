@@ -5,6 +5,7 @@ import { adminUpdateSubscriptionPlan, listActivePlans, type SubscriptionPlan } f
 import { track } from '@/lib/analytics';
 import { validateTierAssignment, ORGANIZATION_MIN_MONTHLY_PRICE, isValidOrganizationTier } from '@/lib/tiers';
 import { logger } from '@/lib/logger';
+import type { AlertButton } from '@/components/ui/AlertModal';
 
 import type { PlanChangeSubscription, PlanChangeSchool, ButtonState } from './usePlanChange.types';
 import { sortPlansByTier, getPlanPrice } from './usePlanChange.types';
@@ -15,7 +16,12 @@ interface UsePlanChangeOptions {
   visible: boolean;
   onSuccess: () => void;
   onClose: () => void;
-  showAlert: (opts: { title: string; message: string; buttons?: Array<{ text: string; style?: string; onPress?: () => void }> }) => void;
+  showAlert: (opts: {
+    title: string;
+    message: string;
+    type?: 'info' | 'warning' | 'success' | 'error';
+    buttons?: AlertButton[];
+  }) => void;
 }
 
 export function usePlanChange({ subscription, school, visible, onSuccess, onClose, showAlert }: UsePlanChangeOptions) {

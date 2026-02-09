@@ -13,7 +13,7 @@ import { useAlert } from '@/components/ui/StyledAlert';
 import { logger } from '@/lib/logger';
 import { QuickActionCard } from '../shared/QuickActionCard';
 import { CollapsibleSection } from '../shared/CollapsibleSection';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { getFeatureFlagsSync, isNextGenDashPolicyEnabled } from '@/lib/featureFlags';
 import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
 import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
@@ -38,6 +38,7 @@ interface PrincipalQuickActionsProps {
   onToggleSection: (sectionId: string, isCollapsed?: boolean) => void;
   onAction?: (actionId: string) => void;
   resolvedSchoolType?: ResolvedSchoolType;
+  organizationId?: string | null;
 }
 
 export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
@@ -50,6 +51,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   onToggleSection,
   onAction,
   resolvedSchoolType = 'preschool',
+  organizationId,
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -57,6 +59,10 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   const styles = createStyles(theme);
   const flags = getFeatureFlagsSync();
   const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
+  const applyNextGenPolicy = isNextGenDashPolicyEnabled({
+    organizationId,
+    resolvedSchoolType,
+  });
 
   const registrationsBadge = stats?.pendingRegistrations?.total ?? pendingRegistrationsCount;
   const popBadge = stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount;
@@ -160,7 +166,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       ],
     };
 
-    if (!flags.NEXT_GEN_DASH_POLICY_V1) {
+    if (!applyNextGenPolicy) {
       return groups;
     }
 
@@ -171,7 +177,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
     });
 
     return groups;
-  }, [canLiveLessons, flags.NEXT_GEN_DASH_POLICY_V1, popBadge, registrationsBadge, resolvedSchoolType, t, unpaidBadge]);
+  }, [applyNextGenPolicy, canLiveLessons, popBadge, registrationsBadge, resolvedSchoolType, t, unpaidBadge]);
 
   const handleActionPress = (actionId: string) => {
     // Allow custom handler first

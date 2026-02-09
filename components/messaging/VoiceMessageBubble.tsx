@@ -318,10 +318,9 @@ export default function VoiceMessageBubble({
           player.setActiveForLockScreen(true, {
             title: 'Voice Message',
             artist: 'EduDash Pro',
-            shouldShowPreviousButton: hasPrevious,
-            shouldShowNextButton: hasNext,
-            onPrevious: hasPrevious ? onPlayPrevious : undefined,
-            onNext: hasNext ? onPlayNext : undefined,
+          }, {
+            showSeekBackward: hasPrevious,
+            showSeekForward: hasNext,
           });
           await player.play();
           console.log('[VoiceMessageBubble] Auto-play started successfully');
@@ -391,11 +390,9 @@ export default function VoiceMessageBubble({
         player.setActiveForLockScreen(true, {
           title: 'Voice Message',
           artist: 'EduDash Pro',
-          // Enable navigation controls based on available messages
-          shouldShowPreviousButton: hasPrevious,
-          shouldShowNextButton: hasNext,
-          onPrevious: hasPrevious ? onPlayPrevious : undefined,
-          onNext: hasNext ? onPlayNext : undefined,
+        }, {
+          showSeekBackward: hasPrevious,
+          showSeekForward: hasNext,
         });
         await player.play();
       }

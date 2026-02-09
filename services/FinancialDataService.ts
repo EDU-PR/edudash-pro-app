@@ -1464,15 +1464,18 @@ export class FinancialDataService {
   }
 
   private static getOutstandingAmountForFee(fee: any): number {
-    const explicitOutstanding = fee?.amount_outstanding;
     const finalAmount = Number(fee?.final_amount ?? fee?.amount ?? 0);
     const paidAmount = Number(fee?.amount_paid ?? 0);
-    const fallbackOutstanding = finalAmount - (Number.isFinite(paidAmount) ? paidAmount : 0);
-    const resolvedOutstanding = explicitOutstanding === null || explicitOutstanding === undefined
-      ? fallbackOutstanding
-      : Number(explicitOutstanding);
-    if (!Number.isFinite(resolvedOutstanding)) return 0;
-    return Math.max(resolvedOutstanding, 0);
+    const explicitOutstanding = Number(fee?.amount_outstanding);
+    const derivedOutstanding = finalAmount - (Number.isFinite(paidAmount) ? paidAmount : 0);
+
+    if (Number.isFinite(derivedOutstanding)) {
+      return Math.max(derivedOutstanding, 0);
+    }
+    if (Number.isFinite(explicitOutstanding)) {
+      return Math.max(explicitOutstanding, 0);
+    }
+    return 0;
   }
 
   private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
@@ -1590,6 +1593,9 @@ export class FinancialDataService {
       month_locked: Boolean(data.month_locked),
       due_this_month: Number(data.due_this_month || 0),
       collected_this_month: Number(data.collected_this_month || 0),
+      collected_allocated_amount: Number(data.collected_allocated_amount || 0),
+      collected_source: data.collected_source === 'fee_ledger' ? 'fee_ledger' : 'allocations',
+      kpi_delta: Number(data.kpi_delta || 0),
       still_outstanding: Number(data.still_outstanding || 0),
       pending_amount: Number(data.pending_amount || 0),
       overdue_amount: Number(data.overdue_amount || 0),
@@ -2020,6 +2026,7 @@ export class FinancialDataService {
     if (breakdownRes.error) errors.breakdown = breakdownRes.error;
     if (queueRes.error) errors.queue = queueRes.error;
     if (payrollRes.error) errors.payroll = payrollRes.error;
+    const payrollValue: any = payrollRes.value;
 
     return {
       month,
@@ -2027,8 +2034,8 @@ export class FinancialDataService {
       receivables: receivablesRes.value,
       payment_breakdown: breakdownRes.value,
       pending_pops: (queueRes.value || []) as any[],
-      payroll: payrollRes.value,
-      payroll_fallback_used: Boolean(payrollRes.value?.fallback_used),
+      payroll: payrollValue,
+      payroll_fallback_used: Boolean(payrollValue?.fallback_used),
       errors: Object.keys(errors).length ? errors : undefined,
     };
   }

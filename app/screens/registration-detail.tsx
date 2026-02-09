@@ -20,7 +20,7 @@ export default function RegistrationDetailScreen() {
   const colors = theme;
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const styles = createStyles(theme, insets);
+  const styles = screenStyles;
 
   const {
     registration, loading, processing, error,
@@ -403,7 +403,7 @@ export default function RegistrationDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const screenStyles = StyleSheet.create({
   container: {
     flex: 1,
   },

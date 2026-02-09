@@ -26,7 +26,7 @@ const COMPUTER_LITERACY_MODULES = [
     id: 'keyboard-intro',
     title: 'Keyboard Introduction',
     description: 'Find letters and numbers on the keyboard',
-    icon: 'keyboard' as const,
+    icon: 'keypad' as const,
     ageGroup: '4-6',
   },
   {

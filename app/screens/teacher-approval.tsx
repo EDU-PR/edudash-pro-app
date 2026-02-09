@@ -23,7 +23,7 @@ import {
   type TeacherApprovalStats,
 } from '@/lib/services/teacherApprovalService';
 import { createStyles } from '@/lib/screen-styles/teacher-approval.styles';
-import logger from '@/lib/logger';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function TeacherApprovalScreen() {
