@@ -474,9 +474,9 @@ class DashPDFGeneratorImpl {
         .from('pdf_user_preferences')
         .select('*')
         .eq('user_id', session.user_id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // Not found is ok
+      if (error) {
         console.error('[DashPDFGenerator] Failed to load preferences:', error);
         return null;
       }
