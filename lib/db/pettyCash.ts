@@ -8,9 +8,6 @@ import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 
-// Temporary declaration to satisfy TypeScript in app context
-declare function withTenantContext<T>(schoolId: string, fn: (context: any, queryBuilder?: any) => Promise<T>): Promise<T>;
-
 // ============================================================================
 // ZOD SCHEMAS FOR VALIDATION
 // ============================================================================
@@ -136,6 +133,75 @@ export interface PaginatedTransactions {
   has_more: boolean;
   next_cursor?: string;
   total_count?: number;
+}
+
+interface PettyCashActorContext {
+  userId: string;
+  role: string;
+  organizationId: string | null;
+  preschoolId: string | null;
+}
+
+const APPROVER_ROLES = new Set([
+  'principal_admin',
+  'principal',
+  'admin',
+  'finance_admin',
+  'super_admin',
+  'superadmin',
+]);
+
+const isSuperRole = (role: string): boolean => ['super_admin', 'superadmin'].includes(role);
+
+async function withPettyCashContext<T>(
+  schoolId: string,
+  fn: (context: PettyCashActorContext) => Promise<T>,
+): Promise<T> {
+  const supabase = assertSupabase();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) {
+    throw new Error('User not authenticated');
+  }
+
+  const userId = authData.user.id;
+  const profileFields = 'id, auth_user_id, role, organization_id, preschool_id';
+  let profileData: any = null;
+
+  const byId = await supabase
+    .from('profiles')
+    .select(profileFields)
+    .eq('id', userId)
+    .maybeSingle();
+  if (byId.error) throw new Error(byId.error.message || 'Failed to load profile');
+  profileData = byId.data;
+
+  if (!profileData) {
+    const byAuthId = await supabase
+      .from('profiles')
+      .select(profileFields)
+      .eq('auth_user_id', userId)
+      .maybeSingle();
+    if (byAuthId.error && byAuthId.error.code !== '42703') {
+      throw new Error(byAuthId.error.message || 'Failed to load profile');
+    }
+    profileData = byAuthId.data;
+  }
+
+  const role = String(profileData?.role || '').trim().toLowerCase();
+  const organizationId = profileData?.organization_id ? String(profileData.organization_id) : null;
+  const preschoolId = profileData?.preschool_id ? String(profileData.preschool_id) : null;
+  const actorOrg = organizationId || preschoolId;
+
+  if (actorOrg && actorOrg !== schoolId && !isSuperRole(role)) {
+    throw new Error('Access denied to requested school');
+  }
+
+  return fn({
+    userId,
+    role,
+    organizationId,
+    preschoolId,
+  });
 }
 
 // ============================================================================
@@ -436,7 +502,8 @@ export async function getSummary(
     const totalSignedAll = (allApproved || []).reduce((sum, t: any) => {
       const amt = Number(t.amount || 0);
       if (t.type === 'expense') return sum - amt;
-      if (t.type === 'replenishment' || t.type === 'adjustment') return sum + amt;
+      if (t.type === 'replenishment') return sum + amt;
+      if (t.type === 'adjustment') return sum - amt;
       return sum;
     }, 0);
     const current_balance = openingBalance + totalSignedAll;
@@ -618,9 +685,8 @@ export async function createTransaction(
  * Approve a pending transaction
  */
 export async function approveTransaction(schoolId: string, transactionId: string): Promise<PettyCashTransaction> {
-  return withTenantContext(schoolId, async (context) => {
-    // Check if user has permission to approve
-    if (!['principal_admin', 'finance_admin', 'super_admin'].includes(context.role)) {
+  return withPettyCashContext(schoolId, async (context) => {
+    if (!APPROVER_ROLES.has(context.role)) {
       throw new Error('Insufficient permissions to approve transactions');
     }
 
@@ -665,9 +731,8 @@ export async function rejectTransaction(
   transactionId: string, 
   reason?: string
 ): Promise<PettyCashTransaction> {
-  return withTenantContext(schoolId, async (context) => {
-    // Check if user has permission to reject
-    if (!['principal_admin', 'finance_admin', 'super_admin'].includes(context.role)) {
+  return withPettyCashContext(schoolId, async (context) => {
+    if (!APPROVER_ROLES.has(context.role)) {
       throw new Error('Insufficient permissions to reject transactions');
     }
 
@@ -715,7 +780,7 @@ export async function createReceiptUpload(
 ): Promise<{ uploadUrl: string; storagePath: string }> {
   const validatedFileMeta = ReceiptFileSchema.parse(fileMeta);
 
-  return withTenantContext(schoolId, async (context) => {
+  return withPettyCashContext(schoolId, async (context) => {
     // Generate upload path
     const { data: uploadPath, error: pathError } = await assertSupabase()
       .rpc('generate_receipt_upload_path', {
@@ -767,7 +832,7 @@ export async function attachReceiptRecord(
 ): Promise<PettyCashReceipt> {
   const validatedFileMeta = ReceiptFileSchema.parse(fileMeta);
 
-  return withTenantContext(schoolId, async (context) => {
+  return withPettyCashContext(schoolId, async (context) => {
     const receiptData = {
       transaction_id: transactionId,
       storage_path: storagePath,
@@ -807,11 +872,14 @@ export async function attachReceiptRecord(
  * Get receipts for a transaction with signed URLs
  */
 export async function getReceipts(schoolId: string, transactionId: string): Promise<PettyCashReceipt[]> {
-  return withTenantContext(schoolId, async (context, queryBuilder) => {
-    const { data: receipts, error } = await queryBuilder
-      .pettyCashReceipts()
-      .select('*')
-      .eq('transaction_id', transactionId);
+  return withPettyCashContext(schoolId, async (_context) => {
+    const { data: receipts, error } = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_receipts')
+        .select('*')
+        .eq(column, schoolId)
+        .eq('transaction_id', transactionId)
+    );
 
     if (error) {
       console.error('Error fetching receipts:', error);
@@ -846,7 +914,7 @@ export async function getReceipts(schoolId: string, transactionId: string): Prom
  * Delete a receipt
  */
 export async function deleteReceipt(schoolId: string, receiptId: string): Promise<boolean> {
-  return withTenantContext(schoolId, async (context) => {
+  return withPettyCashContext(schoolId, async (context) => {
     // Get receipt details first
     const { data: receipt, error: fetchError } = await withPettyCashTenant((column, client) =>
       client

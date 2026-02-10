@@ -63,7 +63,7 @@ export default function ClassDetailsScreen() {
             
             <TouchableOpacity 
               style={[styles.actionButton, { backgroundColor: theme.accent }]}
-              onPress={() => router.push('/screens/teacher-messages')}
+              onPress={() => router.push('/screens/teacher-message-list')}
             >
               <Ionicons name="chatbubbles" size={20} color={theme.onAccent} />
               <Text style={[styles.actionText, { color: theme.onAccent }]}>Message Parents</Text>

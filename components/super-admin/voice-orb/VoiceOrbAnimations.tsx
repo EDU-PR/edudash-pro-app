@@ -304,14 +304,14 @@ export const PulsingRing: React.FC<PulsingRingProps> = ({ size, delay, colors })
 // Generate Animation Data
 // ============================================================================
 
-export function generateParticles(count: number = 12): FloatingParticleProps[] {
+export function generateParticles(count: number = 12, orbSize: number = ORB_SIZE): FloatingParticleProps[] {
   const particles: FloatingParticleProps[] = [];
   for (let i = 0; i < count; i++) {
     particles.push({
-      centerX: ORB_SIZE / 2,
-      centerY: ORB_SIZE / 2,
+      centerX: orbSize / 2,
+      centerY: orbSize / 2,
       angle: (i * 360) / count + Math.random() * 20,
-      distance: ORB_SIZE * 0.35 + Math.random() * 15,
+      distance: orbSize * 0.35 + Math.random() * 15,
       size: 2 + Math.random() * 3,
       delay: i * 150,
       duration: 3000 + Math.random() * 2000,
@@ -321,18 +321,18 @@ export function generateParticles(count: number = 12): FloatingParticleProps[] {
   return particles;
 }
 
-export function generateShootingStars(count: number = 4): ShootingStarProps[] {
+export function generateShootingStars(count: number = 4, orbSize: number = ORB_SIZE): ShootingStarProps[] {
   const stars: ShootingStarProps[] = [];
   for (let i = 0; i < count; i++) {
     const startAngle = Math.random() * Math.PI * 2;
-    const startDist = ORB_SIZE * 0.25;
-    const endDist = ORB_SIZE * 0.48;
+    const startDist = orbSize * 0.25;
+    const endDist = orbSize * 0.48;
     
     stars.push({
-      startX: ORB_SIZE / 2 + Math.cos(startAngle) * startDist,
-      startY: ORB_SIZE / 2 + Math.sin(startAngle) * startDist,
-      endX: ORB_SIZE / 2 + Math.cos(startAngle) * endDist,
-      endY: ORB_SIZE / 2 + Math.sin(startAngle) * endDist,
+      startX: orbSize / 2 + Math.cos(startAngle) * startDist,
+      startY: orbSize / 2 + Math.sin(startAngle) * startDist,
+      endX: orbSize / 2 + Math.cos(startAngle) * endDist,
+      endY: orbSize / 2 + Math.sin(startAngle) * endDist,
       delay: i * 2000,
       duration: 1000 + Math.random() * 500,
     });
@@ -340,20 +340,20 @@ export function generateShootingStars(count: number = 4): ShootingStarProps[] {
   return stars;
 }
 
-export function generateRings(): PulsingRingProps[] {
+export function generateRings(orbSize: number = ORB_SIZE): PulsingRingProps[] {
   return [
     {
-      size: ORB_SIZE * 0.65,
+      size: orbSize * 0.65,
       delay: 0,
       colors: [`${COLORS.nebulaBlue}40`, `${COLORS.nebulaPurple}20`, 'transparent'] as const,
     },
     {
-      size: ORB_SIZE * 0.8,
+      size: orbSize * 0.8,
       delay: 500,
       colors: [`${COLORS.nebulaPurple}30`, `${COLORS.nebulaTeal}15`, 'transparent'] as const,
     },
     {
-      size: ORB_SIZE * 0.95,
+      size: orbSize * 0.95,
       delay: 1000,
       colors: [`${COLORS.nebulaTeal}20`, `${COLORS.nebulaBlue}10`, 'transparent'] as const,
     },

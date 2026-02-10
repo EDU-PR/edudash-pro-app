@@ -5,7 +5,7 @@
  * and need to change their temporary password on first login.
  */
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,29 +17,72 @@ import { GradientButton } from '@/components/marketing/GradientButton';
 import { marketingTokens } from '@/components/marketing/tokens';
 import { PasswordStrengthIndicator } from '@/components/auth/PasswordStrengthIndicator';
 import { useAuth } from '@/contexts/AuthContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { clearAllNavigationLocks, routeAfterLogin } from '@/lib/routeAfterLogin';
+import type { User } from '@supabase/supabase-js';
 
 export default function ChangePasswordRequiredScreen() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const continueToDashboard = async (updatedUser?: User | null) => {
+    try {
+      const supabase = assertSupabase();
+      await refreshProfile();
+
+      const authUser =
+        updatedUser ??
+        (await supabase.auth.getUser()).data.user ??
+        user ??
+        null;
+
+      if (authUser) {
+        clearAllNavigationLocks();
+        await routeAfterLogin(authUser as any, profile as any);
+        return;
+      }
+
+      router.replace('/profiles-gate');
+    } catch (error) {
+      console.error('[ChangePasswordRequired] Post-update routing failed:', error);
+      router.replace('/profiles-gate');
+    }
+  };
+
   const handleChangePassword = async () => {
     // Validate passwords
     if (!password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showAlert({
+        title: 'Error',
+        message: 'Please fill in all fields',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showAlert({
+        title: 'Error',
+        message: 'Passwords do not match',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
+      showAlert({
+        title: 'Error',
+        message: 'Password must be at least 8 characters long',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
@@ -49,16 +92,19 @@ export default function ChangePasswordRequiredScreen() {
     const hasNumber = /[0-9]/.test(password);
 
     if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-      Alert.alert(
-        'Weak Password',
-        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
-      );
+      showAlert({
+        title: 'Weak Password',
+        message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
       return;
     }
 
     setLoading(true);
     try {
       const supabase = assertSupabase();
+      const nowIso = new Date().toISOString();
       
       // Update the password
       const { error: updateError } = await supabase.auth.updateUser({
@@ -70,10 +116,10 @@ export default function ChangePasswordRequiredScreen() {
       }
 
       // Clear the force_password_change flag
-      const { error: metadataError } = await supabase.auth.updateUser({
+      const { data: metadataData, error: metadataError } = await supabase.auth.updateUser({
         data: {
           force_password_change: false,
-          password_changed_at: new Date().toISOString(),
+          password_changed_at: nowIso,
         },
       });
 
@@ -82,22 +128,40 @@ export default function ChangePasswordRequiredScreen() {
         // Continue anyway - password was updated successfully
       }
 
-      Alert.alert(
-        '✅ Password Updated',
-        'Your password has been successfully updated. You can now continue using the app.',
-        [
+      const userForRouting = ((metadataData?.user || user || null) as User | null);
+      const patchedUserForRouting = userForRouting
+        ? ({
+            ...userForRouting,
+            user_metadata: {
+              ...(userForRouting.user_metadata || {}),
+              force_password_change: false,
+              password_changed_at: nowIso,
+            },
+          } as User)
+        : null;
+
+      showAlert({
+        title: 'Password Updated',
+        message: 'Your password has been successfully updated. You can now continue using the app.',
+        type: 'success',
+        buttons: [
           {
             text: 'Continue',
-            onPress: () => {
-              // Route to the appropriate dashboard
-              router.replace('/profiles-gate');
+            style: 'default',
+            onPress: async () => {
+              await continueToDashboard(patchedUserForRouting);
             },
           },
-        ]
-      );
+        ],
+      });
     } catch (e: any) {
       console.error('[ChangePasswordRequired] Error:', e);
-      Alert.alert('Error', e?.message || 'Failed to update password. Please try again.');
+      showAlert({
+        title: 'Error',
+        message: e?.message || 'Failed to update password. Please try again.',
+        type: 'error',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
     } finally {
       setLoading(false);
     }
@@ -238,6 +302,7 @@ export default function ChangePasswordRequiredScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <AlertModal {...alertProps} />
     </LinearGradient>
   );
 }

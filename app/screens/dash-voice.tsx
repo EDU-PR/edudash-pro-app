@@ -68,7 +68,7 @@ type VoiceOrbRef = {
 
 export default function DashVoiceScreen() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const insets = useSafeAreaInsets();
   const role = String(profile?.role || 'parent').toLowerCase();
   const orgType = getOrganizationType(profile);
@@ -181,13 +181,13 @@ export default function DashVoiceScreen() {
   // ── Persist ORB messages to AsyncStorage for handoff to full chat ──
   const persistOrbMessages = useCallback(async (msgs: Array<{ role: 'user' | 'assistant'; content: string }>) => {
     try {
-      const userId = profile?.id;
+      const userId = user?.id || profile?.id;
       if (!userId) return;
       const key = `dash:orb-session:${userId}`;
       const payload = { conversationId: conversationIdRef.current, messages: msgs, updatedAt: Date.now() };
       await AsyncStorage.setItem(key, JSON.stringify(payload));
     } catch { /* non-critical */ }
-  }, [profile?.id]);
+  }, [profile?.id, user?.id]);
 
   // ── Send Message (streaming SSE) ──────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
@@ -318,6 +318,14 @@ export default function DashVoiceScreen() {
         onClose={() => setShowLangMenu(false)}
         selectedLanguage={preferredLanguage}
         onSelect={setPreferredLanguage}
+        onOpenFullChat={async () => {
+          const history = conversationHistoryRef.current;
+          await persistOrbMessages(history);
+          router.push({
+            pathname: '/screens/dash-assistant',
+            params: { source: 'orb' },
+          });
+        }}
         theme={theme}
       />
 
@@ -424,16 +432,16 @@ export default function DashVoiceScreen() {
           )}
 
           {/* Full chat link */}
-          <TouchableOpacity style={s.fullChatLink} onPress={() => {
-            // Pass ORB conversation to full chat so messages carry over
+          <TouchableOpacity style={s.fullChatLink} onPress={async () => {
             const history = conversationHistoryRef.current;
-            const lastMsg = history.length > 0 ? history[history.length - 1] : null;
-            const params: Record<string, string> = {};
-            if (lastMsg?.role === 'user') params.initialMessage = lastMsg.content;
-            router.push({ pathname: '/screens/dash-assistant', params });
+            await persistOrbMessages(history);
+            router.push({
+              pathname: '/screens/dash-assistant',
+              params: { source: 'orb' },
+            });
           }}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.primary} />
-            <Text style={[s.fullChatText, { color: theme.primary }]}>Open full chat</Text>
+            <Text style={[s.fullChatText, { color: theme.primary }]}>Continue in full Dash chat</Text>
           </TouchableOpacity>
         </ScrollView>
 

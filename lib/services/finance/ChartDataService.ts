@@ -1,7 +1,7 @@
 // Chart data formatting service for react-native-chart-kit
 // Transforms financial data into chart-ready formats
 
-import type { FinanceOverviewData, TransactionRecord } from './FinancialDataService';
+import type { FinanceOverviewData, TransactionRecord } from './MockFinancialDataService';
 
 export interface LineChartData {
   labels: string[];

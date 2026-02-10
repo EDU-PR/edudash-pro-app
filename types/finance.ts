@@ -57,6 +57,12 @@ export interface FinanceMonthSnapshot {
   expenses_this_month: number;
   petty_cash_expenses_this_month: number;
   financial_expenses_this_month: number;
+  payroll_expenses_this_month?: number;
+  operational_expenses_this_month?: number;
+  registration_revenue?: number;
+  excluded_inactive_due?: number;
+  excluded_inactive_outstanding?: number;
+  excluded_inactive_students?: number;
   net_after_expenses: number;
   payroll_due: number;
   payroll_paid: number;

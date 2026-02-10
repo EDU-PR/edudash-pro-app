@@ -59,20 +59,12 @@ export default function ProfilesGateScreen() {
   useEffect(() => {
     if (loading || !user) return;
 
-    // Check if user needs onboarding (missing DOB, org type, etc.)
-    const checkOnboardingNeeded = async () => {
+    const noteOnboardingNeeds = () => {
       if (!profile || !user) return;
-
-      // Check if user has completed basic onboarding requirements
       const needsOnboarding = !profile.date_of_birth;
-
-      if (needsOnboarding && !isOnboardingComplete && !navigationInProgressRef.current) {
-        logger.info(TAG, 'User needs onboarding, redirecting...');
-        navigationInProgressRef.current = true;
-        router.replace('/onboarding');
-        return true;
+      if (needsOnboarding && !isOnboardingComplete) {
+        logger.info(TAG, 'User missing DOB/profile basics; continuing to dashboard and handling onboarding in-app.');
       }
-      return false;
     };
 
     // Try a one-time profile recovery before showing the gate UI.
@@ -119,19 +111,16 @@ export default function ProfilesGateScreen() {
     };
 
     if (profile) {
-      // Check onboarding first
-      checkOnboardingNeeded().then(needsOnboarding => {
-        if (needsOnboarding) return; // Already redirected
+      noteOnboardingNeeds();
 
-        const validation = validateUserAccess(profile);
-        setAccessValidation(validation);
-        
-        // If user has valid access, route them appropriately
-        if (validation.hasAccess && !navigationInProgressRef.current) {
-          navigationInProgressRef.current = true;
-          routeAfterLogin(user, profile).catch(console.error);
-        }
-      });
+      const validation = validateUserAccess(profile);
+      setAccessValidation(validation);
+      
+      // DOB onboarding is non-blocking for existing users with valid role/access.
+      if (validation.hasAccess && !navigationInProgressRef.current) {
+        navigationInProgressRef.current = true;
+        routeAfterLogin(user, profile).catch(console.error);
+      }
     } else {
       if (!recoveryAttemptedRef.current) {
         void attemptProfileRecovery();

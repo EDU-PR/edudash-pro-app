@@ -77,7 +77,7 @@ const VALID_ROUTES = new Set([
   '/screens/super-admin-settings',
   '/screens/super-admin-analytics',
   '/screens/teacher-reports',
-  '/screens/teacher-messages',
+  '/screens/teacher-message-list',
   '/(k12)/parent/dashboard',
   '/(k12)/student/dashboard',
   // Add more routes as needed

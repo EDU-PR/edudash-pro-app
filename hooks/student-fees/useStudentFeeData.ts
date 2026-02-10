@@ -57,7 +57,7 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
       const { data, error } = await supabase
         .from('students')
         .select(`
-          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth, registration_fee_amount, registration_fee_paid,
+          id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth, registration_fee_amount, registration_fee_paid, payment_verified, payment_date,
           is_active, status,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
@@ -77,6 +77,8 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
         status: data.status,
         registration_fee_amount: data.registration_fee_amount != null ? Number(data.registration_fee_amount) : null,
         registration_fee_paid: data.registration_fee_paid,
+        payment_verified: data.payment_verified,
+        payment_date: data.payment_date,
         class_name: classData?.name,
         parent_name: parentData ? `${parentData.first_name} ${parentData.last_name}` : undefined,
         parent_id: data.parent_id, preschool_id: data.preschool_id,

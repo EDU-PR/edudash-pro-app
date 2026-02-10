@@ -9,9 +9,8 @@
 
 import { supabase } from '../../lib/supabase';
 import type { ProofOfPayment, ApprovalActionParams } from './types';
-import { createPaymentRecord as createPopPaymentRecord, updateFeeStatus as updatePopFeeStatus, updateInvoiceStatus as updatePopInvoiceStatus } from '@/hooks/pop/paymentProcessing';
 import { ApprovalNotificationService } from './ApprovalNotificationService';
-import { logger } from '../../lib/logger';
+import { writeApprovalAuditLog } from './auditLogger';
 
 export class POPWorkflowService {
   
@@ -257,7 +256,7 @@ export class POPWorkflowService {
 
   /**
    * Approve a proof of payment
-   * Updates pop_uploads status and creates payment record for financial tracking
+   * Uses approve_pop_payment RPC for atomic payment + allocation + fee updates
    */
   static async approvePOP(
     popId: string,
@@ -266,60 +265,54 @@ export class POPWorkflowService {
     reviewNotes?: string
   ): Promise<boolean> {
     try {
-      // First, update the POP status
-      const { data, error } = await supabase
+      const { data: existingPop, error: existingError } = await supabase
         .from('pop_uploads')
-        .update({
-          status: 'approved',
-          reviewed_by: approvedBy,
-          reviewed_at: new Date().toISOString(),
-          review_notes: reviewNotes,
-        })
-        .eq('id', popId)
         .select(`
           *,
           student:students (first_name, last_name),
           uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
         `)
+        .eq('id', popId)
         .single();
 
-      if (error) {
-        console.error('Error approving POP:', error);
+      if (existingError || !existingPop) {
+        console.error('Error loading POP before approval:', existingError);
+        return false;
+      }
+
+      const previousStatus = String(existingPop.status || 'pending');
+      const categoryHint = existingPop.category_code ||
+        (String(existingPop.description || '').toLowerCase().includes('uniform') ? 'uniform' : 'tuition');
+
+      const { data: approvalResult, error: approvalError } = await supabase.rpc('approve_pop_payment', {
+        p_upload_id: popId,
+        p_billing_month: existingPop.payment_for_month || existingPop.payment_date || null,
+        p_category_code: categoryHint,
+        p_allocations: [],
+        p_notes: reviewNotes || null,
+      });
+
+      if (approvalError || !approvalResult?.success) {
+        console.error('Error approving POP via approve_pop_payment:', approvalError || approvalResult?.error);
+        return false;
+      }
+
+      const { data, error } = await supabase
+        .from('pop_uploads')
+        .select(`
+          *,
+          student:students (first_name, last_name),
+          uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
+        `)
+        .eq('id', popId)
+        .single();
+
+      if (error || !data) {
+        console.error('POP approved but failed to refresh pop_uploads row:', error);
         return false;
       }
 
       const isUniform = `${data.description || ''} ${data.title || ''}`.toLowerCase().includes('uniform');
-
-      // Create payment record for financial tracking
-      try {
-        await createPopPaymentRecord(data as any, approvedBy, popId);
-        logger.info('✅ Payment record created for POP approval');
-      } catch (paymentError) {
-        logger.error('Failed to create payment record:', paymentError);
-        // Continue - don't fail the approval if payment record fails
-      }
-
-      // Update student fee status
-      if (!isUniform) {
-        try {
-          await updatePopFeeStatus(data as any);
-          logger.info('✅ Student fee status updated');
-        } catch (feeError) {
-          logger.error('Failed to update fee status:', feeError);
-          // Continue - don't fail the approval if fee update fails
-        }
-      }
-
-      // Update invoice status if applicable
-      if (!isUniform) {
-        try {
-          await updatePopInvoiceStatus(data as any);
-          logger.info('✅ Invoice status updated');
-        } catch (invoiceError) {
-          logger.error('Failed to update invoice status:', invoiceError);
-          // Continue - don't fail the approval
-        }
-      }
 
       // Log the action
       await this.logAction({
@@ -330,7 +323,7 @@ export class POPWorkflowService {
         performerName: approverName,
         performerRole: 'principal_admin',
         action: 'approve',
-        previousStatus: 'pending',
+        previousStatus,
         newStatus: 'approved',
         notes: reviewNotes,
       });
@@ -499,24 +492,6 @@ export class POPWorkflowService {
    * Log approval action for audit trail
    */
   private static async logAction(params: ApprovalActionParams): Promise<void> {
-    try {
-      await supabase
-        .from('approval_logs')
-        .insert({
-          preschool_id: params.preschoolId,
-          entity_type: params.entityType,
-          entity_id: params.entityId,
-          performed_by: params.performedBy,
-          performer_name: params.performerName,
-          performer_role: params.performerRole,
-          action: params.action,
-          previous_status: params.previousStatus,
-          new_status: params.newStatus,
-          notes: params.notes,
-          reason: params.reason,
-        });
-    } catch (error) {
-      console.error('Error logging approval action:', error);
-    }
+    await writeApprovalAuditLog(params);
   }
 }

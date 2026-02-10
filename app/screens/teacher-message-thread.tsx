@@ -1,582 +1,110 @@
 /**
  * Teacher Message Thread Screen
- * Full-featured WhatsApp-style chat interface with:
- * - Online status indicator
- * - 3-dot settings menu
- * - Message context menu (long press)
- * - Clean message container with proper bounds
- * - Adaptive composer matching wallpaper/theme
- * - Voice recording with waveform
- * 
- * Refactored to use shared messaging components from components/messaging/
+ * WhatsApp-style chat interface with online status, context menus, voice, and wallpapers.
+ * Hook logic extracted to @/hooks/teacher-messaging/useTeacherMessageThread
  */
-
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, ImageBackground, Keyboard, Vibration, NativeScrollEvent, NativeSyntheticEvent, LayoutChangeEvent } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, TouchableOpacity, ImageBackground } from 'react-native';
 import { toast } from '@/components/ui/ToastProvider';
-import { useLocalSearchParams, router } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTranslation } from 'react-i18next';
-import { logger } from '@/lib/logger';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCallSafe } from '@/components/calls/CallProvider';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { FlashList } from '@shopify/flash-list';
 
-// Shared messaging components
 import {
-  Message,
+  type Message,
   DateSeparator,
   MessageBubble,
   MessageComposer,
   ChatSearchOverlay,
   MediaGalleryView,
   StarredMessagesView,
-  getDateKey,
-  getDateSeparatorLabel,
 } from '@/components/messaging';
 import { ChatHeader } from '@/components/messaging/ChatHeader';
-import { useTypingIndicator } from '@/hooks/useTypingIndicator';
-import { useThreadOptions } from '@/hooks/useThreadOptions';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-// Safe imports with fallbacks
-let useTheme: () => { theme: any; isDark: boolean };
-let useAuth: () => { user: any; profile: any };
-let useTeacherThreadMessages: (id: string | null) => { data: any[]; isLoading: boolean; error: any; refetch: () => void };
-let useTeacherSendMessage: () => { mutateAsync: (args: any) => Promise<any>; isPending: boolean };
-let useTeacherMarkThreadRead: () => { mutate: (threadId: string) => void };
-let useTeacherMessagesRealtime: (id: string | null) => void = () => {};
-let assertSupabase: () => any;
 
-// Component imports
+import { useTeacherMessageThread, type ChatRow } from '@/hooks/teacher-messaging';
+import { styles, COMPOSER_FLOAT_MARGIN, COMPOSER_FLOAT_GAP } from './teacher-message-thread.styles';
+
+// Safe component imports
 let ChatWallpaperPicker: React.FC<any> | null = null;
 let MessageActionsMenu: React.FC<any> | null = null;
 let ThreadOptionsMenu: React.FC<any> | null = null;
-let getStoredWallpaper: (() => Promise<any>) | null = null;
-let WALLPAPER_PRESETS: any[] = [];
-
-// Voice storage service
-let uploadVoiceNote: ((uri: string, duration: number, conversationId?: string) => Promise<{ publicUrl: string; storagePath: string }>) | null = null;
-try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
-
-try {
-  const m = require('@/components/messaging/ChatWallpaperPicker');
-  ChatWallpaperPicker = m.ChatWallpaperPicker;
-  getStoredWallpaper = m.getStoredWallpaper;
-  WALLPAPER_PRESETS = m.WALLPAPER_PRESETS || [];
-} catch {}
+try { ChatWallpaperPicker = require('@/components/messaging/ChatWallpaperPicker').ChatWallpaperPicker; } catch {}
 try { MessageActionsMenu = require('@/components/messaging/MessageActionsMenu').MessageActionsMenu; } catch {}
 try { ThreadOptionsMenu = require('@/components/messaging/ThreadOptionsMenu').ThreadOptionsMenu; } catch {}
 
-const defaultTheme = {
-  background: '#0f172a',
-  surface: '#1e293b',
-  primary: '#3b82f6',
-  text: '#e2e8f0',
-  textSecondary: '#94a3b8',
-  border: 'rgba(148, 163, 184, 0.15)',
-  error: '#ef4444',
-};
-
-const COMPOSER_OVERLAY_HEIGHT = 84;
-const COMPOSER_FLOAT_MARGIN = 10;
-const COMPOSER_FLOAT_GAP = 8;
-const WALLPAPER_ACCENTS: Record<string, string> = {
-  'purple-glow': '#a78bfa',
-  midnight: '#60a5fa',
-  'ocean-deep': '#38bdf8',
-  'forest-night': '#4ade80',
-  'sunset-warm': '#fb923c',
-  'dark-slate': '#93c5fd',
-};
-
-function hexToRgba(color: string, alpha: number, fallback: string): string {
-  if (!color.startsWith('#')) return fallback;
-  const hex = color.slice(1);
-  const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
-  if (normalized.length !== 6) return fallback;
-  const intValue = Number.parseInt(normalized, 16);
-  if (Number.isNaN(intValue)) return fallback;
-  const r = (intValue >> 16) & 255;
-  const g = (intValue >> 8) & 255;
-  const b = intValue & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+/** Wraps the message FlashList with the appropriate wallpaper background */
+function MessageListWrapper({
+  bgSource, wallpaperType, gradientColors, children,
+}: {
+  bgSource?: { uri: string };
+  wallpaperType?: string;
+  gradientColors: [string, string, ...string[]];
+  children: React.ReactElement;
+}) {
+  if (bgSource) {
+    return <ImageBackground source={bgSource} style={styles.messagesArea} resizeMode="cover">{children}</ImageBackground>;
+  }
+  if (wallpaperType === 'preset') {
+    return <LinearGradient colors={gradientColors} style={styles.messagesArea}>{children}</LinearGradient>;
+  }
+  return <>{children}</>;
 }
-
-try { useTheme = require('@/contexts/ThemeContext').useTheme; } catch { useTheme = () => ({ theme: defaultTheme, isDark: true }); }
-try { useAuth = require('@/contexts/AuthContext').useAuth; } catch { useAuth = () => ({ user: null, profile: null }); }
-try { assertSupabase = require('@/lib/supabase').assertSupabase; } catch { assertSupabase = () => { throw new Error('Supabase not available'); }; }
-try {
-  const h = require('@/hooks/useTeacherMessaging');
-  useTeacherThreadMessages = h.useTeacherThreadMessages;
-  useTeacherSendMessage = h.useTeacherSendMessage;
-  useTeacherMarkThreadRead = h.useTeacherMarkThreadRead;
-  useTeacherMessagesRealtime = h.useTeacherMessagesRealtime;
-} catch {
-  useTeacherThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} });
-  useTeacherSendMessage = () => ({ mutateAsync: async () => ({}), isPending: false });
-  useTeacherMarkThreadRead = () => ({ mutate: () => {} });
-}
-
-// ==================== MAIN COMPONENT ====================
 
 export default function TeacherMessageThreadScreen() {
-  const { t } = useTranslation();
-  const { theme } = useTheme();
-  const { user } = useAuth();
-  const insets = useSafeAreaInsets();
-  
-  const params = useLocalSearchParams<{
-    threadId?: string; threadid?: string;
-    title?: string; parentName?: string;
-    parentId?: string; parentid?: string;
-  }>();
-  
-  const threadId = params.threadId || params.threadid || null;
-  const displayName = params.title || params.parentName || 'Parent';
-  const parentId = params.parentId || params.parentid;
-  
-  // Get CallProvider context (unified presence + calls)
-  const callContext = useCallSafe();
-  const isOnline = parentId && callContext ? callContext.isUserOnline(parentId) : false;
-  const lastSeenText = parentId && callContext ? callContext.getLastSeenText(parentId) : 'Offline';
-  const isAway = !isOnline && lastSeenText === 'Away';
-  const onlineStatus: 'online' | 'away' | 'offline' = isOnline ? 'online' : isAway ? 'away' : 'offline';
-  
-  // Typing indicator hook
-  const { isOtherTyping, typingText, setTyping, clearTyping } = useTypingIndicator({
-    threadId: threadId || null,
-    userId: user?.id || null,
-    userName: user?.email?.split('@')[0] || 'Teacher',
-  });
-  
-  // State
-  const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
-  const [replyTo, setReplyTo] = useState<Message | null>(null);
-  const [showOptions, setShowOptions] = useState(false);
-  const [showActions, setShowActions] = useState(false);
-  const [showWallpaper, setShowWallpaper] = useState(false);
-  const [wallpaper, setWallpaper] = useState<any>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [sending, setSending] = useState(false);
-  const [optimisticMsgs, setOptimisticMsgs] = useState<Message[]>([]);
-  const [currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId] = useState<string | null>(null);
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_OVERLAY_HEIGHT);
-  
-  const listRef = useRef<FlashListRef<any> | null>(null);
-  const isAtBottomRef = useRef(true);
-  
-  // Data
-  const { data: messages = [], isLoading, error, refetch } = useTeacherThreadMessages(threadId);
-  const { mutateAsync: sendMessage, isPending } = useTeacherSendMessage();
-  const { mutate: markRead } = useTeacherMarkThreadRead();
-  
-  // Subscribe to real-time message updates
-  useTeacherMessagesRealtime(threadId);
-  
-  const otherParticipant = useMemo(
-    () => messages.find((m) => m.sender_id !== user?.id),
-    [messages, user?.id]
-  );
-  const resolvedOtherUserId = parentId || otherParticipant?.sender_id;
-  const otherIds = useMemo(
-    () => (resolvedOtherUserId ? [resolvedOtherUserId] : []),
-    [resolvedOtherUserId]
-  );
-  
-  // Mark messages as delivered and read when thread is opened
-  // Delivered (gray ticks): When user comes online or opens thread
-  // Read (blue ticks): When user actively views the thread
-  useEffect(() => {
-    if (threadId && messages.length > 0 && !isLoading && user?.id) {
-      // First, mark messages as delivered (if not already)
-      // This ensures ticks update even if no push notification was received
-      try {
-        assertSupabase().rpc('mark_messages_delivered', {
-            p_thread_id: threadId,
-          p_user_id: user.id,
-        }).then(() => {
-          if (__DEV__) {
-            logger.debug('TeacherThread', 'Marked messages as delivered');
-          }
-        }).catch((err: any) => {
-          if (__DEV__) {
-          console.warn('[TeacherThread] Failed to mark messages as delivered:', err);
-        }
-        });
-      } catch {}
-      
-      // Then mark as read (this adds user to read_by array, showing blue ticks)
-      markRead(threadId);
-    }
-  }, [threadId, messages.length, isLoading, markRead, user?.id]);
-  
-  useEffect(() => {
-    if (getStoredWallpaper) getStoredWallpaper().then(setWallpaper);
-  }, []);
-  
-  useEffect(() => {
-    if (!messages.length) return;
-    if (!isAtBottomRef.current) return;
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-  }, [messages.length]);
-  
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
-      // Keep the newest message visible when keyboard opens
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-
   const {
-    handleClearChat,
-    handleMuteNotifications,
-    handleSearchInChat,
-    handleExportChat,
-    handleMediaLinksAndDocs,
-    handleStarredMessages,
-    handleDisappearingMessages,
-    handleAddShortcut,
-    handleReport,
-    handleBlockUser,
-    handleViewContact,
-    isMuted,
-    isUserBlocked,
-    disappearingStatusLabel,
-    showSearchOverlay,
-    searchResults,
-    searchQuery,
-    isSearching,
-    performSearch,
-    closeSearch,
-    showMediaGallery,
-    closeMediaGallery,
-    showStarredMessages: showStarredView,
-    closeStarredMessages,
-  } = useThreadOptions({
-    threadId: threadId || '',
-    userId: user?.id,
-    otherUserId: resolvedOtherUserId,
-    refetch,
-    setShowOptionsMenu: setShowOptions,
-    setOptimisticMsgs,
-    displayName,
-  });
-  
-  // Handlers
-  const handleSend = useCallback(async (content: string) => {
-    if (!content.trim() || !threadId || !user?.id) return;
-    setSending(true);
-    setReplyTo(null);
-    try {
-      await sendMessage({ threadId, content, senderId: user.id });
-      refetch();
-      clearTyping();
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-    } catch {
-      toast.error('Failed to send message');
-    } finally {
-      setSending(false);
-    }
-  }, [threadId, user?.id, sendMessage, refetch, clearTyping]);
-  
-  const handleVoiceRecording = useCallback(async (uri: string, dur: number) => {
-    if (!threadId || !user?.id) return;
-    
-    const durationSecs = Math.round(dur / 1000);
-    setSending(true);
-    
-    try {
-      if (uploadVoiceNote) {
-        const result = await uploadVoiceNote(uri, dur, threadId);
-        // Store storagePath (not publicUrl) - signed URLs expire!
-        // VoiceMessageBubble will generate fresh signed URLs for playback
-        await sendMessage({ 
-          threadId, 
-          content: `🎤 Voice (${durationSecs}s)`,
-          voiceUrl: result.storagePath,
-          voiceDuration: durationSecs,
-        });
-      } else {
-        await sendMessage({ 
-          threadId, 
-          content: `🎤 Voice message (${durationSecs}s)`,
-        });
-      }
-      refetch();
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
-    } catch (error) {
-      console.error('Voice send error:', error);
-      toast.error('Failed to send voice message');
-    } finally {
-      setSending(false);
-    }
-  }, [threadId, user?.id, sendMessage, refetch]);
-  
-  const handleLongPress = useCallback((msg: Message) => {
-    setSelectedMsg(msg);
-    setShowActions(true);
-    Vibration.vibrate(30);
-  }, []);
-  
-  const handleReply = useCallback(() => {
-    if (selectedMsg) {
-      setReplyTo(selectedMsg);
-      setShowActions(false);
-    }
-  }, [selectedMsg]);
-  
-  // Message action handlers - only one reaction allowed per user per message
-  const handleReact = useCallback(async (emoji: string) => {
-    if (!selectedMsg?.id || !user?.id) {
-      setShowActions(false);
-      return;
-    }
-    
-    try {
-      const client = require('@/lib/supabase').assertSupabase();
-      
-      // Delete any existing reaction from this user on this message first
-      await client
-        .from('message_reactions')
-        .delete()
-        .eq('message_id', selectedMsg.id)
-        .eq('user_id', user.id);
-      
-      // Add the new reaction
-      await client.from('message_reactions').insert({
-        message_id: selectedMsg.id,
-        user_id: user.id,
-        emoji: emoji,
-      });
-      
-      // Refresh messages to show updated reactions
-      refetch();
-    } catch (err) {
-      console.error('Error reacting to message:', err);
-      toast.error('Failed to add reaction');
-    }
-    
-    setShowActions(false);
-  }, [selectedMsg, user?.id, refetch]);
-
-  // Handler for clicking on a reaction to delete it
-  const handleReactionPress = useCallback(async (messageId: string, emoji: string) => {
-    if (!user?.id) return;
-    
-    try {
-      const client = require('@/lib/supabase').assertSupabase();
-      
-      // Delete the user's reaction
-      await client
-        .from('message_reactions')
-        .delete()
-        .eq('message_id', messageId)
-        .eq('user_id', user.id)
-        .eq('emoji', emoji);
-      
-      // Refresh messages
-      refetch();
-      toast.success('Reaction removed');
-    } catch (err) {
-      console.error('Error removing reaction:', err);
-      toast.error('Failed to remove reaction');
-    }
-  }, [user?.id, refetch]);
-
-  const handleToggleStar = useCallback(async () => {
-    if (!selectedMsg?.id || !user?.id) {
-      setShowActions(false);
-      return;
-    }
-
-    try {
-      const client = require('@/lib/supabase').assertSupabase();
-      const isCurrentlyStarred = !!(selectedMsg as any).is_starred;
-
-      const { error } = await client
-        .from('messages')
-        .update({ is_starred: !isCurrentlyStarred })
-        .eq('id', selectedMsg.id);
-
-      if (error) throw error;
-
-      refetch();
-      toast.success(!isCurrentlyStarred ? 'Message starred' : 'Star removed');
-    } catch (error) {
-      console.error('Error toggling star:', error);
-      toast.error('Failed to update star');
-    } finally {
-      setShowActions(false);
-      setSelectedMsg(null);
-    }
-  }, [selectedMsg, user?.id, refetch]);
-
-  const handleVoiceCall = useCallback(() => {
-    if (!callContext) {
-      toast.warn('Voice calling is not available', 'Voice Call');
-      return;
-    }
-    if (!parentId) {
-      toast.warn('Cannot identify recipient', 'Voice Call');
-      return;
-    }
-    callContext.startVoiceCall(parentId, displayName);
-  }, [callContext, parentId, displayName]);
-
-  const handleVideoCall = useCallback(() => {
-    if (!callContext) {
-      toast.warn('Video calling is not available', 'Video Call');
-      return;
-    }
-    if (!parentId) {
-      toast.warn('Cannot identify recipient', 'Video Call');
-      return;
-    }
-    callContext.startVideoCall(parentId, displayName);
-  }, [callContext, parentId, displayName]);
-  
-  // Wallpaper/background
-  const bgSource =
-    wallpaper?.type === 'url'
-      ? { uri: wallpaper.value }
-      : (wallpaper?.uri ? { uri: wallpaper.uri } : undefined);
-  const bgColor = wallpaper?.color || theme.background;
-  const getWallpaperGradient = useCallback((): [string, string, ...string[]] => {
-    if (!wallpaper || wallpaper.type !== 'preset') {
-      return ['#0f172a', '#1e1b4b', '#0f172a'];
-    }
-    const preset = WALLPAPER_PRESETS.find((p: any) => p.key === wallpaper.value);
-    return preset?.colors || ['#0f172a', '#1e1b4b', '#0f172a'];
-  }, [wallpaper]);
-  
-  type ChatRow =
-    | { type: 'date'; key: string; label: string }
-    | { type: 'message'; key: string; msg: Message };
-
-  const messagesAsc = useMemo(() => {
-    const ids = new Set(messages.map((m: any) => m.id));
-    const merged = [
-      ...messages,
-      ...optimisticMsgs.filter((m) => !ids.has(m.id)),
-    ];
-    const sorted = [...merged].sort((a: any, b: any) => {
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
-    return sorted as Message[];
-  }, [messages, optimisticMsgs]);
-
-  const voiceMessageIdsAsc = useMemo(() => {
-    return messagesAsc.filter((m) => m.voice_url).map((m) => m.id);
-  }, [messagesAsc]);
-
-  const rowsAsc = useMemo<ChatRow[]>(() => {
-    const rows: ChatRow[] = [];
-    let lastDateKey = '';
-
-    for (const msg of messagesAsc) {
-      const dateKey = getDateKey(msg.created_at);
-      if (dateKey !== lastDateKey) {
-        rows.push({
-          type: 'date',
-          key: `date-${dateKey}`,
-          label: getDateSeparatorLabel(msg.created_at),
-        });
-        lastDateKey = dateKey;
-      }
-      rows.push({ type: 'message', key: `msg-${msg.id}`, msg });
-    }
-
-    return rows;
-  }, [messagesAsc]);
+    theme, user, insets, threadId, displayName,
+    onlineStatus, lastSeenText, isOtherTyping, typingText,
+    selectedMsg, replyTo, showOptions, setShowOptions,
+    showActions, setShowActions, showWallpaper, setShowWallpaper,
+    wallpaper, setWallpaper, sending, keyboardHeight,
+    currentlyPlayingVoiceId, setCurrentlyPlayingVoiceId,
+    listRef, isLoading, error, isPending,
+    otherIds, voiceMessageIdsAsc,
+    bgSource, bgColor, getWallpaperGradient, rowsAsc,
+    messageViewportInset, messageBottomReserve,
+    composerKeyboardOffset, composerBottomInset,
+    composerSurfaceColor, composerBorderColor,
+    handleSend, handleVoiceRecording, handleLongPress, handleReply,
+    handleReact, handleReactionPress, handleToggleStar,
+    handleVoiceCall, handleVideoCall, handleScroll, handleComposerLayout,
+    handleClearChat, handleMuteNotifications, handleSearchInChat, handleExportChat,
+    handleMediaLinksAndDocs, handleStarredMessages, handleDisappearingMessages,
+    handleAddShortcut, handleReport, handleBlockUser, handleViewContact,
+    isMuted, isUserBlocked, disappearingStatusLabel,
+    showSearchOverlay, searchResults, searchQuery, isSearching, performSearch, closeSearch,
+    showMediaGallery, closeMediaGallery,
+    showStarredMessages: showStarredView, closeStarredMessages,
+    refetch, setReplyTo,
+  } = useTeacherMessageThread();
 
   const renderRow = useCallback(({ item }: { item: ChatRow }) => {
-    if (item.type === 'date') {
-      return <DateSeparator label={item.label} />;
-    }
-
+    if (item.type === 'date') return <DateSeparator label={item.label} />;
     const msg = item.msg;
-
     const voiceIndex = msg.voice_url ? voiceMessageIdsAsc.indexOf(msg.id) : -1;
     const hasNextVoice = voiceIndex >= 0 && voiceIndex < voiceMessageIdsAsc.length - 1;
     const hasPreviousVoice = voiceIndex > 0;
-
-    const handleVoiceFinished = msg.voice_url
-      ? () => {
-          if (hasNextVoice) {
-            setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]);
-          } else {
-            setCurrentlyPlayingVoiceId(null);
-          }
-        }
-      : undefined;
-
-    const handlePlayNext = hasNextVoice
-      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1])
-      : undefined;
-
-    const handlePlayPrevious = hasPreviousVoice
-      ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1])
-      : undefined;
-
-    const shouldAutoPlay = !!msg.voice_url && currentlyPlayingVoiceId === msg.id;
 
     return (
       <MessageBubble
         msg={msg}
         isOwn={msg.sender_id === user?.id}
         onLongPress={() => handleLongPress(msg)}
-        onPlaybackFinished={handleVoiceFinished}
-        onPlayNext={handlePlayNext}
-        onPlayPrevious={handlePlayPrevious}
+        onPlaybackFinished={msg.voice_url ? () => {
+          setCurrentlyPlayingVoiceId(hasNextVoice ? voiceMessageIdsAsc[voiceIndex + 1] : null);
+        } : undefined}
+        onPlayNext={hasNextVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
+        onPlayPrevious={hasPreviousVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1]) : undefined}
         hasNextVoice={hasNextVoice}
         hasPreviousVoice={hasPreviousVoice}
-        autoPlayVoice={shouldAutoPlay}
+        autoPlayVoice={!!msg.voice_url && currentlyPlayingVoiceId === msg.id}
         otherParticipantIds={otherIds}
         onReactionPress={handleReactionPress}
       />
     );
-  }, [currentlyPlayingVoiceId, handleLongPress, handleReactionPress, otherIds, user?.id, voiceMessageIdsAsc]);
+  }, [currentlyPlayingVoiceId, handleLongPress, handleReactionPress, otherIds, user?.id, voiceMessageIdsAsc, setCurrentlyPlayingVoiceId]);
 
-  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    // Track "near bottom" so we only auto-scroll when the user is already at the latest messages.
-    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    const paddingToBottom = 120;
-    isAtBottomRef.current =
-      layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
-  }, []);
-
-  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-    if (nextHeight > 0 && Math.abs(nextHeight - composerHeight) > 1) {
-      setComposerHeight(nextHeight);
-    }
-  }, [composerHeight]);
-  const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);
-  const composerKeyboardOffset =
-    keyboardHeight > 0 ? keyboardHeight - (Platform.OS === 'ios' ? insets.bottom : 0) + 8 : 0;
-  const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
-  const messageViewportInset =
-    composerKeyboardOffset +
-    composerBottomInset +
-    safeComposerHeight +
-    COMPOSER_FLOAT_GAP;
-  const messageBottomReserve = 24;
-  const wallpaperAccent =
-    wallpaper?.type === 'preset' ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
-  const composerSurfaceColor = bgSource
-    ? 'rgba(15, 23, 42, 0.62)'
-    : wallpaper?.type === 'preset'
-    ? hexToRgba(wallpaperAccent, 0.2, 'rgba(15, 23, 42, 0.66)')
-    : 'rgba(15, 23, 42, 0.68)';
-  const composerBorderColor = wallpaper?.type === 'preset'
-    ? hexToRgba(wallpaperAccent, 0.32, 'rgba(148, 163, 184, 0.18)')
-    : 'rgba(148, 163, 184, 0.16)';
-  
   // Loading state
   if (isLoading) {
     return (
@@ -593,7 +121,7 @@ export default function TeacherMessageThreadScreen() {
       </View>
     );
   }
-  
+
   // Error state
   if (error) {
     return (
@@ -614,7 +142,15 @@ export default function TeacherMessageThreadScreen() {
       </View>
     );
   }
-  
+
+  const emptyComponent = (
+    <View style={styles.emptyState}>
+      <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
+      <Text style={styles.emptyTitle}>Start the Conversation</Text>
+      <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
       <ChatHeader
@@ -629,60 +165,14 @@ export default function TeacherMessageThreadScreen() {
         onOptionsPress={() => setShowOptions(true)}
         recipientRole="parent"
       />
-      
+
       {/* Messages Container */}
       <View style={[styles.messagesWrapper, { marginBottom: messageViewportInset }]}>
-        {bgSource ? (
-          <ImageBackground source={bgSource} style={styles.messagesArea} resizeMode="cover">
-            <FlashList
-              ref={listRef}
-              data={rowsAsc}
-              renderItem={renderRow}
-              keyExtractor={(item) => item.key}
-              getItemType={(item) => item.type}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: messageBottomReserve },
-              ]}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
-                  <Text style={styles.emptyTitle}>Start the Conversation</Text>
-                  <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
-                </View>
-              }
-            />
-          </ImageBackground>
-        ) : wallpaper?.type === 'preset' ? (
-          <LinearGradient colors={getWallpaperGradient()} style={styles.messagesArea}>
-            <FlashList
-              ref={listRef}
-              data={rowsAsc}
-              renderItem={renderRow}
-              keyExtractor={(item) => item.key}
-              getItemType={(item) => item.type}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={[
-                styles.scrollContent,
-                { paddingBottom: messageBottomReserve },
-              ]}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
-                  <Text style={styles.emptyTitle}>Start the Conversation</Text>
-                  <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
-                </View>
-              }
-            />
-          </LinearGradient>
-        ) : (
+        <MessageListWrapper
+          bgSource={bgSource}
+          wallpaperType={wallpaper?.type}
+          gradientColors={getWallpaperGradient()}
+        >
           <FlashList
             ref={listRef}
             data={rowsAsc}
@@ -693,36 +183,22 @@ export default function TeacherMessageThreadScreen() {
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: messageBottomReserve },
-            ]}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Ionicons name="chatbubbles-outline" size={64} color="rgba(148,163,184,0.4)" />
-                <Text style={styles.emptyTitle}>Start the Conversation</Text>
-                <Text style={styles.emptySubtitle}>Send a message to {displayName}</Text>
-              </View>
-            }
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: messageBottomReserve }]}
+            ListEmptyComponent={emptyComponent}
           />
-        )}
+        </MessageListWrapper>
       </View>
 
       {/* Floating Composer */}
-      <View style={[
-        styles.composerKeyboard,
-        { bottom: composerKeyboardOffset }
-      ]}>
-        <View style={[
-          styles.composerArea,
-          { 
+      <View style={[styles.composerKeyboard, { bottom: composerKeyboardOffset }]}>
+        <View
+          style={[styles.composerArea, {
             paddingBottom: keyboardHeight > 0 ? 8 : composerBottomInset,
             backgroundColor: composerSurfaceColor,
             borderColor: composerBorderColor,
             marginHorizontal: COMPOSER_FLOAT_MARGIN,
             marginBottom: COMPOSER_FLOAT_GAP,
-          }
-        ]}
+          }]}
           onLayout={handleComposerLayout}
         >
           <MessageComposer
@@ -734,7 +210,7 @@ export default function TeacherMessageThreadScreen() {
           />
         </View>
       </View>
-      
+
       {/* Thread Options Menu */}
       {ThreadOptionsMenu && (
         <ThreadOptionsMenu
@@ -758,7 +234,7 @@ export default function TeacherMessageThreadScreen() {
           contactName={displayName}
         />
       )}
-      
+
       {/* Message Actions Menu */}
       {MessageActionsMenu && selectedMsg && (
         <MessageActionsMenu
@@ -775,7 +251,7 @@ export default function TeacherMessageThreadScreen() {
           onStar={handleToggleStar}
         />
       )}
-      
+
       {/* Wallpaper Picker */}
       {ChatWallpaperPicker && (
         <ChatWallpaperPicker
@@ -785,161 +261,13 @@ export default function TeacherMessageThreadScreen() {
         />
       )}
 
-      {/* Chat Search Overlay */}
       <ChatSearchOverlay
-        visible={showSearchOverlay}
-        query={searchQuery}
-        results={searchResults as any[]}
-        isSearching={isSearching}
-        onSearch={performSearch}
-        onClose={closeSearch}
+        visible={showSearchOverlay} query={searchQuery}
+        results={searchResults as any[]} isSearching={isSearching}
+        onSearch={performSearch} onClose={closeSearch}
       />
-
-      {/* Media Gallery */}
-      <MediaGalleryView
-        visible={showMediaGallery}
-        threadId={threadId || ''}
-        onClose={closeMediaGallery}
-      />
-
-      {/* Starred Messages */}
-      <StarredMessagesView
-        visible={showStarredView}
-        threadId={threadId || ''}
-        onClose={closeStarredMessages}
-      />
+      <MediaGalleryView visible={showMediaGallery} threadId={threadId || ''} onClose={closeMediaGallery} />
+      <StarredMessagesView visible={showStarredView} threadId={threadId || ''} onClose={closeStarredMessages} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#94a3b8',
-  },
-  retryBtn: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-  },
-  retryText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingBottom: 12,
-    backgroundColor: 'rgba(15, 23, 42, 0.98)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(148, 163, 184, 0.1)',
-  },
-  headerBtn: {
-    padding: 8,
-  },
-  avatarContainer: {
-    marginLeft: 4,
-    marginRight: 10,
-    position: 'relative',
-  },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#22c55e',
-    marginTop: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  
-  // Messages Area
-  messagesWrapper: {
-    flex: 1,
-    overflow: 'hidden',
-    zIndex: 1,
-  },
-  messagesArea: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 120,
-  },
-  emptyTitle: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  emptySubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#64748b',
-  },
-  
-  // Composer
-  composerKeyboard: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 100,
-    elevation: 30,
-  },
-  composerArea: {
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(148, 163, 184, 0.18)',
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#020617',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-  },
-});

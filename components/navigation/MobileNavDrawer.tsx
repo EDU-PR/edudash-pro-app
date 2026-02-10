@@ -23,6 +23,11 @@ import { signOutAndRedirect } from '@/lib/authActions';
 import { getRoleDisplayName } from '@/lib/roleUtils';
 import { getNavDrawerStyles, DRAWER_WIDTH } from './MobileNavDrawer.styles';
 import Constants from 'expo-constants';
+import {
+  resolveExplicitSchoolTypeFromProfile,
+  resolveOrganizationId,
+} from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 
 interface NavItem {
   id: string;
@@ -39,7 +44,11 @@ interface MobileNavDrawerProps {
 }
 
 // Default nav items by role
-const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
+const getDefaultNavItems = (
+  role: string,
+  memberType?: string,
+  options?: { adminHomeRoute?: string }
+): NavItem[] => {
   // Check if user is CEO/President (member_type from organization membership)
   if (memberType === 'ceo' || memberType === 'chief_executive_officer' || memberType === 'president') {
     return [
@@ -207,7 +216,7 @@ const getDefaultNavItems = (role: string, memberType?: string): NavItem[] => {
       ];
     case 'admin':
       return [
-        { id: 'home', label: 'Dashboard', icon: 'home', route: '/screens/org-admin-dashboard' },
+        { id: 'home', label: 'Dashboard', icon: 'home', route: options?.adminHomeRoute || '/screens/org-admin-dashboard' },
         { id: 'programs', label: 'Programs', icon: 'school', route: '/screens/org-admin/programs' },
         { id: 'cohorts', label: 'Cohorts', icon: 'people', route: '/screens/org-admin/cohorts' },
         { id: 'instructors', label: 'Team', icon: 'briefcase', route: '/screens/org-admin/instructors' },
@@ -266,7 +275,18 @@ export function MobileNavDrawer({ isOpen, onClose, navItems }: MobileNavDrawerPr
   const userRole = (profile?.role as string) || 'parent';
   // Get member_type from organization_membership for CEO detection
   const memberType = profile?.organization_membership?.member_type;
-  const items = navItems || getDefaultNavItems(userRole, memberType);
+  const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
+  const adminHomeRoute = userRole === 'admin'
+    ? (
+      getDashboardRouteForRole({
+        role: userRole,
+        resolvedSchoolType: explicitSchoolType,
+        hasOrganization: Boolean(resolveOrganizationId(profile)),
+        traceContext: 'MobileNavDrawer.homeItem',
+      }) || '/screens/org-admin-dashboard'
+    )
+    : undefined;
+  const items = navItems || getDefaultNavItems(userRole, memberType, { adminHomeRoute });
   
   // Get display role - prioritize member_type for membership organizations
   const displayRole = memberType 

@@ -76,12 +76,14 @@ export default function DashTutorVoiceChat() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage | null>(null);
+  const [voiceErrorBanner, setVoiceErrorBanner] = useState<string | null>(null);
 
   const listRef = useRef<FlashListRef<ChatMessageData>>(null);
   const voiceOrbRef = useRef<VoiceOrbRefType>(null);
   const isVoiceModeRef = useRef(true);
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
+  const ttsSessionRef = useRef<string | null>(null);
 
   const welcomeMessage: ChatMessageData = useMemo(() => ({
     id: 'welcome',
@@ -173,6 +175,9 @@ export default function DashTutorVoiceChat() {
   useEffect(() => {
     if (!isVoiceMode) {
       speechQueueRef.current = [];
+      ttsSessionRef.current = null;
+      isSpeakingRef.current = false;
+      setIsSpeaking(false);
       voiceOrbRef.current?.stopSpeaking?.().catch(() => {});
     }
   }, [isVoiceMode]);
@@ -257,17 +262,39 @@ export default function DashTutorVoiceChat() {
     const chunks = splitForTTS(cleanText, 1200);
     if (chunks.length === 0) return;
     
+    const sessionId = `dash_tutor_tts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    ttsSessionRef.current = sessionId;
+    console.log('[DashTutorVoiceChat][TTS] session:start', { sessionId, chunkCount: chunks.length });
+
     try {
       setIsSpeaking(true);
-      for (const chunk of chunks) {
-        if (!isSpeakingRef.current) break; // Barge-in support
+      isSpeakingRef.current = true;
+      for (let idx = 0; idx < chunks.length; idx += 1) {
+        const chunk = chunks[idx];
+        if (ttsSessionRef.current !== sessionId || !isSpeakingRef.current) {
+          console.log('[DashTutorVoiceChat][TTS] session:interrupted', { sessionId, atChunk: idx + 1 });
+          break; // Barge-in support
+        }
         const chunkLang = preferredLanguage
           || `${detectTextLanguage(chunk)}-ZA` as SupportedLanguage;
+        console.log('[DashTutorVoiceChat][TTS] chunk:start', {
+          sessionId,
+          index: idx + 1,
+          total: chunks.length,
+          length: chunk.length,
+          language: chunkLang,
+        });
         await voiceOrbRef.current.speakText(chunk, chunkLang);
+        console.log('[DashTutorVoiceChat][TTS] chunk:end', { sessionId, index: idx + 1, total: chunks.length });
       }
     } catch (error) {
       console.error('[DashTutorVoiceChat] TTS error:', error);
     } finally {
+      if (ttsSessionRef.current === sessionId) {
+        console.log('[DashTutorVoiceChat][TTS] session:end', { sessionId });
+        ttsSessionRef.current = null;
+      }
+      isSpeakingRef.current = false;
       setIsSpeaking(false);
     }
   }, [preferredLanguage]);
@@ -297,6 +324,30 @@ export default function DashTutorVoiceChat() {
       console.error('[DashTutorVoiceChat] Failed to clear chat history:', error);
     }
   }, [welcomeMessage]);
+
+  const mapVoiceErrorToBanner = useCallback((errorMessage: string): string => {
+    const normalized = String(errorMessage || '').toLowerCase();
+    if (!normalized) return 'Voice recognition failed. Tap the mic and try again.';
+    if (normalized.includes('not authenticated') || normalized.includes('token')) {
+      return 'Voice recognition needs an active login. Please sign in again.';
+    }
+    if (normalized.includes('no school assigned')) {
+      return 'Your account is missing a school link. Ask admin/principal to assign your school profile.';
+    }
+    if (normalized.includes('permission')) {
+      return 'Microphone permission is required. Enable mic access and try again.';
+    }
+    if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('timeout')) {
+      return 'Voice recognition needs a stable internet connection. Check connection and retry.';
+    }
+    return 'Voice recognition failed. Please try again or use text input.';
+  }, []);
+
+  const handleVoiceRecognitionError = useCallback((errorMessage: string) => {
+    const banner = mapVoiceErrorToBanner(errorMessage);
+    console.warn('[DashTutorVoiceChat] Voice recognition error:', errorMessage);
+    setVoiceErrorBanner(banner);
+  }, [mapVoiceErrorToBanner]);
 
   const sendMessageRegular = async (
     text: string,
@@ -632,10 +683,11 @@ export default function DashTutorVoiceChat() {
   const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
     const formatted = formatTranscript(transcript, language);
     if (language) setPreferredLanguage(language);
+    if (voiceErrorBanner) setVoiceErrorBanner(null);
     if (formatted.trim()) {
       sendMessage(formatted);
     }
-  }, [sendMessage]);
+  }, [sendMessage, voiceErrorBanner]);
 
   const statusLabel = isProcessing
     ? 'Thinking...'
@@ -689,26 +741,41 @@ export default function DashTutorVoiceChat() {
         ListFooterComponent={<View style={{ height: 20 }} />}
       />
 
+      {voiceErrorBanner && (
+        <View style={[styles.voiceErrorBanner, { backgroundColor: theme.error + '20', borderColor: theme.error + '55' }]}>
+          <Ionicons name="warning-outline" size={16} color={theme.error} />
+          <Text style={[styles.voiceErrorText, { color: theme.error }]}>{voiceErrorBanner}</Text>
+          <TouchableOpacity onPress={() => setVoiceErrorBanner(null)} style={styles.voiceErrorDismiss}>
+            <Ionicons name="close" size={14} color={theme.error} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isVoiceMode && VoiceOrb && (
-        <View style={[styles.voiceModeOverlay, { backgroundColor: theme.background + 'F5' }]}>
+        <View style={[styles.voiceDock, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+          <View style={styles.voiceDockHeader}>
+            <Text style={[styles.voiceDockTitle, { color: theme.text }]}>Voice Mode</Text>
+            <TouchableOpacity
+              style={styles.voiceDockCloseButton}
+              onPress={() => setIsVoiceMode(false)}
+            >
+              <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+              <Text style={[styles.voiceDockCloseText, { color: theme.textSecondary }]}>Minimize</Text>
+            </TouchableOpacity>
+          </View>
           <VoiceOrb
             ref={voiceOrbRef}
+            size={118}
             isListening={isListening}
             isSpeaking={isSpeaking}
+            isParentProcessing={isProcessing}
             onStartListening={() => setIsListening(true)}
             onStopListening={() => setIsListening(false)}
             onTranscript={handleVoiceInput}
-            onTTSStart={() => setIsSpeaking(true)}
-            onTTSEnd={() => setIsSpeaking(false)}
+            onVoiceError={handleVoiceRecognitionError}
             autoStartListening
             autoRestartAfterTTS
           />
-          <TouchableOpacity
-            style={styles.voiceModeCloseButton}
-            onPress={() => setIsVoiceMode(false)}
-          >
-            <Ionicons name="close" size={24} color={theme.text} />
-          </TouchableOpacity>
         </View>
       )}
 

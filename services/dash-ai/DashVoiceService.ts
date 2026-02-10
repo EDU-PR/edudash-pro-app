@@ -555,7 +555,10 @@ export class DashVoiceService {
 
     const voiceSettings = this.config.voiceSettings;
     const locale = this.mapToDeviceLocale(options?.language || voiceSettings.language || 'en');
-    const rate = Math.min(Math.max(voiceSettings.rate ?? 1.0, 0.5), 2.0);
+    const baseRate = Number.isFinite(voiceSettings.rate) && voiceSettings.rate > 0
+      ? voiceSettings.rate
+      : 1.0;
+    const rate = Math.min(Math.max(baseRate, 0.5), 2.0);
     const pitch = Math.min(Math.max(voiceSettings.pitch ?? 1.0, 0.5), 2.0);
 
     try {
@@ -689,7 +692,10 @@ export class DashVoiceService {
           : resolveDefaultVoiceId(shortLang as any, gender as any);
 
         // Convert rate/pitch (1.0 baseline) to -50..+50 scale expected by Edge Function
-        const speaking_rate = Math.round(((voiceSettings.rate ?? 1.0) - 1.0) * 100);
+        const baseRate = Number.isFinite(voiceSettings.rate) && voiceSettings.rate > 0
+          ? voiceSettings.rate
+          : 1.0;
+        const speaking_rate = Math.round((baseRate - 1.0) * 100);
         const pitch = Math.round(((voiceSettings.pitch ?? 1.0) - 1.0) * 100);
 
 
@@ -706,13 +712,8 @@ export class DashVoiceService {
           // Play via audio manager
           const { audioManager } = await import('@/lib/voice/audio');
           callbacks?.onStart?.();
-          await audioManager.play(resp.audio_url, (state) => {
-            if (!state.isPlaying && state.position === 0 && !state.error) {
-              callbacks?.onDone?.();
-            } else if (state.error) {
-              callbacks?.onError?.(new Error(state.error));
-            }
-          });
+          await audioManager.play(resp.audio_url);
+          callbacks?.onDone?.();
           return;
         } catch (edgeError: any) {
           console.warn('[DashVoice] Azure TTS failed or unavailable');
@@ -1038,8 +1039,8 @@ export class DashVoiceService {
     return text
       // Remove quote characters (TTS often reads "quote")
       .replace(/[“”"«»]/g, '')
-      // Remove curly single quotes
-      .replace(/[‘’]/g, '')
+      // Normalize apostrophes so contractions like "I'm" stay pronounceable
+      .replace(/[‘’`]/g, "'")
       // Remove brackets and parentheses
       .replace(/[()[\]{}<>]/g, '')
       // Normalize stray punctuation clusters

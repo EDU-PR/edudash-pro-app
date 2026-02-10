@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useOrgAdminMetrics } from '@/hooks/useOrgAdminMetrics';
 
 interface QuickActionsGridProps {
@@ -9,100 +10,81 @@ interface QuickActionsGridProps {
 
 export function QuickActionsGrid({ theme }: QuickActionsGridProps) {
   const { data: metrics } = useOrgAdminMetrics();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const actions = [
     {
       label: 'Programs',
       route: '/screens/org-admin/programs',
       badge: metrics?.totalPrograms,
-      icon: 'school-outline',
+      icon: 'school-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Cohorts',
       route: '/screens/org-admin/cohorts',
       badge: metrics?.totalCohorts,
-      icon: 'people-outline',
+      icon: 'people-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Instructors',
       route: '/screens/org-admin/instructors',
       badge: metrics?.totalInstructors,
-      icon: 'person-outline',
+      icon: 'person-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Enrollments',
       route: '/screens/org-admin/enrollments',
       badge: metrics?.totalEnrollments,
-      icon: 'list-outline',
+      icon: 'list-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Certifications',
       route: '/screens/org-admin/certifications',
       badge: metrics?.totalCertifications,
-      icon: 'ribbon-outline',
+      icon: 'ribbon-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Placements',
       route: '/screens/org-admin/placements',
       badge: metrics?.totalPlacements,
-      icon: 'business-outline',
+      icon: 'business-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Invoices',
       route: '/screens/org-admin/invoices',
-      icon: 'document-text-outline',
+      icon: 'document-text-outline' as keyof typeof Ionicons.glyphMap,
     },
     {
       label: 'Settings',
       route: '/screens/org-admin/settings',
-      icon: 'settings-outline',
+      icon: 'settings-outline' as keyof typeof Ionicons.glyphMap,
     },
   ];
 
   return (
-    <View style={createStyles(theme).container}>
-      <Text style={createStyles(theme).title}>Quick Actions</Text>
-      <View style={createStyles(theme).grid}>
-        {actions.map((action, index) => (
-          <ActionButton
-            key={index}
-            label={action.label}
-            route={action.route}
-            badge={action.badge}
-            theme={theme}
-          />
+    <View style={styles.container}>
+      <Text style={styles.title}>Quick Actions</Text>
+      <View style={styles.grid}>
+        {actions.map((action) => (
+          <TouchableOpacity
+            key={action.label}
+            style={styles.button}
+            onPress={() => router.push(action.route as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.buttonIconWrap}>
+              <Ionicons name={action.icon} size={22} color={theme.primary} />
+            </View>
+            <Text style={styles.buttonText}>{action.label}</Text>
+            {action.badge !== undefined && action.badge > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{action.badge}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         ))}
       </View>
     </View>
-  );
-}
-
-function ActionButton({
-  label,
-  route,
-  badge,
-  theme,
-}: {
-  label: string;
-  route: string;
-  badge?: number;
-  theme: any;
-}) {
-  const styles = createStyles(theme);
-
-  return (
-    <TouchableOpacity
-      style={styles.button}
-      onPress={() => router.push(route as any)}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-      {badge !== undefined && badge > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
   );
 }
 
@@ -112,30 +94,40 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   title: {
     color: theme.text,
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   button: {
-    flexBasis: '48%',
-    backgroundColor: theme.card,
-    padding: 16,
-    borderRadius: 12,
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: theme.surface,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.border,
-    minHeight: 70,
+    minHeight: 80,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    gap: 6,
+  },
+  buttonIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.primary + '14',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     color: theme.text,
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     textAlign: 'center',
   },
   badge: {

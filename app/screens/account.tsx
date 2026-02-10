@@ -15,6 +15,7 @@ import {
   isEnrolled,
 } from "@/lib/biometrics";
 import { BiometricAuthService } from "@/services/BiometricAuthService";
+import { EnhancedBiometricAuth } from "@/services/EnhancedBiometricAuth";
 import { assertSupabase } from "@/lib/supabase";
 import { ensureImageLibraryPermission } from "@/lib/utils/mediaLibrary";
 import { ImageConfirmModal } from "@/components/ui/ImageConfirmModal";
@@ -384,6 +385,20 @@ export default function AccountScreen() {
       } else {
         const success = await BiometricAuthService.enableBiometric(data.user.id, data.user.email || "");
         if (success) {
+          // Seed quick-switch storage immediately for the current account.
+          try {
+            await EnhancedBiometricAuth.storeBiometricSession(
+              data.user.id,
+              data.user.email || email || '',
+              {
+                role,
+                organization_id: null,
+                seat_status: 'active',
+              }
+            );
+          } catch (seedErr) {
+            console.warn('[Account] Failed to seed quick-switch biometric account (non-fatal):', seedErr);
+          }
           await setBiometricsEnabled(true);
           setBiometricEnabled(true);
           showAppAlert("Biometric Login Enabled", "You can now use biometric authentication.");

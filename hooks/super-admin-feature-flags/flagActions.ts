@@ -3,6 +3,7 @@
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
+import { writeSuperAdminAudit } from '@/lib/audit/superAdminAudit';
 import type { FeatureFlag, FeatureFlagForm } from '@/lib/screen-styles/super-admin-feature-flags.styles';
 import type { FetchFlagsResult } from './types';
 
@@ -112,10 +113,12 @@ export async function deleteFlagFromDb(flagId: string): Promise<void> {
 export async function logAuditAction(
   profileId: string, action: string, details: Record<string, unknown>,
 ): Promise<void> {
-  const { error } = await assertSupabase()
-    .from('audit_logs')
-    .insert({ admin_user_id: profileId, action, details });
-  if (error) logger.error(`Failed to log ${action}:`, error);
+  await writeSuperAdminAudit({
+    actorProfileId: profileId,
+    action,
+    description: action.replace(/_/g, ' '),
+    metadata: details,
+  });
 }
 
 export function trackFlagEvent(

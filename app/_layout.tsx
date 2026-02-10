@@ -76,6 +76,7 @@ import { patchNativeEventEmitterModules } from '../lib/nativeEventEmitterPatch';
 import { parseDeepLinkUrl } from '../lib/utils/deepLink';
 import { assertSupabase } from '../lib/supabase';
 import { checkAndRefreshTokenIfNeeded, registerPushDevice } from '../lib/notifications';
+import { resolveExplicitSchoolTypeFromProfile } from '../lib/schoolTypeResolver';
 
 patchNativeEventEmitterModules();
 
@@ -95,8 +96,6 @@ function LayoutContent() {
   const { loading: authLoading, profileLoading, user, profile } = useAuth();
   const { isDark } = useTheme();
   const loadingOverlay = useLoadingOverlay();
-  const [showFAB, setShowFAB] = useState(false);
-  const [statusBarKey, setStatusBarKey] = useState(0);
   const pushRegistrationRef = useRef<{ userId: string; attempted: boolean } | null>(null);
   
   // App preferences for FAB visibility
@@ -106,11 +105,6 @@ function LayoutContent() {
   useAuthGuard();
   useMobileWebGuard();
   useRouteInterstitial();
-  
-  // Force StatusBar re-render when theme changes
-  useEffect(() => {
-    setStatusBarKey((prev) => prev + 1);
-  }, [isDark]);
   
   // Configure Android navigation bar to match theme
   useEffect(() => {
@@ -153,16 +147,7 @@ function LayoutContent() {
       pathname.includes('register'));
 
   const shouldShowOverlay = (!isAuthRoute && (authLoading || profileLoading)) || loadingOverlay.visible;
-  
-  // Show FAB after auth loads and brief delay - ONLY if user is logged in
-  useEffect(() => {
-    if (!authLoading && !isAuthRoute && user) {
-      const timer = setTimeout(() => setShowFAB(true), 800);
-      return () => clearTimeout(timer);
-    } else {
-      setShowFAB(false);
-    }
-  }, [authLoading, isAuthRoute, user]);
+  const isReadyForFAB = !authLoading && !profileLoading && !isAuthRoute && !!user;
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -184,13 +169,15 @@ function LayoutContent() {
   // Determine if FAB should be visible (user pref + route logic + must be logged in)
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isPrincipalRole = normalizedRole === 'principal' || normalizedRole === 'principal_admin';
-  const shouldShowFAB = showFAB && !shouldHideFAB && powerUserModeEnabled && showDashFAB && !!user;
-  const hasCenterDashTab = ROLES_WITH_CENTER_TAB.includes(normalizedRole);
+  const hasExplicitSchoolType = Boolean(resolveExplicitSchoolTypeFromProfile(profile));
+  const hasAdminCenterDashTab = normalizedRole === 'admin' && hasExplicitSchoolType;
+  const shouldShowFAB = isReadyForFAB && !shouldHideFAB && powerUserModeEnabled && showDashFAB && !!user;
+  const hasCenterDashTab = ROLES_WITH_CENTER_TAB.includes(normalizedRole) || hasAdminCenterDashTab;
   const shouldRenderFAB = shouldShowFAB && (!hasCenterDashTab || isPrincipalRole);
   
   return (
     <View style={styles.container}>
-      <StatusBar key={statusBarKey} style={isDark ? 'light' : 'dark'} animated />
+      <StatusBar style={isDark ? 'light' : 'dark'} animated />
       
       {/* App Tutorial - shows on first launch */}
       {Platform.OS !== 'web' && !tutorialCompleted && (

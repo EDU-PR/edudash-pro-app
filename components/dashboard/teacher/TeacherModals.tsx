@@ -178,7 +178,7 @@ export const TeacherModals: React.FC<TeacherModalsProps> = ({
               style={styles.optionItem}
               onPress={() => {
                 setShowOptionsMenu(false);
-                router.push("/screens/teacher-messages");
+                router.push("/screens/teacher-message-list");
               }}
             >
               <View style={styles.optionLeft}>

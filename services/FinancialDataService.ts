@@ -1481,13 +1481,9 @@ export class FinancialDataService {
 
   private static isStudentActiveForReceivables(student: any): boolean {
     if (!student) return false;
-
-    if (student.is_active === false) return false;
-
+    if (student.is_active !== true) return false;
     const status = String(student.status || '').toLowerCase().trim();
-    if (!status) return true;
-
-    return !['inactive', 'deleted', 'removed', 'withdrawn', 'archived'].includes(status);
+    return status === 'active';
   }
 
   private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
@@ -1619,6 +1615,12 @@ export class FinancialDataService {
       expenses_this_month: Number(data.expenses_this_month || 0),
       petty_cash_expenses_this_month: Number(data.petty_cash_expenses_this_month || 0),
       financial_expenses_this_month: Number(data.financial_expenses_this_month || 0),
+      payroll_expenses_this_month: Number(data.payroll_expenses_this_month || 0),
+      operational_expenses_this_month: Number(data.operational_expenses_this_month || 0),
+      registration_revenue: Number(data.registration_revenue || 0),
+      excluded_inactive_due: Number(data.excluded_inactive_due || 0),
+      excluded_inactive_outstanding: Number(data.excluded_inactive_outstanding || 0),
+      excluded_inactive_students: Number(data.excluded_inactive_students || 0),
       net_after_expenses: Number(data.net_after_expenses || 0),
       payroll_due: Number(data.payroll_due || 0),
       payroll_paid: Number(data.payroll_paid || 0),

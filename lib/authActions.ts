@@ -97,7 +97,13 @@ function forceNavigate(targetRoute: string): void {
  * This ensures all auth state is properly cleaned up
  * Includes timeout protection to prevent hanging
  */
-type SignOutOptions = { clearBiometrics?: boolean; redirectTo?: string; exitApp?: boolean; resetApp?: boolean };
+type SignOutOptions = {
+  clearBiometrics?: boolean;
+  redirectTo?: string;
+  exitApp?: boolean;
+  resetApp?: boolean;
+  preserveOtherSessions?: boolean;
+};
 
 export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any): Promise<void> {
   // Check if sign-out is in progress, but also handle stale sign-outs
@@ -125,6 +131,10 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
       : targetRoute;
   const shouldExitApp = Platform.OS === 'android' && options?.exitApp === true;
   const shouldResetApp = options?.resetApp !== false;
+  const preserveOtherSessions =
+    options?.preserveOtherSessions === true ||
+    options?.clearBiometrics === false ||
+    targetRouteWithFresh.includes('switch=1');
   
   // Overall timeout to prevent infinite hang - force navigation after 15 seconds
   const overallTimeoutId = setTimeout(() => {
@@ -180,7 +190,12 @@ export async function signOutAndRedirect(optionsOrEvent?: SignOutOptions | any):
     
     // Perform complete sign-out with timeout (clears Supabase session + storage)
     console.log('[authActions] Performing complete sign-out...');
-    await withTimeout(signOut(), SIGNOUT_TIMEOUT, 'Sign-out', undefined);
+    await withTimeout(
+      signOut({ preserveOtherSessions }),
+      SIGNOUT_TIMEOUT,
+      'Sign-out',
+      undefined,
+    );
     console.log('[authActions] Sign-out successful');
     
     // Clear overall timeout since we succeeded

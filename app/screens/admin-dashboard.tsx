@@ -5,16 +5,21 @@ import { Stack, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
+import { resolveExplicitSchoolTypeFromProfile, type ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 import { useAdminDashboardPack } from '@/hooks/useAdminDashboardPack';
 import { useAdminDashboardData } from '@/hooks/useAdminDashboardData';
+import { useAdminOperationalSnapshot } from '@/hooks/useAdminOperationalSnapshot';
 import { AdminWorkflowService } from '@/services/AdminWorkflowService';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
 import {
   AdminActivityFeed,
   AdminDashboardShell,
   AdminEscalationPanel,
+  AdminOperationalSnapshot,
   AdminOperationalInbox,
   AdminTaskPackGrid,
   AdminWorkflowLanes,
@@ -31,8 +36,22 @@ function formatOrgTypeLabel(value: string | null): string {
   return value;
 }
 
-function getFallbackRouteForRole(role?: string | null): string {
+function getFallbackRouteForRole(
+  role?: string | null,
+  schoolType?: ResolvedSchoolType | null
+): string {
   const normalized = String(role || '').toLowerCase().trim();
+  if (schoolType) {
+    if (normalized === 'admin') return '/screens/principal-dashboard';
+    return (
+      getDashboardRouteForRole({
+        role: normalized,
+        resolvedSchoolType: schoolType,
+        hasOrganization: true,
+        traceContext: 'AdminDashboard.fallback',
+      }) || '/screens/principal-dashboard'
+    );
+  }
   if (normalized === 'principal' || normalized === 'principal_admin') return '/screens/principal-dashboard';
   if (normalized === 'super_admin' || normalized === 'superadmin') return '/screens/super-admin-dashboard';
   return '/screens/org-admin-dashboard';
@@ -53,6 +72,7 @@ export default function AdaptiveAdminDashboardScreen() {
   const role = String(profile?.role || '').toLowerCase();
   const isAdminRole = role === 'admin';
   const isStillLoading = loading || profileLoading;
+  const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
 
   const featureFlags = getFeatureFlagsSync();
   const adaptiveDashboardEnabled = featureFlags.adaptive_admin_dashboard_mobile_v1 !== false;
@@ -64,6 +84,7 @@ export default function AdaptiveAdminDashboardScreen() {
     organizationName,
     pack,
   } = useAdminDashboardPack();
+  const safeFallbackRoute = getFallbackRouteForRole(profile?.role, explicitSchoolType || orgType);
 
   const {
     data: bundle,
@@ -74,6 +95,20 @@ export default function AdaptiveAdminDashboardScreen() {
   } = useAdminDashboardData({
     orgId,
     orgType,
+    enabled:
+      !!orgId &&
+      !isStillLoading &&
+      isAdminRole &&
+      adaptiveDashboardEnabled &&
+      isSupportedOrgType &&
+      !!pack,
+  });
+
+  const {
+    data: operationalSnapshot,
+    isLoading: operationalSnapshotLoading,
+  } = useAdminOperationalSnapshot({
+    orgId,
     enabled:
       !!orgId &&
       !isStillLoading &&
@@ -112,10 +147,11 @@ export default function AdaptiveAdminDashboardScreen() {
 
     if (!isAdminRole || !adaptiveDashboardEnabled || !isSupportedOrgType || !pack) {
       navigationAttempted.current = true;
-      router.replace(getFallbackRouteForRole(profile?.role));
+      router.replace(safeFallbackRoute as any);
     }
   }, [
     adaptiveDashboardEnabled,
+    safeFallbackRoute,
     isAdminRole,
     isStillLoading,
     isSupportedOrgType,
@@ -129,8 +165,8 @@ export default function AdaptiveAdminDashboardScreen() {
   useEffect(() => {
     if (!bundleError || bundleLoading || dataFallbackAttempted.current) return;
     dataFallbackAttempted.current = true;
-    router.replace('/screens/org-admin-dashboard');
-  }, [bundleError, bundleLoading]);
+    router.replace(safeFallbackRoute as any);
+  }, [bundleError, bundleLoading, safeFallbackRoute]);
 
   const handleOpenTask = useCallback((task: AdminTaskDefinition) => {
     router.push(task.route as any);
@@ -138,10 +174,10 @@ export default function AdaptiveAdminDashboardScreen() {
 
   const handleOpenLane = useCallback(
     (lane: 'hiring' | 'admissions' | 'finance_ops') => {
-      const route = pack?.laneRoutes[lane] || '/screens/org-admin-dashboard';
+      const route = pack?.laneRoutes[lane] || safeFallbackRoute;
       router.push(route as any);
     },
-    [pack]
+    [pack, safeFallbackRoute]
   );
 
   const handleOpenWorkflowItem = useCallback((item: AdminWorkflowItem) => {
@@ -149,16 +185,16 @@ export default function AdaptiveAdminDashboardScreen() {
       router.push('/screens/admin/manage-join-requests' as any);
       return;
     }
-    router.push('/screens/org-admin-dashboard' as any);
-  }, []);
+    router.push(safeFallbackRoute as any);
+  }, [safeFallbackRoute]);
 
   const handleOpenInboxItem = useCallback((item: AdminInboxItem) => {
     if (item.request_type && item.request_id) {
       router.push('/screens/admin/manage-join-requests' as any);
       return;
     }
-    router.push('/screens/org-admin-dashboard' as any);
-  }, []);
+    router.push(safeFallbackRoute as any);
+  }, [safeFallbackRoute]);
 
   const handleScreenAction = useCallback(
     async (
@@ -220,41 +256,50 @@ export default function AdaptiveAdminDashboardScreen() {
         <Text style={styles.loadingText}>Preparing dashboard...</Text>
         <TouchableOpacity
           style={styles.fallbackButton}
-          onPress={() => router.replace('/screens/org-admin-dashboard')}
+          onPress={() => router.replace(safeFallbackRoute as any)}
         >
-          <Text style={styles.fallbackButtonText}>Open Legacy Admin</Text>
+          <Text style={styles.fallbackButtonText}>Open Dashboard</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
-      <Stack.Screen options={{ title: 'Adaptive Admin Dashboard', headerShown: true }} />
-      <AdminDashboardShell
-        orgName={organizationName}
-        orgTypeLabel={formatOrgTypeLabel(orgType)}
-        counters={bundle?.counters || EMPTY_ADMIN_COUNTERS}
-        onRefresh={() => {
-          refetch();
-        }}
-        refreshing={isRefetching}
-      >
-        <AdminOperationalInbox items={bundle.inbox} onOpenItem={handleOpenInboxItem} />
-        <AdminWorkflowLanes
-          workflows={bundle.workflows}
-          laneRoutes={pack.laneRoutes}
-          screeningRequestId={screeningRequestId}
-          onOpenLaneRoute={handleOpenLane}
-          onOpenWorkflowItem={handleOpenWorkflowItem}
-          onScreenAction={handleScreenAction}
-        />
-        <AdminTaskPackGrid tasks={pack.tasks} counters={bundle.counters} onOpenTask={handleOpenTask} />
-        <AdminEscalationPanel items={bundle.escalations} onOpenItem={handleOpenWorkflowItem} />
-        <AdminActivityFeed items={bundle.activity} />
-      </AdminDashboardShell>
+    <>
+      <Stack.Screen options={{ title: 'Adaptive Admin Dashboard', headerShown: false }} />
+      {/* School admins reuse principal mobile chrome (hamburger, notifications, avatar). */}
+      <DesktopLayout role="principal" title={organizationName}>
+        <View style={styles.container}>
+          <AdminDashboardShell
+            orgName={organizationName}
+            orgTypeLabel={formatOrgTypeLabel(orgType)}
+            counters={bundle?.counters || EMPTY_ADMIN_COUNTERS}
+            onRefresh={() => {
+              refetch();
+            }}
+            refreshing={isRefetching}
+          >
+            <AdminOperationalSnapshot
+              metrics={operationalSnapshot}
+              loading={operationalSnapshotLoading}
+            />
+            <AdminOperationalInbox items={bundle.inbox} onOpenItem={handleOpenInboxItem} />
+            <AdminWorkflowLanes
+              workflows={bundle.workflows}
+              laneRoutes={pack.laneRoutes}
+              screeningRequestId={screeningRequestId}
+              onOpenLaneRoute={handleOpenLane}
+              onOpenWorkflowItem={handleOpenWorkflowItem}
+              onScreenAction={handleScreenAction}
+            />
+            <AdminTaskPackGrid tasks={pack.tasks} counters={bundle.counters} onOpenTask={handleOpenTask} />
+            <AdminEscalationPanel items={bundle.escalations} onOpenItem={handleOpenWorkflowItem} />
+            <AdminActivityFeed items={bundle.activity} />
+          </AdminDashboardShell>
+        </View>
+      </DesktopLayout>
       <AlertModal {...alertProps} />
-    </SafeAreaView>
+    </>
   );
 }
 

@@ -178,20 +178,23 @@ export class DashVoiceController {
       callbacks?.onStart?.();
       
       const { audioManager } = await import('@/lib/voice/audio');
+      let playbackError = false;
       await audioManager.play(data.audio_url, (state) => {
         if (this.isSpeechAborted) {
           console.log('[DashVoiceController] Speech aborted during playback');
-          audioManager.stop();
+          void audioManager.stop();
           callbacks?.onStopped?.();
           return;
         }
-        if (!state.isPlaying && state.position === 0 && !state.error) {
-          callbacks?.onDone?.();
-        } else if (state.error) {
+        if (state.error) {
+          playbackError = true;
           console.error('[DashVoiceController] Audio playback error:', state.error);
           callbacks?.onError?.(new Error(state.error));
         }
       });
+      if (!this.isSpeechAborted && !playbackError) {
+        callbacks?.onDone?.();
+      }
     } catch (error) {
       console.error('[DashVoiceController] Azure TTS failed:', error);
       throw error;
@@ -312,7 +315,8 @@ export class DashVoiceController {
       .replace(/_Tools used:.*?_/gi, '')
       .replace(/_.*?tokens used_/gi, '')
       // Quotes and parens
-      .replace(/["""«»'']/g, '')
+      .replace(/[“”"«»]/g, '')
+      .replace(/[‘’`]/g, "'")
       // Status labels that shouldn't be spoken
       .replace(/\bCorrect answer:\s*/gi, '')
       .replace(/\bNext question:\s*/gi, '')

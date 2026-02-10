@@ -128,7 +128,7 @@ export class DashNavigationHandler implements IDashNavigationHandler {
       requiresAuth: true
     },
     'messages': {
-      route: '/screens/teacher-messages',
+      route: '/screens/teacher-message-list',
       title: 'Messages',
       description: 'Send and receive messages',
       keywords: ['messages', 'communication', 'chat', 'inbox'],

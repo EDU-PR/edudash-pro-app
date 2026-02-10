@@ -101,7 +101,7 @@ export const EDUDASH_FEATURES: Record<string, Feature> = {
       'view parent messages',
       'contact guardian'
     ],
-    relatedScreens: ['/(parent)/home', '/screens/messages', '/screens/teacher-messages'],
+    relatedScreens: ['/(parent)/home', '/screens/messages', '/screens/teacher-message-list'],
     relatedTables: ['messages', 'users']
   },
   
@@ -671,7 +671,7 @@ export const EDUDASH_SCREENS: Record<string, Screen> = {
   },
 
   teacher_messages: {
-    route: '/screens/teacher-messages',
+    route: '/screens/teacher-message-list',
     title: 'Teacher Messages',
     description: 'Communicate with parents',
     roles: ['teacher', 'principal'],

@@ -19,6 +19,7 @@ interface LanguageDropdownProps {
   onClose: () => void;
   selectedLanguage: SupportedLanguage;
   onSelect: (lang: SupportedLanguage) => void;
+  onOpenFullChat?: () => void | Promise<void>;
   theme: any;
 }
 
@@ -28,7 +29,7 @@ const LANGUAGES = [
   { code: 'zu-ZA' as SupportedLanguage, label: 'isiZulu', flag: '🇿🇦', desc: 'isiZulu' },
 ];
 
-export function LanguageDropdown({ visible, onClose, selectedLanguage, onSelect, theme }: LanguageDropdownProps) {
+export function LanguageDropdown({ visible, onClose, selectedLanguage, onSelect, onOpenFullChat, theme }: LanguageDropdownProps) {
   if (!visible) return null;
 
   return (
@@ -58,10 +59,17 @@ export function LanguageDropdown({ visible, onClose, selectedLanguage, onSelect,
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <TouchableOpacity
             style={styles.item}
-            onPress={() => { onClose(); router.push('/screens/dash-assistant'); }}
+            onPress={async () => {
+              onClose();
+              if (onOpenFullChat) {
+                await onOpenFullChat();
+                return;
+              }
+              router.push({ pathname: '/screens/dash-assistant', params: { source: 'orb' } });
+            }}
           >
             <Ionicons name="chatbubbles-outline" size={18} color={theme.primary} />
-            <Text style={[styles.label, { color: theme.primary, marginLeft: 8 }]}>Open full chat</Text>
+            <Text style={[styles.label, { color: theme.primary, marginLeft: 8 }]}>Continue in full Dash chat</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
