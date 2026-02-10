@@ -5,8 +5,8 @@
  * Extracted from app/screens/teacher-management.tsx per WARP.md standards.
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import type { Teacher } from '@/types/teacher-management';
@@ -22,11 +22,14 @@ interface TeacherCardProps {
   onCopyInviteLink?: (teacher: Teacher) => void;
   onDeleteInvite?: (inviteId: string, email: string) => void;
   onDeleteTeacher?: (teacher: Teacher) => void;
+  onSetRole?: (teacher: Teacher, role: 'teacher' | 'admin') => void;
   inviteStatus?: string | null;
   inviteToken?: string | null;
   inviteId?: string | null;
   isAssigning: boolean;
   isRevoking: boolean;
+  isUpdatingRole?: boolean;
+  updatingRoleTeacherId?: string | null;
   shouldDisableAssignment: boolean;
   theme?: ThemeColors;
 }
@@ -40,11 +43,14 @@ export function TeacherCard({
   onCopyInviteLink,
   onDeleteInvite,
   onDeleteTeacher,
+  onSetRole,
   inviteStatus,
   inviteToken,
   inviteId,
   isAssigning,
   isRevoking,
+  isUpdatingRole,
+  updatingRoleTeacherId,
   shouldDisableAssignment,
   theme,
 }: TeacherCardProps) {
@@ -59,6 +65,10 @@ export function TeacherCard({
   const fullName = `${teacher.firstName} ${teacher.lastName}`.trim() || teacher.email;
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   const [showActions, setShowActions] = useState(false);
+  const teacherRole = teacher.schoolRole || 'teacher';
+  const isAdminRole = teacherRole === 'admin' || teacherRole === 'principal_admin';
+  const canUpdateRole = Boolean(onSetRole && teacher.profileId);
+  const isRoleUpdating = Boolean(isUpdatingRole && updatingRoleTeacherId === teacher.id);
   const initials = [teacher.firstName, teacher.lastName]
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase())
@@ -104,6 +114,23 @@ export function TeacherCard({
               <View style={[styles.chip, { borderColor: seatColor }]}>
                 <Ionicons name={seatIcon as any} size={11} color={seatColor} />
                 <Text style={[styles.chipText, { color: seatColor }]}>{seatLabel}</Text>
+              </View>
+
+              {/* School Role Chip */}
+              <View
+                style={[
+                  styles.chip,
+                  isAdminRole && styles.roleChipAdmin,
+                ]}
+              >
+                <Ionicons
+                  name={isAdminRole ? 'shield-checkmark-outline' : 'person-outline'}
+                  size={11}
+                  color={isAdminRole ? '#0ea5e9' : (theme?.textSecondary || '#6b7280')}
+                />
+                <Text style={[styles.chipText, isAdminRole && styles.roleChipTextAdmin]}>
+                  {isAdminRole ? 'Admin' : 'Teacher'}
+                </Text>
               </View>
 
               {/* Classes Chip */}
@@ -160,6 +187,48 @@ export function TeacherCard({
                 <Text style={[styles.actionBtnText, { color: '#6366f1' }]}>Profile</Text>
               </TouchableOpacity>
 
+              {/* Role Management */}
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  isAdminRole ? styles.actionBtnRoleDemote : styles.actionBtnRolePromote,
+                  (!canUpdateRole || isRoleUpdating) && styles.actionBtnDisabled,
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  if (!onSetRole || !canUpdateRole || isRoleUpdating) return;
+                  onSetRole(teacher, isAdminRole ? 'teacher' : 'admin');
+                }}
+                disabled={!canUpdateRole || isRoleUpdating}
+              >
+                <Ionicons
+                  name={isAdminRole ? 'person-circle-outline' : 'shield-outline'}
+                  size={16}
+                  color={
+                    !canUpdateRole || isRoleUpdating
+                      ? '#9ca3af'
+                      : isAdminRole
+                        ? '#f59e0b'
+                        : '#0ea5e9'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.actionBtnText,
+                    {
+                      color:
+                        !canUpdateRole || isRoleUpdating
+                          ? '#9ca3af'
+                          : isAdminRole
+                            ? '#f59e0b'
+                            : '#0ea5e9',
+                    },
+                  ]}
+                >
+                  {isRoleUpdating ? 'Updating role...' : isAdminRole ? 'Set Teacher' : 'Make Admin'}
+                </Text>
+              </TouchableOpacity>
+
               {/* Seat Management */}
               {!hasSeatUser ? (
                 <>
@@ -199,7 +268,9 @@ export function TeacherCard({
                   disabled={isRevoking || !hasSeatUser}
                 >
                   <Ionicons name="remove-circle-outline" size={16} color="#f59e0b" />
-                  <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>Revoke Seat</Text>
+                  <Text style={[styles.actionBtnText, { color: '#f59e0b' }]}>
+                    {isRevoking ? 'Revoking...' : 'Revoke Seat'}
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -212,7 +283,7 @@ export function TeacherCard({
                     e.stopPropagation();
                     onAssignSeat(teacher.teacherUserId, fullName);
                   }}
-                  disabled={isAssigning || shouldDisableAssignment || !hasSeatUser}
+                  disabled={isAssigning || !hasSeatUser}
                 >
                   <Ionicons
                     name="add-circle-outline"
@@ -221,7 +292,9 @@ export function TeacherCard({
                   />
                   <Text style={[styles.actionBtnText, {
                     color: shouldDisableAssignment || !hasSeatUser ? '#9ca3af' : '#059669'
-                  }]}>Assign Seat</Text>
+                  }]}>
+                    {isAssigning ? 'Assigning...' : 'Assign Seat'}
+                  </Text>
                 </TouchableOpacity>
               )}
 
@@ -336,6 +409,13 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     color: theme?.textSecondary || '#64748b',
   },
+  roleChipAdmin: {
+    borderColor: '#0ea5e966',
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+  },
+  roleChipTextAdmin: {
+    color: '#0ea5e9',
+  },
   moreButton: {
     padding: 6,
     borderRadius: 8,
@@ -387,6 +467,14 @@ const createStyles = (theme?: ThemeColors) => StyleSheet.create({
   actionBtnAssign: {
     borderColor: '#059669',
     backgroundColor: 'rgba(5, 150, 105, 0.08)',
+  },
+  actionBtnRolePromote: {
+    borderColor: '#0ea5e9',
+    backgroundColor: 'rgba(14, 165, 233, 0.08)',
+  },
+  actionBtnRoleDemote: {
+    borderColor: '#f59e0b',
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
   },
   actionBtnDeleteInvite: {
     borderColor: '#ef4444',

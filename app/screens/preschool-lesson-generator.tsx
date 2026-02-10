@@ -11,7 +11,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { logger } from '@/lib/logger';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const TAG = 'PreschoolLessonGenerator';
 
 // Conditional import for markdown rendering on native
 const isWeb = Platform.OS === 'web';
@@ -384,8 +387,8 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
       setProgressMessage('Complete!');
 
       // Debug: Log raw content for troubleshooting
-      console.log('[PreschoolLessonGenerator] Raw content length:', content.length);
-      console.log('[PreschoolLessonGenerator] Content preview:', content.substring(0, 200));
+      logger.debug(TAG, 'Raw content length:', content.length);
+      logger.debug(TAG, 'Content preview:', content.substring(0, 200));
 
       // Parse sections from generated content with more flexible matching
       // Match lesson plan section (various emoji/heading variations)
@@ -398,7 +401,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
       const parsedInsights = insightsMatch ? insightsMatch[0].trim() : '';
       const parsedHomework = homeworkMatch ? homeworkMatch[0].trim() : '';
 
-      console.log('[PreschoolLessonGenerator] Parsed sections:', {
+      logger.debug(TAG, 'Parsed sections:', {
         lessonLength: parsedLesson.length,
         insightsLength: parsedInsights.length,
         homeworkLength: parsedHomework.length,

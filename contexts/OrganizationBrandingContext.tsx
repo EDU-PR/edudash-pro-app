@@ -7,6 +7,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 
+const TAG = 'Branding';
+
 export interface DashboardSettings {
   wallpaper_url?: string;
   wallpaper_opacity?: number;
@@ -61,10 +63,10 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
       const supabase = assertSupabase();
       const { data: { user } } = await supabase.auth.getUser();
       
-      console.log('[Branding] User:', user?.id);
+      logger.debug(TAG, 'User:', user?.id);
       
       if (!user) {
-        console.log('[Branding] No user found, skipping fetch');
+        logger.debug(TAG, 'No user found, skipping fetch');
         setIsLoading(false);
         return;
       }
@@ -76,24 +78,24 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
         .eq('user_id', user.id)
         .maybeSingle();
 
-      console.log('[Branding] Member query result:', { member, memberError });
+      logger.debug(TAG, 'Member query result:', { member, memberError });
 
       if (memberError) {
-        console.log('[Branding] Error querying membership:', memberError.message);
+        logger.debug(TAG, 'Error querying membership:', memberError.message);
         logger.info('[Branding] Error querying membership:', memberError.message);
       }
       
       // If user is in an organization with dashboard_settings, use that
       if (member?.organization_id && member.organizations) {
         const org = member.organizations as any;
-        console.log('[Branding] Organization found:', org.id, org.name);
-        console.log('[Branding] Dashboard settings:', org.dashboard_settings);
+        logger.debug(TAG, 'Organization found:', org.id, org.name);
+        logger.debug(TAG, 'Dashboard settings:', org.dashboard_settings);
         setOrganizationId(org.id);
         setOrganizationName(org.name);
         
         if (org.dashboard_settings) {
           setSettings(org.dashboard_settings as DashboardSettings);
-          console.log('[Branding] Settings applied from organization:', org.dashboard_settings);
+          logger.debug(TAG, 'Settings applied from organization:', org.dashboard_settings);
           logger.info('[Branding] Loaded organization branding:', org.dashboard_settings);
           setIsLoading(false);
           return;
@@ -120,7 +122,7 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
       }
 
       if (profile?.preschool_id) {
-        console.log('[Branding] User has preschool_id:', profile.preschool_id);
+        logger.debug(TAG, 'User has preschool_id:', profile.preschool_id);
         
         // Check if an organization has this preschool linked to it
         // Note: The FK is organizations.preschool_id → preschools.id (reverse direction)
@@ -131,11 +133,11 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
           .maybeSingle();
 
         if (linkedOrgError) {
-          console.log('[Branding] Error querying linked organization:', linkedOrgError.message);
+          logger.debug(TAG, 'Error querying linked organization:', linkedOrgError.message);
         }
 
         if (linkedOrg?.dashboard_settings) {
-          console.log('[Branding] Using preschool organization branding:', linkedOrg.dashboard_settings);
+          logger.debug(TAG, 'Using preschool organization branding:', linkedOrg.dashboard_settings);
           setOrganizationId(linkedOrg.id);
           setOrganizationName(linkedOrg.name);
           setSettings(linkedOrg.dashboard_settings as DashboardSettings);
@@ -145,7 +147,7 @@ export const OrganizationBrandingProvider: React.FC<OrganizationBrandingProvider
         }
       }
 
-      console.log('[Branding] No branding found for user');
+      logger.debug(TAG, 'No branding found for user');
     } catch (err: any) {
       logger.error('[Branding] Error fetching branding:', err);
       setError(err.message);

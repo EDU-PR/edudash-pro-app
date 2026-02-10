@@ -140,7 +140,11 @@ export async function speakDashResponse(params: {
   try {
     if (isFreeTier && message.content && process.env.NODE_ENV !== 'development') {
       const estimatedMs = Math.max(1500, Math.round((message.content.length / 12.5) * 1000));
-      await consumeVoiceBudget(estimatedMs);
+      try {
+        await consumeVoiceBudget(estimatedMs);
+      } catch (budgetError) {
+        console.warn('[useDashAssistant] Voice budget update failed, continuing with playback:', budgetError);
+      }
     }
     setIsSpeaking(true);
     setSpeakingMessageId(message.id);

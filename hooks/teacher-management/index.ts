@@ -12,6 +12,7 @@ export type { UseTeacherManagementOptions, UseTeacherManagementReturn } from './
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { TeacherInviteService } from '@/lib/services/teacherInviteService';
+import { setSchoolStaffRole } from '@/lib/services/schoolRoleService';
 import { useSeatLimits, useTeacherHasSeat } from '@/lib/hooks/useSeatLimits';
 import type { TeacherDocument, TeacherDocType } from '@/lib/services/TeacherDocumentsService';
 import type { AlertButton } from '@/components/ui/AlertModal';
@@ -66,13 +67,15 @@ export function useTeacherManagement(
   const [isUploadingDoc] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [updatingRoleTeacherId, setUpdatingRoleTeacherId] = useState<string | null>(null);
 
   // --- Seat management ---
   const {
     seatUsageDisplay,
     shouldDisableAssignment,
-    assignSeat,
-    revokeSeat,
+    assignSeatAsync,
+    revokeSeatAsync,
     isAssigning,
     isRevoking,
     isLoading: seatLimitsLoading,
@@ -137,11 +140,85 @@ export function useTeacherManagement(
   const { handleAssignSeat, handleRevokeSeat } = createSeatHandlers({
     shouldDisableAssignment,
     seatUsageDisplay,
-    assignSeat,
-    revokeSeat,
+    assignSeat: assignSeatAsync,
+    revokeSeat: revokeSeatAsync,
     fetchTeachers,
     safeAlert,
   });
+
+  const handleSetTeacherRole = useCallback(
+    async (teacher: Teacher, role: 'teacher' | 'admin' | 'principal_admin') => {
+      const schoolId = getPreschoolId();
+      if (!schoolId) {
+        safeAlert({
+          title: 'School Not Found',
+          message: 'Could not determine your school. Please re-open this screen and try again.',
+          type: 'error',
+        });
+        return;
+      }
+
+      const profileId = teacher.profileId;
+      if (!profileId) {
+        safeAlert({
+          title: 'Cannot Update Role',
+          message: 'This teacher is missing a linked profile record. Please ask them to complete account setup first.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const currentRole = teacher.schoolRole || 'teacher';
+      if (currentRole === role) return;
+
+      const teacherName = `${teacher.firstName} ${teacher.lastName}`.trim() || teacher.email;
+      const roleLabel = role === 'teacher' ? 'Teacher' : 'School Admin';
+      const actionLabel = role === 'teacher' ? 'Set as Teacher' : 'Make School Admin';
+      const confirmMessage =
+        role === 'teacher'
+          ? `${teacherName} will lose school admin privileges and remain a teacher.`
+          : `${teacherName} will gain school admin access for this school.`;
+
+      safeAlert({
+        title: actionLabel,
+        message: confirmMessage,
+        type: 'info',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' } as AlertButton,
+          {
+            text: actionLabel,
+            onPress: async () => {
+              try {
+                setIsUpdatingRole(true);
+                setUpdatingRoleTeacherId(teacher.id);
+                await setSchoolStaffRole({
+                  targetProfileId: profileId,
+                  schoolId,
+                  role,
+                });
+                await fetchTeachers();
+                safeAlert({
+                  title: 'Role Updated',
+                  message: `${teacherName} is now ${roleLabel}.`,
+                  type: 'success',
+                });
+              } catch (error) {
+                safeAlert({
+                  title: 'Role Update Failed',
+                  message: error instanceof Error ? error.message : 'Could not update school role.',
+                  type: 'error',
+                });
+              } finally {
+                setIsUpdatingRole(false);
+                setUpdatingRoleTeacherId(null);
+              }
+            },
+          } as AlertButton,
+        ],
+      });
+    },
+    [fetchTeachers, getPreschoolId, safeAlert],
+  );
 
   // --- Document handlers ---
   const refreshSelectedTeacherDocs = useCallback(
@@ -196,6 +273,8 @@ export function useTeacherManagement(
     shouldDisableAssignment,
     isAssigning,
     isRevoking,
+    isUpdatingRole,
+    updatingRoleTeacherId,
     seatLimitsLoading,
     seatLimitsError,
     selectedTeacherHasSeat,
@@ -214,6 +293,7 @@ export function useTeacherManagement(
     refetchSeatLimits,
     handleAssignSeat,
     handleRevokeSeat,
+    handleSetTeacherRole,
     pickAndUploadTeacherDoc,
     showAttachDocActionSheet,
     refreshSelectedTeacherDocs,

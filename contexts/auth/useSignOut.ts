@@ -11,10 +11,13 @@ import * as Sentry from 'sentry-expo';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { signOut } from '@/lib/sessionManager';
+import { logger } from '@/lib/logger';
 import { getPostHog } from '@/lib/posthogClient';
 import { securityAuditor } from '@/lib/security-audit';
 import { createPermissionChecker, type EnhancedUserProfile, type PermissionChecker } from '@/lib/rbac';
 import type { Session, User } from '@supabase/supabase-js';
+
+const TAG = 'SignOut';
 
 export interface SignOutActions {
   setUser: (user: User | null) => void;
@@ -37,7 +40,7 @@ export function useSignOut(
 
   return useCallback(async () => {
     try {
-      console.log('[AuthContext] Starting sign-out process...');
+      logger.info(TAG, 'Starting sign-out process...');
       
       // Security audit for logout
       if (user?.id) {
@@ -48,7 +51,7 @@ export function useSignOut(
       }
       
       // Clear all state immediately to prevent stale data
-      console.log('[AuthContext] Clearing auth state...');
+      logger.info(TAG, 'Clearing auth state...');
       actions.setUser(null);
       actions.setSession(null);
       actions.setProfile(null);
@@ -57,9 +60,9 @@ export function useSignOut(
       
       // Clear TanStack Query cache to prevent stale data flash
       try {
-        console.log('[AuthContext] Clearing TanStack Query cache...');
+        logger.debug(TAG, 'Clearing TanStack Query cache...');
         queryClient.clear();
-        console.log('[AuthContext] Query cache cleared successfully');
+        logger.debug(TAG, 'Query cache cleared successfully');
       } catch (cacheErr) {
         console.warn('[AuthContext] Query cache clear failed:', cacheErr);
       }
@@ -69,7 +72,7 @@ export function useSignOut(
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        console.log('[AuthContext] All navigation locks cleared before sign-out');
+        logger.debug(TAG, 'All navigation locks cleared before sign-out');
       } catch (lockErr) {
         console.warn('[AuthContext] Failed to clear navigation locks (non-fatal):', lockErr);
       }
@@ -80,19 +83,19 @@ export function useSignOut(
       // Clear PostHog and Sentry
       try {
         await getPostHog()?.reset();
-        console.log('[AuthContext] PostHog reset completed');
+        logger.debug(TAG, 'PostHog reset completed');
       } catch (e) {
         console.warn('[AuthContext] PostHog reset failed:', e);
       }
       
       try {
         Sentry.Native.setUser(null as any);
-        console.log('[AuthContext] Sentry user cleared');
+        logger.debug(TAG, 'Sentry user cleared');
       } catch (e) {
         console.warn('[AuthContext] Sentry clear user failed:', e);
       }
       
-      console.log('[AuthContext] Sign-out completed successfully');
+      logger.info(TAG, 'Sign-out completed successfully');
       
       // Navigate to sign-in screen
       navigateToSignIn();
@@ -137,7 +140,7 @@ function navigateToSignIn(): void {
         if (w?.location) {
           // Use location.replace to completely replace history entry
           w.location.replace('/(auth)/sign-in');
-          console.log('[AuthContext] Browser navigated to sign-in with history cleared');
+          logger.debug(TAG, 'Browser navigated to sign-in with history cleared');
         } else {
           // Fallback to router if location is not available
           router.replace('/(auth)/sign-in');

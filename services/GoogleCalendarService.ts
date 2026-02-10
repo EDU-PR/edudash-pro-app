@@ -9,6 +9,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface CalendarEvent {
@@ -237,7 +238,7 @@ export class GoogleCalendarService implements IGoogleCalendarService {
     }
 
     // Token expired or expiring soon - refresh it
-    console.log('[GoogleCalendar] Refreshing expired token...');
+    logger.info('GoogleCalendar', 'Refreshing expired token...');
     const newTokens = await this.refreshAccessToken(tokenData.refresh_token);
 
     // Update database with new tokens

@@ -12,6 +12,9 @@ import { Ionicons } from '@expo/vector-icons';
 // import { router } from 'expo-router'; // TODO: Use for navigation after export complete
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { logger } from '@/lib/logger';
+
+const TAG = 'DataExport';
 import { RoleBasedHeader } from '@/components/RoleBasedHeader';
 import { navigateBack } from '@/lib/navigation';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -190,7 +193,7 @@ export default function DataExportScreen() {
     //   }
     // });
     
-    console.log(`Export ${option.id} simulated for preschool ${preschoolId}`);
+    logger.info(TAG, `Export ${option.id} simulated for preschool ${preschoolId}`);
   };
 
   const getFilteredOptions = () => {

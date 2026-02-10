@@ -8,6 +8,10 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { logger } from '@/lib/logger';
+
+const TAG = 'PDFGenerator';
+
 import {
   View,
   Text,
@@ -592,7 +596,7 @@ export default function PDFGeneratorScreen() {
               }
               onContentChange={(newHtml) => {
                 setPreview(prev => ({ ...prev, html: newHtml, lastUpdated: new Date().toISOString() }));
-                console.log('[PDF Preview] Content edited by user');
+                logger.debug(TAG, 'Content edited by user');
               }}
             />
           </View>

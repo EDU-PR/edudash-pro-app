@@ -18,6 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
+
+const TAG = 'TeacherPostActivity';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { uploadMultipleImages } from '@/lib/ai/simple-image-upload';
@@ -268,7 +271,7 @@ export default function TeacherPostActivityScreen() {
       // Upload images if any
       let mediaUrls: string[] = [];
       if (selectedImages.length > 0) {
-        console.log('[TeacherPostActivity] Uploading images...');
+        logger.info(TAG, 'Uploading images...');
         const uploads = await uploadMultipleImages(selectedImages, false);
         mediaUrls = uploads.map(u => u.url);
       }

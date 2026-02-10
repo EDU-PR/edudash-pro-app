@@ -32,6 +32,8 @@ export interface CreateTeacherAccountResult {
   temp_password?: string | null;
   email_sent?: boolean;
   school_name?: string;
+  login_method_hint?: string | null;
+  provisioning_warnings?: string[];
   message?: string;
   error?: string;
   code?: string;

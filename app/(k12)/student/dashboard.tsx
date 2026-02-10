@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { logger } from '@/lib/logger';
 import { track } from '@/lib/analytics';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 
@@ -141,7 +142,7 @@ export default function K12StudentDashboardScreen() {
     track('k12.student.quick_action_tap', { action: actionId, user_id: user?.id });
     // TODO: Enable navigation when routes exist
     // router.push(route as any);
-    console.log('[K12 Student] Quick action:', actionId, route);
+    logger.debug('K12Student', 'Quick action:', actionId, route);
   };
 
   const getGreeting = () => {

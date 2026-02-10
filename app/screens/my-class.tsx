@@ -15,6 +15,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'MyClass';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface ClassInfo {
@@ -56,7 +59,7 @@ export default function MyClassScreen() {
     queryFn: async () => {
       if (!teacherId || !organizationId) return [];
       
-      console.log('[MyClass] Fetching classes for teacher:', teacherId, 'org:', organizationId);
+      logger.debug(TAG, 'Fetching classes for teacher:', teacherId, 'org:', organizationId);
       
       const { data, error } = await assertSupabase()
         .from('classes')
@@ -71,7 +74,7 @@ export default function MyClassScreen() {
         throw error;
       }
       
-      console.log('[MyClass] Found classes:', data?.length || 0);
+      logger.debug(TAG, 'Found classes:', data?.length || 0);
       return data || [];
     },
     enabled: !!teacherId && !!organizationId,

@@ -11,6 +11,9 @@ import { MetricsCards } from '@/components/org-admin/MetricsCards';
 import { QuickActionsGrid } from '@/components/org-admin/QuickActionsGrid';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { logger } from '@/lib/logger';
+
+const TAG = 'OrgAdminDashboard';
 
 export default function OrgAdminDashboard() {
   const { t } = useTranslation();
@@ -50,7 +53,7 @@ export default function OrgAdminDashboard() {
     // Decision 2: User exists but no organization -> onboarding
     if (!orgId) {
       navigationAttempted.current = true;
-      console.log('Org Admin dashboard: No organization found, redirecting to onboarding', {
+      logger.info(TAG, 'No organization found, redirecting to onboarding', {
         profile,
         organization_id: profile?.organization_id,
         preschool_id: (profile as any)?.preschool_id,

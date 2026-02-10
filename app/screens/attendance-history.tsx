@@ -16,6 +16,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
+import { logger } from '@/lib/logger';
+
+const TAG = 'AttendanceHistory';
 import ThemedStatusBar from '@/components/ui/ThemedStatusBar';
 import { Stack, router } from 'expo-router';
 import { useSimplePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -143,11 +146,11 @@ export default function AttendanceHistoryScreen() {
     queryKey: ['attendance_history', schoolId, selectedDate, selectedClass],
     queryFn: async () => {
       if (!schoolId) {
-        console.log('[AttendanceHistory] No schoolId available');
+        logger.debug(TAG, 'No schoolId available');
         return { records: [], stats: null };
       }
 
-      console.log('[AttendanceHistory] Fetching for schoolId:', schoolId, 'date:', selectedDate);
+      logger.debug(TAG, 'Fetching for schoolId:', schoolId, 'date:', selectedDate);
 
       // First get all students in this school (check both preschool_id and organization_id)
       const { data: schoolStudents, error: studentsError } = await assertSupabase()
@@ -160,7 +163,7 @@ export default function AttendanceHistoryScreen() {
       }
       
       const studentIds = schoolStudents?.map(s => s.id) || [];
-      console.log('[AttendanceHistory] Found', studentIds.length, 'students');
+      logger.debug(TAG, 'Found', studentIds.length, 'students');
       
       if (studentIds.length === 0) {
         return { records: [], stats: { total_records: 0, present_count: 0, absent_count: 0, late_count: 0 } };
@@ -194,7 +197,7 @@ export default function AttendanceHistoryScreen() {
 
       const { data, error } = await query;
       
-      console.log('[AttendanceHistory] Query result - data:', data?.length || 0, 'records, error:', error);
+      logger.debug(TAG, 'Query result - data:', data?.length || 0, 'records, error:', error);
       
       if (error) {
         console.error('[AttendanceHistory] Query error:', error);
@@ -250,7 +253,7 @@ export default function AttendanceHistoryScreen() {
         console.error('[AttendanceHistory] Error fetching classes:', error);
         throw error;
       }
-      console.log('[AttendanceHistory] Found', data?.length || 0, 'classes');
+      logger.debug(TAG, 'Found', data?.length || 0, 'classes');
       return data || [];
     },
     enabled: !!schoolId,

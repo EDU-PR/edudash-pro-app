@@ -55,11 +55,13 @@ export default function ClassTeacherManagementScreen() {
     selectedClass,
     activeTab,
     classForm,
+    roleUpdateTeacherId,
     activeTeachers,
     handleCreateClass,
     handleAssignTeacher,
     handleRemoveTeacher,
     handleDeleteTeacher,
+    handleSetTeacherRole,
     handleToggleClassStatus,
     setShowClassModal,
     setShowTeacherAssignment,
@@ -236,6 +238,7 @@ export default function ClassTeacherManagementScreen() {
                   onRemoveTeacher={handleRemoveTeacher}
                   onAssignTeacher={(cls) => {
                     setSelectedClass(cls);
+                    setClassForm((prev) => ({ ...prev, teacher_id: cls.teacher_id || '' }));
                     setShowTeacherAssignment(true);
                   }}
                   onViewStudents={navigateTo.classStudents}
@@ -253,6 +256,8 @@ export default function ClassTeacherManagementScreen() {
                 theme={theme}
                 onViewClasses={navigateTo.teacherClasses}
                 onEditTeacher={navigateTo.editTeacher}
+                onSetRole={handleSetTeacherRole}
+                roleUpdateTeacherId={roleUpdateTeacherId}
                 onDeleteTeacher={handleDeleteTeacher}
               />
             ))

@@ -13,6 +13,8 @@ import { Alert, Platform } from "react-native";
 import * as Device from "expo-device";
 import { log, warn, debug, error as logError } from '@/lib/debug';
 
+const TAG = 'BiometricAuth';
+
 // Dynamically import SecureStore to avoid web issues
 let SecureStore: any = null;
 try {
@@ -336,7 +338,7 @@ export class BiometricAuthService {
       const enableWebBiometricTesting = process.env.EXPO_PUBLIC_ENABLE_WEB_BIOMETRIC_TESTING === 'true';
       
       if (isDevelopment && isWeb && enableWebBiometricTesting) {
-        console.log('[DEV] Using mock biometric authentication for web testing');
+        debug(TAG, 'Using mock biometric authentication for web testing');
         // Simulate a brief delay for realistic UX
         await new Promise(resolve => setTimeout(resolve, 1000));
         
@@ -377,7 +379,7 @@ export class BiometricAuthService {
       };
 
       if (!capabilities.isAvailable) {
-        console.log('Biometric authentication not available on device');
+        log(TAG, 'Biometric authentication not available on device');
         return {
           success: false,
           error: "Biometric authentication is not available on this device",
@@ -385,7 +387,7 @@ export class BiometricAuthService {
       }
 
       if (!capabilities.isEnrolled) {
-        console.log('No biometric data enrolled on device');
+        log(TAG, 'No biometric data enrolled on device');
         return {
           success: false,
           error: "No biometric data is enrolled on this device. Please set up fingerprint or face recognition in your device settings.",
@@ -403,7 +405,7 @@ export class BiometricAuthService {
               "Biometric security level is insufficient. Please use a stronger authentication method.",
           };
         } else {
-          console.log('Allowing weak biometric security for OPPO device');
+          log(TAG, 'Allowing weak biometric security for OPPO device');
         }
       }
 
@@ -430,8 +432,8 @@ export class BiometricAuthService {
       // Do not set biometricsSecurityLevel explicitly.
       // Many Android devices exhibit casting/issues with this flag; letting the platform decide is more compatible.
 
-      console.log('Attempting authentication with config:', authConfig);
-      console.log('Device capabilities during auth:', {
+      debug(TAG, 'Attempting authentication with config:', authConfig);
+      debug(TAG, 'Device capabilities during auth:', {
         hasHardware: capabilities.isAvailable,
         isEnrolled: capabilities.isEnrolled,
         supportedTypes: capabilities.supportedTypes,
@@ -441,7 +443,7 @@ export class BiometricAuthService {
       const result = await LocalAuthentication.authenticateAsync(authConfig);
       
       // Log raw result to avoid type issues across platforms
-      console.log('Authentication result:', result);
+      debug(TAG, 'Authentication result:', result);
 
       // Update security state based on result
       await this.updateSecurityState(result.success);
@@ -744,7 +746,7 @@ export class BiometricAuthService {
             text: "Enable",
             onPress: async () => {
               // This should be called with actual user data
-              console.log(
+              debug(TAG,
                 "Biometric setup requested - implement with user data",
               );
             },

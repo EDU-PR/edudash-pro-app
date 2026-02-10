@@ -25,6 +25,14 @@ interface LoadStudentsResult {
   fromCache: boolean;
 }
 
+const STUDENT_DELETE_RETENTION_DAYS = 30;
+
+const getRetentionDeadlineIso = (): string => {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + STUDENT_DELETE_RETENTION_DAYS);
+  return deadline.toISOString();
+};
+
 /** Fetch and transform students from database. Returns the student list. */
 export async function loadStudentsData(params: LoadStudentsParams): Promise<LoadStudentsResult> {
   const { preschoolId, userId, userEmail, userRole, includeInactive, forceRefresh } = params;
@@ -175,20 +183,57 @@ export async function softDeleteStudent(
   userId: string,
   preschoolId: string,
   userRole: string,
-): Promise<void> {
+): Promise<{ permanentDeleteAfter: string }> {
   const supabase = assertSupabase();
+  const nowIso = new Date().toISOString();
+  const permanentDeleteAfter = getRetentionDeadlineIso();
+  const reason = `Removed by principal - left school (retention ${STUDENT_DELETE_RETENTION_DAYS} days)`;
 
-  const { error } = await supabase
-    .from('students')
-    .update({ is_active: false, status: 'inactive', updated_at: new Date().toISOString() })
-    .eq('id', studentId);
+  const { error: rpcError } = await supabase.rpc('deactivate_student', {
+    student_uuid: studentId,
+    reason,
+  });
 
-  if (error) throw error;
+  if (rpcError) {
+    logger.warn(TAG, 'RPC deactivate_student failed; using fallback update', rpcError);
+
+    const enrichedFallback: Record<string, any> = {
+      is_active: false,
+      status: 'inactive',
+      class_id: null,
+      deleted_at: nowIso,
+      delete_reason: reason,
+      permanent_delete_after: permanentDeleteAfter,
+      updated_at: nowIso,
+    };
+
+    let { error: updateError } = await supabase
+      .from('students')
+      .update(enrichedFallback as any)
+      .eq('id', studentId);
+
+    if (updateError && /column .* does not exist|schema cache/i.test(updateError.message || '')) {
+      const { error: minimalError } = await supabase
+        .from('students')
+        .update({
+          is_active: false,
+          status: 'inactive',
+          class_id: null,
+          updated_at: nowIso,
+        })
+        .eq('id', studentId);
+      updateError = minimalError;
+    }
+
+    if (updateError) throw updateError;
+  }
 
   // Invalidate cache
   const identifier = isPrincipalOrAbove(userRole) ? preschoolId : `${preschoolId}_${userId}`;
   await offlineCacheService.remove('student_data_', identifier);
   logger.info(TAG, 'Student cache invalidated after soft delete');
+
+  return { permanentDeleteAfter };
 }
 
 /** Permanently delete a student record. */

@@ -125,6 +125,7 @@ export default function DashVoiceScreen() {
     const chunks = splitForTTS(clean, 1200);
     if (chunks.length === 0) return;
     try {
+      isSpeakingRef.current = true;
       setIsSpeaking(true);
       for (const chunk of chunks) {
         if (!isSpeakingRef.current) break;
@@ -132,6 +133,7 @@ export default function DashVoiceScreen() {
         await voiceOrbRef.current.speakText(chunk, chunkLang);
       }
     } catch { /* ignore */ } finally {
+      isSpeakingRef.current = false;
       setIsSpeaking(false);
     }
   }, [preferredLanguage]);

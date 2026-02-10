@@ -9,6 +9,9 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'BirthdayPlanner';
 
 // Types
 export interface StudentBirthday {
@@ -326,8 +329,8 @@ export class BirthdayPlannerService {
       const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
       
       if (debugEnabled) {
-        console.log('[BirthdayPlannerService.getAllBirthdays] Fetching for preschoolId:', preschoolId);
-        console.log('[BirthdayPlannerService.getAllBirthdays] Target year:', targetYear);
+        logger.debug(TAG, 'getAllBirthdays - Fetching for preschoolId:', preschoolId);
+        logger.debug(TAG, 'getAllBirthdays - Target year:', targetYear);
       }
       
       // First, count total students to help diagnose issues
@@ -338,7 +341,7 @@ export class BirthdayPlannerService {
         .eq('is_active', true);
       
       if (debugEnabled) {
-        console.log('[BirthdayPlannerService.getAllBirthdays] Total active students:', totalStudents);
+        logger.debug(TAG, 'getAllBirthdays - Total active students:', totalStudents);
       }
       
       // Simplified query - fetch students with classes only, get parent info separately if needed
@@ -365,19 +368,19 @@ export class BirthdayPlannerService {
       }
       
       if (debugEnabled) {
-        console.log('[BirthdayPlannerService.getAllBirthdays] Students with DOB:', students?.length || 0);
-        console.log('[BirthdayPlannerService.getAllBirthdays] Students without DOB:', (totalStudents || 0) - (students?.length || 0));
+        logger.debug(TAG, 'getAllBirthdays - Students with DOB:', students?.length || 0);
+        logger.debug(TAG, 'getAllBirthdays - Students without DOB:', (totalStudents || 0) - (students?.length || 0));
       }
       
       // Debug: Log first few students to verify DOB format
       if (debugEnabled) {
         if (students && students.length > 0) {
-          console.log('[BirthdayPlannerService.getAllBirthdays] Sample DOB:', students.slice(0, 3).map(s => ({
+          logger.debug(TAG, 'getAllBirthdays - Sample DOB:', students.slice(0, 3).map(s => ({
             name: `${s.first_name} ${s.last_name}`,
             dob: s.date_of_birth
           })));
         } else {
-          console.log('[BirthdayPlannerService.getAllBirthdays] No students with DOB found - check if date_of_birth is populated in student profiles');
+          logger.debug(TAG, 'getAllBirthdays - No students with DOB found - check if date_of_birth is populated in student profiles');
         }
       }
 

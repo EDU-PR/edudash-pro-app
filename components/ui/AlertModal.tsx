@@ -77,10 +77,11 @@ export const AlertModal: React.FC<AlertModalProps> = ({
   const finalIconColor = iconColor || getTypeColor();
 
   const handleButtonPress = async (button: AlertButton) => {
+    onClose();
     try {
       await button.onPress?.();
-    } finally {
-      onClose();
+    } catch (error) {
+      console.error('[AlertModal] Button action failed:', error);
     }
   };
 

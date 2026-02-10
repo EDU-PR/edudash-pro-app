@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { fetchParentChildren } from '@/lib/parent-children';
 import { sanitizeAvatarUrl } from '@/lib/utils/avatar';
 import type { Child } from '@/domains/k12/components/K12ParentChildCard';
@@ -240,7 +241,7 @@ export function useK12ParentData(profileId: string | undefined, organizationId: 
           const studentId = (payload.new as any)?.student_id || (payload.old as any)?.student_id;
           // Only refresh if the attendance is for one of the parent's children
           if (studentIds.includes(studentId)) {
-            console.log('[K12 Dashboard] Attendance updated for child:', studentId);
+            logger.debug('K12Dashboard', 'Attendance updated for child:', studentId);
             fetchChildrenData();
           }
         }

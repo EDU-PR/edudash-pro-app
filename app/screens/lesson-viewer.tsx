@@ -16,6 +16,9 @@ import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'LessonViewer';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Helper to parse content - handles both JSON objects and markdown text
@@ -276,7 +279,7 @@ export default function LessonViewer() {
             createdAt: lessonData.created_at
           };
           
-          console.log('[LessonViewer] Loaded lesson:', lessonPlan.title, 'with', lessonPlan.activities.length, 'activities');
+          logger.debug(TAG, 'Loaded lesson:', lessonPlan.title, 'with', lessonPlan.activities.length, 'activities');
           
           setLesson(lessonPlan);
           setLoading(false);

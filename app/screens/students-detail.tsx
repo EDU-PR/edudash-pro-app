@@ -29,6 +29,7 @@ import { FilterModal } from '@/components/students-detail/FilterModal';
 import { StudentDetailModal } from '@/components/students-detail/StudentDetailModal';
 
 const TAG = 'StudentsDetailScreen';
+const STUDENT_DELETE_RETENTION_DAYS = 30;
 
 export default function StudentsDetailScreen() {
   const { t } = useTranslation();
@@ -171,7 +172,7 @@ export default function StudentsDetailScreen() {
     }
     showAlert(
       'Remove Student',
-      `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n\u2022 Mark the student as inactive\n\u2022 Keep historical records\n\u2022 Notify the parent (if applicable)`,
+      `Are you sure you want to remove ${studentName} from the school?\n\nThis will:\n\u2022 Mark the student as inactive\n\u2022 Keep records for ${STUDENT_DELETE_RETENTION_DAYS} days before permanent deletion\n\u2022 Allow restoration during the retention window\n\u2022 Notify the parent (if applicable)`,
       'warning',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -180,11 +181,26 @@ export default function StudentsDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              hideAlert();
               setActionMessage(`Removing ${studentName}...`);
               const preschoolId = getPreschoolId();
-              await softDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');
+              const { permanentDeleteAfter } = await softDeleteStudent(
+                studentId,
+                user?.id || '',
+                preschoolId || '',
+                profile?.role || 'parent',
+              );
+              const deleteOn = new Date(permanentDeleteAfter).toLocaleDateString('en-ZA', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              });
               setStudents(prev => prev.filter(s => s.id !== studentId));
-              showAlert('Success', `${studentName} has been removed from the active students list.`, 'success');
+              showAlert(
+                'Student Removed',
+                `${studentName} is now inactive and can be restored before ${deleteOn}. Permanent deletion is scheduled after ${STUDENT_DELETE_RETENTION_DAYS} days.`,
+                'success',
+              );
             } catch (error: any) {
               logger.error(TAG, 'Error soft-deleting student:', error);
               showAlert('Error', error.message || 'Failed to remove student. Please try again.', 'error');
@@ -213,6 +229,7 @@ export default function StudentsDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              hideAlert();
               setActionMessage(`Permanently deleting ${studentName}...`);
               const preschoolId = getPreschoolId();
               await permanentDeleteStudent(studentId, user?.id || '', preschoolId || '', profile?.role || 'parent');

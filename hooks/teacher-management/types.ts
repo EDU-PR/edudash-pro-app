@@ -60,6 +60,8 @@ export interface UseTeacherManagementReturn {
   shouldDisableAssignment: boolean;
   isAssigning: boolean;
   isRevoking: boolean;
+  isUpdatingRole: boolean;
+  updatingRoleTeacherId: string | null;
   seatLimitsLoading: boolean;
   seatLimitsError: boolean;
   selectedTeacherHasSeat: boolean;
@@ -79,6 +81,7 @@ export interface UseTeacherManagementReturn {
   refetchSeatLimits: () => void;
   handleAssignSeat: (teacherUserId: string, teacherName: string) => void;
   handleRevokeSeat: (teacherUserId: string, teacherName: string) => void;
+  handleSetTeacherRole: (teacher: Teacher, role: 'teacher' | 'admin' | 'principal_admin') => Promise<void>;
   pickAndUploadTeacherDoc: (docType: TeacherDocType) => Promise<void>;
   showAttachDocActionSheet: () => void;
   refreshSelectedTeacherDocs: () => Promise<void>;

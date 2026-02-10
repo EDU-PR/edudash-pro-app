@@ -7,6 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { logger } from '@/lib/logger';
+
+const TAG = 'ClassDetails';
 
 export default function ClassDetailsScreen() {
   const { theme } = useTheme();
@@ -16,7 +19,7 @@ export default function ClassDetailsScreen() {
   const classId = params.classId as string;
   const className = params.className as string || 'Class Details';
 
-  console.log('Class Details Params:', { classId, className, allParams: params });
+  logger.debug(TAG, 'Params:', { classId, className, allParams: params });
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>

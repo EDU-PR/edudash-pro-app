@@ -8,6 +8,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'VoiceStorage';
 
 const VOICE_BUCKET = 'voice_recordings';
 const MAX_VOICE_SIZE_MB = 10; // 10MB max for voice notes
@@ -90,7 +93,7 @@ export async function uploadVoiceNote(
   const storagePath = generateVoiceFilename(user.id, conversationId);
   const mimeType = 'audio/mp4'; // m4a files
 
-  console.log('[VoiceStorage] Uploading voice note:', {
+  logger.info(TAG, 'Uploading voice note:', {
     localUri,
     storagePath,
     fileSize,
@@ -143,7 +146,7 @@ export async function uploadVoiceNote(
 
   const publicUrl = urlData.signedUrl;
 
-  console.log('[VoiceStorage] Upload complete:', {
+  logger.info(TAG, 'Upload complete:', {
     storagePath,
     publicUrl,
   });
@@ -201,7 +204,7 @@ export async function deleteVoiceNote(storagePath: string): Promise<void> {
     throw new Error(`Failed to delete voice note: ${error.message}`);
   }
 
-  console.log('[VoiceStorage] Deleted voice note:', storagePath);
+  logger.info(TAG, 'Deleted voice note:', storagePath);
 }
 
 /**

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
@@ -30,6 +31,7 @@ import { createStyles } from '@/lib/screen-styles/teacher-management.styles';
 export default function TeacherManagementScreen() {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const { showAlert, alertProps } = useAlertModal();
   const {
     teachers, loading, fetchTeachers, getPreschoolId,
     invites, loadInvites,
@@ -46,12 +48,11 @@ export default function TeacherManagementScreen() {
     teacherDocsMap,
     isAssigning, isRevoking,
     handleAssignSeat, handleRevokeSeat,
+    isUpdatingRole, updatingRoleTeacherId, handleSetTeacherRole,
     shouldDisableAssignment,
     selectedTeacherHasSeat,
     seatUsageDisplay,
-  } = useTeacherManagement();
-
-  const { showAlert, alertProps } = useAlertModal();
+  } = useTeacherManagement({ showAlert });
   const router = useRouter();
   const schoolName = (profile as any)?.preschool_name
     || (profile as any)?.organization_name
@@ -123,12 +124,16 @@ export default function TeacherManagementScreen() {
         inviteId={invite?.id}
         isAssigning={isAssigning}
         isRevoking={isRevoking}
+        isUpdatingRole={isUpdatingRole}
+        updatingRoleTeacherId={updatingRoleTeacherId}
+        onSetRole={(teacher, role) => void handleSetTeacherRole(teacher, role)}
         shouldDisableAssignment={shouldDisableAssignment}
       />
     );
   }, [invites, theme, setSelectedTeacher, setCurrentView, handleAssignSeat, handleRevokeSeat,
     handleInviteTeacher, handleCopyInviteLink, handleDeleteInvite, handleDeleteTeacher,
-    isAssigning, isRevoking, shouldDisableAssignment, showAlert]);
+    isAssigning, isRevoking, isUpdatingRole, updatingRoleTeacherId, handleSetTeacherRole,
+    shouldDisableAssignment, showAlert]);
 
   const list = teachers || [];
   const activeTeachers = list.filter((t: any) => t.status === 'active').length;
@@ -160,12 +165,20 @@ export default function TeacherManagementScreen() {
               <Text style={styles.headerTitle}>Teacher Management</Text>
               <Text style={styles.headerSubtitle}>{schoolName}</Text>
             </View>
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => router.push('/screens/principal-seat-management')}
-            >
-              <Ionicons name="settings-outline" size={20} color="#fff" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={styles.settingsButton}
+                onPress={() => router.push('/screens/class-teacher-management')}
+              >
+                <Ionicons name="school-outline" size={20} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.settingsButton, { marginLeft: 8 }]}
+                onPress={() => router.push('/screens/principal-seat-management')}
+              >
+                <Ionicons name="settings-outline" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
@@ -430,10 +443,28 @@ export default function TeacherManagementScreen() {
           schoolId={getPreschoolId()}
           onClose={() => { setShowCreateTeacherModal(false); setCreateTeacherPrefill({}); }}
           onSuccess={(result) => {
+            const messageParts: string[] = [];
+            if (result.message) {
+              messageParts.push(result.message);
+            }
+            if (result.temp_password) {
+              messageParts.push(`Temporary Password: ${result.temp_password}`);
+              void Clipboard.setStringAsync(result.temp_password).catch(() => {});
+              messageParts.push('Temporary password copied to clipboard.');
+            }
+            if (result.email_sent === false) {
+              messageParts.push('Email delivery failed. Share the temporary password manually.');
+            }
+            if (result.login_method_hint) {
+              messageParts.push(result.login_method_hint);
+            }
+            if (Array.isArray(result.provisioning_warnings) && result.provisioning_warnings.length > 0) {
+              messageParts.push(`Warnings: ${result.provisioning_warnings.join(' | ')}`);
+            }
             showAlert({
               title: result.is_existing_user ? 'Teacher Linked' : 'Account Created',
-              message: result.message || 'Teacher account is ready.',
-              type: 'success',
+              message: messageParts.join('\n\n') || 'Teacher account is ready.',
+              type: result.email_sent === false ? 'warning' : 'success',
             });
             fetchTeachers();
             loadInvites();

@@ -8,6 +8,9 @@ import { routeAfterLogin } from '@/lib/routeAfterLogin';
 import { useTheme } from '@/contexts/ThemeContext';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
+import { logger } from '@/lib/logger';
+
+const TAG = 'Index';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Default theme fallback (used before ThemeProvider mounts)
@@ -74,18 +77,18 @@ export default function Index() {
                 search.set(k, String(v));
               }
               const target = `${path}${search.toString() ? `?${search.toString()}` : ''}`;
-              console.log('[Index] Detected initial deep link, routing to:', target);
+              logger.info(TAG, 'Detected initial deep link, routing to:', target);
               
               // Special handling for auth-related deep links
               if (path === '/reset-password' || path.includes('reset-password')) {
-                console.log('[Index] Password reset deep link detected - routing to native reset flow');
+                logger.info(TAG, 'Password reset deep link detected - routing to native reset flow');
                 // Set recovery flag early so AuthContext does not auto-route away.
                 try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
                 router.replace(`/reset-password${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
                 return;
               }
               if (path === '/auth-callback' || path.includes('auth-callback')) {
-                console.log('[Index] Auth callback deep link detected');
+                logger.info(TAG, 'Auth callback deep link detected');
                 const flow = String(params.flow || params.type || '').toLowerCase();
                 if (flow === 'recovery') {
                   try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
@@ -104,18 +107,18 @@ export default function Index() {
 
         // If authenticated with profile, go to dashboard
         if (session && user && profile?.role) {
-          console.log('[Index] Native + authenticated, routing to dashboard');
+          logger.info(TAG, 'Native + authenticated, routing to dashboard');
           routeAfterLogin(user, profile).catch((err) => {
             console.error('[Index] routeAfterLogin failed:', err);
             router.replace('/profiles-gate');
           });
         } else if (session && user) {
           // Authenticated but no role - go to profiles gate
-          console.log('[Index] Native + authenticated but no role, going to profiles-gate');
+          logger.info(TAG, 'Native + authenticated but no role, going to profiles-gate');
           router.replace('/profiles-gate');
         } else {
           // Not authenticated - go directly to sign-in
-          console.log('[Index] Native + not authenticated, going to sign-in');
+          logger.info(TAG, 'Native + not authenticated, going to sign-in');
           router.replace('/(auth)/sign-in');
         }
       })();
@@ -125,7 +128,7 @@ export default function Index() {
     // Web: Only redirect if authenticated
     if (session && user) {
       hasNavigatedRef.current = true;
-      console.log('[Index] Web + authenticated, routing to dashboard');
+      logger.info(TAG, 'Web + authenticated, routing to dashboard');
       
       if (profile?.role) {
         routeAfterLogin(user, profile).catch((err) => {

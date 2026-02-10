@@ -81,6 +81,32 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     color: theme.textSecondary,
     marginTop: 2,
   },
+  statusPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  statusPillActive: {
+    backgroundColor: theme.success + '1A',
+  },
+  statusPillInactive: {
+    backgroundColor: theme.warning + '1F',
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusPillTextActive: {
+    color: theme.success,
+  },
+  statusPillTextInactive: {
+    color: theme.warning,
+  },
   parentNotice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,10 +164,46 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
+  changeClassButtonDisabled: {
+    opacity: 0.5,
+  },
   changeClassText: {
     fontSize: 14,
     fontWeight: '600',
     color: theme.primary,
+  },
+  markInactiveButton: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: theme.warning + '18',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  markInactiveText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.warning,
+  },
+  inactiveInfoBanner: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: theme.warning + '12',
+    alignSelf: 'stretch',
+  },
+  inactiveInfoText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.warning,
   },
   summaryRow: {
     flexDirection: 'row',

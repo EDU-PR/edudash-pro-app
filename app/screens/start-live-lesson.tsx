@@ -12,6 +12,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { logger } from '@/lib/logger';
+
+const TAG = 'StartLiveLesson';
 
 export default function StartLiveLessonScreen() {
   const { profile } = useAuth();
@@ -19,7 +22,7 @@ export default function StartLiveLessonScreen() {
   const flags = getFeatureFlagsSync();
   const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
 
-  console.log('[StartLiveLessonScreen] Render with:', {
+  logger.debug(TAG, 'Render with:', {
     profileId: profile?.id,
     preschoolId: profile?.preschool_id,
     organizationId: profile?.organization_id,

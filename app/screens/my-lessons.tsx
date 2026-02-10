@@ -16,6 +16,9 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { assertSupabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
+
+const TAG = 'MyLessons';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import LessonsService from '@/services/LessonsService';
 import { Lesson } from '@/types/lessons';
@@ -101,7 +104,7 @@ export default function MyLessonsScreen() {
       const teacherId = profile.id;
       const preschoolId = profile.preschool_id || profile.organization_id;
       
-      console.log('[MyLessons] Fetching lessons for teacher:', teacherId, 'preschool:', preschoolId);
+      logger.debug(TAG, 'Fetching lessons for teacher:', teacherId, 'preschool:', preschoolId);
       
       // Build the query - handle case where preschoolId might be null
       let query = assertSupabase()
@@ -127,7 +130,7 @@ export default function MyLessonsScreen() {
         throw error;
       }
       
-      console.log('[MyLessons] Found', data?.length || 0, 'lessons');
+      logger.debug(TAG, 'Found', data?.length || 0, 'lessons');
       return data || [];
     },
     enabled: !!profile?.id,

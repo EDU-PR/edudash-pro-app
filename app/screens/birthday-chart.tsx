@@ -15,7 +15,10 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { BirthdayChart } from '@/components/dashboard/BirthdayChart';
 import { BirthdayPlannerService, type StudentBirthday } from '@/services/BirthdayPlannerService';
+import { logger } from '@/lib/logger';
 import { getActiveOrganizationId } from '@/lib/tenant/compat';
+
+const TAG = 'BirthdayChart';
 import { fetchParentChildren } from '@/lib/parent-children';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -65,7 +68,7 @@ export default function BirthdayChartScreen() {
   // Debug logging for organizationId
   useEffect(() => {
     if (debugEnabled) {
-      console.log('[BirthdayChart] Profile info:', {
+      logger.debug(TAG, 'Profile info:', {
         organizationId,
         hasProfile: !!profile,
         profileOrgId: profile?.organization_id,
@@ -79,7 +82,7 @@ export default function BirthdayChartScreen() {
   // Load all birthdays
   const loadBirthdays = useCallback(async () => {
     if (!organizationId && !isParentView) {
-      console.log('[BirthdayChart] No organization ID, skipping birthday load');
+      logger.debug(TAG, 'No organization ID, skipping birthday load');
       setError('Unable to determine school. Please try again.');
       return;
     }
@@ -95,13 +98,13 @@ export default function BirthdayChartScreen() {
           setError('Unable to determine parent account. Please try again.');
           return;
         }
-        if (debugEnabled) console.log('[BirthdayChart] Parent view - getting organization from children');
+        if (debugEnabled) logger.debug(TAG, 'Parent view - getting organization from children');
         const children = await fetchParentChildren(parentId);
         if (children && children.length > 0) {
           // Get organization from first child (all children should be in same org)
           const firstChild = children[0];
           effectiveOrgId = firstChild.organization_id || (firstChild as any).preschool_id;
-          if (debugEnabled) console.log('[BirthdayChart] Parent org from child:', effectiveOrgId);
+          if (debugEnabled) logger.debug(TAG, 'Parent org from child:', effectiveOrgId);
         }
         if (!effectiveOrgId) {
           setError('Unable to determine school. Please ensure your children are enrolled.');
@@ -116,13 +119,13 @@ export default function BirthdayChartScreen() {
 
       // Load ALL birthdays for the organization (not just parent's children)
       // This allows parents to see all upcoming birthdays in the school and plan ahead
-      if (debugEnabled) console.log('[BirthdayChart] Loading all birthdays for org:', effectiveOrgId);
+      if (debugEnabled) logger.debug(TAG, 'Loading all birthdays for org:', effectiveOrgId);
       const data = await BirthdayPlannerService.getAllBirthdays(effectiveOrgId as string, targetYear);
-      if (debugEnabled) console.log('[BirthdayChart] Loaded birthdays:', data.length, 'students');
+      if (debugEnabled) logger.debug(TAG, 'Loaded birthdays:', data.length, 'students');
       setBirthdays(data);
       
       if (data.length === 0) {
-        if (debugEnabled) console.log('[BirthdayChart] No birthdays found - students may not have DOB set');
+        if (debugEnabled) logger.debug(TAG, 'No birthdays found - students may not have DOB set');
       }
     } catch (error: any) {
       console.error('[BirthdayChart] Error loading birthdays:', error);

@@ -11,7 +11,10 @@ import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { router } from 'expo-router';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { logger } from '@/lib/logger';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService'
+
+const TAG = 'AIProgressAnalysis';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface StudentProgress {
@@ -76,8 +79,8 @@ export default function AIProgressAnalysisScreen() {
       }
 
       // First try to determine what data structure we have
-      console.log('Checking available data for teacher:', user.id);
-      console.log('User object:', user);
+      logger.debug(TAG, 'Checking available data for teacher:', user.id);
+      logger.debug(TAG, 'User object:', user);
       
       // Try to get classes first (simpler approach)
       const { data: classes, error: classesError } = await assertSupabase()
@@ -100,7 +103,7 @@ export default function AIProgressAnalysisScreen() {
         return;
       }
       
-      console.log('Found classes:', classes.length, classes);
+      logger.debug(TAG, 'Found classes:', classes.length, classes);
       
       // For now, let's create some mock data to test the UI
       // Since we need actual data to see how the current system works

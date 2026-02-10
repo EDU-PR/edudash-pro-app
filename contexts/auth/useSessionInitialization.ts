@@ -9,6 +9,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import * as Sentry from 'sentry-expo';
 import { logger } from '@/lib/logger';
+
+const TAG = 'SessionInit';
 import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
 import { track } from '@/lib/analytics';
@@ -178,20 +180,20 @@ export function useSessionInitialization(
         const { session: storedSession, profile: storedProfile } = await initializeSession();
         
         // Debug session restoration
-        console.log('=== SESSION RESTORATION DEBUG ===');
-        console.log('Stored session exists:', !!storedSession);
-        console.log('Stored profile exists:', !!storedProfile);
+        logger.debug(TAG, '=== SESSION RESTORATION DEBUG ===');
+        logger.debug(TAG, 'Stored session exists:', !!storedSession);
+        logger.debug(TAG, 'Stored profile exists:', !!storedProfile);
         if (storedSession) {
-          console.log('Session user_id:', storedSession.user_id);
-          console.log('Session email:', storedSession.email);
-          console.log('Session expires_at:', new Date(storedSession.expires_at * 1000).toISOString());
+          logger.debug(TAG, 'Session user_id:', storedSession.user_id);
+          logger.debug(TAG, 'Session email:', storedSession.email);
+          logger.debug(TAG, 'Session expires_at:', new Date(storedSession.expires_at * 1000).toISOString());
         }
         if (storedProfile) {
-          console.log('Profile role:', storedProfile.role);
-          console.log('Profile org_id:', storedProfile.organization_id);
-          console.log('Profile email:', storedProfile.email);
+          logger.debug(TAG, 'Profile role:', storedProfile.role);
+          logger.debug(TAG, 'Profile org_id:', storedProfile.organization_id);
+          logger.debug(TAG, 'Profile email:', storedProfile.email);
         }
-        console.log('================================');
+        logger.debug(TAG, '================================');
         
         if (storedSession && storedProfile && mountedRef.current) {
           actions.setSession({ 
@@ -392,7 +394,7 @@ async function handleAuthStateChange(
     }
 
     if (event === 'SIGNED_OUT' && mountedRef.current) {
-      console.log('[AuthContext] SIGNED_OUT event received, clearing all auth state');
+      logger.info(TAG, 'SIGNED_OUT event received, clearing all auth state');
       actions.setProfile(null);
       actions.setPermissions(createPermissionChecker(null));
       actions.setUser(null);
@@ -420,7 +422,7 @@ async function handleAuthStateChange(
         logger.debug('Toast on sign-out failed (non-blocking)', e);
       }
       
-      console.log('[AuthContext] Sign-out cleanup complete');
+      logger.info(TAG, 'Sign-out cleanup complete');
     }
   } catch (error) {
     console.error('Auth state change handler error:', error);

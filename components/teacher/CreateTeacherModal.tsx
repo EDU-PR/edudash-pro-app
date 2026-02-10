@@ -296,8 +296,8 @@ export function CreateTeacherModal({
             <View style={styles.infoBox}>
               <Ionicons name="information-circle" size={18} color={theme.primary} />
               <Text style={styles.infoText}>
-                A temporary password will be generated and emailed to the teacher.
-                They must change it on first login.
+                A temporary password is generated only when needed.
+                Teachers with existing Google sign-in can continue using Google.
               </Text>
             </View>
           </ScrollView>

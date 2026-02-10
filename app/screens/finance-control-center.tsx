@@ -101,7 +101,7 @@ const deriveNetSalary = (recipient?: PayrollRosterItem | null): number => {
 
 const pickSectionError = (
   errors: FinanceControlCenterBundle['errors'] | undefined,
-  key: 'snapshot' | 'receivables' | 'breakdown' | 'queue' | 'payroll',
+  key: 'snapshot' | 'receivables' | 'expenses' | 'breakdown' | 'queue' | 'payroll',
 ): string | null => {
   const value = errors?.[key];
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
@@ -169,6 +169,7 @@ export default function FinanceControlCenterScreen() {
 
   const snapshot = bundle?.snapshot || null;
   const receivables = bundle?.receivables || null;
+  const expenses = bundle?.expenses || null;
   const paymentBreakdown = bundle?.payment_breakdown || null;
   const pendingPOPs = bundle?.pending_pops || [];
   const payrollItems = bundle?.payroll?.items || [];
@@ -178,6 +179,15 @@ export default function FinanceControlCenterScreen() {
     const collected = Number(snapshot?.collected_this_month || 0);
     const collectedAllocated = Number(snapshot?.collected_allocated_amount || 0);
     const outstanding = Number(snapshot?.still_outstanding || 0);
+    const snapshotExpensesTotal = Number(snapshot?.expenses_this_month || 0);
+    const breakdownExpensesTotal = Number(expenses?.total_expenses || 0);
+    const snapshotPettyCashExpenses = Number(snapshot?.petty_cash_expenses_this_month || 0);
+    const breakdownPettyCashExpenses = Number(expenses?.petty_cash_expenses || 0);
+    const snapshotFinancialExpenses = Number(snapshot?.financial_expenses_this_month || 0);
+    const breakdownFinancialExpenses = Number(expenses?.financial_expenses || 0);
+    const totalExpenses = snapshotExpensesTotal > 0 ? snapshotExpensesTotal : breakdownExpensesTotal;
+    const pettyCashExpenses = snapshotPettyCashExpenses > 0 ? snapshotPettyCashExpenses : breakdownPettyCashExpenses;
+    const financialExpenses = snapshotFinancialExpenses > 0 ? snapshotFinancialExpenses : breakdownFinancialExpenses;
     const pendingAmount = Number(snapshot?.pending_amount || 0);
     const overdueAmount = Number(snapshot?.overdue_amount || 0);
     const equationDelta = Math.abs((due - collected) - outstanding);
@@ -191,6 +201,11 @@ export default function FinanceControlCenterScreen() {
       collectedAllocated,
       collectedSource: snapshot?.collected_source || 'allocations',
       outstanding,
+      expenses: totalExpenses,
+      pettyCashExpenses,
+      financialExpenses,
+      expenseEntries: Number(expenses?.entries?.length || 0),
+      netAfterExpenses: Number(snapshot?.net_after_expenses || (collected - totalExpenses)),
       pendingAmount,
       overdueAmount,
       pendingStudents: Number(snapshot?.pending_students || receivables?.summary?.pending_students || 0),
@@ -206,7 +221,7 @@ export default function FinanceControlCenterScreen() {
       allocationGap,
       snapshotAsOf: snapshot?.as_of_date || snapshot?.generated_at || null,
     };
-  }, [snapshot, receivables, pendingPOPs.length]);
+  }, [snapshot, receivables, expenses, pendingPOPs.length]);
 
   const loadData = React.useCallback(async (force = false) => {
     if (!orgId) return;
@@ -216,7 +231,7 @@ export default function FinanceControlCenterScreen() {
     try {
       const data = await FinancialDataService.getFinanceControlCenterBundle(orgId, monthIso);
       setBundle(data);
-      if (!data.snapshot && !data.receivables && !data.payment_breakdown && !data.pending_pops.length) {
+      if (!data.snapshot && !data.receivables && !data.expenses && !data.payment_breakdown && !data.pending_pops.length) {
         showAlert({
           title: 'Finance Warning',
           message: 'Some finance sections are unavailable. You can still use the available tabs.',
@@ -479,6 +494,7 @@ export default function FinanceControlCenterScreen() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>At a Glance</Text>
       {renderSectionError(pickSectionError(bundle?.errors, 'snapshot'))}
+      {renderSectionError(pickSectionError(bundle?.errors, 'expenses'))}
       <View style={styles.cardGrid}>
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Due This Month</Text>
@@ -507,6 +523,16 @@ export default function FinanceControlCenterScreen() {
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Pending POP</Text>
           <Text style={[styles.metricValue, { color: theme.warning || '#F59E0B' }]}>{derivedOverview.pendingPOPs}</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricLabel}>Expenses This Month</Text>
+          <Text style={[styles.metricValue, { color: theme.error }]}>{formatCurrency(derivedOverview.expenses)}</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricLabel}>Net After Expenses</Text>
+          <Text style={[styles.metricValue, { color: derivedOverview.netAfterExpenses >= 0 ? theme.success : theme.error }]}>
+            {formatCurrency(derivedOverview.netAfterExpenses)}
+          </Text>
         </View>
       </View>
 
@@ -548,6 +574,16 @@ export default function FinanceControlCenterScreen() {
         <Text style={styles.calloutTitle}>Payroll</Text>
         <Text style={styles.calloutText}>
           Due {formatCurrency(derivedOverview.payrollDue)} | Paid {formatCurrency(derivedOverview.payrollPaid)}
+        </Text>
+      </View>
+
+      <View style={styles.calloutCard}>
+        <Text style={styles.calloutTitle}>Expenses</Text>
+        <Text style={styles.calloutText}>
+          Petty cash {formatCurrency(derivedOverview.pettyCashExpenses)} | Logged expenses {formatCurrency(derivedOverview.financialExpenses)}
+        </Text>
+        <Text style={styles.calloutText}>
+          {derivedOverview.expenseEntries} month-scoped entries loaded for {monthLabel}.
         </Text>
       </View>
     </View>
@@ -601,6 +637,7 @@ export default function FinanceControlCenterScreen() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Collections</Text>
       {renderSectionError(pickSectionError(bundle?.errors, 'breakdown'))}
+      {renderSectionError(pickSectionError(bundle?.errors, 'expenses'))}
 
       <View style={styles.calloutCard}>
         <Text style={styles.calloutTitle}>What Payments Were For</Text>
@@ -654,6 +691,39 @@ export default function FinanceControlCenterScreen() {
                 </Text>
               </View>
               <Text style={styles.breakdownValue}>{formatCurrency(row.collected)}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      <View style={styles.calloutCard}>
+        <Text style={styles.calloutTitle}>Expense Entries (Petty Cash + Expense Log)</Text>
+        {!!expenses && (
+          <Text style={styles.calloutText}>
+            Total {formatCurrency(expenses.total_expenses)} | Petty cash {formatCurrency(expenses.petty_cash_expenses)} | Logged expenses {formatCurrency(expenses.financial_expenses)}
+          </Text>
+        )}
+        {(expenses?.entries || []).length === 0 ? (
+          <Text style={styles.calloutText}>No expense entries for this month yet.</Text>
+        ) : (
+          (expenses?.entries || []).map((row) => (
+            <View key={`${row.source}-${row.id}`} style={styles.breakdownRow}>
+              <View style={styles.breakdownLeft}>
+                <Text style={styles.breakdownLabel}>{row.category}</Text>
+                <Text style={styles.breakdownMeta}>
+                  {row.source === 'petty_cash' ? 'Petty Cash' : 'Expense Log'} • {FinancialDataService.getDisplayStatus(row.status)}
+                </Text>
+                <Text style={styles.breakdownMeta}>{row.description}</Text>
+                <Text style={styles.breakdownMeta}>
+                  {new Date(row.date).toLocaleDateString('en-ZA', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                  {row.reference ? ` • Ref ${row.reference}` : ''}
+                </Text>
+              </View>
+              <Text style={[styles.breakdownValue, { color: theme.error }]}>{formatCurrency(row.amount)}</Text>
             </View>
           ))
         )}

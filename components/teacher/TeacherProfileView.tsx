@@ -137,7 +137,7 @@ export function TeacherProfileView({
           <TouchableOpacity
             style={[styles.actionButton, styles.assignButton]}
             onPress={() => onAssignSeat(teacher.teacherUserId, fullName)}
-            disabled={shouldDisableAssignment || isAssigning}
+            disabled={isAssigning}
           >
             <Ionicons name="add-circle" size={16} color="#fff" />
             <Text style={styles.actionButtonText}>Assign Seat</Text>

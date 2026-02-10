@@ -188,8 +188,8 @@ export async function fetchStatsAndCounts(
     });
   }
 
-  const combinedPendingPayments =
-    pendingPaymentsCount + pendingRegistrationPayments + pendingPOPUploadsCount;
+  // "Unpaid fees" widgets must stay fee-ledger scoped (not mixed with registrations/POP queue).
+  const combinedPendingPayments = pendingPaymentsCount;
 
   const schoolName =
     preschoolInfo.name || preschoolCapacity.name || fallbackSchoolName;

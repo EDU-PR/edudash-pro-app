@@ -18,7 +18,10 @@ import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { marketingTokens } from '@/components/marketing/tokens';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 import { useLocalSearchParams } from 'expo-router';
+
+const TAG = 'ResetPassword';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ResetPasswordScreen() {
@@ -49,12 +52,12 @@ export default function ResetPasswordScreen() {
         const refreshToken = searchParams.refresh_token;
         
         if (accessToken && refreshToken) {
-          console.log('[ResetPassword] Received tokens from URL, setting session...');
+          logger.info(TAG, 'Received tokens from URL, setting session...');
           
           // Set the global flag BEFORE calling setSession to prevent AuthContext
           // from routing away when it receives the SIGNED_IN event
           setPasswordRecoveryInProgress(true);
-          console.log('[ResetPassword] Set password recovery flag to true');
+          logger.debug(TAG, 'Set password recovery flag to true');
           
           const { data, error: setError } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -69,7 +72,7 @@ export default function ResetPasswordScreen() {
           }
           
           if (data.session && data.user) {
-            console.log('[ResetPassword] Session set successfully for:', data.user.email);
+            logger.info(TAG, 'Session set successfully for:', data.user.email);
             setValidSession(true);
             setUserEmail(data.user.email || null);
             return;
@@ -93,7 +96,7 @@ export default function ResetPasswordScreen() {
           setValidSession(true);
           setUserEmail(session.user.email || null);
         } else {
-          console.log('[ResetPassword] No session found');
+          logger.info(TAG, 'No session found');
           setPasswordRecoveryInProgress(false);
           setValidSession(false);
         }
@@ -108,7 +111,7 @@ export default function ResetPasswordScreen() {
     
     // Cleanup: clear the flag when component unmounts
     return () => {
-      console.log('[ResetPassword] Component unmounting, clearing recovery flag');
+      logger.debug(TAG, 'Component unmounting, clearing recovery flag');
       setPasswordRecoveryInProgress(false);
     };
   }, [searchParams.access_token, searchParams.refresh_token]);
@@ -173,7 +176,7 @@ export default function ResetPasswordScreen() {
 
       // Clear the recovery flag now that password has been updated
       setPasswordRecoveryInProgress(false);
-      console.log('[ResetPassword] Password updated, cleared recovery flag');
+      logger.info(TAG, 'Password updated, cleared recovery flag');
 
       showAlert({
         title: 'Password Updated',

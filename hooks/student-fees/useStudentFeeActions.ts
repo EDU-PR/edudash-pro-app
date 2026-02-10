@@ -18,6 +18,7 @@ import {
 } from './feeHelpers';
 
 type ShowAlert = (title: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', buttons?: any[]) => void;
+const STUDENT_DELETE_RETENTION_DAYS = 30;
 
 function toDayStart(dateValue?: string | null): Date | null {
   if (!dateValue) return null;
@@ -62,6 +63,7 @@ export interface StudentFeeActionsParams {
 
 export interface StudentFeeActionsReturn {
   saving: boolean;
+  deactivatingStudent: boolean;
   processingFeeId: string | null;
   processingFeeAction: 'mark_paid' | 'mark_unpaid' | null;
   modalType: ModalType;
@@ -96,6 +98,7 @@ export interface StudentFeeActionsReturn {
   handleAdjustFee: () => Promise<void>;
   handleChangeClass: () => Promise<void>;
   handleUpdateEnrollmentDate: (date: Date) => Promise<void>;
+  handleDeactivateStudent: () => Promise<void>;
   handleMarkPaid: (fee: StudentFee) => Promise<void>;
   handleMarkUnpaid: (fee: StudentFee) => Promise<void>;
   handleReceiptAction: (fee: StudentFee) => Promise<void>;
@@ -107,6 +110,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const { profile } = useAuth();
 
   const [saving, setSaving] = useState(false);
+  const [deactivatingStudent, setDeactivatingStudent] = useState(false);
   const [processingFeeId, setProcessingFeeId] = useState<string | null>(null);
   const [processingFeeAction, setProcessingFeeAction] = useState<'mark_paid' | 'mark_unpaid' | null>(null);
   const [modalType, setModalType] = useState<ModalType>(null);
@@ -255,6 +259,106 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     finally { setSaving(false); }
   };
 
+  const handleDeactivateStudent = useCallback(async () => {
+    if (!student || deactivatingStudent) return;
+
+    const studentName = `${student.first_name} ${student.last_name}`.trim();
+    showAlert(
+      'Mark Student Inactive',
+      `Are you sure you want to mark ${studentName} as inactive?\n\nThis will:\n- remove the learner from unpaid-fees follow-up\n- keep records for ${STUDENT_DELETE_RETENTION_DAYS} days before permanent deletion\n- allow reactivation during the retention window`,
+      'warning',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Inactive',
+          style: 'destructive',
+          onPress: async () => {
+            const currentStudent = studentRef.current || student;
+            if (!currentStudent) return;
+
+            setDeactivatingStudent(true);
+            setSaving(true);
+            const supabase = assertSupabase();
+            const nowIso = new Date().toISOString();
+            const retentionDate = new Date();
+            retentionDate.setDate(retentionDate.getDate() + STUDENT_DELETE_RETENTION_DAYS);
+            const retentionIso = retentionDate.toISOString();
+            const retentionLabel = retentionDate.toLocaleDateString('en-ZA', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            });
+            const reason = `Removed by principal - left school (retention ${STUDENT_DELETE_RETENTION_DAYS} days)`;
+
+            try {
+              const { error: rpcError } = await supabase.rpc('deactivate_student', {
+                student_uuid: currentStudent.id,
+                reason,
+              });
+
+              if (rpcError) {
+                let { error: fallbackError } = await supabase
+                  .from('students')
+                  .update({
+                    is_active: false,
+                    status: 'inactive',
+                    class_id: null,
+                    deleted_at: nowIso,
+                    delete_reason: reason,
+                    permanent_delete_after: retentionIso,
+                    updated_at: nowIso,
+                  } as any)
+                  .eq('id', currentStudent.id);
+
+                if (fallbackError && /column .* does not exist|schema cache/i.test(fallbackError.message || '')) {
+                  const { error: minimalError } = await supabase
+                    .from('students')
+                    .update({
+                      is_active: false,
+                      status: 'inactive',
+                      class_id: null,
+                      updated_at: nowIso,
+                    })
+                    .eq('id', currentStudent.id);
+                  fallbackError = minimalError;
+                }
+
+                if (fallbackError) {
+                  throw fallbackError;
+                }
+              }
+
+              setStudent((prev) => (prev
+                ? {
+                    ...prev,
+                    is_active: false,
+                    status: 'inactive',
+                    class_id: null,
+                    deleted_at: nowIso,
+                    permanent_delete_after: retentionIso,
+                  }
+                : prev));
+
+              const refreshed = await loadStudent();
+              await loadFees(refreshed);
+
+              showAlert(
+                'Student Inactive',
+                `${studentName} is now inactive and excluded from unpaid fee follow-up. Permanent deletion is scheduled after ${retentionLabel}.`,
+                'success',
+              );
+            } catch (error: any) {
+              showAlert('Error', getSupabaseErrorMessage(error, 'Failed to mark student inactive.'), 'error');
+            } finally {
+              setDeactivatingStudent(false);
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [deactivatingStudent, loadFees, loadStudent, showAlert, student, studentRef, setStudent]);
+
   // ── Mark paid / unpaid ────────────────────────────────────
 
   const handleMarkPaid = async (fee: StudentFee) => {
@@ -364,13 +468,13 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const canSubmitClassCorrection = Boolean(newClassId) && hasValidFee && (hasClassChange || hasFeeChange) && !saving && !loadingSuggestedFee;
 
   return {
-    saving, processingFeeId, processingFeeAction, modalType, setModalType, selectedFee, setSelectedFee,
+    saving, deactivatingStudent, processingFeeId, processingFeeAction, modalType, setModalType, selectedFee, setSelectedFee,
     showEnrollmentPicker, setShowEnrollmentPicker,
     waiveAmount, setWaiveAmount, waiveReason, setWaiveReason, waiveType, setWaiveType,
     adjustAmount, setAdjustAmount, adjustReason, setAdjustReason,
     newClassId, setNewClassId, classRegistrationFee, setClassRegistrationFee,
     classFeeHint, setClassFeeHint, loadingSuggestedFee, canSubmitClassCorrection,
-    handleWaiveFee, handleAdjustFee, handleChangeClass, handleUpdateEnrollmentDate,
+    handleWaiveFee, handleAdjustFee, handleChangeClass, handleUpdateEnrollmentDate, handleDeactivateStudent,
     handleMarkPaid, handleMarkUnpaid, handleReceiptAction, prefillRegistrationFeeForClass,
   };
 }

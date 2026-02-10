@@ -1,5 +1,5 @@
 /**
- * seatHandlers — assign / revoke teacher seat actions.
+ * seatHandlers — assign / revoke school staff seat actions.
  *
  * Each handler performs validation, shows a confirmation alert,
  * then delegates to the seat-management hook returned from useSeatLimits.
@@ -11,8 +11,8 @@ import type { SafeAlert } from './types';
 interface SeatContext {
   shouldDisableAssignment: boolean;
   seatUsageDisplay: { displayText: string } | null;
-  assignSeat: (params: { teacherUserId: string }) => void;
-  revokeSeat: (params: { teacherUserId: string }) => void;
+  assignSeat: (params: { teacherUserId: string }) => Promise<unknown>;
+  revokeSeat: (params: { teacherUserId: string }) => Promise<unknown>;
   fetchTeachers: () => Promise<void>;
   safeAlert: SafeAlert;
 }
@@ -40,7 +40,7 @@ export function createSeatHandlers(ctx: SeatContext) {
     if (shouldDisableAssignment) {
       safeAlert({
         title: 'Seat Limit Reached',
-        message: `Cannot assign more teacher seats. You have reached the limit for your current plan.${
+        message: `Cannot assign more staff seats. You have reached the limit for your current plan.${
           seatUsageDisplay ? `\n\nCurrent usage: ${seatUsageDisplay.displayText}` : ''
         }`,
         type: 'warning',
@@ -62,8 +62,8 @@ export function createSeatHandlers(ctx: SeatContext) {
     }
 
     safeAlert({
-      title: 'Assign Teacher Seat',
-      message: `Assign a teacher seat to ${teacherName}?\n\nThis will allow them to use the teacher portal and access student information.`,
+      title: 'Assign Staff Seat',
+      message: `Assign a staff seat to ${teacherName}?\n\nThis will allow them to use the staff portal and access school operations.`,
       type: 'info',
       buttons: [
         { text: 'Cancel', style: 'cancel' } as AlertButton,
@@ -97,8 +97,8 @@ export function createSeatHandlers(ctx: SeatContext) {
     }
 
     safeAlert({
-      title: 'Revoke Teacher Seat',
-      message: `Are you sure you want to revoke the teacher seat from ${teacherName}?\n\nThey will lose access to the teacher portal until a new seat is assigned.`,
+      title: 'Revoke Staff Seat',
+      message: `Are you sure you want to revoke the staff seat from ${teacherName}?\n\nThey will lose access to the staff portal until a new seat is assigned.`,
       type: 'warning',
       buttons: [
         { text: 'Cancel', style: 'cancel' } as AlertButton,

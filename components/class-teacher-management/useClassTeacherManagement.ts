@@ -7,6 +7,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
+import { setSchoolStaffRole } from '@/lib/services/schoolRoleService';
 import type {
   ClassInfo,
   Teacher,
@@ -21,6 +22,80 @@ interface UseClassTeacherManagementOptions {
   userId: string | undefined;
 }
 
+interface TeacherMembershipRow {
+  user_id: string | null;
+  role: string | null;
+  member_type: string | null;
+  seat_status: string | null;
+  membership_status: string | null;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  created_at: string | null;
+}
+
+interface TeacherRow {
+  user_id: string | null;
+  auth_user_id: string | null;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  role: string | null;
+  created_at: string | null;
+  is_active: boolean | null;
+}
+
+interface TeacherProfileRow {
+  id: string;
+  auth_user_id: string | null;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  role: string | null;
+  created_at: string | null;
+}
+
+interface TeacherCandidateMeta {
+  profile?: TeacherProfileRow;
+  roleHint?: string | null;
+  createdAt?: string | null;
+  emailHint?: string | null;
+  firstNameHint?: string | null;
+  lastNameHint?: string | null;
+  userIdHint?: string | null;
+}
+
+const normalizeTeacherRole = (role: string | null | undefined): Teacher['role'] => {
+  const normalized = String(role || '').toLowerCase();
+  if (normalized === 'admin') return 'admin';
+  if (normalized === 'principal_admin') return 'principal_admin';
+  return 'teacher';
+};
+
+const isTeacherMembership = (row: TeacherMembershipRow): boolean => {
+  const role = String(row.role || '').toLowerCase();
+  const memberType = String(row.member_type || '').toLowerCase();
+  const seatStatus = String(row.seat_status || 'active').toLowerCase();
+  const membershipStatus = String(row.membership_status || 'active').toLowerCase();
+
+  const hasActiveSeat = seatStatus === 'active' || seatStatus === 'pending' || seatStatus === '';
+  const isActiveMembership = membershipStatus === 'active' || membershipStatus === '';
+  const isStaffRole =
+    role.includes('teacher') ||
+    role === 'admin' ||
+    role === 'principal_admin' ||
+    memberType === 'staff';
+
+  return hasActiveSeat && isActiveMembership && isStaffRole;
+};
+
+const pushClassIndex = (map: Map<string, ClassInfo[]>, key: string, classInfo: ClassInfo): void => {
+  if (!key) return;
+  const existing = map.get(key) || [];
+  map.set(key, existing.concat(classInfo));
+};
+
 export function useClassTeacherManagement({
   orgId,
   userId,
@@ -34,6 +109,7 @@ export function useClassTeacherManagement({
   const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('classes');
   const [classForm, setClassForm] = useState<ClassFormData>(INITIAL_CLASS_FORM);
+  const [roleUpdateTeacherId, setRoleUpdateTeacherId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!userId || !orgId) return;
@@ -41,73 +117,149 @@ export function useClassTeacherManagement({
     try {
       setLoading(true);
       const schoolId = orgId;
+      const supabase = assertSupabase();
 
-      // Load classes (without embedded join - no FK constraint on teacher_id)
-      const { data: classesData, error: classesError } = await assertSupabase()
-        .from('classes')
-        .select(`
-          id,
-          name,
-          grade_level,
-          max_capacity,
-          room_number,
-          teacher_id,
-          active
-        `)
-        .eq('preschool_id', schoolId);
+      const [classesResult, teacherMembersResult, teacherRowsResult] = await Promise.all([
+        supabase
+          .from('classes')
+          .select('id,name,grade_level,max_capacity,room_number,teacher_id,active')
+          .eq('preschool_id', schoolId),
+        supabase
+          .from('organization_members')
+          .select('user_id,role,member_type,seat_status,membership_status,email,first_name,last_name,created_at')
+          .eq('organization_id', schoolId),
+        supabase
+          .from('teachers')
+          .select('user_id,auth_user_id,email,first_name,last_name,role,created_at,is_active')
+          .eq('preschool_id', schoolId)
+          .eq('is_active', true),
+      ]);
 
-      if (classesError) {
-        console.error('Error loading classes:', classesError);
+      if (classesResult.error) {
+        console.error('[ClassTeacherManagement] Error loading classes:', classesResult.error);
+      }
+      if (teacherMembersResult.error) {
+        console.error('[ClassTeacherManagement] Error loading memberships:', teacherMembersResult.error);
+      }
+      if (teacherRowsResult.error) {
+        console.error('[ClassTeacherManagement] Error loading teachers table:', teacherRowsResult.error);
       }
 
-      // Fetch teacher profiles separately (teacher_id references auth.users.id)
-      const teacherIds = (classesData || [])
-        .map((c: any) => c.teacher_id)
-        .filter((id: any) => !!id);
-      
-      let teacherProfilesMap: Record<string, { first_name?: string; last_name?: string; email?: string }> = {};
-      
-      if (teacherIds.length > 0) {
-        const { data: profilesData } = await assertSupabase()
-          .from('profiles')
-          .select('id, first_name, last_name, email')
-          .in('id', teacherIds);
-        
-        (profilesData || []).forEach((p: any) => {
-          teacherProfilesMap[p.id] = p;
-        });
+      const classRows = (classesResult.data || []) as Array<{
+        id: string;
+        name: string;
+        grade_level: string;
+        max_capacity: number | null;
+        room_number: string | null;
+        teacher_id: string | null;
+        active: boolean | null;
+      }>;
+
+      const teacherMembers = (teacherMembersResult.data || []) as TeacherMembershipRow[];
+      const teacherRows = (teacherRowsResult.data || []) as TeacherRow[];
+
+      const classTeacherRefs = Array.from(
+        new Set(classRows.map((row) => row.teacher_id).filter((id): id is string => Boolean(id)))
+      );
+
+      const membershipTeacherRefs = Array.from(
+        new Set(
+          teacherMembers
+            .filter(isTeacherMembership)
+            .map((row) => row.user_id)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      const teacherTableRefs = Array.from(
+        new Set(
+          teacherRows
+            .flatMap((row) => [row.user_id, row.auth_user_id])
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      const lookupRefs = Array.from(new Set([...classTeacherRefs, ...membershipTeacherRefs, ...teacherTableRefs]));
+
+      let profiles: TeacherProfileRow[] = [];
+      if (lookupRefs.length > 0) {
+        const [profilesByIdResult, profilesByAuthIdResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id,auth_user_id,email,first_name,last_name,phone,role,created_at')
+            .in('id', lookupRefs),
+          supabase
+            .from('profiles')
+            .select('id,auth_user_id,email,first_name,last_name,phone,role,created_at')
+            .in('auth_user_id', lookupRefs),
+        ]);
+
+        if (profilesByIdResult.error) {
+          console.warn('[ClassTeacherManagement] Profile lookup by id warning:', profilesByIdResult.error);
+        }
+        if (profilesByAuthIdResult.error) {
+          console.warn('[ClassTeacherManagement] Profile lookup by auth_user_id warning:', profilesByAuthIdResult.error);
+        }
+
+        const mergedProfiles = [
+          ...((profilesByIdResult.data || []) as TeacherProfileRow[]),
+          ...((profilesByAuthIdResult.data || []) as TeacherProfileRow[]),
+        ];
+
+        const dedupedById = new Map<string, TeacherProfileRow>();
+        for (const row of mergedProfiles) {
+          if (!row?.id) continue;
+          dedupedById.set(row.id, row);
+        }
+        profiles = Array.from(dedupedById.values());
       }
 
-      // Process classes with teacher names from profiles lookup
-      const processedClasses: ClassInfo[] = (classesData || []).map((cls: any) => {
-        const teacher = cls.teacher_id ? teacherProfilesMap[cls.teacher_id] : null;
-        const teacherName = teacher
-          ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() || teacher.email
+      const profileById = new Map<string, TeacherProfileRow>();
+      const profileByAuthId = new Map<string, TeacherProfileRow>();
+      for (const profile of profiles) {
+        profileById.set(profile.id, profile);
+        if (profile.auth_user_id) {
+          profileByAuthId.set(profile.auth_user_id, profile);
+        }
+      }
+
+      const resolveProfile = (refId: string | null | undefined): TeacherProfileRow | null => {
+        if (!refId) return null;
+        return profileById.get(refId) || profileByAuthId.get(refId) || null;
+      };
+
+      const processedClasses: ClassInfo[] = classRows.map((row) => {
+        const teacherProfile = resolveProfile(row.teacher_id);
+        const teacherName = teacherProfile
+          ? `${teacherProfile.first_name || ''} ${teacherProfile.last_name || ''}`.trim() || teacherProfile.email || undefined
           : undefined;
+
         return {
-          id: cls.id,
-          name: cls.name,
-          grade_level: cls.grade_level,
-          capacity: cls.max_capacity,
-          current_enrollment: 0, // Will be updated below
-          room_number: cls.room_number,
-          teacher_id: cls.teacher_id,
+          id: row.id,
+          name: row.name,
+          grade_level: row.grade_level,
+          capacity: row.max_capacity || 0,
+          current_enrollment: 0,
+          room_number: row.room_number || undefined,
+          teacher_id: teacherProfile?.id || row.teacher_id || undefined,
           teacher_name: teacherName,
-          is_active: cls.active ?? true,
+          is_active: row.active ?? true,
         } as ClassInfo;
       });
 
-      // Get student counts per class
       const classIds = processedClasses.map((c) => c.id);
       if (classIds.length > 0) {
-        const { data: enrollments } = await assertSupabase()
+        const { data: enrollments, error: enrollmentError } = await supabase
           .from('students')
           .select('class_id')
           .in('class_id', classIds);
 
-        // Count students per class
+        if (enrollmentError) {
+          console.warn('[ClassTeacherManagement] Enrollment count warning:', enrollmentError);
+        }
+
         const countMap: Record<string, number> = {};
-        (enrollments || []).forEach((e: any) => {
+        (enrollments || []).forEach((e: { class_id: string }) => {
           countMap[e.class_id] = (countMap[e.class_id] || 0) + 1;
         });
 
@@ -118,70 +270,143 @@ export function useClassTeacherManagement({
 
       setClasses(processedClasses);
 
-      // Load teachers
-      const { data: teacherMembers, error: teacherMembersError } = await assertSupabase()
-        .from('organization_members')
-        .select('user_id')
-        .eq('organization_id', schoolId)
-        .ilike('role', '%teacher%');
+      const classesByTeacherRef = new Map<string, ClassInfo[]>();
+      classRows.forEach((row, index) => {
+        const classInfo = processedClasses[index];
+        const teacherProfile = resolveProfile(row.teacher_id);
+        const keys = new Set<string>();
 
-      if (teacherMembersError) {
-        console.error('Error loading teacher memberships:', teacherMembersError);
-      }
+        if (row.teacher_id) keys.add(row.teacher_id);
+        if (classInfo.teacher_id) keys.add(classInfo.teacher_id);
+        if (teacherProfile?.auth_user_id) keys.add(teacherProfile.auth_user_id);
 
-      const teacherAuthIds: string[] = (teacherMembers || [])
-        .map((m: any) => m.user_id)
-        .filter((v: any) => !!v);
-
-      let teacherUsers: any[] = [];
-      if (teacherAuthIds.length > 0) {
-        // Use profiles table (not deprecated users table)
-        const { data: usersData } = await assertSupabase()
-          .from('profiles')
-          .select('id, email, first_name, last_name, role, created_at')
-          .in('id', teacherAuthIds);
-        teacherUsers = usersData || [];
-      }
-
-      // Fallback: if membership is empty, try profiles table by preschool and role
-      if (teacherUsers.length === 0) {
-        const { data: fallbackUsers } = await assertSupabase()
-          .from('profiles')
-          .select('id, email, first_name, last_name, role, created_at')
-          .eq('preschool_id', schoolId)
-          .ilike('role', '%teacher%');
-        teacherUsers = fallbackUsers || [];
-      }
-
-      // Aggregate classes and student counts per teacher from processedClasses
-      const classesByTeacher: Record<string, ClassInfo[]> = {};
-      for (const cls of processedClasses) {
-        if (!cls.teacher_id) continue;
-        if (!classesByTeacher[cls.teacher_id]) classesByTeacher[cls.teacher_id] = [];
-        classesByTeacher[cls.teacher_id].push(cls);
-      }
-
-      const processedTeachers: Teacher[] = (teacherUsers || []).map((u: any) => {
-        const tClasses = classesByTeacher[u.id] || [];
-        const classes_assigned = tClasses.length;
-        const students_count = tClasses.reduce((sum, c) => sum + (c.current_enrollment || 0), 0);
-        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.name || u.email;
-        return {
-          id: u.id,
-          full_name: fullName,
-          email: u.email,
-          phone: undefined,
-          specialization: '',
-          status: 'active',
-          hire_date: u.created_at || new Date().toISOString(),
-          classes_assigned,
-          students_count,
-        } as Teacher;
+        keys.forEach((key) => pushClassIndex(classesByTeacherRef, key, classInfo));
       });
+
+      const candidateByProfileId = new Map<string, TeacherCandidateMeta>();
+      const addCandidate = (
+        refId: string | null | undefined,
+        meta: Partial<TeacherCandidateMeta> = {}
+      ): void => {
+        if (!refId) return;
+
+        const matchedProfile = resolveProfile(refId);
+        const profileId = matchedProfile?.id || refId;
+        const existing = candidateByProfileId.get(profileId) || {};
+
+        candidateByProfileId.set(profileId, {
+          ...existing,
+          ...meta,
+          profile: matchedProfile || existing.profile,
+          userIdHint: meta.userIdHint || existing.userIdHint || matchedProfile?.auth_user_id || matchedProfile?.id || refId,
+        });
+      };
+
+      teacherMembers.forEach((row) => {
+        if (!isTeacherMembership(row)) return;
+        addCandidate(row.user_id, {
+          roleHint: row.role || row.member_type,
+          createdAt: row.created_at,
+          emailHint: row.email,
+          firstNameHint: row.first_name,
+          lastNameHint: row.last_name,
+          userIdHint: row.user_id,
+        });
+      });
+
+      teacherRows.forEach((row) => {
+        addCandidate(row.user_id, {
+          roleHint: row.role,
+          createdAt: row.created_at,
+          emailHint: row.email,
+          firstNameHint: row.first_name,
+          lastNameHint: row.last_name,
+          userIdHint: row.auth_user_id || row.user_id,
+        });
+        addCandidate(row.auth_user_id, {
+          roleHint: row.role,
+          createdAt: row.created_at,
+          emailHint: row.email,
+          firstNameHint: row.first_name,
+          lastNameHint: row.last_name,
+          userIdHint: row.auth_user_id || row.user_id,
+        });
+      });
+
+      processedClasses.forEach((cls) => {
+        if (!cls.teacher_id) return;
+        addCandidate(cls.teacher_id, {});
+      });
+
+      if (candidateByProfileId.size === 0) {
+        const { data: fallbackProfiles, error: fallbackError } = await supabase
+          .from('profiles')
+          .select('id,auth_user_id,email,first_name,last_name,phone,role,created_at')
+          .eq('preschool_id', schoolId)
+          .or('role.ilike.%teacher%,role.eq.admin,role.eq.principal_admin');
+
+        if (fallbackError) {
+          console.warn('[ClassTeacherManagement] Fallback teacher profile warning:', fallbackError);
+        }
+
+        ((fallbackProfiles || []) as TeacherProfileRow[]).forEach((profile) => {
+          addCandidate(profile.id, {
+            roleHint: profile.role,
+            createdAt: profile.created_at,
+            emailHint: profile.email,
+            firstNameHint: profile.first_name,
+            lastNameHint: profile.last_name,
+            userIdHint: profile.auth_user_id || profile.id,
+            profile,
+          });
+        });
+      }
+
+      const processedTeachers: Teacher[] = Array.from(candidateByProfileId.entries())
+        .map(([profileId, candidate]) => {
+          const role = normalizeTeacherRole(candidate.profile?.role || candidate.roleHint);
+          const firstName = candidate.profile?.first_name || candidate.firstNameHint || '';
+          const lastName = candidate.profile?.last_name || candidate.lastNameHint || '';
+          const fullName = `${firstName} ${lastName}`.trim() || candidate.profile?.email || candidate.emailHint || 'Teacher';
+
+          const classLookupKeys = new Set<string>();
+          classLookupKeys.add(profileId);
+          if (candidate.profile?.auth_user_id) classLookupKeys.add(candidate.profile.auth_user_id);
+          if (candidate.userIdHint) classLookupKeys.add(candidate.userIdHint);
+
+          const classMap = new Map<string, ClassInfo>();
+          classLookupKeys.forEach((key) => {
+            (classesByTeacherRef.get(key) || []).forEach((cls) => classMap.set(cls.id, cls));
+          });
+
+          const teacherClasses = Array.from(classMap.values());
+          const studentsCount = teacherClasses.reduce((sum, cls) => sum + (cls.current_enrollment || 0), 0);
+
+          return {
+            id: profileId,
+            user_id: candidate.profile?.auth_user_id || candidate.userIdHint || profileId,
+            full_name: fullName,
+            email: candidate.profile?.email || candidate.emailHint || 'No email',
+            phone: candidate.profile?.phone || undefined,
+            specialization: '',
+            role,
+            status: 'active',
+            hire_date: candidate.profile?.created_at || candidate.createdAt || new Date().toISOString(),
+            classes_assigned: teacherClasses.length,
+            students_count: studentsCount,
+          } as Teacher;
+        })
+        .sort((a, b) => {
+          if (a.role !== b.role) {
+            if (a.role === 'admin') return -1;
+            if (b.role === 'admin') return 1;
+          }
+          return a.full_name.localeCompare(b.full_name);
+        });
 
       setTeachers(processedTeachers);
     } catch (error) {
-      console.error('Error loading class/teacher data:', error);
+      console.error('[ClassTeacherManagement] Error loading class/teacher data:', error);
       Alert.alert('Error', 'Failed to load data');
     } finally {
       setLoading(false);
@@ -189,15 +414,16 @@ export function useClassTeacherManagement({
     }
   }, [userId, orgId]);
 
-  // Load data when org is available
   useEffect(() => {
     if (orgId && userId) {
       loadData();
     }
   }, [orgId, userId, loadData]);
 
-  // Memoize filtered lists for better performance
-  const activeTeachers = useMemo(() => teachers.filter((t) => t.status === 'active'), [teachers]);
+  const activeTeachers = useMemo(
+    () => teachers.filter((t) => t.status === 'active' && (t.role === 'teacher' || t.role === 'admin' || t.role === 'principal_admin')),
+    [teachers]
+  );
 
   const activeClasses = useMemo(() => classes.filter((c) => c.is_active), [classes]);
 
@@ -223,7 +449,7 @@ export function useClassTeacherManagement({
         });
 
       if (error) {
-        Alert.alert('Error', 'Failed to create class');
+        Alert.alert('Error', error.message || 'Failed to create class');
         return;
       }
 
@@ -231,7 +457,8 @@ export function useClassTeacherManagement({
       setShowClassModal(false);
       setClassForm(INITIAL_CLASS_FORM);
       loadData();
-    } catch {
+    } catch (error) {
+      console.error('[ClassTeacherManagement] create class failed:', error);
       Alert.alert('Error', 'Failed to create class');
     }
   }, [classForm, orgId, loadData]);
@@ -246,7 +473,12 @@ export function useClassTeacherManagement({
         .eq('id', selectedClass.id);
 
       if (error) {
-        Alert.alert('Error', 'Failed to assign teacher');
+        console.error('[ClassTeacherManagement] assign teacher failed:', {
+          classId: selectedClass.id,
+          teacherId: classForm.teacher_id,
+          error,
+        });
+        Alert.alert('Error', error.message || 'Failed to assign teacher');
         return;
       }
 
@@ -255,7 +487,8 @@ export function useClassTeacherManagement({
       setSelectedClass(null);
       setClassForm((prev) => ({ ...prev, teacher_id: '' }));
       loadData();
-    } catch {
+    } catch (error) {
+      console.error('[ClassTeacherManagement] assign teacher exception:', error);
       Alert.alert('Error', 'Failed to assign teacher');
     }
   }, [selectedClass, classForm.teacher_id, loadData]);
@@ -275,13 +508,14 @@ export function useClassTeacherManagement({
                 .eq('id', classInfo.id);
 
               if (error) {
-                Alert.alert('Error', 'Failed to remove teacher');
+                Alert.alert('Error', error.message || 'Failed to remove teacher');
                 return;
               }
 
               Alert.alert('Success', 'Teacher removed from class');
               loadData();
-            } catch {
+            } catch (error) {
+              console.error('[ClassTeacherManagement] remove teacher exception:', error);
               Alert.alert('Error', 'Failed to remove teacher');
             }
           },
@@ -313,7 +547,7 @@ export function useClassTeacherManagement({
             onPress: async () => {
               try {
                 await removeTeacherFromSchool({
-                  teacherUserId: teacher.id,
+                  teacherUserId: teacher.user_id || teacher.id,
                   organizationId: orgId,
                 });
                 Alert.alert('Success', 'Teacher removed from school');
@@ -330,6 +564,47 @@ export function useClassTeacherManagement({
     [loadData, orgId]
   );
 
+  const handleSetTeacherRole = useCallback(
+    async (teacher: Teacher, targetRole: 'teacher' | 'admin') => {
+      if (!orgId) {
+        Alert.alert('Error', 'No school found for this account.');
+        return;
+      }
+      if (!teacher.id) {
+        Alert.alert('Error', 'Missing teacher identifier.');
+        return;
+      }
+      if (teacher.role === targetRole) {
+        return;
+      }
+
+      try {
+        setRoleUpdateTeacherId(teacher.id);
+
+        await setSchoolStaffRole({
+          targetProfileId: teacher.id,
+          schoolId: orgId,
+          role: targetRole,
+        });
+
+        Alert.alert(
+          'Success',
+          targetRole === 'admin'
+            ? `${teacher.full_name} is now a school admin.`
+            : `${teacher.full_name} is now assigned as a teacher.`
+        );
+
+        await loadData();
+      } catch (error) {
+        console.error('[ClassTeacherManagement] role update failed:', error);
+        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update role');
+      } finally {
+        setRoleUpdateTeacherId(null);
+      }
+    },
+    [orgId, loadData]
+  );
+
   const handleToggleClassStatus = useCallback(
     async (classInfo: ClassInfo) => {
       try {
@@ -339,12 +614,13 @@ export function useClassTeacherManagement({
           .eq('id', classInfo.id);
 
         if (error) {
-          Alert.alert('Error', 'Failed to update class status');
+          Alert.alert('Error', error.message || 'Failed to update class status');
           return;
         }
 
         loadData();
-      } catch {
+      } catch (error) {
+        console.error('[ClassTeacherManagement] toggle class status exception:', error);
         Alert.alert('Error', 'Failed to update class status');
       }
     },
@@ -357,7 +633,6 @@ export function useClassTeacherManagement({
   }, [loadData]);
 
   return {
-    // State
     classes,
     teachers,
     loading,
@@ -367,15 +642,15 @@ export function useClassTeacherManagement({
     selectedClass,
     activeTab,
     classForm,
-    // Computed
+    roleUpdateTeacherId,
     activeTeachers,
     activeClasses,
-    // Actions
     loadData,
     handleCreateClass,
     handleAssignTeacher,
     handleRemoveTeacher,
     handleDeleteTeacher,
+    handleSetTeacherRole,
     handleToggleClassStatus,
     setShowClassModal,
     setShowTeacherAssignment,

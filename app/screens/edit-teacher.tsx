@@ -11,6 +11,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'EditTeacher';
 import { removeTeacherFromSchool } from '@/lib/services/teacherRemovalService';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -46,11 +49,12 @@ export default function EditTeacherScreen() {
       // Fetch teacher profile
       const { data: teacherData, error: teacherError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, email, phone')
-        .eq('id', teacherId)
-        .single();
+        .select('id, auth_user_id, first_name, last_name, email, phone')
+        .or(`id.eq.${teacherId},auth_user_id.eq.${teacherId}`)
+        .maybeSingle();
 
       if (teacherError) throw teacherError;
+      if (!teacherData) throw new Error('Teacher not found');
 
       // Get teacher record from teachers table if exists
       const { data: teacherRecord } = await supabase
@@ -70,10 +74,13 @@ export default function EditTeacherScreen() {
       });
 
       // Fetch assigned classes
+      const teacherRefIds = Array.from(
+        new Set([teacherData.id, teacherData.auth_user_id].filter((v): v is string => Boolean(v)))
+      );
       const { data: classesData } = await supabase
         .from('classes')
         .select('name')
-        .eq('teacher_id', teacherId);
+        .in('teacher_id', teacherRefIds);
 
       setAssignedClasses((classesData || []).map((c: any) => c.name));
     } catch (error: any) {
@@ -136,7 +143,7 @@ export default function EditTeacherScreen() {
 
       // Don't throw on teacher error - row might not exist
       if (teacherError) {
-        console.log('Note: teachers table update skipped:', teacherError.message);
+        logger.info(TAG, 'teachers table update skipped:', teacherError.message);
       }
 
       Alert.alert('Success', 'Teacher profile updated successfully', [

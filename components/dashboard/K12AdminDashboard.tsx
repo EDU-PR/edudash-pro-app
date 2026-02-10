@@ -202,6 +202,19 @@ export function K12AdminDashboard() {
         onPress: () => router.push('/screens/announcements'),
       },
       {
+        id: 'dash-advisor',
+        title: 'Dash AI Advisor',
+        icon: 'sparkles-outline',
+        color: '#7C3AED',
+        onPress: () =>
+          router.push({
+            pathname: '/screens/dash-assistant',
+            params: {
+              initialMessage: 'Help me prioritize K-12 school operations for this week.',
+            },
+          } as any),
+      },
+      {
         id: 'social-agent',
         title: 'Social Agent',
         icon: 'logo-facebook',

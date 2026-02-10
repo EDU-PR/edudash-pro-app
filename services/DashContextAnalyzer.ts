@@ -8,6 +8,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { getCurrentSession, getCurrentProfile } from '@/lib/sessionManager';
 import type { DashUserProfile, DashMemoryItem, DashInsight } from './dash-ai/types';
 
@@ -757,7 +758,7 @@ export class DashContextAnalyzer implements IDashContextAnalyzer {
       });
 
       this.lastSnapshotTime = now;
-      console.log('[DashContext] Context snapshot persisted');
+      logger.debug('DashContext', 'Context snapshot persisted');
     } catch (error) {
       console.error('[DashContext] Failed to persist snapshot:', error);
     }
@@ -782,7 +783,7 @@ export class DashContextAnalyzer implements IDashContextAnalyzer {
 
       if (error || !data) return null;
 
-      console.log('[DashContext] Loaded context snapshot from', new Date(data.created_at));
+      logger.debug('DashContext', 'Loaded context snapshot from', new Date(data.created_at));
       return data.snapshot as ContextData;
     } catch (error) {
       console.error('[DashContext] Failed to load snapshot:', error);
@@ -1018,7 +1019,7 @@ export class DashContextAnalyzer implements IDashContextAnalyzer {
 
     // Log predictions in development
     if (predictions.length > 0 && process.env.EXPO_PUBLIC_DEBUG_MODE === 'true') {
-      console.log('[DashContext] Predicted needs:', predictions);
+      logger.debug('DashContext', 'Predicted needs:', predictions);
     }
 
     return predictions.slice(0, 3); // Return top 3 predictions

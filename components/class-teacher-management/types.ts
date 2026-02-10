@@ -17,10 +17,12 @@ export interface ClassInfo {
 
 export interface Teacher {
   id: string;
+  user_id?: string;
   full_name: string;
   email: string;
   phone?: string;
   specialization: string;
+  role: 'teacher' | 'admin' | 'principal_admin';
   status: 'active' | 'inactive' | 'on_leave';
   hire_date: string;
   classes_assigned: number;
@@ -47,6 +49,7 @@ export interface ClassTeacherState {
   selectedClass: ClassInfo | null;
   activeTab: ActiveTab;
   classForm: ClassFormData;
+  roleUpdateTeacherId: string | null;
 }
 
 export interface ClassTeacherActions {
@@ -55,6 +58,7 @@ export interface ClassTeacherActions {
   handleAssignTeacher: () => Promise<void>;
   handleRemoveTeacher: (classInfo: ClassInfo) => void;
   handleDeleteTeacher: (teacher: Teacher) => void;
+  handleSetTeacherRole: (teacher: Teacher, role: 'teacher' | 'admin') => Promise<void>;
   handleToggleClassStatus: (classInfo: ClassInfo) => Promise<void>;
   setShowClassModal: (show: boolean) => void;
   setShowTeacherAssignment: (show: boolean) => void;

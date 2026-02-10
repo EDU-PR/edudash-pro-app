@@ -7,6 +7,9 @@ import '../polyfills/react-use';
 import 'react-native-get-random-values';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform, LogBox } from 'react-native';
+import { logger } from '@/lib/logger';
+
+const TAG = 'RootLayout';
 // Initialize i18n globally (web + native)
 import '../lib/i18n';
 
@@ -126,7 +129,7 @@ function LayoutContent() {
           await NavigationBar.setBorderColorAsync(isDark ? '#1a1a2e' : '#e5e7eb');
         } catch (error) {
           // Navigation bar API may not be available on all devices
-          console.log('NavigationBar setup skipped:', error);
+          logger.debug(TAG, 'NavigationBar setup skipped:', error);
         }
       };
       configureNavigationBar();
@@ -234,7 +237,7 @@ function LayoutContent() {
 export default function RootLayout() {
   const [resetKey, setResetKey] = useState(0);
 
-  if (__DEV__) console.log('[RootLayout] Rendering...');
+  if (__DEV__) logger.debug(TAG, 'Rendering...');
   
   // Setup PWA meta tags on web
   useEffect(() => {
@@ -298,17 +301,17 @@ function RootLayoutContent() {
   const { session } = useAuth();
   const lastDashSessionTokenRef = useRef<string | null>(null);
   
-  if (__DEV__) console.log('[RootLayoutContent] Rendering...');
+  if (__DEV__) logger.debug(TAG, 'RootLayoutContent Rendering...');
   
   // Setup notification router on native (once per app lifecycle)
   useEffect(() => {
     if (Platform.OS === 'web') return;
     
-    console.log('[RootLayout] Setting up notification router...');
+    logger.debug(TAG, 'Setting up notification router...');
     const cleanup = setupNotificationRouter();
     
     return () => {
-      console.log('[RootLayout] Cleaning up notification router');
+      logger.debug(TAG, 'Cleaning up notification router');
       cleanup();
     };
   }, []);
@@ -330,7 +333,7 @@ function RootLayoutContent() {
             if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
-          console.log('[_layout] Password reset deep link detected - routing to native reset flow');
+          logger.info(TAG, 'Password reset deep link detected - routing to native reset flow');
           try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
           router.replace(`/reset-password${search.toString() ? `?${search.toString()}` : ''}` as `/${string}`);
           return;
@@ -343,7 +346,7 @@ function RootLayoutContent() {
             if (v === undefined || v === null || v === '') continue;
             search.set(k, String(v));
           }
-          console.log('[_layout] Auth callback deep link (warm start)');
+          logger.info(TAG, 'Auth callback deep link (warm start)');
           const flow = String(params.flow || params.type || '').toLowerCase();
           if (flow === 'recovery') {
             try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
@@ -395,13 +398,13 @@ function RootLayoutContent() {
       n.serviceWorker
         .register('/sw.js')
         .then((registration: ServiceWorkerRegistration) => {
-          console.log('[PWA] Service worker registered:', registration.scope);
+          logger.info(TAG, 'PWA Service worker registered:', registration.scope);
         })
         .catch((error: Error) => {
-          console.warn('[PWA] Service worker registration failed:', error);
+          logger.warn(TAG, 'PWA Service worker registration failed:', error);
         });
     } else {
-      console.log('[PWA] Service workers not supported in this browser');
+      logger.debug(TAG, 'PWA Service workers not supported in this browser');
     }
   }, []);
   
@@ -409,7 +412,7 @@ function RootLayoutContent() {
   useEffect(() => {
     // Skip Dash AI on web platform
     if (Platform.OS === 'web') {
-      console.log('[RootLayoutContent] Skipping Dash AI on web');
+      logger.debug(TAG, 'Skipping Dash AI on web');
       return;
     }
     
@@ -426,7 +429,7 @@ function RootLayoutContent() {
     // which triggers a background→active AppState blip on Android.
     const currentToken = session.access_token;
     if (currentToken && currentToken === lastDashSessionTokenRef.current) {
-      if (__DEV__) console.log('[RootLayoutContent] Skipping duplicate Dash AI init (same token)');
+      if (__DEV__) logger.debug(TAG, 'Skipping duplicate Dash AI init (same token)');
       return;
     }
     lastDashSessionTokenRef.current = currentToken ?? null;

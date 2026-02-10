@@ -16,6 +16,9 @@ import { useAppPreferencesSafe } from '@/contexts/AppPreferencesContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
+import { logger } from '@/lib/logger';
+
+const TAG = 'Settings';
 import {
   NotificationPresets,
   setBadgeCount,
@@ -58,11 +61,11 @@ const useSafeUpdates = () => {
       isUpdateDownloaded: false,
       updateError: null,
       checkForUpdates: async () => {
-        console.log('[Settings] Updates check not available in current environment');
+        logger.debug(TAG, 'Updates check not available in current environment');
         return false;
       },
       applyUpdate: async () => {
-        console.log('[Settings] Update apply not available in current environment');
+        logger.debug(TAG, 'Update apply not available in current environment');
       },
     };
   }
@@ -224,7 +227,7 @@ export default function SettingsScreen() {
           BiometricAuthService.isBiometricEnabled(),
         ]);
         
-        console.log('Settings: Biometric check:', { capabilities, availableTypes, isEnabled });
+        logger.debug(TAG, 'Biometric check:', { capabilities, availableTypes, isEnabled });
         
         setBiometricSupported(capabilities.isAvailable);
         setBiometricEnrolled(capabilities.isEnrolled);
@@ -278,8 +281,8 @@ export default function SettingsScreen() {
       }
 
       const parsed = parseDeepLinkUrl(url);
-      console.log('[Dev][ForgotPasswordTest] URL:', url);
-      console.log('[Dev][ForgotPasswordTest] Parsed:', parsed);
+      logger.debug(TAG, 'ForgotPasswordTest URL:', url);
+      logger.debug(TAG, 'ForgotPasswordTest Parsed:', parsed);
 
       Alert.alert(
         'Forgot Password Test',

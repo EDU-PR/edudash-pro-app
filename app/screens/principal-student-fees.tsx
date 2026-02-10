@@ -91,6 +91,8 @@ export default function StudentFeeManagementScreen() {
   }
 
   const { student } = data;
+  const isStudentInactive =
+    student.is_active === false || String(student.status || '').toLowerCase() === 'inactive';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -124,6 +126,26 @@ export default function StudentFeeManagementScreen() {
               <Text style={styles.studentMeta}>
                 {student.class_name || 'No Class'} {'\u2022'} {student.parent_name || 'No Parent'}
               </Text>
+              <View
+                style={[
+                  styles.statusPill,
+                  isStudentInactive ? styles.statusPillInactive : styles.statusPillActive,
+                ]}
+              >
+                <Ionicons
+                  name={isStudentInactive ? 'pause-circle' : 'checkmark-circle'}
+                  size={12}
+                  color={isStudentInactive ? theme.warning : theme.success}
+                />
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    isStudentInactive ? styles.statusPillTextInactive : styles.statusPillTextActive,
+                  ]}
+                >
+                  {isStudentInactive ? 'Inactive' : 'Active'}
+                </Text>
+              </View>
               {!data.hasParent && (
                 <View style={styles.parentNotice}>
                   <Ionicons name="alert-circle-outline" size={14} color={theme.warning || '#f59e0b'} />
@@ -150,8 +172,10 @@ export default function StudentFeeManagementScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.changeClassButton}
+            style={[styles.changeClassButton, isStudentInactive && styles.changeClassButtonDisabled]}
+            disabled={isStudentInactive}
             onPress={() => {
+              if (isStudentInactive) return;
               actions.setNewClassId(student.class_id || '');
               actions.setClassRegistrationFee(Number(student.registration_fee_amount || 0).toFixed(2));
               actions.setClassFeeHint('Update class and registration fee together to fix parent-facing amount mismatches.');
@@ -161,6 +185,33 @@ export default function StudentFeeManagementScreen() {
             <Ionicons name="swap-horizontal" size={18} color={theme.primary} />
             <Text style={styles.changeClassText}>Change Class</Text>
           </TouchableOpacity>
+
+          {!isStudentInactive ? (
+            <TouchableOpacity
+              style={[
+                styles.markInactiveButton,
+                (actions.saving || actions.deactivatingStudent) && { opacity: 0.7 },
+              ]}
+              onPress={actions.handleDeactivateStudent}
+              disabled={actions.saving || actions.deactivatingStudent}
+            >
+              {actions.deactivatingStudent ? (
+                <EduDashSpinner size="small" color={theme.warning} />
+              ) : (
+                <Ionicons name="pause-circle-outline" size={18} color={theme.warning} />
+              )}
+              <Text style={styles.markInactiveText}>
+                {actions.deactivatingStudent ? 'Marking Inactive...' : 'Mark Inactive (30-day retention)'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.inactiveInfoBanner}>
+              <Ionicons name="information-circle-outline" size={14} color={theme.warning} />
+              <Text style={styles.inactiveInfoText}>
+                This learner is inactive and excluded from unpaid follow-up.
+              </Text>
+            </View>
+          )}
         </View>
 
         {actions.showEnrollmentPicker && (
