@@ -27,6 +27,8 @@ import { getMonthStartISO } from '@/lib/utils/dateUtils';
 import { normalizePaymentMethodCode, PAYMENT_METHOD_LABELS } from '@/lib/utils/paymentMethod';
 import { FinancialDataService } from '@/services/FinancialDataService';
 import { PayrollService } from '@/services/PayrollService';
+import { PayrollPaymentHistory } from '@/components/principal/PayrollPaymentHistory';
+import { PayrollAdvanceModal } from '@/components/principal/PayrollAdvanceModal';
 import type {
   FeeCategoryCode,
   FinanceControlCenterBundle,
@@ -143,6 +145,10 @@ export default function FinanceControlCenterScreen() {
   const [salaryDeductions, setSalaryDeductions] = React.useState('');
   const [salaryNotes, setSalaryNotes] = React.useState('');
   const [savingSalary, setSavingSalary] = React.useState(false);
+  const [showHistoryModal, setShowHistoryModal] = React.useState(false);
+  const [historyRecipient, setHistoryRecipient] = React.useState<PayrollRosterItem | null>(null);
+  const [showAdvanceModal, setShowAdvanceModal] = React.useState(false);
+  const [advanceRecipient, setAdvanceRecipient] = React.useState<PayrollRosterItem | null>(null);
 
   const monthIso = React.useMemo(
     () => `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, '0')}-01`,
@@ -843,6 +849,28 @@ export default function FinanceControlCenterScreen() {
                   <Text style={styles.secondaryButtonText}>Edit Salary</Text>
                 </TouchableOpacity>
               </View>
+              <View style={[styles.queueActions, { marginTop: 4 }]}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    setHistoryRecipient(item);
+                    setShowHistoryModal(true);
+                  }}
+                >
+                  <Ionicons name="receipt-outline" size={14} color={theme.text} />
+                  <Text style={styles.secondaryButtonText}> History</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    setAdvanceRecipient(item);
+                    setShowAdvanceModal(true);
+                  }}
+                >
+                  <Ionicons name="cash-outline" size={14} color={theme.text} />
+                  <Text style={styles.secondaryButtonText}> Advances</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           );
         })
@@ -1096,6 +1124,21 @@ export default function FinanceControlCenterScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <PayrollPaymentHistory
+        visible={showHistoryModal}
+        recipient={historyRecipient}
+        monthIso={monthIso}
+        monthLabel={monthLabel}
+        onClose={() => { setShowHistoryModal(false); setHistoryRecipient(null); }}
+        onDataChanged={() => loadData(true)}
+      />
+      <PayrollAdvanceModal
+        visible={showAdvanceModal}
+        recipient={advanceRecipient}
+        organizationId={orgId || ''}
+        onClose={() => { setShowAdvanceModal(false); setAdvanceRecipient(null); }}
+        onDataChanged={() => loadData(true)}
+      />
       <AlertModal {...alertProps} />
     </SafeAreaView>
   );

@@ -17,6 +17,7 @@ import { DashUserProfileManager, type UserProfileManagerConfig } from './DashUse
 import { DashAIClient } from './DashAIClient';
 import { DashPromptBuilder } from './DashPromptBuilder';
 import { fetchParentChildren } from '@/lib/parent-children';
+import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 
 // Import facades
 import {
@@ -598,13 +599,22 @@ export class DashAICore {
       const tutoringGuidance = (userProfile?.role === 'parent' || userProfile?.role === 'student')
         ? `Tutoring guidance: For homework/math help, use the student_tutor tool. Ask for the exact question and confirm grade/age before proceeding. If the parent has multiple children, ask which child to focus on. Teach step-by-step, include worked examples, then give short practice and ask a follow-up question. IMPORTANT: Ask ONE question at a time and STOP. Do not continue to the next question until the learner answers. Do not include placeholders like "[Wait for the learner's response]". Avoid inventing specific tests unless requested.`
         : '';
-      const serviceType = 'homework_help';
+      const hasScannableAttachment = Array.isArray(attachments)
+        && attachments.some((attachment: any) => {
+          const kind = String(attachment?.kind || '').toLowerCase();
+          return kind === 'image' || kind === 'pdf' || kind === 'document';
+        });
+      const detectedOcrTask = hasScannableAttachment ? detectOCRTask(userInput) : null;
+      const ocrMode = hasScannableAttachment && (isOCRIntent(userInput) || detectedOcrTask !== null);
+      const ocrTask = detectedOcrTask || 'document';
+      const serviceType = ocrMode ? 'image_analysis' : 'homework_help';
 
       const contextParts = [
         systemPrompt,
         `User role: ${userProfile?.role || 'educator'}`,
         childrenContext,
         tutoringGuidance,
+        ocrMode ? getOCRPromptForTask(ocrTask) : null,
         languageOverrideDirective || langDirective,
         contextOverride || null,
       ].filter(Boolean);
@@ -615,6 +625,9 @@ export class DashAICore {
         context: contextParts.join('\n'),
         attachments,
         serviceType,
+        ocrMode,
+        ocrTask,
+        ocrResponseFormat: ocrMode ? 'json' : undefined,
         stream: shouldStream,
         onChunk: onStreamChunk,
         model: modelOverride || undefined,

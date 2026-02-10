@@ -9,6 +9,7 @@ import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { dashAIThrottler } from '@/lib/dash-ai-throttle';
 import type { ChatMessage, SelectedImage, ExamContext } from '@/components/dash-chat/types';
+import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 
 interface UseChatLogicProps {
   conversationId: string;
@@ -199,6 +200,8 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
       const token = sessionData.session?.access_token;
 
       // Prepare payload
+      const ocrTask = selectedImages.length > 0 ? detectOCRTask(textToSend || '') : null;
+      const ocrMode = selectedImages.length > 0 && (isOCRIntent(textToSend || '') || ocrTask !== null);
       const payload: any = {
         prompt: textToSend || userMessage.content,
         conversationHistory: conversationHistory,
@@ -216,8 +219,15 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
         payload.image_context = {
           has_images: true,
           image_count: selectedImages.length,
-          hint: 'Images uploaded. If extractable as exam/homework material, identify grade/subject/topic and offer curriculum help.',
+          hint: ocrMode
+            ? getOCRPromptForTask(ocrTask || 'document')
+            : 'Images uploaded. If extractable as exam/homework material, identify grade/subject/topic and offer curriculum help.',
         };
+        if (ocrMode) {
+          payload.ocr_mode = true;
+          payload.ocr_task = ocrTask || 'document';
+          payload.ocr_response_format = 'json';
+        }
       }
 
       // Add voice if present (for future transcription)
@@ -232,13 +242,16 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
         supabase.functions.invoke('ai-proxy', {
           body: {
             scope: 'parent',
-            service_type: 'dash_conversation',
+            service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
             payload: {
               prompt: payload.prompt,
               conversationHistory: payload.conversationHistory,
               images: payload.images,
               image_context: payload.image_context,
               voice_data: payload.voice_data,
+              ocr_mode: payload.ocr_mode,
+              ocr_task: payload.ocr_task,
+              ocr_response_format: payload.ocr_response_format,
             },
             enable_tools: true,
             stream: false,
@@ -246,6 +259,8 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
               role: 'parent',
               supports_images: true,
               allow_diagrams: true,
+              ocr_mode: ocrMode,
+              ocr_task: ocrTask || undefined,
             },
           },
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,

@@ -1,5 +1,6 @@
 import { assertSupabase } from '@/lib/supabase';
-import type { PayrollRosterBundle } from '@/types/finance';
+import type { PayrollRosterBundle, PayrollPaymentRecord, PayrollAdvanceRecord } from '@/types/finance';
+import * as PayrollExt from './PayrollExtensions';
 
 const normalizeMonthIso = (value?: string): string => {
   const base = value ? new Date(value) : new Date();
@@ -337,4 +338,13 @@ export class PayrollService {
       effectiveFrom: String(data?.effective_from || effectiveFrom),
     };
   }
+
+  // ── Delegated to PayrollExtensions (WARP split) ─────────────
+
+  static getPaymentHistory = PayrollExt.getPaymentHistory;
+  static editPayment = PayrollExt.editPayment;
+  static voidPayment = PayrollExt.voidPayment;
+  static getAdvances = PayrollExt.getAdvances;
+  static recordAdvance = PayrollExt.recordAdvance;
+  static markAdvanceRepaid = PayrollExt.markAdvanceRepaid;
 }

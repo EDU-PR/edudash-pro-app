@@ -245,15 +245,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // ─── Push notifications via Expo ───────────
     let pushCount = 0;
     if (status === 'finished' && recipientIds.length > 0) {
-      const { data: pushTokens } = await supabase
-        .from('push_tokens')
-        .select('token, user_id')
-        .in('user_id', recipientIds);
+      const { data: pushDevices } = await supabase
+        .from('push_devices')
+        .select('expo_push_token, user_id')
+        .in('user_id', recipientIds)
+        .eq('is_active', true);
 
-      const expoPushMessages = (pushTokens || [])
-        .filter((pt) => pt.token?.startsWith('ExponentPushToken'))
-        .map((pt) => ({
-          to: pt.token,
+      // Deduplicate by user_id (keep first occurrence)
+      const seenUsers = new Set<string>();
+      const uniqueDevices = (pushDevices || []).filter((d: any) => {
+        if (seenUsers.has(d.user_id)) return false;
+        seenUsers.add(d.user_id);
+        return true;
+      });
+
+      const expoPushMessages = uniqueDevices
+        .filter((pt: any) => pt.expo_push_token?.startsWith('ExponentPushToken'))
+        .map((pt: any) => ({
+          to: pt.expo_push_token,
           sound: 'default',
           title,
           body,

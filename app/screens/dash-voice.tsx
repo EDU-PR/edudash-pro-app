@@ -35,6 +35,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/LanguageDropdown';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
@@ -46,9 +47,10 @@ import {
   cleanForTTS,
   cleanRawJSON,
   createStreamingRequest,
-  splitForTTS,
   detectTextLanguage,
 } from '@/lib/dash-voice-utils';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { detectOCRTask, isOCRIntent, getOCRPromptForTask } from '@/lib/dash-ai/ocrPrompts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ORB_SIZE = Math.min(SCREEN_WIDTH * 0.55, 220);
@@ -61,7 +63,7 @@ if (!isWeb) {
 }
 
 type VoiceOrbRef = {
-  speakText: (text: string, language?: SupportedLanguage) => Promise<void>;
+  speakText: (text: string, language?: SupportedLanguage, options?: { phonicsMode?: boolean }) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   isSpeaking: boolean;
 };
@@ -82,6 +84,7 @@ export default function DashVoiceScreen() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage>('en-ZA');
   const [attachedImage, setAttachedImage] = useState<{ uri: string; base64: string } | null>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
 
   // Conversation history for context (prevents redundant greetings)
@@ -122,21 +125,17 @@ export default function DashVoiceScreen() {
     if (!voiceOrbRef.current) return;
     const clean = cleanForTTS(text);
     if (!clean) return;
-    const chunks = splitForTTS(clean, 1200);
-    if (chunks.length === 0) return;
+    const phonicsMode = shouldUsePhonicsMode(clean, { organizationType: orgType });
     try {
       isSpeakingRef.current = true;
       setIsSpeaking(true);
-      for (const chunk of chunks) {
-        if (!isSpeakingRef.current) break;
-        const chunkLang = preferredLanguage || `${detectTextLanguage(chunk)}-ZA` as SupportedLanguage;
-        await voiceOrbRef.current.speakText(chunk, chunkLang);
-      }
+      const chunkLang = preferredLanguage || `${detectTextLanguage(clean)}-ZA` as SupportedLanguage;
+      await voiceOrbRef.current.speakText(clean, chunkLang, { phonicsMode });
     } catch { /* ignore */ } finally {
       isSpeakingRef.current = false;
       setIsSpeaking(false);
     }
-  }, [preferredLanguage]);
+  }, [preferredLanguage, orgType]);
 
   const processSpeechQueue = useCallback(async () => {
     if (isSpeakingRef.current) return;
@@ -166,16 +165,16 @@ export default function DashVoiceScreen() {
   }, []);
 
   const takePhoto = useCallback(async () => {
-    try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) return;
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true, quality: 0.7, base64: true,
-      });
-      if (!result.canceled && result.assets[0]?.base64) {
-        setAttachedImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 });
-      }
-    } catch { /* cancelled */ }
+    setScannerVisible(true);
+  }, []);
+
+  const handleScannerScanned = useCallback((result: HomeworkScanResult) => {
+    if (!result?.base64) return;
+    setAttachedImage({
+      uri: result.uri,
+      base64: result.base64,
+    });
+    setScannerVisible(false);
   }, []);
 
   // ── Persist ORB messages to AsyncStorage for handoff to full chat ──
@@ -209,26 +208,83 @@ export default function DashVoiceScreen() {
 
       const systemPrompt = buildSystemPrompt(orgType, role, preferredLanguage);
       const hasImage = !!attachedImage?.base64;
+      const ocrTask = hasImage ? detectOCRTask(text) : null;
+      const ocrMode = hasImage && (isOCRIntent(text) || ocrTask !== null);
       const imageContext = hasImage
         ? '\n\nIMAGE PROCESSING: The user attached an image. Describe what you see and provide educational insights.'
+        : '';
+      const ocrContext = ocrMode
+        ? `\n\n${getOCRPromptForTask(ocrTask || 'document')}`
         : '';
       // Send full conversation history (last 20 turns) so AI has context
       const recentHistory = updatedHistory.slice(-20);
       const payload: Record<string, any> = {
         messages: recentHistory,
-        context: systemPrompt + imageContext,
+        context: systemPrompt + imageContext + ocrContext,
       };
       if (hasImage) {
         payload.images = [{ data: attachedImage.base64, media_type: 'image/jpeg' }];
       }
+      if (ocrMode) {
+        payload.ocr_mode = true;
+        payload.ocr_task = ocrTask || 'document';
+        payload.ocr_response_format = 'json';
+      }
 
       const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
-      const body = JSON.stringify({
-        scope: role, service_type: 'dash_conversation', payload,
-        stream: true, enable_tools: true,
-        metadata: { role, source: 'dash_voice_orb', org_type: orgType, language: preferredLanguage || undefined, has_image: hasImage },
-      });
+      const bodyPayload = {
+        scope: role,
+        service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
+        payload,
+        stream: !ocrMode, enable_tools: true,
+        metadata: {
+          role,
+          source: 'dash_voice_orb',
+          org_type: orgType,
+          language: preferredLanguage || undefined,
+          has_image: hasImage,
+          ocr_mode: ocrMode,
+          ocr_task: ocrTask || undefined,
+        },
+      };
+      const body = JSON.stringify(bodyPayload);
       if (attachedImage) setAttachedImage(null);
+
+      if (ocrMode) {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body,
+        });
+        const data = await response.json().catch(() => ({} as Record<string, any>));
+        if (!response.ok) {
+          throw new Error(String(data?.error || data?.message || `Request failed (${response.status})`));
+        }
+
+        const ocr = data?.ocr;
+        const content = typeof data?.content === 'string'
+          ? data.content
+          : typeof ocr?.analysis === 'string'
+            ? ocr.analysis
+            : '';
+        const cleaned = cleanRawJSON(content);
+        const displayText = cleaned || 'I analyzed the image but did not find readable text.';
+        setLastResponse(displayText);
+        setStreamingText('');
+        setIsProcessing(false);
+        if (displayText) {
+          const withResponse = [...updatedHistory, { role: 'assistant' as const, content: displayText }];
+          conversationHistoryRef.current = withResponse;
+          setConversationHistory(withResponse);
+          persistOrbMessages(withResponse);
+          enqueueSpeech(displayText);
+        }
+        activeRequestRef.current = null;
+        return;
+      }
 
       const req = createStreamingRequest(url, session.access_token, body,
         (accumulated) => {
@@ -312,6 +368,7 @@ export default function DashVoiceScreen() {
 
   // ── Render ────────────────────────────────────────────────────────
   return (
+    <>
     <View style={[s.container, { backgroundColor: theme.background }]}>
       <LanguageDropdown
         visible={showLangMenu}
@@ -482,6 +539,13 @@ export default function DashVoiceScreen() {
         </View>
       </KeyboardAvoidingView>
     </View>
+    <HomeworkScanner
+      visible={scannerVisible}
+      onClose={() => setScannerVisible(false)}
+      onScanned={handleScannerScanned}
+      title="Scan Homework"
+    />
+    </>
   );
 }
 

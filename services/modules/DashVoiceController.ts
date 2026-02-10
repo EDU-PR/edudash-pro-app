@@ -13,6 +13,8 @@ import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 import { voiceService } from '@/lib/voice/client';
 import type { DashMessage } from '@/services/dash-ai/types';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 // Azure TTS languages (short codes accepted by tts-proxy)
 const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
@@ -22,6 +24,7 @@ export interface VoiceSettings {
   pitch: number;
   language: string;
   voice?: 'male' | 'female';
+  phonicsMode?: boolean;
 }
 
 export interface SpeechCallbacks {
@@ -64,7 +67,13 @@ export class DashVoiceController {
         const split = rawText.split(/next question:/i);
         rawText = split[1]?.trim() || rawText;
       }
-      const normalizedText = this.normalizeTextForSpeech(rawText);
+      const phonicsMode = typeof voiceSettings.phonicsMode === 'boolean'
+        ? voiceSettings.phonicsMode
+        : shouldUsePhonicsMode(rawText);
+      const normalizedText = normalizeForTTS(rawText, {
+        phonicsMode,
+        preservePhonicsMarkers: phonicsMode,
+      });
       if (normalizedText.length === 0) {
         callbacks?.onError?.('No speakable content');
         return;
@@ -95,7 +104,11 @@ export class DashVoiceController {
       
       // Azure-only
       try {
-        await this.speakWithAzureTTS(normalizedText, shortCode, callbacks);
+        await this.speakWithAzureTTS(normalizedText, shortCode, callbacks, {
+          phonicsMode,
+          rate: phonicsMode ? -25 : 0,
+          pitch: 0,
+        });
         if (this.isSpeechAborted) callbacks?.onStopped?.();
         return;
       } catch (azureError) {
@@ -134,7 +147,12 @@ export class DashVoiceController {
   private async speakWithAzureTTS(
     text: string,
     language: string,
-    callbacks?: SpeechCallbacks
+    callbacks?: SpeechCallbacks,
+    options?: {
+      phonicsMode?: boolean;
+      rate?: number;
+      pitch?: number;
+    }
   ): Promise<void> {
     const { assertSupabase } = await import('@/lib/supabase');
     const supabase = assertSupabase();
@@ -145,7 +163,13 @@ export class DashVoiceController {
     try {
       const { data, error } = await supabase.functions.invoke('tts-proxy', {
         // rate/pitch are in -50..50 scale; 0 = normal (1.0x)
-        body: { text, language: shortCode, rate: 0, pitch: 0 }
+        body: {
+          text,
+          language: shortCode,
+          rate: Number.isFinite(options?.rate as number) ? Number(options?.rate) : 0,
+          pitch: Number.isFinite(options?.pitch as number) ? Number(options?.pitch) : 0,
+          phonics_mode: options?.phonicsMode === true,
+        }
       });
       
       if (error) {

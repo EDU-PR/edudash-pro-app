@@ -7,6 +7,7 @@
 
 import type { LearnerContext } from './learnerContext';
 import { detectLearningStyle, detectStuckPattern, isPreschoolContext } from './learnerContext';
+import { SHARED_PHONICS_PROMPT_BLOCK } from './phonicsPrompt';
 
 export interface PromptBuildOptions {
   learner?: LearnerContext | null;
@@ -115,7 +116,8 @@ AGE-APPROPRIATE STYLE (PRESCHOOL/ECD):
 - Make it fun: "Let's play...", "Can you find...", "Yay!"
 - Praise often and enthusiastically
 - Use stories, songs, and games to teach
-- Keep explanations very short (2-3 sentences max)` : 
+- Keep explanations very short (2-3 sentences max)
+${SHARED_PHONICS_PROMPT_BLOCK}` : 
 learner?.ageBand === '9-12' ? `
 AGE-APPROPRIATE STYLE (AGES 9-12):
 - Clear, friendly explanations

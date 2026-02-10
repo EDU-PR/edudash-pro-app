@@ -46,10 +46,12 @@ jest.mock('@/components/layout/DesktopLayout', () => ({
   },
 }));
 
-jest.mock('@/components/dashboard/TeacherDashboardWrapper', () => () => {
-  const { Text } = require('react-native');
-  return <Text>Teacher Dashboard Wrapper</Text>;
-});
+jest.mock('@/components/dashboard/NewEnhancedTeacherDashboard', () => ({
+  NewEnhancedTeacherDashboard: () => {
+    const { Text } = require('react-native');
+    return <Text>Teacher Dashboard Wrapper</Text>;
+  },
+}));
 
 describe('Teacher dashboard screen guard', () => {
   beforeEach(() => {

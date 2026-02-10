@@ -1,0 +1,31 @@
+import { detectPhonicsIntent, isPreschoolContext, shouldUsePhonicsMode } from '../phonicsDetection';
+
+describe('phonicsDetection', () => {
+  it('detects explicit phonics prompts', () => {
+    expect(detectPhonicsIntent('teach me phonics with letter sounds')).toBe(true);
+    expect(detectPhonicsIntent('what sound does b make?')).toBe(true);
+    expect(detectPhonicsIntent('explain algebra')).toBe(false);
+  });
+
+  it('detects preschool context by org type, age, and grade', () => {
+    expect(isPreschoolContext({ organizationType: 'preschool' })).toBe(true);
+    expect(isPreschoolContext({ ageYears: 5 })).toBe(true);
+    expect(isPreschoolContext({ gradeLevel: 'Grade R' })).toBe(true);
+    expect(isPreschoolContext({ ageYears: 9, gradeLevel: 'Grade 4' })).toBe(false);
+  });
+
+  it('enables phonics mode from explicit content or preschool reading cues', () => {
+    expect(shouldUsePhonicsMode('Use /b/ and c-a-t markers')).toBe(true);
+    expect(
+      shouldUsePhonicsMode('let us practice reading letters', {
+        organizationType: 'ecd_center',
+        ageYears: 6,
+      })
+    ).toBe(true);
+    expect(
+      shouldUsePhonicsMode('solve long division', {
+        gradeLevel: 'Grade 5',
+      })
+    ).toBe(false);
+  });
+});

@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Platform, Linking } from 'react-native';
 import { assertSupabase } from './supabase';
 import { getFCMToken, onFCMTokenRefresh } from './calls/CallHeadlessTask';
+import { getStableDeviceId } from './notifications';
 
 export interface NotificationData {
   id: string;
@@ -42,26 +43,20 @@ Notifications.setNotificationHandler({
     const data = notification.request.content.data;
     const type = data?.type as string | undefined;
     
-    // Always show incoming call notifications (high priority)
+    // Types that should NOT show as foreground banners (suppress list)
+    // Everything else defaults to showing — this prevents new notification
+    // types from being silently swallowed
+    const suppressedTypes = new Set<string>([
+      // Add types here that should be silent in foreground
+      // e.g. 'presence_update', 'typing_indicator'
+    ]);
+    
+    const shouldSuppress = type ? suppressedTypes.has(type) : false;
+    const shouldShow = !shouldSuppress;
+    
+    // Priority: calls are MAX, messages are HIGH, everything else DEFAULT
     const isIncomingCall = type === 'incoming_call';
-    
-    // Show message notifications as banners (WhatsApp-style)
     const isMessage = type === 'message' || type === 'chat';
-    
-    // Show update notifications (important for OTA updates)
-    const isUpdate = type === 'update_ready';
-    
-    // Show educational & school activity notifications in foreground
-    const isSchoolActivity = [
-      'announcement', 'homework', 'assignment', 'attendance',
-      'reminder', 'progress', 'billing', 'invoice', 'admin',
-      'enrollment', 'event', 'report', 'grade', 'payment',
-      'fee', 'test', 'system',
-    ].includes(type || '');
-    
-    // Determine if we should show the notification when app is in foreground
-    // Show calls, messages, updates, school activity, and forced notifications
-    const shouldShow = isIncomingCall || isMessage || isUpdate || isSchoolActivity || data?.forceShow === true;
     
     return {
       shouldShowAlert: shouldShow,
@@ -197,7 +192,9 @@ class NotificationService {
       };
 
       // Get device installation ID for upsert conflict key
-      const deviceInstallationId = Constants.deviceId || Constants.sessionId || 'unknown';
+      // Use getStableDeviceId() to match lib/notifications.ts and lib/calls/setupPushNotifications.ts
+      // This prevents duplicate push_devices rows from different registration paths
+      const deviceInstallationId = await getStableDeviceId();
 
       const deviceData = {
         user_id: userId,

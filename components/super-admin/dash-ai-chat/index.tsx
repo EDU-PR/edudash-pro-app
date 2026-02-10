@@ -30,6 +30,8 @@ import { DASH_WELCOME_MESSAGE, TOOL_MESSAGES } from '../../../lib/ai/constants';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 
 // Storage keys
 const CHAT_HISTORY_KEY = '@dash_ai_chat_history';
@@ -59,6 +61,44 @@ interface DashAIChatProps {
   onClose?: () => void;
   /** Show as modal or full screen */
   mode?: 'modal' | 'screen';
+}
+
+function parseAiProxyAssistantText(data: any): string {
+  const content = typeof data?.content === 'string'
+    ? data.content
+    : Array.isArray(data?.content) && data.content[0]?.text
+      ? data.content[0].text
+      : typeof data?.message?.content === 'string'
+        ? data.message.content
+        : typeof data?.response === 'string'
+          ? data.response
+          : '';
+
+  if (typeof data?.ocr?.analysis === 'string' && data.ocr.analysis.trim()) {
+    return data.ocr.analysis.trim();
+  }
+
+  const normalized = String(content || '').trim();
+  if (!normalized.startsWith('{')) return normalized;
+
+  try {
+    const parsed = JSON.parse(normalized) as {
+      analysis?: string;
+      extracted_text?: string;
+      confidence?: number;
+    };
+    if (!parsed || typeof parsed !== 'object') return normalized;
+    const analysis = typeof parsed.analysis === 'string' ? parsed.analysis.trim() : '';
+    const extracted = typeof parsed.extracted_text === 'string' ? parsed.extracted_text.trim() : '';
+    const confidence = typeof parsed.confidence === 'number'
+      ? `\n\nConfidence: ${Math.round(parsed.confidence * 100)}%`
+      : '';
+    if (!analysis && !extracted) return normalized;
+    const extractedBlock = extracted ? `\n\nExtracted text:\n${extracted}` : '';
+    return `${analysis || 'OCR complete.'}${extractedBlock}${confidence}`.trim();
+  } catch {
+    return normalized;
+  }
 }
 
 export default function DashAIChat({ 
@@ -213,14 +253,20 @@ export default function DashAIChat({
         throw new Error('Please log in to continue');
       }
 
-      // Use streaming for voice mode, regular for text
-    // Streaming enabled for voice mode to provide faster, more natural responses
-    const useStreaming = isVoiceModeRef.current;      if (useStreaming) {
+      // Use streaming for voice mode, regular for text.
+      const detectedOCRTask = detectOCRTask(text.trim());
+      const ocrMode = isOCRIntent(text.trim()) || detectedOCRTask !== null;
+      const useStreaming = isVoiceModeRef.current && !ocrMode;
+
+      if (useStreaming) {
         // STREAMING MODE - for natural conversation
         await sendMessageStreaming(text.trim(), history, assistantId, session.access_token);
       } else {
         // REGULAR MODE - wait for full response
-        await sendMessageRegular(text.trim(), history, assistantId, session.access_token);
+        await sendMessageRegular(text.trim(), history, assistantId, session.access_token, {
+          ocrMode,
+          ocrTask: detectedOCRTask || 'document',
+        });
       }
 
     } catch (error) {
@@ -243,17 +289,35 @@ export default function DashAIChat({
   /**
    * Regular non-streaming message send
    */
-  const sendMessageRegular = async (text: string, history: any[], assistantId: string, token: string) => {
+  const sendMessageRegular = async (
+    text: string,
+    history: any[],
+    assistantId: string,
+    token: string,
+    options?: {
+      ocrMode?: boolean;
+      ocrTask?: 'homework' | 'document' | 'handwriting';
+    }
+  ) => {
     // Show "thinking" state
     setMessages(prev => prev.map(msg =>
       msg.id === assistantId
         ? { ...msg, content: '🤔 Thinking...', isStreaming: true }
         : msg
     ));
-    
-    const response = await fetch(
-      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`,
-      {
+
+    const baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const superAdminEndpoint = `${baseUrl}/functions/v1/superadmin-ai`;
+    const aiProxyEndpoint = `${baseUrl}/functions/v1/ai-proxy`;
+    const traceId = `dash_ai_chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const ocrMode = options?.ocrMode === true;
+    const ocrTask = options?.ocrTask || 'document';
+
+    let mode: 'superadmin' | 'ai_proxy' = ocrMode ? 'ai_proxy' : 'superadmin';
+    let data: any = null;
+
+    if (mode === 'superadmin') {
+      const response = await fetch(superAdminEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,15 +327,60 @@ export default function DashAIChat({
           action: 'chat',
           message: text,
           history: history,
-          max_tokens: 800, // Limit for faster response
+          max_tokens: 800,
         }),
+      });
+
+      data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        const errMsg = String(data?.error || data?.message || `Request failed: ${response.status}`);
+        const lower = errMsg.toLowerCase();
+        const fallback = response.status === 404 || response.status === 502 || response.status === 503
+          || lower.includes('function not found')
+          || lower.includes('superadmin-ai')
+          || lower.includes('not deployed');
+        if (!fallback) {
+          throw new Error(errMsg);
+        }
+        mode = 'ai_proxy';
       }
-    );
+    }
 
-    const data = await response.json();
+    if (mode === 'ai_proxy') {
+      const aiResponse = await fetch(aiProxyEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          scope: 'admin',
+          service_type: ocrMode ? 'image_analysis' : 'chat_message',
+          payload: {
+            prompt: text,
+            context: ocrMode ? getOCRPromptForTask(ocrTask) : undefined,
+            messages: history,
+            ocr_mode: ocrMode || undefined,
+            ocr_task: ocrMode ? ocrTask : undefined,
+            ocr_response_format: ocrMode ? 'json' : undefined,
+          },
+          stream: false,
+          enable_tools: true,
+          metadata: {
+            role: 'super_admin',
+            source: 'super_admin_dash_ai_chat',
+            trace_id: traceId,
+            ocr_mode: ocrMode,
+            ocr_task: ocrMode ? ocrTask : undefined,
+          },
+        }),
+      });
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Request failed');
+      data = await aiResponse.json().catch(() => ({}));
+      if (!aiResponse.ok) {
+        throw new Error(String(data?.error || data?.message || `Request failed: ${aiResponse.status}`));
+      }
     }
 
     // If tool calls were made, log but don't speak them
@@ -286,7 +395,9 @@ export default function DashAIChat({
       msg.id === assistantId
         ? {
             ...msg,
-            content: data.response, // Clean response without tool metadata
+            content: mode === 'superadmin'
+              ? String(data.response || '')
+              : parseAiProxyAssistantText(data),
             isStreaming: false,
             toolsUsed: data.tool_calls?.map((t: any) => t.name),
           }
@@ -294,10 +405,13 @@ export default function DashAIChat({
     ));
 
     // If in voice mode, speak the response (use ref to get latest value)
-    console.log('[DashAIChat] Checking TTS - isVoiceModeRef:', isVoiceModeRef.current, 'hasResponse:', !!data.response);
-    if (isVoiceModeRef.current && data.response) {
+    const responseText = mode === 'superadmin'
+      ? String(data.response || '')
+      : parseAiProxyAssistantText(data);
+    console.log('[DashAIChat] Checking TTS - isVoiceModeRef:', isVoiceModeRef.current, 'hasResponse:', !!responseText);
+    if (isVoiceModeRef.current && responseText) {
       console.log('[DashAIChat] Triggering TTS for response');
-      speakResponse(data.response);
+      speakResponse(responseText);
     }
   };
 
@@ -326,7 +440,17 @@ export default function DashAIChat({
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Request failed: ${response.status}`);
+      const message = String(errorData?.error || errorData?.message || `Request failed: ${response.status}`);
+      const lower = message.toLowerCase();
+      const fallback = response.status === 404 || response.status === 502 || response.status === 503
+        || lower.includes('function not found')
+        || lower.includes('superadmin-ai')
+        || lower.includes('not deployed');
+      if (fallback) {
+        await sendMessageRegular(text, history, assistantId, token);
+        return;
+      }
+      throw new Error(message);
     }
 
     // Check if streaming is supported
@@ -469,15 +593,7 @@ export default function DashAIChat({
     try {
       setIsSpeaking(true);
       console.log('[DashAIChat] Speaking response via VoiceOrb, length:', text.length);
-      // Strip markdown for cleaner TTS
-      const cleanText = text
-        .replace(/\*\*/g, '')
-        .replace(/\*/g, '')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/`[^`]+`/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/>\s/g, '')
-        .trim();
+      const cleanText = normalizeForTTS(text);
       await voiceOrbRef.current.speakText(cleanText);
     } catch (error) {
       console.error('[DashAIChat] TTS error:', error);

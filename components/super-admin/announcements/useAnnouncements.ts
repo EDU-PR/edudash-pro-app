@@ -236,19 +236,28 @@ export function useAnnouncements() {
           }
 
           // Insert push notifications for users with push tokens
-          // This query gets all users with push tokens that match the target audience
-          const { data: pushTokens, error: tokenError } = await supabase
-            .from('push_tokens')
-            .select('user_id, token, profiles!inner(role, preschool_id)')
-            .in('profiles.role', targetRoles.length > 0 ? targetRoles : ['principal', 'teacher', 'parent']);
+          // Uses push_devices table (current) — NOT the legacy push_tokens table
+          const { data: pushDevices, error: tokenError } = await supabase
+            .from('push_devices')
+            .select('user_id, expo_push_token, profiles!inner(role, preschool_id)')
+            .in('profiles.role', targetRoles.length > 0 ? targetRoles : ['principal', 'teacher', 'parent'])
+            .eq('is_active', true);
 
           if (tokenError) {
-            console.warn('Failed to fetch push tokens:', tokenError);
-          } else if (pushTokens && pushTokens.length > 0) {
+            console.warn('Failed to fetch push devices:', tokenError);
+          } else if (pushDevices && pushDevices.length > 0) {
+            // Deduplicate by user_id (keep first = most recent due to default ordering)
+            const seenUsers = new Set<string>();
+            const uniqueDevices = pushDevices.filter((d: any) => {
+              if (seenUsers.has(d.user_id)) return false;
+              seenUsers.add(d.user_id);
+              return true;
+            });
+
             // Filter by specific schools if needed
-            let filteredTokens = pushTokens;
+            let filteredTokens = uniqueDevices;
             if (formData.target_audience === 'specific_schools' && formData.target_schools.length > 0) {
-              filteredTokens = pushTokens.filter((t: any) => 
+              filteredTokens = uniqueDevices.filter((t: any) => 
                 formData.target_schools.includes(t.profiles?.preschool_id)
               );
             }

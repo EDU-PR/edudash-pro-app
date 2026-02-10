@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { SuperAdminAIControl, SuperAdminAIControlState } from '@/services/superadmin/SuperAdminAIControl';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
+import { isSuperAdmin } from '@/lib/roleUtils';
 import type { PasswordModalState, ShowAlertFn } from './types';
 
 /** Preset configs keyed by name */
@@ -28,7 +29,7 @@ export function useAIControl({ userId, userEmail, role, showAlert }: UseAIContro
   const passwordResolverRef = useRef<((ok: boolean) => void) | null>(null);
   const passwordValueRef = useRef('');
 
-  const isSA = role === 'super_admin';
+  const isSA = isSuperAdmin(role);
 
   const setPasswordValue = useCallback((v: string) => {
     passwordValueRef.current = v;
@@ -143,8 +144,10 @@ export function useAIControl({ userId, userEmail, role, showAlert }: UseAIContro
   const isOwnerUnclaimed = aiControl ? !aiControl.owner_user_id : false;
   const canEditAIControl = isOwner && !aiControlLoading;
   const highRiskAvailable = aiControl?.autonomy_mode === 'full';
-  const ownerStatusText = !aiControl
-    ? 'Owner status unavailable.'
+  const ownerStatusText = !isSA
+    ? 'Owner controls are unavailable for this role.'
+    : !aiControl
+      ? 'Owner status unavailable.'
     : isOwner
       ? 'You control Dash AI autonomy.'
       : isOwnerUnclaimed

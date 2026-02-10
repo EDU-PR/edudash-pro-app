@@ -1,4 +1,5 @@
 export type TutorMode = 'diagnostic' | 'practice' | 'quiz' | 'explain' | 'play';
+export type PhonicsStage = 'letter_sounds' | 'cvc_blending' | 'rhyming' | 'segmenting';
 
 /** Preschool-specific play activities Dash can run in conversation */
 export type PreschoolPlayType =
@@ -32,6 +33,12 @@ export type TutorSession = {
   playType?: PreschoolPlayType | null;
   /** Whether voice mode is active (kid-friendly ORB) */
   voiceActive?: boolean;
+  /** Phonics teaching mode for preschool literacy flow */
+  phonicsMode?: boolean;
+  /** Current phonics progression stage */
+  phonicsStage?: PhonicsStage | null;
+  /** Recently mastered sounds/words for stage progression */
+  phonicsMastered?: string[];
 };
 
 export type TutorPayload = {
