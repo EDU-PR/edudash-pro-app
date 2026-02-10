@@ -1,6 +1,15 @@
 /**
  * Pure helper functions for student fee management.
  * No React hooks — async business logic extracted from the screen.
+ *
+ * NOTE: The `bootstrapFeesIfMissing()` function is the client-side
+ * equivalent of the `generate-monthly-fees` Edge Function. If you
+ * change the fee selection or bootstrap logic here, mirror those
+ * changes in `supabase/functions/generate-monthly-fees/index.ts`.
+ *
+ * TODO(deferred): `resolveFromSchoolFees()` bridges `school_fee_structures`
+ * into `fee_structures` by creating a mirrored row at runtime. A future
+ * migration should unify these two tables so this bridge is unnecessary.
  */
 
 import { Linking } from 'react-native';

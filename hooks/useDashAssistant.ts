@@ -64,12 +64,15 @@ import {
   buildFallbackTutorEvaluation,
   buildTutorDisplayContent,
   buildTutorSystemContext,
+  detectPhonicsTutorRequest,
   detectTutorIntent,
   extractLearningContext,
   extractTutorQuestionFromText,
+  getInitialPhonicsStage,
   getMaxQuestions,
   getTutorPhaseLabel,
   isTutorStopIntent,
+  nextPhonicsStage,
   parseTutorPayload,
   reconcileTutorEvaluation,
 } from '@/hooks/dash-assistant/tutorUtils';
@@ -169,6 +172,7 @@ interface UseDashAssistantReturn {
   handlePickImages: () => Promise<void>;
   handleTakePhoto: () => Promise<void>;
   handleRemoveAttachment: (attachmentId: string) => Promise<void>;
+  addAttachments: (attachments: DashAttachment[]) => void;
   handleInputMicPress: () => Promise<void>;
   stopVoiceRecording: () => Promise<void>;
   startNewConversation: () => Promise<void>;
@@ -373,6 +377,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     canUseDocuments,
     isFreeTier,
   });
+
+  const addAttachments = useCallback((attachments: DashAttachment[]) => {
+    if (!Array.isArray(attachments) || attachments.length === 0) return;
+    dashAttachments.setSelectedAttachments((prev) => [...prev, ...attachments]);
+  }, [dashAttachments]);
 
   // Load voice budget on mount and when tier changes
   const refreshVoiceBudget = useCallback(async () => {
@@ -896,6 +905,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const activeSession = tutorSessionRef.current;
       const normalizedRole = String(profile?.role || '').toLowerCase();
       const isLearnerRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+      const phonicsRequested = isLearnerRole && detectPhonicsTutorRequest(userText);
       const hasLearningAttachment = attachments.some(
         (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
       );
@@ -918,6 +928,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         });
       } else if (tutorIntent && !stopTutor) {
         const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
+        const phonicsMode = phonicsRequested;
         const newSession: TutorSession = {
           id: `tutor_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           mode: tutorIntent,
@@ -935,6 +946,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           incorrectStreak: 0,
           correctStreak: 0,
           attemptsOnQuestion: 0,
+          phonicsMode,
+          phonicsStage: phonicsMode ? getInitialPhonicsStage(userText) : null,
+          phonicsMastered: [],
         };
         setTutorSession(newSession);
         tutorAction = 'start';
@@ -1174,6 +1188,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             } else if (isCorrect && nextCorrectStreak >= 2) {
               nextDifficulty = Math.min(3, nextDifficulty + 1);
             }
+            const currentPhonicsStage = prev.phonicsStage || 'letter_sounds';
+            const advancedPhonicsStage =
+              prev.phonicsMode && isCorrect && nextCorrectStreak >= 2
+                ? nextPhonicsStage(currentPhonicsStage)
+                : currentPhonicsStage;
+            const masteredTokenSource = adjustedPayload.correct_answer || prev.expectedAnswer || '';
+            const masteredToken = String(masteredTokenSource || '').trim().toLowerCase();
+            const updatedMastered = prev.phonicsMode && isCorrect && masteredToken
+              ? Array.from(new Set([...(prev.phonicsMastered || []), masteredToken])).slice(-24)
+              : prev.phonicsMastered;
             if (completed) {
               const summary: DashMessage = {
                 id: `tutor_summary_${Date.now()}`,
@@ -1196,6 +1220,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
               correctStreak: nextCorrectStreak,
               attemptsOnQuestion,
               difficulty: nextDifficulty,
+              phonicsStage: prev.phonicsMode ? advancedPhonicsStage : prev.phonicsStage,
+              phonicsMastered: updatedMastered,
             };
           });
         }
@@ -2022,6 +2048,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     handlePickImages: dashAttachments.handlePickImages,
     handleTakePhoto: dashAttachments.handleTakePhoto,
     handleRemoveAttachment: dashAttachments.handleRemoveAttachment,
+    addAttachments,
     handleInputMicPress,
     stopVoiceRecording,
     startNewConversation,

@@ -49,7 +49,7 @@ import {
 } from './VoiceOrbAnimations';
 import { useVoiceRecorder } from './useVoiceRecorder';
 import { useVoiceSTT, SUPPORTED_LANGUAGES, SupportedLanguage, TranscribeLanguage } from './useVoiceSTT';
-import { useVoiceTTS } from './useVoiceTTS';
+import { useVoiceTTS, type TTSOptions } from './useVoiceTTS';
 import { canAutoRestartAfterInterrupt, INTERRUPT_RESTART_DELAY_MS } from './interrupt';
 
 // ============================================================================
@@ -58,7 +58,7 @@ import { canAutoRestartAfterInterrupt, INTERRUPT_RESTART_DELAY_MS } from './inte
 
 export interface VoiceOrbRef {
   /** Speak text using TTS */
-  speakText: (text: string, language?: SupportedLanguage) => Promise<void>;
+  speakText: (text: string, language?: SupportedLanguage, options?: TTSOptions) => Promise<void>;
   /** Stop TTS playback */
   stopSpeaking: () => Promise<void>;
   /** Get current speaking state */
@@ -135,7 +135,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, [externalLanguage]);
 
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
-  const LIVE_SILENCE_TIMEOUT_MS = 2200;
+  const liveSilenceTimeoutRaw = Number.parseInt(process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || '2800', 10);
+  const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
+    ? Math.min(8000, Math.max(1200, liveSilenceTimeoutRaw))
+    : 2800;
   const LIVE_FINAL_FALLBACK_MS = 700;
   const usingLiveSTTRef = useRef(false);
   const liveSessionRef = useRef(0);
@@ -339,13 +342,13 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   
   // Expose TTS methods via ref
   useImperativeHandle(ref, () => ({
-    speakText: async (text: string, language?: SupportedLanguage) => {
+    speakText: async (text: string, language?: SupportedLanguage, options?: TTSOptions) => {
       onTTSStart?.();
       try {
         // Priority: passed language > last detected > selected > default
         const ttsLanguage = language || lastDetectedLanguage || selectedLanguage;
         console.log('[VoiceOrb] Speaking with language:', ttsLanguage);
-        await speak(text, ttsLanguage);
+        await speak(text, ttsLanguage, options);
       } finally {
         onTTSEnd?.();
       }
@@ -397,12 +400,12 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     }
   }, [autoStartListening, isMuted, isSpeaking, ttsIsSpeaking]);
   
-  // Auto-restart listening after TTS ends (track PARENT isSpeaking state)
-  const prevIsSpeaking = useRef(isSpeaking);
+  // Auto-restart listening after local TTS confirms stop transition.
+  const prevTtsSpeaking = useRef(ttsIsSpeaking);
   useEffect(() => {
-    // Detect TTS just finished (was speaking, now not speaking)
-    if (prevIsSpeaking.current && !isSpeaking && !ttsIsSpeaking && autoRestartAfterTTS && !isMuted && !isProcessing) {
-      console.log('[VoiceOrb] TTS finished (parent state), auto-restarting listening in 800ms...');
+    // Detect real TTS stop transition (was speaking, now stopped)
+    if (prevTtsSpeaking.current && !ttsIsSpeaking && !isSpeaking && autoRestartAfterTTS && !isMuted && !isProcessing) {
+      console.log('[VoiceOrb] TTS finished (confirmed stop), auto-restarting listening in 800ms...');
       // Delay before restarting to ensure TTS audio has fully stopped
       const timer = setTimeout(() => {
         // Triple-check not speaking before starting (prevent feedback)
@@ -413,10 +416,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
           console.log('[VoiceOrb] ⚠️ Skipping auto-restart - TTS still active');
         }
       }, 800);
-      prevIsSpeaking.current = isSpeaking;
+      prevTtsSpeaking.current = ttsIsSpeaking;
       return () => clearTimeout(timer);
     }
-    prevIsSpeaking.current = isSpeaking;
+    prevTtsSpeaking.current = ttsIsSpeaking;
   }, [isSpeaking, ttsIsSpeaking, autoRestartAfterTTS, isMuted, isProcessing]);
 
   // Always-listening mode: auto-restart after transcription completes (silence/result)

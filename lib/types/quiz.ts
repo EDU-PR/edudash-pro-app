@@ -9,7 +9,15 @@
 // Question Types
 // ============================================
 
-export type QuestionType = 'multiple_choice' | 'true_false' | 'fill_blank' | 'matching';
+export type QuestionType =
+  | 'multiple_choice'
+  | 'true_false'
+  | 'fill_blank'
+  | 'matching'
+  | 'letter_sound_match'
+  | 'rhyme_match'
+  | 'blend_word'
+  | 'vowel_identify';
 export type QuizDifficulty = 'easy' | 'medium' | 'hard' | 'challenge';
 export type SkillLevel = 'beginner' | 'developing' | 'proficient' | 'advanced' | 'mastery';
 export type SessionStatus = 'in_progress' | 'completed' | 'abandoned' | 'timed_out';

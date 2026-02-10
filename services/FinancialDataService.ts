@@ -1621,6 +1621,7 @@ export class FinancialDataService {
       excluded_inactive_due: Number(data.excluded_inactive_due || 0),
       excluded_inactive_outstanding: Number(data.excluded_inactive_outstanding || 0),
       excluded_inactive_students: Number(data.excluded_inactive_students || 0),
+      family_credits_available: Number(data.family_credits_available || 0),
       net_after_expenses: Number(data.net_after_expenses || 0),
       payroll_due: Number(data.payroll_due || 0),
       payroll_paid: Number(data.payroll_paid || 0),

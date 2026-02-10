@@ -34,6 +34,9 @@ export interface AIServiceParams {
   images?: Array<{ data: string; media_type: string }>;
   model?: string;
   serviceType?: string;
+  ocrMode?: boolean;
+  ocrTask?: 'homework' | 'document' | 'handwriting';
+  ocrResponseFormat?: 'json' | 'text';
   stream?: boolean;
   onChunk?: (chunk: string) => void;
 }
@@ -265,6 +268,9 @@ export class DashAIClient {
             context: params.context || undefined,
             model: params.model,
             serviceType: params.serviceType,
+            ocrMode: params.ocrMode,
+            ocrTask: params.ocrTask,
+            ocrResponseFormat: params.ocrResponseFormat,
           },
           params.onChunk
         );
@@ -285,6 +291,7 @@ export class DashAIClient {
       const userTier = (profile?.tier || 'free') as string;
       const traceId = this.createTraceId('dash_ai_client');
       const orchestration = this.getOrchestrationConfig();
+      const effectiveServiceType = params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message');
 
       // Canonical client tool inventory (shared with Dash Assistant/Tutor/ORB).
       const clientToolDefs = this.getClientToolDefs(role, userTier);
@@ -293,12 +300,15 @@ export class DashAIClient {
       const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
         body: {
           scope,
-          service_type: params.serviceType || 'chat_message',
+          service_type: effectiveServiceType,
           payload: {
             prompt: messagesArr.length > 0 ? undefined : promptText,
             context: mergedContext,
             messages: messagesArr.length > 0 ? messagesArr : undefined,
             images: images.length > 0 ? images : undefined,
+            ocr_mode: params.ocrMode || undefined,
+            ocr_task: params.ocrTask || undefined,
+            ocr_response_format: params.ocrResponseFormat || undefined,
             model: params.model || undefined,
           },
           stream: false,
@@ -672,10 +682,13 @@ export class DashAIClient {
         },
         body: JSON.stringify({
           scope: scope,
-          service_type: params.serviceType || 'chat_message',
+          service_type: params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message'),
           payload: {
             prompt: params.promptText,
             context: params.context || undefined,
+            ocr_mode: params.ocrMode || undefined,
+            ocr_task: params.ocrTask || undefined,
+            ocr_response_format: params.ocrResponseFormat || undefined,
             model: params.model || undefined,
           },
           stream: true,
@@ -901,10 +914,13 @@ export class DashAIClient {
           // Send request payload
           const payload = {
             scope,
-            service_type: params.serviceType || 'chat_message',
+            service_type: params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message'),
             payload: {
               prompt: params.promptText,
               context: params.context || undefined,
+              ocr_mode: params.ocrMode || undefined,
+              ocr_task: params.ocrTask || undefined,
+              ocr_response_format: params.ocrResponseFormat || undefined,
               model: params.model || undefined,
             },
             enable_tools: true,

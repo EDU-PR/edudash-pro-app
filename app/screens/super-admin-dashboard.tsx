@@ -104,8 +104,9 @@ export default function SuperAdminDashboardScreen() {
                 {aiControlLoading ? (
                   <EduDashSpinner size="small" color={theme.primary} />
                 ) : !aiControl ? (
-                  <View style={[styles.aiOwnerBadge, { backgroundColor: theme.warningLight, borderColor: theme.warning }]}>
-                    <Text style={[styles.aiOwnerBadgeText, { color: theme.warning }]}>OFFLINE</Text>
+                  <View style={[styles.aiOwnerBadge, { backgroundColor: 'rgba(239, 68, 68, 0.22)', borderColor: '#f87171' }]}>
+                    <Ionicons name="cloud-offline-outline" size={12} color="#fecaca" />
+                    <Text style={[styles.aiOwnerBadgeText, { color: '#fecaca' }]}>UNAVAILABLE</Text>
                   </View>
                 ) : isOwnerUnclaimed ? (
                   <TouchableOpacity
@@ -116,11 +117,16 @@ export default function SuperAdminDashboardScreen() {
                   </TouchableOpacity>
                 ) : (
                   <View style={[styles.aiOwnerBadge, {
-                    backgroundColor: isOwner ? theme.successLight : theme.warningLight,
-                    borderColor: isOwner ? theme.success : theme.warning,
+                    backgroundColor: isOwner ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                    borderColor: isOwner ? '#34d399' : '#fbbf24',
                   }]}>
-                    <Text style={[styles.aiOwnerBadgeText, { color: isOwner ? theme.success : theme.warning }]}>
-                      {isOwner ? 'OWNER' : 'READ ONLY'}
+                    <Ionicons
+                      name={isOwner ? 'checkmark-circle' : 'lock-closed'}
+                      size={12}
+                      color={isOwner ? '#6ee7b7' : '#fcd34d'}
+                    />
+                    <Text style={[styles.aiOwnerBadgeText, { color: isOwner ? '#6ee7b7' : '#fcd34d' }]}>
+                      {isOwner ? 'ONLINE' : 'READ ONLY'}
                     </Text>
                   </View>
                 )}

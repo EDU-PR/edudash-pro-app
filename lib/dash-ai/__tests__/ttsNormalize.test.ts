@@ -1,0 +1,33 @@
+import { normalizeForTTS, normalizeForTTSPhonics } from '../ttsNormalize';
+
+describe('ttsNormalize', () => {
+  it('expands contractions to reduce pronunciation drift', () => {
+    const out = normalizeForTTS("I'm Dash and I can't wait");
+    expect(out).toContain('I am Dash');
+    expect(out).toContain('cannot');
+  });
+
+  it('converts spaced repeated consonants to sustained sounds', () => {
+    const out = normalizeForTTS('say s s s then m m m now');
+    expect(out).toContain('sss');
+    expect(out).toContain('mmm');
+    expect(out).not.toContain('s s s');
+    expect(out).not.toContain('m m m');
+  });
+
+  it('preserves phonics markers in phonics mode', () => {
+    const out = normalizeForTTS('/b/ and [c] and c-a-t', {
+      phonicsMode: true,
+      preservePhonicsMarkers: true,
+    });
+    expect(out).toContain('/b/');
+    expect(out).toContain('[c]');
+    expect(out).toContain('c-a-t');
+  });
+
+  it('phonics helper keeps marker punctuation', () => {
+    const out = normalizeForTTSPhonics('blend c-a-t with /b/');
+    expect(out).toContain('c-a-t');
+    expect(out).toContain('/b/');
+  });
+});

@@ -246,7 +246,8 @@ export async function requestUserDeletion(user: UserRecord, deps: ActionDeps): P
             fetchUsers();
           } catch (error) {
             logger.error('Failed to request user deletion:', error);
-            showAlert({ title: 'Error', message: 'Failed to request user deletion', type: 'error' });
+            const message = error instanceof Error ? error.message : 'Failed to request user deletion';
+            showAlert({ title: 'Error', message, type: 'error' });
           }
         },
       },

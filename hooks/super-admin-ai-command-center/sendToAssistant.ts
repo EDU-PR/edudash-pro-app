@@ -7,6 +7,7 @@ import type { ScrollView } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import type { ChatMessage } from '@/lib/screen-styles/super-admin-ai-command-center.styles';
+import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 import type { SetState } from './types';
 
 export interface SendAssistantParams {
@@ -69,18 +70,26 @@ export async function sendAssistantMessage(params: SendAssistantParams): Promise
     };
 
     const superAdminBody = { action: 'chat', message: userMessage.content };
+    const detectedOCRTask = detectOCRTask(userMessage.content);
+    const ocrMode = isOCRIntent(userMessage.content) || detectedOCRTask !== null;
     const aiProxyBody = {
       scope: 'admin',
-      service_type: 'chat_message',
+      service_type: ocrMode ? 'image_analysis' : 'chat_message',
       payload: {
         prompt: userMessage.content,
+        context: ocrMode ? getOCRPromptForTask(detectedOCRTask || 'document') : undefined,
         messages: chatHistory.slice(-8).map(m => ({ role: m.role, content: m.content })),
+        ocr_mode: ocrMode || undefined,
+        ocr_task: ocrMode ? (detectedOCRTask || 'document') : undefined,
+        ocr_response_format: ocrMode ? 'json' : undefined,
       },
       stream: false,
       enable_tools: true,
       metadata: {
         role: 'super_admin',
         source: 'super_admin_command_center',
+        ocr_mode: ocrMode,
+        ocr_task: ocrMode ? (detectedOCRTask || 'document') : undefined,
         trace_id: traceId,
         tool_plan: {
           source: 'super_admin_command_center.sendToAssistant',

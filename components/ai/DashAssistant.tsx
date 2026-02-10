@@ -29,11 +29,12 @@ import {
   DashContextChips,
 } from './dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
-import type { DashMessage } from '@/services/dash-ai/types';
+import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { DashToolsModal } from '@/components/ai/DashToolsModal';
+import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
@@ -123,6 +124,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const { tierStatus, refresh: refreshTier } = useRealtimeTier();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showToolsModal, setShowToolsModal] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
@@ -234,6 +236,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     handleInputMicPress,
     stopVoiceRecording,
     handleRemoveAttachment,
+    addAttachments,
     extractFollowUps,
     runTool,
     tier,
@@ -260,6 +263,40 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     },
     [runTool]
   );
+
+  const openScanner = useCallback(() => {
+    if (Platform.OS === 'web') {
+      void handleTakePhoto();
+      return;
+    }
+    setScannerVisible(true);
+  }, [handleTakePhoto]);
+
+  const handleScannerScanned = useCallback((result: HomeworkScanResult) => {
+    if (!result?.base64) return;
+    const attachment: DashAttachment = {
+      id: `attach_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: `homework_scan_${Date.now()}.jpg`,
+      mimeType: 'image/jpeg',
+      size: Math.max(0, Math.floor(result.base64.length * 0.75)),
+      bucket: 'attachments',
+      storagePath: '',
+      kind: 'image',
+      status: 'pending',
+      previewUri: result.uri,
+      uploadProgress: 0,
+      meta: {
+        base64: result.base64,
+        image_base64: result.base64,
+        image_media_type: 'image/jpeg',
+        width: result.width,
+        height: result.height,
+        source: 'homework_scanner',
+      },
+    };
+    addAttachments([attachment]);
+    setScannerVisible(false);
+  }, [addAttachments]);
 
   const safeModels = Array.isArray(availableModels) ? availableModels : [];
   const selectedModelInfo = useMemo(
@@ -926,7 +963,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           messages={messages}
           onSend={() => sendMessage()}
           onMicPress={handleInputMicPress}
-          onTakePhoto={handleTakePhoto}
+          onTakePhoto={openScanner}
           onAttachFile={handleAttachFile}
           onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
           onRemoveAttachment={handleRemoveAttachment}
@@ -953,6 +990,12 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           tools={toolShortcuts}
           getToolSchema={(toolName) => ToolRegistry.getTool(toolName)?.parameters}
           onRunTool={handleRunTool}
+        />
+        <HomeworkScanner
+          visible={scannerVisible}
+          onClose={() => setScannerVisible(false)}
+          onScanned={handleScannerScanned}
+          title="Scan Homework"
         />
         </View>
       </KeyboardAvoidingView>

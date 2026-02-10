@@ -14,6 +14,104 @@ import type {
 } from '@/lib/screen-styles/super-admin-ai-command-center.styles';
 import type { SetState, ShowAlertFn } from './types';
 
+const EXECUTION_POLL_INTERVAL_MS = 1200;
+const EXECUTION_POLL_MAX_ATTEMPTS = 30;
+const TERMINAL_EXECUTION_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout']);
+
+interface AgentExecutionRow {
+  status: string | null;
+  error_message: string | null;
+  result: Record<string, unknown> | null;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function refreshAgentFromDb(
+  agentId: string,
+  setAgents: SetState<AIAgent[]>,
+): Promise<AIAgent | null> {
+  const { data, error } = await assertSupabase()
+    .from('superadmin_ai_agents')
+    .select('id,status,last_run_at,last_run_status,success_rate,total_runs')
+    .eq('id', agentId)
+    .maybeSingle();
+
+  if (error || !data) {
+    if (error) {
+      logger.warn('SuperAdminAICommandCenter', 'Failed to refresh agent state from DB', error);
+    }
+    return null;
+  }
+
+  const patch = {
+    status: (data.status || 'idle') as AIAgent['status'],
+    last_run_at: data.last_run_at || undefined,
+    last_run_status: data.last_run_status || undefined,
+    success_rate: Number(data.success_rate || 0),
+    total_runs: Number(data.total_runs || 0),
+  };
+
+  setAgents(prev => prev.map(agent => (
+    agent.id === agentId ? { ...agent, ...patch } : agent
+  )));
+
+  return data as AIAgent;
+}
+
+async function pollExecutionUntilTerminal(
+  executionId: string,
+  agentId: string,
+  setAgents: SetState<AIAgent[]>,
+): Promise<{ status: string; summary?: string; error?: string }> {
+  const supabase = assertSupabase();
+
+  for (let attempt = 1; attempt <= EXECUTION_POLL_MAX_ATTEMPTS; attempt += 1) {
+    const { data, error } = await supabase
+      .from('superadmin_agent_executions')
+      .select('status,error_message,result')
+      .eq('id', executionId)
+      .maybeSingle();
+
+    if (error) {
+      logger.warn('SuperAdminAICommandCenter', 'Failed to poll execution status', { executionId, error });
+      await sleep(EXECUTION_POLL_INTERVAL_MS);
+      continue;
+    }
+
+    const execution = (data || null) as AgentExecutionRow | null;
+    const status = String(execution?.status || 'pending').toLowerCase();
+
+    // If the backend still queues pending rows, try to process explicitly once.
+    if (attempt === 1 && status === 'pending') {
+      const { error: processError } = await supabase
+        .rpc('process_superadmin_agent_execution', { execution_id_param: executionId });
+      if (processError) {
+        logger.info('SuperAdminAICommandCenter', 'Execution processor RPC unavailable or failed', processError.message);
+      }
+    }
+
+    if (TERMINAL_EXECUTION_STATUSES.has(status)) {
+      await refreshAgentFromDb(agentId, setAgents);
+      const summary = typeof execution?.result?.summary === 'string'
+        ? execution.result.summary
+        : undefined;
+      return {
+        status,
+        summary,
+        error: execution?.error_message || undefined,
+      };
+    }
+
+    await sleep(EXECUTION_POLL_INTERVAL_MS);
+  }
+
+  await refreshAgentFromDb(agentId, setAgents);
+  return {
+    status: 'timeout',
+    error: 'Agent execution is still running in the background',
+  };
+}
+
 export async function toggleAgent(
   agentId: string,
   agents: AIAgent[],
@@ -89,39 +187,34 @@ export function runAgent(
         text: 'Run Now',
         onPress: async () => {
           try {
-            const { error } = await assertSupabase()
-              .rpc('execute_superadmin_agent', { agent_id_param: agent.id });
-
-            if (error) {
-              await assertSupabase()
-                .from('superadmin_ai_agents')
-                .update({ status: 'running', last_run_at: new Date().toISOString() })
-                .eq('id', agent.id);
-            }
-
             setAgents(prev => prev.map(a =>
               a.id === agent.id
                 ? { ...a, status: 'running', last_run_at: new Date().toISOString() }
                 : a,
             ));
+
+            const { data: executionId, error } = await assertSupabase()
+              .rpc('execute_superadmin_agent', { agent_id_param: agent.id });
+
+            if (error || typeof executionId !== 'string') {
+              throw error || new Error('Execution was not created');
+            }
+
             toast.success(`${agent.name} started`);
 
-            // Poll for completion (in production, use realtime subscription)
-            setTimeout(async () => {
-              await assertSupabase()
-                .from('superadmin_ai_agents')
-                .update({ status: 'active', last_run_status: 'completed' })
-                .eq('id', agent.id);
-
-              setAgents(prev => prev.map(a =>
-                a.id === agent.id
-                  ? { ...a, status: 'active', last_run_status: 'completed' }
-                  : a,
-              ));
-              toast.success(`${agent.name} completed successfully`);
-            }, 5000);
+            const outcome = await pollExecutionUntilTerminal(executionId, agent.id, setAgents);
+            if (outcome.status === 'completed') {
+              toast.success(outcome.summary || `${agent.name} completed successfully`);
+              return;
+            }
+            if (outcome.status === 'timeout') {
+              toast.info(`${agent.name} is still running in the background`);
+              return;
+            }
+            toast.error(outcome.error || `${agent.name} failed to complete`);
           } catch (err) {
-            logger.error('Failed to run agent:', err);
+            logger.error('SuperAdminAICommandCenter', 'Failed to run agent', err);
+            await refreshAgentFromDb(agent.id, setAgents);
             toast.error('Failed to start agent');
           }
         },

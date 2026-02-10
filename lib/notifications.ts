@@ -21,7 +21,7 @@ const DEVICE_ID_STORAGE_KEY = '@edudash_device_id'
  * Get or create a stable device ID that persists across app restarts.
  * This ensures consistency between notification registrations.
  */
-async function getStableDeviceId(): Promise<string> {
+export async function getStableDeviceId(): Promise<string> {
   try {
     // First try to get from storage
     const storedId = await AsyncStorage.getItem(DEVICE_ID_STORAGE_KEY)

@@ -22,6 +22,7 @@ import {
   type AIPersonalityConfig,
   type TerminologyMap 
 } from '@/lib/types/organization';
+import { SHARED_PHONICS_PROMPT_BLOCK } from '@/lib/dash-ai/phonicsPrompt';
 
 /**
  * Age group type for content adaptation
@@ -217,6 +218,7 @@ ${orgType === 'skills_development' ? `
 - Prioritize letter recognition, phonics sounds, number recognition, counting, shapes, colors, and fine-motor skills
 - Keep steps short and hands-on (3-6 steps max)
 - Include a quick interactive check (e.g., "Can you point to the letter B?")
+${SHARED_PHONICS_PROMPT_BLOCK}
 `;
     }
     

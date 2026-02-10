@@ -13,15 +13,18 @@ import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { assertSupabase } from '../../../lib/supabase';
 import { SupportedLanguage } from './useVoiceSTT';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 export interface TTSOptions {
   voice?: string;
   rate?: number;
   pitch?: number;
+  phonicsMode?: boolean;
 }
 
 export interface UseVoiceTTSReturn {
-  speak: (text: string, language?: SupportedLanguage) => Promise<void>;
+  speak: (text: string, language?: SupportedLanguage, options?: TTSOptions) => Promise<void>;
   stop: () => Promise<void>;
   isSpeaking: boolean;
   error: string | null;
@@ -201,7 +204,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
       let settled = false;
       let hasStarted = false;
-      let notPlayingTicks = 0;
+      let stallTicks = 0;
+      let endConfidenceTicks = 0;
+      let lastPositionMs = 0;
+      let lastSnapshot = { durationMs: 0, positionMs: 0, playing: false };
       const playbackId = playbackIdRef.current + 1;
       playbackIdRef.current = playbackId;
 
@@ -247,6 +253,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           playing = player.playing;
           durationMs = (player.duration || 0) * 1000;
           positionMs = (player.currentTime || 0) * 1000;
+          lastSnapshot = { durationMs, positionMs, playing };
         } catch (err) {
           console.warn('[VoiceTTS] Playback status error, stopping:', err);
           finalize(new Error('AUDIO_PLAYER_STATUS_ERROR'));
@@ -254,24 +261,52 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         }
         if (playing) {
           hasStarted = true;
-          notPlayingTicks = 0;
+          stallTicks = 0;
+          endConfidenceTicks = 0;
+          if (positionMs > lastPositionMs) {
+            lastPositionMs = positionMs;
+          }
           return;
         }
         if (!hasStarted) {
           return;
         }
 
-        notPlayingTicks += 1;
+        const hasProgressed = positionMs > lastPositionMs + 20;
+        if (hasProgressed) {
+          lastPositionMs = positionMs;
+          stallTicks = 0;
+        } else {
+          stallTicks += 1;
+        }
+
         const reachedEnd = durationMs > 0 && positionMs >= Math.max(durationMs - 180, 0);
-        if (reachedEnd || notPlayingTicks >= 4) {
+        if (reachedEnd) {
+          endConfidenceTicks += 1;
+          if (endConfidenceTicks >= 2) {
+            finalize();
+          }
+          return;
+        }
+
+        const nearEndStall = durationMs > 0 && positionMs >= durationMs * 0.95 && stallTicks >= 6;
+        if (nearEndStall) {
           finalize();
         }
       }, 150);
 
       playbackTimeoutRef.current = setTimeout(() => {
-        const stillPlaying = !!player && player.playing;
-        if (!hasStarted || stillPlaying) {
+        if (!hasStarted) {
           finalize(new Error('AUDIO_PLAYBACK_TIMEOUT'));
+          return;
+        }
+        if (lastSnapshot.playing) {
+          finalize(new Error('AUDIO_PLAYBACK_TIMEOUT'));
+          return;
+        }
+        const unfinished = lastSnapshot.durationMs > 0 && lastSnapshot.positionMs < lastSnapshot.durationMs * 0.8;
+        if (unfinished) {
+          finalize(new Error('AUDIO_PLAYBACK_STALL'));
           return;
         }
         finalize();
@@ -311,7 +346,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   /**
    * Speak using Azure TTS (primary method)
    */
-  const speakWithAzure = useCallback(async (cleanText: string, language: SupportedLanguage): Promise<void> => {
+  const speakWithAzure = useCallback(async (
+    cleanText: string,
+    language: SupportedLanguage,
+    options: TTSOptions = {}
+  ): Promise<void> => {
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
     if (!supabaseUrl) {
       throw new Error('SERVICE_UNCONFIGURED_SUPABASE_URL');
@@ -327,6 +366,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     const langCode = language.split('-')[0] as 'en' | 'af' | 'zu';
     const endpoint = `${supabaseUrl}/functions/v1/tts-proxy`;
 
+    const phonicsMode = options.phonicsMode === true;
+    const effectiveRate = Number.isFinite(options.rate as number)
+      ? Number(options.rate)
+      : phonicsMode ? -25 : 0;
+    const effectivePitch = Number.isFinite(options.pitch as number) ? Number(options.pitch) : 0;
+
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -338,9 +383,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         body: JSON.stringify({
           text: cleanText,
           lang: langCode,
-          rate: 0,
-          pitch: 0,
+          rate: effectiveRate,
+          pitch: effectivePitch,
           style: 'friendly',
+          phonics_mode: phonicsMode,
           format: 'mp3',
         }),
       });
@@ -427,7 +473,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     return normalized;
   };
 
-  const speak = useCallback(async (text: string, language: SupportedLanguage = 'en-ZA') => {
+  const speak = useCallback(async (
+    text: string,
+    language: SupportedLanguage = 'en-ZA',
+    options: TTSOptions = {}
+  ) => {
     stopRequestedRef.current = false;
     setIsSpeaking(true);
     setError(null);
@@ -450,68 +500,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       const effectiveLanguage: SupportedLanguage = language;
       
-      // Comprehensive text cleaning for natural TTS — strip markdown,
-      // emojis, icons, unicode symbols and normalise for Azure Neural.
-      const cleanText = text
-        // Acronym expansion for natural speech
-        .replace(/EduDash Pro/gi, 'Edu Dash Pro')
-        .replace(/\bAPI\b/g, 'A P I')
-        .replace(/\bHTTP\b/g, 'H T T P')
-        .replace(/\bJSON\b/g, 'J S O N')
-        .replace(/\bSQL\b/g, 'S Q L')
-        .replace(/\bRLS\b/g, 'R L S')
-        .replace(/\bRBAC\b/g, 'R B A C')
-        .replace(/\bSTEM\b/g, 'stem')
-        .replace(/\bSTT\b/g, 'speech to text')
-        .replace(/\bTTS\b/g, 'text to speech')
-        .replace(/\bAI\b/g, 'A.I.')
-        .replace(/\bCAPS\b/g, 'caps')
-        // Normalise newlines and list bullets
-        .replace(/\r\n/g, '\n')
-        .replace(/^\s*[-*\u2022\u25e6\u25aa\ufe0e\u00b7]\s*/gm, '')
-        .replace(/^\s*\d+[.)]\s*/gm, '')
-        // Code blocks + inline code
-        .replace(/```[\s\S]*?```/g, '')
-        .replace(/`[^`]+`/g, '')
-        // Markdown formatting
-        .replace(/\*\*/g, '')
-        .replace(/\*/g, '')
-        .replace(/`/g, '')
-        .replace(/#{1,6}\s/g, '')
-        .replace(/>/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        // Comprehensive emoji/icon removal (unicode ranges)
-        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-        .replace(/[\u{2600}-\u{26FF}]/gu, '')
-        .replace(/[\u{2700}-\u{27BF}]/gu, '')
-        .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-        .replace(/[\u{200D}]/gu, '')
-        .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '')
-        .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')
-        // Bracketed meta + tool indicators
-        .replace(/\[.*?\]/g, '')
-        .replace(/_Tools used:.*?_/gi, '')
-        .replace(/_.*?tokens used_/gi, '')
-        // Quotes/brackets that TTS reads awkwardly
-        .replace(/[\u201C\u201D\u201E\u00AB\u00BB"]/g, '')
-        .replace(/[\u2018\u2019`]/g, "'")
-        .replace(/[()[\]{}<>]/g, '')
-        // Status labels
-        .replace(/\bCorrect answer:\s*/gi, '')
-        .replace(/\bNext question:\s*/gi, '')
-        .replace(/\bHint:\s*/gi, 'Hint. ')
-        .replace(/^\s*User:\s*/gmi, '')
-        .replace(/^\s*Assistant:\s*/gmi, '')
-        // SA language names for proper TTS pronunciation
-        .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
-        .replace(/\bi\s*s\s*i\s+xhosa\b/gi, 'isiXhosa')
-        .replace(/\bse\s+pedi\b/gi, 'Sepedi')
-        .replace(/\bse\s+sotho\b/gi, 'Sesotho')
-        // Collapse whitespace
-        .replace(/\n+/g, '. ')
-        .replace(/\s{2,}/g, ' ')
-        .replace(/\.\s*\./g, '. ')
-        .trim();
+      const phonicsMode = typeof options.phonicsMode === 'boolean'
+        ? options.phonicsMode
+        : shouldUsePhonicsMode(text);
+      const cleanText = normalizeForTTS(text, {
+        phonicsMode,
+        preservePhonicsMarkers: phonicsMode,
+      });
       
       if (!cleanText) {
         console.log('[VoiceTTS] No text to speak');
@@ -520,7 +515,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       }
       
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
-      const chunks = splitIntoChunks(cleanText, 1200);
+      const chunks = splitIntoChunks(cleanText, phonicsMode ? 800 : 1200);
       
       // Speak chunks sequentially so speech never cuts off mid-sentence
       let anyChunkSucceeded = false;
@@ -529,7 +524,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
         try {
-          await speakWithAzure(chunk, effectiveLanguage);
+          await speakWithAzure(chunk, effectiveLanguage, {
+            ...options,
+            phonicsMode,
+          });
           anyChunkSucceeded = true;
         } catch (azureErr) {
           console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', azureErr);

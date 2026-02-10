@@ -12,6 +12,8 @@
 
 import { SUPPORTED_LANGUAGES } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
+import { SHARED_PHONICS_PROMPT_BLOCK } from '@/lib/dash-ai/phonicsPrompt';
 
 // ── Quick Actions ────────────────────────────────────────────────────
 
@@ -129,17 +131,7 @@ export function buildSystemPrompt(
       'This format lets the child tap on answer buttons. ALWAYS include two to four options.',
       'Put the correct answer among the options. Make wrong options plausible but clearly different.',
       '',
-      'PHONICS AND LETTER SOUNDS (critical skill):',
-      'When teaching phonics, pronounce letter SOUNDS not letter NAMES.',
-      'For example: the letter B makes the sound "buh", not "bee".',
-      'The letter S makes "sss", M makes "mmm", A makes "ah".',
-      'Teach blending: "c-a-t" sounds become "cat".',
-      'Teach segmenting: break "dog" into "d-o-g".',
-      'Use rhyming games: "What rhymes with cat? Hat! Bat! Sat!"',
-      'Use alliteration: "Silly Sam sat on a soft sofa."',
-      'Always make it playful and musical. Sing sounds when you can.',
-      'Start with single letter sounds, then CVC words (consonant-vowel-consonant).',
-      'Progress: letter sounds, then blending two sounds, then three-letter words.',
+      SHARED_PHONICS_PROMPT_BLOCK,
       '',
       'OTHER EARLY LEARNING:',
       'Teach counting with real objects: "Let\'s count. One apple. Two apples. Three apples."',
@@ -263,51 +255,7 @@ export function buildSystemPrompt(
  * and normalises whitespace so Azure Neural voices read naturally.
  */
 export function cleanForTTS(t: string): string {
-  return (
-    t
-      // Code blocks
-      .replace(/```[\s\S]*?```/g, '')
-      .replace(/`[^`]+`/g, '')
-      // Markdown formatting
-      .replace(/\*\*/g, '')
-      .replace(/\*/g, '')
-      .replace(/#{1,6}\s/g, '')
-      .replace(/>\s/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      // List bullets / numbers
-      .replace(/^\s*[-*•◦▪︎·]\s*/gm, '')
-      .replace(/^\s*\d+[.)]\s*/gm, '')
-      // Emojis (comprehensive unicode ranges)
-      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-      .replace(/[\u{2600}-\u{26FF}]/gu, '')
-      .replace(/[\u{2700}-\u{27BF}]/gu, '')
-      .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-      .replace(/[\u{200D}]/gu, '')
-      .replace(/[✅❌⚠️✨🎯📊💡🚀⚡🔍📝🔧📈👋🎤🔇🔊]/g, '')
-      // Bracketed meta info
-      .replace(/\[.*?\]/g, '')
-      .replace(/_Tools used:.*?_/gi, '')
-      .replace(/_.*?tokens used_/gi, '')
-      // Quotes and parens that TTS reads awkwardly
-      .replace(/[“”"«»]/g, '')
-      .replace(/[‘’`]/g, "'")
-      .replace(/[()\[\]{}<>]/g, '')
-      // Acronym expansion for natural speech
-      .replace(/\bEduDash Pro\b/gi, 'Edu Dash Pro')
-      .replace(/\bAI\b/g, 'A.I.')
-      .replace(/\bSTEM\b/g, 'stem')
-      .replace(/\bCAPS\b/g, 'caps')
-      // South African language name normalisation
-      .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
-      .replace(/\bi\s*s\s*i\s+xhosa\b/gi, 'isiXhosa')
-      .replace(/\bse\s+pedi\b/gi, 'Sepedi')
-      .replace(/\bse\s+sotho\b/gi, 'Sesotho')
-      // Collapse whitespace
-      .replace(/\n+/g, '. ')
-      .replace(/\s{2,}/g, ' ')
-      .replace(/\.\s*\./g, '. ')
-      .trim()
-  );
+  return normalizeForTTS(t);
 }
 
 export function cleanRawJSON(text: string): string {

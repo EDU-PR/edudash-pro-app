@@ -63,6 +63,7 @@ export interface FinanceMonthSnapshot {
   excluded_inactive_due?: number;
   excluded_inactive_outstanding?: number;
   excluded_inactive_students?: number;
+  family_credits_available?: number;
   net_after_expenses: number;
   payroll_due: number;
   payroll_paid: number;
@@ -106,6 +107,43 @@ export interface PayrollRosterItem {
   paid_this_month: boolean;
   paid_amount_this_month: number;
   last_paid_at?: string | null;
+}
+
+export interface PayrollPaymentRecord {
+  id: string;
+  payroll_recipient_id: string;
+  organization_id: string;
+  amount: number;
+  payment_month: string;
+  payment_method: string;
+  payment_reference?: string | null;
+  notes?: string | null;
+  status: 'completed' | 'voided' | 'edited';
+  original_amount?: number | null;
+  edit_reason?: string | null;
+  edited_at?: string | null;
+  voided_at?: string | null;
+  void_reason?: string | null;
+  recorded_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayrollAdvanceRecord {
+  id: string;
+  payroll_recipient_id: string;
+  organization_id: string;
+  amount: number;
+  advance_date: string;
+  reason?: string | null;
+  repayment_month?: string | null;
+  repaid: boolean;
+  repaid_at?: string | null;
+  repaid_amount?: number | null;
+  recorded_by?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PayrollRosterBundle {

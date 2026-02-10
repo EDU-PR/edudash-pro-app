@@ -29,12 +29,14 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system';
 import { assertSupabase } from '../../lib/supabase';
 import { getWelcomeMessage } from '../../lib/ai/constants';
 import { createDashOrbStyles } from './DashOrb.styles';
 import { ChatModal, ChatMessage } from './ChatModal';
 import { QuickAction } from './QuickActions';
 import { DashToolsModal } from '@/components/ai/DashToolsModal';
+import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { useVoiceTTS } from '../super-admin/voice-orb/useVoiceTTS';
 import { useVoiceRecorder } from '../super-admin/voice-orb/useVoiceRecorder';
 import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
@@ -53,6 +55,10 @@ import { ToolRegistry } from '@/services/AgentTools';
 import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
 import { formatToolResultMessage } from '@/lib/ai/toolUtils';
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
+import type { DashAttachment } from '@/services/dash-ai/types';
+import { pickImages } from '@/services/AttachmentService';
+import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 let AsyncStorage: any = null;
 try {
@@ -121,6 +127,8 @@ export default function DashOrb({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [pendingTutorIntent, setPendingTutorIntent] = useState<{ prompt: string; label?: string } | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<DashAttachment[]>([]);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [whisperModeEnabled, setWhisperModeEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -898,23 +906,105 @@ export default function DashOrb({
     return () => clearTimeout(timer);
   }, [whisperModeEnabled, isProcessing, isSpeaking, isListeningForCommand]);
 
-  const handleOrbAttach = () => {
-    toast.info('Attachments are available in the full Dash Tutor screen for now.');
-  };
+  const readBase64FromUri = useCallback(async (uri: string): Promise<string | null> => {
+    if (!uri) return null;
+    try {
+      if (Platform.OS !== 'web') {
+        return await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+      }
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image blob'));
+        reader.readAsDataURL(blob);
+      });
+      const commaIndex = dataUrl.indexOf(',');
+      return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+    } catch (error) {
+      console.warn('[DashOrb] Failed to read base64 image:', error);
+      return null;
+    }
+  }, []);
 
-  const handleOrbCamera = () => {
-    toast.info('Camera upload is available in the full Dash Tutor screen for now.');
-  };
+  const buildImagePayloads = useCallback(async (attachments: DashAttachment[]) => {
+    const images: Array<{ data: string; media_type: string }> = [];
+    for (const attachment of attachments) {
+      if (attachment.kind !== 'image') continue;
+      const metaData = typeof attachment.meta?.image_base64 === 'string'
+        ? attachment.meta.image_base64
+        : typeof attachment.meta?.base64 === 'string'
+          ? attachment.meta.base64
+          : null;
+      const base64 = metaData || await readBase64FromUri(attachment.previewUri || '');
+      if (!base64) continue;
+      images.push({
+        data: base64,
+        media_type: attachment.mimeType || (attachment.meta?.image_media_type as string) || 'image/jpeg',
+      });
+    }
+    return images;
+  }, [readBase64FromUri]);
+
+  const handleOrbAttach = useCallback(async () => {
+    if (isProcessing) return;
+    try {
+      const picked = await pickImages();
+      if (!picked || picked.length === 0) return;
+      setPendingAttachments((prev) => [...prev, ...picked].slice(0, 5));
+      toast.success(`${picked.length} image${picked.length === 1 ? '' : 's'} attached`);
+    } catch (error) {
+      console.warn('[DashOrb] Failed to attach images:', error);
+      toast.error('Could not attach image');
+    }
+  }, [isProcessing]);
+
+  const handleOrbCamera = useCallback(async () => {
+    if (isProcessing) return;
+    setScannerVisible(true);
+  }, [isProcessing]);
+
+  const handleScannerScanned = useCallback((result: HomeworkScanResult) => {
+    if (!result?.base64) return;
+    const attachment: DashAttachment = {
+      id: `attach_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: `homework_scan_${Date.now()}.jpg`,
+      mimeType: 'image/jpeg',
+      size: Math.max(0, Math.floor(result.base64.length * 0.75)),
+      bucket: 'attachments',
+      storagePath: '',
+      kind: 'image',
+      status: 'pending',
+      previewUri: result.uri,
+      uploadProgress: 0,
+      meta: {
+        base64: result.base64,
+        image_base64: result.base64,
+        image_media_type: 'image/jpeg',
+        width: result.width,
+        height: result.height,
+        source: 'homework_scanner',
+      },
+    };
+    setPendingAttachments((prev) => [...prev, attachment].slice(0, 5));
+    setScannerVisible(false);
+    toast.success('Homework scan attached');
+  }, []);
 
   const handleSend = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && pendingAttachments.length === 0) return;
     if (isEditing && editingMessageId) {
       const index = messages.findIndex((m) => m.id === editingMessageId);
       const baseMessages = index >= 0 ? messages.slice(0, index) : messages;
       setIsEditing(false);
       setEditingMessageId(null);
-      await processCommand(trimmed, undefined, { baseMessages });
+      await processCommand(trimmed, undefined, {
+        baseMessages,
+        attachments: pendingAttachments,
+      });
+      setPendingAttachments([]);
       return;
     }
     if (pendingTutorIntent) {
@@ -924,10 +1014,12 @@ export default function DashOrb({
       });
       const label = pendingTutorIntent.label || 'Continue';
       setPendingTutorIntent(null);
-      await processCommand(mergedPrompt, trimmed);
+      await processCommand(mergedPrompt, trimmed, { attachments: pendingAttachments });
+      setPendingAttachments([]);
       return;
     }
-    await processCommand(trimmed);
+    await processCommand(trimmed || 'Please analyze this image.', undefined, { attachments: pendingAttachments });
+    setPendingAttachments([]);
   };
 
   useEffect(() => {
@@ -969,6 +1061,7 @@ export default function DashOrb({
       baseMessages?: ChatMessage[];
       historyOverride?: Array<{ role: string; content: string }>;
       skipUserMessage?: boolean;
+      attachments?: DashAttachment[];
     }
   ) => {
     // Sanitize input
@@ -1005,6 +1098,9 @@ export default function DashOrb({
       role: 'user',
       content: displayOverride ? sanitizeInput(displayOverride, 2000) : sanitized,
       timestamp: new Date(),
+      attachments: options?.attachments && options.attachments.length > 0
+        ? options.attachments
+        : undefined,
     };
     setInputText('');
     setIsProcessing(true);
@@ -1049,7 +1145,7 @@ export default function DashOrb({
       const history = toolContextEntry ? [...baseHistory, toolContextEntry] : baseHistory;
 
       // Process the command
-      const result = await executeCommand(command, history);
+      const result = await executeCommand(command, history, options?.attachments || []);
       
       // Replace thinking message with result
       await streamResponseToMessage(thinkingId, result);
@@ -1066,7 +1162,13 @@ export default function DashOrb({
         // Reset error dedup so toast fires on every new TTS attempt
         lastTTSErrorRef.current = '';
         try {
-          await speak(result, ttsLanguage);
+          const phonicsMode = shouldUsePhonicsMode(result, {
+            ageYears: learnerAgeYears,
+            gradeLevel: learnerGrade || null,
+            schoolType: learnerContext?.schoolType || null,
+            organizationType: learnerContext?.schoolType || null,
+          });
+          await speak(result, ttsLanguage, { phonicsMode });
         } catch (ttsErr) {
           console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
           // Surface TTS failure as a system message so user knows
@@ -1251,7 +1353,11 @@ export default function DashOrb({
    * Execute command via AI Edge Function
    * Uses superadmin-ai for super admins with runtime fallback to ai-proxy.
    */
-  const executeCommand = async (command: string, history: Array<{role: string, content: string}> = []): Promise<string> => {
+  const executeCommand = async (
+    command: string,
+    history: Array<{ role: string; content: string }> = [],
+    attachments: DashAttachment[] = []
+  ): Promise<string> => {
     try {
       const supabase = assertSupabase();
       const { data: { session } } = await supabase.auth.getSession();
@@ -1283,15 +1389,37 @@ export default function DashOrb({
       const traceId = `dash_orb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const superAdminEndpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/superadmin-ai`;
       const aiProxyEndpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
+      const images = await buildImagePayloads(attachments);
+      const detectedOCRTask = images.length > 0 ? detectOCRTask(command) : null;
+      const ocrMode = images.length > 0 && (isOCRIntent(command) || detectedOCRTask !== null);
+      const ocrTask = detectedOCRTask || 'document';
+      const attachmentContext = attachments.length > 0
+        ? [
+            'ATTACHMENTS:',
+            ...attachments.map((attachment) => {
+              const sizeLabel = typeof attachment.size === 'number' && attachment.size > 0
+                ? ` (${Math.round(attachment.size / 1024)} KB)`
+                : '';
+              return `- ${attachment.name || 'Attachment'} [${attachment.kind || 'file'}]${sizeLabel}`;
+            }),
+          ].join('\n')
+        : null;
+      const ocrContext = ocrMode ? getOCRPromptForTask(ocrTask) : null;
 
       const aiProxyBody = {
         scope: normalizedRole || 'parent',
-        service_type: 'dash_conversation',
+        service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
         payload: {
           prompt: command,
+          images: images.length > 0 ? images : undefined,
+          ocr_mode: ocrMode || undefined,
+          ocr_task: ocrMode ? ocrTask : undefined,
+          ocr_response_format: ocrMode ? 'json' : undefined,
           context: [
             history.length > 0 ? history.map((h) => `${h.role}: ${h.content}`).join('\n') : null,
             memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
+            attachmentContext,
+            ocrContext,
             nameContext,
             gradeContext,
             schoolTypeContext,
@@ -1306,6 +1434,10 @@ export default function DashOrb({
           role: normalizedRole,
           source: 'dash_orb',
           age_years: ageYears ?? undefined,
+          has_image: images.length > 0,
+          attachment_count: attachments.length,
+          ocr_mode: ocrMode,
+          ocr_task: ocrMode ? ocrTask : undefined,
           trace_id: traceId,
           tool_plan: {
             source: 'dash_orb.executeCommand',
@@ -1321,8 +1453,42 @@ export default function DashOrb({
         max_tokens: 1024,
       };
 
+      const toReadableOCRText = (raw: string): string | null => {
+        const value = String(raw || '').trim();
+        if (!value.startsWith('{')) return null;
+        try {
+          const parsed = JSON.parse(value) as {
+            extracted_text?: string;
+            analysis?: string;
+            confidence?: number;
+            document_type?: string;
+          };
+          if (!parsed || typeof parsed !== 'object') return null;
+          const analysis = typeof parsed.analysis === 'string' ? parsed.analysis.trim() : '';
+          const extracted = typeof parsed.extracted_text === 'string' ? parsed.extracted_text.trim() : '';
+          if (!analysis && !extracted) return null;
+          const confidencePct = typeof parsed.confidence === 'number'
+            ? `\n\nConfidence: ${Math.round(parsed.confidence * 100)}%`
+            : '';
+          const documentType = typeof parsed.document_type === 'string'
+            ? `Document type: ${parsed.document_type}`
+            : '';
+          const extractedBlock = extracted
+            ? `\n\nExtracted text:\n${extracted}`
+            : '';
+          return [analysis || documentType, documentType && analysis ? '' : null, extractedBlock, confidencePct]
+            .filter(Boolean)
+            .join('');
+        } catch {
+          return null;
+        }
+      };
+
       const parseAiProxyResponse = (data: any): string => {
-        if (typeof data?.content === 'string') return data.content;
+        if (typeof data?.ocr?.analysis === 'string') return data.ocr.analysis;
+        if (typeof data?.content === 'string') {
+          return toReadableOCRText(data.content) || data.content;
+        }
         if (Array.isArray(data?.content) && data.content[0]?.text) return data.content[0].text;
         if (typeof data?.message?.content === 'string') return data.message.content;
         if (typeof data?.text === 'string') return data.text;
@@ -1361,7 +1527,8 @@ export default function DashOrb({
         return { ok: response.ok, status: response.status, data };
       };
 
-      let mode: 'superadmin' | 'ai_proxy' = isUserSuperAdmin ? 'superadmin' : 'ai_proxy';
+      const forceAiProxy = ocrMode || images.length > 0;
+      let mode: 'superadmin' | 'ai_proxy' = isUserSuperAdmin && !forceAiProxy ? 'superadmin' : 'ai_proxy';
       let response = await invoke(
         mode === 'superadmin' ? superAdminEndpoint : aiProxyEndpoint,
         mode === 'superadmin' ? superAdminBody : aiProxyBody
@@ -1750,7 +1917,7 @@ export default function DashOrb({
         onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
         onAttachFile={handleOrbAttach}
         onTakePhoto={handleOrbCamera}
-        attachmentCount={0}
+        attachmentCount={pendingAttachments.length}
         quickIntents={quickIntents}
         onQuickIntent={handleQuickIntent}
         memorySnapshot={memorySnapshot}
@@ -1837,6 +2004,12 @@ export default function DashOrb({
           setIsEditing(false);
           setEditingMessageId(null);
         }}
+      />
+      <HomeworkScanner
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScanned={handleScannerScanned}
+        title="Scan Homework"
       />
       <DashToolsModal
         visible={showToolsModal}

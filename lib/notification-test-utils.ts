@@ -17,22 +17,18 @@ let handlerEnsured = false;
 /**
  * Ensure a notification handler is registered so foreground notifications
  * actually display in the status bar and as banners.
- * Without this, Expo silently suppresses all foreground notifications.
+ * 
+ * NOTE: The global handler is already configured in lib/NotificationService.ts
+ * with a suppress-list approach (shows ALL notification types by default).
+ * We no longer override it here — doing so previously masked the real bug
+ * where the production handler had an incomplete allow-list.
  */
 function ensureNotificationHandler(): void {
   if (handlerEnsured) return;
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      priority: Notifications.AndroidNotificationPriority.HIGH,
-    }),
-  });
+  // The handler in NotificationService.ts is already set at module load time.
+  // We just mark as ensured to avoid repeated checks.
   handlerEnsured = true;
-  console.log('[Test Notification] Handler ensured — foreground notifications will display');
+  console.log('[Test Notification] Using production notification handler from NotificationService');
 }
 
 /**

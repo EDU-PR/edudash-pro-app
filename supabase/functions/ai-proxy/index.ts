@@ -113,6 +113,9 @@ const RequestSchema = z.object({
       image_options: ImageOptionsSchema.optional(),
       image_context: z.record(z.unknown()).optional(),
       voice_data: z.record(z.unknown()).optional(),
+      ocr_mode: z.boolean().optional(),
+      ocr_task: z.enum(['homework', 'document', 'handwriting']).optional(),
+      ocr_response_format: z.enum(['json', 'text']).optional(),
       model: z.string().optional(),
     })
     .default({}),
@@ -212,6 +215,38 @@ const WebSearchArgsSchema = z.object({
 });
 
 const DEFAULT_SYSTEM_PROMPT = `You are Dash, an AI tutor for parents and students.\n\nCORE BEHAVIOR:\n- Always teach step-by-step, ask one short question at a time, and wait for the learner’s response.\n- Never assume age, grade, language, or background knowledge. Ask for them if missing.\n- Never refuse to help or say you can’t help. If info is missing, ask. If tools are needed, use them.\n- Keep responses short and interactive.\n\nTUTOR FLOW:\nDiagnose → Teach → Practice → Check.\n\nWEB SEARCH TOOL:\nIf the user asks about information not in the curriculum/context, call the web_search tool to retrieve trustworthy sources.\n\nLANGUAGE:\nIf the user’s preferred language is unknown, ask which language they prefer (English, Afrikaans, isiZulu).`;
+
+const SHARED_PHONICS_PROMPT_BLOCK = [
+  'PHONICS MODE:',
+  '- Teach letter sounds, not letter names.',
+  '- Use sustained sound text: "sss", "mmm", "fff".',
+  '- Never write spaced repetition like "s s s" or "m m m".',
+  '- For blending, format as "c-a-t becomes cat".',
+  '- For segmenting, split words like "dog is d-o-g".',
+  '- Keep phonics examples short, playful, and concrete.',
+].join('\n');
+
+const OCR_PROMPT_BY_TASK: Record<'homework' | 'document' | 'handwriting', string> = {
+  homework: [
+    'OCR HOMEWORK SCAN:',
+    '- Read all visible handwritten and printed text.',
+    '- Identify subject, topic, and likely grade.',
+    '- If answers are present, evaluate briefly and suggest next practice.',
+    '- Mark uncertain words with [?].',
+  ].join('\n'),
+  document: [
+    'OCR DOCUMENT SCAN:',
+    '- Extract all visible text from the image.',
+    '- Preserve structure where possible (titles, bullets, steps).',
+    '- Mark uncertain words with [?].',
+  ].join('\n'),
+  handwriting: [
+    'OCR HANDWRITING REVIEW:',
+    '- Read handwritten text line by line.',
+    '- Mark uncertain words with [?].',
+    '- Give short handwriting improvement tips for young learners.',
+  ].join('\n'),
+};
 
 // CORS headers are now managed by _shared/cors.ts — computed per-request in serve()
 // The `corsHeaders` variable is set once per request at the top of serve().
@@ -768,6 +803,112 @@ function buildSystemPrompt(extraContext?: string): string {
   
   // Normal context appended after default prompt
   return `${DEFAULT_SYSTEM_PROMPT}\n\nCONTEXT:\n${extraContext}`;
+}
+
+function getOCRPrompt(task: 'homework' | 'document' | 'handwriting'): string {
+  return OCR_PROMPT_BY_TASK[task] || OCR_PROMPT_BY_TASK.document;
+}
+
+function detectPhonicsMode(
+  requestPayload: z.infer<typeof RequestSchema>['payload'],
+  metadata?: Record<string, unknown>
+): boolean {
+  const context = [
+    requestPayload.prompt,
+    requestPayload.context,
+    Array.isArray(requestPayload.messages)
+      ? requestPayload.messages
+          .map((msg) => (typeof msg.content === 'string' ? msg.content : ''))
+          .join('\n')
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase();
+
+  const role = String(metadata?.role || '').toLowerCase();
+  const orgType = String(metadata?.org_type || metadata?.organization_type || '').toLowerCase();
+  const ageYears = Number(metadata?.age_years ?? metadata?.learner_age_years ?? Number.NaN);
+  const grade = String(metadata?.grade || metadata?.grade_level || '').toLowerCase();
+
+  const explicitPhonics = /\bphonics\b|\bletter\s+sound|\bblend(?:ing)?\b|\bsegment(?:ing)?\b|\brhyme\b|\/[a-z]\//i.test(context);
+  const preschoolSignals = (
+    orgType.includes('preschool') ||
+    orgType.includes('ecd') ||
+    role === 'parent' ||
+    role === 'student' ||
+    (Number.isFinite(ageYears) && ageYears <= 6) ||
+    grade === 'grade r' ||
+    grade === 'pre-r' ||
+    grade === 'pre r' ||
+    grade === 'grade 1'
+  );
+
+  return explicitPhonics || (preschoolSignals && /\b(letter|sound|alphabet|reading)\b/i.test(context));
+}
+
+function extractJsonObjectCandidate(content: string): Record<string, unknown> | null {
+  const text = String(content || '').trim();
+  if (!text) return null;
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fenceMatch?.[1] || text).trim();
+  try {
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // Ignore and fall through
+  }
+  const loose = text.match(/\{[\s\S]*\}/);
+  if (!loose) return null;
+  try {
+    const parsed = JSON.parse(loose[0]) as Record<string, unknown>;
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // Ignore
+  }
+  return null;
+}
+
+function normalizeOCRResponse(params: {
+  content: string;
+  task: 'homework' | 'document' | 'handwriting';
+}): {
+  extracted_text: string;
+  confidence: number;
+  document_type: 'homework' | 'document' | 'handwriting';
+  analysis: string;
+} {
+  const parsed = extractJsonObjectCandidate(params.content);
+  const extractedText = typeof parsed?.extracted_text === 'string'
+    ? parsed.extracted_text
+    : typeof parsed?.text === 'string'
+      ? parsed.text
+      : String(params.content || '').trim();
+  const analysis = typeof parsed?.analysis === 'string'
+    ? parsed.analysis
+    : String(params.content || '').trim();
+  const confidenceRaw = typeof parsed?.confidence === 'number'
+    ? parsed.confidence
+    : typeof parsed?.confidence === 'string'
+      ? Number.parseFloat(parsed.confidence)
+      : 0.72;
+  const confidence = Number.isFinite(confidenceRaw)
+    ? Math.min(1, Math.max(0, confidenceRaw))
+    : 0.72;
+  const documentType = (
+    parsed?.document_type === 'homework' ||
+    parsed?.document_type === 'document' ||
+    parsed?.document_type === 'handwriting'
+  )
+    ? parsed.document_type
+    : params.task;
+
+  return {
+    extracted_text: extractedText,
+    confidence: Number(confidence.toFixed(2)),
+    document_type: documentType,
+    analysis,
+  };
 }
 
 function parseAllowedModels(envKey: string, defaults: string[]): string[] {
@@ -1836,13 +1977,25 @@ serve(async (req) => {
     }
 
     const wantsStream = payload.stream === true;
+    const normalizedServiceType = normalizeServiceType(payload.service_type);
+    const requestedOCRMode = payload.payload.ocr_mode === true || normalizedServiceType === 'image_analysis';
+    const ocrTask = payload.payload.ocr_task || 'document';
+    const ocrResponseFormat = payload.payload.ocr_response_format || 'text';
+    const phonicsMode = detectPhonicsMode(payload.payload, payload.metadata as Record<string, unknown> | undefined);
 
-    const systemPrompt = buildSystemPrompt(payload.payload.context);
+    const contextParts = [
+      payload.payload.context,
+      phonicsMode ? SHARED_PHONICS_PROMPT_BLOCK : null,
+      requestedOCRMode ? getOCRPrompt(ocrTask) : null,
+    ].filter(Boolean);
+    const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
+
+    const systemPrompt = buildSystemPrompt(mergedContext);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
     // Redact PII before sending to AI providers
     const messages = redactMessagesForProvider(rawMessages);
-    const serviceType = normalizeServiceType(payload.service_type);
-    const maxTokens = getMaxTokensForService(serviceType);
+    const serviceType = normalizedServiceType;
+    const maxTokens = getMaxTokensForService(requestedOCRMode ? 'image_analysis' : serviceType);
 
     const normalizedRequestedModel = normalizeRequestedModel(
       typeof payload.payload.model === 'string' ? payload.payload.model : null
@@ -2214,8 +2367,18 @@ serve(async (req) => {
       console.warn('[ai-proxy] record_ai_usage failed (non-fatal):', usageError);
     }
 
+    const normalizedOCR = requestedOCRMode
+      ? normalizeOCRResponse({
+          content: providerResponse.content || '',
+          task: ocrTask,
+        })
+      : null;
+    const responseContent = requestedOCRMode && ocrResponseFormat === 'json'
+      ? JSON.stringify(normalizedOCR)
+      : (providerResponse.content || normalizedOCR?.analysis || '');
+
     if (wantsStream) {
-      return new Response(buildSseStream(providerResponse.content || ''), {
+      return new Response(buildSseStream(responseContent), {
         status: 200,
         headers: {
           ...corsHeaders,
@@ -2234,12 +2397,13 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      content: providerResponse.content,
+      content: responseContent,
       usage: providerResponse.usage,
       model: providerResponse.model,
       generated_images: providerResponse.generated_images || [],
       tool_results: providerResponse.tool_results || [],
       pending_tool_calls: providerResponse.pending_tool_calls || [],
+      ocr: normalizedOCR || undefined,
       resolution_status: resolutionMeta.resolution_status,
       confidence_score: resolutionMeta.confidence_score,
       escalation_offer: resolutionMeta.escalation_offer,

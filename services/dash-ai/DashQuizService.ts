@@ -27,6 +27,7 @@ import type {
   ReviewSchedule,
   AIQuizResponse,
   SkillLevel,
+  QuestionType,
 } from '@/lib/types/quiz';
 
 // ============================================
@@ -39,6 +40,14 @@ const DEFAULT_QUESTION_COUNT = 10;
 const DEFAULT_TIME_LIMIT = 0; // No limit
 const MASTERY_THRESHOLD = 80; // Score needed for mastery
 const FILL_BLANK_SIMILARITY_THRESHOLD = 0.8;
+const PHONICS_SIMILARITY_THRESHOLD = 0.84;
+
+const PHONICS_QUESTION_TYPES: QuestionType[] = [
+  'letter_sound_match',
+  'rhyme_match',
+  'blend_word',
+  'vowel_identify',
+];
 
 /** SM-2 defaults */
 const SM2_INITIAL_EASE = 2.5;
@@ -58,6 +67,27 @@ const SKILL_THRESHOLDS: Record<SkillLevel, number> = {
 // ============================================
 
 export class DashQuizService {
+  private static isEarlyPhonicsGrade(gradeLevel: string | null | undefined): boolean {
+    const normalized = String(gradeLevel || '').trim().toLowerCase();
+    return normalized === 'pre-r'
+      || normalized === 'pre r'
+      || normalized === 'grade r'
+      || normalized === 'r'
+      || normalized === 'grade 1'
+      || normalized === '1';
+  }
+
+  private static resolveQuestionTypes(config: QuizConfig): QuestionType[] {
+    const requested = Array.isArray(config.questionTypes) ? config.questionTypes.filter(Boolean) : [];
+    if (requested.length > 0) return requested;
+
+    if (DashQuizService.isEarlyPhonicsGrade(config.gradeLevel)) {
+      return [...PHONICS_QUESTION_TYPES];
+    }
+
+    return ['multiple_choice', 'true_false', 'fill_blank', 'matching'];
+  }
+
   /**
    * Generate a quiz using AI and start a session.
    */
@@ -66,13 +96,19 @@ export class DashQuizService {
     organizationId: string | null,
     config: QuizConfig
   ): Promise<QuizGenerationResult> {
+    const questionTypes = DashQuizService.resolveQuestionTypes(config);
     const questionCount = Math.max(
       MIN_QUESTIONS_PER_QUIZ,
       Math.min(config.questionCount || DEFAULT_QUESTION_COUNT, MAX_QUESTIONS_PER_QUIZ)
     );
+    const effectiveConfig: QuizConfig & { questionCount: number; questionTypes: QuestionType[] } = {
+      ...config,
+      questionCount,
+      questionTypes,
+    };
 
     // Build the prompt
-    const prompt = DashQuizService.buildGenerationPrompt({ ...config, questionCount });
+    const prompt = DashQuizService.buildGenerationPrompt(effectiveConfig);
 
     // Call AI to generate questions
     const { data, error: fnError } = await supabase.functions.invoke('ai-proxy', {
@@ -86,10 +122,11 @@ export class DashQuizService {
         },
         metadata: {
           user_id: userId,
-          subject: config.subject,
-          topic: config.topic,
-          grade_level: config.gradeLevel,
-          difficulty: config.difficulty,
+          subject: effectiveConfig.subject,
+          topic: effectiveConfig.topic,
+          grade_level: effectiveConfig.gradeLevel,
+          difficulty: effectiveConfig.difficulty,
+          question_types: effectiveConfig.questionTypes,
         },
       },
     });
@@ -110,14 +147,14 @@ export class DashQuizService {
       parsed.questions,
       organizationId,
       userId,
-      config
+      effectiveConfig
     );
 
     // Create quiz session
     const sessionId = await DashQuizService.createSession(
       userId,
       organizationId,
-      config,
+      effectiveConfig,
       savedQuestions.map((q) => q.id)
     );
 
@@ -414,14 +451,19 @@ export class DashQuizService {
   // Private helpers
   // ============================================
 
-  private static buildGenerationPrompt(config: QuizConfig & { questionCount: number }): string {
+  private static buildGenerationPrompt(config: QuizConfig & { questionCount: number; questionTypes: QuestionType[] }): string {
     const typeDescriptions: Record<string, string> = {
       multiple_choice: '4 options (A-D) with exactly one correct',
       true_false: 'True or False',
       fill_blank: 'Fill in the blank (single word or short phrase)',
       matching: '4 pairs to match (left column to right column)',
+      letter_sound_match: 'Select the sound made by a letter (use sustained sounds like "sss", "mmm", "buh")',
+      rhyme_match: 'Choose the word that rhymes with the target word',
+      blend_word: 'Blend segmented sounds/letters into a full word (for example "c-a-t" -> "cat")',
+      vowel_identify: 'Identify whether the vowel sound is short or long in a simple word',
     };
 
+    const phonicsGrade = DashQuizService.isEarlyPhonicsGrade(config.gradeLevel);
     const typesRequested = config.questionTypes
       .map((t) => `${t}: ${typeDescriptions[t] ?? t}`)
       .join('\n  - ');
@@ -434,6 +476,7 @@ Grade Level: ${config.gradeLevel}
 Difficulty: ${config.difficulty}
 Language: ${config.language ?? 'en'}
 ${config.capsAligned ? 'Align with South African CAPS curriculum standards.' : ''}
+${phonicsGrade ? 'Preschool phonics priority: focus on letter sounds, blending, rhymes, and short/long vowels.' : ''}
 
 Question types to include:
   - ${typesRequested}
@@ -499,6 +542,9 @@ Requirements:
 - Each question must have at least 1 hint
 - Explanations should be educational and encouraging
 - For fill_blank, accept reasonable synonyms
+- For phonics questions, use sustained sounds ("sss", "mmm", "buh"), never spaced letters ("s s s")
+- For blend_word, include segmented form and blended answer
+- For vowel_identify, keep words simple (CVC or common sight words)
 - No duplicate questions`;
   }
 
@@ -628,6 +674,23 @@ Requirements:
       // Fuzzy match using Levenshtein similarity
       const similarity = DashQuizService.stringSimilarity(normalizedUser, normalizedCorrect);
       return similarity >= FILL_BLANK_SIMILARITY_THRESHOLD;
+    }
+
+    if (questionType === 'blend_word') {
+      const compactUser = normalizedUser.replace(/[^a-z]/g, '');
+      const compactCorrect = normalizedCorrect.replace(/[^a-z]/g, '');
+      if (!compactUser || !compactCorrect) return false;
+      if (compactUser === compactCorrect) return true;
+      return DashQuizService.stringSimilarity(compactUser, compactCorrect) >= PHONICS_SIMILARITY_THRESHOLD;
+    }
+
+    if (
+      questionType === 'letter_sound_match' ||
+      questionType === 'rhyme_match' ||
+      questionType === 'vowel_identify'
+    ) {
+      if (normalizedUser === normalizedCorrect) return true;
+      return DashQuizService.stringSimilarity(normalizedUser, normalizedCorrect) >= PHONICS_SIMILARITY_THRESHOLD;
     }
 
     // For multiple_choice, true_false, matching — exact match

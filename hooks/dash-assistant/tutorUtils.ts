@@ -1,5 +1,15 @@
 import type { LearnerContext } from '@/lib/dash-ai/learnerContext';
-import type { TutorMode, TutorPayload, TutorSession, PreschoolPlayType } from '@/hooks/dash-assistant/tutorTypes';
+import type {
+  TutorMode,
+  TutorPayload,
+  TutorSession,
+  PreschoolPlayType,
+  PhonicsStage,
+} from '@/hooks/dash-assistant/tutorTypes';
+
+const PHONICS_STAGE_ORDER: PhonicsStage[] = ['letter_sounds', 'cvc_blending', 'rhyming', 'segmenting'];
+
+const PHONICS_TRIGGER_PATTERN = /\b(phonics|letter sounds?|teach me letter|what sound does|blend(?:ing)?|segment(?:ing)?|rhyme(?:s|ing)?|short vowel|long vowel)\b/i;
 
 export const detectTutorIntent = (text: string): TutorMode | null => {
   const value = (text || '').toLowerCase();
@@ -7,6 +17,8 @@ export const detectTutorIntent = (text: string): TutorMode | null => {
 
   // Play mode — preschool interactive play (check BEFORE other modes)
   if (/(let.s\s+play|play\s+a\s+game|play\s+with\s+me|fun\s+game|counting\s+game|colour\s+game|shape\s+game|rhyme\s+game|story\s+time|animal\s+sound|letter\s+game|silly\s+question)/i.test(value)) return 'play';
+  // Phonics mode defaults to guided practice flow
+  if (PHONICS_TRIGGER_PATTERN.test(value)) return 'practice';
   // Quiz mode — formal assessment-style
   if (/(quiz\s+me|test\s+me|give\s+me\s+a\s+quiz|assessment|mock\s+test|exam\s+prep|past\s+paper)/i.test(value)) return 'quiz';
   // Practice mode — exercises, drills, worksheets
@@ -17,6 +29,27 @@ export const detectTutorIntent = (text: string): TutorMode | null => {
   if (/(explain|help\s+me\s+understand|teach\s+me|how\s+does|what\s+is|homework\s+help|can\s+you\s+explain)/i.test(value)) return 'explain';
 
   return null;
+};
+
+export const detectPhonicsTutorRequest = (text: string): boolean => {
+  return PHONICS_TRIGGER_PATTERN.test(text || '');
+};
+
+export const getInitialPhonicsStage = (text: string): PhonicsStage => {
+  const value = (text || '').toLowerCase();
+  if (/\bsegment(?:ing)?\b/.test(value)) return 'segmenting';
+  if (/\brhyme(?:s|ing)?\b/.test(value)) return 'rhyming';
+  if (/\bblend(?:ing)?\b|\bc-a-t\b/.test(value)) return 'cvc_blending';
+  return 'letter_sounds';
+};
+
+export const nextPhonicsStage = (current?: PhonicsStage | null): PhonicsStage => {
+  const stage = current || 'letter_sounds';
+  const idx = PHONICS_STAGE_ORDER.indexOf(stage);
+  if (idx < 0 || idx >= PHONICS_STAGE_ORDER.length - 1) {
+    return PHONICS_STAGE_ORDER[PHONICS_STAGE_ORDER.length - 1];
+  }
+  return PHONICS_STAGE_ORDER[idx + 1];
 };
 
 /** Detect which preschool play sub-type the user wants */
@@ -110,6 +143,8 @@ export const buildTutorSystemContext = (
     ageBand === '3-5' ||
     ageBand === '6-8';
   const isPlayMode = session.mode === 'play';
+  const phonicsMode = session.phonicsMode === true;
+  const phonicsStage = session.phonicsStage || 'letter_sounds';
 
   const levelGuidance = isPlayMode
     ? [
@@ -170,6 +205,19 @@ export const buildTutorSystemContext = (
         '- Life Skills: Personal & Social Wellbeing, Physical Education, Creative Arts',
       ].join('\n');
 
+  const phonicsGuidance = phonicsMode
+    ? [
+        'PHONICS PROGRESSION MODE:',
+        `- Current stage: ${phonicsStage.replace(/_/g, ' ')}.`,
+        '- Use sounds, not letter names.',
+        '- Write sustained sounds like "sss", "mmm", "fff", and "buh".',
+        '- Never write spaced letter repetition like "s s s" or "m m m".',
+        '- Use blending format: "c-a-t becomes cat".',
+        '- Ask ONE phonics prompt at a time and wait for the learner answer.',
+        '- Keep examples playful and concrete with 3-5 year old vocabulary.',
+      ].join('\n')
+    : null;
+
   const baseLines = [
     'TUTOR MODE OVERRIDE:',
     `Mode: ${session.mode}.`,
@@ -181,6 +229,7 @@ export const buildTutorSystemContext = (
     ageBand ? `Age band: ${ageBand}.` : null,
     learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
     levelGuidance,
+    phonicsGuidance,
     '',
     'INTERACTIVE TEACHING TOOLS:',
     '- For math: Show visual representations (use emoji grids for counting, simple ASCII diagrams for shapes)',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 
 interface TTSOptions {
   rate?: number; // -50 to +50
@@ -159,21 +160,13 @@ export function useTTS(userId?: string) {
       return;
     }
 
-    const cleanText = text
-      .replace(/#{1,6}\s/g, '')
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/\*(.+?)\*/g, '$1')
-      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-      .replace(/`(.+?)`/g, '$1')
-      .replace(/[🎓💪🌟🤖✓⚠️📚👍]/g, '')
-      .replace(/\n+/g, '. ')
-      .trim();
+    const cleanText = normalizeForTTS(text);
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     
     // Map Azure rate/pitch to browser TTS (Azure: -50 to +50, Browser: 0.1 to 10 / 0 to 2)
-    const browserRate = 0.95 + ((options.rate || 0) / 100);
-    const browserPitch = 1.0 + ((options.pitch || 0) / 100);
+    const browserRate = 1.0 + ((options.rate ?? 0) / 100);
+    const browserPitch = 1.0 + ((options.pitch ?? 0) / 100);
     
     utterance.rate = Math.max(0.1, Math.min(10, browserRate));
     utterance.pitch = Math.max(0, Math.min(2, browserPitch));
@@ -225,16 +218,8 @@ export function useTTS(userId?: string) {
         }
       }
 
-      // Clean markdown formatting from text
-      const cleanText = text
-        .replace(/#{1,6}\s/g, '') // Remove markdown headers
-        .replace(/\*\*(.+?)\*\*/g, '$1') // Remove bold
-        .replace(/\*(.+?)\*/g, '$1') // Remove italic
-        .replace(/\[(.+?)\]\(.+?\)/g, '$1') // Remove links, keep text
-        .replace(/`(.+?)`/g, '$1') // Remove code formatting
-        .replace(/[🎓💪🌟🤖✓⚠️📚👍]/g, '') // Remove emojis
-        .replace(/\n+/g, '. ') // Replace line breaks with pauses
-        .trim();
+      // Keep one normalization path shared with mobile/super-admin TTS flows.
+      const cleanText = normalizeForTTS(text);
 
       // Auto-detect language if not specified
       const language = options.language || detectLanguage(cleanText);
@@ -255,8 +240,8 @@ export function useTTS(userId?: string) {
           language: language,
           voiceId: voiceGender === 'male' ? `${language}-ZA-male` : undefined,
           style: options.style || 'friendly',
-          rate: options.rate || 5,
-          pitch: options.pitch || 0,
+          rate: options.rate ?? 0,
+          pitch: options.pitch ?? 0,
         },
       });
 

@@ -16,7 +16,8 @@
  *   rate?: number,
  *   pitch?: number,         // -50..50
  *   format?: 'mp3'|'wav',
- *   style?: string
+ *   style?: string,
+ *   phonics_mode?: boolean
  * }
  */
 
@@ -46,6 +47,35 @@ const DEFAULT_VOICES: Record<string, string> = {
   'nso-ZA': 'nso-ZA-DidiNeural',
 };
 
+const LETTER_IPA: Record<string, { ipa: string; sound: string }> = {
+  a: { ipa: 'æ', sound: 'ah' },
+  b: { ipa: 'b', sound: 'buh' },
+  c: { ipa: 'k', sound: 'kuh' },
+  d: { ipa: 'd', sound: 'duh' },
+  e: { ipa: 'ɛ', sound: 'eh' },
+  f: { ipa: 'f', sound: 'fff' },
+  g: { ipa: 'g', sound: 'guh' },
+  h: { ipa: 'h', sound: 'hhh' },
+  i: { ipa: 'ɪ', sound: 'ih' },
+  j: { ipa: 'dʒ', sound: 'juh' },
+  k: { ipa: 'k', sound: 'kuh' },
+  l: { ipa: 'l', sound: 'lll' },
+  m: { ipa: 'm', sound: 'mmm' },
+  n: { ipa: 'n', sound: 'nnn' },
+  o: { ipa: 'ɒ', sound: 'aw' },
+  p: { ipa: 'p', sound: 'puh' },
+  q: { ipa: 'k', sound: 'kuh' },
+  r: { ipa: 'ɹ', sound: 'rrr' },
+  s: { ipa: 's', sound: 'sss' },
+  t: { ipa: 't', sound: 'tuh' },
+  u: { ipa: 'ʌ', sound: 'uh' },
+  v: { ipa: 'v', sound: 'vvv' },
+  w: { ipa: 'w', sound: 'wuh' },
+  x: { ipa: 'ks', sound: 'ks' },
+  y: { ipa: 'j', sound: 'yuh' },
+  z: { ipa: 'z', sound: 'zzz' },
+};
+
 function jsonResponse(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
@@ -60,6 +90,44 @@ function escapeXml(input: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function phonemeTag(letter: string): string {
+  const key = String(letter || '').toLowerCase();
+  const entry = LETTER_IPA[key];
+  if (!entry) return escapeXml(letter);
+  return `<phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme>`;
+}
+
+function buildBlendSSML(blend: string): string {
+  const letters = String(blend || '')
+    .toLowerCase()
+    .split('-')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  if (letters.length < 2 || letters.some((v) => v.length !== 1)) {
+    return escapeXml(blend);
+  }
+
+  const segmented = letters
+    .map((letter) => `${phonemeTag(letter)}<break time="400ms"/>`)
+    .join(' ');
+
+  return `${segmented}<break time="450ms"/>${escapeXml(letters.join(''))}`;
+}
+
+function convertPhonicsMarkersToSSML(rawText: string): string {
+  let text = escapeXml(rawText || '');
+
+  // /b/ markers
+  text = text.replace(/\/([a-z])\//gi, (_, letter: string) => phonemeTag(letter));
+  // [b] markers
+  text = text.replace(/\[([a-z])\]/gi, (_, letter: string) => phonemeTag(letter));
+  // c-a-t markers
+  text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
+
+  return text;
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -150,7 +218,10 @@ Deno.serve(async (req) => {
       textPreview: text.substring(0, 50),
     });
 
-    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? 0);
+    const phonicsMode = body.phonics_mode === true;
+
+    const hasExplicitRate = typeof body.speaking_rate === 'number' || typeof body.rate === 'number';
+    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? -25 : 0));
     const pitchRaw = Number(body.pitch ?? 0);
     const speakingRate = clampNumber(speakingRateRaw, -50, 50);
     const pitch = clampNumber(pitchRaw, -50, 50);
@@ -160,9 +231,10 @@ Deno.serve(async (req) => {
       ? 'riff-24khz-16bit-mono-pcm'
       : 'audio-24khz-96kbitrate-mono-mp3';
 
-    const style = typeof body.style === 'string' ? body.style.trim() : '';
+    const styleOverride = typeof body.style === 'string' ? body.style.trim() : '';
+    const style = styleOverride || (phonicsMode ? 'friendly' : '');
 
-    const ssmlText = escapeXml(text);
+    const ssmlText = phonicsMode ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
     const prosody = `<prosody rate="${speakingRate}%" pitch="${pitch}%">${ssmlText}</prosody>`;
     const inner = style
       ? `<mstts:express-as style="${escapeXml(style)}">${prosody}</mstts:express-as>`
@@ -195,7 +267,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    const contentHash = await sha256(`${text}|${language}|${voiceId}|${speakingRate}|${pitch}|${outputFormat}`);
+    const contentHash = await sha256(
+      `${text}|${language}|${voiceId}|${hasExplicitRate ? speakingRate : speakingRateRaw}|${pitch}|${outputFormat}|${phonicsMode ? 'phonics' : 'normal'}`
+    );
     const extension = format;
     const objectPath = `tts/${userData.user.id}/${contentHash}.${extension}`;
 
