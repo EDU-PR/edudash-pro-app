@@ -75,10 +75,11 @@ import {
 } from '@/hooks/dash-assistant/tutorUtils';
 
 // Extracted utilities
-import { 
+import {
   resolveAgeBand, 
   type LearnerContext,
 } from '@/lib/dash-ai/learnerContext';
+import { resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
 import {
   shouldCelebrate,
 } from '@/lib/dash-ai/promptBuilder';
@@ -340,9 +341,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const canUseImages = capsReady ? can('multimodal.vision') : true;
   const canUseDocuments = capsReady ? can('multimodal.documents') : true;
 
+  const resolveActiveConversationId = useCallback((): string | null => {
+    if (conversation?.id) return conversation.id;
+    try {
+      const current = dashInstance?.getCurrentConversationId?.();
+      if (typeof current === 'string' && current.trim().length > 0) {
+        return current;
+      }
+    } catch {}
+    return null;
+  }, [conversation?.id, dashInstance]);
+
   // Initialize attachments hook
   const dashAttachments = useDashAttachments({
     conversation,
+    getConversationId: resolveActiveConversationId,
     onShowAlert: showAlert,
     canUseImages,
     canUseDocuments,
@@ -398,17 +411,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       // Get school/organization info
       const schoolId = profile?.organization_id || profile?.preschool_id;
       
-      // Use organization_membership.school_type (reliable source)
-      const membershipSchoolType = (profile as any)?.organization_membership?.school_type;
-      const schoolType = membershipSchoolType || 'preschool';
-      
-      // Normalize school type to detect K-12 vs preschool/ECD
-      const normalizedSchoolType = String(schoolType || '').toLowerCase();
-      const isPreschoolOrg = normalizedSchoolType.includes('preschool') || 
-                            normalizedSchoolType.includes('ecd') || 
-                            normalizedSchoolType.includes('early') ||
-                            normalizedSchoolType.includes('daycare') ||
-                            normalizedSchoolType.includes('creche');
+      // Resolve canonical type so K-12 aliases (combined/primary/secondary/etc.) do not fall back to preschool.
+      const schoolType = resolveSchoolTypeFromProfile(profileAny);
 
       const setDefaultAgeBand = async (band: string | null) => {
         if (!band) return;
@@ -584,6 +588,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     profile?.role,
     profile?.organization_id,
     profile?.preschool_id,
+    (profile as any)?.organization_membership?.school_type,
+    (profile as any)?.organization_type,
+    (profile as any)?.school_type,
+    (profile as any)?.usage_type,
     profile?.full_name,
     profile?.first_name,
     profile?.date_of_birth,
@@ -820,8 +828,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setStatusStartTime(Date.now());
       }
 
+      let conversationIdForUpload = resolveActiveConversationId();
+      if (!conversationIdForUpload) {
+        const createdId = await dashInstance.startNewConversation('Chat with Dash');
+        dashInstance.setCurrentConversationId?.(createdId);
+        conversationIdForUpload = createdId;
+        const createdConversation = await dashInstance.getConversation(createdId);
+        if (createdConversation) {
+          setConversation(createdConversation);
+          persistConversationSnapshot(createdConversation).catch(() => {});
+        }
+      }
+
       // Upload attachments using dashAttachments hook
-      const uploadedAttachments = await dashAttachments.uploadAttachments(attachments);
+      const uploadedAttachments = await dashAttachments.uploadAttachments(attachments, conversationIdForUpload);
+      if (attachments.length > 0 && uploadedAttachments.length === 0) {
+        throw new Error('All selected attachments failed to upload. Please retry with a smaller image or check your connection.');
+      }
       const hasAttachmentPayload = uploadedAttachments.length > 0 || attachments.length > 0;
       setLoadingStatus(hasAttachmentPayload ? 'analyzing' : 'thinking');
       setStatusStartTime(Date.now());
@@ -1305,9 +1328,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
     } catch (error) {
       console.error('Failed to send message:', error);
+      const errorMessage = error instanceof Error ? error.message : '';
       showAlert({
         title: 'Error',
-        message: 'Failed to send message. Please try again.',
+        message: errorMessage || 'Failed to send message. Please try again.',
         type: 'error',
         icon: 'alert-circle-outline',
         buttons: [{ text: 'OK', style: 'default' }]
@@ -1344,6 +1368,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     logTutorAttempt,
     getTutorPhaseLabel,
     persistConversationSnapshot,
+    resolveActiveConversationId,
     learnerContext,
     capsReady,
     canInteractiveLessons,

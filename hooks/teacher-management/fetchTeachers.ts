@@ -12,6 +12,13 @@ import type { TeacherDocument } from '@/lib/services/TeacherDocumentsService';
 import type { Teacher } from '@/types/teacher-management';
 import { parseClasses } from './types';
 
+const normalizeSchoolRole = (role: string | null | undefined): Teacher['schoolRole'] => {
+  const normalized = String(role || '').toLowerCase();
+  if (normalized === 'admin') return 'admin';
+  if (normalized === 'principal_admin') return 'principal_admin';
+  return 'teacher';
+};
+
 export async function fetchTeachersForSchool(preschoolId: string): Promise<Teacher[]> {
   const supabase = assertSupabase();
 
@@ -30,22 +37,53 @@ export async function fetchTeachersForSchool(preschoolId: string): Promise<Teach
 
   if (teachersError) throw teachersError;
 
-  // 2. Profile names
-  const userIds = (teachersData || []).map((t: Record<string, unknown>) => t.user_id).filter(Boolean);
-  const profileByUserId = new Map<string, { first_name: string; last_name: string }>();
+  // 2. Profile names + school role
+  const teacherRefs = Array.from(
+    new Set(
+      (teachersData || [])
+        .flatMap((t: Record<string, unknown>) => [t.user_id, t.auth_user_id])
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    ),
+  );
 
-  if (userIds.length > 0) {
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', userIds);
+  type ProfileRow = {
+    id: string;
+    auth_user_id: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    role?: string | null;
+  };
+  const profileById = new Map<string, ProfileRow>();
+  const profileByAuthUserId = new Map<string, ProfileRow>();
 
-    if (!profilesError && profilesData) {
-      profilesData.forEach((p: { id: string; first_name?: string; last_name?: string }) => {
-        if (p.id) profileByUserId.set(p.id, { first_name: p.first_name || '', last_name: p.last_name || '' });
-      });
+  if (teacherRefs.length > 0) {
+    const [profilesByIdResult, profilesByAuthResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, auth_user_id, first_name, last_name, role')
+        .in('id', teacherRefs),
+      supabase
+        .from('profiles')
+        .select('id, auth_user_id, first_name, last_name, role')
+        .in('auth_user_id', teacherRefs),
+    ]);
+
+    const combinedProfiles = [
+      ...((profilesByIdResult.data || []) as ProfileRow[]),
+      ...((profilesByAuthResult.data || []) as ProfileRow[]),
+    ];
+
+    for (const profile of combinedProfiles) {
+      if (!profile?.id) continue;
+      profileById.set(profile.id, profile);
+      if (profile.auth_user_id) profileByAuthUserId.set(profile.auth_user_id, profile);
     }
   }
+
+  const resolveProfile = (idOrAuthId: string | null | undefined): ProfileRow | null => {
+    if (!idOrAuthId) return null;
+    return profileById.get(idOrAuthId) || profileByAuthUserId.get(idOrAuthId) || null;
+  };
 
   // 3. Overview stats (class count / student count)
   const { data: overviewRows } = await supabase
@@ -66,7 +104,7 @@ export async function fetchTeachersForSchool(preschoolId: string): Promise<Teach
   // 4. Transform
   const transformed = (teachersData || []).map((db: Record<string, unknown>) => {
     const teacherUserId = db.user_id as string;
-    const profileData = teacherUserId ? profileByUserId.get(teacherUserId) : null;
+    const profileData = resolveProfile(teacherUserId) || resolveProfile(db.auth_user_id as string | null);
 
     const { firstName, lastName, fullName } = resolveName(db, profileData);
     const documents = buildDocuments(db, preschoolId);
@@ -79,6 +117,8 @@ export async function fetchTeachersForSchool(preschoolId: string): Promise<Teach
       id: db.id as string,
       teacherUserId: resolvedUserId,
       authUserId,
+      profileId: profileData?.id || null,
+      schoolRole: normalizeSchoolRole(profileData?.role),
       employeeId: `EMP${(db.id as string).slice(0, 3)}`,
       firstName,
       lastName,
@@ -109,7 +149,7 @@ export async function fetchTeachersForSchool(preschoolId: string): Promise<Teach
 
 function resolveName(
   db: Record<string, unknown>,
-  profileData: { first_name: string; last_name: string } | null | undefined,
+  profileData: { first_name?: string | null; last_name?: string | null } | null | undefined,
 ): { firstName: string; lastName: string; fullName: string } {
   // Priority 1: profile table
   if (profileData && (profileData.first_name || profileData.last_name)) {
@@ -165,6 +205,13 @@ function dedupeTeachers(list: Teacher[]): Teacher[] {
       ...existing,
       teacherUserId: existing.teacherUserId || teacher.teacherUserId,
       authUserId: existing.authUserId || teacher.authUserId,
+      profileId: existing.profileId || teacher.profileId,
+      schoolRole:
+        existing.schoolRole === 'principal_admin' || teacher.schoolRole === 'principal_admin'
+          ? 'principal_admin'
+          : existing.schoolRole === 'admin' || teacher.schoolRole === 'admin'
+            ? 'admin'
+            : existing.schoolRole || teacher.schoolRole || 'teacher',
       firstName: existing.firstName || teacher.firstName,
       lastName: existing.lastName || teacher.lastName,
       email: existing.email || teacher.email,

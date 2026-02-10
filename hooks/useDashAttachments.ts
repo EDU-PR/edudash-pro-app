@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 
 export interface UseDashAttachmentsOptions {
   conversation: DashConversation | null;
+  getConversationId?: () => string | null;
   onShowAlert?: (config: {
     title: string;
     message: string;
@@ -53,12 +54,12 @@ export interface UseDashAttachmentsReturn {
   handlePickDocuments: () => Promise<void>;
   handleAttachFile: () => Promise<void>;
   handleRemoveAttachment: (attachmentId: string) => Promise<void>;
-  uploadAttachments: (attachments: DashAttachment[]) => Promise<DashAttachment[]>;
+  uploadAttachments: (attachments: DashAttachment[], conversationIdOverride?: string | null) => Promise<DashAttachment[]>;
   prepareAttachmentsForAI: (attachments: DashAttachment[]) => Promise<DashAttachment[]>;
 }
 
 export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashAttachmentsReturn {
-  const { conversation, onShowAlert, canUseImages = true, canUseDocuments = true, isFreeTier = false } = options;
+  const { conversation, getConversationId, onShowAlert, canUseImages = true, canUseDocuments = true, isFreeTier = false } = options;
   
   const [selectedAttachments, setSelectedAttachments] = useState<DashAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -121,6 +122,17 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
       buttons: [{ text: 'OK', style: 'default' }],
     });
   }, [onShowAlert]);
+
+  const resolveConversationId = useCallback((): string | null => {
+    if (conversation?.id) {
+      return conversation.id;
+    }
+    const fromGetter = getConversationId?.();
+    if (fromGetter && typeof fromGetter === 'string') {
+      return fromGetter;
+    }
+    return null;
+  }, [conversation?.id, getConversationId]);
 
   // Take photo with camera
   const handleTakePhoto = useCallback(async () => {
@@ -265,8 +277,12 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
   }, []);
 
   // Upload attachments to storage
-  const uploadAttachments = useCallback(async (attachments: DashAttachment[]): Promise<DashAttachment[]> => {
-    if (!conversation?.id) {
+  const uploadAttachments = useCallback(async (
+    attachments: DashAttachment[],
+    conversationIdOverride?: string | null,
+  ): Promise<DashAttachment[]> => {
+    const conversationId = conversationIdOverride || resolveConversationId();
+    if (!conversationId) {
       throw new Error('No active conversation');
     }
 
@@ -280,7 +296,7 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
         try {
           const result = await uploadAttachment(
             attachment,
-            conversation.id,
+            conversationId,
             (progress) => updateAttachmentProgress(attachment.id, progress, 'uploading')
           );
           
@@ -295,7 +311,7 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
           
           onShowAlert?.({
             title: 'Upload Failed',
-            message: `Failed to upload ${attachment.name}. Please try again.`,
+            message: `Failed to upload ${attachment.name}. ${error instanceof Error ? error.message : 'Please try again.'}`,
             type: 'error',
             icon: 'cloud-offline-outline',
             buttons: [{ text: 'OK', style: 'default' }],
@@ -307,7 +323,7 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
     }
 
     return uploaded;
-  }, [conversation, isFreeTier, onShowAlert, updateAttachmentProgress]);
+  }, [isFreeTier, onShowAlert, resolveConversationId, updateAttachmentProgress]);
 
   // Prepare attachments for AI (compress images)
   const prepareAttachmentsForAI = useCallback(async (attachments: DashAttachment[]): Promise<DashAttachment[]> => {

@@ -54,12 +54,35 @@ export interface FinanceMonthSnapshot {
   pending_students: number;
   overdue_students: number;
   prepaid_for_future_months: number;
+  expenses_this_month: number;
+  petty_cash_expenses_this_month: number;
+  financial_expenses_this_month: number;
+  net_after_expenses: number;
   payroll_due: number;
   payroll_paid: number;
   pending_pop_reviews: number;
   categories: FinanceMonthCategoryRow[];
   as_of_date: string;
   generated_at: string;
+}
+
+export interface FinanceExpenseEntry {
+  id: string;
+  source: 'petty_cash' | 'financial_txn';
+  date: string;
+  amount: number;
+  status: string;
+  category: string;
+  description: string;
+  reference?: string | null;
+}
+
+export interface FinanceMonthExpenseBreakdown {
+  month: string;
+  total_expenses: number;
+  petty_cash_expenses: number;
+  financial_expenses: number;
+  entries: FinanceExpenseEntry[];
 }
 
 export interface PayrollRosterItem {
@@ -142,6 +165,7 @@ export interface FinanceControlCenterBundle {
     summary: FinanceReceivablesSummary;
     students: FinanceReceivableStudentRow[];
   } | null;
+  expenses: FinanceMonthExpenseBreakdown | null;
   payment_breakdown: {
     month: string;
     total_collected: number;
@@ -160,5 +184,5 @@ export interface FinanceControlCenterBundle {
   pending_pops: FinancePendingPOPRow[];
   payroll: PayrollRosterBundle | null;
   payroll_fallback_used: boolean;
-  errors?: Partial<Record<'snapshot' | 'receivables' | 'breakdown' | 'queue' | 'payroll', string>>;
+  errors?: Partial<Record<'snapshot' | 'receivables' | 'expenses' | 'breakdown' | 'queue' | 'payroll', string>>;
 }

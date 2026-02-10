@@ -1,4 +1,6 @@
 import { logger } from '@/lib/logger';
+
+const TAG = 'Updates';
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
@@ -97,7 +99,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     };
     
     logger.info('[Updates] Update environment:', updateInfo);
-    console.log('[Updates] Full update info:', JSON.stringify(updateInfo, null, 2));
+    logger.debug(TAG, 'Full update info:', JSON.stringify(updateInfo, null, 2));
     
     if (!Updates.isEnabled) {
       logger.warn('[Updates] Updates are disabled - skipping check (likely development build)');
@@ -111,7 +113,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
     try {
       updateState({ isDownloading: true, updateError: null, lastCheckTime: new Date() });
-      console.log('[Updates] Checking for updates via expo-updates API...');
+      logger.debug(TAG, 'Checking for updates via expo-updates API...');
       logger.info('[Updates] Checking for updates...');
       
       const update = await Updates.checkForUpdateAsync();
@@ -121,7 +123,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         await blockUpdates(60, 'updatePreviouslyFailed');
         return false;
       }
-      console.log('[Updates] Update check result:', { 
+      logger.debug(TAG, 'Update check result:', { 
         isAvailable: update.isAvailable, 
         manifestId: update.manifest?.id,
         manifest: update.manifest 
@@ -132,11 +134,11 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       trackOTAUpdateCheck(update);
       
       if (update.isAvailable) {
-        console.log('[Updates] ✅ Update available! Starting download...');
+        logger.info(TAG, 'Update available! Starting download...');
         logger.info('[Updates] Update available, starting download...');
         // Start downloading
         const result = await Updates.fetchUpdateAsync();
-        console.log('[Updates] ✅ Update downloaded successfully:', { isNew: result.isNew });
+        logger.info(TAG, 'Update downloaded successfully:', { isNew: result.isNew });
         logger.info('[Updates] Update downloaded:', { isNew: result.isNew });
         
         // Track update fetch
@@ -158,7 +160,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         
         return true;
       } else {
-        console.log('[Updates] ℹ️ No update available - already on latest version');
+        logger.info(TAG, 'No update available - already on latest version');
         logger.info('[Updates] No update available');
         updateState({ isDownloading: false, lastCheckTime: new Date() });
         return false;
@@ -227,7 +229,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       trackOTAUpdateApply();
       
       logger.info('[Updates] Applying update and reloading app...');
-      console.log('[Updates] Calling Updates.reloadAsync()...');
+      logger.debug(TAG, 'Calling Updates.reloadAsync()...');
       
       // Use setTimeout to ensure any pending state updates complete before reload
       setTimeout(async () => {

@@ -52,11 +52,12 @@ export default function TeacherClassesScreen() {
       // Fetch teacher info
       const { data: teacherData, error: teacherError } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, email')
-        .eq('id', teacherId)
-        .single();
+        .select('id, auth_user_id, first_name, last_name, email')
+        .or(`id.eq.${teacherId},auth_user_id.eq.${teacherId}`)
+        .maybeSingle();
 
       if (teacherError) throw teacherError;
+      if (!teacherData) throw new Error('Teacher not found');
 
       setTeacherInfo({
         id: teacherData.id,
@@ -64,11 +65,15 @@ export default function TeacherClassesScreen() {
         email: teacherData.email,
       });
 
+      const teacherRefIds = Array.from(
+        new Set([teacherData.id, teacherData.auth_user_id].filter((v): v is string => Boolean(v)))
+      );
+
       // Fetch classes assigned to this teacher
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('*')
-        .eq('teacher_id', teacherId)
+        .in('teacher_id', teacherRefIds)
         .order('name', { ascending: true });
 
       if (classesError) throw classesError;

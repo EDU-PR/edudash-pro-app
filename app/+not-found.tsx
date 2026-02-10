@@ -6,6 +6,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COMMUNITY_SCHOOL_ID } from '@/lib/routeAfterLogin';
+import { logger } from '@/lib/logger';
+
+const TAG = 'NotFound';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Auto-redirect delay (in ms) - reduced for better UX
@@ -83,7 +86,7 @@ export default function NotFound() {
       const targetRoute = getSmartFallback();
       
       if (__DEV__) {
-        console.log('[NotFound] Auto-redirecting to:', targetRoute, 'from:', pathname);
+        logger.debug(TAG, 'Auto-redirecting to:', targetRoute, 'from:', pathname);
       }
       
       router.replace(targetRoute as any);

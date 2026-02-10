@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 import * as Clipboard from 'expo-clipboard';
 import { extractOrganizationId } from '@/lib/tenant/compat';
 
@@ -319,7 +320,7 @@ export default function CreateProgramScreen() {
       // Store sponsor info if provided (could be in a separate table or JSON field)
       if (isSponsored && (sponsorName || sponsorContact)) {
         // TODO: Create sponsor relationship in database
-        console.log('Sponsor info:', { sponsorName, sponsorContact, programId: newProgram.id });
+        logger.debug('CreateProgram', 'Sponsor info:', { sponsorName, sponsorContact, programId: newProgram.id });
       }
 
       // Clear draft after successful creation

@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { assertSupabase } from '@/lib/supabase';
 import { useTranslation } from 'react-i18next';
 import { setPasswordRecoveryInProgress, signOut as signOutSession } from '@/lib/sessionManager';
+import { logger } from '@/lib/logger';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Central landing handler for deep links
@@ -72,7 +73,7 @@ export default function LandingHandler() {
         
         // PASSWORD RECOVERY: Route to native recovery flow when inside the app.
         if (flow === 'recovery' || query.type === 'recovery') {
-          console.log('[Landing] Password recovery flow detected');
+          logger.info('Landing', 'Password recovery flow detected');
           setMessage(t('landing.opening_password_reset', { defaultValue: 'Opening password reset...' }));
 
           // Build params once so we can reuse them for web and native routing.

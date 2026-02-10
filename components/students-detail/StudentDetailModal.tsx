@@ -128,7 +128,7 @@ export function StudentDetailModal({
                       onPress={() => { onClose(); onPermanentDelete(student.id, `${student.firstName} ${student.lastName}`); }}
                     >
                       <Ionicons name="trash" size={20} color="white" />
-                      <Text style={styles.actionBtnTextWhite}>Delete Permanently</Text>
+                      <Text style={styles.actionBtnTextWhite}>Delete Permanently Now</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
@@ -137,7 +137,7 @@ export function StudentDetailModal({
                     onPress={() => { onClose(); onDelete(student.id, `${student.firstName} ${student.lastName}`); }}
                   >
                     <Ionicons name="close-circle" size={20} color="white" />
-                    <Text style={styles.actionBtnTextWhite}>Remove Student</Text>
+                    <Text style={styles.actionBtnTextWhite}>Remove (30-Day Recovery)</Text>
                   </TouchableOpacity>
                 )}
               </View>

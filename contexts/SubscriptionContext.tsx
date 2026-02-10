@@ -21,7 +21,10 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 import { normalizeTierName, getCapabilityTier, type CapabilityTier } from '@/lib/tiers';
+
+const TAG = 'SubscriptionContext';
 
 // Test mode configuration - set to true during Google Play internal testing
 const SUBSCRIPTION_TEST_MODE = process.env.EXPO_PUBLIC_SUBSCRIPTION_TEST_MODE === 'true' || __DEV__;
@@ -95,14 +98,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   // Function to manually refresh subscription data
   const refresh = () => {
-    console.log('[SubscriptionContext] Manual refresh triggered');
+    logger.debug(TAG, 'Manual refresh triggered');
     setRefreshTrigger(prev => prev + 1);
   };
 
   // Function to reset trial timer (for testing)
   const resetTrial = async () => {
     if (SUBSCRIPTION_TEST_MODE) {
-      console.log('[SubscriptionContext] 🧪 TEST MODE: Manually resetting trial');
+      logger.debug(TAG, 'TEST MODE: Manually resetting trial');
       await AsyncStorage.removeItem(TRIAL_START_KEY);
       refresh();
     }
@@ -130,17 +133,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     let mounted = true;
     
-    console.log('[SubscriptionContext] useEffect triggered, refreshTrigger:', refreshTrigger);
+    logger.debug(TAG, 'useEffect triggered, refreshTrigger:', refreshTrigger);
     
     const fetchSubscriptionData = async () => {
-      console.log('[SubscriptionContext] Fetching subscription data...');
+      logger.debug(TAG, 'Fetching subscription data...');
       try {
         // Note: setReady(false) is NOT called here to avoid double re-render.
         // The account-switching effect above already resets ready when user?.id changes.
         const { data: userRes, error: userError } = await assertSupabase().auth.getUser();
         
         if (userError || !userRes.user) {
-          console.log('[SubscriptionContext] No authenticated user');
+          logger.debug(TAG, 'No authenticated user');
           if (mounted) {
             setTier('free');
             setCapabilityTier('free');
@@ -154,7 +157,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         }
         
         const userId = userRes.user.id;
-        console.log('[SubscriptionContext] User ID:', userId);
+        logger.debug(TAG, 'User ID:', userId);
         
         if (!mounted) return;
         
@@ -176,7 +179,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           return;
         }
         
-        console.log('[SubscriptionContext] Profile data:', profile);
+        logger.debug(TAG, 'Profile data:', profile);
         
         let finalTier: Tier = 'free';
         let source: TierSource = 'unknown';
@@ -188,20 +191,20 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           const tierStr = String(profile.subscription_tier);
           finalTier = normalizeTierName(tierStr) as Tier;
           source = 'profile';
-          console.log('[SubscriptionContext] ✅ Tier from profile:', finalTier);
+          logger.debug(TAG, 'Tier from profile:', finalTier);
         }
 
-        const roleLower = String(profile?.role || '').toLowerCase();
+        const roleLower = String(profile?.role || '').trim().toLowerCase();
         const isSuperAdmin = roleLower === 'super_admin' || roleLower === 'superadmin';
         if (isSuperAdmin) {
           finalTier = 'enterprise';
           source = 'profile';
           sourceDetail = 'super_admin_override';
-          console.log('[SubscriptionContext] ✅ Super admin override to enterprise tier');
+          logger.debug(TAG, 'Super admin override to enterprise tier');
         }
 
         // If a parent subscription was cancelled and end date has passed, downgrade to free
-        if (profile?.role === 'parent') {
+        if (roleLower === 'parent') {
           try {
             const { data: cancelledSub } = await assertSupabase()
               .from('subscriptions')
@@ -221,7 +224,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 
                 finalTier = 'free';
                 source = 'profile';
-                console.log('[SubscriptionContext] ✅ Cancelled subscription ended; downgraded to free');
+                logger.debug(TAG, 'Cancelled subscription ended; downgraded to free');
               }
             }
           } catch (err) {
@@ -229,40 +232,73 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           }
         }
         
-        // For teachers/principals/admins with 'free' tier, check organization tier
-        const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(profile?.role || '');
-        const schoolId = profile?.organization_id || profile?.preschool_id || null;
+        const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(roleLower);
+        const schoolIdCandidates = Array.from(
+          new Set(
+            [profile?.organization_id, profile?.preschool_id]
+              .map((value) => String(value || '').trim())
+              .filter(Boolean),
+          ),
+        );
 
-        // Priority: use active school subscription plan tier (if any)
-        if (isStaff && schoolId) {
+        // Some staff records are linked via organization_members only.
+        if (isStaff && schoolIdCandidates.length === 0) {
           try {
-            const { data: subscription } = await assertSupabase()
-              .from('subscriptions')
-              .select(`
-                status,
-                seats_total,
-                seats_used,
-                subscription_plans:plan_id (
-                  tier
-                )
-              `)
-              .eq('school_id', schoolId)
-              .in('status', ['active', 'trialing'])
-              .order('created_at', { ascending: false })
+            const { data: membership } = await assertSupabase()
+              .from('organization_members')
+              .select('organization_id')
+              .eq('user_id', userId)
+              .in('membership_status', ['active', 'pending'])
+              .order('updated_at', { ascending: false })
               .limit(1)
               .maybeSingle();
 
-            if (subscription) {
-              seatsData = { total: subscription.seats_total ?? 0, used: subscription.seats_used ?? 0 };
-              const planInfo = Array.isArray(subscription.subscription_plans)
-                ? subscription.subscription_plans[0]
-                : subscription.subscription_plans;
-              const planTier = planInfo?.tier ? normalizeTierName(String(planInfo.tier)) : null;
-              if (planTier && (finalTier === 'free' || source === 'unknown')) {
-                finalTier = planTier as Tier;
-                source = 'school';
-                sourceDetail = 'subscription';
-                console.log('[SubscriptionContext] ✅ Tier from active school subscription:', finalTier);
+            if (membership?.organization_id) {
+              schoolIdCandidates.push(String(membership.organization_id));
+            }
+          } catch (err) {
+            console.warn('[SubscriptionContext] Error resolving school from organization_members:', err);
+          }
+        }
+
+        logger.debug(TAG, 'Tier resolution context:', {
+          role: roleLower,
+          profileTier: profile?.subscription_tier || null,
+          schoolIdCandidates,
+        });
+
+        // Priority: active school subscription tier + seat counts.
+        if (isStaff && schoolIdCandidates.length > 0) {
+          try {
+            const { data: subs, error: subsError } = await assertSupabase()
+              .from('subscriptions')
+              .select('id, school_id, status, plan_id, seats_total, seats_used, created_at')
+              .in('school_id', schoolIdCandidates)
+              .in('status', ['active', 'trialing'])
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            if (subsError) throw subsError;
+
+            const activeSub = Array.isArray(subs) && subs.length > 0 ? subs[0] : null;
+            if (activeSub) {
+              seatsData = { total: activeSub.seats_total ?? 0, used: activeSub.seats_used ?? 0 };
+              if (activeSub.plan_id) {
+                const { data: plan, error: planError } = await assertSupabase()
+                  .from('subscription_plans')
+                  .select('tier')
+                  .eq('id', activeSub.plan_id)
+                  .maybeSingle();
+
+                if (planError) throw planError;
+
+                const planTier = plan?.tier ? normalizeTierName(String(plan.tier)) : null;
+                if (planTier && (finalTier === 'free' || source === 'unknown')) {
+                  finalTier = planTier as Tier;
+                  source = 'school';
+                  sourceDetail = 'subscription';
+                  logger.debug(TAG, 'Tier from active school subscription:', finalTier);
+                }
               }
             }
           } catch (err) {
@@ -270,61 +306,59 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
           }
         }
 
-        if (finalTier === 'free' && isStaff && profile?.organization_id) {
+        // Fallback: organization-level tier fields.
+        if (finalTier === 'free' && isStaff && schoolIdCandidates.length > 0) {
           try {
             const { data: org } = await assertSupabase()
               .from('organizations')
-              .select('plan_tier')
-              .eq('id', profile.organization_id)
+              .select('subscription_tier, plan_tier')
+              .in('id', schoolIdCandidates)
+              .limit(1)
               .maybeSingle();
-            
-            if (org?.plan_tier && String(org.plan_tier).toLowerCase() !== 'free') {
-              finalTier = normalizeTierName(String(org.plan_tier)) as Tier;
+
+            const orgSubscriptionTier = org?.subscription_tier ? String(org.subscription_tier).toLowerCase() : '';
+            const orgPlanTier = org?.plan_tier ? String(org.plan_tier).toLowerCase() : '';
+            const inheritedOrgTier = orgSubscriptionTier && orgSubscriptionTier !== 'free'
+              ? orgSubscriptionTier
+              : orgPlanTier && orgPlanTier !== 'free'
+                ? orgPlanTier
+                : null;
+
+            if (inheritedOrgTier) {
+              finalTier = normalizeTierName(inheritedOrgTier) as Tier;
               source = 'organization';
-              sourceDetail = 'plan_tier';
-              console.log('[SubscriptionContext] ✅ Teacher inheriting org tier:', finalTier);
+              sourceDetail = orgSubscriptionTier && orgSubscriptionTier !== 'free'
+                ? 'subscription_tier'
+                : 'plan_tier';
+              logger.debug(TAG, 'Staff inheriting organization tier:', finalTier);
             }
           } catch (err) {
-            console.warn('[SubscriptionContext] Error fetching org tier:', err);
+            console.warn('[SubscriptionContext] Error fetching organization tier:', err);
           }
         }
-        
-        // For staff with school_id, also check school subscription for seats
-        if (isStaff && profile?.preschool_id) {
+
+        // Legacy preschool fallback for seats/tier.
+        if (finalTier === 'free' && isStaff && profile?.preschool_id) {
           try {
-            const { data: sub } = await assertSupabase()
-              .from('subscriptions')
-              .select('seats_total, seats_used, status')
-              .eq('school_id', profile.preschool_id)
-              .in('status', ['active', 'trialing'])
+            const { data: school } = await assertSupabase()
+              .from('preschools')
+              .select('subscription_tier')
+              .eq('id', profile.preschool_id)
               .maybeSingle();
-            
-            if (sub) {
-              seatsData = { total: sub.seats_total ?? 0, used: sub.seats_used ?? 0 };
-              
-              // If still free and school has active subscription, inherit school tier
-              if (finalTier === 'free') {
-                const { data: school } = await assertSupabase()
-                  .from('preschools')
-                  .select('subscription_tier')
-                  .eq('id', profile.preschool_id)
-                  .maybeSingle();
-                
-                if (school?.subscription_tier && String(school.subscription_tier).toLowerCase() !== 'free') {
-                  finalTier = normalizeTierName(String(school.subscription_tier)) as Tier;
-                  source = 'school';
-                  sourceDetail = 'subscription_tier';
-                  console.log('[SubscriptionContext] ✅ Teacher inheriting school tier:', finalTier);
-                }
-              }
+
+            if (school?.subscription_tier && String(school.subscription_tier).toLowerCase() !== 'free') {
+              finalTier = normalizeTierName(String(school.subscription_tier)) as Tier;
+              source = 'school';
+              sourceDetail = 'subscription_tier';
+              logger.debug(TAG, 'Staff inheriting legacy preschool tier:', finalTier);
             }
           } catch (err) {
-            console.warn('[SubscriptionContext] Error fetching school subscription:', err);
+            console.warn('[SubscriptionContext] Error fetching preschool tier:', err);
           }
         }
         
         if (mounted) {
-          console.log('[SubscriptionContext] FINAL tier:', finalTier, 'source:', source);
+          logger.debug(TAG, 'FINAL tier:', finalTier, 'source:', source);
           
           // TESTING MODE: Check and handle 24-hour trial reset
           if (SUBSCRIPTION_TEST_MODE && finalTier !== 'free' && source === 'profile') {
@@ -335,7 +369,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
               if (!trialStart) {
                 // First time with paid tier - start the trial timer
                 await AsyncStorage.setItem(TRIAL_START_KEY, now.toString());
-                console.log('[SubscriptionContext] 🧪 TEST MODE: Started 24h trial timer');
+                logger.debug(TAG, 'TEST MODE: Started 24h trial timer');
                 setTrialHoursRemaining(24);
               } else {
                 const elapsed = now - parseInt(trialStart, 10);
@@ -344,7 +378,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                 
                 if (elapsed >= TRIAL_DURATION_MS) {
                   // Trial expired - reset to free tier
-                  console.log('[SubscriptionContext] 🧪 TEST MODE: 24h trial expired, resetting to free');
+                  logger.debug(TAG, 'TEST MODE: 24h trial expired, resetting to free');
                   
                   const supabase = assertSupabase();
                   await supabase
@@ -359,7 +393,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
                   finalTier = 'free';
                   source = 'profile';
                 } else {
-                  console.log(`[SubscriptionContext] 🧪 TEST MODE: Trial active, ${hoursLeft.toFixed(1)}h remaining`);
+                  logger.debug(TAG, `TEST MODE: Trial active, ${hoursLeft.toFixed(1)}h remaining`);
                 }
               }
             } catch (trialErr) {

@@ -6,6 +6,7 @@
  */
 
 import { router } from 'expo-router';
+import { logger } from '@/lib/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface NavigationCommand {
@@ -356,7 +357,7 @@ export class DashNavigationHandler implements IDashNavigationHandler {
       // Update history
       this.addToHistory(screenKey);
 
-      console.log(`[DashNav] Navigated to: ${screenInfo.title}`);
+      logger.info('DashNav', `Navigated to: ${screenInfo.title}`);
 
       return {
         success: true,

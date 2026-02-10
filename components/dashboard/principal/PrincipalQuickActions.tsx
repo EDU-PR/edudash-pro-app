@@ -113,6 +113,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         color: '#06B6D4',
       },
       {
+        id: 'dash-advisor',
+        title: t('dashboard.dash_ai_advisor', { defaultValue: 'Dash AI Advisor' }),
+        icon: 'sparkles',
+        color: '#7C3AED',
+      },
+      {
         id: 'announcements',
         title: t('dashboard.send_announcement', { defaultValue: 'Announcement' }),
         icon: 'megaphone',
@@ -317,6 +323,14 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'dash-studio':
         router.push('/screens/dash-studio');
+        break;
+      case 'dash-advisor':
+        router.push({
+          pathname: '/screens/dash-assistant',
+          params: {
+            initialMessage: 'Help me prioritize this week\'s school operations and finance actions.',
+          },
+        } as any);
         break;
       default:
         alert.show(

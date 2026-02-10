@@ -18,6 +18,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { logger } from '@/lib/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCallSafe } from '@/components/calls/CallProvider';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
@@ -197,7 +198,7 @@ export default function TeacherMessageThreadScreen() {
           p_user_id: user.id,
         }).then(() => {
           if (__DEV__) {
-            console.log('[TeacherThread] ✅ Marked messages as delivered');
+            logger.debug('TeacherThread', 'Marked messages as delivered');
           }
         }).catch((err: any) => {
           if (__DEV__) {

@@ -20,6 +20,7 @@ import { PayrollService } from '@/services/PayrollService';
 import type {
   ApprovePopPaymentPayload,
   FinanceControlCenterBundle,
+  FinanceMonthExpenseBreakdown,
   FinanceMonthSnapshot,
   FinanceReceivableStudentRow,
   FinanceReceivablesSummary,
@@ -1469,13 +1470,24 @@ export class FinancialDataService {
     const explicitOutstanding = Number(fee?.amount_outstanding);
     const derivedOutstanding = finalAmount - (Number.isFinite(paidAmount) ? paidAmount : 0);
 
-    if (Number.isFinite(derivedOutstanding)) {
-      return Math.max(derivedOutstanding, 0);
-    }
     if (Number.isFinite(explicitOutstanding)) {
       return Math.max(explicitOutstanding, 0);
     }
+    if (Number.isFinite(derivedOutstanding)) {
+      return Math.max(derivedOutstanding, 0);
+    }
     return 0;
+  }
+
+  private static isStudentActiveForReceivables(student: any): boolean {
+    if (!student) return false;
+
+    if (student.is_active === false) return false;
+
+    const status = String(student.status || '').toLowerCase().trim();
+    if (!status) return true;
+
+    return !['inactive', 'deleted', 'removed', 'withdrawn', 'archived'].includes(status);
   }
 
   private static isAdvancePayment(dueDate?: string | null, paidDate?: string | null): boolean {
@@ -1604,6 +1616,10 @@ export class FinancialDataService {
       pending_students: Number(data.pending_students || 0),
       overdue_students: Number(data.overdue_students || 0),
       prepaid_for_future_months: Number(data.prepaid_for_future_months || 0),
+      expenses_this_month: Number(data.expenses_this_month || 0),
+      petty_cash_expenses_this_month: Number(data.petty_cash_expenses_this_month || 0),
+      financial_expenses_this_month: Number(data.financial_expenses_this_month || 0),
+      net_after_expenses: Number(data.net_after_expenses || 0),
       payroll_due: Number(data.payroll_due || 0),
       payroll_paid: Number(data.payroll_paid || 0),
       pending_pop_reviews: Number(data.pending_pop_reviews || 0),
@@ -1811,6 +1827,126 @@ export class FinancialDataService {
     };
   }
 
+  static async getMonthExpenseBreakdown(
+    orgId: string,
+    monthIso?: string,
+  ): Promise<FinanceMonthExpenseBreakdown> {
+    const month = this.normalizeMonthIso(monthIso);
+    const nextMonth = this.nextMonthIso(month);
+    const finalizedStatuses = new Set(['approved', 'completed']);
+
+    const [pettyCashResult, financialResult] = await Promise.all([
+      withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select(
+            'id, amount, description, category, type, status, created_at, transaction_date, receipt_number, reference_number',
+          )
+          .eq(column, orgId)
+          .eq('type', 'expense')
+          .gte('created_at', month)
+          .lt('created_at', nextMonth)
+          .order('created_at', { ascending: false })
+          .limit(500),
+      ),
+      withFinanceTenant<Array<any>>((column) =>
+        assertSupabase()
+          .from('financial_transactions')
+          .select(
+            `
+              id,
+              amount,
+              description,
+              status,
+              type,
+              created_at,
+              payment_reference,
+              reference_number,
+              expense_categories(name)
+            `,
+          )
+          .eq(column, orgId)
+          .in('type', ['expense', 'operational_expense', 'salary', 'purchase'])
+          .gte('created_at', month)
+          .lt('created_at', nextMonth)
+          .order('created_at', { ascending: false })
+          .limit(500),
+      ),
+    ]);
+
+    if (pettyCashResult.error) {
+      throw new Error(pettyCashResult.error.message || 'Failed to load petty cash expenses');
+    }
+    if (financialResult.error) {
+      throw new Error(financialResult.error.message || 'Failed to load finance expense entries');
+    }
+
+    let pettyCashTotal = 0;
+    let financialTotal = 0;
+    const entries: FinanceMonthExpenseBreakdown['entries'] = [];
+
+    for (const tx of (pettyCashResult.data || []) as Array<any>) {
+      const amount = Math.abs(Number(tx?.amount || 0));
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const status = String(tx?.status || '').toLowerCase();
+      if (finalizedStatuses.has(status)) {
+        pettyCashTotal += amount;
+      }
+
+      entries.push({
+        id: String(tx?.id || `petty-${entries.length}`),
+        source: 'petty_cash',
+        date: String(tx?.transaction_date || tx?.created_at || new Date().toISOString()),
+        amount: Number(amount.toFixed(2)),
+        status: status || 'pending',
+        category: String(tx?.category || 'Petty Cash'),
+        description: String(tx?.description || 'Petty cash expense'),
+        reference: tx?.reference_number || tx?.receipt_number || null,
+      });
+    }
+
+    for (const tx of (financialResult.data || []) as Array<any>) {
+      const amount = Math.abs(Number(tx?.amount || 0));
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const status = String(tx?.status || '').toLowerCase();
+      if (finalizedStatuses.has(status)) {
+        financialTotal += amount;
+      }
+
+      const categoryData = Array.isArray(tx?.expense_categories)
+        ? tx.expense_categories[0]
+        : tx?.expense_categories;
+      const fallbackType = this.normalizePurposeLabel(tx?.type || 'Expense');
+
+      entries.push({
+        id: String(tx?.id || `fin-${entries.length}`),
+        source: 'financial_txn',
+        date: String(tx?.created_at || new Date().toISOString()),
+        amount: Number(amount.toFixed(2)),
+        status: status || 'pending',
+        category: String(categoryData?.name || fallbackType),
+        description: String(tx?.description || fallbackType),
+        reference: tx?.payment_reference || tx?.reference_number || null,
+      });
+    }
+
+    entries.sort((a, b) => {
+      const timeA = new Date(a.date).getTime();
+      const timeB = new Date(b.date).getTime();
+      return (Number.isFinite(timeB) ? timeB : 0) - (Number.isFinite(timeA) ? timeA : 0);
+    });
+
+    return {
+      month,
+      total_expenses: Number((pettyCashTotal + financialTotal).toFixed(2)),
+      petty_cash_expenses: Number(pettyCashTotal.toFixed(2)),
+      financial_expenses: Number(financialTotal.toFixed(2)),
+      entries: entries.slice(0, 120),
+    };
+  }
+
   static async getReceivablesSnapshot(
     orgId: string,
     monthIso?: string,
@@ -1839,6 +1975,8 @@ export class FinancialDataService {
           id,
           first_name,
           last_name,
+          is_active,
+          status,
           preschool_id,
           organization_id
         )
@@ -1868,6 +2006,8 @@ export class FinancialDataService {
             id,
             first_name,
             last_name,
+            is_active,
+            status,
             preschool_id,
             organization_id
           )
@@ -1901,6 +2041,7 @@ export class FinancialDataService {
       const studentData = Array.isArray(fee?.students) ? fee.students[0] : fee?.students;
       const studentId = String(fee?.student_id || studentData?.id || '').trim();
       if (!studentId) continue;
+      if (!this.isStudentActiveForReceivables(studentData)) continue;
 
       const amount = this.getOutstandingAmountForFee(fee);
       if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -2012,9 +2153,10 @@ export class FinancialDataService {
       return data || [];
     })();
 
-    const [snapshotRes, receivablesRes, breakdownRes, queueRes, payrollRes] = await Promise.all([
+    const [snapshotRes, receivablesRes, expensesRes, breakdownRes, queueRes, payrollRes] = await Promise.all([
       settle(this.getMonthSnapshot(orgId, month)),
       settle(this.getReceivablesSnapshot(orgId, month)),
+      settle(this.getMonthExpenseBreakdown(orgId, month)),
       settle(this.getMonthPaymentBreakdown(orgId, month)),
       settle(queuePromise),
       settle(PayrollService.getRoster(orgId, month)),
@@ -2023,6 +2165,7 @@ export class FinancialDataService {
     const errors: FinanceControlCenterBundle['errors'] = {};
     if (snapshotRes.error) errors.snapshot = snapshotRes.error;
     if (receivablesRes.error) errors.receivables = receivablesRes.error;
+    if (expensesRes.error) errors.expenses = expensesRes.error;
     if (breakdownRes.error) errors.breakdown = breakdownRes.error;
     if (queueRes.error) errors.queue = queueRes.error;
     if (payrollRes.error) errors.payroll = payrollRes.error;
@@ -2032,6 +2175,7 @@ export class FinancialDataService {
       month,
       snapshot: snapshotRes.value,
       receivables: receivablesRes.value,
+      expenses: expensesRes.value,
       payment_breakdown: breakdownRes.value,
       pending_pops: (queueRes.value || []) as any[],
       payroll: payrollValue,

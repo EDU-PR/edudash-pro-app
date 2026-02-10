@@ -13,7 +13,10 @@ import { View, Text, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { assertSupabase } from '@/lib/supabase';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { logger } from '@/lib/logger';
 import ResetPasswordScreen from './(auth)/reset-password';
+
+const TAG = 'ResetPasswordRoute';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function ResetPasswordRoute() {
@@ -28,7 +31,7 @@ export default function ResetPasswordRoute() {
         
         // IMPORTANT: Set the recovery flag FIRST to prevent AuthContext from routing away
         setPasswordRecoveryInProgress(true);
-        console.log('[ResetPasswordRoute] Set password recovery flag to true');
+        logger.info(TAG, 'Set password recovery flag to true');
         
         // Check for PKCE code parameter (from web redirect)
         const code = params.code as string | undefined;
@@ -36,7 +39,7 @@ export default function ResetPasswordRoute() {
         const token = params.token as string | undefined;
         const type = params.type as string | undefined;
         
-        console.log('[ResetPasswordRoute] Checking session with params:', { 
+        logger.debug(TAG, 'Checking session with params:', { 
           hasCode: !!code,
           hasTokenHash: !!token_hash,
           hasToken: !!token,
@@ -45,7 +48,7 @@ export default function ResetPasswordRoute() {
 
         // Handle PKCE code exchange if present
         if (code) {
-          console.log('[ResetPasswordRoute] Processing PKCE code exchange...');
+          logger.debug(TAG, 'Processing PKCE code exchange...');
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           
           if (exchangeError) {
@@ -56,7 +59,7 @@ export default function ResetPasswordRoute() {
           }
 
           if (data.session) {
-            console.log('[ResetPasswordRoute] PKCE code exchanged successfully');
+            logger.info(TAG, 'PKCE code exchanged successfully');
             setHasSession(true);
             setChecking(false);
             return;
@@ -65,7 +68,7 @@ export default function ResetPasswordRoute() {
 
         // Handle token_hash (legacy flow)
         if (token_hash && type === 'recovery') {
-          console.log('[ResetPasswordRoute] Processing token_hash verification...');
+          logger.debug(TAG, 'Processing token_hash verification...');
           const { data, error: verifyError } = await supabase.auth.verifyOtp({
             token_hash,
             type: 'recovery',
@@ -79,7 +82,7 @@ export default function ResetPasswordRoute() {
           }
 
           if (data.session) {
-            console.log('[ResetPasswordRoute] Token verified successfully');
+            logger.info(TAG, 'Token verified successfully');
             setHasSession(true);
             setChecking(false);
             return;
@@ -88,7 +91,7 @@ export default function ResetPasswordRoute() {
 
         // Handle PKCE token parameter
         if (token && type === 'recovery') {
-          console.log('[ResetPasswordRoute] Processing PKCE token...');
+          logger.debug(TAG, 'Processing PKCE token...');
           const { data, error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: token,
             type: 'recovery',
@@ -102,7 +105,7 @@ export default function ResetPasswordRoute() {
           }
 
           if (data.session) {
-            console.log('[ResetPasswordRoute] PKCE token verified successfully');
+            logger.info(TAG, 'PKCE token verified successfully');
             setHasSession(true);
             setChecking(false);
             return;
@@ -112,7 +115,7 @@ export default function ResetPasswordRoute() {
         // Fallback: Check for existing session (PKCE flow may have already set it)
         const { data: { session }, error } = await supabase.auth.getSession();
         
-        console.log('[ResetPasswordRoute] Session check:', { 
+        logger.debug(TAG, 'Session check:', { 
           hasSession: !!session, 
           userId: session?.user?.id,
           error: error?.message 
@@ -123,7 +126,7 @@ export default function ResetPasswordRoute() {
           setHasSession(true);
         } else {
           // No session - the link might be expired or user needs to request new one
-          console.log('[ResetPasswordRoute] No valid session found');
+          logger.info(TAG, 'No valid session found');
           setHasSession(false);
         }
       } catch (e) {

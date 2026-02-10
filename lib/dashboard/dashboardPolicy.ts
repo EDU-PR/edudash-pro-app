@@ -78,6 +78,7 @@ const POLICY: PolicyMap = {
       'meetings',
       'settings',
       'dash-studio',
+      'dash-advisor',
     ]),
   },
   k12_school: {
@@ -138,6 +139,7 @@ const POLICY: PolicyMap = {
       'live-lessons',
       'announcements',
       'settings',
+      'dash-advisor',
     ]),
   },
 };

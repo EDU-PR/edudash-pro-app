@@ -25,6 +25,41 @@ const SCHOOL_SLUG_TO_ORG_ID: Record<string, string> = {
 // Cache for dynamic slug-to-org mappings
 const slugToOrgCache: Record<string, string> = {};
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function normalizeEmail(value: unknown): string {
+  return normalizeText(value);
+}
+
+function asNullableUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return UUID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+function buildEduSiteSyncKey(params: {
+  organizationId: string;
+  parentEmail?: unknown;
+  guardianEmail?: unknown;
+  studentFirstName?: unknown;
+  studentLastName?: unknown;
+  studentDob?: unknown;
+}): string | null {
+  const orgId = normalizeText(params.organizationId);
+  const email = normalizeEmail(params.parentEmail) || normalizeEmail(params.guardianEmail);
+  const firstName = normalizeText(params.studentFirstName);
+  const lastName = normalizeText(params.studentLastName);
+  const dob = typeof params.studentDob === 'string' ? params.studentDob.trim() : '';
+
+  if (!orgId || !firstName || !lastName || !dob) return null;
+  return [orgId, email, firstName, lastName, dob].join('|');
+}
+
 /**
  * Look up organization ID by tenant_slug from preschools table
  */
@@ -141,6 +176,7 @@ Deno.serve(async (req) => {
     let updated = 0;
     let skipped = 0;
     let deleted = 0;
+    let mergedByKey = 0;
 
     // Process each EduSitePro registration
     for (const reg of edusiteRegistrations || []) {
@@ -169,12 +205,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Check if already synced to EduDashPro
-        const { data: existing } = await supabase
-          .from('registration_requests')
-          .select('id, status, updated_at')
-          .eq('edusite_id', reg.id)
-          .maybeSingle();
+        const externalId = asNullableUuid(reg.id);
 
         const registrationData = {
           organization_id: orgId,
@@ -215,9 +246,50 @@ Deno.serve(async (req) => {
           emergency_contact_phone: reg.emergency_contact_phone,
           emergency_contact_relation: reg.emergency_contact_relation,
           synced_from_edusite: true,
-          edusite_id: reg.id,
+          edusite_id: externalId,
+          edusite_sync_key: buildEduSiteSyncKey({
+            organizationId: orgId,
+            parentEmail: reg.parent_email,
+            guardianEmail: reg.guardian_email,
+            studentFirstName: reg.student_first_name || reg.child_first_name,
+            studentLastName: reg.student_last_name || reg.child_last_name,
+            studentDob: reg.student_dob || reg.student_date_of_birth || reg.child_date_of_birth,
+          }),
           synced_at: new Date().toISOString(),
         };
+
+        // If we cannot build any stable dedupe identifier, skip to avoid cron floods.
+        if (!registrationData.edusite_id && !registrationData.edusite_sync_key) {
+          console.warn(
+            `[sync-from-edusite] Skipping registration ${String(reg.id || '<no-id>')}: missing dedupe keys`
+          );
+          skipped++;
+          continue;
+        }
+
+        // Check if already synced to EduDashPro
+        let existing: { id: string; status?: string; updated_at?: string } | null = null;
+
+        if (registrationData.edusite_id) {
+          const { data } = await supabase
+            .from('registration_requests')
+            .select('id, status, updated_at')
+            .eq('edusite_id', registrationData.edusite_id)
+            .maybeSingle();
+          existing = data;
+        }
+
+        if (!existing && registrationData.edusite_sync_key) {
+          const { data } = await supabase
+            .from('registration_requests')
+            .select('id, status, updated_at')
+            .eq('edusite_sync_key', registrationData.edusite_sync_key)
+            .maybeSingle();
+          existing = data;
+          if (existing) {
+            mergedByKey++;
+          }
+        }
 
         if (existing) {
           // Update existing record
@@ -238,6 +310,29 @@ Deno.serve(async (req) => {
             .insert(registrationData);
 
           if (insertError) {
+            // Guard against race conditions when two syncs overlap.
+            if (
+              registrationData.edusite_sync_key &&
+              (insertError.code === '23505' || String(insertError.message || '').toLowerCase().includes('duplicate'))
+            ) {
+              const { data: retryExisting } = await supabase
+                .from('registration_requests')
+                .select('id')
+                .eq('edusite_sync_key', registrationData.edusite_sync_key)
+                .maybeSingle();
+
+              if (retryExisting?.id) {
+                const { error: retryUpdateError } = await supabase
+                  .from('registration_requests')
+                  .update(registrationData)
+                  .eq('id', retryExisting.id);
+                if (!retryUpdateError) {
+                  updated++;
+                  mergedByKey++;
+                  continue;
+                }
+              }
+            }
             console.error(`[sync-from-edusite] Error inserting ${reg.id}:`, insertError);
           } else {
             synced++;
@@ -278,6 +373,7 @@ Deno.serve(async (req) => {
       updated,
       skipped,
       deleted,
+      mergedByKey,
       total: edusiteRegistrations?.length || 0,
     };
 

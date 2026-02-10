@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 /**
- * Custom hook for managing teacher seat limits
+ * Custom hook for managing school staff seat limits
  * 
  * Uses TanStack Query for caching and background updates
  * Provides real-time seat limit information for UI components
@@ -50,7 +50,7 @@ export function useSeatLimits() {
     },
   });
 
-  // Assign teacher seat mutation
+  // Assign staff seat mutation
   const assignSeatMutation = useMutation({
     mutationFn: SeatService.assignTeacherSeat,
     onSuccess: (data, variables) => {
@@ -59,31 +59,31 @@ export function useSeatLimits() {
       queryClient.invalidateQueries({ queryKey: SEAT_QUERY_KEYS.seats });
       
       if (data.status === 'assigned') {
-        alert.showSuccess('Success', 'Teacher seat assigned successfully!');
+        alert.showSuccess('Success', 'Staff seat assigned successfully!');
       } else if (data.status === 'already_assigned') {
-        alert.show('Info', 'Teacher already has an active seat.', [{ text: 'OK' }], { type: 'info' });
+        alert.show('Info', 'Staff member already has an active seat.', [{ text: 'OK' }], { type: 'info' });
       }
     },
     onError: (error: SeatManagementError) => {
       let title = 'Assignment Failed';
-      let message = 'Failed to assign teacher seat.';
+      let message = 'Failed to assign staff seat.';
       
       switch (error.code) {
         case 'LIMIT_EXCEEDED':
           title = 'Seat Limit Reached';
-          message = 'No teacher seats available for your current plan. Consider upgrading your subscription.';
+          message = 'No staff seats available for your current plan. Consider upgrading your subscription.';
           break;
         case 'PERMISSION_DENIED':
           title = 'Permission Denied';
-          message = 'Only principals can assign teacher seats.';
+          message = 'Only principals can assign staff seats.';
           break;
         case 'USER_NOT_FOUND':
-          title = 'Invalid Teacher';
-          message = 'The selected user must be a teacher in your school.';
+          title = 'Invalid Staff Member';
+          message = 'The selected user must be school staff in your school.';
           break;
         case 'ALREADY_ASSIGNED':
           title = 'Already Assigned';
-          message = 'This teacher already has an active seat.';
+          message = 'This staff member already has an active seat.';
           break;
         default:
           message = error.message || 'An unexpected error occurred.';
@@ -94,7 +94,7 @@ export function useSeatLimits() {
     },
   });
 
-  // Revoke teacher seat mutation
+  // Revoke staff seat mutation
   const revokeSeatMutation = useMutation({
     mutationFn: SeatService.revokeTeacherSeat,
     onSuccess: (data, variables) => {
@@ -103,23 +103,23 @@ export function useSeatLimits() {
       queryClient.invalidateQueries({ queryKey: SEAT_QUERY_KEYS.seats });
       
       if (data.status === 'revoked') {
-        alert.showSuccess('Success', 'Teacher seat revoked successfully!');
+        alert.showSuccess('Success', 'Staff seat revoked successfully!');
       } else if (data.status === 'no_active_seat') {
-        alert.show('Info', 'Teacher does not have an active seat.', [{ text: 'OK' }], { type: 'info' });
+        alert.show('Info', 'Staff member does not have an active seat.', [{ text: 'OK' }], { type: 'info' });
       }
     },
     onError: (error: SeatManagementError) => {
       let title = 'Revocation Failed';
-      let message = 'Failed to revoke teacher seat.';
+      let message = 'Failed to revoke staff seat.';
       
       switch (error.code) {
         case 'PERMISSION_DENIED':
           title = 'Permission Denied';
-          message = 'Only principals can revoke teacher seats.';
+          message = 'Only principals can revoke staff seats.';
           break;
         case 'NO_ACTIVE_SEAT':
           title = 'No Active Seat';
-          message = 'This teacher does not have an active seat to revoke.';
+          message = 'This staff member does not have an active seat to revoke.';
           break;
         default:
           message = error.message || 'An unexpected error occurred.';
@@ -138,7 +138,7 @@ export function useSeatLimits() {
   // Check if assignment should be disabled
   const shouldDisableAssignment = limitsQuery.data 
     ? SeatService.shouldDisableAssignment(limitsQuery.data)
-    : true; // Default to disabled while loading
+    : false; // Avoid silently disabling actions while limits are loading/refreshing
 
   return {
     // Data
@@ -153,7 +153,9 @@ export function useSeatLimits() {
     
     // Mutations
     assignSeat: assignSeatMutation.mutate,
+    assignSeatAsync: assignSeatMutation.mutateAsync,
     revokeSeat: revokeSeatMutation.mutate,
+    revokeSeatAsync: revokeSeatMutation.mutateAsync,
     isAssigning: assignSeatMutation.isPending,
     isRevoking: revokeSeatMutation.isPending,
     
@@ -163,7 +165,7 @@ export function useSeatLimits() {
 }
 
 /**
- * Hook for listing teacher seats in the school
+ * Hook for listing staff seats in the school
  */
 export function useTeacherSeats() {
   const seatsQuery = useQuery({
@@ -193,7 +195,7 @@ export function useTeacherSeats() {
 }
 
 /**
- * Helper function to check if a specific teacher has an active seat
+ * Helper function to check if a specific staff member has an active seat
  */
 export function useTeacherHasSeat(teacherUserId: string) {
   const { seats } = useTeacherSeats();

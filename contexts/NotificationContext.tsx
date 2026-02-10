@@ -149,7 +149,7 @@ async function fetchUnreadMessageCount(userId: string): Promise<number> {
       }
     }
 
-    console.log(`[NotificationContext] Unread messages count for user ${userId}:`, {
+    logger.debug('NotificationContext', `Unread messages count for user ${userId}:`, {
       totalUnread,
       threadCount: participantData.length,
       threadsWithUnread: threadCounts.length,

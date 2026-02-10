@@ -51,6 +51,7 @@ import {
 
 export default function StudentDetailScreen() {
   const TAG = 'StudentDetail';
+  const STUDENT_DELETE_RETENTION_DAYS = 30;
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
@@ -238,7 +239,7 @@ export default function StudentDetailScreen() {
 
     showAlert(
       'Remove Student',
-      `Are you sure you want to remove ${student.first_name} ${student.last_name} from the school? This will deactivate their account and remove them from their class.`,
+      `Are you sure you want to remove ${student.first_name} ${student.last_name} from the school?\n\nThis will:\n- deactivate the student\n- keep records for ${STUDENT_DELETE_RETENTION_DAYS} days before permanent deletion\n- allow reactivation during the retention window`,
       'warning',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -247,27 +248,53 @@ export default function StudentDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              hideAlert();
               setSavingMessage('Removing student...');
               setSaving(true);
+              const nowIso = new Date().toISOString();
+              const retentionDate = new Date();
+              retentionDate.setDate(retentionDate.getDate() + STUDENT_DELETE_RETENTION_DAYS);
+              const retentionIso = retentionDate.toISOString();
+              const retentionLabel = retentionDate.toLocaleDateString('en-ZA', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              });
 
               // Call the deactivate_student function
               const { error } = await assertSupabase()
                 .rpc('deactivate_student', {
                   student_uuid: student.id,
-                  reason: 'Removed by principal - left school',
+                  reason: `Removed by principal - left school (retention ${STUDENT_DELETE_RETENTION_DAYS} days)`,
                 });
 
               if (error) {
                 logger.warn(TAG, 'RPC deactivate_student failed, falling back to direct update:', error);
-                const { error: updateError } = await assertSupabase()
+                let { error: updateError } = await assertSupabase()
                   .from('students')
                   .update({
                     is_active: false,
                     status: 'inactive',
                     class_id: null,
-                    updated_at: new Date().toISOString(),
-                  })
+                    deleted_at: nowIso,
+                    delete_reason: `Removed by principal - left school (retention ${STUDENT_DELETE_RETENTION_DAYS} days)`,
+                    permanent_delete_after: retentionIso,
+                    updated_at: nowIso,
+                  } as any)
                   .eq('id', student.id);
+
+                if (updateError && /column .* does not exist|schema cache/i.test(updateError.message || '')) {
+                  const { error: minimalError } = await assertSupabase()
+                    .from('students')
+                    .update({
+                      is_active: false,
+                      status: 'inactive',
+                      class_id: null,
+                      updated_at: nowIso,
+                    })
+                    .eq('id', student.id);
+                  updateError = minimalError;
+                }
 
                 if (updateError) {
                   logger.error(TAG, 'Error deactivating student (fallback):', updateError);
@@ -277,8 +304,8 @@ export default function StudentDetailScreen() {
               }
 
               showAlert(
-                'Success',
-                `${student.first_name} ${student.last_name} has been removed from the school.`,
+                'Student Removed',
+                `${student.first_name} ${student.last_name} is now inactive and can be restored before ${retentionLabel}. Permanent deletion is scheduled after ${STUDENT_DELETE_RETENTION_DAYS} days.`,
                 'success',
                 [
                   {

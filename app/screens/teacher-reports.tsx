@@ -6,7 +6,10 @@ import { useTeacherDashboard } from '@/hooks/useDashboardData'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { ScreenHeader } from '@/components/ui/ScreenHeader'
+import { logger } from '@/lib/logger'
 import { Ionicons } from '@expo/vector-icons'
+
+const TAG = 'TeacherReports'
 
 export default function TeacherReportsScreen() {
   const { profile, permissions } = useAuth()
@@ -16,7 +19,7 @@ export default function TeacherReportsScreen() {
   const hasActiveSeat = profile?.seat_status === 'active'
   const canViewAnalytics = hasActiveSeat && permissions.can('view_class_analytics')
   
-  console.log('Teacher Reports Access Check:', {
+  logger.debug(TAG, 'Access Check:', {
     profile: profile ? { 
       id: profile.id, 
       role: profile.role, 

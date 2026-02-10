@@ -58,6 +58,7 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
         .from('students')
         .select(`
           id, first_name, last_name, class_id, parent_id, preschool_id, enrollment_date, date_of_birth, registration_fee_amount, registration_fee_paid,
+          is_active, status,
           classes!students_class_id_fkey(name),
           profiles!students_parent_id_fkey(first_name, last_name)
         `)
@@ -72,6 +73,8 @@ export function useStudentFeeData(studentId?: string): StudentFeeDataReturn {
       const next: Student = {
         id: data.id, first_name: data.first_name, last_name: data.last_name,
         class_id: data.class_id,
+        is_active: data.is_active,
+        status: data.status,
         registration_fee_amount: data.registration_fee_amount != null ? Number(data.registration_fee_amount) : null,
         registration_fee_paid: data.registration_fee_paid,
         class_name: classData?.name,

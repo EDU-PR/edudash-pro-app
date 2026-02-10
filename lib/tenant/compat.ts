@@ -76,7 +76,7 @@ export function getOrganizationType(
 ): OrganizationType {
   // Try organization data first
   if (organizationData?.type) {
-    return organizationData.type as OrganizationType;
+    return normalizeSchoolType(String(organizationData.type));
   }
   
   // Try profile.organization_membership.school_type (most reliable source)
@@ -87,7 +87,7 @@ export function getOrganizationType(
   
   // Try profile metadata
   if (profile?.organization_type) {
-    return profile.organization_type as OrganizationType;
+    return normalizeSchoolType(String(profile.organization_type));
   }
   
   // Try profile.school_type
@@ -104,13 +104,27 @@ export function getOrganizationType(
  */
 export function normalizeSchoolType(schoolType: string): OrganizationType {
   const lower = String(schoolType || '').toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/g, '');
+
   if (lower.includes('preschool') || lower.includes('ecd') || lower.includes('early') || lower.includes('daycare') || lower.includes('creche')) {
     return 'preschool';
+  }
+  if (lower === 'combined' || lower === 'community_school' || lower.includes('community school')) {
+    return 'k12_school';
   }
   if (lower.includes('primary') || lower.includes('elementary')) {
     return 'k12_school';
   }
-  if (lower.includes('high') || lower.includes('secondary') || lower.includes('k12')) {
+  if (
+    lower.includes('high') ||
+    lower.includes('secondary') ||
+    lower.includes('k12') ||
+    lower.includes('k-12') ||
+    compact.includes('k12')
+  ) {
+    return 'k12_school';
+  }
+  if (lower === 'k12_school') {
     return 'k12_school';
   }
   if (lower.includes('university') || lower.includes('college') || lower.includes('tertiary')) {

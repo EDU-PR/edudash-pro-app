@@ -72,6 +72,39 @@ const formatGradeLabel = (grade?: string | null) => {
   return raw;
 };
 
+const formatSchoolTypeLabel = (schoolType?: string | null) => {
+  if (!schoolType) return null;
+  const raw = String(schoolType).trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/g, '');
+
+  if (
+    lower === 'k12_school' ||
+    lower === 'k12' ||
+    lower === 'combined' ||
+    lower === 'primary' ||
+    lower === 'secondary' ||
+    lower === 'community_school' ||
+    lower.includes('k-12') ||
+    compact.includes('k12')
+  ) {
+    return 'K-12 School';
+  }
+
+  if (
+    lower.includes('preschool') ||
+    lower.includes('ecd') ||
+    lower.includes('early') ||
+    lower.includes('daycare') ||
+    lower.includes('creche')
+  ) {
+    return 'Preschool';
+  }
+
+  return raw;
+};
+
 interface DashAssistantProps {
   conversationId?: string;
   onClose?: () => void;
@@ -252,7 +285,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const contextChips = useMemo(() => {
     if (!learnerContext) return [];
     const chips: string[] = [];
-    const schoolLabel = learnerContext.schoolType || (isPreschool ? 'Preschool' : orgType ? String(orgType) : null);
+    const schoolLabel = formatSchoolTypeLabel(
+      learnerContext.schoolType || (isPreschool ? 'preschool' : orgType ? String(orgType) : null)
+    );
     if (schoolLabel) chips.push(schoolLabel);
     const gradeLabel = formatGradeLabel(learnerContext.grade);
     if (gradeLabel) chips.push(gradeLabel);

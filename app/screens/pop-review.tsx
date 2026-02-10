@@ -17,6 +17,7 @@ import { useUpdatePOPStatus } from '@/hooks/usePOPUploads';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { getPOPFileUrl, POPUploadType } from '@/lib/popUpload';
 import { useAlertModal, AlertModal } from '@/components/ui/AlertModal';
+import { logger } from '@/lib/logger';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 import { inferFeeCategoryCode, normalizeFeeCategoryCode } from '@/lib/utils/feeUtils';
 import type { FeeCategoryCode } from '@/types/finance';
@@ -95,7 +96,7 @@ const CATEGORY_ORDER: FeeCategoryCode[] = [
 
 export default function POPReviewScreen() {
   // #region agent log
-  console.log('[DEBUG_AGENT] POPReviewScreen-MOUNTED', JSON.stringify({timestamp:Date.now()}));
+  logger.debug('POPReview', 'POPReviewScreen-MOUNTED', JSON.stringify({timestamp:Date.now()}));
   // #endregion
   const { theme } = useTheme();
   const { profile } = useAuth();

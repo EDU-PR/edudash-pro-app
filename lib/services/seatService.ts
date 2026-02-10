@@ -1,5 +1,5 @@
 /**
- * Teacher Seat Management Service
+ * School Staff Seat Management Service
  * 
  * Provides a clean interface to the seat management RPC functions
  * Created to fix inconsistent seat assignment issues on plans like starter
@@ -21,7 +21,7 @@ export class SeatService {
   
   /**
    * Get current seat limits and usage for the caller's school
-   * Works for both principals and teachers
+   * Works for both principals and staff
    */
   static async getSeatLimits(): Promise<SeatLimits> {
     try {
@@ -30,12 +30,12 @@ export class SeatService {
 
       if (error) {
         console.error('Error fetching seat limits:', error);
-        throw this.createError('NETWORK_ERROR', 'Failed to fetch seat limits', error.message);
+        throw SeatService.createError('NETWORK_ERROR', 'Failed to fetch seat limits', error.message);
       }
 
       // The RPC returns a single row with limit, used, available
       if (!data || data.length === 0) {
-        throw this.createError('UNKNOWN', 'No seat limit data returned');
+        throw SeatService.createError('UNKNOWN', 'No seat limit data returned');
       }
 
       const result = data[0];
@@ -49,12 +49,12 @@ export class SeatService {
         throw error; // Re-throw SeatManagementError
       }
       console.error('Unexpected error fetching seat limits:', error);
-      throw this.createError('UNKNOWN', 'Unexpected error fetching seat limits', String(error));
+      throw SeatService.createError('UNKNOWN', 'Unexpected error fetching seat limits', String(error));
     }
   }
 
   /**
-   * Assign a teacher seat to a user
+   * Assign a staff seat to a user
    * Only principals can assign seats for their school
    */
   static async assignTeacherSeat({ teacherUserId }: AssignSeatParams): Promise<SeatAssignResponse> {
@@ -63,20 +63,27 @@ export class SeatService {
         .rpc('rpc_assign_teacher_seat', { target_user_id: teacherUserId });
 
       if (error) {
-        console.error('Error assigning teacher seat:', error);
+        console.error('Error assigning staff seat:', error);
         
         // Map specific error messages to error codes
-        if (error.message.includes('Only principals can assign')) {
-          throw this.createError('PERMISSION_DENIED', 'Only principals can assign teacher seats');
+        const message = String(error.message || '');
+        if (message.includes('Only principals can assign')) {
+          throw SeatService.createError('PERMISSION_DENIED', 'Only principals can assign staff seats');
         }
-        if (error.message.includes('No teacher seats available')) {
-          throw this.createError('LIMIT_EXCEEDED', 'No teacher seats available for this plan');
+        if (message.includes('No teacher seats available') || message.includes('No staff seats available')) {
+          throw SeatService.createError('LIMIT_EXCEEDED', 'No staff seats available for this plan');
         }
-        if (error.message.includes('Target must be a teacher')) {
-          throw this.createError('USER_NOT_FOUND', 'Target user must be a teacher in the same school');
+        if (message.includes('Target must be a teacher') || message.includes('Target must be school staff')) {
+          throw SeatService.createError('USER_NOT_FOUND', 'Target user must be school staff in the same school');
+        }
+        if (message.includes('Cannot find user record for target user ID')) {
+          throw SeatService.createError('USER_NOT_FOUND', 'Staff account is not fully provisioned yet. Please retry in a few seconds.');
+        }
+        if (message.includes('No active subscription found')) {
+          throw SeatService.createError('LIMIT_EXCEEDED', 'No active school subscription was found for seat assignment.');
         }
         
-        throw this.createError('NETWORK_ERROR', 'Failed to assign teacher seat', error.message);
+        throw SeatService.createError('NETWORK_ERROR', 'Failed to assign staff seat', message);
       }
 
       return data as SeatAssignResponse;
@@ -84,13 +91,13 @@ export class SeatService {
       if (error instanceof Error && 'code' in error) {
         throw error; // Re-throw SeatManagementError
       }
-      console.error('Unexpected error assigning teacher seat:', error);
-      throw this.createError('UNKNOWN', 'Unexpected error assigning teacher seat', String(error));
+      console.error('Unexpected error assigning staff seat:', error);
+      throw SeatService.createError('UNKNOWN', 'Unexpected error assigning staff seat', String(error));
     }
   }
 
   /**
-   * Revoke a teacher seat from a user
+   * Revoke a staff seat from a user
    * Only principals can revoke seats for their school
    */
   static async revokeTeacherSeat({ teacherUserId }: RevokeSeatParams): Promise<SeatRevokeResponse> {
@@ -99,14 +106,14 @@ export class SeatService {
         .rpc('rpc_revoke_teacher_seat', { target_user_id: teacherUserId });
 
       if (error) {
-        console.error('Error revoking teacher seat:', error);
+        console.error('Error revoking staff seat:', error);
         
         // Map specific error messages to error codes
         if (error.message.includes('Only principals can revoke')) {
-          throw this.createError('PERMISSION_DENIED', 'Only principals can revoke teacher seats');
+          throw SeatService.createError('PERMISSION_DENIED', 'Only principals can revoke teacher seats');
         }
         
-        throw this.createError('NETWORK_ERROR', 'Failed to revoke teacher seat', error.message);
+        throw SeatService.createError('NETWORK_ERROR', 'Failed to revoke teacher seat', error.message);
       }
 
       return data as SeatRevokeResponse;
@@ -114,13 +121,13 @@ export class SeatService {
       if (error instanceof Error && 'code' in error) {
         throw error; // Re-throw SeatManagementError
       }
-      console.error('Unexpected error revoking teacher seat:', error);
-      throw this.createError('UNKNOWN', 'Unexpected error revoking teacher seat', String(error));
+      console.error('Unexpected error revoking staff seat:', error);
+      throw SeatService.createError('UNKNOWN', 'Unexpected error revoking teacher seat', String(error));
     }
   }
 
   /**
-   * List all teacher seats for the caller's school (if principal) or own seats (if teacher)
+   * List all staff seats for the caller's school (if principal) or own seats (if staff)
    */
   static async listTeacherSeats(): Promise<TeacherSeat[]> {
     try {
@@ -128,8 +135,8 @@ export class SeatService {
         .rpc('rpc_list_teacher_seats');
 
       if (error) {
-        console.error('Error listing teacher seats:', error);
-        throw this.createError('NETWORK_ERROR', 'Failed to list teacher seats', error.message);
+        console.error('Error listing staff seats:', error);
+        throw SeatService.createError('NETWORK_ERROR', 'Failed to list staff seats', error.message);
       }
 
       return data as TeacherSeat[];
@@ -137,8 +144,8 @@ export class SeatService {
       if (error instanceof Error && 'code' in error) {
         throw error; // Re-throw SeatManagementError
       }
-      console.error('Unexpected error listing teacher seats:', error);
-      throw this.createError('UNKNOWN', 'Unexpected error listing teacher seats', String(error));
+      console.error('Unexpected error listing staff seats:', error);
+      throw SeatService.createError('UNKNOWN', 'Unexpected error listing staff seats', String(error));
     }
   }
 

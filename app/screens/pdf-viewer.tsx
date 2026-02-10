@@ -12,6 +12,9 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
+import { logger } from '@/lib/logger';
+
+const TAG = 'PDFViewer';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Conditional import for react-native-pdf (requires native module)
@@ -56,7 +59,7 @@ export default function PDFViewerScreen() {
       
       const info = await FileSystem.getInfoAsync(localPath);
       if (info.exists) {
-        console.log('[PDFViewer] Using cached PDF:', localPath);
+        logger.debug(TAG, 'Using cached PDF:', localPath);
         return localPath;
       }
     } catch (error) {
@@ -109,7 +112,7 @@ export default function PDFViewerScreen() {
       const result = await downloadResumable.downloadAsync();
       if (result?.uri) {
         setLocalUri(result.uri);
-        console.log('[PDFViewer] Downloaded PDF to:', result.uri);
+        logger.debug(TAG, 'Downloaded PDF to:', result.uri);
       } else {
         throw new Error('Download failed');
       }
@@ -256,7 +259,7 @@ export default function PDFViewerScreen() {
           horizontal={false}
           onLoadComplete={(numberOfPages: number) => {
             setTotalPages(numberOfPages);
-            console.log('[PDFViewer] Loaded', numberOfPages, 'pages');
+            logger.debug(TAG, 'Loaded', numberOfPages, 'pages');
           }}
           onPageChanged={(page: number) => {
             setCurrentPage(page);

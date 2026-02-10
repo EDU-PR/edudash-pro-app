@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useOrgPrograms } from '@/hooks/useOrgPrograms';
+import { logger } from '@/lib/logger';
 import { EnrollmentInviteModal } from '@/components/org-admin/EnrollmentInviteModal';
 import { ProgramCodeShareModal } from '@/components/org-admin/ProgramCodeShareModal';
 
@@ -80,7 +81,7 @@ export default function ProgramsScreen() {
                 ]}
                 activeOpacity={0.7}
                 onPress={() => {
-                  console.log('[Programs] Navigating to program:', program.id, program.title);
+                  logger.debug('Programs', 'Navigating to program:', program.id, program.title);
                   router.push({
                     pathname: '/screens/org-admin/program-detail',
                     params: { id: program.id }

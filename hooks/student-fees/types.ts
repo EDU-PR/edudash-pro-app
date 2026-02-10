@@ -8,6 +8,10 @@ export interface Student {
   first_name: string;
   last_name: string;
   class_id: string | null;
+  is_active?: boolean | null;
+  status?: 'active' | 'inactive' | 'pending' | string | null;
+  deleted_at?: string | null;
+  permanent_delete_after?: string | null;
   registration_fee_amount?: number | null;
   registration_fee_paid?: boolean | null;
   class_name?: string;

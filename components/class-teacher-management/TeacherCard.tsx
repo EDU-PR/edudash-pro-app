@@ -14,6 +14,8 @@ interface TeacherCardProps {
   theme: any;
   onViewClasses: (teacherId: string) => void;
   onEditTeacher: (teacherId: string) => void;
+  onSetRole?: (teacher: Teacher, role: 'teacher' | 'admin') => void;
+  roleUpdateTeacherId?: string | null;
   onDeleteTeacher?: (teacher: Teacher) => void;
 }
 
@@ -22,10 +24,15 @@ export function TeacherCard({
   theme,
   onViewClasses,
   onEditTeacher,
+  onSetRole,
+  roleUpdateTeacherId,
   onDeleteTeacher,
 }: TeacherCardProps) {
   const styles = getStyles(theme);
   const workloadColor = getTeacherWorkloadColor(teacher, theme);
+  const isUpdatingRole = roleUpdateTeacherId === teacher.id;
+  const isAdmin = teacher.role === 'admin' || teacher.role === 'principal_admin';
+  const roleLabel = isAdmin ? 'Admin' : 'Teacher';
 
   return (
     <View style={styles.teacherCard}>
@@ -36,6 +43,16 @@ export function TeacherCard({
           {teacher.specialization && (
             <Text style={styles.teacherSpecialization}>{teacher.specialization}</Text>
           )}
+          <View style={[styles.roleChip, isAdmin && styles.roleChipAdmin]}>
+            <Ionicons
+              name={isAdmin ? 'shield-checkmark-outline' : 'person-outline'}
+              size={12}
+              color={isAdmin ? '#0ea5e9' : theme.primary}
+            />
+            <Text style={[styles.roleChipText, isAdmin && styles.roleChipTextAdmin]}>
+              {roleLabel}
+            </Text>
+          </View>
         </View>
         <View
           style={[
@@ -65,6 +82,25 @@ export function TeacherCard({
           <Text style={styles.statLabel}>Since</Text>
         </View>
       </View>
+
+      <TouchableOpacity
+        style={[styles.roleActionButton, isUpdatingRole && styles.roleActionButtonDisabled]}
+        onPress={() => onSetRole?.(teacher, isAdmin ? 'teacher' : 'admin')}
+        disabled={isUpdatingRole || !onSetRole}
+      >
+        <Ionicons
+          name={isAdmin ? 'person-circle-outline' : 'shield-outline'}
+          size={16}
+          color={theme.primary}
+        />
+        <Text style={styles.roleActionText}>
+          {isUpdatingRole
+            ? 'Updating role...'
+            : isAdmin
+              ? 'Set as Teacher'
+              : 'Make School Admin'}
+        </Text>
+      </TouchableOpacity>
 
       <View style={styles.teacherActions}>
         <TouchableOpacity
@@ -152,6 +188,31 @@ const getStyles = (theme: any) =>
       fontSize: 12,
       color: theme.accent,
     },
+    roleChip: {
+      alignSelf: 'flex-start',
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: theme.primary + '66',
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.elevated,
+    },
+    roleChipAdmin: {
+      borderColor: '#0ea5e966',
+      backgroundColor: '#0ea5e91a',
+    },
+    roleChipText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.primary,
+      marginLeft: 4,
+    },
+    roleChipTextAdmin: {
+      color: '#0ea5e9',
+    },
     statusBadge: {
       paddingHorizontal: 8,
       paddingVertical: 4,
@@ -179,6 +240,26 @@ const getStyles = (theme: any) =>
       fontSize: 12,
       color: theme.textSecondary,
       marginTop: 2,
+    },
+    roleActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      marginBottom: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.primary + '66',
+      backgroundColor: theme.elevated,
+    },
+    roleActionButtonDisabled: {
+      opacity: 0.6,
+    },
+    roleActionText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.primary,
+      marginLeft: 6,
     },
     teacherActions: {
       flexDirection: 'row',

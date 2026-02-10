@@ -1,7 +1,7 @@
 // Supabase Edge Function: create-teacher-account
 // Creates teacher accounts with temp password, links to school, sends welcome email.
 // Used by principals to directly hire teachers or add temporary/trainee staff.
-// VERSION: v1
+// VERSION: v2
 
 declare const Deno: {
   env: { get(key: string): string | undefined };
@@ -138,13 +138,12 @@ serve(async (req: Request) => {
     const tempPassword = generateTempPassword(10);
     const teacherType = body.teacher_type || 'permanent';
     const fullName = `${body.first_name} ${body.last_name}`.trim();
+    let tempPasswordForLogin: string | null = null;
+    let loginMethodHint: string | null = null;
+    const provisioningWarnings: string[] = [];
 
     // ── Check if user already exists ──
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1,
-    });
-    // listUsers doesn't filter by email well, so check directly
+    // Query profile directly by email (faster and more reliable than listUsers scans)
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id, auth_user_id, role, organization_id')
@@ -160,20 +159,77 @@ serve(async (req: Request) => {
       isExistingUser = true;
 
       // Update their profile to this school
-      await supabaseAdmin
+      const profilePatch: Record<string, unknown> = {
+        role: 'teacher',
+        preschool_id: body.school_id,
+        organization_id: body.school_id,
+        first_name: body.first_name,
+        last_name: body.last_name,
+        full_name: fullName,
+        is_active: true,
+        hire_date: new Date().toISOString().split('T')[0],
+      };
+      if (body.phone && body.phone.trim().length > 0) {
+        profilePatch.phone = body.phone.trim();
+      }
+      const { error: existingProfileUpdateError } = await supabaseAdmin
         .from('profiles')
-        .update({
-          role: 'teacher',
-          preschool_id: body.school_id,
-          organization_id: body.school_id,
-          first_name: body.first_name,
-          last_name: body.last_name,
-          full_name: fullName,
-          phone: body.phone || existingProfile.id ? undefined : null,
-          is_active: true,
-          hire_date: new Date().toISOString().split('T')[0],
-        })
+        .update(profilePatch as any)
         .eq('id', existingProfile.id);
+      if (existingProfileUpdateError) {
+        throw new Error(`Failed to link profile: ${existingProfileUpdateError.message}`);
+      }
+
+      // Check auth providers and password state for existing users.
+      const { data: existingAuthRow, error: existingAuthLookupError } = await supabaseAdmin
+        .schema('auth')
+        .from('users')
+        .select('id, encrypted_password, raw_app_meta_data')
+        .eq('id', userId)
+        .maybeSingle();
+      if (existingAuthLookupError) {
+        provisioningWarnings.push(`Could not inspect auth providers: ${existingAuthLookupError.message}`);
+      }
+
+      const appMeta = (existingAuthRow?.raw_app_meta_data || {}) as Record<string, unknown>;
+      const providerFromMeta = typeof appMeta.provider === 'string' ? appMeta.provider : null;
+      const providersFromMeta = Array.isArray(appMeta.providers)
+        ? (appMeta.providers as unknown[]).filter((p): p is string => typeof p === 'string')
+        : [];
+      const providerList = providersFromMeta.length > 0
+        ? providersFromMeta
+        : (providerFromMeta ? [providerFromMeta] : []);
+      const hasPasswordCredential = Boolean(existingAuthRow?.encrypted_password);
+      const isGoogleOnlyAccount = providerList.length > 0 && providerList.every((p) => p === 'google');
+
+      // Existing social-only users do not have password credentials. Issue one for principal handoff.
+      if (!hasPasswordCredential) {
+        const { data: existingAuthData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        const existingMetadata = existingAuthData?.user?.user_metadata || {};
+        const { error: setTempPasswordError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: tempPassword,
+          user_metadata: {
+            ...existingMetadata,
+            force_password_change: true,
+            temp_password_issued_by_admin: true,
+            temp_password_issued_at: new Date().toISOString(),
+            teacher_type: teacherType,
+          },
+        });
+        if (setTempPasswordError) {
+          provisioningWarnings.push(`Could not issue temporary password for existing account: ${setTempPasswordError.message}`);
+          loginMethodHint = isGoogleOnlyAccount
+            ? 'This user currently signs in with Google. Ask them to continue with Google Sign-In.'
+            : 'Use existing account credentials to sign in.';
+        } else {
+          tempPasswordForLogin = tempPassword;
+          loginMethodHint = 'A temporary password was generated for this existing account.';
+        }
+      } else {
+        loginMethodHint = isGoogleOnlyAccount
+          ? 'This user can sign in with Google.'
+          : 'This user should continue using existing credentials.';
+      }
     } else {
       // ── Create new auth user ──
       const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -209,12 +265,13 @@ serve(async (req: Request) => {
       }
 
       userId = authData.user.id;
+      tempPasswordForLogin = tempPassword;
 
       // Wait for profile trigger
       await new Promise((r) => setTimeout(r, 1200));
 
       // Update profile with school linkage
-      await supabaseAdmin
+      const { error: newProfileUpdateError } = await supabaseAdmin
         .from('profiles')
         .update({
           role: 'teacher',
@@ -229,9 +286,12 @@ serve(async (req: Request) => {
           hire_date: new Date().toISOString().split('T')[0],
         })
         .eq('id', userId);
+      if (newProfileUpdateError) {
+        throw new Error(`Failed to update profile for new teacher: ${newProfileUpdateError.message}`);
+      }
 
       // Set force_password_change flag
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
+      const { error: updateMetaError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: {
           first_name: body.first_name,
           last_name: body.last_name,
@@ -240,10 +300,13 @@ serve(async (req: Request) => {
           teacher_type: teacherType,
         },
       });
+      if (updateMetaError) {
+        throw new Error(`Failed to update auth metadata: ${updateMetaError.message}`);
+      }
     }
 
     // ── Create teachers table record ──
-    await supabaseAdmin.from('teachers').upsert(
+    const { error: teacherUpsertError } = await supabaseAdmin.from('teachers').upsert(
       {
         user_id: userId,
         auth_user_id: userId,
@@ -253,32 +316,40 @@ serve(async (req: Request) => {
         last_name: body.last_name,
         full_name: fullName,
         phone: body.phone || null,
-        role: teacherType === 'trainee' ? 'trainee' : 'teacher',
+        role: 'teacher',
         is_active: true,
         subject_specialization: body.subject_specialization || null,
       } as any,
-      { onConflict: 'auth_user_id,preschool_id' } as any
+      { onConflict: 'user_id' } as any
     );
+    if (teacherUpsertError) {
+      throw new Error(`Failed to upsert teacher record: ${teacherUpsertError.message}`);
+    }
 
     // ── Assign active seat ──
-    try {
-      await supabaseAdmin.from('organization_members').upsert(
-        {
-          organization_id: body.school_id,
-          user_id: userId,
-          role: 'teacher',
-          seat_status: 'active',
-          member_type: teacherType,
-          invited_by: caller.id,
-        } as any,
-        { onConflict: 'organization_id,user_id' } as any
-      );
-    } catch {
-      // Non-fatal: some envs may not have this table
+    const { error: orgMemberError } = await supabaseAdmin.from('organization_members').upsert(
+      {
+        organization_id: body.school_id,
+        user_id: userId,
+        role: 'teacher',
+        seat_status: 'active',
+        member_type: 'staff',
+        membership_status: 'active',
+        invited_by: caller.id,
+        first_name: body.first_name,
+        last_name: body.last_name,
+        email,
+        phone: body.phone || null,
+      } as any,
+      { onConflict: 'user_id,organization_id' } as any
+    );
+    if (orgMemberError) {
+      // Keep non-fatal across environments, but return warning so UI can surface partial provisioning.
+      provisioningWarnings.push(`organization_members upsert warning: ${orgMemberError.message}`);
     }
 
     // ── Create approved teacher_approvals record (skip pending queue) ──
-    await supabaseAdmin.from('teacher_approvals').upsert(
+    const { error: approvalUpsertError } = await supabaseAdmin.from('teacher_approvals').upsert(
       {
         teacher_id: userId,
         preschool_id: body.school_id,
@@ -290,6 +361,9 @@ serve(async (req: Request) => {
       } as any,
       { onConflict: 'teacher_id,preschool_id' } as any
     );
+    if (approvalUpsertError) {
+      throw new Error(`Failed to upsert teacher approval: ${approvalUpsertError.message}`);
+    }
 
     // ── Create employment history ──
     try {
@@ -306,30 +380,39 @@ serve(async (req: Request) => {
 
     // ── Send welcome email ──
     let emailSent = false;
+    const typeLabel =
+      teacherType === 'trainee'
+        ? 'Trainee'
+        : teacherType === 'temporary'
+          ? 'Temporary Teacher'
+          : 'Teacher';
     if (resendApiKey) {
-      const typeLabel =
-        teacherType === 'trainee'
-          ? 'Trainee'
-          : teacherType === 'temporary'
-            ? 'Temporary Teacher'
-            : 'Teacher';
-
       const emailBody = isExistingUser
-        ? `<p>Hi ${body.first_name},</p>
-           <p>Great news! You have been added as a <strong>${typeLabel}</strong> at <strong>${schoolName}</strong> on EduDash Pro.</p>
-           <p>Since you already have an EduDash Pro account, simply log in with your existing credentials and you'll have access to your new school dashboard.</p>
-           <p style="margin-top:16px;padding:14px;background:#f0fdf4;border-radius:10px;border:1px solid #bbf7d0;">
-             <strong>School:</strong> ${schoolName}<br/>
-             <strong>Role:</strong> ${typeLabel}<br/>
-             <strong>Status:</strong> Active ✅
-           </p>
-           <p>If you have any questions, please reach out to your school principal.</p>`
+        ? tempPasswordForLogin
+          ? `<p>Hi ${body.first_name},</p>
+             <p>Great news! You have been linked to <strong>${schoolName}</strong> as a <strong>${typeLabel}</strong> on EduDash Pro.</p>
+             <p>A temporary password has been issued for your account:</p>
+             <div style="margin:16px 0;padding:16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+               <p style="margin:0 0 8px 0;"><strong>Email:</strong> ${email}</p>
+               <p style="margin:0 0 8px 0;"><strong>Temporary Password:</strong> <code style="background:#e2e8f0;padding:4px 8px;border-radius:6px;font-size:16px;font-weight:700;">${tempPasswordForLogin}</code></p>
+               <p style="margin:0;"><strong>Role:</strong> ${typeLabel}</p>
+             </div>
+             <p style="color:#ef4444;font-weight:600;">⚠️ Please change your password after your first login.</p>`
+          : `<p>Hi ${body.first_name},</p>
+             <p>Great news! You have been added as a <strong>${typeLabel}</strong> at <strong>${schoolName}</strong> on EduDash Pro.</p>
+             <p>Since you already have an EduDash Pro account, please sign in with your existing login method.</p>
+             ${loginMethodHint ? `<p><strong>Login hint:</strong> ${loginMethodHint}</p>` : ''}
+             <p style="margin-top:16px;padding:14px;background:#f0fdf4;border-radius:10px;border:1px solid #bbf7d0;">
+               <strong>School:</strong> ${schoolName}<br/>
+               <strong>Role:</strong> ${typeLabel}<br/>
+               <strong>Status:</strong> Active ✅
+             </p>`
         : `<p>Hi ${body.first_name},</p>
            <p>Welcome to <strong>EduDash Pro</strong>! Your teacher account has been created at <strong>${schoolName}</strong>.</p>
            <p>Here are your login credentials:</p>
            <div style="margin:16px 0;padding:16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
              <p style="margin:0 0 8px 0;"><strong>Email:</strong> ${email}</p>
-             <p style="margin:0 0 8px 0;"><strong>Temporary Password:</strong> <code style="background:#e2e8f0;padding:4px 8px;border-radius:6px;font-size:16px;font-weight:700;">${tempPassword}</code></p>
+             <p style="margin:0 0 8px 0;"><strong>Temporary Password:</strong> <code style="background:#e2e8f0;padding:4px 8px;border-radius:6px;font-size:16px;font-weight:700;">${tempPasswordForLogin || tempPassword}</code></p>
              <p style="margin:0;"><strong>Role:</strong> ${typeLabel}</p>
            </div>
            <p style="color:#ef4444;font-weight:600;">⚠️ Please change your password after your first login.</p>
@@ -369,6 +452,8 @@ serve(async (req: Request) => {
       } catch (emailErr) {
         console.error('[create-teacher-account] Email error:', emailErr);
       }
+    } else {
+      provisioningWarnings.push('RESEND_API_KEY is not configured. Welcome email was skipped.');
     }
 
     return new Response(
@@ -377,11 +462,15 @@ serve(async (req: Request) => {
         user_id: userId,
         is_existing_user: isExistingUser,
         teacher_type: teacherType,
-        temp_password: isExistingUser ? null : tempPassword,
+        temp_password: tempPasswordForLogin,
         email_sent: emailSent,
         school_name: schoolName,
+        login_method_hint: loginMethodHint,
+        provisioning_warnings: provisioningWarnings,
         message: isExistingUser
-          ? `${fullName} was already registered and has been linked to ${schoolName}.`
+          ? tempPasswordForLogin
+            ? `${fullName} was already registered and has been linked to ${schoolName}. Temporary credentials were generated for this account.`
+            : `${fullName} was already registered and has been linked to ${schoolName}. ${loginMethodHint || 'Use existing credentials to sign in.'}`
           : `Account created for ${fullName}. ${emailSent ? 'Welcome email sent.' : 'Email not sent — share credentials manually.'}`,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

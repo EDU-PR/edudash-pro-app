@@ -5,6 +5,8 @@
  * Contains auth state change event handlers and related utilities.
  */
 import { logger } from '@/lib/logger';
+
+const TAG = 'AuthEventHandlers';
 import * as Sentry from 'sentry-expo';
 import { assertSupabase } from '@/lib/supabase';
 import { getPostHog } from '@/lib/posthogClient';
@@ -135,7 +137,7 @@ export async function handleSignedOut(
 ): Promise<void> {
   const { mounted, setters, currentUser } = options;
   
-  console.log('[AuthEventHandlers] SIGNED_OUT event received, clearing all auth state');
+  logger.info(TAG, 'SIGNED_OUT event received, clearing all auth state');
   
   if (mounted.current) {
     setters.setProfile(null);
@@ -171,7 +173,7 @@ export async function handleSignedOut(
     logger.debug('Toast on sign-out failed (non-blocking)', e);
   }
   
-  console.log('[AuthEventHandlers] Sign-out cleanup complete');
+  logger.info(TAG, 'Sign-out cleanup complete');
 }
 
 /**

@@ -12,6 +12,9 @@ import { fetchEnhancedUserProfile, type Role } from '@/lib/rbac';
 import { track } from '@/lib/analytics';
 import { reportError } from '@/lib/monitoring';
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+const TAG = 'ProfilesGate';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 const ROLES = [
@@ -64,7 +67,7 @@ export default function ProfilesGateScreen() {
       const needsOnboarding = !profile.date_of_birth;
 
       if (needsOnboarding && !isOnboardingComplete && !navigationInProgressRef.current) {
-        console.log('Profiles-gate: User needs onboarding, redirecting...');
+        logger.info(TAG, 'User needs onboarding, redirecting...');
         navigationInProgressRef.current = true;
         router.replace('/onboarding');
         return true;
@@ -77,7 +80,7 @@ export default function ProfilesGateScreen() {
       if (recoveryAttemptedRef.current || profile) return;
       recoveryAttemptedRef.current = true;
       setIsRecoveringProfile(true);
-      console.log('Profiles-gate: No profile found, attempting refresh...');
+      logger.info(TAG, 'No profile found, attempting refresh...');
 
       const PROFILE_RECOVERY_TIMEOUT_MS = 6000;
       try {
@@ -96,14 +99,14 @@ export default function ProfilesGateScreen() {
     // avoid routing loops by not redirecting without a real profile.
     const handleExistingUser = async () => {
       if (!profile && user && !selectedRole) {
-        console.log('Profiles-gate: No profile found, checking if existing user...');
+        logger.info(TAG, 'No profile found, checking if existing user...');
         try {
           // Try to detect user role from legacy methods
           const { detectRoleAndSchool } = await import('@/lib/routeAfterLogin');
           const { role } = await detectRoleAndSchool(user);
           
           if (role) {
-            console.log('Profiles-gate: Found existing user role:', role);
+            logger.info(TAG, 'Found existing user role:', role);
             const supportedRoles: Role[] = ['parent', 'teacher', 'principal_admin'];
             if (supportedRoles.includes(role as Role) && !selectedRole) {
               setSelectedRole(role as Role);
@@ -153,7 +156,7 @@ export default function ProfilesGateScreen() {
     setIsSubmitting(true);
     
     try {
-      console.log('Profile gate: Continuing with selected role:', selectedRole);
+      logger.info(TAG, 'Continuing with selected role:', selectedRole);
       
       track('edudash.profile_gate.role_submitted', {
         user_id: user.id,
@@ -175,7 +178,7 @@ export default function ProfilesGateScreen() {
           if (updateError) {
             console.error('Failed to update user metadata:', updateError);
           } else {
-            console.log('Successfully updated user metadata with role:', selectedRole);
+            logger.info(TAG, 'Successfully updated user metadata with role:', selectedRole);
           }
         } catch { /* Intentional: non-fatal */ }
 
@@ -197,13 +200,13 @@ export default function ProfilesGateScreen() {
 
       // If we have an enhanced profile with proper role, use enhanced routing
       if (updatedProfile && updatedProfile.role) {
-        console.log('Profile gate: Using enhanced routing with profile:', updatedProfile);
+        logger.info(TAG, 'Using enhanced routing with profile:', updatedProfile);
         await routeAfterLogin(user, updatedProfile);
         return;
       }
       
       // Fallback: Route directly based on selected role
-      console.log('Profile gate: Using fallback routing for role:', selectedRole);
+      logger.info(TAG, 'Using fallback routing for role:', selectedRole);
       const routes = {
         'parent': '/screens/parent-dashboard',
         'teacher': '/screens/teacher-dashboard', 
@@ -212,7 +215,7 @@ export default function ProfilesGateScreen() {
       
       const targetRoute = routes[selectedRole as keyof typeof routes];
       if (targetRoute && !navigationInProgressRef.current) {
-        console.log('Profile gate: Routing to:', targetRoute);
+        logger.info(TAG, 'Routing to:', targetRoute);
         navigationInProgressRef.current = true;
         router.replace(targetRoute as `/${string}`);
         return;

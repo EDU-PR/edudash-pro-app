@@ -18,6 +18,9 @@ import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { QuickActions } from '@/components/learner/QuickActions';
 import type { LearnerQuickAction } from '@/components/learner/QuickActions';
 import DashOrb from '@/components/dash-orb';
+import { logger } from '@/lib/logger';
+
+const TAG = 'StudentDashboard';
 import { track } from '@/lib/analytics';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -95,7 +98,7 @@ export default function StudentDashboard() {
     // and should use the learner-dashboard, not the standalone student-dashboard
     if (orgId) {
       navigationAttempted.current = true;
-      console.log('[StudentDashboard] User has organization_id, redirecting to learner-dashboard');
+      logger.info(TAG, 'User has organization_id, redirecting to learner-dashboard');
       try {
         router.replace('/screens/learner-dashboard');
       } catch (e) {

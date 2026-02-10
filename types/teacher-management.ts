@@ -10,6 +10,8 @@ export interface Teacher {
   id: string; // primary key from teachers table
   teacherUserId: string; // public.users.id (seat RPC expects this)
   authUserId: string | null; // auth.users.id (nullable)
+  profileId?: string | null; // public.profiles.id (role updates)
+  schoolRole?: 'teacher' | 'admin' | 'principal_admin';
   employeeId: string;
   firstName: string;
   lastName: string;

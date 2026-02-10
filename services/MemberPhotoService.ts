@@ -3,6 +3,7 @@
  * Handles photo uploads for organization members (ID card photos)
  */
 import { assertSupabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
@@ -165,7 +166,7 @@ export class MemberPhotoService {
       } catch (fileSystemError) {
         // FileSystem.getInfoAsync might fail for content:// URIs
         // That's okay - we'll let ImageManipulator handle validation
-        console.log('[MemberPhotoService] FileSystem check skipped (content URI):', uri);
+        logger.debug('MemberPhotoService', 'FileSystem check skipped (content URI):', uri);
       }
 
       // Basic URI validation
