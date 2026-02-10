@@ -26,12 +26,20 @@ export async function fetchFeeOverviewData(
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const monthIso = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}-01`;
+
+  const snapshotPromise = timeFilter === 'month'
+    ? supabase.rpc('get_finance_month_snapshot', {
+        p_org_id: organizationId,
+        p_month: monthIso,
+      })
+    : Promise.resolve({ data: null, error: null } as { data: any; error: any });
 
   // 1. Fetch students + fees + registrations in parallel
   const { data: studentsData, error: studentsError } = await supabase
     .from('students')
     .select(`
-      id, first_name, last_name, enrollment_date, class_id,
+      id, first_name, last_name, enrollment_date, class_id, is_active, status,
       classes!students_class_id_fkey(name),
       profiles!students_parent_id_fkey(first_name, last_name)
     `)
@@ -40,7 +48,11 @@ export async function fetchFeeOverviewData(
     .order('first_name');
   if (studentsError) throw studentsError;
 
-  const studentIds = (studentsData || []).map(s => s.id);
+  const activeStudentsData = (studentsData || []).filter(
+    (student: any) => student?.is_active === true && String(student?.status || '').toLowerCase() === 'active',
+  );
+
+  const studentIds = activeStudentsData.map((s: any) => s.id);
   const { data: feesData, error: feesError } = studentIds.length
     ? await supabase.from('student_fees')
         .select('*, fee_structures(name, fee_type, description)')
@@ -48,14 +60,24 @@ export async function fetchFeeOverviewData(
     : { data: [] as any[], error: null };
   if (feesError) throw feesError;
 
-  const [{ data: registrations }, { data: inAppRegistrations }] = await Promise.all([
+  const [{ data: registrations }, { data: inAppRegistrations }, snapshotResult] = await Promise.all([
     supabase.from('registration_requests')
       .select('registration_fee_amount, payment_verified, status, created_at')
       .eq('organization_id', organizationId),
     supabase.from('child_registration_requests')
       .select('registration_fee_amount, payment_verified, status, created_at')
       .eq('preschool_id', organizationId),
+    snapshotPromise,
   ]);
+
+  const monthSnapshot = snapshotResult?.error
+    ? null
+    : snapshotResult?.data?.success
+      ? snapshotResult.data
+      : null;
+  if (snapshotResult?.error) {
+    console.warn('[FeeOverview] Failed to load get_finance_month_snapshot, using local aggregate fallback.', snapshotResult.error);
+  }
 
   // 2. Group fees + build enrollment map
   const feesByStudent = new Map<string, any[]>();
@@ -66,14 +88,14 @@ export async function fetchFeeOverviewData(
   });
 
   const enrollmentMap = new Map<string, Date | null>();
-  (studentsData || []).forEach((s: any) => {
+  activeStudentsData.forEach((s: any) => {
     const d = s.enrollment_date ? new Date(s.enrollment_date) : null;
     enrollmentMap.set(s.id, d ? new Date(d.getFullYear(), d.getMonth(), 1) : null);
   });
 
   // 3. Process students into StudentWithFees
   const processedStudents = buildStudentList(
-    studentsData || [], feesByStudent, enrollmentMap,
+    activeStudentsData, feesByStudent, enrollmentMap,
     timeFilter, monthStart, monthEnd, todayStart,
   );
 
@@ -85,7 +107,7 @@ export async function fetchFeeOverviewData(
   // 5. Totals + registration summary
   const summary = buildFinancialSummary(
     processedStudents, registrations || [], inAppRegistrations || [],
-    timeFilter, monthStart, monthEnd,
+    timeFilter, monthStart, monthEnd, monthSnapshot,
   );
 
   // 6. Payments, POP, expenses
@@ -123,16 +145,23 @@ export async function fetchFeeOverviewData(
   const popSummary = buildPopSummary(popsData);
   const expenseSummary = buildExpenseSummary(pettyData, finData, supabase);
 
-  const income = paymentSummary.completedAmount;
-  const pending = paymentSummary.pendingAmount;
+  const income = timeFilter === 'month' && monthSnapshot
+    ? Number(monthSnapshot.collected_this_month || 0)
+    : paymentSummary.completedAmount;
+  const pending = timeFilter === 'month' && monthSnapshot
+    ? Number(monthSnapshot.still_outstanding || 0)
+    : paymentSummary.pendingAmount;
   const expenses = expenseSummary.totalAmount;
-  const completionRate = income + pending > 0 ? (income / (income + pending)) * 100 : 0;
+  const due = timeFilter === 'month' && monthSnapshot
+    ? Number(monthSnapshot.due_this_month || 0)
+    : income + pending;
+  const completionRate = due > 0 ? (income / due) * 100 : 0;
   const accountingSnapshot: AccountingSnapshot = {
     income, pending, expenses, net: income - expenses, completionRate,
   };
 
   // 7. Uniform summary
-  const uniformSummary = await fetchUniformSummary(supabase, organizationId, studentsData || []);
+  const uniformSummary = await fetchUniformSummary(supabase, organizationId, activeStudentsData);
 
   return {
     students: processedStudents, summary, paymentSummary, popSummary,
@@ -237,7 +266,7 @@ function buildFeeBreakdown(
 
 function buildFinancialSummary(
   students: StudentWithFees[], registrations: any[], inAppRegistrations: any[],
-  timeFilter: TimeFilter, monthStart: Date, monthEnd: Date,
+  timeFilter: TimeFilter, monthStart: Date, monthEnd: Date, monthSnapshot?: any | null,
 ): FinancialSummary {
   const totalOutstanding = students.reduce((s, st) => s + st.fees.outstanding, 0);
   const totalPaid = students.reduce((s, st) => s + st.fees.paid, 0);
@@ -259,14 +288,21 @@ function buildFinancialSummary(
     .filter((r: any) => !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected')
     .reduce((s: number, r: any) => s + (parseFloat(r.registration_fee_amount) || 0), 0);
 
+  const schoolCollected = timeFilter === 'month' && monthSnapshot
+    ? Number(monthSnapshot.collected_this_month || 0)
+    : totalPaid;
+  const schoolOutstanding = timeFilter === 'month' && monthSnapshot
+    ? Number(monthSnapshot.still_outstanding || 0)
+    : totalOutstanding;
+
   return {
     totalStudents: students.length,
-    totalOutstanding: totalOutstanding + regPending,
-    totalPaid: totalPaid + regCollected,
+    totalOutstanding: schoolOutstanding + regPending,
+    totalPaid: schoolCollected + regCollected,
     totalWaived,
     overdueStudents,
     registrationFees: { collected: regCollected, pending: regPending },
-    schoolFees: { collected: totalPaid, pending: totalOutstanding },
+    schoolFees: { collected: schoolCollected, pending: schoolOutstanding },
   };
 }
 

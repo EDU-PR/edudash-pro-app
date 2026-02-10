@@ -7,7 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
-import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import {
+  resolveExplicitSchoolTypeFromProfile,
+  resolveOrganizationId,
+  resolveSchoolTypeFromProfile,
+} from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -28,6 +32,15 @@ interface TabItem {
 
 /** Roles that have the Dash center tab in the bottom nav (FAB hidden for these) */
 export const ROLES_WITH_CENTER_TAB = ['parent', 'student', 'learner', 'principal', 'principal_admin'];
+
+const SCHOOL_ADMIN_DASH_TAB: TabItem = {
+  id: 'school-admin-dash',
+  label: 'Dash',
+  icon: 'sparkles-outline',
+  activeIcon: 'sparkles',
+  route: '/screens/dash-voice',
+  isCenterTab: true,
+};
 
 const TAB_ITEMS: TabItem[] = [
   // Parent tabs
@@ -91,7 +104,7 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['teacher'] 
   },
   { 
-    id: 'teacher-messages', 
+    id: 'teacher-message-list', 
     label: 'Messages', 
     icon: 'chatbubble-outline', 
     activeIcon: 'chatbubble', 
@@ -507,14 +520,17 @@ export function BottomTabBar() {
   const isVeteransLeague = memberType?.startsWith('veterans_');
   
   const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
+  const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
+  const isSchoolAdmin = userRole === 'admin' && Boolean(explicitSchoolType);
   const homeDashboardRoute = getDashboardRouteForRole({
     role: userRole,
-    resolvedSchoolType,
+    resolvedSchoolType: userRole === 'admin' ? explicitSchoolType : resolvedSchoolType,
     hasOrganization: Boolean(resolveOrganizationId(profile)),
+    traceContext: 'BottomTabBar.homeTab',
   });
   
   // Filter tabs by role - special member types get their dedicated tabs
-  const visibleTabs = TAB_ITEMS.filter(item => {
+  let visibleTabs = TAB_ITEMS.filter(item => {
     if (!item.roles) return false; // Require explicit role assignment
     
     // If user is CEO, ONLY show CEO tabs (national_admin role)
@@ -556,8 +572,18 @@ export function BottomTabBar() {
     if (homeDashboardRoute && item.id === 'learner-dashboard' && (userRole === 'student' || userRole === 'learner')) {
       return { ...item, route: homeDashboardRoute };
     }
+    if (homeDashboardRoute && item.id === 'org-admin-dashboard' && userRole === 'admin') {
+      return { ...item, route: homeDashboardRoute };
+    }
     return item;
   });
+
+  if (isSchoolAdmin) {
+    visibleTabs = visibleTabs.filter(item => item.id !== 'org-admin-settings');
+    if (!visibleTabs.some(item => item.isCenterTab)) {
+      visibleTabs = [...visibleTabs, SCHOOL_ADMIN_DASH_TAB];
+    }
+  }
 
   // Check if current route matches tab
   const isActive = (route: string) => {

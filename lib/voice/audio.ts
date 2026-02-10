@@ -17,6 +17,10 @@ export class AudioManager {
   private player: AudioPlayer | null = null;
   private isInitialized: boolean = false;
   private audioSession: AudioModeSession | null = null;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private playbackResolve: (() => void) | null = null;
+  private playbackReject: ((reason?: unknown) => void) | null = null;
+  private playbackUpdateCallback: ((state: PlaybackState) => void) | null = null;
   private playbackState: PlaybackState = {
     isPlaying: false,
     duration: 0,
@@ -74,31 +78,38 @@ export class AudioManager {
       // Create and play using expo-audio player
       this.player = createAudioPlayer(uri);
       this.player.play();
-      
-      // Set up status polling for updates (expo-audio uses hooks pattern instead of callbacks)
-      const pollInterval = setInterval(() => {
-        if (!this.player) {
-          clearInterval(pollInterval);
-          return;
-        }
-        
-        this.playbackState = {
-          isPlaying: this.player.playing,
-          duration: (this.player.duration || 0) * 1000, // Convert to ms
-          position: (this.player.currentTime || 0) * 1000, // Convert to ms
-          uri,
-        };
 
-        if (onUpdate) {
-          onUpdate(this.playbackState);
-        }
+      this.playbackUpdateCallback = onUpdate || null;
 
-        // Auto-cleanup when playback finishes
-        if (this.player.currentTime >= this.player.duration && this.player.duration > 0) {
-          clearInterval(pollInterval);
-          this.stop();
-        }
-      }, 100);
+      await new Promise<void>((resolve, reject) => {
+        this.playbackResolve = resolve;
+        this.playbackReject = reject;
+
+        // Set up status polling for updates (expo-audio uses hooks pattern instead of callbacks)
+        this.pollInterval = setInterval(() => {
+          if (!this.player) {
+            this.resolvePlaybackPromise();
+            return;
+          }
+
+          const duration = (this.player.duration || 0) * 1000; // Convert to ms
+          const position = (this.player.currentTime || 0) * 1000; // Convert to ms
+
+          this.playbackState = {
+            isPlaying: this.player.playing,
+            duration,
+            position,
+            uri,
+          };
+          this.playbackUpdateCallback?.(this.playbackState);
+
+          // Auto-cleanup when playback finishes (small tolerance avoids floating point misses)
+          const reachedEnd = duration > 0 && position >= Math.max(duration - 120, 0);
+          if (reachedEnd) {
+            void this.stop();
+          }
+        }, 100);
+      });
 
     } catch (error) {
       // Release audio session on error
@@ -116,6 +127,7 @@ export class AudioManager {
       if (onUpdate) {
         onUpdate(this.playbackState);
       }
+      this.rejectPlaybackPromise(error);
       throw error;
     }
   }
@@ -154,6 +166,8 @@ export class AudioManager {
    */
   async stop(): Promise<void> {
     try {
+      this.clearPolling();
+
       if (this.player) {
         this.player.pause();
         this.player.release();
@@ -172,8 +186,12 @@ export class AudioManager {
         duration: 0,
         position: 0,
       };
+      this.playbackUpdateCallback?.(this.playbackState);
     } catch (error) {
       console.error('[AudioManager] ❌ Failed to stop:', error);
+    } finally {
+      this.playbackUpdateCallback = null;
+      this.resolvePlaybackPromise();
     }
   }
 
@@ -191,6 +209,33 @@ export class AudioManager {
    */
   async cleanup(): Promise<void> {
     await this.stop();
+  }
+
+  private clearPolling(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  private resolvePlaybackPromise(): void {
+    this.clearPolling();
+    this.playbackUpdateCallback = null;
+    const resolve = this.playbackResolve;
+    this.playbackResolve = null;
+    this.playbackReject = null;
+    resolve?.();
+  }
+
+  private rejectPlaybackPromise(error: unknown): void {
+    this.clearPolling();
+    this.playbackUpdateCallback = null;
+    const reject = this.playbackReject;
+    this.playbackResolve = null;
+    this.playbackReject = null;
+    if (reject) {
+      reject(error);
+    }
   }
 }
 

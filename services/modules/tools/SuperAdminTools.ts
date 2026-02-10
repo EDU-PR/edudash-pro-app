@@ -414,7 +414,10 @@ export function registerSuperAdminTools(register: (tool: AgentTool) => void): vo
         await supabase.from('audit_logs').insert({
           action: 'feature_flag_toggle',
           actor_id: profile.id,
-          details: { flag_id: args.flag_id, enabled: args.enabled }
+          event_type: 'admin_action',
+          event_name: 'feature_flag_toggle',
+          event_description: 'Feature flag toggled',
+          metadata: { flag_id: args.flag_id, enabled: args.enabled }
         });
         
         return { success: true, message: `Feature flag ${args.enabled ? 'enabled' : 'disabled'}`, flag: data };
@@ -760,7 +763,10 @@ export function registerSuperAdminTools(register: (tool: AgentTool) => void): vo
         await supabase.from('audit_logs').insert({
           action: 'subscription_status_change',
           actor_id: profile.id,
-          details: { 
+          event_type: 'admin_action',
+          event_name: 'subscription_status_change',
+          event_description: 'Subscription status changed',
+          metadata: { 
             subscription_id: args.subscription_id, 
             new_status: args.new_status,
             reason: args.reason 

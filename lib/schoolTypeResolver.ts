@@ -77,6 +77,29 @@ export function resolveSchoolTypeFromProfile(
   return fallback;
 }
 
+/**
+ * Resolve school type only when explicitly present on profile sources.
+ * Unlike resolveSchoolTypeFromProfile(), this does NOT fall back to defaults.
+ */
+export function resolveExplicitSchoolTypeFromProfile(profile: any): ResolvedSchoolType | null {
+  const candidates = [
+    profile?.organization_membership?.school_type,
+    profile?.organization_membership?.organization_kind,
+    profile?.organization_type,
+    profile?.school_type,
+    profile?.usage_type,
+    profile?.organization_kind,
+    profile?.tenant_kind,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeResolvedSchoolType(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 export function isK12ResolvedSchoolType(value: unknown): boolean {
   return normalizeResolvedSchoolType(value) === 'k12_school';
 }

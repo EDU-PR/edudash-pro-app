@@ -18,6 +18,9 @@ const toMonthStart = (d: Date): string =>
 export interface FinancialRawResult {
   monthlyRevenue: number;
   previousMonthRevenue: number;
+  monthlyExpenses: number;
+  hasError: boolean;
+  errorMessage?: string | null;
 }
 
 /**
@@ -33,22 +36,61 @@ export async function fetchFinancials(
   const currentMonth = toMonthStart(new Date(now.getFullYear(), now.getMonth(), 1));
   const previousMonth = toMonthStart(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 
-  const [currentSnapshot, previousSnapshot] = await Promise.all([
-    FinancialDataService.getMonthSnapshot(preschoolId, currentMonth),
-    FinancialDataService.getMonthSnapshot(preschoolId, previousMonth),
-  ]);
+  try {
+    const [currentResult, previousResult] = await Promise.allSettled([
+      FinancialDataService.getMonthSnapshot(preschoolId, currentMonth),
+      FinancialDataService.getMonthSnapshot(preschoolId, previousMonth),
+    ]);
 
-  const monthlyRevenue = Number(currentSnapshot.collected_this_month || 0);
-  const previousMonthRevenue = Number(previousSnapshot.collected_this_month || 0);
+    const currentSnapshot = currentResult.status === 'fulfilled' ? currentResult.value : null;
+    const previousSnapshot = previousResult.status === 'fulfilled' ? previousResult.value : null;
 
-  logger.info('💰 Financials fetched', {
-    month: currentMonth,
-    previousMonth,
-    collectedForBillingMonth: monthlyRevenue,
-    previousCollectedForBillingMonth: previousMonthRevenue,
-  });
+    const monthlyRevenue = Number(currentSnapshot?.collected_this_month || 0);
+    const previousMonthRevenue = Number(previousSnapshot?.collected_this_month || 0);
+    const monthlyExpenses = Number(currentSnapshot?.expenses_this_month || 0);
 
-  return { monthlyRevenue, previousMonthRevenue };
+    const errorMessages = [
+      currentResult.status === 'rejected' ? currentResult.reason?.message || String(currentResult.reason) : null,
+      previousResult.status === 'rejected' ? previousResult.reason?.message || String(previousResult.reason) : null,
+    ].filter(Boolean);
+
+    const hasError = !currentSnapshot || errorMessages.length > 0;
+
+    logger.info('💰 Financials fetched', {
+      month: currentMonth,
+      previousMonth,
+      collectedForBillingMonth: monthlyRevenue,
+      previousCollectedForBillingMonth: previousMonthRevenue,
+      expensesForBillingMonth: monthlyExpenses,
+      fallbackUsed: hasError,
+    });
+
+    if (hasError) {
+      logger.warn('[PrincipalHub] fetchFinancials fallback triggered', {
+        errors: errorMessages,
+        currentSnapshotLoaded: Boolean(currentSnapshot),
+        previousSnapshotLoaded: Boolean(previousSnapshot),
+      });
+    }
+
+    return {
+      monthlyRevenue,
+      previousMonthRevenue,
+      monthlyExpenses,
+      hasError,
+      errorMessage: errorMessages.length ? errorMessages.join(' | ') : null,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load financial summary';
+    logger.error('[PrincipalHub] fetchFinancials failed, returning fallback summary', { error: message });
+    return {
+      monthlyRevenue: 0,
+      previousMonthRevenue: 0,
+      monthlyExpenses: 0,
+      hasError: true,
+      errorMessage: message,
+    };
+  }
 }
 
 /**
@@ -58,7 +100,7 @@ export function buildFinancialSummary(
   raw: FinancialRawResult,
   pettyCash: { currentBalance?: number; monthlyExpenses?: number; pendingTransactionsCount?: number },
 ): FinancialSummary {
-  const totalExpenses = pettyCash.monthlyExpenses || 0;
+  const totalExpenses = Number(raw.monthlyExpenses || 0);
   const netProfit = raw.monthlyRevenue - totalExpenses;
   const profitMargin = raw.monthlyRevenue > 0
     ? Math.round((netProfit / raw.monthlyRevenue) * 100)
@@ -76,6 +118,8 @@ export function buildFinancialSummary(
     pettyCashBalance: pettyCash.currentBalance || 0,
     pettyCashExpenses: pettyCash.monthlyExpenses || 0,
     pendingApprovals: pettyCash.pendingTransactionsCount || 0,
+    hasDataError: raw.hasError,
+    dataErrorMessage: raw.errorMessage || null,
     timestamp: new Date().toISOString(),
   };
 }

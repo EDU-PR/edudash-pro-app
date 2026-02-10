@@ -797,7 +797,7 @@ export const ParentDashboardDatabase: React.FC = () => {
           icon="📞"
           title="School Contact"
           subtitle="Reach out to school administration"
-          onPress={() => router.push('/screens/teacher-messages')}
+          onPress={() => router.push('/screens/teacher-message-list')}
         />
       </WireframeCard>
 

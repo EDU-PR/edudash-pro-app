@@ -58,7 +58,7 @@ import { canAutoRestartAfterInterrupt, INTERRUPT_RESTART_DELAY_MS } from './inte
 
 export interface VoiceOrbRef {
   /** Speak text using TTS */
-  speakText: (text: string) => Promise<void>;
+  speakText: (text: string, language?: SupportedLanguage) => Promise<void>;
   /** Stop TTS playback */
   stopSpeaking: () => Promise<void>;
   /** Get current speaking state */
@@ -79,10 +79,14 @@ interface VoiceOrbProps {
   onTTSStart?: () => void;
   /** Called when TTS ends */
   onTTSEnd?: () => void;
+  /** Called when voice capture/transcription fails */
+  onVoiceError?: (message: string) => void;
   /** Called when user changes language */
   onLanguageChange?: (lang: SupportedLanguage) => void;
   /** Externally set language (from parent language dropdown) */
   language?: SupportedLanguage;
+  /** Optional orb size override for compact layouts */
+  size?: number;
   /** Auto-start listening when component mounts (default: true) */
   autoStartListening?: boolean;
   /** Auto-restart listening after TTS ends (default: true) */
@@ -104,8 +108,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   onSpeakEnd,
   onTTSStart,
   onTTSEnd,
+  onVoiceError,
   onLanguageChange,
   language: externalLanguage,
+  size = ORB_SIZE,
   autoStartListening = true,
   autoRestartAfterTTS = true,
 }, ref) => {
@@ -147,7 +153,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, []);
   
   const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected);
-  const { transcribe, isTranscribing } = useVoiceSTT({ preschoolId: tenantId });
+  const { transcribe, isTranscribing, error: sttError } = useVoiceSTT({ preschoolId: tenantId });
   const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking } = useVoiceTTS();
   const isSpeakingRef = useRef(isSpeaking);
   const ttsSpeakingRef = useRef(ttsIsSpeaking);
@@ -165,6 +171,14 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   useEffect(() => {
     usingLiveSTTRef.current = usingLiveSTT;
   }, [usingLiveSTT]);
+
+  useEffect(() => {
+    if (!sttError) return;
+    setStatusText('Voice recognition error');
+    onVoiceError?.(sttError);
+    const timer = setTimeout(() => setStatusText('Listening...'), 2500);
+    return () => clearTimeout(timer);
+  }, [sttError, onVoiceError]);
 
   const clearLiveTimers = useCallback(() => {
     if (liveSilenceTimerRef.current) {
@@ -204,6 +218,8 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       if (usingLiveSTTRef.current) {
         setUsingLiveSTT(false);
       }
+      setStatusText('Voice recognition error');
+      onVoiceError?.(errorMsg);
     },
   });
 
@@ -450,12 +466,13 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   const glowIntensity = useSharedValue(0.5);
   
   // Derived sizes
-  const coreSize = ORB_SIZE * 0.35;
+  const orbSize = Math.max(110, size);
+  const coreSize = orbSize * 0.42;
   
   // Pre-generate animation data
-  const particles = useMemo(() => generateParticles(8), []);
-  const shootingStars = useMemo(() => generateShootingStars(3), []);
-  const rings = useMemo(() => generateRings(), []);
+  const particles = useMemo(() => generateParticles(8, orbSize), [orbSize]);
+  const shootingStars = useMemo(() => generateShootingStars(3, orbSize), [orbSize]);
+  const rings = useMemo(() => generateRings(orbSize), [orbSize]);
 
   // ── Voice amplitude reactive animation ──────────────────────────
   // Track audio level for ORB scale reactivity
@@ -565,6 +582,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         return;
       } catch (liveError) {
         console.warn('[VoiceOrb] Live STT start failed, falling back to audio:', liveError);
+        onVoiceError?.(liveError instanceof Error ? liveError.message : 'Live voice recognition unavailable');
         setUsingLiveSTT(false);
       }
     }
@@ -575,9 +593,10 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       setStatusText('Listening...');
     } else {
       setStatusText('Microphone permission denied');
+      onVoiceError?.('Microphone permission denied');
       setTimeout(() => setStatusText('Listening...'), 2000);
     }
-  }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking, liveAvailable, startLiveListening, clearLiveResults, clearLiveTimers]);
+  }, [isMuted, isProcessing, recorderState.isRecording, recorderActions, onStartListening, isSpeaking, ttsIsSpeaking, liveAvailable, startLiveListening, clearLiveResults, clearLiveTimers, onVoiceError]);
   
   // Update ref for use in effects
   useEffect(() => {
@@ -653,7 +672,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
         activeOpacity={0.9}
         onPress={handlePress}
         onLongPress={handleLongPress}
-        style={[styles.orbContainer, { width: ORB_SIZE, height: ORB_SIZE }]}
+        style={[styles.orbContainer, { width: orbSize, height: orbSize }]}
       >
         {/* Pulsing rings */}
         {rings.map((ring, index) => (

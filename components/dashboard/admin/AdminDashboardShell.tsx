@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import type { AdminOperationalCounters } from '@/lib/dashboard/admin/types';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -33,22 +33,24 @@ export function AdminDashboardShell({
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
         ) : undefined
       }
-    >
-      <LinearGradient
-        colors={['#111827', '#1D4ED8', '#0EA5E9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.hero}
       >
+      <View style={styles.hero}>
         <View style={styles.heroTopRow}>
-          <Text style={styles.roleBadge}>Admin Operations</Text>
-          <Text style={styles.orgType}>{orgTypeLabel}</Text>
+          <View style={styles.heroTitleRow}>
+            <View style={styles.iconBadge}>
+              <Ionicons name="settings-outline" size={16} color={theme.onPrimary} />
+            </View>
+            <Text style={styles.roleBadge}>Admin Command</Text>
+          </View>
+          <View style={styles.orgTypeBadge}>
+            <Text style={styles.orgType}>{orgTypeLabel}</Text>
+          </View>
         </View>
         <Text style={styles.orgName} numberOfLines={1}>
           {orgName}
         </Text>
         <Text style={styles.heroSubtitle}>
-          Operational control with principal-governed approvals
+          Operational control with principal approvals.
         </Text>
 
         <View style={styles.counterRow}>
@@ -56,7 +58,7 @@ export function AdminDashboardShell({
           <CounterChip label="Awaiting Principal" value={counters.awaiting_principal} tone="warning" />
           <CounterChip label="Pending" value={counters.total_pending} tone="info" />
         </View>
-      </LinearGradient>
+      </View>
 
       {children}
     </ScrollView>
@@ -73,9 +75,9 @@ function CounterChip({
   tone: 'danger' | 'warning' | 'info';
 }) {
   const toneMap: Record<string, { bg: string; border: string; text: string }> = {
-    danger: { bg: 'rgba(239,68,68,0.18)', border: 'rgba(252,165,165,0.7)', text: '#FEE2E2' },
-    warning: { bg: 'rgba(245,158,11,0.2)', border: 'rgba(253,230,138,0.8)', text: '#FFFBEB' },
-    info: { bg: 'rgba(14,165,233,0.18)', border: 'rgba(125,211,252,0.7)', text: '#ECFEFF' },
+    danger: { bg: 'rgba(255,255,255,0.18)', border: 'rgba(255,255,255,0.28)', text: '#FCA5A5' },
+    warning: { bg: 'rgba(255,255,255,0.18)', border: 'rgba(255,255,255,0.28)', text: '#FDE68A' },
+    info: { bg: 'rgba(255,255,255,0.18)', border: 'rgba(255,255,255,0.28)', text: '#93C5FD' },
   };
   const colors = toneMap[tone];
 
@@ -121,50 +123,72 @@ const createStyles = (theme: any) =>
     hero: {
       marginHorizontal: 16,
       marginTop: 14,
-      borderRadius: 20,
+      borderRadius: 16,
       padding: 16,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.2)',
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 14 },
-      shadowOpacity: 0.26,
-      shadowRadius: 24,
-      elevation: 10,
+      borderColor: 'rgba(255,255,255,0.22)',
+      backgroundColor: theme.primary,
+      shadowColor: theme.shadow || '#0F172A',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.14,
+      shadowRadius: 10,
+      elevation: 4,
     },
     heroTopRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 12,
+      marginBottom: 10,
+    },
+    heroTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 1,
+    },
+    iconBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.16)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.24)',
     },
     roleBadge: {
-      color: '#FFFFFF',
-      fontSize: 12,
+      color: theme.onPrimary,
+      fontSize: 14,
       fontWeight: '800',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-      backgroundColor: 'rgba(15,23,42,0.35)',
+      letterSpacing: 0.2,
+    },
+    orgTypeBadge: {
       borderRadius: 999,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.26)',
+      backgroundColor: 'rgba(255,255,255,0.14)',
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 5,
     },
     orgType: {
-      color: '#E2E8F0',
+      color: theme.onPrimary,
       fontSize: 12,
       fontWeight: '700',
+      opacity: 0.95,
     },
     orgName: {
-      color: '#FFFFFF',
-      fontSize: 24,
-      fontWeight: '900',
+      color: theme.onPrimary,
+      fontSize: 22,
+      fontWeight: '800',
       marginBottom: 6,
     },
     heroSubtitle: {
-      color: 'rgba(255,255,255,0.92)',
+      color: theme.onPrimary,
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: '500',
       lineHeight: 18,
       marginBottom: 14,
+      opacity: 0.9,
     },
     counterRow: {
       flexDirection: 'row',

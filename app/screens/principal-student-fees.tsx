@@ -93,6 +93,8 @@ export default function StudentFeeManagementScreen() {
   const { student } = data;
   const isStudentInactive =
     student.is_active === false || String(student.status || '').toLowerCase() === 'inactive';
+  const registrationMarkedPaid =
+    Boolean(student.registration_fee_paid) || Boolean(student.payment_verified);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -171,6 +173,75 @@ export default function StudentFeeManagementScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.registrationCard}>
+            <View style={styles.registrationHeaderRow}>
+              <View>
+                <Text style={styles.registrationTitle}>Registration Fee</Text>
+                <Text style={styles.registrationAmount}>
+                  {formatCurrency(Number(student.registration_fee_amount || 0))}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.registrationStatusBadge,
+                  registrationMarkedPaid
+                    ? styles.registrationStatusBadgePaid
+                    : styles.registrationStatusBadgeUnpaid,
+                ]}
+              >
+                <Ionicons
+                  name={registrationMarkedPaid ? 'checkmark-circle' : 'alert-circle'}
+                  size={12}
+                  color={registrationMarkedPaid ? theme.success : theme.warning}
+                />
+                <Text
+                  style={[
+                    styles.registrationStatusText,
+                    registrationMarkedPaid
+                      ? styles.registrationStatusTextPaid
+                      : styles.registrationStatusTextUnpaid,
+                  ]}
+                >
+                  {registrationMarkedPaid ? 'Paid' : 'Not Paid'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.registrationActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.registrationActionButton,
+                  styles.registrationMarkPaidButton,
+                  (actions.saving || actions.updatingRegistrationStatus || registrationMarkedPaid) && { opacity: 0.6 },
+                ]}
+                disabled={actions.saving || actions.updatingRegistrationStatus || registrationMarkedPaid}
+                onPress={() => void actions.handleSetRegistrationPaidStatus(true)}
+              >
+                {actions.updatingRegistrationStatus && !registrationMarkedPaid ? (
+                  <EduDashSpinner size="small" color={theme.success} />
+                ) : (
+                  <Ionicons name="checkmark-circle-outline" size={15} color={theme.success} />
+                )}
+                <Text style={styles.registrationMarkPaidText}>Mark Paid</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.registrationActionButton,
+                  styles.registrationMarkUnpaidButton,
+                  (actions.saving || actions.updatingRegistrationStatus || !registrationMarkedPaid) && { opacity: 0.6 },
+                ]}
+                disabled={actions.saving || actions.updatingRegistrationStatus || !registrationMarkedPaid}
+                onPress={() => void actions.handleSetRegistrationPaidStatus(false)}
+              >
+                {actions.updatingRegistrationStatus && registrationMarkedPaid ? (
+                  <EduDashSpinner size="small" color={theme.warning} />
+                ) : (
+                  <Ionicons name="refresh-circle-outline" size={15} color={theme.warning} />
+                )}
+                <Text style={styles.registrationMarkUnpaidText}>Mark Unpaid</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <TouchableOpacity
             style={[styles.changeClassButton, isStudentInactive && styles.changeClassButtonDisabled]}
             disabled={isStudentInactive}
@@ -184,6 +255,24 @@ export default function StudentFeeManagementScreen() {
           >
             <Ionicons name="swap-horizontal" size={18} color={theme.primary} />
             <Text style={styles.changeClassText}>Change Class</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.syncTuitionButton,
+              (isStudentInactive || actions.syncingTuitionFees || actions.saving) && styles.changeClassButtonDisabled,
+            ]}
+            disabled={isStudentInactive || actions.syncingTuitionFees || actions.saving}
+            onPress={() => void actions.handleSyncTuitionFeesToClass()}
+          >
+            {actions.syncingTuitionFees ? (
+              <EduDashSpinner size="small" color={theme.info || theme.primary} />
+            ) : (
+              <Ionicons name="refresh-circle" size={18} color={theme.info || theme.primary} />
+            )}
+            <Text style={styles.syncTuitionText}>
+              {actions.syncingTuitionFees ? 'Syncing Tuition...' : 'Sync Tuition To Class'}
+            </Text>
           </TouchableOpacity>
 
           {!isStudentInactive ? (
@@ -256,7 +345,10 @@ export default function StudentFeeManagementScreen() {
               {data.feeSetupStatus === 'school_only' && (
                 <Text style={styles.emptyFeesHint}>Fees are configured but haven't been generated for this student.</Text>
               )}
-              {data.feeSetupStatus !== 'missing' && (
+              {data.feeSetupStatus === 'skipped_inactive' && (
+                <Text style={styles.emptyFeesHint}>Fee generation was skipped because this learner is not active.</Text>
+              )}
+              {data.feeSetupStatus !== 'missing' && data.feeSetupStatus !== 'skipped_inactive' && (
                 <TouchableOpacity style={styles.generateFeesButton} onPress={data.handleGenerateFees} disabled={data.generatingFees}>
                   <Text style={styles.generateFeesText}>{data.generatingFees ? 'Generating...' : 'Generate Fees'}</Text>
                 </TouchableOpacity>

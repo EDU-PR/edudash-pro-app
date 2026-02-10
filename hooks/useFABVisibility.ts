@@ -71,7 +71,7 @@ export const useFABVisibility = (pathname: string | null) => {
       pathname.includes('teacher-message-thread') ||
       pathname.includes('teacher-message-list') ||
       pathname.includes('parent-messages') ||
-      pathname.includes('teacher-messages') ||
+      pathname.includes('teacher-message') ||
       pathname.includes('teacher/messages') ||
       pathname.includes('principal/messages') ||
       pathname.includes('new-message')

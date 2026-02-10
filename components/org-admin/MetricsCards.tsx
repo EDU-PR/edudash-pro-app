@@ -1,69 +1,81 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useOrgAdminMetrics } from '@/hooks/useOrgAdminMetrics';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
 interface MetricsCardsProps {
   theme: any;
 }
 
+interface KPIConfig {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  getValue: (m: any) => string;
+}
+
 export function MetricsCards({ theme }: MetricsCardsProps) {
   const { data: metrics, isLoading, error } = useOrgAdminMetrics();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const kpis: KPIConfig[] = useMemo(() => [
+    {
+      title: 'Active Learners',
+      icon: 'people',
+      color: theme.primary,
+      getValue: (m: any) => m?.activeLearners?.toString() || '0',
+    },
+    {
+      title: 'Completion Rate',
+      icon: 'checkmark-circle',
+      color: '#10B981',
+      getValue: (m: any) => `${m?.completionRate?.toFixed(1) || '0'}%`,
+    },
+    {
+      title: 'Cert Pipeline',
+      icon: 'ribbon',
+      color: '#F59E0B',
+      getValue: (m: any) => m?.certPipeline?.toString() || '0',
+    },
+    {
+      title: 'MRR',
+      icon: 'wallet',
+      color: '#8B5CF6',
+      getValue: (m: any) => `R${((m?.mrr || 0) / 100).toFixed(0)}`,
+    },
+  ], [theme.primary]);
 
   if (isLoading) {
     return (
-      <View style={createStyles(theme).loadingContainer}>
+      <View style={styles.loadingContainer}>
         <EduDashSpinner size="large" color={theme.primary} />
-        <Text style={[createStyles(theme).loadingText, { color: theme.textSecondary }]}>
-          Loading metrics...
-        </Text>
+        <Text style={styles.loadingText}>Loading metrics...</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={createStyles(theme).errorContainer}>
-        <Text style={[createStyles(theme).errorText, { color: theme.error }]}>
-          Failed to load metrics
-        </Text>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Failed to load metrics</Text>
       </View>
     );
   }
 
   return (
-    <View style={createStyles(theme).row}>
-      <KPICard
-        title="Active Learners"
-        value={metrics?.activeLearners?.toString() || '0'}
-        theme={theme}
-      />
-      <KPICard
-        title="Completion Rate"
-        value={`${metrics?.completionRate?.toFixed(1) || '0'}%`}
-        theme={theme}
-      />
-      <KPICard
-        title="Cert Pipeline"
-        value={metrics?.certPipeline?.toString() || '0'}
-        theme={theme}
-      />
-      <KPICard
-        title="MRR"
-        value={`R${((metrics?.mrr || 0) / 100).toFixed(2)}`}
-        theme={theme}
-      />
-    </View>
-  );
-}
-
-function KPICard({ title, value, theme }: { title: string; value: string; theme: any }) {
-  const styles = createStyles(theme);
-  
-  return (
-    <View style={styles.card}>
-      <Text style={styles.value}>{value}</Text>
-      <Text style={styles.title}>{title}</Text>
+    <View style={styles.row}>
+      {kpis.map((kpi) => (
+        <View key={kpi.title} style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconCircle, { backgroundColor: kpi.color + '18' }]}>
+              <Ionicons name={kpi.icon} size={18} color={kpi.color} />
+            </View>
+          </View>
+          <Text style={styles.value}>{kpi.getValue(metrics)}</Text>
+          <Text style={styles.title}>{kpi.title}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -75,25 +87,36 @@ const createStyles = (theme: any) => StyleSheet.create({
     gap: 12,
   },
   card: {
-    flexBasis: '48%',
-    backgroundColor: theme.card,
-    padding: 16,
-    borderRadius: 12,
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: theme.surface,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.border,
-    minHeight: 90,
+    minHeight: 100,
+    justifyContent: 'flex-end',
+  },
+  cardHeader: {
+    marginBottom: 10,
+  },
+  iconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   value: {
     color: theme.text,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   title: {
     color: theme.textSecondary,
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
   loadingContainer: {
     padding: 40,
@@ -103,6 +126,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
+    color: theme.textSecondary,
   },
   errorContainer: {
     padding: 20,
@@ -111,6 +135,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   errorText: {
     fontSize: 14,
     textAlign: 'center',
+    color: theme.error,
   },
 });
 

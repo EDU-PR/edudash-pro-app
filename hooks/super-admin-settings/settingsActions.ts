@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
-import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { signOutAndRedirect } from '@/lib/authActions';
 import { logger } from '@/lib/logger';
+import { writeSuperAdminAudit } from '@/lib/audit/superAdminAudit';
 import type { ShowAlertFn } from './types';
 
 /** Creates memoized action handlers for the Super Admin settings screen. */
@@ -26,11 +26,12 @@ export function useSettingsActions(
               track('superadmin_signed_out', {
                 session_duration: Date.now() - (profile?.last_login_at ? new Date(profile.last_login_at).getTime() : 0),
               });
-              const { error } = await assertSupabase().from('audit_logs').insert({
-                admin_user_id: profile?.id, action: 'superadmin_signed_out',
-                details: { sign_out_time: new Date().toISOString() },
+              await writeSuperAdminAudit({
+                actorProfileId: profile?.id,
+                action: 'superadmin_signed_out',
+                description: 'Super admin signed out',
+                metadata: { sign_out_time: new Date().toISOString() },
               });
-              if (error) logger.error('Failed to log sign out:', error);
               await signOutAndRedirect({ redirectTo: '/(auth)/sign-in' });
             } catch (err) {
               logger.error('Sign out error:', err);
@@ -58,11 +59,12 @@ export function useSettingsActions(
             try {
               setMaintenanceMode(value);
               track('superadmin_maintenance_mode_toggled', { enabled: value, timestamp: new Date().toISOString() });
-              const { error } = await assertSupabase().from('audit_logs').insert({
-                admin_user_id: profile?.id, action: 'maintenance_mode_toggled',
-                details: { enabled: value, reason: 'Manual toggle by super admin' },
+              await writeSuperAdminAudit({
+                actorProfileId: profile?.id,
+                action: 'maintenance_mode_toggled',
+                description: `Maintenance mode ${value ? 'enabled' : 'disabled'}`,
+                metadata: { enabled: value, reason: 'Manual toggle by super admin' },
               });
-              if (error) logger.error('Failed to log maintenance mode toggle:', error);
               showAlert({ title: 'Success', message: `Maintenance mode ${value ? 'enabled' : 'disabled'} successfully`, type: 'success' });
             } catch (err) {
               logger.error('Failed to toggle maintenance mode:', err);
@@ -87,11 +89,12 @@ export function useSettingsActions(
           onPress: async () => {
             try {
               track('superadmin_cache_cleared', { timestamp: new Date().toISOString() });
-              const { error } = await assertSupabase().from('audit_logs').insert({
-                admin_user_id: profile?.id, action: 'platform_cache_cleared',
-                details: { cleared_at: new Date().toISOString() },
+              await writeSuperAdminAudit({
+                actorProfileId: profile?.id,
+                action: 'platform_cache_cleared',
+                description: 'Platform cache cleared',
+                metadata: { cleared_at: new Date().toISOString() },
               });
-              if (error) logger.error('Failed to log cache clear:', error);
               showAlert({ title: 'Success', message: 'Platform cache cleared successfully', type: 'success' });
             } catch (err) {
               logger.error('Failed to clear cache:', err);
@@ -115,11 +118,12 @@ export function useSettingsActions(
           onPress: async () => {
             try {
               track('superadmin_data_export_initiated', { timestamp: new Date().toISOString() });
-              const { error } = await assertSupabase().from('audit_logs').insert({
-                admin_user_id: profile?.id, action: 'platform_data_export_initiated',
-                details: { export_type: 'full_platform_export', initiated_at: new Date().toISOString() },
+              await writeSuperAdminAudit({
+                actorProfileId: profile?.id,
+                action: 'platform_data_export_initiated',
+                description: 'Platform data export initiated',
+                metadata: { export_type: 'full_platform_export', initiated_at: new Date().toISOString() },
               });
-              if (error) logger.error('Failed to log data export:', error);
               showAlert({ title: 'Export Started', message: 'Platform data export has been initiated. You will receive an email when the export is complete.', type: 'success' });
             } catch (err) {
               logger.error('Failed to initiate data export:', err);

@@ -289,7 +289,9 @@ export function cleanForTTS(t: string): string {
       .replace(/_Tools used:.*?_/gi, '')
       .replace(/_.*?tokens used_/gi, '')
       // Quotes and parens that TTS reads awkwardly
-      .replace(/["""«»''()\[\]{}<>]/g, '')
+      .replace(/[“”"«»]/g, '')
+      .replace(/[‘’`]/g, "'")
+      .replace(/[()\[\]{}<>]/g, '')
       // Acronym expansion for natural speech
       .replace(/\bEduDash Pro\b/gi, 'Edu Dash Pro')
       .replace(/\bAI\b/g, 'A.I.')

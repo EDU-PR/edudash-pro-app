@@ -113,7 +113,7 @@ export const navigateTo = {
   
   // Announcements
   announcementsHistory: () => 
-    router.push('/screens/teacher-messages' as any),
+    router.push('/screens/teacher-message-list' as any),
   
   // Help routes
   financialReportsHelp: () => 

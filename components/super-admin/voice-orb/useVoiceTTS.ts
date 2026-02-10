@@ -176,6 +176,13 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     return category;
   }, []);
 
+  const estimatePlaybackTimeoutMs = useCallback((text: string): number => {
+    const length = (text || '').length;
+    // Conservative estimate for slower voices; clamp to avoid unbounded waits.
+    const estimated = length * 120;
+    return Math.min(120000, Math.max(20000, estimated));
+  }, []);
+
   const playAudioUrl = useCallback((audioUrl: string, timeoutMs: number): Promise<void> => {
     return new Promise<void>(async (resolve, reject) => {
       // Configure audio mode on first use (ensures playback works on Android)
@@ -194,6 +201,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
       let settled = false;
       let hasStarted = false;
+      let notPlayingTicks = 0;
       const playbackId = playbackIdRef.current + 1;
       playbackIdRef.current = playbackId;
 
@@ -233,8 +241,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           return;
         }
         let playing = false;
+        let durationMs = 0;
+        let positionMs = 0;
         try {
           playing = player.playing;
+          durationMs = (player.duration || 0) * 1000;
+          positionMs = (player.currentTime || 0) * 1000;
         } catch (err) {
           console.warn('[VoiceTTS] Playback status error, stopping:', err);
           finalize(new Error('AUDIO_PLAYER_STATUS_ERROR'));
@@ -242,14 +254,23 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         }
         if (playing) {
           hasStarted = true;
+          notPlayingTicks = 0;
+          return;
         }
-        if (hasStarted && !playing) {
+        if (!hasStarted) {
+          return;
+        }
+
+        notPlayingTicks += 1;
+        const reachedEnd = durationMs > 0 && positionMs >= Math.max(durationMs - 180, 0);
+        if (reachedEnd || notPlayingTicks >= 4) {
           finalize();
         }
       }, 150);
 
       playbackTimeoutRef.current = setTimeout(() => {
-        if (!hasStarted) {
+        const stillPlaying = !!player && player.playing;
+        if (!hasStarted || stillPlaying) {
           finalize(new Error('AUDIO_PLAYBACK_TIMEOUT'));
           return;
         }
@@ -317,6 +338,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         body: JSON.stringify({
           text: cleanText,
           lang: langCode,
+          rate: 0,
+          pitch: 0,
           style: 'friendly',
           format: 'mp3',
         }),
@@ -346,11 +369,12 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     }
 
     try {
-      await playAudioUrl(data.audio_url, 15000);
+      const timeoutMs = estimatePlaybackTimeoutMs(cleanText);
+      await playAudioUrl(data.audio_url, timeoutMs);
     } catch (playbackError) {
       throw new Error(`PLAYBACK_ERROR:${playbackError instanceof Error ? playbackError.message : String(playbackError)}`);
     }
-  }, [playAudioUrl]);
+  }, [playAudioUrl, estimatePlaybackTimeoutMs]);
 
   const splitIntoChunks = (text: string, maxLength: number): string[] => {
     const sentences: string[] = [];
@@ -469,8 +493,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         .replace(/_Tools used:.*?_/gi, '')
         .replace(/_.*?tokens used_/gi, '')
         // Quotes/brackets that TTS reads awkwardly
-        .replace(/[\u201C\u201D\u201E\u00AB\u00BB\u2018\u2019]/g, '')
-        .replace(/["""'']/g, '')
+        .replace(/[\u201C\u201D\u201E\u00AB\u00BB"]/g, '')
+        .replace(/[\u2018\u2019`]/g, "'")
         .replace(/[()[\]{}<>]/g, '')
         // Status labels
         .replace(/\bCorrect answer:\s*/gi, '')

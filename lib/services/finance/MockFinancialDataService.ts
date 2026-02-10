@@ -38,7 +38,7 @@ function randomSeeded(seed: number) {
   return () => (s = Math.sin(s) * 10000) - Math.floor(Math.sin(s) * 10000);
 }
 
-class FinancialDataServiceImpl {
+class MockFinancialDataServiceImpl {
   // Mock: generate repeatable data
   private rng = randomSeeded(42);
 
@@ -102,5 +102,4 @@ class FinancialDataServiceImpl {
   }
 }
 
-export const FinancialDataService = new FinancialDataServiceImpl();
-
+export const MockFinancialDataService = new MockFinancialDataServiceImpl();

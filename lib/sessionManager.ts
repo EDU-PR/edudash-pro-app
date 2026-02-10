@@ -298,9 +298,12 @@ async function clearStoredData(): Promise<void> {
       }
     }
 
-    // Clear Supabase auth session and legacy keys from cross-platform storage
+    // Clear legacy keys from cross-platform storage.
+    // IMPORTANT: Do NOT clear SUPABASE_STORAGE_KEY here — Supabase manages its
+    // own session storage internally via auth.signOut(). Wiping it externally
+    // causes auth.getSession() to return null even after a successful sign-in,
+    // which produces an infinite redirect back to the sign-in screen.
     const extraKeys = [
-      SUPABASE_STORAGE_KEY,
       ...LEGACY_SESSION_KEYS,
       ...ACTIVE_CHILD_KEYS,
       ...ACTIVE_ORG_KEYS,
@@ -877,9 +880,13 @@ export async function signInWithSession(
       if (__DEV__) console.log('[SessionManager] Pre sign-in check failed (non-fatal)', e);
     }
     
-    // Clear any stale session data
-    if (__DEV__) console.log('[SessionManager] Clearing stale session data before sign-in...');
-    await clearStoredData();
+    // Clear app-level stale session data (NOT Supabase's own storage key)
+    // Supabase manages its own session storage via signInWithPassword.
+    if (__DEV__) console.log('[SessionManager] Clearing stale app session data before sign-in...');
+    await Promise.all([
+      storage.removeItem(SESSION_STORAGE_KEY),
+      storage.removeItem(PROFILE_STORAGE_KEY),
+    ]);
     
     const signInPromise = assertSupabase().auth.signInWithPassword({
       email,
@@ -889,117 +896,59 @@ export async function signInWithSession(
       error: err,
     }));
 
-    const SIGN_IN_TIMEOUT_MS = 15000;
-    type SignInRaceResult =
-      | { kind: 'signIn'; result: { data: { session: Session | null; user: User | null }; error: any } }
-      | { kind: 'session'; session: Session | null }
-      | { kind: 'timeout' };
+    const SIGN_IN_TIMEOUT_MS = 10000;
 
-    const racePromise: Promise<SignInRaceResult> = Promise.race([
-      signInPromise.then((result) => ({ kind: 'signIn' as const, result })),
-      waitForSessionOrAuth(SIGN_IN_TIMEOUT_MS + 5000).then((session) => ({ kind: 'session' as const, session })),
-    ]);
-
-    const raceResult = await withTimeout<SignInRaceResult>(
-      racePromise,
+    // Wait for signInWithPassword to complete (with timeout).
+    // AuthContext's onAuthStateChange(SIGNED_IN) will handle profile fetching,
+    // routing, and analytics. We just need to return the session quickly.
+    const signInResult = await withTimeout(
+      signInPromise,
       SIGN_IN_TIMEOUT_MS,
-      { kind: 'timeout' }
+      { data: { session: null, user: null }, error: { message: 'Sign-in timed out. Please try again.' } as any }
     );
 
-    if (raceResult.kind === 'session' && raceResult.session?.user) {
-      const wantedEmail = email.trim().toLowerCase();
-      const sessionEmail = raceResult.session.user.email?.toLowerCase();
-      if (!sessionEmail || sessionEmail === wantedEmail) {
-        const session: UserSession = {
-          access_token: raceResult.session.access_token,
-          refresh_token: raceResult.session.refresh_token,
-          expires_at: raceResult.session.expires_at || Date.now() / 1000 + 3600,
-          user_id: raceResult.session.user.id,
-          email: raceResult.session.user.email,
-        };
-        const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-          fetchUserProfile(raceResult.session.user.id),
-          4000
-        );
-        let profile = fetchedProfile;
-        if (!profile) {
-          if (timedOut) {
-            console.warn('[SessionManager] fetchUserProfile timed out after session signal, using minimal fallback');
-          }
-          profile = await buildMinimalProfileFromUser(raceResult.session.user);
-        }
-        await storeSession(session);
-        await storeProfile(profile);
-        setupAutoRefresh(session);
-        return { session, profile };
-      }
-    }
-
-    if (raceResult.kind === 'timeout') {
-      console.warn('[SessionManager] Sign-in timed out - checking for late session...');
-      try {
-        const lateSession = await waitForSessionOrAuth(10000);
-        if (lateSession?.user) {
-          const session: UserSession = {
-            access_token: lateSession.access_token,
-            refresh_token: lateSession.refresh_token,
-            expires_at: lateSession.expires_at || Date.now() / 1000 + 3600,
-            user_id: lateSession.user.id,
-            email: lateSession.user.email,
-          };
-          const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-            fetchUserProfile(lateSession.user.id),
-            8000
-          );
-          let profile = fetchedProfile;
-          if (!profile) {
-            if (timedOut) {
-              console.warn('[SessionManager] fetchUserProfile timed out after late session, using minimal fallback');
-            }
-            profile = await buildMinimalProfileFromUser(lateSession.user);
-          }
-          await storeSession(session);
-          await storeProfile(profile);
-          setupAutoRefresh(session);
-          return { session, profile };
-        }
-      } catch (lateErr) {
-        console.warn('[SessionManager] Late session check failed:', lateErr);
-      }
-      return { session: null, profile: null, error: 'Sign-in timed out. Please try again.' };
-    }
-
-    const { data, error } =
-      raceResult.kind === 'signIn'
-        ? raceResult.result
-        : await signInPromise;
+    const { data, error } = signInResult;
 
     if (error) {
       console.error('[SessionManager] Supabase auth error:', error.message);
       authDebug('signIn.error', { message: error.message });
-      
-      // Special handling for "already signed in" errors
-      if (error.message?.includes('already') || error.message?.includes('signed in')) {
-        if (__DEV__) console.log('[SessionManager] User already signed in, attempting to get session...');
+
+      // Check if this is a timeout — auth might have actually succeeded in the background
+      if (error.message?.toLowerCase()?.includes('timed out')) {
         try {
           const { data: sessionData } = await assertSupabase().auth.getSession();
-          if (sessionData?.session) {
-            if (__DEV__) console.log('[SessionManager] Retrieved existing session');
-            // If the existing session is for a different user, sign out and retry once.
-            const existingEmail = sessionData.session.user.email?.toLowerCase();
+          if (sessionData?.session?.user) {
+            if (__DEV__) console.log('[SessionManager] Late session found after timeout');
+            const session: UserSession = {
+              access_token: sessionData.session.access_token,
+              refresh_token: sessionData.session.refresh_token,
+              expires_at: sessionData.session.expires_at || Date.now() / 1000 + 3600,
+              user_id: sessionData.session.user.id,
+              email: sessionData.session.user.email,
+            };
+            const profile = await buildMinimalProfileFromUser(sessionData.session.user);
+            await Promise.all([storeSession(session), storeProfile(profile)]);
+            setupAutoRefresh(session);
+            return { session, profile };
+          }
+        } catch (lateErr) {
+          console.warn('[SessionManager] Late session check failed:', lateErr);
+        }
+      }
+
+      // Special handling for "already signed in" errors
+      if (error.message?.includes('already') || error.message?.includes('signed in')) {
+        try {
+          const { data: sessionData } = await assertSupabase().auth.getSession();
+          if (sessionData?.session?.user) {
             const wantedEmail = email.trim().toLowerCase();
+            const existingEmail = sessionData.session.user.email?.toLowerCase();
             if (existingEmail && existingEmail !== wantedEmail) {
-              if (__DEV__) console.log('[SessionManager] Existing session is for different email; signing out and retrying sign-in...');
-              // Use global scope to ensure complete sign-out
-              await assertSupabase().auth.signOut({ scope: 'global' } as any);
-              await clearStoredData();
-              await new Promise((resolve) => setTimeout(resolve, 300));
+              await assertSupabase().auth.signOut({ scope: 'local' } as any);
+              await new Promise((resolve) => setTimeout(resolve, 200));
               const retry = await assertSupabase().auth.signInWithPassword({ email, password });
-              if (retry.error) {
-                return { session: null, profile: null, error: retry.error.message };
-              }
-              if (!retry.data.session || !retry.data.user) {
-                return { session: null, profile: null, error: 'Invalid credentials' };
+              if (retry.error || !retry.data.session || !retry.data.user) {
+                return { session: null, profile: null, error: retry.error?.message || 'Invalid credentials' };
               }
               const session: UserSession = {
                 access_token: retry.data.session.access_token,
@@ -1008,23 +957,12 @@ export async function signInWithSession(
                 user_id: retry.data.user.id,
                 email: retry.data.user.email,
               };
-              const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-                fetchUserProfile(retry.data.user.id),
-                8000
-              );
-              let profile = fetchedProfile;
-              if (!profile) {
-                if (timedOut) {
-                  console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
-                }
-                profile = await buildMinimalProfileFromUser(retry.data.user);
-              }
-              await storeSession(session);
-              await storeProfile(profile);
+              const profile = await buildMinimalProfileFromUser(retry.data.user);
+              await Promise.all([storeSession(session), storeProfile(profile)]);
               setupAutoRefresh(session);
               return { session, profile };
             }
-            // Use the existing session
+            // Same user — use existing session
             const session: UserSession = {
               access_token: sessionData.session.access_token,
               refresh_token: sessionData.session.refresh_token,
@@ -1032,19 +970,8 @@ export async function signInWithSession(
               user_id: sessionData.session.user.id,
               email: sessionData.session.user.email,
             };
-            const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-              fetchUserProfile(sessionData.session.user.id),
-              8000
-            );
-            let profile = fetchedProfile;
-            if (!profile) {
-              if (timedOut) {
-                console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
-              }
-              profile = await buildMinimalProfileFromUser(sessionData.session.user);
-            }
-            await storeSession(session);
-            await storeProfile(profile);
+            const profile = await buildMinimalProfileFromUser(sessionData.session.user);
+            await Promise.all([storeSession(session), storeProfile(profile)]);
             setupAutoRefresh(session);
             return { session, profile };
           }
@@ -1052,7 +979,7 @@ export async function signInWithSession(
           console.error('[SessionManager] Session recovery failed:', recoveryError);
         }
       }
-      
+
       track('edudash.auth.sign_in', {
         method: 'email',
         role: 'unknown',
@@ -1066,7 +993,13 @@ export async function signInWithSession(
       return { session: null, profile: null, error: 'Invalid credentials' };
     }
 
-    // Create session object
+    // ── FAST PATH: Store session immediately + build minimal profile ──
+    // AuthContext's onAuthStateChange(SIGNED_IN) handler already handles:
+    //   • Full profile fetch (fetchEnhancedUserProfile)
+    //   • Emergency profile fallback
+    //   • routeAfterLogin navigation
+    //   • Biometric session storage
+    // So we just need to persist the session and return quickly.
     const session: UserSession = {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
@@ -1075,87 +1008,48 @@ export async function signInWithSession(
       email: data.user.email,
     };
 
-    // Store session EARLY so fetchUserProfile can read it from storage
-    // This prevents race conditions where profile fetch needs the session
-    if (__DEV__) console.log('[SessionManager] Storing session early for profile fetch...');
-    try {
-      await storeSession(session);
-    } catch (earlyStoreError) {
-      console.warn('[SessionManager] Early session store failed (non-fatal):', earlyStoreError);
-    }
+    // Build minimal profile from the auth response (instant, no network call)
+    const profile = await buildMinimalProfileFromUser(data.user);
 
-    // Fetch user profile
-    if (__DEV__) console.log('[SessionManager] Fetching user profile for:', data.user.id);
-    const { result: fetchedProfile, timedOut } = await withTimeoutMarker(
-      fetchUserProfile(data.user.id),
-      8000
-    );
-    let profile = fetchedProfile;
-    if (!profile) {
-      if (timedOut) {
-        console.warn('[SessionManager] fetchUserProfile timed out, using minimal fallback profile');
-      } else {
-        console.warn('[SessionManager] fetchUserProfile returned null, using minimal fallback profile');
-      }
-      profile = await buildMinimalProfileFromUser(data.user);
-    }
-    if (__DEV__) console.log('[SessionManager] Profile loaded successfully. Role:', profile.role, 'Org:', profile.organization_id);
-
-    // Store session and profile
-    if (__DEV__) console.log('[SessionManager] Storing session and profile...');
-    try {
-      await Promise.all([
-        storeSession(session),
-        storeProfile(profile),
-      ]);
-    console.log('[SessionManager] Session and profile stored successfully');
-    authDebug('signIn.success', { userId: data.user.id });
-    } catch (storeError) {
-      console.error('[SessionManager] Storage error:', storeError);
-      throw new Error(`Storage failed: ${storeError instanceof Error ? storeError.message : 'Unknown error'}`);
-    }
-
-    // Update last login via RPC to avoid REST conflicts on public.users
-    try {
-      const rpcPromise = assertSupabase().rpc('update_user_last_login') as unknown as Promise<{
-        data?: unknown;
-        error?: unknown;
-      }>;
-      const { result: lastLoginResult, timedOut: lastLoginTimedOut } = await withTimeoutMarker(
-        rpcPromise,
-        2000
-      );
-      if (lastLoginTimedOut) {
-        console.warn('[SessionManager] update_user_last_login timed out (non-blocking)');
-      } else if ((lastLoginResult as any)?.error) {
-        console.warn('Could not update last_login_at via RPC:', (lastLoginResult as any)?.error);
-      }
-    } catch (updateError) {
-      console.warn('Error updating last_login_at via RPC:', updateError);
-      // Continue anyway - this is not critical for login success
-    }
-
-    // Set up monitoring and feature flags
-    identifyUser(data.user.id, {
-      role: profile.role,
-      organization_id: profile.organization_id,
-      seat_status: profile.seat_status,
-    });
-
-    identifyUserForFlags(data.user.id, {
-      role: profile.role,
-      organization_tier: profile.organization_id ? 'org_member' : 'individual',
-      capabilities: profile.capabilities,
-    });
-
-    // Set up auto-refresh
+    // Store session + profile immediately
+    if (__DEV__) console.log('[SessionManager] Storing session and minimal profile...');
+    await Promise.all([storeSession(session), storeProfile(profile)]);
     setupAutoRefresh(session);
 
-    track('edudash.auth.sign_in', {
-      method: 'email',
-      role: profile.role,
-      success: true,
-    });
+    if (__DEV__) console.log('[SessionManager] Sign-in fast path complete for:', data.user.email);
+    authDebug('signIn.success', { userId: data.user.id });
+
+    // Fire-and-forget: analytics, last-login update, monitoring
+    // These are non-critical and should NOT block the sign-in flow.
+    void (async () => {
+      try {
+        // Update last login
+        await withTimeout(
+          assertSupabase().rpc('update_user_last_login') as unknown as Promise<any>,
+          2000,
+          null
+        );
+      } catch { /* non-fatal */ }
+
+      try {
+        identifyUser(data.user!.id, {
+          role: profile.role,
+          organization_id: profile.organization_id,
+          seat_status: profile.seat_status,
+        });
+        identifyUserForFlags(data.user!.id, {
+          role: profile.role,
+          organization_tier: profile.organization_id ? 'org_member' : 'individual',
+          capabilities: profile.capabilities,
+        });
+      } catch { /* non-fatal */ }
+
+      track('edudash.auth.sign_in', {
+        method: 'email',
+        role: profile.role,
+        success: true,
+      });
+    })();
 
     return { session, profile };
 
@@ -1256,7 +1150,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 /**
  * Sign out and clear session
  */
-export async function signOut(): Promise<void> {
+export async function signOut(options: { preserveOtherSessions?: boolean } = {}): Promise<void> {
   try {
     authDebug('signOut.start');
     console.log('[SessionManager] Starting sign-out process...');
@@ -1265,6 +1159,7 @@ export async function signOut(): Promise<void> {
     const sessionDuration = session 
       ? Math.round((Date.now() - (session.expires_at * 1000 - 3600000)) / 1000 / 60)
       : 0;
+    const preserveOtherSessions = options.preserveOtherSessions === true;
 
     // Clear auto-refresh timer
     if (sessionRefreshTimer) {
@@ -1287,12 +1182,8 @@ export async function signOut(): Promise<void> {
       }
     }
 
-    // Clear stored data FIRST to prevent any race conditions with getSession() calls
-    // This is critical for preventing sign-in freeze after sign-out
-    console.log('[SessionManager] Clearing stored session data first...');
-    await clearStoredData();
-
-    // Attempt Supabase sign-out with timeout protection (2 seconds max)
+    // Attempt Supabase sign-out FIRST so Supabase can clean its own storage/state,
+    // then clear our app-level stored data afterwards.
     // Use 'local' scope first to clear client-side state immediately
     try {
       console.log('[SessionManager] Signing out from Supabase (local scope first)...');
@@ -1306,20 +1197,27 @@ export async function signOut(): Promise<void> {
       console.warn('[SessionManager] Local sign-out error (continuing):', localError);
     }
     
-    // Then sign out globally to invalidate server session
-    try {
-      console.log('[SessionManager] Signing out from Supabase (global scope)...');
-      await withTimeout(
-        assertSupabase().auth.signOut({ scope: 'global' } as any),
-        2000,
-        { error: null }
-      );
-      console.log('[SessionManager] Global sign-out completed');
-    } catch (supabaseError) {
-      console.warn('[SessionManager] Global sign-out error (continuing):', supabaseError);
+    // Then sign out globally to invalidate server session, unless this flow
+    // is preserving other saved sessions for account switching.
+    if (!preserveOtherSessions) {
+      try {
+        console.log('[SessionManager] Signing out from Supabase (global scope)...');
+        await withTimeout(
+          assertSupabase().auth.signOut({ scope: 'global' } as any),
+          2000,
+          { error: null }
+        );
+        console.log('[SessionManager] Global sign-out completed');
+      } catch (supabaseError) {
+        console.warn('[SessionManager] Global sign-out error (continuing):', supabaseError);
+      }
+    } else {
+      console.log('[SessionManager] Preserving other account sessions (skipping global sign-out)');
     }
     
-    // Clear stored data again to ensure clean slate
+    // Clear app-level stored data after Supabase sign-out completes.
+    // Single call — no need to call it multiple times.
+    console.log('[SessionManager] Clearing stored session data...');
     await clearStoredData();
 
     track('edudash.auth.sign_out', {

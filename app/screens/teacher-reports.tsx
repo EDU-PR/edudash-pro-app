@@ -104,7 +104,7 @@ export default function TeacherReportsScreen() {
                 <Ionicons name="add-circle" size={18} color={palette.background} />
                 <Text style={[styles.actionText, { color: palette.background }]}>Create Lesson</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: palette.primary }]} onPress={() => router.push('/screens/teacher-messages')}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: palette.primary }]} onPress={() => router.push('/screens/teacher-message-list')}>
                 <Ionicons name="chatbubbles" size={18} color={palette.background} />
                 <Text style={[styles.actionText, { color: palette.background }]}>Message Parents</Text>
               </TouchableOpacity>

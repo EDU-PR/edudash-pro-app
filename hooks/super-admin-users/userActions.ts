@@ -3,6 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
+import { writeSuperAdminAudit } from '@/lib/audit/superAdminAudit';
 import { getAvailableTiersForRole } from '@/lib/tiers';
 import { formatTierLabel } from '@/lib/screen-styles/super-admin-users.styles';
 import type { UserRecord } from '@/lib/screen-styles/super-admin-users.styles';
@@ -87,19 +88,18 @@ export async function impersonateUser(user: UserRecord, deps: ActionDeps): Promi
               impersonated_school_id: user.school_id,
             });
 
-            const { error: logError } = await assertSupabase()
-              .from('audit_logs')
-              .insert({
-                admin_user_id: profileId,
-                action: 'user_impersonation_start',
-                target_user_id: user.id,
-                details: {
-                  impersonated_email: user.email,
-                  impersonated_role: user.role,
-                  impersonated_school: user.school_name,
-                },
-              });
-            if (logError) logger.error('Failed to log impersonation:', logError);
+            await writeSuperAdminAudit({
+              actorProfileId: profileId,
+              action: 'user_impersonation_start',
+              targetId: user.id,
+              targetType: 'user',
+              description: `Impersonation started for ${user.email}`,
+              metadata: {
+                impersonated_email: user.email,
+                impersonated_role: user.role,
+                impersonated_school: user.school_name,
+              },
+            });
 
             showAlert({
               title: 'Impersonation Started',
@@ -109,11 +109,13 @@ export async function impersonateUser(user: UserRecord, deps: ActionDeps): Promi
                 {
                   text: 'Return to Admin',
                   onPress: () => {
-                    assertSupabase().from('audit_logs').insert({
-                      admin_user_id: profileId,
+                    writeSuperAdminAudit({
+                      actorProfileId: profileId,
                       action: 'user_impersonation_end',
-                      target_user_id: user.id,
-                      details: { duration: 'immediate_return' },
+                      targetId: user.id,
+                      targetType: 'user',
+                      description: `Impersonation ended for ${user.email}`,
+                      metadata: { duration: 'immediate_return' },
                     });
                   },
                 },
@@ -271,13 +273,14 @@ export async function resetUserPassword(user: UserRecord, deps: ActionDeps): Pro
 
             track('superadmin_password_reset_sent', { user_id: user.id, user_email: user.email });
 
-            const { error: logError } = await assertSupabase().from('audit_logs').insert({
-              admin_user_id: profileId,
+            await writeSuperAdminAudit({
+              actorProfileId: profileId,
               action: 'password_reset_sent',
-              target_user_id: user.id,
-              details: { user_email: user.email },
+              targetId: user.id,
+              targetType: 'user',
+              description: `Password reset requested for ${user.email}`,
+              metadata: { user_email: user.email },
             });
-            if (logError) logger.error('Failed to log password reset:', logError);
 
             showAlert({ title: 'Success', message: 'Password reset email sent successfully', type: 'success' });
           } catch (error) {

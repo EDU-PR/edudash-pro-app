@@ -52,7 +52,7 @@ export function ProfileSwitcher({
   const { theme } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const { showAlert, alertProps } = useAlertModal();
 
   const [accounts, setAccounts] = useState<StoredAccount[]>([]);
@@ -290,10 +290,27 @@ export function ProfileSwitcher({
   }, [t, loadAccounts, showAlert]);
 
   // Add new account (sign out and go to sign in)
-  const handleAddAccount = useCallback(() => {
+  const handleAddAccount = useCallback(async () => {
+    // Persist the CURRENT user's session before signing out so they
+    // appear in the quick-switch list after the new sign-in completes.
+    if (user?.id && user?.email) {
+      try {
+        const { getCurrentSession } = await import('@/lib/sessionManager');
+        const currentSession = await getCurrentSession();
+        await EnhancedBiometricAuth.storeBiometricSession(
+          user.id,
+          user.email,
+          profile || undefined,
+          currentSession?.refresh_token,
+        );
+      } catch (storeErr) {
+        // Non-fatal: proceed with sign-out even if storage fails
+        if (__DEV__) console.warn('[ProfileSwitcher] Failed to store current account before add:', storeErr);
+      }
+    }
     onClose();
     signOutAndRedirect({ clearBiometrics: false, resetApp: false, redirectTo: '/(auth)/sign-in?switch=1' });
-  }, [onClose]);
+  }, [onClose, user?.id, user?.email, profile]);
 
   // Format last used date
   const formatLastUsed = (dateString: string): string => {

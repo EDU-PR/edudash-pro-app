@@ -1,18 +1,199 @@
 /**
  * Petty Cash Workflow Service
- * 
- * Handles teacher petty cash requests, approvals, disbursements
- * For ECD centers managing small purchases and classroom supplies
- * 
+ *
+ * Uses petty_cash_transactions as the source of truth for petty cash approvals.
+ * Keeps the public service API stable for existing screens.
+ *
  * @module PettyCashWorkflowService
  */
 
 import { supabase } from '../../lib/supabase';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 import type { PettyCashRequest, ApprovalActionParams } from './types';
 import { ApprovalNotificationService } from './ApprovalNotificationService';
+import { writeApprovalAuditLog } from './auditLogger';
+
+interface BasicProfile {
+  id: string;
+  auth_user_id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  role?: string | null;
+}
 
 export class PettyCashWorkflowService {
-  
+  private static mapTransactionStatusToRequestStatus(status: unknown): PettyCashRequest['status'] {
+    const value = String(status || '').toLowerCase();
+    switch (value) {
+      case 'approved':
+        return 'approved';
+      case 'rejected':
+        return 'rejected';
+      case 'completed':
+        return 'completed';
+      default:
+        return 'pending';
+    }
+  }
+
+  private static mapRequestStatusesToTransactionStatuses(statuses?: string[]): string[] {
+    if (!Array.isArray(statuses) || statuses.length === 0) return [];
+    const mapped = new Set<string>();
+
+    for (const raw of statuses) {
+      const status = String(raw || '').toLowerCase();
+      switch (status) {
+        case 'requires_info':
+          mapped.add('pending');
+          break;
+        case 'disbursed':
+          mapped.add('approved');
+          break;
+        case 'cancelled':
+          mapped.add('rejected');
+          break;
+        default:
+          mapped.add(status);
+          break;
+      }
+    }
+
+    return Array.from(mapped);
+  }
+
+  private static normalizeUrgency(raw: unknown, fallbackText = ''): PettyCashRequest['urgency'] {
+    const value = `${String(raw || '').toLowerCase()} ${String(fallbackText || '').toLowerCase()}`;
+    if (value.includes('urgent')) return 'urgent';
+    if (value.includes('high')) return 'high';
+    if (value.includes('low')) return 'low';
+    return 'normal';
+  }
+
+  private static composeDescription(description: string, justification?: string): string {
+    const base = String(description || '').trim();
+    const reason = String(justification || '').trim();
+    if (!reason) return base;
+    if (!base) return `Justification: ${reason}`;
+    return `${base}\nJustification: ${reason}`;
+  }
+
+  private static async loadProfilesForCreators(creatorIds: string[]): Promise<Map<string, BasicProfile>> {
+    const ids = Array.from(new Set(creatorIds.filter(Boolean)));
+    const profileMap = new Map<string, BasicProfile>();
+    if (!ids.length) return profileMap;
+
+    const byId = await supabase
+      .from('profiles')
+      .select('id, auth_user_id, first_name, last_name, role')
+      .in('id', ids);
+
+    if (Array.isArray(byId.data)) {
+      byId.data.forEach((profile: BasicProfile) => {
+        if (profile?.id) profileMap.set(String(profile.id), profile);
+        if (profile?.auth_user_id) profileMap.set(String(profile.auth_user_id), profile);
+      });
+    }
+
+    const unresolved = ids.filter((id) => !profileMap.has(id));
+    if (!unresolved.length) return profileMap;
+
+    const byAuth = await supabase
+      .from('profiles')
+      .select('id, auth_user_id, first_name, last_name, role')
+      .in('auth_user_id', unresolved as any);
+
+    if (Array.isArray(byAuth.data)) {
+      byAuth.data.forEach((profile: BasicProfile) => {
+        if (profile?.id) profileMap.set(String(profile.id), profile);
+        if (profile?.auth_user_id) profileMap.set(String(profile.auth_user_id), profile);
+      });
+    }
+
+    return profileMap;
+  }
+
+  private static mapTransactionToRequest(
+    tx: any,
+    profiles: Map<string, BasicProfile>,
+    overrides?: Partial<PettyCashRequest>,
+  ): PettyCashRequest {
+    const createdBy = String(tx?.created_by || '');
+    const profile = profiles.get(createdBy);
+    const requestorName = profile
+      ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Staff Member'
+      : 'Staff Member';
+    const requestorRole = String(profile?.role || 'teacher');
+
+    const createdAt = String(tx?.created_at || new Date().toISOString());
+    const updatedAt = String(tx?.updated_at || createdAt);
+    const neededBy = tx?.transaction_date ? String(tx.transaction_date) : undefined;
+
+    const baseDate = neededBy ? new Date(neededBy) : new Date(createdAt);
+    const receiptDeadline = Number.isNaN(baseDate.getTime())
+      ? undefined
+      : new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const status = this.mapTransactionStatusToRequestStatus(tx?.status);
+
+    const base: PettyCashRequest = {
+      id: String(tx?.id || ''),
+      preschool_id: String(tx?.school_id || tx?.preschool_id || ''),
+      requested_by: createdBy,
+      requestor_name: requestorName,
+      requestor_role: requestorRole,
+      amount: Math.abs(Number(tx?.amount || 0)),
+      category: String(tx?.category || 'General'),
+      description: String(tx?.description || ''),
+      justification: String(tx?.description || ''),
+      urgency: this.normalizeUrgency(tx?.transaction_type, tx?.description),
+      status,
+      approved_by: tx?.approved_by || undefined,
+      approved_at: status === 'approved' || status === 'completed' ? updatedAt : undefined,
+      approved_amount: status === 'approved' || status === 'completed'
+        ? Math.abs(Number(tx?.amount || 0))
+        : undefined,
+      disbursed_by: tx?.approved_by || undefined,
+      disbursed_at: status === 'approved' || status === 'completed' ? updatedAt : undefined,
+      disbursement_method: 'petty_cash_float',
+      receipt_required: true,
+      receipt_deadline: receiptDeadline,
+      receipt_submitted: Boolean(tx?.receipt_url),
+      receipt_image_path: tx?.receipt_url || undefined,
+      actual_amount_spent: tx?.receipt_url ? Math.abs(Number(tx?.amount || 0)) : undefined,
+      change_amount: 0,
+      change_returned: false,
+      requested_at: createdAt,
+      needed_by: neededBy,
+      created_at: createdAt,
+      updated_at: updatedAt,
+    };
+
+    return {
+      ...base,
+      ...overrides,
+    };
+  }
+
+  private static async getTransactionById(requestId: string): Promise<{ data: any; column: string } | null> {
+    const result = await withPettyCashTenant((column, client) =>
+      client
+        .from('petty_cash_transactions')
+        .select(`id, ${column}, amount, status, type, category, description, created_by, approved_by, receipt_url, transaction_type, transaction_date, created_at, updated_at`)
+        .eq('id', requestId)
+        .eq('type', 'expense')
+        .single()
+    );
+
+    if (result.error || !result.data) {
+      return null;
+    }
+
+    return {
+      data: result.data,
+      column: result.column,
+    };
+  }
+
   /**
    * Submit a new petty cash request
    */
@@ -34,36 +215,57 @@ export class PettyCashWorkflowService {
     }
   ): Promise<PettyCashRequest | null> {
     try {
-      // Set receipt deadline (7 days from needed_by or 7 days from now)
-      const receiptDeadline = requestData.needed_by 
-        ? new Date(new Date(requestData.needed_by).getTime() + 7 * 24 * 60 * 60 * 1000)
-        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const transactionDate = requestData.needed_by || new Date().toISOString().split('T')[0];
+      const receiptDeadline = new Date(new Date(transactionDate).getTime() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
 
-      const { data, error } = await supabase
-        .from('petty_cash_requests')
-        .insert({
-          preschool_id: preschoolId,
-          requested_by: requestedBy,
-          requestor_name: requestorName,
-          requestor_role: requestorRole,
-          ...requestData,
-          receipt_required: requestData.receipt_required ?? true,
-          receipt_deadline: receiptDeadline.toISOString().split('T')[0],
-          status: 'pending',
-        })
-        .select()
-        .single();
+      const { data, error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .insert({
+            [column]: preschoolId,
+            created_by: requestedBy,
+            amount: Math.abs(Number(requestData.amount || 0)),
+            type: 'expense',
+            category: requestData.category || 'General',
+            description: this.composeDescription(requestData.description, requestData.justification),
+            status: 'pending',
+            transaction_date: transactionDate,
+            transaction_type: requestData.urgency,
+            reference_number: requestData.budget_category_id || null,
+          })
+          .select('*')
+          .single()
+      );
 
-      if (error) {
+      if (error || !data) {
         console.error('Error submitting petty cash request:', error);
         return null;
       }
 
-      // Log the action
+      const profileMap = new Map<string, BasicProfile>([
+        [requestedBy, {
+          id: requestedBy,
+          first_name: requestorName,
+          last_name: '',
+          role: requestorRole,
+        }],
+      ]);
+
+      const request = this.mapTransactionToRequest(data, profileMap, {
+        requestor_name: requestorName,
+        requestor_role: requestorRole,
+        urgency: requestData.urgency,
+        justification: requestData.justification,
+        receipt_required: requestData.receipt_required ?? true,
+        receipt_deadline: receiptDeadline,
+      });
+
       await this.logAction({
         preschoolId,
         entityType: 'petty_cash_request',
-        entityId: data.id,
+        entityId: request.id,
         performedBy: requestedBy,
         performerName: requestorName,
         performerRole: requestorRole,
@@ -73,10 +275,8 @@ export class PettyCashWorkflowService {
         notes: `Petty cash request for ${requestData.description}`,
       });
 
-      // Send notification to principal
-      await ApprovalNotificationService.notifyPrincipalOfNewPettyCashRequest(data);
-
-      return data;
+      await ApprovalNotificationService.notifyPrincipalOfNewPettyCashRequest(request);
+      return request;
     } catch (error) {
       console.error('Error in submitPettyCashRequest:', error);
       return null;
@@ -88,20 +288,26 @@ export class PettyCashWorkflowService {
    */
   static async getPendingPettyCashRequests(preschoolId: string, limit = 50): Promise<PettyCashRequest[]> {
     try {
-      const { data, error } = await supabase
-        .from('petty_cash_requests')
-        .select('*')
-        .eq('preschool_id', preschoolId)
-        .in('status', ['pending', 'requires_info'])
-        .order('requested_at', { ascending: false })
-        .limit(limit);
+      const { data, error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('*')
+          .eq(column, preschoolId)
+          .eq('type', 'expense')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(limit)
+      );
 
       if (error) {
         console.error('Error loading pending petty cash requests:', error);
         return [];
       }
 
-      return data || [];
+      const rows = Array.isArray(data) ? data : [];
+      const profiles = await this.loadProfilesForCreators(rows.map((row: any) => String(row.created_by || '')));
+
+      return rows.map((row: any) => this.mapTransactionToRequest(row, profiles));
     } catch (error) {
       console.error('Error in getPendingPettyCashRequests:', error);
       return [];
@@ -122,40 +328,47 @@ export class PettyCashWorkflowService {
     }
   ): Promise<PettyCashRequest[]> {
     try {
-      let query = supabase
-        .from('petty_cash_requests')
-        .select('*')
-        .eq('preschool_id', preschoolId)
-        .order('requested_at', { ascending: false });
+      const mappedStatuses = this.mapRequestStatusesToTransactionStatuses(options?.status);
 
-      if (options?.status?.length) {
-        query = query.in('status', options.status);
-      }
+      const { data, error } = await withPettyCashTenant((column, client) => {
+        let query = client
+          .from('petty_cash_transactions')
+          .select('*')
+          .eq(column, preschoolId)
+          .eq('type', 'expense')
+          .order('created_at', { ascending: false });
 
-      if (options?.requestorId) {
-        query = query.eq('requested_by', options.requestorId);
-      }
+        if (mappedStatuses.length) {
+          query = query.in('status', mappedStatuses);
+        }
 
-      if (options?.urgency) {
-        query = query.eq('urgency', options.urgency);
-      }
+        if (options?.requestorId) {
+          query = query.eq('created_by', options.requestorId);
+        }
 
-      if (options?.limit) {
-        query = query.limit(options.limit);
-      }
+        if (options?.urgency) {
+          query = query.eq('transaction_type', options.urgency);
+        }
 
-      if (options?.offset) {
-        query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
-      }
+        if (options?.limit) {
+          query = query.limit(options.limit);
+        }
 
-      const { data, error } = await query;
+        if (options?.offset) {
+          query = query.range(options.offset, options.offset + (options.limit || 50) - 1);
+        }
+
+        return query;
+      });
 
       if (error) {
         console.error('Error loading petty cash requests:', error);
         return [];
       }
 
-      return data || [];
+      const rows = Array.isArray(data) ? data : [];
+      const profiles = await this.loadProfilesForCreators(rows.map((row: any) => String(row.created_by || '')));
+      return rows.map((row: any) => this.mapTransactionToRequest(row, profiles));
     } catch (error) {
       console.error('Error in getAllPettyCashRequests:', error);
       return [];
@@ -173,54 +386,59 @@ export class PettyCashWorkflowService {
     approvalNotes?: string
   ): Promise<boolean> {
     try {
-      const { data: request, error: fetchError } = await supabase
-        .from('petty_cash_requests')
-        .select('*')
-        .eq('id', requestId)
-        .single();
-
-      if (fetchError || !request) {
-        console.error('Error fetching petty cash request:', fetchError);
+      const existing = await this.getTransactionById(requestId);
+      if (!existing) {
+        console.error('Error fetching petty cash request:', requestId);
         return false;
       }
 
-      const finalApprovedAmount = approvedAmount ?? request.amount;
+      const finalApprovedAmount = Math.abs(Number(approvedAmount ?? existing.data.amount ?? 0));
 
-      const { data, error } = await supabase
-        .from('petty_cash_requests')
-        .update({
-          status: 'approved',
-          approved_by: approvedBy,
-          approved_at: new Date().toISOString(),
-          approved_amount: finalApprovedAmount,
-          approval_notes: approvalNotes,
-        })
-        .eq('id', requestId)
-        .select()
-        .single();
+      const updateResult = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .update({
+            status: 'approved',
+            approved_by: approvedBy,
+            amount: finalApprovedAmount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', requestId)
+          .eq(column, existing.data[existing.column])
+          .select('*')
+          .single()
+      );
 
-      if (error) {
-        console.error('Error approving petty cash request:', error);
+      if (updateResult.error || !updateResult.data) {
+        console.error('Error approving petty cash request:', updateResult.error);
         return false;
       }
 
-      // Log the action
       await this.logAction({
-        preschoolId: data.preschool_id,
+        preschoolId: String(
+          updateResult.data.school_id ||
+          updateResult.data.preschool_id ||
+          existing.data[existing.column] ||
+          '',
+        ),
         entityType: 'petty_cash_request',
         entityId: requestId,
         performedBy: approvedBy,
         performerName: approverName,
         performerRole: 'principal_admin',
         action: 'approve',
-        previousStatus: 'pending',
+        previousStatus: String(existing.data.status || 'pending'),
         newStatus: 'approved',
         notes: approvalNotes,
       });
 
-      // Send notification to teacher
-      await ApprovalNotificationService.notifyTeacherPettyCashApproved(data);
+      const profiles = await this.loadProfilesForCreators([String(updateResult.data.created_by || '')]);
+      const request = this.mapTransactionToRequest(updateResult.data, profiles, {
+        approved_amount: finalApprovedAmount,
+        approval_notes: approvalNotes,
+      });
 
+      await ApprovalNotificationService.notifyTeacherPettyCashApproved(request);
       return true;
     } catch (error) {
       console.error('Error in approvePettyCashRequest:', error);
@@ -239,42 +457,57 @@ export class PettyCashWorkflowService {
     approvalNotes?: string
   ): Promise<boolean> {
     try {
-      const { data, error } = await supabase
-        .from('petty_cash_requests')
-        .update({
-          status: 'rejected',
-          approved_by: rejectedBy,
-          approved_at: new Date().toISOString(),
-          rejection_reason: rejectionReason,
-          approval_notes: approvalNotes,
-        })
-        .eq('id', requestId)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error rejecting petty cash request:', error);
+      const existing = await this.getTransactionById(requestId);
+      if (!existing) {
+        console.error('Error fetching petty cash request:', requestId);
         return false;
       }
 
-      // Log the action
+      const updateResult = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .update({
+            status: 'rejected',
+            approved_by: rejectedBy,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', requestId)
+          .eq(column, existing.data[existing.column])
+          .select('*')
+          .single()
+      );
+
+      if (updateResult.error || !updateResult.data) {
+        console.error('Error rejecting petty cash request:', updateResult.error);
+        return false;
+      }
+
       await this.logAction({
-        preschoolId: data.preschool_id,
+        preschoolId: String(
+          updateResult.data.school_id ||
+          updateResult.data.preschool_id ||
+          existing.data[existing.column] ||
+          '',
+        ),
         entityType: 'petty_cash_request',
         entityId: requestId,
         performedBy: rejectedBy,
         performerName: rejectorName,
         performerRole: 'principal_admin',
         action: 'reject',
-        previousStatus: 'pending',
+        previousStatus: String(existing.data.status || 'pending'),
         newStatus: 'rejected',
         notes: approvalNotes,
         reason: rejectionReason,
       });
 
-      // Send notification to teacher
-      await ApprovalNotificationService.notifyTeacherPettyCashRejected(data);
+      const profiles = await this.loadProfilesForCreators([String(updateResult.data.created_by || '')]);
+      const request = this.mapTransactionToRequest(updateResult.data, profiles, {
+        rejection_reason: rejectionReason,
+        approval_notes: approvalNotes,
+      });
 
+      await ApprovalNotificationService.notifyTeacherPettyCashRejected(request);
       return true;
     } catch (error) {
       console.error('Error in rejectPettyCashRequest:', error);
@@ -291,15 +524,24 @@ export class PettyCashWorkflowService {
     disbursementMethod: 'cash' | 'bank_transfer' | 'petty_cash_float' = 'petty_cash_float'
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('petty_cash_requests')
-        .update({
-          status: 'disbursed',
-          disbursed_by: disbursedBy,
-          disbursed_at: new Date().toISOString(),
-          disbursement_method: disbursementMethod,
-        })
-        .eq('id', requestId);
+      const existing = await this.getTransactionById(requestId);
+      if (!existing) {
+        console.error('Error fetching petty cash request for disbursement:', requestId);
+        return false;
+      }
+
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .update({
+            status: 'approved',
+            approved_by: disbursedBy,
+            updated_at: new Date().toISOString(),
+            transaction_type: disbursementMethod,
+          })
+          .eq('id', requestId)
+          .eq(column, existing.data[existing.column])
+      );
 
       if (error) {
         console.error('Error disbursing petty cash:', error);
@@ -323,16 +565,32 @@ export class PettyCashWorkflowService {
     changeAmount: number
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('petty_cash_requests')
-        .update({
-          receipt_submitted: true,
-          receipt_image_path: receiptImagePath,
-          actual_amount_spent: actualAmountSpent,
-          change_amount: changeAmount,
-          status: 'completed',
-        })
-        .eq('id', requestId);
+      const existing = await this.getTransactionById(requestId);
+      if (!existing) {
+        console.error('Error fetching petty cash request for receipt:', requestId);
+        return false;
+      }
+
+      const nextAmount = Number.isFinite(actualAmountSpent)
+        ? Math.abs(Number(actualAmountSpent || 0))
+        : Math.abs(Number(existing.data.amount || 0));
+      const receiptNote = Number.isFinite(changeAmount)
+        ? ` | Change returned: ${Math.abs(Number(changeAmount || 0)).toFixed(2)}`
+        : '';
+
+      const { error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .update({
+            receipt_url: receiptImagePath,
+            amount: nextAmount,
+            status: 'completed',
+            description: `${existing.data.description || ''}${receiptNote}`.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', requestId)
+          .eq(column, existing.data[existing.column])
+      );
 
       if (error) {
         console.error('Error submitting receipt:', error);
@@ -351,23 +609,34 @@ export class PettyCashWorkflowService {
    */
   static async getOverdueReceipts(preschoolId: string): Promise<PettyCashRequest[]> {
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      const { data, error } = await supabase
-        .from('petty_cash_requests')
-        .select('*')
-        .eq('preschool_id', preschoolId)
-        .eq('status', 'disbursed')
-        .eq('receipt_submitted', false)
-        .lt('receipt_deadline', today)
-        .order('receipt_deadline', { ascending: true });
+      const { data, error } = await withPettyCashTenant((column, client) =>
+        client
+          .from('petty_cash_transactions')
+          .select('*')
+          .eq(column, preschoolId)
+          .eq('type', 'expense')
+          .eq('status', 'approved')
+          .is('receipt_url', null)
+          .order('transaction_date', { ascending: true })
+      );
 
       if (error) {
         console.error('Error loading overdue receipts:', error);
         return [];
       }
 
-      return data || [];
+      const rows = Array.isArray(data) ? data : [];
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const overdueRows = rows.filter((row: any) => {
+        const base = row?.transaction_date ? new Date(row.transaction_date) : new Date(row?.created_at || '');
+        if (Number.isNaN(base.getTime())) return false;
+        const deadline = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+        return deadline < todayStart;
+      });
+
+      const profiles = await this.loadProfilesForCreators(overdueRows.map((row: any) => String(row.created_by || '')));
+      return overdueRows.map((row: any) => this.mapTransactionToRequest(row, profiles));
     } catch (error) {
       console.error('Error in getOverdueReceipts:', error);
       return [];
@@ -378,24 +647,6 @@ export class PettyCashWorkflowService {
    * Log approval action for audit trail
    */
   private static async logAction(params: ApprovalActionParams): Promise<void> {
-    try {
-      await supabase
-        .from('approval_logs')
-        .insert({
-          preschool_id: params.preschoolId,
-          entity_type: params.entityType,
-          entity_id: params.entityId,
-          performed_by: params.performedBy,
-          performer_name: params.performerName,
-          performer_role: params.performerRole,
-          action: params.action,
-          previous_status: params.previousStatus,
-          new_status: params.newStatus,
-          notes: params.notes,
-          reason: params.reason,
-        });
-    } catch (error) {
-      console.error('Error logging approval action:', error);
-    }
+    await writeApprovalAuditLog(params);
   }
 }

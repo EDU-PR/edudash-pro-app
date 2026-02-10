@@ -17,7 +17,7 @@ import type {
 } from './types';
 import { isRegistrationFeeEntry } from './types';
 
-export type FeeSetupStatus = 'unknown' | 'ready' | 'missing' | 'school_only';
+export type FeeSetupStatus = 'unknown' | 'ready' | 'missing' | 'school_only' | 'skipped_inactive';
 
 // ── Pure helpers ────────────────────────────────────────────────
 
@@ -41,6 +41,7 @@ export function mapFeeRow(f: any): StudentFee {
   return {
     id: f.id,
     student_id: f.student_id,
+    fee_structure_id: f.fee_structure_id,
     amount,
     final_amount: finalAmount,
     discount_amount: discountAmount,
@@ -83,6 +84,11 @@ export async function bootstrapFeesIfMissing(
     const preschoolId = student.preschool_id || organizationId;
     if (!preschoolId) return 'missing';
 
+    const studentStatus = String(student.status || '').trim().toLowerCase();
+    if (student.is_active !== true || studentStatus !== 'active') {
+      return 'skipped_inactive';
+    }
+
     const { data: feeStructures, error: feeError } = await supabase
       .from('fee_structures')
       .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
@@ -110,6 +116,8 @@ export async function bootstrapFeesIfMissing(
     const selectedFee = selectFeeStructureForChild(resolvedTuitionFees as FeeStructureRow[], {
       dateOfBirth: student.date_of_birth,
       enrollmentDate: student.enrollment_date,
+      ageGroupLabel: student.class_name || undefined,
+      gradeLevel: student.class_name || undefined,
     });
 
     if (!selectedFee) return 'ready';
@@ -167,6 +175,8 @@ async function resolveFromSchoolFees(
   const selected = selectFeeStructureForChild(mapped, {
     dateOfBirth: student.date_of_birth,
     enrollmentDate: student.enrollment_date,
+    ageGroupLabel: student.class_name || undefined,
+    gradeLevel: student.class_name || undefined,
   });
 
   if (!selected) return { status: 'school_only' };
@@ -245,6 +255,54 @@ export async function resolveSuggestedRegistrationFee(
     return selected ? Number(selected.amount) : Number(registrationFees[0].amount);
   } catch (error) {
     console.warn('[StudentFeeManagement] Failed to resolve suggested registration fee:', error);
+    return null;
+  }
+}
+
+export async function resolveSuggestedTuitionFee(
+  organizationId: string,
+  student: Student | null,
+  className?: string | null,
+): Promise<FeeStructureRow | null> {
+  try {
+    const supabase = assertSupabase();
+    const { data, error } = await supabase
+      .from('fee_structures')
+      .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+      .eq('preschool_id', organizationId)
+      .eq('is_active', true)
+      .order('effective_from', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const tuitionFees = (data || []).filter((fee: FeeStructureRow) =>
+      isTuitionFee(fee.fee_type, fee.name, fee.description),
+    );
+    if (!tuitionFees.length) return null;
+
+    const classNeedle = className?.trim().toLowerCase();
+    if (classNeedle) {
+      const match = tuitionFees.find((fee) => {
+        const text = [fee.name, fee.description, ...(fee.grade_levels || [])]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return text.includes(classNeedle);
+      });
+      if (match) return match;
+    }
+
+    const selected = selectFeeStructureForChild(tuitionFees as FeeStructureRow[], {
+      dateOfBirth: student?.date_of_birth,
+      enrollmentDate: student?.enrollment_date,
+      ageGroupLabel: className || student?.class_name || undefined,
+      gradeLevel: className || student?.class_name || undefined,
+    });
+
+    return selected || tuitionFees[0] || null;
+  } catch (error) {
+    console.warn('[StudentFeeManagement] Failed to resolve suggested tuition fee:', error);
     return null;
   }
 }

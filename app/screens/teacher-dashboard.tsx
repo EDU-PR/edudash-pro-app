@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Stack, router } from 'expo-router';
-import TeacherDashboardWrapper from '@/components/dashboard/TeacherDashboardWrapper';
+import { NewEnhancedTeacherDashboard } from '@/components/dashboard/NewEnhancedTeacherDashboard';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -109,7 +109,7 @@ export default function TeacherDashboardScreen() {
   return (
     <DesktopLayout role="teacher">
       <Stack.Screen options={{ headerShown: false }} />
-      <TeacherDashboardWrapper />
+      <NewEnhancedTeacherDashboard />
     </DesktopLayout>
   );
 }

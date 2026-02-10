@@ -73,8 +73,8 @@ export class DashAINavigator {
       'teacher-management': '/screens/teacher-management',
       
       // Communication
-      messages: '/screens/teacher-messages',
-      'teacher-messages': '/screens/teacher-messages',
+      messages: '/screens/teacher-message-list',
+      'teacher-messages': '/screens/teacher-message-list',
       announcements: '/screens/principal-announcement',
       
       // Financial
@@ -233,7 +233,7 @@ export class DashAINavigator {
     const params: Record<string, string> = {};
     if (subject) params.prefillSubject = subject;
     if (body) params.prefillMessage = body;
-    this.navigateToScreen('/screens/teacher-messages', params);
+    this.navigateToScreen('/screens/teacher-message-list', params);
   }
 
   /**

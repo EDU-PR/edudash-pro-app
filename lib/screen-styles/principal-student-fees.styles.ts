@@ -154,7 +154,86 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     fontWeight: '600',
     color: theme.primary,
   },
+  registrationCard: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border + '80',
+  },
+  registrationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  registrationTitle: {
+    fontSize: 12,
+    color: theme.textSecondary,
+    fontWeight: '600',
+  },
+  registrationAmount: {
+    marginTop: 2,
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  registrationStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  registrationStatusBadgePaid: {
+    backgroundColor: theme.success + '1A',
+  },
+  registrationStatusBadgeUnpaid: {
+    backgroundColor: theme.warning + '1F',
+  },
+  registrationStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  registrationStatusTextPaid: {
+    color: theme.success,
+  },
+  registrationStatusTextUnpaid: {
+    color: theme.warning,
+  },
+  registrationActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  registrationActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  registrationMarkPaidButton: {
+    backgroundColor: theme.success + '15',
+  },
+  registrationMarkUnpaidButton: {
+    backgroundColor: theme.warning + '15',
+  },
+  registrationMarkPaidText: {
+    color: theme.success,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  registrationMarkUnpaidText: {
+    color: theme.warning,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   changeClassButton: {
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -171,6 +250,22 @@ export const createStyles = (theme: any, isDark: boolean, insets: any) => StyleS
     fontSize: 14,
     fontWeight: '600',
     color: theme.primary,
+  },
+  syncTuitionButton: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: (theme.info || theme.primary) + '14',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  syncTuitionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.info || theme.primary,
   },
   markInactiveButton: {
     marginTop: 10,

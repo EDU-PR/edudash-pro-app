@@ -94,6 +94,7 @@ import {
 interface UseDashAssistantOptions {
   conversationId?: string;
   initialMessage?: string;
+  handoffSource?: string;
   onClose?: () => void;
 }
 
@@ -189,7 +190,7 @@ const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
-  const { conversationId, initialMessage, onClose } = options;
+  const { conversationId, initialMessage, handoffSource, onClose } = options;
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
@@ -311,10 +312,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const voiceProviderRef = useRef<VoiceProvider | null>(null);
   const voiceInputStartAtRef = useRef<number | null>(null);
   const lastSpeakStartRef = useRef<number>(0);
+  const ttsSessionIdRef = useRef<string | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestQueueRef = useRef<Array<{ text: string; attachments: DashAttachment[] }>>([]);
   const isProcessingRef = useRef(false);
   const prevLengthRef = useRef<number>(0);
+  const messagesLengthRef = useRef<number>(0);
+  const isSpeakingStateRef = useRef<boolean>(false);
   const tutorSessionRef = useRef<TutorSession | null>(null);
   const tutorOverridesRef = useRef<Record<string, string>>({});
   const learnerContextRef = useRef<LearnerContext | null>(null);
@@ -326,6 +330,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useEffect(() => {
     learnerContextRef.current = learnerContext;
   }, [learnerContext]);
+
+  useEffect(() => {
+    messagesLengthRef.current = messages.length;
+  }, [messages.length]);
+
+  useEffect(() => {
+    isSpeakingStateRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   // Save conversation ID whenever it changes for persistence
   useEffect(() => {
@@ -774,6 +786,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     if (!dashInstance) return;
     
     try {
+      ttsSessionIdRef.current = null;
       await dashInstance.stopSpeaking();
       setIsSpeaking(false);
       setSpeakingMessageId(null);
@@ -800,6 +813,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         voiceProviderRef,
         voiceInputStartAtRef,
         lastSpeakStartRef,
+        ttsSessionIdRef,
       },
       setIsSpeaking,
       setSpeakingMessageId,
@@ -1402,6 +1416,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         voiceProviderRef,
         voiceInputStartAtRef,
         lastSpeakStartRef,
+        ttsSessionIdRef,
       },
       isFreeTier,
       consumeVoiceBudget,
@@ -1516,6 +1531,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         voiceProviderRef,
         voiceInputStartAtRef,
         lastSpeakStartRef,
+        ttsSessionIdRef,
       },
     });
   }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale, isFreeTier, consumeVoiceBudget]);
@@ -1642,6 +1658,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setDashInstance(dash);
         setIsInitialized(true);
 
+        const preferOrbHandoff = handoffSource === 'orb' || handoffSource === 'dash_voice_orb';
         let hasExistingMessages = false;
 
         if (conversationId) {
@@ -1725,24 +1742,91 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
         // Check for ORB session messages to carry over
         let orbMessagesLoaded = false;
-        if (!hasExistingMessages && user?.id) {
+        if ((preferOrbHandoff || !hasExistingMessages) && user?.id) {
           try {
-            const orbKey = `dash:orb-session:${user.id}`;
-            const orbRaw = await AsyncStorage.getItem(orbKey);
-            if (orbRaw) {
-              const orbData = JSON.parse(orbRaw);
-              // Only use ORB messages if they're recent (last 30 min)
-              if (orbData?.messages?.length > 0 && (Date.now() - (orbData.updatedAt || 0)) < 30 * 60 * 1000) {
-                const orbMessages: DashMessage[] = orbData.messages.map((m: any, i: number) => ({
-                  id: `orb_${orbData.conversationId}_${i}`,
-                  type: m.role === 'user' ? 'user' : 'assistant',
-                  content: m.content,
-                  timestamp: (orbData.updatedAt || Date.now()) - ((orbData.messages.length - i) * 1000),
-                }));
+            const legacyProfileId = profile?.id && profile.id !== user.id ? profile.id : null;
+            const candidateKeys = [
+              `dash:orb-session:${user.id}`,
+              legacyProfileId ? `dash:orb-session:${legacyProfileId}` : null,
+            ].filter((key): key is string => Boolean(key));
+
+            let orbData: any = null;
+            const consumedKeys: string[] = [];
+            for (const key of candidateKeys) {
+              const raw = await AsyncStorage.getItem(key);
+              if (!raw) continue;
+              consumedKeys.push(key);
+              try {
+                const parsed = JSON.parse(raw);
+                if (parsed?.messages?.length > 0 && (Date.now() - (parsed.updatedAt || 0)) < 30 * 60 * 1000) {
+                  orbData = parsed;
+                  break;
+                }
+              } catch {
+                // ignore malformed orb payloads
+              }
+            }
+
+            if (orbData?.messages?.length > 0) {
+              const orbMessages: DashMessage[] = orbData.messages.map((m: any, i: number) => ({
+                id: `orb_${orbData.conversationId || 'handoff'}_${i}`,
+                type: m.role === 'user' ? 'user' : 'assistant',
+                content: String(m.content || ''),
+                timestamp: (orbData.updatedAt || Date.now()) - ((orbData.messages.length - i) * 1000),
+              }));
+
+              if (preferOrbHandoff) {
+                try {
+                  const handoffConversationId = await dash.startNewConversation('Dash Orb Chat');
+                  dash.setCurrentConversationId?.(handoffConversationId);
+                  let seededViaSyntheticConversation = false;
+
+                  const addMessage = (dash as any).addMessageToConversation;
+                  if (typeof addMessage === 'function') {
+                    for (const message of orbMessages) {
+                      await addMessage.call(dash, handoffConversationId, message);
+                    }
+                  } else {
+                    const nowTs = Date.now();
+                    const synthesizedConversation: DashConversation = {
+                      id: handoffConversationId,
+                      title: 'Dash Orb Chat',
+                      messages: orbMessages,
+                      created_at: nowTs,
+                      updated_at: nowTs,
+                    };
+                    setConversation(synthesizedConversation);
+                    setMessages(normalizeConversationMessages(orbMessages));
+                    persistConversationSnapshot(synthesizedConversation).catch(() => {});
+                    hasExistingMessages = orbMessages.length > 0;
+                    seededViaSyntheticConversation = true;
+                  }
+
+                  if (!seededViaSyntheticConversation) {
+                    const handoffConversation = await dash.getConversation(handoffConversationId);
+                    if (handoffConversation) {
+                      setConversation(handoffConversation);
+                      setMessages(normalizeConversationMessages(handoffConversation.messages || []));
+                      persistConversationSnapshot(handoffConversation).catch(() => {});
+                      hasExistingMessages = (handoffConversation.messages?.length || 0) > 0;
+                    } else {
+                      setMessages(orbMessages);
+                      hasExistingMessages = orbMessages.length > 0;
+                    }
+                  }
+                } catch (handoffErr) {
+                  console.warn('[useDashAssistant] Orb handoff conversation bootstrap failed:', handoffErr);
+                  setMessages(orbMessages);
+                  hasExistingMessages = orbMessages.length > 0;
+                }
+              } else {
                 setMessages(orbMessages);
-                orbMessagesLoaded = true;
-                // Clear the ORB session after loading
-                await AsyncStorage.removeItem(orbKey);
+                hasExistingMessages = orbMessages.length > 0;
+              }
+
+              orbMessagesLoaded = true;
+              for (const key of consumedKeys) {
+                await AsyncStorage.removeItem(key);
               }
             }
           } catch (orbErr) {
@@ -1772,10 +1856,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [
     conversationId,
     initialMessage,
+    handoffSource,
     loadChatPrefs,
     normalizeConversationMessages,
     hydrateFromSnapshot,
     persistConversationSnapshot,
+    profile?.id,
     user?.id,
   ]);
 
@@ -1818,26 +1904,29 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   useFocusEffect(
     useCallback(() => {
       loadChatPrefs();
-      if (dashInstance && conversation) {
+      let active = true;
+
+      if (dashInstance && conversation?.id) {
         dashInstance.getConversation(conversation.id).then((updatedConv: any) => {
-          if (updatedConv && updatedConv.messages.length !== messages.length) {
+          if (!active) return;
+          const currentLength = messagesLengthRef.current;
+          if (updatedConv && updatedConv.messages.length !== currentLength) {
             setMessages(normalizeConversationMessages(updatedConv.messages));
             setConversation(updatedConv);
             persistConversationSnapshot(updatedConv).catch(() => {});
           }
-        });
+        }).catch(() => {});
       }
 
       return () => {
-        if (isSpeaking) {
+        active = false;
+        if (isSpeakingStateRef.current) {
           stopSpeaking().catch(() => {});
         }
       };
     }, [
       dashInstance,
-      conversation,
-      messages.length,
-      isSpeaking,
+      conversation?.id,
       loadChatPrefs,
       stopSpeaking,
       normalizeConversationMessages,

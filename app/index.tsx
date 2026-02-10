@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useAuth } from '@/contexts/AuthContext';
 import MarketingLanding from '@/components/marketing/MarketingLanding';
-import { routeAfterLogin } from '@/lib/routeAfterLogin';
+import { isNavigationLocked, routeAfterLogin } from '@/lib/routeAfterLogin';
 import { useTheme } from '@/contexts/ThemeContext';
 import { setPasswordRecoveryInProgress } from '@/lib/sessionManager';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
@@ -49,6 +49,7 @@ export default function Index() {
     // let it handle routing via SIGNED_IN handler — don't compete.
     // This prevents Index + AuthContext from both calling routeAfterLogin.
     if (session && user && !profile && profileLoading) return;
+    if (session && user && isNavigationLocked(user.id)) return;
     
     // Native app: Always skip landing page
     if (isNative) {
@@ -110,7 +111,7 @@ export default function Index() {
           logger.info(TAG, 'Native + authenticated, routing to dashboard');
           routeAfterLogin(user, profile).catch((err) => {
             console.error('[Index] routeAfterLogin failed:', err);
-            router.replace('/profiles-gate');
+            // AuthContext may already be routing this user; avoid competing redirects here.
           });
         } else if (session && user) {
           // Authenticated but no role - go to profiles gate
@@ -133,7 +134,7 @@ export default function Index() {
       if (profile?.role) {
         routeAfterLogin(user, profile).catch((err) => {
           console.error('[Index] routeAfterLogin failed:', err);
-          router.replace('/profiles-gate');
+          // AuthContext may already be routing this user; avoid competing redirects here.
         });
       } else {
         router.replace('/profiles-gate');

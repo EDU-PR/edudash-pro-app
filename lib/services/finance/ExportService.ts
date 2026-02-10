@@ -8,7 +8,7 @@ import * as Print from 'expo-print';
 import { Alert } from 'react-native';
 import { Buffer } from 'buffer';
 
-import type { TransactionRecord } from './FinancialDataService';
+import type { TransactionRecord } from './MockFinancialDataService';
 
 export type ExportFormat = 'csv' | 'pdf' | 'excel';
 

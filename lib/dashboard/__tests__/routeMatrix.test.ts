@@ -81,6 +81,32 @@ describe('routeMatrix', () => {
     ).toBe('/screens/student-dashboard');
   });
 
+  it('routes admins to school admin dashboard only when school type is explicit', () => {
+    expect(
+      getDashboardRouteForRole({
+        role: 'admin',
+        resolvedSchoolType: 'preschool',
+        hasOrganization: true,
+      })
+    ).toBe('/screens/admin-dashboard');
+
+    expect(
+      getDashboardRouteForRole({
+        role: 'admin',
+        resolvedSchoolType: 'k12_school',
+        hasOrganization: true,
+      })
+    ).toBe('/screens/admin-dashboard');
+
+    expect(
+      getDashboardRouteForRole({
+        role: 'admin',
+        resolvedSchoolType: null,
+        hasOrganization: true,
+      })
+    ).toBe('/screens/org-admin-dashboard');
+  });
+
   it('detects mismatches between current and expected dashboard families', () => {
     expect(isDashboardRouteMismatch('/screens/parent-dashboard', '/(k12)/parent/dashboard')).toBe(true);
     expect(isDashboardRouteMismatch('/screens/parent-dashboard', '/screens/parent-dashboard')).toBe(false);

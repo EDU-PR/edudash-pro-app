@@ -13,12 +13,14 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import { withPettyCashTenant } from '@/lib/utils/pettyCashTenant';
 import { FinancialDataService } from '../FinancialDataService';
 
 // Import modular services
 import { POPWorkflowService } from './POPWorkflowService';
 import { PettyCashWorkflowService } from './PettyCashWorkflowService';
 import { ApprovalNotificationService } from './ApprovalNotificationService';
+import { writeApprovalAuditLog } from './auditLogger';
 
 // Re-export types
 export type {
@@ -86,53 +88,68 @@ export class ApprovalWorkflowService {
    */
   static async getApprovalSummary(preschoolId: string) {
     try {
-      // Count pending POPs
-      const { count: pendingPOPs } = await supabase
-        .from('proof_of_payments')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .in('status', ['submitted', 'under_review', 'requires_info']);
+      const [popResult, pettyResult] = await Promise.all([
+        supabase
+          .from('pop_uploads')
+          .select('id', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .eq('upload_type', 'proof_of_payment')
+          .in('status', ['pending', 'needs_revision', 'under_review']),
+        withPettyCashTenant((column, client) =>
+          client
+            .from('petty_cash_transactions')
+            .select('id, amount, status, receipt_url, transaction_type, description, transaction_date, created_at')
+            .eq(column, preschoolId)
+            .eq('type', 'expense')
+            .in('status', ['pending', 'approved', 'completed'])
+            .limit(2000)
+        ),
+      ]);
 
-      // Count pending petty cash requests
-      const { count: pendingPettyCash } = await supabase
-        .from('petty_cash_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .in('status', ['pending', 'requires_info']);
+      if (popResult.error) throw popResult.error;
+      if (pettyResult.error) throw pettyResult.error;
 
-      // Get total pending amount
-      const { data: pendingAmounts } = await supabase
-        .from('petty_cash_requests')
-        .select('amount')
-        .eq('preschool_id', preschoolId)
-        .in('status', ['pending', 'requires_info']);
+      const pettyRows = Array.isArray(pettyResult.data) ? pettyResult.data : [];
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-      const totalPendingAmount = (pendingAmounts || []).reduce((sum, req) => sum + req.amount, 0);
+      let pendingPettyCash = 0;
+      let totalPendingAmount = 0;
+      let urgentRequests = 0;
+      let overdueReceipts = 0;
 
-      // Count urgent requests
-      const { count: urgentRequests } = await supabase
-        .from('petty_cash_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .eq('urgency', 'urgent')
-        .in('status', ['pending', 'approved']);
+      for (const row of pettyRows) {
+        const status = String(row?.status || '').toLowerCase();
+        const amount = Math.abs(Number(row?.amount || 0));
+        const urgencyText = `${row?.transaction_type || ''} ${row?.description || ''}`.toLowerCase();
 
-      // Count overdue receipts
-      const today = new Date().toISOString().split('T')[0];
-      const { count: overdueReceipts } = await supabase
-        .from('petty_cash_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('preschool_id', preschoolId)
-        .eq('status', 'disbursed')
-        .eq('receipt_submitted', false)
-        .lt('receipt_deadline', today);
+        if (status === 'pending') {
+          pendingPettyCash += 1;
+          totalPendingAmount += amount;
+        }
+
+        if ((status === 'pending' || status === 'approved') && urgencyText.includes('urgent')) {
+          urgentRequests += 1;
+        }
+
+        if (status === 'approved' && !row?.receipt_url) {
+          const baseDateRaw = row?.transaction_date || row?.created_at;
+          const baseDate = baseDateRaw ? new Date(baseDateRaw) : null;
+          if (baseDate && !Number.isNaN(baseDate.getTime())) {
+            const deadline = new Date(baseDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+            if (deadline < todayStart) {
+              overdueReceipts += 1;
+            }
+          }
+        }
+      }
 
       return {
-        pending_pops: pendingPOPs || 0,
-        pending_petty_cash: pendingPettyCash || 0,
+        pending_pops: popResult.count || 0,
+        pending_petty_cash: pendingPettyCash,
         total_pending_amount: totalPendingAmount,
-        urgent_requests: urgentRequests || 0,
-        overdue_receipts: overdueReceipts || 0,
+        urgent_requests: urgentRequests,
+        overdue_receipts: overdueReceipts,
       };
     } catch (error) {
       console.error('Error getting approval summary:', error);
@@ -166,25 +183,19 @@ export class ApprovalWorkflowService {
     notes?: string,
     reason?: string
   ): Promise<void> {
-    try {
-      await supabase
-        .from('approval_logs')
-        .insert({
-          preschool_id: preschoolId,
-          entity_type: entityType,
-          entity_id: entityId,
-          performed_by: performedBy,
-          performer_name: performerName,
-          performer_role: performerRole,
-          action,
-          previous_status: previousStatus,
-          new_status: newStatus,
-          notes,
-          reason,
-        });
-    } catch (error) {
-      console.error('Error logging approval action:', error);
-    }
+    await writeApprovalAuditLog({
+      preschoolId,
+      entityType,
+      entityId,
+      performedBy,
+      performerName,
+      performerRole,
+      action,
+      previousStatus,
+      newStatus,
+      notes,
+      reason,
+    });
   }
 
   // ============================================================================

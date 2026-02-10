@@ -1,7 +1,7 @@
 // needs refactor to use AuthContext for sign-in state management
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView, RefreshControl } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView, RefreshControl, Keyboard } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,15 +43,30 @@ export default function SignIn() {
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricAttempted, setBiometricAttempted] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
   const { showAlert, alertProps } = useAlertModal();
   const isMountedRef = useRef(true);
+  const signInWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSignInWatchdog = useCallback(() => {
+    if (signInWatchdogRef.current) {
+      clearTimeout(signInWatchdogRef.current);
+      signInWatchdogRef.current = null;
+    }
+  }, []);
+
+  const stopLoadingState = useCallback(() => {
+    clearSignInWatchdog();
+    setLoading(false);
+  }, [clearSignInWatchdog]);
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
+      clearSignInWatchdog();
     };
-  }, []);
+  }, [clearSignInWatchdog]);
 
   // Safety net: clear local loading once auth resolves AND profile is loaded.
   // Normally the component unmounts when routeAfterLogin navigates away,
@@ -59,9 +74,9 @@ export default function SignIn() {
   useEffect(() => {
     if (loading && user && !profileLoading) {
       logger.debug('SignIn', 'Auth user + profile resolved, clearing loading state');
-      setLoading(false);
+      stopLoadingState();
     }
-  }, [loading, user, profileLoading]);
+  }, [loading, user, profileLoading, stopLoadingState]);
 
   // Pull-to-refresh handler - clears any stale state
   const onRefresh = useCallback(async () => {
@@ -321,13 +336,16 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
       return;
     }
 
+    Keyboard.dismiss();
+    emailInputRef.current?.blur();
+    passwordInputRef.current?.blur();
+
     // Clear any stale sign-out flag before attempting sign-in
     resetSignOutState();
 
     setLoading(true);
     // Give the UI a tick to render the spinner before heavy auth work begins.
     await new Promise(resolve => setTimeout(resolve, 50));
-    let signInSuccess = false;
     // #region agent log
     logger.debug('SignIn', '[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
     // #endregion
@@ -345,7 +363,7 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
             for (let attempt = 0; attempt < 2; attempt += 1) {
               const { data: sessionData } = await supabase.auth.getSession();
               if (sessionData?.session?.user) {
-                setLoading(false);
+                stopLoadingState();
                 return;
               }
               await new Promise(resolve => setTimeout(resolve, 1200));
@@ -413,7 +431,7 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
               }
             ],
           });
-          setLoading(false);
+          stopLoadingState();
           return;
         }
         
@@ -423,12 +441,11 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
           type: 'error',
           buttons: [{ text: 'OK', style: 'default' }],
         });
-        setLoading(false);
+        stopLoadingState();
         return;
       }
 
       logger.debug('SignIn', 'Sign in successful:', email.trim());
-      signInSuccess = true;
       // #region agent log
       logger.debug('SignIn', '[DEBUG_AGENT] SignIn-SUCCESS', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
       // #endregion
@@ -448,6 +465,24 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
         }
       } catch (credErr) {
         logger.warn('SignIn', 'Remember me save failed:', credErr);
+      }
+
+      // Persist this account for quick biometric switching (multi-account).
+      // This is the missing link for "Add Account" flows on the native sign-in screen.
+      try {
+        const signedInUserId = res.session?.user_id;
+        const signedInEmail = res.session?.email || email.trim();
+        if (signedInUserId && signedInEmail) {
+          await EnhancedBiometricAuth.storeBiometricSession(
+            signedInUserId,
+            signedInEmail,
+            res.profile || undefined,
+            res.session?.refresh_token
+          );
+          logger.debug('SignIn', 'Stored biometric quick-switch account:', signedInEmail);
+        }
+      } catch (biometricStoreErr) {
+        logger.warn('SignIn', 'Failed to store quick-switch biometric account (non-fatal):', biometricStoreErr);
       }
 
       // NOTE: Do NOT call routeAfterLogin here!
@@ -480,6 +515,24 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
       // Avoid local fallback routing to prevent wrong-org navigation.
       // NOTE: Do NOT setLoading(false) here — keep spinner active until
       // AuthContext finishes profile resolution and routes away (unmounts this component).
+      // Native-specific safety net: if routing never happens, stop spinner and recover.
+      clearSignInWatchdog();
+      signInWatchdogRef.current = setTimeout(async () => {
+        if (!isMountedRef.current) return;
+        try {
+          const { data: sessionData } = await assertSupabase().auth.getSession();
+          if (!sessionData?.session?.user) {
+            stopLoadingState();
+            return;
+          }
+          logger.warn('SignIn', 'Post sign-in route watchdog fired - forcing profiles-gate fallback');
+          stopLoadingState();
+          router.replace('/profiles-gate');
+        } catch (watchdogError) {
+          logger.warn('SignIn', 'Route watchdog failed (non-fatal):', watchdogError);
+          stopLoadingState();
+        }
+      }, 6000);
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
       logger.error('SignIn', '=== SIGN IN ERROR DEBUG ===');
@@ -498,7 +551,7 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
         type: 'error',
         buttons: [{ text: 'OK', style: 'default' }],
       });
-      setLoading(false);
+      stopLoadingState();
     }
   };
 
@@ -931,13 +984,16 @@ return (
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 12) : 0}
       >
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -999,6 +1055,7 @@ return (
 
               <View style={styles.form}>
             <TextInput
+              ref={emailInputRef}
               style={styles.input}
               placeholder={t('auth.email', { defaultValue: 'Email' })}
               placeholderTextColor={theme.inputPlaceholder}

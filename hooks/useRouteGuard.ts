@@ -7,13 +7,17 @@
  * - Authenticated users to their dashboard (from auth routes)
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
-import { resolveOrganizationId, resolveSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import {
+  resolveExplicitSchoolTypeFromProfile,
+  resolveOrganizationId,
+  resolveSchoolTypeFromProfile,
+} from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole, isDashboardRouteMismatch } from '@/lib/dashboard/routeMatrix';
 import {
   trackDashboardRouteMismatch,
@@ -36,9 +40,34 @@ export const useAuthGuard = () => {
   const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
   const lastAttemptAt = useRef(0);
+  const lastRedirectKey = useRef<string | null>(null);
+  const lastRedirectAt = useRef(0);
   const lastUserId = useRef<string | null>(null);
   const lastMismatchKey = useRef<string | null>(null);
+  const authRouteSeenAt = useRef<number | null>(null);
   const signingOut = isSignOutInProgress();
+  const AUTH_ROUTE_PROFILE_GRACE_MS = 3500;
+  const REDIRECT_DEDUP_WINDOW_MS = 1200;
+
+  const safeReplace = useCallback((to: string, reason: string) => {
+    const from = typeof pathname === 'string' ? pathname : '';
+    if (from === to) {
+      return false;
+    }
+
+    const key = `${from}->${to}`;
+    const now = Date.now();
+    if (lastRedirectKey.current === key && now - lastRedirectAt.current < REDIRECT_DEDUP_WINDOW_MS) {
+      authDebug('guard.redirect_skipped', { from, to, reason });
+      return false;
+    }
+
+    lastRedirectKey.current = key;
+    lastRedirectAt.current = now;
+    authDebug('guard.redirect', { from, to, reason });
+    router.replace(to as any);
+    return true;
+  }, [pathname]);
   
   useEffect(() => {
     // Reset navigation attempt when the authenticated user changes
@@ -47,6 +76,7 @@ export const useAuthGuard = () => {
       hasNavigated.current = false;
       lastAttemptAt.current = 0;
       lastUserId.current = currentUserId;
+      authRouteSeenAt.current = currentUserId ? Date.now() : null;
     }
 
     if (signingOut) {
@@ -77,29 +107,40 @@ export const useAuthGuard = () => {
     
     const isProfilesGate =
       typeof pathname === 'string' && pathname.includes('profiles-gate');
+    const isOnboardingRoute =
+      typeof pathname === 'string' &&
+      (pathname === '/onboarding' || pathname.startsWith('/onboarding/'));
+
+    const isOrgAdminFamilyRoute =
+      typeof pathname === 'string' &&
+      (pathname === '/screens/org-admin-dashboard' ||
+        pathname.startsWith('/screens/org-admin/') ||
+        pathname.startsWith('/screens/admin-tertiary'));
 
     // Not authenticated: redirect to sign-in (unless on auth route)
     if (!user) {
-      if (!isAuthRoute && !hasNavigated.current) {
+      authRouteSeenAt.current = null;
+      if (!isAuthRoute && !isOnboardingRoute && !hasNavigated.current) {
         console.log('[AuthGuard] No user, redirecting to sign-in from:', pathname);
-        authDebug('guard.redirect', { from: pathname, to: '/(auth)/sign-in' });
         hasNavigated.current = true;
-        router.replace('/(auth)/sign-in');
+        safeReplace('/(auth)/sign-in', 'no_user');
       }
       return;
     }
 
     // Authenticated but missing profile: avoid dashboards getting stuck loading
-    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate) {
+    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate && !isOnboardingRoute) {
       console.log('[AuthGuard] Missing profile, redirecting to profiles-gate from:', pathname);
-      authDebug('guard.redirect', { from: pathname, to: '/profiles-gate' });
       hasNavigated.current = true;
-      router.replace('/profiles-gate');
+      safeReplace('/profiles-gate', 'missing_profile_protected_route');
       return;
     }
     
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute) {
+      if (!authRouteSeenAt.current) {
+        authRouteSeenAt.current = Date.now();
+      }
       // If profile is still loading, let AuthContext handle routing first
       if (profileLoading) {
         return;
@@ -111,14 +152,20 @@ export const useAuthGuard = () => {
       }
       // If profile is missing after loading, route to profile gate to avoid auth-route dead ends
       if (!profile) {
+        const elapsed = Date.now() - (authRouteSeenAt.current || Date.now());
+        // Give AuthContext a short grace window to resolve profile after SIGNED_IN.
+        // Without this, native can jump to profiles-gate prematurely and appear frozen.
+        if (elapsed < AUTH_ROUTE_PROFILE_GRACE_MS) {
+          return;
+        }
         if (!isProfilesGate && !hasNavigated.current) {
           console.log('[AuthGuard] Authenticated without profile on auth route, redirecting to profiles-gate');
-          authDebug('guard.redirect', { from: pathname, to: '/profiles-gate' });
           hasNavigated.current = true;
-          router.replace('/profiles-gate');
+          safeReplace('/profiles-gate', 'missing_profile_after_auth_grace');
         }
         return;
       }
+      authRouteSeenAt.current = null;
       // Avoid redirecting with a stale profile from a different user
       if (profile?.id && user?.id && profile.id !== user.id) {
         console.log('[AuthGuard] Stale profile detected, waiting for refresh');
@@ -136,7 +183,6 @@ export const useAuthGuard = () => {
       }
       
       console.log('[AuthGuard] User authenticated, redirecting from auth route:', pathname);
-      authDebug('guard.redirect', { from: pathname, to: 'dashboard' });
       hasNavigated.current = true;
       lastAttemptAt.current = now;
       
@@ -159,7 +205,12 @@ export const useAuthGuard = () => {
         if (normalizedRole === 'super_admin' || normalizedRole === 'superadmin') {
           targetDashboard = '/screens/super-admin-dashboard';
         } else if (normalizedRole === 'admin') {
-          targetDashboard = '/screens/org-admin-dashboard';
+          const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(
+            profile || (user.user_metadata as any) || {}
+          );
+          targetDashboard = explicitSchoolType
+            ? '/screens/admin-dashboard'
+            : '/screens/org-admin-dashboard';
         } else {
           targetDashboard = '/screens/parent-dashboard';
         }
@@ -174,11 +225,36 @@ export const useAuthGuard = () => {
         organizationId: resolveOrganizationId(profile || (user.user_metadata as any) || {}),
       });
 
-      router.replace(targetDashboard as any);
+      safeReplace(String(targetDashboard), 'authenticated_auth_route');
       return;
     }
 
     if (user && profile && !profileLoading && !isAuthRoute && typeof pathname === 'string') {
+      // Hard guard: school tenants must never render org-admin/tertiary dashboard family.
+      if (isOrgAdminFamilyRoute) {
+        const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
+        if (explicitSchoolType) {
+          const role = profile.role || (user.user_metadata as any)?.role || null;
+          const normalizedRole = String(role || '').toLowerCase().trim();
+          const hasOrganization = Boolean(resolveOrganizationId(profile));
+          const schoolDashboard =
+            normalizedRole === 'admin'
+              ? '/screens/admin-dashboard'
+              : getDashboardRouteForRole({
+                  role,
+                  resolvedSchoolType: explicitSchoolType,
+                  hasOrganization,
+                }) || '/screens/principal-dashboard';
+
+          if (pathname !== schoolDashboard && !hasNavigated.current) {
+            hasNavigated.current = true;
+            lastAttemptAt.current = Date.now();
+            safeReplace(String(schoolDashboard), `school_dashboard_guard:${String(explicitSchoolType)}`);
+            return;
+          }
+        }
+      }
+
       const role = profile.role || (user.user_metadata as any)?.role || null;
       const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
       const expectedDashboard = getDashboardRouteForRole({
@@ -211,5 +287,19 @@ export const useAuthGuard = () => {
     // NOTE: Do NOT reset hasNavigated in cleanup — it resets on user change (line above).
     // Resetting on every re-run caused an infinite re-render loop because:
     // setProfileLoading(false) → effect re-runs → cleanup resets hasNavigated → navigates → pathname changes → loop
-  }, [pathname, user, loading, profile?.role, profile?.id, profile?.organization_id, profile?.preschool_id, profileLoading, signingOut]);
+  }, [
+    pathname,
+    user,
+    loading,
+    profile?.role,
+    profile?.id,
+    profile?.organization_id,
+    profile?.preschool_id,
+    profile?.organization_membership?.school_type,
+    (profile as any)?.organization_membership?.organization_kind,
+    (profile as any)?.organization_type,
+    profileLoading,
+    signingOut,
+    safeReplace,
+  ]);
 };

@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const orgNameRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileRef = useRef<EnhancedUserProfile | null>(null);
   const profileLoadingRef = useRef(false);
+  const signedInGenerationRef = useRef(0);
 
   // Wrapped setters that keep refs in sync for use inside closures
   const setProfile = useCallback((p: EnhancedUserProfile | null) => {
@@ -568,8 +569,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         
         const nextUserId = s?.user?.id ?? null;
+        if (event === 'SIGNED_OUT') {
+          // Invalidate any in-flight SIGNED_IN pipeline work.
+          signedInGenerationRef.current += 1;
+        }
         const lastUserId = lastUserIdRef.current;
-        if (event === 'SIGNED_IN' && lastUserId && nextUserId && lastUserId !== nextUserId) {
+        const currentProfileUserId = profileRef.current?.id ?? null;
+        const isUserSwitch =
+          event === 'SIGNED_IN' &&
+          !!nextUserId &&
+          (
+            (lastUserId && lastUserId !== nextUserId) ||
+            (currentProfileUserId && currentProfileUserId !== nextUserId)
+          );
+        if (isUserSwitch) {
           logger.debug('AuthContext', 'Detected user switch, clearing cached profile and permissions');
           setProfile(null);
           setPermissions(createPermissionChecker(null));
@@ -590,6 +603,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           if (event === 'SIGNED_IN' && s?.user) {
+            const currentSignInGeneration = ++signedInGenerationRef.current;
+            const isStaleSignIn = () =>
+              signedInGenerationRef.current !== currentSignInGeneration ||
+              !mounted ||
+              lastUserIdRef.current !== s.user.id;
+
             // ── De-duplicate: skip full re-processing if we already
             //    have a valid profile for the SAME user and are not loading.
             //    Supabase fires SIGNED_IN on token refresh, realtime reconnect,
@@ -609,7 +628,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             authDebug('auth.signed_in', { userId: s.user.id });
             // Fetch enhanced profile on sign in (non-blocking for routing)
-            const QUICK_PROFILE_TIMEOUT_MS = 8000;
+            const QUICK_PROFILE_TIMEOUT_MS = 4000;
             let enhancedProfile: EnhancedUserProfile | null = null;
             let usedFallback = false;
             let profileSource: 'rpc' | 'stored' | 'fallback' = 'rpc';
@@ -628,9 +647,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               logger.warn('AuthContext', 'Quick profile fetch failed:', error);
               enhancedProfile = null;
             }
+            if (isStaleSignIn()) {
+              authDebug('auth.signed_in.stale_skip', { userId: s.user.id, stage: 'quick_profile' });
+              return;
+            }
 
-            const safeExistingProfile = isSameUserProfile(s.user, profile) ? profile : null;
-            if (profile && !safeExistingProfile) {
+            const currentProfile = profileRef.current;
+            const safeExistingProfile = isSameUserProfile(s.user, currentProfile) ? currentProfile : null;
+            if (currentProfile && !safeExistingProfile) {
               setProfile(null);
               setPermissions(createPermissionChecker(null));
             }
@@ -641,11 +665,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               // outdated role (e.g. role changed from parent → teacher in DB).
               if (!enhancedProfile) {
                 try {
-                  const FALLBACK_TIMEOUT_MS = 5000;
+                  const FALLBACK_TIMEOUT_MS = 2500;
                   const fallbackResult = await Promise.race([
                     buildFallbackProfileFromSession(s.user, safeExistingProfile),
                     new Promise<null>((resolve) => setTimeout(() => {
-                      logger.warn('AuthContext', 'buildFallbackProfileFromSession timed out after 5s');
+                      logger.warn('AuthContext', 'buildFallbackProfileFromSession timed out after 2.5s');
                       resolve(null);
                     }, FALLBACK_TIMEOUT_MS)),
                   ]);
@@ -657,6 +681,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 } catch (fallbackErr) {
                   logger.warn('AuthContext', 'Fallback profile build failed:', fallbackErr);
                   enhancedProfile = null;
+                }
+                if (isStaleSignIn()) {
+                  authDebug('auth.signed_in.stale_skip', { userId: s.user.id, stage: 'fallback_profile' });
+                  return;
                 }
               }
 
@@ -671,6 +699,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   }
                 } catch (storedErr) {
                   logger.warn('AuthContext', 'Stored profile fallback failed:', storedErr);
+                }
+                if (isStaleSignIn()) {
+                  authDebug('auth.signed_in.stale_skip', { userId: s.user.id, stage: 'stored_profile' });
+                  return;
                 }
               }
 
@@ -719,10 +751,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   enhancedProfile.organization_name ||
                   enhancedProfile.organization_membership?.organization_name ||
                   '';
+                const hasLinkedOrganization = Boolean(
+                  enhancedProfile.organization_id ||
+                  (enhancedProfile as any)?.preschool_id ||
+                  enhancedProfile.organization_membership?.organization_id
+                );
                 needsOrgNameRefresh =
-                  !resolvedOrgName ||
-                  String(resolvedOrgName).trim().length === 0 ||
-                  String(resolvedOrgName).trim().toLowerCase() === 'unknown';
+                  hasLinkedOrganization && (
+                    !resolvedOrgName ||
+                    String(resolvedOrgName).trim().length === 0 ||
+                    String(resolvedOrgName).trim().toLowerCase() === 'unknown'
+                  );
                 if (needsOrgNameRefresh) {
                   logger.warn('[AuthContext] Organization name missing after sign-in', {
                     user_id: s.user.id,
@@ -749,10 +788,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } catch (profileErr) {
               logger.warn('AuthContext', 'Sign-in profile resolution failed:', profileErr);
             } finally {
-              // CRITICAL: Route BEFORE setting profileLoading=false
-              // If we set profileLoading=false first, useAuthGuard sees profile loaded + user on auth route
-              // and fires its own simpler navigation, racing with routeAfterLogin below.
-              // By routing first, we ensure the correct route is used (determineUserRoute has full SOA/K12 logic).
+              if (isStaleSignIn()) {
+                authDebug('auth.signed_in.stale_skip', { userId: s.user.id, stage: 'finally' });
+                return;
+              }
               
               // SAFETY NET: If enhancedProfile is STILL null (e.g. catch block ran),
               // build an absolute-minimum profile so the user is never stranded.
@@ -780,6 +819,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 } catch {
                   logger.error('AuthContext', 'Last-resort profile build failed');
                 }
+              }
+
+              // Let route guards proceed; navigation now runs in fire-and-forget mode below.
+              if (mounted) {
+                setProfileLoading(false);
               }
               
               if (mounted && enhancedProfile) {
@@ -810,38 +854,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   // #endregion
                 } else {
                   // Route user after successful sign in
-                  try {
-                    // #region agent log
-                    debugLog('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
-                    // #endregion
-                    await routeAfterLogin(s.user, enhancedProfile);
-                    // #region agent log
-                    debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
-                    // #endregion
-                    authDebug('routeAfterLogin.called', { userId: s.user.id });
+                  // #region agent log
+                  debugLog('[DEBUG_AGENT] RouteAfterLogin-CALLING', JSON.stringify({userId:s.user.id,role:enhancedProfile?.role,orgId:enhancedProfile?.organization_id,timestamp:Date.now()}));
+                  // #endregion
+                  authDebug('routeAfterLogin.called', { userId: s.user.id });
 
-                    // Register device session (non-blocking) — Option B multi-device awareness
-                    import('@/lib/deviceSessionTracker').then(({ registerDeviceSession }) => {
-                      registerDeviceSession().then((result) => {
-                        if (result.isNewDevice && result.otherDevices.length > 0) {
-                          const names = result.otherDevices.map(d => d.device_name || d.platform).join(', ');
-                          import('@/components/ui/ToastProvider').then(({ toast }) => {
-                            toast.info(`Also signed in on: ${names}`, 5000);
-                          }).catch(() => {});
-                        }
-                      }).catch(() => {});
+                  void routeAfterLogin(s.user, enhancedProfile)
+                    .then(() => {
+                      // #region agent log
+                      debugLog('[DEBUG_AGENT] RouteAfterLogin-COMPLETED', JSON.stringify({userId:s.user.id,timestamp:Date.now()}));
+                      // #endregion
+                    })
+                    .catch((error) => {
+                      logger.error('AuthContext', 'Post-login routing failed:', error);
+                      // #region agent log
+                      debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
+                      // #endregion
+                    });
+
+                  // Retroactively store this user's biometric session so they
+                  // appear in the multi-account quick-switch list even if they
+                  // originally signed in before the unconditional-store fix.
+                  import('@/services/EnhancedBiometricAuth').then(({ EnhancedBiometricAuth }) => {
+                    EnhancedBiometricAuth.storeBiometricSession(
+                      s.user.id,
+                      s.user.email || '',
+                      enhancedProfile || undefined,
+                      s.refresh_token,
+                    ).catch(() => { /* non-fatal */ });
+                  }).catch(() => { /* non-fatal */ });
+
+                  // Register device session (non-blocking) — Option B multi-device awareness
+                  import('@/lib/deviceSessionTracker').then(({ registerDeviceSession }) => {
+                    registerDeviceSession().then((result) => {
+                      if (result.isNewDevice && result.otherDevices.length > 0) {
+                        const names = result.otherDevices.map(d => d.device_name || d.platform).join(', ');
+                        import('@/components/ui/ToastProvider').then(({ toast }) => {
+                          toast.info(`Also signed in on: ${names}`, 5000);
+                        }).catch(() => {});
+                      }
                     }).catch(() => {});
-                  } catch (error) {
-                    logger.error('AuthContext', 'Post-login routing failed:', error);
-                    // #region agent log
-                    debugLog('[DEBUG_AGENT] RouteAfterLogin-FAILED', JSON.stringify({userId:s.user.id,error:String(error),timestamp:Date.now()}));
-                    // #endregion
-                  }
+                  }).catch(() => {});
                 }
-              }
-
-              if (mounted) {
-                setProfileLoading(false);
               }
 
               // Force a profile refresh shortly after login if org name is missing.
@@ -855,9 +909,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 orgNameRefreshTimerRef.current = setTimeout(async () => {
                   orgNameRefreshTimerRef.current = null;
                   if (!mounted || lastUserIdRef.current !== refreshUserId) return;
-                  setProfileLoading(true);
                   try {
-                    const refreshed = await fetchEnhancedUserProfile(refreshUserId, s);
+                    // Non-blocking refresh with timeout: never hold the global loading overlay here.
+                    const ORG_REFRESH_TIMEOUT_MS = 5000;
+                    const refreshed = await Promise.race([
+                      fetchEnhancedUserProfile(refreshUserId, s),
+                      new Promise<null>((resolve) => setTimeout(() => resolve(null), ORG_REFRESH_TIMEOUT_MS)),
+                    ]) as EnhancedUserProfile | null;
+                    if (!refreshed) {
+                      logger.warn('[AuthContext] Forced org-name profile refresh timed out or returned null', {
+                        user_id: refreshUserId,
+                      });
+                      return;
+                    }
                     if (refreshed && mounted && lastUserIdRef.current === refreshUserId) {
                       setProfile(refreshed);
                       setPermissions(createPermissionChecker(refreshed));
@@ -881,10 +945,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     }
                   } catch (refreshErr) {
                     logger.warn('[AuthContext] Forced profile refresh failed', refreshErr);
-                  } finally {
-                    if (mounted) {
-                      setProfileLoading(false);
-                    }
                   }
                 }, 1500);
               }
@@ -1018,6 +1078,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (error) {
           logger.error('AuthContext', 'Auth state change handler error:', error);
+          // Fail-safe: never leave profileLoading stuck true after SIGNED_IN failures.
+          if (mounted && event === 'SIGNED_IN') {
+            setProfileLoading(false);
+          }
         }
       });
       unsub = listener;

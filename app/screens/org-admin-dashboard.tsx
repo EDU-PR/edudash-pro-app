@@ -11,6 +11,8 @@ import { MetricsCards } from '@/components/org-admin/MetricsCards';
 import { QuickActionsGrid } from '@/components/org-admin/QuickActionsGrid';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { extractOrganizationId } from '@/lib/tenant/compat';
+import { resolveExplicitSchoolTypeFromProfile } from '@/lib/schoolTypeResolver';
+import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 import { logger } from '@/lib/logger';
 
 const TAG = 'OrgAdminDashboard';
@@ -27,6 +29,8 @@ export default function OrgAdminDashboard() {
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
   const orgId = extractOrganizationId(profile);
+  const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
+  const normalizedRole = String(profile?.role || '').toLowerCase().trim();
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;
@@ -65,9 +69,30 @@ export default function OrgAdminDashboard() {
       }
       return;
     }
+
+    // Decision 3: School tenants should never stay on org-admin dashboard routes.
+    if (explicitSchoolType) {
+      navigationAttempted.current = true;
+      const schoolRoute =
+        normalizedRole === 'admin'
+          ? '/screens/admin-dashboard'
+          : getDashboardRouteForRole({
+              role: profile?.role,
+              resolvedSchoolType: explicitSchoolType,
+              hasOrganization: true,
+              traceContext: 'OrgAdminDashboard.schoolTenantRedirect',
+            }) || '/screens/principal-dashboard';
+      logger.info(TAG, 'School tenant detected on org-admin dashboard, redirecting', {
+        explicitSchoolType,
+        role: normalizedRole,
+        to: schoolRoute,
+      });
+      router.replace(schoolRoute as any);
+      return;
+    }
     
-    // Decision 3: All good, stay on dashboard (no navigation needed)
-  }, [isStillLoading, user, orgId, profile]);
+    // Decision 4: All good, stay on dashboard (no navigation needed)
+  }, [explicitSchoolType, isStillLoading, normalizedRole, orgId, profile, user]);
 
   // Show loading state while auth/profile is loading
   if (isStillLoading) {
@@ -104,6 +129,19 @@ export default function OrgAdminDashboard() {
           }}>
             <Text style={[styles.loadingText, { textDecorationLine: 'underline', marginTop: 12 }]}>{t('common.go_now', { defaultValue: 'Go Now' })}</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (explicitSchoolType) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: t('org_admin.title', { defaultValue: 'Organization Admin' }) }} />
+        <View style={styles.empty}>
+          <Text style={styles.loadingText}>
+            Redirecting to your school dashboard...
+          </Text>
         </View>
       </View>
     );
@@ -185,7 +223,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   content: { 
     padding: 16, 
-    gap: 24,
+    gap: 20,
     paddingBottom: 32,
   },
   section: {
@@ -193,7 +231,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   heading: { 
     color: theme?.text || '#fff', 
-    fontSize: 20, 
+    fontSize: 14, 
     fontWeight: '800' 
   },
   empty: { 

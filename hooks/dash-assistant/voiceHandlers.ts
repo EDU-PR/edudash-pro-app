@@ -8,12 +8,14 @@ import type { VoiceProvider, VoiceSession } from '@/lib/voice/unifiedProvider';
 import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { track } from '@/lib/analytics';
+import { cleanForTTS, splitForTTS, detectTextLanguage } from '@/lib/dash-voice-utils';
 
 type VoiceRefs = {
   voiceSessionRef: React.MutableRefObject<VoiceSession | null>;
   voiceProviderRef: React.MutableRefObject<VoiceProvider | null>;
   voiceInputStartAtRef: React.MutableRefObject<number | null>;
   lastSpeakStartRef: React.MutableRefObject<number | null>;
+  ttsSessionIdRef?: React.MutableRefObject<string | null>;
 };
 
 export async function stopDashVoiceRecording(params: {
@@ -146,76 +148,140 @@ export async function speakDashResponse(params: {
         console.warn('[useDashAssistant] Voice budget update failed, continuing with playback:', budgetError);
       }
     }
+    const cleaned = cleanForTTS(message.content || '');
+    const chunks = splitForTTS(cleaned, 900);
+    if (chunks.length === 0) {
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    const sessionId = `${message.id}:${now}`;
+    if (voiceRefs.ttsSessionIdRef) {
+      voiceRefs.ttsSessionIdRef.current = sessionId;
+    }
+
     setIsSpeaking(true);
     setSpeakingMessageId(message.id);
     voiceRefs.lastSpeakStartRef.current = now;
 
-    await dashInstance.speakResponse(message, {
-      onStart: () => {},
-      onDone: () => {
-        setIsSpeaking(false);
-        setSpeakingMessageId(null);
-      },
-      onStopped: () => {
-        setIsSpeaking(false);
-        setSpeakingMessageId(null);
-      },
-      onError: (error: unknown) => {
-        setIsSpeaking(false);
-        setSpeakingMessageId(null);
-        const errorMessage = typeof error === 'string'
-          ? error
-          : (error as any)?.message || '';
-        const errorCode = (error as any)?.code || '';
-        const normalized = `${errorCode} ${errorMessage}`.toLowerCase();
+    const throwSpeechError = (error: unknown) => {
+      const errorMessage = typeof error === 'string'
+        ? error
+        : (error as any)?.message || '';
+      const errorCode = (error as any)?.code || '';
+      const normalized = `${errorCode} ${errorMessage}`.toLowerCase();
 
-        console.error('Speech error:', error);
+      console.error('Speech error:', error);
 
-        let title = 'Voice Playback Error';
-        let messageText = 'We had trouble speaking that response. Try again or disable voice.';
+      let title = 'Voice Playback Error';
+      let messageText = 'We had trouble speaking that response. Try again or disable voice.';
 
-        if (normalized.includes('tts_free_tier_blocked')) {
-          title = 'Voice Limit Reached';
-          messageText = 'Your plan does not include voice playback. Upgrade to unlock Dash voice.';
-        } else if (
-          normalized.includes('auth_required') ||
-          normalized.includes('unauthorized') ||
-          normalized.includes('invalid token')
-        ) {
-          title = 'Voice Needs Login';
-          messageText = 'Voice playback requires an active session. Please sign in again.';
-        } else if (
-          normalized.includes('azure speech not configured') ||
-          normalized.includes('device_fallback') ||
-          normalized.includes('tts unavailable')
-        ) {
-          title = 'Voice Service Offline';
-          messageText = 'Azure TTS is not available right now. Check the Supabase `tts-proxy` function secrets (AZURE_SPEECH_KEY / AZURE_SPEECH_REGION) and redeploy.';
-        } else if (normalized.includes('network') || normalized.includes('fetch')) {
-          title = 'Voice Network Error';
-          messageText = "Dash couldn't reach the voice service. Check your connection and try again.";
-        }
+      if (normalized.includes('tts_free_tier_blocked')) {
+        title = 'Voice Limit Reached';
+        messageText = 'Your plan does not include voice playback. Upgrade to unlock Dash voice.';
+      } else if (
+        normalized.includes('auth_required') ||
+        normalized.includes('unauthorized') ||
+        normalized.includes('invalid token')
+      ) {
+        title = 'Voice Needs Login';
+        messageText = 'Voice playback requires an active session. Please sign in again.';
+      } else if (
+        normalized.includes('azure speech not configured') ||
+        normalized.includes('device_fallback') ||
+        normalized.includes('tts unavailable')
+      ) {
+        title = 'Voice Service Offline';
+        messageText = 'Azure TTS is not available right now. Check the Supabase `tts-proxy` function secrets (AZURE_SPEECH_KEY / AZURE_SPEECH_REGION) and redeploy.';
+      } else if (normalized.includes('network') || normalized.includes('fetch')) {
+        title = 'Voice Network Error';
+        messageText = "Dash couldn't reach the voice service. Check your connection and try again.";
+      }
 
-        showAlert({
-          title,
-          message: messageText,
-          type: 'warning',
-          icon: 'volume-mute-outline',
-          buttons: [
-            { text: 'OK', style: 'default' },
-            {
-              text: 'Disable Voice',
-              onPress: () => {
-                hideAlert();
-                setVoiceEnabled(false);
-              },
+      showAlert({
+        title,
+        message: messageText,
+        type: 'warning',
+        icon: 'volume-mute-outline',
+        buttons: [
+          { text: 'OK', style: 'default' },
+          {
+            text: 'Disable Voice',
+            onPress: () => {
+              hideAlert();
+              setVoiceEnabled(false);
             },
-          ],
+          },
+        ],
+      });
+    };
+
+    for (let idx = 0; idx < chunks.length; idx += 1) {
+      if (voiceRefs.ttsSessionIdRef && voiceRefs.ttsSessionIdRef.current !== sessionId) {
+        break;
+      }
+
+      const chunk = chunks[idx];
+      const detected = detectTextLanguage(chunk);
+      const localized = `${detected}-ZA`;
+      const chunkMessage: DashMessage = {
+        ...message,
+        content: chunk,
+        metadata: {
+          ...(message.metadata || {}),
+          detected_language: localized,
+        },
+      };
+
+      let chunkFailed = false;
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          fn();
+        };
+
+        const timeout = setTimeout(() => settle(resolve), 30000);
+        const clear = () => clearTimeout(timeout);
+
+        void dashInstance.speakResponse(chunkMessage, {
+          onStart: () => {},
+          onDone: () => {
+            clear();
+            settle(resolve);
+          },
+          onStopped: () => {
+            clear();
+            settle(resolve);
+          },
+          onError: (error: unknown) => {
+            clear();
+            settle(() => reject(error));
+          },
         });
-      },
-    });
+      }).catch((error) => {
+        chunkFailed = true;
+        throwSpeechError(error);
+      });
+      if (chunkFailed) {
+        break;
+      }
+    }
+
+    if (!voiceRefs.ttsSessionIdRef || voiceRefs.ttsSessionIdRef.current === sessionId) {
+      if (voiceRefs.ttsSessionIdRef) {
+        voiceRefs.ttsSessionIdRef.current = null;
+      }
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
   } catch (error) {
     console.error('Failed to speak response:', error);
+    if (voiceRefs.ttsSessionIdRef) {
+      voiceRefs.ttsSessionIdRef.current = null;
+    }
     setIsSpeaking(false);
     setSpeakingMessageId(null);
   }

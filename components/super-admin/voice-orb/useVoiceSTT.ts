@@ -131,7 +131,23 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
         if (!sttResponse.ok) {
           const errorText = await sttResponse.text();
           console.error('[VoiceSTT] STT error:', errorText);
-          throw new Error(`STT failed: ${sttResponse.status}`);
+          let detail = '';
+          try {
+            const parsed = JSON.parse(errorText) as { error?: string; message?: string; details?: string };
+            detail = String(parsed.error || parsed.message || parsed.details || '').trim();
+          } catch {
+            detail = '';
+          }
+
+          const statusLabel = sttResponse.status === 401 || sttResponse.status === 403
+            ? 'not authenticated'
+            : sttResponse.status === 400
+              ? 'invalid voice request'
+              : sttResponse.status >= 500
+                ? 'voice service unavailable'
+                : 'voice recognition request failed';
+
+          throw new Error(detail ? `${statusLabel}: ${detail}` : `${statusLabel} (${sttResponse.status})`);
         }
 
         return sttResponse.json();

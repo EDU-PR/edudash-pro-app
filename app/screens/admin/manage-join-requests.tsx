@@ -82,14 +82,7 @@ export default function ManageJoinRequestsScreen() {
 
       let query = supabase
         .from('join_requests')
-        .select(`
-          *,
-          requester_profile:profiles!join_requests_requester_id_fkey(
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .or(`organization_id.eq.${organizationId},preschool_id.eq.${organizationId}`);
 
       // Filter by status
@@ -109,7 +102,45 @@ export default function ManageJoinRequestsScreen() {
         .limit(100);
 
       if (fetchError) throw fetchError;
-      return (data || []) as JoinRequestWithProfile[];
+
+      const baseRequests = (data || []) as JoinRequestWithProfile[];
+      if (baseRequests.length === 0) return baseRequests;
+
+      const requesterIds = Array.from(
+        new Set(
+          baseRequests
+            .map((request) => request.requester_id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        )
+      );
+
+      if (requesterIds.length === 0) return baseRequests;
+
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', requesterIds);
+
+      if (profileError) {
+        logger.warn('ManageJoinRequests', 'Failed to fetch requester profiles; rendering requests without profile names', profileError);
+        return baseRequests;
+      }
+
+      const profileMap = new Map(
+        (profiles || []).map((profile: any) => [
+          profile.id,
+          {
+            first_name: profile.first_name || null,
+            last_name: profile.last_name || null,
+            avatar_url: profile.avatar_url || null,
+          },
+        ])
+      );
+
+      return baseRequests.map((request) => ({
+        ...request,
+        requester_profile: request.requester_id ? profileMap.get(request.requester_id) : undefined,
+      }));
     },
     enabled: !!organizationId,
   });

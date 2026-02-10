@@ -248,9 +248,22 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
     setNavigationLock(userId);
     console.log('🚦 [ROUTE] Navigation lock acquired early for user:', userId);
 
-    // Fetch enhanced profile if not provided or if the provided profile is not enhanced
+    // Fetch enhanced profile only when we truly do not have usable routing data.
+    // If profile already includes role/capabilities but lacks helper methods
+    // (e.g. serialized fallback), hydrate helpers locally instead of re-fetching.
     let enhancedProfile = profile as any;
-    const needsEnhanced = !enhancedProfile || typeof enhancedProfile.hasCapability !== 'function';
+    if (enhancedProfile && typeof enhancedProfile.hasCapability !== 'function') {
+      const capabilities = Array.isArray(enhancedProfile.capabilities)
+        ? enhancedProfile.capabilities
+        : [];
+      enhancedProfile = {
+        ...enhancedProfile,
+        capabilities,
+        hasCapability: (capability: string) => capabilities.includes(capability),
+      };
+    }
+
+    const needsEnhanced = !enhancedProfile || !enhancedProfile.role;
     if (needsEnhanced) {
       debugLog('[ROUTE DEBUG] Fetching enhanced profile for user:', userId);
       
@@ -385,8 +398,15 @@ export async function routeAfterLogin(user?: User | null, profile?: EnhancedUser
     
     try {
       // Use setTimeout to prevent blocking the UI thread
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
+          // Skip stale navigations when auth user switched while routeAfterLogin was in flight.
+          const { data: { user: activeUser } } = await assertSupabase().auth.getUser();
+          if (activeUser?.id && activeUser.id !== userId) {
+            console.log('🚦 [ROUTE] Skipping stale navigation for user:', userId, 'active user is:', activeUser.id);
+            return;
+          }
+
           if (route.params) {
             console.log('🚦 [ROUTE] Using router.replace with params:', { pathname: route.path, params: route.params });
             router.replace({ pathname: route.path as any, params: route.params } as any);
@@ -693,6 +713,7 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       role: roleValue,
       resolvedSchoolType: resolvedDashboardSchoolType,
       hasOrganization,
+      traceContext: 'routeAfterLogin.resolveDashboardPathForRole',
     });
 
   switch (role) {
@@ -712,14 +733,14 @@ function determineUserRoute(profile: EnhancedUserProfile): { path: string; param
       const adminSchoolType = resolveAdminSchoolType(profile);
       const isSchoolAdminDashboardOrg = adminSchoolType === 'preschool' || adminSchoolType === 'k12_school';
 
-      if (adaptiveAdminEnabled && isSchoolAdminDashboardOrg) {
-        debugLog('[ROUTE DEBUG] Admin routing - using adaptive admin dashboard', {
+      if (isSchoolAdminDashboardOrg) {
+        debugLog('[ROUTE DEBUG] Admin routing - enforcing school dashboard for school admin org', {
           adminSchoolType,
           adaptiveAdminEnabled,
         });
         return {
           path: '/screens/admin-dashboard',
-          params: { schoolType: adminSchoolType },
+          params: adminSchoolType ? { schoolType: adminSchoolType } : undefined,
         };
       }
 

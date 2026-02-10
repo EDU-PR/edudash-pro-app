@@ -109,12 +109,14 @@ interface DashAssistantProps {
   conversationId?: string;
   onClose?: () => void;
   initialMessage?: string;
+  handoffSource?: string;
 }
 
 export const DashAssistant: React.FC<DashAssistantProps> = ({
   conversationId,
   onClose,
-  initialMessage
+  initialMessage,
+  handoffSource,
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -125,7 +127,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
   const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
@@ -237,7 +238,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     runTool,
     tier,
     subReady,
-  } = useDashAssistant({ conversationId, initialMessage, onClose });
+  } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource });
   const { can, ready: capsReady } = useCapability();
   const isTypingActive = isLoading || !!loadingStatus;
 
@@ -846,11 +847,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           learnerContext={learnerContext}
           bottomInset={insets.bottom}
           keyboardVisible={keyboardVisible}
-          onScroll={(currentScrollY) => {
-            // Header auto-hide disabled - was causing flickering
-            // Keep header visible always for better UX
-            setLastScrollY(currentScrollY);
-          }}
         />
 
         {isStaff && latestAssistantMessage && (

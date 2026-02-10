@@ -43,6 +43,8 @@ export interface FinancialSummary {
   pettyCashBalance: number;
   pettyCashExpenses: number;
   pendingApprovals: number;
+  hasDataError?: boolean;
+  dataErrorMessage?: string | null;
   timestamp: string;
 }
 

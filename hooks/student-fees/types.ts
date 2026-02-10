@@ -14,6 +14,8 @@ export interface Student {
   permanent_delete_after?: string | null;
   registration_fee_amount?: number | null;
   registration_fee_paid?: boolean | null;
+  payment_verified?: boolean | null;
+  payment_date?: string | null;
   class_name?: string;
   parent_name?: string;
   parent_id?: string | null;
@@ -25,6 +27,7 @@ export interface Student {
 export interface StudentFee {
   id: string;
   student_id: string;
+  fee_structure_id?: string | null;
   amount: number;
   final_amount: number;
   discount_amount?: number;
