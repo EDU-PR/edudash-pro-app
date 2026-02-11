@@ -33,6 +33,7 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import InlineUpgradeBanner from '@/components/ui/InlineUpgradeBanner';
 import AdBannerWithUpgrade from '@/components/ui/AdBannerWithUpgrade';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { useSpotlightTarget } from '@/hooks/useSpotlightTarget';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 export default function K12ParentDashboardScreen() {
@@ -43,6 +44,9 @@ export default function K12ParentDashboardScreen() {
   const { t } = useTranslation();
   const { tier } = useSubscription();
   const { showAlert, alertProps } = useAlertModal();
+  const menuTourRef = useSpotlightTarget('parent-menu-tile');
+  const docsTourRef = useSpotlightTarget('parent-documents-tile');
+  const announcementsTourRef = useSpotlightTarget('parent-announcements-tile');
   const dashCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const flags = getFeatureFlagsSync();
   const params = useLocalSearchParams<{ schoolType?: string; mode?: string }>();
@@ -162,6 +166,8 @@ export default function K12ParentDashboardScreen() {
     { id: 'messages', icon: 'chatbubbles', label: t('navigation.messages', { defaultValue: 'Messages' }), route: '/screens/parent-messages', color: '#3B82F6' },
     { id: 'payments', icon: 'card', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), route: '/screens/parent-payments', color: '#8B5CF6' },
     { id: 'announcements', icon: 'megaphone', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), route: '/screens/parent-announcements', color: '#EF4444' },
+    { id: 'menu', icon: 'restaurant-outline', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), route: '/screens/parent-menu', color: '#F97316' },
+    { id: 'documents', icon: 'document-attach', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), route: '/screens/parent-document-upload', color: '#14B8A6' },
   ]), [t]);
 
   const aiQuickActions = useMemo(() => ([
@@ -196,7 +202,9 @@ export default function K12ParentDashboardScreen() {
     { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }), icon: 'chatbubbles', route: '/screens/parent-messages' },
     { id: 'payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: 'card', route: '/screens/parent-payments' },
     { id: 'announcements', label: t('dashboard.parent.nav.announcements', { defaultValue: 'Announcements' }), icon: 'megaphone', route: '/screens/parent-announcements' },
+    { id: 'menu', label: t('dashboard.parent.nav.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant-outline', route: '/screens/parent-menu' },
     { id: 'reports', label: t('dashboard.parent.k12.weekly_reports', { defaultValue: 'Weekly Reports' }), icon: 'stats-chart', route: '/screens/parent-weekly-report' },
+    { id: 'documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: 'document-attach', route: '/screens/parent-document-upload' },
     { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
     { id: 'settings', label: t('navigation.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
   ]), [t]);
@@ -388,19 +396,27 @@ export default function K12ParentDashboardScreen() {
             hint={t('dashboard.quick_actions_hint', { defaultValue: 'Shortcuts to messages, attendance, payments, and announcements.' })}
           />
           <View style={styles.quickActionsGrid}>
-            {quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={[styles.quickActionCard, { backgroundColor: theme.surface }]}
-                onPress={() => handleQuickAction(action.route, action.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
-                  <Ionicons name={action.icon as any} size={24} color={action.color} />
-                </View>
-                <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
-              </TouchableOpacity>
-            ))}
+            {quickActions.map((action) => {
+              const tourRef = action.id === 'menu' ? menuTourRef
+                : action.id === 'documents' ? docsTourRef
+                : action.id === 'announcements' ? announcementsTourRef
+                : undefined;
+              return (
+                <TouchableOpacity
+                  key={action.id}
+                  ref={tourRef}
+                  collapsable={false}
+                  style={[styles.quickActionCard, { backgroundColor: theme.surface }]}
+                  onPress={() => handleQuickAction(action.route, action.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.quickActionIcon, { backgroundColor: action.color + '20' }]}>
+                    <Ionicons name={action.icon as any} size={24} color={action.color} />
+                  </View>
+                  <Text style={[styles.quickActionLabel, { color: theme.text }]}>{action.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 

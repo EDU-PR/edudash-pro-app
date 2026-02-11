@@ -3,6 +3,20 @@
  * Shared interfaces for student detail components
  */
 
+export interface StudentFee {
+  id: string;
+  fee_structure_id: string;
+  fee_name: string;
+  amount: number;
+  final_amount: number;
+  amount_paid: number;
+  amount_outstanding: number;
+  status: 'pending' | 'paid' | 'overdue' | 'waived' | 'partial';
+  billing_month: string;
+  due_date: string;
+  category_code: string;
+}
+
 export interface StudentDetail {
   id: string;
   first_name: string;
@@ -46,6 +60,12 @@ export interface StudentDetail {
   guardian_email?: string;
   guardian_phone?: string;
   age_group_name?: string;
+  // Fee tier info
+  fee_tier_name?: string;
+  monthly_fee_amount?: number;
+  fee_structure_id?: string;
+  // Monthly fee breakdown
+  student_fees?: StudentFee[];
   // Calculated fields
   attendance_rate?: number;
   last_attendance?: string;

@@ -29,6 +29,8 @@ interface FeeCandidate {
   grade_levels?: string[] | null;
   effective_from?: string | null;
   created_at?: string | null;
+  age_min_months?: number | null;
+  age_max_months?: number | null;
 }
 
 interface StudentRow {
@@ -119,6 +121,18 @@ function selectFee(structures: FeeCandidate[], student: StudentRow): FeeCandidat
   if (structures.length === 1) return structures[0];
 
   const ageMonths = computeAgeMonths(student.date_of_birth);
+
+  // Prefer structured age ranges from DB (age_min_months/age_max_months)
+  if (ageMonths != null) {
+    const structuredMatch = structures.find(
+      (f) =>
+        f.age_min_months != null &&
+        f.age_max_months != null &&
+        ageMonths >= f.age_min_months &&
+        ageMonths <= f.age_max_months
+    );
+    if (structuredMatch) return structuredMatch;
+  }
 
 
   const candidates = structures.map((fee) => {
@@ -259,7 +273,7 @@ serve(async (req: Request): Promise<Response> => {
         // ── Fetch active fee structures for this school ────────────────
         const { data: feeStructures, error: fsErr } = await supabase
           .from('fee_structures')
-          .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+          .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at, age_min_months, age_max_months')
           .eq('preschool_id', school.id)
           .eq('is_active', true)
           .order('effective_from', { ascending: false })

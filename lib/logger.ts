@@ -43,7 +43,14 @@ export const logger = {
    */
   error: (tag: string, ...args: any[]) => {
     console.error(`[${tag}]`, ...args);
-    // TODO: Send to Sentry in production
+    // Report to Sentry in production
+    if (!__DEV__) {
+      try {
+        const { reportError } = require('@/lib/monitoring');
+        const err = args[0] instanceof Error ? args[0] : new Error(`[${tag}] ${String(args[0])}`);
+        reportError(err, { tag, details: args.slice(1) });
+      } catch { /* monitoring not available */ }
+    }
   },
 
   /**
@@ -65,7 +72,14 @@ export const logger = {
    */
   forceError: (tag: string, ...args: any[]) => {
     console.error(`[${tag}]`, ...args);
-    // TODO: Send to Sentry in production
+    // Report to Sentry in production
+    if (!__DEV__) {
+      try {
+        const { reportError } = require('@/lib/monitoring');
+        const err = args[0] instanceof Error ? args[0] : new Error(`[${tag}] ${String(args[0])}`);
+        reportError(err, { tag, details: args.slice(1), forced: true });
+      } catch { /* monitoring not available */ }
+    }
   },
 };
 

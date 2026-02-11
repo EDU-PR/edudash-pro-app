@@ -126,6 +126,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [staffActionsExpanded, setStaffActionsExpanded] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -351,9 +352,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const showAdvancedControls = !isParentOrStudent;
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
   const usageLabel = tierStatus
-    ? (isParentOrStudent
-        ? `${roleCopy.title} • ${remaining === null ? 'Unlimited' : `${remaining} left this month`}`
-        : `${tierStatus.tierDisplayName} • ${remaining === null ? 'Unlimited' : `${remaining} left this month`}`)
+    ? (remaining === null ? 'Unlimited requests available' : `${remaining} left this month`)
     : '';
   const [lastSavedLessonId, setLastSavedLessonId] = useState<string | null>(null);
   const latestAssistantMessage = useMemo(() => {
@@ -364,6 +363,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     return null;
   }, [messages]);
+
+  useEffect(() => {
+    setStaffActionsExpanded(false);
+  }, [latestAssistantMessage?.id]);
 
   const ensureLessonAccess = useCallback(async () => {
     if (!capsReady) {
@@ -825,7 +828,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           stopSpeaking={stopSpeaking}
           handleNewChat={handleNewChat}
           toggleWakeWord={toggleWakeWord}
-          cleanup={dashInstance?.cleanup}
+          cleanup={dashInstance ? () => dashInstance.cleanup() : undefined}
           styles={styles}
           theme={theme}
         />
@@ -887,42 +890,73 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         />
 
         {isStaff && latestAssistantMessage && (
-          <View style={[inputStyles.staffActionsRow, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          <View style={[inputStyles.staffActionsShell, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+            <View style={inputStyles.staffActionsHeader}>
+              <View style={inputStyles.staffActionsTitleWrap}>
+                <Ionicons name="flash-outline" size={14} color={theme.primary} />
+                <Text style={[inputStyles.staffActionsTitle, { color: theme.text }]}>Quick actions</Text>
+              </View>
+              <TouchableOpacity
+                style={[inputStyles.staffActionsToggle, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
+                onPress={() => setStaffActionsExpanded((prev) => !prev)}
+                activeOpacity={0.8}
+              >
+                <Text style={[inputStyles.staffActionsToggleText, { color: theme.text }]}>
+                  {staffActionsExpanded ? 'Hide' : 'Show'}
+                </Text>
+                <Ionicons
+                  name={staffActionsExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color={theme.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
-              style={[inputStyles.staffActionButton, { backgroundColor: theme.primary }]}
+              style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
               onPress={saveLessonFromMessage}
+              activeOpacity={0.85}
             >
               <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
               <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-              onPress={saveRoutineFromMessage}
-            >
-              <Ionicons name="time-outline" size={16} color={theme.text} />
-              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-              onPress={saveThemeFromMessage}
-            >
-              <Ionicons name="color-palette-outline" size={16} color={theme.text} />
-              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-              onPress={saveActivityFromMessage}
-            >
-              <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-              onPress={() => router.push('/screens/teacher-activity-builder')}
-            >
-              <Ionicons name="hammer-outline" size={16} color={theme.text} />
-              <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
-            </TouchableOpacity>
+
+            {staffActionsExpanded && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={inputStyles.staffActionScroll}
+              >
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveRoutineFromMessage}
+                >
+                  <Ionicons name="time-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveThemeFromMessage}
+                >
+                  <Ionicons name="color-palette-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveActivityFromMessage}
+                >
+                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={() => router.push('/screens/teacher-activity-builder')}
+                >
+                  <Ionicons name="hammer-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
           </View>
         )}
 

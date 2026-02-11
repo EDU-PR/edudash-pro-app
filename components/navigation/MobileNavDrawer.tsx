@@ -176,6 +176,7 @@ const getDefaultNavItems = (
         { id: 'activities', label: 'Activities', icon: 'game-controller', route: '/screens/aftercare-activities' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/teacher-message-list' },
         { id: 'calendar', label: 'Calendar', icon: 'calendar', route: '/screens/calendar' },
+        { id: 'menu', label: 'Weekly Menu', icon: 'restaurant-outline', route: '/screens/parent-menu' },
         { id: 'reports', label: 'Reports', icon: 'document-text', route: '/screens/teacher-reports' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
       ];
@@ -186,11 +187,13 @@ const getDefaultNavItems = (
         { id: 'progress', label: 'Learning Progress', icon: 'trending-up', route: '/screens/parent-progress' },
         { id: 'homework_history', label: 'Homework History', icon: 'time', route: '/screens/parent-homework-history' },
         { id: 'announcements', label: 'Announcements', icon: 'megaphone', route: '/screens/parent-announcements' },
+        { id: 'menu', label: 'Weekly Menu', icon: 'restaurant-outline', route: '/screens/parent-menu' },
         { id: 'messages', label: 'Messages', icon: 'chatbubble', route: '/screens/parent-messages' },
         { id: 'ai_help', label: 'AI Help Hub', icon: 'sparkles', route: '/screens/parent-ai-help' },
         { id: 'my_exams', label: 'My Exams', icon: 'school', route: '/screens/parent-my-exams' },
         { id: 'aftercare', label: 'Register Aftercare', icon: 'school', route: '/screens/parent-aftercare-registration' },
         { id: 'upgrade', label: 'Upgrade Plan', icon: 'arrow-up-circle', route: '/screens/parent-upgrade' },
+        { id: 'documents', label: 'Documents', icon: 'document-attach', route: '/screens/parent-document-upload' },
         { id: 'calendar', label: 'Calendar', icon: 'calendar', route: '/screens/calendar' },
         { id: 'settings', label: 'Settings', icon: 'settings', route: '/screens/settings' },
       ];

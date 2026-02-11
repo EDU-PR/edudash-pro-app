@@ -7,6 +7,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import {
   StudentDetail,
+  StudentFee,
   Class,
   Transaction,
   calculateAge,
@@ -171,28 +172,58 @@ export async function fetchStudentData(params: FetchStudentParams): Promise<Fetc
   // Financial data
   let outstandingFees = 0;
   let transactions: Transaction[] = [];
+  let studentFees: StudentFee[] = [];
+  let feeTierName: string | undefined;
+  let monthlyFeeAmount: number | undefined;
+  let feeStructureId: string | undefined;
 
-  if (canViewFinancial) {
+  if (canViewFinancial || isParent) {
+    // Detailed fees with fee structure info
     const { data: feeData, error: feeError } = await supabase
       .from('student_fees')
-      .select('amount_outstanding, status, final_amount')
-      .eq('student_id', studentId);
+      .select('id, fee_structure_id, amount, final_amount, amount_paid, amount_outstanding, status, billing_month, due_date, category_code, fee_structures(name)')
+      .eq('student_id', studentId)
+      .order('billing_month', { ascending: false });
 
     if (feeError) {
       logger.error(TAG, 'Error loading student fees:', feeError);
     }
 
-    outstandingFees = (feeData || []).reduce((sum, fee) => sum + (fee.amount_outstanding ?? 0), 0);
+    studentFees = (feeData || []).map((f: any) => ({
+      id: f.id,
+      fee_structure_id: f.fee_structure_id,
+      fee_name: f.fee_structures?.name || 'Monthly Fee',
+      amount: f.amount ?? 0,
+      final_amount: f.final_amount ?? f.amount ?? 0,
+      amount_paid: f.amount_paid ?? 0,
+      amount_outstanding: f.amount_outstanding ?? 0,
+      status: f.status || 'pending',
+      billing_month: f.billing_month || f.due_date || '',
+      due_date: f.due_date || f.billing_month || '',
+      category_code: f.category_code || 'tuition',
+    }));
 
-    const { data: txData } = await supabase
-      .from('financial_transactions')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('preschool_id', schoolId)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    outstandingFees = studentFees.reduce((sum, fee) => sum + (fee.amount_outstanding ?? 0), 0);
 
-    transactions = txData || [];
+    // Get current fee tier from most recent tuition fee
+    const latestTuition = studentFees.find(f => f.category_code === 'tuition');
+    if (latestTuition) {
+      feeTierName = latestTuition.fee_name;
+      monthlyFeeAmount = latestTuition.amount;
+      feeStructureId = latestTuition.fee_structure_id;
+    }
+
+    if (canViewFinancial) {
+      const { data: txData } = await supabase
+        .from('financial_transactions')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('preschool_id', schoolId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      transactions = txData || [];
+    }
   }
 
   // Build processed student
@@ -211,6 +242,10 @@ export async function fetchStudentData(params: FetchStudentParams): Promise<Fetc
     guardian_phone: guardianInfo.phone,
     profile_photo: studentData.avatar_url || studentData.profile_photo,
     age_group_name: ageGroupName,
+    fee_tier_name: feeTierName,
+    monthly_fee_amount: monthlyFeeAmount,
+    fee_structure_id: feeStructureId,
+    student_fees: studentFees,
     attendance_rate: attendanceRate,
     last_attendance: lastAttendance,
     outstanding_fees: outstandingFees,
