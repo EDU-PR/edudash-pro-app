@@ -159,6 +159,25 @@ export class SchoolMenuService {
     return unique;
   }
 
+  /**
+   * Delete all daily menu rows for a specific week.
+   * Only principals/admins with manager permissions should call this.
+   */
+  static async deleteWeekMenu(preschoolId: string, weekStartDate: string): Promise<void> {
+    const supabase = assertSupabase();
+    const normalizedWeek = startOfWeekMonday(weekStartDate);
+
+    const { error } = await supabase
+      .from('school_daily_menus')
+      .delete()
+      .eq('preschool_id', preschoolId)
+      .eq('week_start_date', normalizedWeek);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to delete school menu');
+    }
+  }
+
   static async getWeekMenuWithFallback(preschoolId: string, weekStartDate: string): Promise<WeeklyMenuDraft | null> {
     const normalizedWeek = startOfWeekMonday(weekStartDate);
 

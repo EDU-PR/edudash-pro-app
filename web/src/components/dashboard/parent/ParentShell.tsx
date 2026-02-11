@@ -37,6 +37,7 @@ import {
   School,
   Newspaper,
   ChefHat,
+  FileText,
 } from 'lucide-react';
 import { usePendingHomework } from '@/lib/hooks/parent/usePendingHomework';
 import { useChildrenData } from '@/lib/hooks/parent/useChildrenData';
@@ -233,6 +234,7 @@ export function ParentShell({ tenantSlug, userEmail, userName, preschoolName, un
           : []),
         ...(isPreschoolChild ? [{ href: '/dashboard/parent/learning-hub', label: t('dashboard.parent.nav.learning_hub', { defaultValue: 'Learning Hub' }), icon: Rocket }] : []),
         { href: '/dashboard/parent/payments', label: t('dashboard.parent.nav.payments', { defaultValue: 'Payments' }), icon: CreditCard },
+        { href: '/dashboard/parent/documents', label: t('dashboard.parent.nav.documents', { defaultValue: 'Documents' }), icon: FileText },
         { href: '/dashboard/parent/aftercare', label: t('dashboard.parent.nav.aftercare', { defaultValue: 'Aftercare Registration' }), icon: School },
         ...(!isPreschoolChild ? [{ href: '/dashboard/parent/robotics', label: t('dashboard.parent.nav.robotics', { defaultValue: 'Robotics' }), icon: Sparkles }] : []),
         { href: '/dashboard/parent/settings', label: t('dashboard.parent.nav.settings', { defaultValue: 'Settings' }), icon: Settings },

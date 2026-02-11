@@ -465,7 +465,7 @@ SET
   allowed_mime_types = EXCLUDED.allowed_mime_types,
   public = EXCLUDED.public;
 
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- RLS is already enabled on storage.objects by Supabase — do NOT alter it here.
 
 DROP POLICY IF EXISTS school_menu_uploads_insert ON storage.objects;
 CREATE POLICY school_menu_uploads_insert

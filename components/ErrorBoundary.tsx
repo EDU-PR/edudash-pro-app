@@ -41,10 +41,13 @@ export class ErrorBoundary extends Component<Props, State> {
     // Log error to console (always)
     console.error('[ErrorBoundary] App Error:', error, errorInfo);
     
-    // TODO: Send to Sentry in production
-    // if (!__DEV__) {
-    //   Sentry.captureException(error, { contexts: { react: errorInfo } });
-    // }
+    // Report to Sentry in production via monitoring service
+    if (!__DEV__) {
+      try {
+        const { reportError } = require('@/lib/monitoring');
+        reportError(error, { componentStack: errorInfo?.componentStack });
+      } catch { /* monitoring not available */ }
+    }
     
     this.setState({
       error,

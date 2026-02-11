@@ -16,6 +16,7 @@
  */
 
 import { unifiedToolRegistry } from '@/services/tools/UnifiedToolRegistry';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 
 // Global declarations for React Native environment
 // Reference: https://reactnative.dev/docs/javascript-environment
@@ -182,6 +183,47 @@ export class DashAIClient {
     return { role, scope };
   }
 
+  private resolveUserTier(profile: any): string {
+    const candidates = [
+      profile?.tier,
+      profile?.subscription_tier,
+      profile?.current_tier,
+      profile?.context?.subscription_tier,
+      profile?.context?.tier,
+      profile?.context?.capability_tier,
+      profile?.preferences?.subscription_tier,
+      profile?.preferences?.tier,
+    ];
+
+    for (const candidate of candidates) {
+      const raw = String(candidate || '').trim().toLowerCase();
+      if (!raw) continue;
+
+      // Preserve direct capability tiers.
+      if (raw === 'free' || raw === 'starter' || raw === 'premium' || raw === 'enterprise') {
+        return raw;
+      }
+
+      // Legacy aliases still present in historic usage records.
+      if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') {
+        return 'starter';
+      }
+      if (raw === 'pro' || raw === 'group_10') {
+        return 'premium';
+      }
+
+      try {
+        return getCapabilityTier(normalizeTierName(raw));
+      } catch {
+        if (raw.includes('enterprise')) return 'enterprise';
+        if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
+        if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
+      }
+    }
+
+    return 'free';
+  }
+
   private getClientToolDefs(role: string, tier: string): Array<{
     name: string;
     description: string;
@@ -288,7 +330,7 @@ export class DashAIClient {
       const images = this.buildImagePayloads(params.attachments, params.images);
       const profile = this.getUserProfile() as any;
       const { role, scope } = this.normalizeRoleAndScope(profile?.role);
-      const userTier = (profile?.tier || 'free') as string;
+      const userTier = this.resolveUserTier(profile);
       const traceId = this.createTraceId('dash_ai_client');
       const orchestration = this.getOrchestrationConfig();
       const effectiveServiceType = params.serviceType || (params.ocrMode ? 'image_analysis' : 'chat_message');
@@ -391,7 +433,7 @@ export class DashAIClient {
         const executionContext = {
           userId: profile?.id || '',
           role: role,
-          tier: profile?.tier || 'free',
+          tier: userTier,
           organizationId: profile?.organization_id || profile?.preschool_id || '',
           hasOrganization: !!(profile?.organization_id || profile?.preschool_id),
           isGuest: !profile?.id,
@@ -668,7 +710,7 @@ export class DashAIClient {
       
       const userProfile = this.getUserProfile() as any;
       const { role: userRole, scope } = this.normalizeRoleAndScope(userProfile?.role || 'student');
-      const userTier = (userProfile?.tier || 'free') as string;
+      const userTier = this.resolveUserTier(userProfile);
       const clientToolDefs = this.getClientToolDefs(userRole, userTier);
       const traceId = this.createTraceId('dash_ai_stream');
       const toolPlan = this.buildToolPlanMetadata(userRole, userTier);
@@ -898,7 +940,7 @@ export class DashAIClient {
         const wsUrl = `${supabaseUrl.replace('https', 'wss')}/functions/v1/ai-proxy-ws`;
         const profile = this.getUserProfile() as any;
         const { role, scope } = this.normalizeRoleAndScope(profile?.role || 'teacher');
-        const userTier = (profile?.tier || 'free') as string;
+        const userTier = this.resolveUserTier(profile);
         const traceId = this.createTraceId('dash_ai_ws');
         const toolPlan = this.buildToolPlanMetadata(role, userTier);
         const clientTools = this.getClientToolDefs(role, userTier);

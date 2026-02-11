@@ -45,6 +45,7 @@ import {
   ParentContactSection,
   ProgressReportsSection,
   FinancialStatusSection,
+  FeeBreakdownSection,
   MedicalInfoSection,
   ClassAssignmentModal,
 } from '@/components/student-detail';
@@ -336,6 +337,66 @@ export default function StudentDetailScreen() {
     await loadStudentData();
   };
 
+  // Handle updating a specific fee (Principal only)
+  const handleUpdateFee = async (feeId: string, updates: { amount?: number; due_date?: string }) => {
+    if (!user || !isPrincipal) throw new Error('Unauthorized');
+    const supabase = assertSupabase();
+
+    const updatePayload: Record<string, any> = {};
+    if (updates.amount != null) {
+      updatePayload.amount = updates.amount;
+      updatePayload.final_amount = updates.amount;
+      // Recalculate outstanding based on current paid amount
+      const { data: current } = await supabase
+        .from('student_fees')
+        .select('amount_paid')
+        .eq('id', feeId)
+        .single();
+      updatePayload.amount_outstanding = updates.amount - (current?.amount_paid ?? 0);
+    }
+    if (updates.due_date) {
+      updatePayload.due_date = updates.due_date;
+    }
+
+    const { error } = await supabase
+      .from('student_fees')
+      .update(updatePayload)
+      .eq('id', feeId);
+
+    if (error) {
+      showAlert('Error', 'Failed to update fee: ' + error.message, 'error');
+      throw error;
+    }
+    showAlert('Success', 'Fee updated successfully', 'success');
+    await loadStudentData();
+  };
+
+  // Handle re-assessing fee for student's current age (Principal only)
+  const handleCorrectFee = async (studentId: string, billingMonth: string) => {
+    if (!user || !isPrincipal) throw new Error('Unauthorized');
+    const supabase = assertSupabase();
+
+    const { data, error } = await supabase
+      .rpc('assign_correct_fee_for_student', {
+        p_student_id: studentId,
+        p_billing_month: billingMonth,
+      });
+
+    if (error) {
+      showAlert('Error', 'Failed to correct fee: ' + error.message, 'error');
+      throw error;
+    }
+
+    const result = data as any;
+    if (result?.error) {
+      showAlert('Error', result.error, 'error');
+      return;
+    }
+
+    showAlert('Success', `Fee ${result?.action || 'updated'}: ${result?.fee_name || ''} — ${result?.amount ? 'R' + result.amount : ''}`, 'success');
+    await loadStudentData();
+  };
+
   useEffect(() => {
     loadStudentData();
   }, [studentId, user]);
@@ -482,6 +543,17 @@ export default function StudentDetailScreen() {
             theme={theme}
             isPrincipal={isPrincipal}
             onMarkPaymentReceived={handleMarkPaymentReceived}
+          />
+        )}
+
+        {/* Fee Breakdown — visible to principals AND parents */}
+        {(canViewFinancial || isParent) && (
+          <FeeBreakdownSection
+            student={student}
+            theme={theme}
+            isPrincipal={isPrincipal}
+            onUpdateFee={isPrincipal ? handleUpdateFee : undefined}
+            onCorrectFee={isPrincipal ? handleCorrectFee : undefined}
           />
         )}
 

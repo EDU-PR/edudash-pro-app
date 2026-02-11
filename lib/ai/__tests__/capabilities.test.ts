@@ -41,6 +41,13 @@ describe('Capability System', () => {
         expect(hasCapability(tier, 'chat.basic')).toBe(true);
       });
     });
+
+    it('should normalize paid product-tier aliases to capability tiers', () => {
+      expect(hasCapability('school_pro', 'exam.pastpapers')).toBe(true);
+      expect(hasCapability('teacher_pro', 'exam.marking')).toBe(true);
+      expect(hasCapability('parent_plus', 'exam.studyguide')).toBe(true);
+      expect(hasCapability('basic', 'chat.streaming')).toBe(true);
+    });
   });
 
   describe('getCapabilities', () => {
@@ -132,6 +139,12 @@ describe('Capability System', () => {
       
       expect(Math.sign(result1)).toBe(Math.sign(result3));
       expect(Math.sign(result2)).toBe(Math.sign(result3));
+    });
+
+    it('should compare normalized aliases correctly', () => {
+      expect(compareTiers('school_pro', 'starter')).toBeGreaterThan(0);
+      expect(compareTiers('teacher_starter', 'parent_plus')).toBeLessThan(0);
+      expect(compareTiers('basic', 'school_starter')).toBe(0);
     });
   });
 
@@ -295,6 +308,12 @@ describe('Capability System', () => {
       expect(getTierInfo('free').name).toBe('Free');
       expect(getTierInfo('premium').name).toBe('Premium');
       expect(getTierInfo('enterprise').name).toBe('Enterprise');
+    });
+
+    it('should normalize product-tier aliases for display metadata', () => {
+      expect(getTierInfo('school_pro').id).toBe('premium');
+      expect(getTierInfo('teacher_starter').id).toBe('starter');
+      expect(getTierInfo('unknown_tier').id).toBe('free');
     });
   });
 

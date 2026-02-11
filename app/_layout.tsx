@@ -44,6 +44,8 @@ import { DashboardPreferencesProvider } from '../contexts/DashboardPreferencesCo
 import { UpdatesProvider } from '../contexts/UpdatesProvider';
 import { TermsProvider } from '../contexts/TerminologyContext';
 import { OnboardingProvider } from '../contexts/OnboardingContext';
+import { SpotlightTourProvider } from '../contexts/SpotlightTourContext';
+import { allTours } from '../lib/tours';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../components/ui/StyledAlert';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -89,6 +91,17 @@ const STACK_SCREEN_OPTIONS = {
   contentStyle: { backgroundColor: 'transparent' },
 };
 const CONTENT_CONTAINER_STYLE = { paddingBottom: 0 };
+
+/** Bridge that reads user role from AuthContext and passes to SpotlightTourProvider */
+function SpotlightTourBridge({ children }: { children: React.ReactNode }) {
+  const { profile } = useAuth();
+  const role = profile?.role ?? undefined;
+  return (
+    <SpotlightTourProvider tours={allTours} userRole={role}>
+      {children}
+    </SpotlightTourProvider>
+  );
+}
 
 // Inner component with access to AuthContext
 function LayoutContent() {
@@ -251,6 +264,7 @@ export default function RootLayout() {
                   <AppPreferencesProvider>
                     <NotificationProvider>
                       <CallProvider>
+                        <SpotlightTourBridge>
                         <OnboardingProvider>
                           <OrganizationBrandingProvider>
                           <DashboardPreferencesProvider>
@@ -268,6 +282,7 @@ export default function RootLayout() {
                         </DashboardPreferencesProvider>
                         </OrganizationBrandingProvider>
                         </OnboardingProvider>
+                        </SpotlightTourBridge>
                       </CallProvider>
                     </NotificationProvider>
                   </AppPreferencesProvider>

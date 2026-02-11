@@ -16,6 +16,9 @@ export interface FeeStructureCandidate {
   grade_level?: string | null;
   effective_from?: string | null;
   created_at?: string | null;
+  /** Structured age range — preferred over text-parsing when present */
+  age_min_months?: number | null;
+  age_max_months?: number | null;
 }
 
 interface AgeRange {
@@ -142,9 +145,15 @@ export function selectFeeStructureForChild<T extends FeeStructureCandidate>(
 
   const candidates = structures.map((fee) => {
     const labels = buildFeeLabels(fee);
-    const ranges = labels
+    // Prefer structured age columns from DB over text-parsing
+    const structuredRange: AgeRange | null =
+      fee.age_min_months != null && fee.age_max_months != null
+        ? { minMonths: fee.age_min_months, maxMonths: fee.age_max_months }
+        : null;
+    const textRanges = labels
       .map(parseAgeRange)
       .filter((range): range is AgeRange => range !== null);
+    const ranges = structuredRange ? [structuredRange] : textRanges;
     const labelText = labels.join(' ').toLowerCase();
     return { fee, ranges, labelText };
   });

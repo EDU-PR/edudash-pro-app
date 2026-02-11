@@ -60,6 +60,7 @@ export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
         { href: '/dashboard/teacher/attendance', label: 'Attendance', icon: CheckSquare },
         { href: '/dashboard/teacher/live-lesson', label: 'Live Lesson', icon: Video },
         { href: '/dashboard/teacher/birthdays', label: 'Birthday Chart', icon: Gift },
+        { href: '/dashboard/teacher/menu', label: 'Weekly Menu', icon: Calendar },
       ],
     },
     {

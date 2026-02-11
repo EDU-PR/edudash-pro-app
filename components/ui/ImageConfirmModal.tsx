@@ -21,7 +21,7 @@
  *   />
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -31,9 +31,11 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ImageCropEditor } from './ImageCropEditor';
+import { applySmartCrop, type SmartCropMode } from '@/lib/utils/smartCrop';
 
 // Safe spinner import
 let EduDashSpinner: React.FC<any> = ({ size, color }: any) => null;
@@ -62,6 +64,8 @@ interface ImageConfirmModalProps {
   loading?: boolean;
   /** Icon name for the confirm button (default: "checkmark-circle-outline") */
   confirmIcon?: keyof typeof Ionicons.glyphMap;
+  /** Smart crop mode — auto-frames image on load. Only used when showCrop is true. */
+  smartCropMode?: SmartCropMode;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -78,23 +82,50 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
   cropAspect,
   loading = false,
   confirmIcon = 'checkmark-circle-outline',
+  smartCropMode = 'auto',
 }) => {
   const [currentUri, setCurrentUri] = React.useState<string | null>(imageUri);
+  const [originalUri, setOriginalUri] = React.useState<string | null>(imageUri);
   const [showCropEditor, setShowCropEditor] = React.useState(false);
+  const [autoCropping, setAutoCropping] = React.useState(false);
+  const [wasAutoCropped, setWasAutoCropped] = React.useState(false);
 
-  // Sync external imageUri changes
-  React.useEffect(() => {
+  // Sync external imageUri changes + apply smart auto-crop
+  useEffect(() => {
+    setOriginalUri(imageUri);
     setCurrentUri(imageUri);
-  }, [imageUri]);
+    setWasAutoCropped(false);
 
-  const handleCrop = useCallback(() => {
+    if (imageUri && showCrop && cropAspect) {
+      setAutoCropping(true);
+      applySmartCrop(imageUri, smartCropMode, cropAspect)
+        .then((result) => {
+          if (result.wasAutoCropped) {
+            setCurrentUri(result.uri);
+            setWasAutoCropped(true);
+          }
+        })
+        .catch(() => {
+          // Fallback: use original image if smart crop fails
+        })
+        .finally(() => setAutoCropping(false));
+    }
+  }, [imageUri, showCrop, cropAspect, smartCropMode]);
+
+  const handleAdjust = useCallback(() => {
     setShowCropEditor(true);
   }, []);
 
   const handleCropDone = useCallback((croppedUri: string) => {
     setCurrentUri(croppedUri);
+    setWasAutoCropped(true);
     setShowCropEditor(false);
   }, []);
+
+  const handleReset = useCallback(() => {
+    setCurrentUri(originalUri);
+    setWasAutoCropped(false);
+  }, [originalUri]);
 
   const handleConfirm = useCallback(() => {
     if (currentUri) {
@@ -124,9 +155,15 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
 
           {/* Image preview */}
           <View style={styles.previewContainer}>
+            {autoCropping && (
+              <View style={styles.autoCropOverlay}>
+                <ActivityIndicator color="#3b82f6" size="small" />
+                <Text style={styles.autoCropText}>Auto-framing...</Text>
+              </View>
+            )}
             <Image
               source={{ uri: currentUri }}
-              style={styles.preview}
+              style={[styles.preview, autoCropping && { opacity: 0.5 }]}
               resizeMode="contain"
             />
           </View>
@@ -134,20 +171,31 @@ export const ImageConfirmModal: React.FC<ImageConfirmModalProps> = ({
           {/* Action buttons */}
           <View style={styles.actions}>
             {showCrop && (
-              <TouchableOpacity
-                style={styles.cropBtn}
-                onPress={handleCrop}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="crop-outline" size={20} color="#3b82f6" />
-                <Text style={styles.cropText}>Crop</Text>
-              </TouchableOpacity>
+              <View style={styles.adjustRow}>
+                <TouchableOpacity
+                  style={styles.adjustBtn}
+                  onPress={handleAdjust}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="options-outline" size={18} color="#3b82f6" />
+                  <Text style={styles.adjustText}>Adjust</Text>
+                </TouchableOpacity>
+                {wasAutoCropped && (
+                  <TouchableOpacity
+                    style={styles.resetBtn}
+                    onPress={handleReset}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="refresh-outline" size={16} color="#94a3b8" />
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
 
             <TouchableOpacity
-              style={[styles.confirmBtn, showCrop && { flex: 1.5 }]}
+              style={[styles.confirmBtn, !showCrop && { flex: 1 }]}
               onPress={handleConfirm}
-              disabled={loading}
+              disabled={loading || autoCropping}
               activeOpacity={0.8}
             >
               {loading ? (
@@ -235,22 +283,44 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 8,
   },
-  cropBtn: {
-    flex: 1,
+  autoCropOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+  },
+  autoCropText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '500',
+  },
+  adjustRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.3)',
-    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    gap: 8,
   },
-  cropText: {
-    fontSize: 16,
-    fontWeight: '600',
+  adjustBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    backgroundColor: 'rgba(59, 130, 246, 0.06)',
+  },
+  adjustText: {
+    fontSize: 14,
+    fontWeight: '500',
     color: '#3b82f6',
+  },
+  resetBtn: {
+    padding: 8,
+    borderRadius: 8,
   },
   confirmBtn: {
     flex: 1,

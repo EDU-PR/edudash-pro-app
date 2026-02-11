@@ -19,7 +19,7 @@
  */
 
 import { Tool, ToolCategory, RiskLevel, ToolParameter, ToolExecutionContext, ToolExecutionResult } from '../types';
-import { hasCapability } from '@/lib/ai/capabilities';
+import { hasCapability, resolveCapabilityTier } from '@/lib/ai/capabilities';
 import type { Tier } from '@/lib/ai/capabilities';
 
 // Exam types available
@@ -176,7 +176,7 @@ export const ExamPrepTool: Tool = {
   ): Promise<ToolExecutionResult> => {
     try {
       const { grade, subject, topic, exam_type, difficulty, num_questions, language, include_answers, term, interactive } = params;
-      const userTier = (context.tier || 'free') as Tier;
+      const userTier = resolveCapabilityTier(context.tier || 'free') as Tier;
       
       // Check capability for advanced features
       if (exam_type === 'past_paper' && !hasCapability(userTier, 'exam.pastpapers')) {

@@ -15,13 +15,51 @@
  * - [ ] Quota tracking per capability (e.g., API calls/month)
  */
 
-import type { CapabilityTier } from '@/lib/tiers';
+import {
+  getCapabilityTier,
+  normalizeTierName,
+  type CapabilityTier,
+} from '@/lib/tiers';
 
 /**
  * Available subscription tiers in ascending order of features.
  * Re-exported from the canonical tier system in `@/lib/tiers`.
  */
 export type Tier = CapabilityTier;
+
+const TIER_ORDER: Tier[] = ['free', 'starter', 'premium', 'enterprise'];
+
+/**
+ * Resolve any product or legacy tier string into capability-tier space.
+ * This prevents false feature blocking when callers pass values like
+ * "school_pro", "teacher_pro", "parent_plus", or "basic".
+ */
+export function resolveCapabilityTier(tier: Tier | string | null | undefined): Tier {
+  const raw = String(tier || '').trim().toLowerCase();
+  if (!raw) return 'free';
+
+  if ((TIER_ORDER as string[]).includes(raw)) {
+    return raw as Tier;
+  }
+
+  // Legacy billing aliases used in older records/tool contexts.
+  if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') {
+    return 'starter';
+  }
+  if (raw === 'pro' || raw === 'group_10') {
+    return 'premium';
+  }
+
+  try {
+    return getCapabilityTier(normalizeTierName(raw));
+  } catch {
+    // Last-resort fallback for malformed values.
+    if (raw.includes('enterprise')) return 'enterprise';
+    if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
+    if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
+    return 'free';
+  }
+}
 
 /**
  * Granular capability identifiers for feature gating
@@ -384,8 +422,9 @@ export interface CapabilityMetadata {
  * }
  * ```
  */
-export function hasCapability(tier: Tier, capability: DashCapability): boolean {
-  const capabilities = CAPABILITY_MATRIX[tier];
+export function hasCapability(tier: Tier | string, capability: DashCapability): boolean {
+  const resolvedTier = resolveCapabilityTier(tier);
+  const capabilities = CAPABILITY_MATRIX[resolvedTier];
   if (!capabilities) return false;
   return capabilities.includes(capability);
 }
@@ -402,8 +441,9 @@ export function hasCapability(tier: Tier, capability: DashCapability): boolean {
  * console.log(capabilities); // ['chat.basic', 'chat.streaming', ...]
  * ```
  */
-export function getCapabilities(tier: Tier): readonly DashCapability[] {
-  return CAPABILITY_MATRIX[tier] || [];
+export function getCapabilities(tier: Tier | string): readonly DashCapability[] {
+  const resolvedTier = resolveCapabilityTier(tier);
+  return CAPABILITY_MATRIX[resolvedTier] || [];
 }
 
 /**
@@ -475,9 +515,10 @@ export function getExclusiveCapabilities(tier: Tier): DashCapability[] {
  * }
  * ```
  */
-export function compareTiers(tier1: Tier, tier2: Tier): number {
-  const tiers: Tier[] = ['free', 'starter', 'premium', 'enterprise'];
-  return tiers.indexOf(tier1) - tiers.indexOf(tier2);
+export function compareTiers(tier1: Tier | string, tier2: Tier | string): number {
+  const resolvedTier1 = resolveCapabilityTier(tier1);
+  const resolvedTier2 = resolveCapabilityTier(tier2);
+  return TIER_ORDER.indexOf(resolvedTier1) - TIER_ORDER.indexOf(resolvedTier2);
 }
 
 /**
@@ -539,11 +580,13 @@ export class FeatureGatedError extends Error {
  * ```
  */
 export function assertCapability(
-  tier: Tier,
+  tier: Tier | string,
   capability: DashCapability,
   customMessage?: string
 ): void {
-  if (!hasCapability(tier, capability)) {
+  const resolvedTier = resolveCapabilityTier(tier);
+
+  if (!hasCapability(resolvedTier, capability)) {
     const requiredTier = getRequiredTier(capability);
     const message = customMessage || 
       `Feature '${capability}' requires ${requiredTier} tier or higher`;
@@ -552,7 +595,7 @@ export function assertCapability(
       message,
       capability,
       requiredTier || 'premium',
-      tier
+      resolvedTier
     );
   }
 }
@@ -574,7 +617,7 @@ export function assertCapability(
  * ```
  */
 export function checkCapabilities(
-  tier: Tier,
+  tier: Tier | string,
   capabilities: DashCapability[]
 ): Record<string, boolean> {
   return capabilities.reduce((acc, capability) => {
@@ -589,12 +632,13 @@ export function checkCapabilities(
  * @param tier - Tier to get info for
  * @returns Display information for the tier
  */
-export function getTierInfo(tier: Tier): {
+export function getTierInfo(tier: Tier | string): {
   id: Tier;
   name: string;
   color: string;
   order: number;
 } {
+  const resolvedTier = resolveCapabilityTier(tier);
   const tiers = {
     free: { name: 'Free', color: '#8E8E93', order: 0 },
     starter: { name: 'Starter', color: '#34C759', order: 1 },
@@ -603,6 +647,6 @@ export function getTierInfo(tier: Tier): {
   };
 
   const fallback = tiers.free;
-  const info = tiers[tier] || fallback;
-  return { id: (tiers[tier] ? tier : 'free'), ...info };
+  const info = tiers[resolvedTier] || fallback;
+  return { id: (tiers[resolvedTier] ? resolvedTier : 'free'), ...info };
 }

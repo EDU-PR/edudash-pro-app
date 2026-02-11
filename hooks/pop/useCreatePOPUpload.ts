@@ -199,6 +199,12 @@ function buildDatabaseRecord(
       }),
       category_code: data.category_code || inferFeeCategoryCode(data.description || data.title || 'tuition'),
       payment_reference: data.payment_reference,
+      ...(data.advance_months && data.advance_months > 0 && {
+        advance_months: data.advance_months,
+      }),
+      ...(data.covers_months?.length && {
+        covers_months: data.covers_months,
+      }),
     }),
     
     ...(data.upload_type === 'picture_of_progress' && {

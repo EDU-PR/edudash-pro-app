@@ -37,6 +37,7 @@ import { useAIModelSelection } from '@/hooks/useAIModelSelection';
 import { useCapability } from '@/hooks/useCapability';
 import type { AIModelId, AIModelInfo } from '@/lib/ai/models';
 import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { useDashAttachments, type AttachmentProgress } from '@/hooks/useDashAttachments';
 import {
   getConversationSnapshot,
@@ -352,7 +353,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, [conversation?.id]);
 
-  const isFreeTier = (tier || 'free').toLowerCase().includes('free');
+  const capabilityTier = useMemo(
+    () => getCapabilityTier(normalizeTierName(String(tier || 'free'))),
+    [tier],
+  );
+  const isFreeTier = subReady ? capabilityTier === 'free' : false;
   const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
   const canUseImages = capsReady ? can('multimodal.vision') : true;
   const canUseDocuments = capsReady ? can('multimodal.documents') : true;
@@ -499,6 +504,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
             organization_type: schoolType || null,
             preferred_language: targetLocale,
             user_role: 'parent',
+            subscription_tier: tier || null,
+            capability_tier: capabilityTier,
           }).catch(() => {});
           return;
         }
@@ -540,6 +547,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           preferred_language: targetLocale,
           student_id: activeChild.id,
           student_name: learnerName,
+          subscription_tier: tier || null,
+          capability_tier: capabilityTier,
         }).catch(() => {});
 
         await setDefaultAgeBand(ageBand);
@@ -574,6 +583,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           grade_levels: grade ? [String(grade)] : null,
           organization_type: schoolType || null,
           preferred_language: targetLocale,
+          subscription_tier: tier || null,
+          capability_tier: capabilityTier,
         }).catch(() => {});
 
         await setDefaultAgeBand(ageBand);
@@ -596,6 +607,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         organization_type: schoolType || null,
         preferred_language: targetLocale,
         user_role: role || null,
+        subscription_tier: tier || null,
+        capability_tier: capabilityTier,
       }).catch(() => {});
     };
 
@@ -613,6 +626,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     (profile as any)?.organization_type,
     (profile as any)?.school_type,
     (profile as any)?.usage_type,
+    tier,
+    capabilityTier,
     profile?.full_name,
     profile?.first_name,
     profile?.date_of_birth,

@@ -116,6 +116,26 @@ export default function ProofOfPaymentScreen() {
                 <Ionicons name="calendar" size={20} color={theme.textSecondary} />
               </TouchableOpacity>
               {h.showPaymentForPicker && <DateTimePicker value={h.paymentForMonth || new Date()} mode="date" onChange={(_, d) => { h.setShowPaymentForPicker(false); if (d) h.setPaymentForMonth(new Date(d.getFullYear(), d.getMonth(), 1)); }} />}
+
+              {/* Advance Months Selector */}
+              <Text style={styles.label}>Number of Months</Text>
+              <View style={styles.categoryRow}>
+                {[1, 2, 3, 6].map(n => {
+                  const sel = h.advanceMonths === n;
+                  return (
+                    <TouchableOpacity key={n} style={[styles.categoryChip, { backgroundColor: sel ? theme.primary : theme.primary + '10', borderColor: sel ? theme.primary : theme.primary + '30' }]} onPress={() => h.setAdvanceMonths(n)}>
+                      <Text style={[styles.categoryChipText, { color: sel ? '#fff' : theme.primary }]}>{n === 1 ? '1 month' : `${n} months`}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {h.advanceMonths > 1 && h.coversMonths.length > 0 && (
+                <View style={{ backgroundColor: theme.primary + '08', borderRadius: 8, padding: 10, marginTop: 6 }}>
+                  <Text style={[styles.label, { marginBottom: 4, fontSize: 12, color: theme.primary }]}>
+                    Covers: {h.coversMonths.map(m => new Date(m + 'T00:00:00').toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })).join(', ')}
+                  </Text>
+                </View>
+              )}
             </>
           ) : (
             <View style={styles.autoMonthRow}>

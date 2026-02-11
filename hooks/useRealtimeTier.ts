@@ -17,6 +17,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { getQuotaStatus } from '@/lib/ai/api';
 import { logger } from '@/lib/logger';
+import { getCapabilityTier, getTierDisplayName, normalizeTierName } from '@/lib/tiers';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -38,6 +39,77 @@ export interface UseRealtimeTierOptions {
   /** Callback when tier changes */
   onTierChange?: (newTier: string, oldTier: string) => void;
 }
+
+const CAPABILITY_TIER_ORDER = ['free', 'starter', 'premium', 'enterprise'] as const;
+
+const resolveCapabilityTier = (rawTier?: string | null): (typeof CAPABILITY_TIER_ORDER)[number] => {
+  const raw = String(rawTier || '').trim().toLowerCase();
+  if (!raw) return 'free';
+  if (raw === 'free' || raw === 'starter' || raw === 'premium' || raw === 'enterprise') return raw;
+  if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') return 'starter';
+  if (raw === 'pro' || raw === 'group_10') return 'premium';
+  try {
+    return getCapabilityTier(normalizeTierName(raw));
+  } catch {
+    if (raw.includes('enterprise')) return 'enterprise';
+    if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
+    if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
+    return 'free';
+  }
+};
+
+const selectBestTier = (tiers: Array<string | null | undefined>): string => {
+  let bestTier = 'free';
+  let bestIndex = 0;
+
+  for (const candidate of tiers) {
+    const raw = String(candidate || '').trim();
+    if (!raw) continue;
+    const capability = resolveCapabilityTier(raw);
+    const capabilityIndex = CAPABILITY_TIER_ORDER.indexOf(capability);
+    if (capabilityIndex > bestIndex) {
+      bestIndex = capabilityIndex;
+      bestTier = raw;
+    }
+  }
+
+  return bestTier;
+};
+
+const normalizeTierForLimits = (tier: string): string => {
+  const raw = String(tier || '').trim().toLowerCase();
+  if (!raw) return 'free';
+  try {
+    return normalizeTierName(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const formatRealtimeTierName = (tier: string): string => {
+  const raw = String(tier || '').trim();
+  if (!raw) return 'Free';
+  try {
+    return getTierDisplayName(normalizeTierName(raw));
+  } catch {
+    const normalized = raw.toLowerCase().replace('-', '_');
+    const names: Record<string, string> = {
+      free: 'Free',
+      parent_starter: 'Parent Starter',
+      parent_plus: 'Parent Plus',
+      starter: 'Starter',
+      premium: 'Premium',
+      pro: 'Pro',
+      enterprise: 'Enterprise',
+      school_starter: 'School Starter',
+      school_premium: 'School Premium',
+      school_pro: 'School Pro',
+      teacher_starter: 'Teacher Starter',
+      teacher_pro: 'Teacher Pro',
+    };
+    return names[normalized] || raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+};
 
 /**
  * Hook for real-time tier status updates
@@ -84,13 +156,19 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
 
       if (usageError) throw usageError;
       
-      // Determine effective tier
-      const effectiveTier = tierData?.tier || usageData?.current_tier || contextTier || 'free';
+      // Determine effective tier from all available sources.
+      // We choose the highest capability-equivalent tier to avoid false "free"
+      // displays when one source lags behind (common during tier propagation).
+      const effectiveTier = selectBestTier([
+        contextTier,
+        tierData?.tier,
+        usageData?.current_tier,
+      ]);
       
       // Get tier limits (daily chat quota)
       // Valid tiers: free, trial, parent_starter, parent_plus, teacher_starter, teacher_pro, 
       // school_starter, school_premium, school_pro, school_enterprise
-      const normalizedTier = effectiveTier.toLowerCase();
+      const normalizedTier = normalizeTierForLimits(effectiveTier);
       const { data: limitsData, error: limitsError } = await supabase
         .from('ai_usage_tiers')
         .select('chat_messages_per_day, chat_messages_per_month, exams_per_month, explanations_per_month')
@@ -126,7 +204,7 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       
       const newStatus: TierStatus = {
         tier: effectiveTier,
-        tierDisplayName: formatTierName(effectiveTier),
+        tierDisplayName: formatRealtimeTierName(effectiveTier),
         isActive: !tierData?.expires_at || new Date(tierData.expires_at) > new Date(),
         expiresAt: tierData?.expires_at || null,
         quotaUsed: normalizedUsed,
@@ -235,31 +313,10 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
     error,
     refresh,
     tier: tierStatus?.tier || contextTier || 'free',
-    tierDisplayName: tierStatus?.tierDisplayName || formatTierName(contextTier || 'free'),
+    tierDisplayName: tierStatus?.tierDisplayName || formatRealtimeTierName(contextTier || 'free'),
     isActive: tierStatus?.isActive ?? true,
     quotaPercentage: tierStatus?.quotaPercentage || 0,
   };
-}
-
-/**
- * Format tier name for display
- */
-function formatTierName(tier: string): string {
-  const names: Record<string, string> = {
-    free: 'Free',
-    parent_starter: 'Parent Starter',
-    parent_plus: 'Parent Plus',
-    starter: 'Starter',
-    premium: 'Premium',
-    pro: 'Pro',
-    enterprise: 'Enterprise',
-    school_starter: 'School Starter',
-    school_premium: 'School Premium',
-    school_pro: 'School Pro',
-  };
-  
-  const normalized = tier.toLowerCase().replace('-', '_');
-  return names[normalized] || tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
 export default useRealtimeTier;

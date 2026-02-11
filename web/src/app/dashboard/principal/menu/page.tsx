@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, ChefHat, Plus, RefreshCw } from 'lucide-react';
+import { CalendarDays, ChefHat, Plus, RefreshCw, Trash2, PenSquare } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
@@ -23,6 +23,7 @@ export default function PrincipalMenuPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([]);
   const [weekDraft, setWeekDraft] = useState<WeeklyMenuDraft | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -72,6 +73,21 @@ export default function PrincipalMenuPage() {
     if (!preschoolId || authLoading || profileLoading) return;
     void loadData();
   }, [preschoolId, selectedWeek, authLoading, profileLoading]);
+
+  const handleDeleteMenu = async () => {
+    if (!preschoolId || !weekDraft) return;
+    if (!window.confirm(`Delete the menu for week of ${selectedWeek}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await SchoolMenuService.deleteWeekMenu(preschoolId, selectedWeek);
+      setWeekDraft(null);
+      void loadData();
+    } catch {
+      alert('Failed to delete menu. Please try again.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (authLoading || profileLoading) {
     return (
@@ -163,6 +179,34 @@ export default function PrincipalMenuPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
+            {/* Edit / Delete actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                className="btn btnSecondary"
+                onClick={() => setShowCreateModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+              >
+                <PenSquare className="icon16" />
+                Edit Menu
+              </button>
+              <button
+                className="btn"
+                onClick={() => void handleDeleteMenu()}
+                disabled={deleting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 13,
+                  color: '#ef4444',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  background: 'rgba(239,68,68,0.06)',
+                }}
+              >
+                <Trash2 className="icon16" />
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
             {weekDraft.days.map((day) => {
               const date = new Date(`${day.date}T00:00:00.000Z`);
               return (

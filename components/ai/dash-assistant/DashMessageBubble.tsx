@@ -113,6 +113,34 @@ const buildMarkdownStyles = (theme: ReturnType<typeof useTheme>['theme'], isUser
   },
 });
 
+const toTitleCase = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+const prettifyToolName = (toolName?: string) => {
+  const normalized = String(toolName || '')
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  if (!normalized) return 'Operation';
+  return toTitleCase(
+    normalized
+      .replace(/\b(get|fetch|run|execute|create|generate|build)\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || normalized,
+  );
+};
+
+const firstText = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+};
+
 const AttachmentImagePreview: React.FC<{
   attachment: DashMessage['attachments'][number];
   isUser: boolean;
@@ -367,6 +395,63 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 
   const assistantContent = getAssistantDisplayContent();
   const userContent = sanitizeUserDisplayContent(message.content || '');
+  const metadata = (message.metadata || {}) as Record<string, any>;
+  const rawToolName = firstText(metadata.tool_name);
+  const toolExecution = metadata.tool_result as Record<string, any> | undefined;
+  const isToolOperation = !isUser && !!rawToolName && !!toolExecution;
+  const toolPayload = toolExecution ? (toolExecution.result ?? toolExecution.data ?? null) : null;
+  const toolSuccess = toolExecution ? toolExecution.success !== false : true;
+  const toolError = toolExecution ? firstText(toolExecution.error) : null;
+  const toolSummary = (() => {
+    if (!toolExecution) return null;
+    const summary = firstText(
+      toolPayload?.summary,
+      toolPayload?.message,
+      toolPayload?.status_message,
+      toolPayload?.title,
+    );
+    if (summary) return summary;
+
+    const count = typeof toolPayload?.count === 'number' ? toolPayload.count : null;
+    const grade = firstText(toolPayload?.grade, toolPayload?.grade_level);
+    const subject = firstText(toolPayload?.subject, toolPayload?.topic);
+    const toolKey = String(rawToolName || '').toLowerCase();
+
+    if (toolKey === 'get_caps_documents') {
+      const target = [grade ? `Grade ${String(grade).replace(/^grade\s*/i, '')}` : null, subject]
+        .filter(Boolean)
+        .join(' ');
+      if (count === 0) return `No CAPS documents found${target ? ` for ${target}` : ''}.`;
+      if (count !== null) return `Found ${count} CAPS document${count === 1 ? '' : 's'}${target ? ` for ${target}` : ''}.`;
+    }
+
+    if (Array.isArray(toolPayload?.documents)) {
+      const total = toolPayload.documents.length;
+      return `Found ${total} document${total === 1 ? '' : 's'}.`;
+    }
+    if (Array.isArray(toolPayload?.recommendations)) {
+      const total = toolPayload.recommendations.length;
+      return `Generated ${total} recommendation${total === 1 ? '' : 's'}.`;
+    }
+    if (count !== null) {
+      return `${count} result${count === 1 ? '' : 's'} returned.`;
+    }
+    return null;
+  })();
+  const toolMetaPills = (() => {
+    if (!toolPayload || typeof toolPayload !== 'object') return [] as string[];
+    const pills: string[] = [];
+    const count = typeof toolPayload.count === 'number' ? toolPayload.count : null;
+    const grade = firstText(toolPayload.grade, toolPayload.grade_level);
+    const subject = firstText(toolPayload.subject, toolPayload.topic);
+    const term = firstText(toolPayload.term, toolPayload.period, toolPayload.time_period);
+
+    if (count !== null) pills.push(`${count} result${count === 1 ? '' : 's'}`);
+    if (grade) pills.push(String(grade).toLowerCase().startsWith('grade') ? grade : `Grade ${grade}`);
+    if (subject) pills.push(subject);
+    if (term) pills.push(`Term ${term}`.replace(/\bterm term\b/i, 'Term'));
+    return pills.slice(0, 4);
+  })();
   const markdownStyles = React.useMemo(() => buildMarkdownStyles(theme, isUser), [theme, isUser]);
 
   const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
@@ -434,7 +519,94 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </View>
         )}
         <View style={styles.messageContentRow}>
-          {isUser || !Markdown ? (
+          {isToolOperation ? (
+            <View
+              style={{
+                flex: 1,
+                padding: 12,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: toolSuccess ? theme.primary + '44' : theme.error + '44',
+                backgroundColor: toolSuccess ? theme.primary + '12' : theme.error + '10',
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: toolSuccess ? theme.primary + '22' : theme.error + '22',
+                    }}
+                  >
+                    <Ionicons
+                      name={toolSuccess ? 'checkmark-done-outline' : 'alert-circle-outline'}
+                      size={14}
+                      color={toolSuccess ? theme.primary : theme.error}
+                    />
+                  </View>
+                  <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flexShrink: 1 }}>
+                    {prettifyToolName(rawToolName || undefined)}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    borderRadius: 999,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    backgroundColor: toolSuccess ? theme.success + '22' : theme.error + '22',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '700',
+                      color: toolSuccess ? (theme.success || '#16a34a') : theme.error,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {toolSuccess ? 'Done' : 'Error'}
+                  </Text>
+                </View>
+              </View>
+
+              {(toolSummary || assistantContent) && (
+                <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 18 }}>
+                  {toolSummary || assistantContent}
+                </Text>
+              )}
+
+              {toolMetaPills.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {toolMetaPills.map((pill) => (
+                    <View
+                      key={pill}
+                      style={{
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        backgroundColor: theme.surface,
+                      }}
+                    >
+                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: '600' }}>{pill}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {!toolSuccess && toolError && (
+                <Text style={{ color: theme.error, fontSize: 12, lineHeight: 17 }}>
+                  {toolError}
+                </Text>
+              )}
+            </View>
+          ) : isUser || !Markdown ? (
             <Text
               style={[
                 styles.messageText,

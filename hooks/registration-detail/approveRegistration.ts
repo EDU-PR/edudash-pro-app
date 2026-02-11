@@ -45,7 +45,7 @@ async function autoAssignFees(
 ) {
   const { data: feeStructures, error: feeError } = await supabase
     .from('fee_structures')
-    .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at')
+    .select('id, amount, fee_type, name, description, grade_levels, effective_from, created_at, age_min_months, age_max_months')
     .eq('preschool_id', orgId)
     .eq('is_active', true)
     .order('effective_from', { ascending: false })
@@ -75,8 +75,10 @@ async function autoAssignFees(
       amount: selectedFee.amount,
       final_amount: selectedFee.amount,
       due_date: date.toISOString().split('T')[0],
+      billing_month: date.toISOString().split('T')[0],
       status: 'pending',
       amount_outstanding: selectedFee.amount,
+      category_code: 'tuition',
     }));
 
     await supabase.from('student_fees').insert(feesToInsert);

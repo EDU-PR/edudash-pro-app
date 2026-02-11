@@ -20,6 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 import type { SupportedLanguage } from '@/lib/voice/types';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 
 // Declare global window for web platform type safety
 declare const window: any;
@@ -589,13 +590,47 @@ export class DashVoiceService {
     });
   }
 
-  // Tiers that have TTS access (aligned with tts-proxy Edge Function)
-  private static readonly TTS_ALLOWED_TIERS = [
-    'parent_starter', 'parent_plus', 'parent-starter', 'parent-plus',
-    'teacher_starter', 'teacher_pro', 'teacher-starter', 'teacher-pro',
-    'starter', 'basic', 'pro', 'premium', 'enterprise', 'trial',
-    'school_starter', 'school_pro', 'school_enterprise'
-  ];
+  private static readonly TTS_ALLOWED_CAPABILITY_TIERS = new Set([
+    'starter',
+    'premium',
+    'enterprise',
+  ]);
+
+  private static readonly CAPABILITY_TIER_ORDER = ['free', 'starter', 'premium', 'enterprise'] as const;
+
+  private resolveCapabilityTier(rawTier: unknown): string {
+    const raw = String(rawTier || '').trim().toLowerCase();
+    if (!raw) return 'free';
+
+    if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') return 'starter';
+    if (raw === 'pro' || raw === 'group_10') return 'premium';
+    if (raw === 'free' || raw === 'starter' || raw === 'premium' || raw === 'enterprise') return raw;
+
+    try {
+      return getCapabilityTier(normalizeTierName(raw));
+    } catch {
+      if (raw.includes('enterprise')) return 'enterprise';
+      if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
+      if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
+      return 'free';
+    }
+  }
+
+  private selectHighestCapabilityTier(candidates: unknown[]): string {
+    let best = 'free';
+    let bestIndex = 0;
+
+    for (const candidate of candidates) {
+      const tier = this.resolveCapabilityTier(candidate);
+      const index = DashVoiceService.CAPABILITY_TIER_ORDER.indexOf(tier as any);
+      if (index > bestIndex) {
+        best = tier;
+        bestIndex = index;
+      }
+    }
+
+    return best;
+  }
 
   /**
    * Speak text using TTS with intelligent text normalization
@@ -607,28 +642,89 @@ export class DashVoiceService {
       
       // Check tier access for TTS (premium feature)
       try {
-        const { useSubscription } = await import('@/contexts/SubscriptionContext');
-        // We can't use hooks here, so check via Supabase directly
+        // We can't use hooks here, so check via Supabase directly.
+        // Resolve from multiple sources and pick the highest capability tier.
         const supabase = this.config.supabaseClient;
         if (supabase) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const { data: tierData } = await supabase
+            const { data: directTierData } = await supabase
               .from('user_ai_tiers')
               .select('tier')
               .eq('user_id', user.id)
               .maybeSingle();
             
-            const { data: usageData } = await supabase
+            const { data: directUsageData } = await supabase
               .from('user_ai_usage')
               .select('current_tier')
               .eq('user_id', user.id)
               .maybeSingle();
-            
-            const userTier = tierData?.tier || usageData?.current_tier || 'free';
-            const tierLower = String(userTier).toLowerCase().replace(/-/g, '_');
-            
-            if (!DashVoiceService.TTS_ALLOWED_TIERS.some(t => t.replace(/-/g, '_') === tierLower)) {
+
+            let profile: any = null;
+            const { data: profileByAuth } = await supabase
+              .from('profiles')
+              .select('id, subscription_tier, organization_id, preschool_id')
+              .eq('auth_user_id', user.id)
+              .maybeSingle();
+            if (profileByAuth) {
+              profile = profileByAuth;
+            } else {
+              const { data: profileById } = await supabase
+                .from('profiles')
+                .select('id, subscription_tier, organization_id, preschool_id')
+                .eq('id', user.id)
+                .maybeSingle();
+              profile = profileById;
+            }
+
+            let profileTierData: any = null;
+            let profileUsageData: any = null;
+            if (profile?.id) {
+              const { data: tierByProfileId } = await supabase
+                .from('user_ai_tiers')
+                .select('tier')
+                .eq('user_id', profile.id)
+                .maybeSingle();
+              profileTierData = tierByProfileId;
+
+              const { data: usageByProfileId } = await supabase
+                .from('user_ai_usage')
+                .select('current_tier')
+                .eq('user_id', profile.id)
+                .maybeSingle();
+              profileUsageData = usageByProfileId;
+            }
+
+            const orgId = profile?.organization_id || profile?.preschool_id;
+            let orgTier: string | null = null;
+            if (orgId) {
+              const { data: preschoolData } = await supabase
+                .from('preschools')
+                .select('subscription_tier')
+                .eq('id', orgId)
+                .maybeSingle();
+              orgTier = preschoolData?.subscription_tier || null;
+
+              if (!orgTier) {
+                const { data: organizationData } = await supabase
+                  .from('organizations')
+                  .select('subscription_tier')
+                  .eq('id', orgId)
+                  .maybeSingle();
+                orgTier = organizationData?.subscription_tier || null;
+              }
+            }
+
+            const resolvedTier = this.selectHighestCapabilityTier([
+              directTierData?.tier,
+              directUsageData?.current_tier,
+              profileTierData?.tier,
+              profileUsageData?.current_tier,
+              profile?.subscription_tier,
+              orgTier,
+            ]);
+
+            if (!DashVoiceService.TTS_ALLOWED_CAPABILITY_TIERS.has(resolvedTier)) {
               console.log(`[DashVoice] TTS blocked for free tier user`);
               callbacks?.onError?.(new Error('TTS_FREE_TIER_BLOCKED'));
               return;

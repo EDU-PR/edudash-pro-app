@@ -26,6 +26,8 @@ export interface POPUpload {
   payment_for_month?: string;
   category_code?: FeeCategoryCode;
   payment_reference?: string;
+  advance_months?: number;
+  covers_months?: string[];
   
   // Picture of Progress specific
   subject?: string;
@@ -84,6 +86,8 @@ export interface CreatePOPUploadData {
   payment_for_month?: string;
   category_code?: FeeCategoryCode;
   payment_reference?: string;
+  advance_months?: number;
+  covers_months?: string[];
   
   // Progress specific
   subject?: string;

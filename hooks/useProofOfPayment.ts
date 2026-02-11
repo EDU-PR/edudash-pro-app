@@ -71,6 +71,16 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPaymentForPicker, setShowPaymentForPicker] = useState(false);
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
+  const [advanceMonths, setAdvanceMonths] = useState(1);
+
+  /** Generate array of month-start dates this payment covers */
+  const coversMonths = useMemo(() => {
+    if (!paymentForMonth || advanceMonths <= 0) return [];
+    return Array.from({ length: advanceMonths }, (_, i) => {
+      const d = new Date(paymentForMonth.getFullYear(), paymentForMonth.getMonth() + i, 1);
+      return d.toISOString().split('T')[0];
+    });
+  }, [paymentForMonth, advanceMonths]);
 
   useEffect(() => { setCategoryCode(autoCategoryCode); }, [autoCategoryCode]);
 
@@ -184,6 +194,8 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
           ? new Date(effectiveMonth.getFullYear(), effectiveMonth.getMonth(), 1).toISOString().split('T')[0]
           : undefined,
         payment_reference: paymentReference.trim() || undefined,
+        advance_months: advanceMonths > 1 ? advanceMonths : undefined,
+        covers_months: coversMonths.length > 1 ? coversMonths : undefined,
       };
       await createUpload.mutateAsync(uploadData);
       showAlert({
@@ -194,7 +206,7 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
     } catch (error) {
       showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : 'Upload failed' });
     }
-  }, [validateForm, studentId, selectedFile, paymentForMonth, isUniformPayment, autoPaymentForMonth, title, description, amount, paymentMethod, categoryCode, paymentDate, paymentReference, createUpload, showAlert, t]);
+  }, [validateForm, studentId, selectedFile, paymentForMonth, isUniformPayment, autoPaymentForMonth, title, description, amount, paymentMethod, categoryCode, paymentDate, paymentReference, advanceMonths, coversMonths, createUpload, showAlert, t]);
 
   return {
     title, setTitle, description, setDescription, amount, setAmount,
@@ -203,6 +215,7 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
     paymentReference, setPaymentReference, selectedFile, setSelectedFile,
     showDatePicker, setShowDatePicker, showPaymentForPicker, setShowPaymentForPicker,
     showPaymentMethods, setShowPaymentMethods,
+    advanceMonths, setAdvanceMonths, coversMonths,
     isUniformPayment, showPaymentForField, autoPaymentForMonth,
     createUpload, validateForm,
     handleImagePicker, handleCameraPicker, handleDocumentPicker, handleSubmit,
