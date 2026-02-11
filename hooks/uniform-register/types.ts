@@ -19,8 +19,6 @@ export interface UniformEntry {
   filled_out_at: string | null;
   notes: string | null;
   preschool_id: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface UniformItem {

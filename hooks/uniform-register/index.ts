@@ -39,9 +39,12 @@ export function useUniformRegister(
     searchQuery: '',
   });
 
-  /* ── Load ──────────────────────────────────────────────── */
   const loadData = useCallback(async () => {
-    if (!preschoolId) return;
+    if (!preschoolId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const result = await fetchUniformRegister(preschoolId);
       setEntries(result.entries);
@@ -55,16 +58,11 @@ export function useUniformRegister(
     }
   }, [preschoolId, showAlert]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  /* ── Filter ────────────────────────────────────────────── */
   const filteredEntries = useMemo(() => {
     let result = [...entries];
-    if (filter.status !== 'all') {
-      result = result.filter((e) => e.payment_status === filter.status);
-    }
+    if (filter.status !== 'all') result = result.filter((e) => e.payment_status === filter.status);
     if (filter.filledOut === 'yes') result = result.filter((e) => e.filled_out);
     if (filter.filledOut === 'no') result = result.filter((e) => !e.filled_out);
     if (filter.searchQuery.trim()) {
@@ -78,82 +76,48 @@ export function useUniformRegister(
     return result.sort((a, b) => a.student_name.localeCompare(b.student_name));
   }, [entries, filter]);
 
-  /* ── Actions ───────────────────────────────────────────── */
-  const handleVerifyPayment = useCallback(
-    async (studentId: string) => {
-      if (!preschoolId) return;
-      setProcessing(true);
-      try {
-        await verifyUniformPayment(studentId, preschoolId);
-        await loadData();
-        showAlert('Success', 'Uniform payment verified ✅', 'success');
-      } catch (err: any) {
-        showAlert('Error', err.message, 'error');
-      } finally {
-        setProcessing(false);
-      }
-    },
-    [preschoolId, loadData, showAlert],
-  );
+  const handleVerifyPayment = useCallback(async (studentId: string) => {
+    if (!preschoolId) return;
+    setProcessing(true);
+    try {
+      await verifyUniformPayment(studentId, preschoolId);
+      await loadData();
+      showAlert('Success', 'Uniform payment verified ✅', 'success');
+    } catch (err: any) {
+      showAlert('Error', err.message, 'error');
+    } finally { setProcessing(false); }
+  }, [preschoolId, loadData, showAlert]);
 
   const handlePrint = useCallback(async () => {
     setProcessing(true);
-    try {
-      await printRegister(filteredEntries, summary, schoolName);
-    } catch (err: any) {
-      showAlert('Error', err.message, 'error');
-    } finally {
-      setProcessing(false);
-    }
+    try { await printRegister(filteredEntries, summary, schoolName); }
+    catch (err: any) { showAlert('Error', err.message, 'error'); }
+    finally { setProcessing(false); }
   }, [filteredEntries, summary, schoolName, showAlert]);
 
   const handleSharePdf = useCallback(async () => {
     setProcessing(true);
-    try {
-      await shareRegisterPdf(filteredEntries, summary, schoolName);
-    } catch (err: any) {
-      showAlert('Error', err.message, 'error');
-    } finally {
-      setProcessing(false);
-    }
+    try { await shareRegisterPdf(filteredEntries, summary, schoolName); }
+    catch (err: any) { showAlert('Error', err.message, 'error'); }
+    finally { setProcessing(false); }
   }, [filteredEntries, summary, schoolName, showAlert]);
 
   const handleSendList = useCallback(async () => {
     setProcessing(true);
-    try {
-      await sendListViaShare(filteredEntries, summary, schoolName);
-    } catch (err: any) {
-      showAlert('Error', err.message, 'error');
-    } finally {
-      setProcessing(false);
-    }
+    try { await sendListViaShare(filteredEntries, summary, schoolName); }
+    catch (err: any) { showAlert('Error', err.message, 'error'); }
+    finally { setProcessing(false); }
   }, [filteredEntries, summary, schoolName, showAlert]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadData();
-  }, [loadData]);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadData(); }, [loadData]);
 
   return {
-    entries: filteredEntries,
-    allEntries: entries,
-    summary,
-    loading,
-    refreshing,
-    processing,
-    filter,
-    setFilter,
-    handleVerifyPayment,
-    handlePrint,
-    handleSharePdf,
-    handleSendList,
-    onRefresh,
-    reload: loadData,
+    entries: filteredEntries, allEntries: entries, summary,
+    loading, refreshing, processing,
+    filter, setFilter,
+    handleVerifyPayment, handlePrint, handleSharePdf, handleSendList,
+    onRefresh, reload: loadData,
   };
 }
 
-export type {
-  UniformEntry,
-  UniformRegisterSummary,
-  UniformRegisterFilter,
-} from './types';
+export type { UniformEntry, UniformRegisterSummary, UniformRegisterFilter } from './types';
