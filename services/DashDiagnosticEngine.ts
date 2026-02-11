@@ -12,7 +12,7 @@
  */
 
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import { assertSupabase } from '@/lib/supabase';

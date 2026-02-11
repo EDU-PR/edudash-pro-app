@@ -1,7 +1,7 @@
 import React from 'react';
 import { Platform, View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import TutorHome from './TutorHome';
+import { SmartSuggest } from './SmartSuggest';
 
 type LearnerContext = {
   learnerName?: string | null;
@@ -33,7 +33,7 @@ export interface DashAssistantMessagesProps {
   onScroll?: (scrollY: number) => void;
 }
 
-export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
+export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = React.memo(function DashAssistantMessages({
   flashListRef,
   messages,
   renderMessage,
@@ -52,7 +52,7 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onScroll,
   bottomInset = 0,
   keyboardVisible = false,
-}) => {
+}) {
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
     if (explicitPhase) {
@@ -92,13 +92,19 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
     return !role || ['parent', 'student', 'learner'].includes(role);
   }, [learnerContext?.role]);
 
+  const isStaff = React.useMemo(() => {
+    const r = learnerContext?.role?.toLowerCase();
+    return r === 'teacher' || r === 'principal' || r === 'super_admin' || r === 'admin';
+  }, [learnerContext?.role]);
+
   const renderEmptyState = () => (
-    <TutorHome
-      styles={styles}
-      theme={theme}
-      onSendMessage={onSendMessage}
-      onAgeBandChange={onAgeBandChange}
-      learnerContext={learnerContext}
+    <SmartSuggest
+      role={learnerContext?.role ?? 'student'}
+      schoolType={learnerContext?.schoolType ?? 'preschool'}
+      onSendMessage={onSendMessage ?? (() => {})}
+      grade={learnerContext?.grade}
+      learnerName={learnerContext?.learnerName}
+      isStaff={isStaff}
     />
   );
 
@@ -182,6 +188,6 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
       }
     />
   );
-};
+});
 
 export default DashAssistantMessages;

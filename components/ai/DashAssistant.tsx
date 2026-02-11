@@ -27,6 +27,7 @@ import {
   DashUsageBanner,
   DashModelSelector,
   DashContextChips,
+  AnimatedMessageEntry,
 } from './dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
@@ -244,12 +245,21 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource });
   const { can, ready: capsReady } = useCapability();
   const isTypingActive = isLoading || !!loadingStatus;
+  const refreshTierTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (wasLoadingRef.current && !isLoading) {
-      refreshTier?.();
+      // Next-Gen: Debounce refreshTier to avoid hammering SubscriptionContext
+      // which causes full tree re-renders. Wait 2s after loading finishes.
+      if (refreshTierTimerRef.current) clearTimeout(refreshTierTimerRef.current);
+      refreshTierTimerRef.current = setTimeout(() => {
+        refreshTier?.();
+      }, 2000);
     }
     wasLoadingRef.current = isLoading;
+    return () => {
+      if (refreshTierTimerRef.current) clearTimeout(refreshTierTimerRef.current);
+    };
   }, [isLoading, refreshTier]);
 
   const handleNewChat = useCallback(async () => {
@@ -348,6 +358,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     return 'Step-by-step focus with quick checks for understanding.';
   }, [learnerContext, isPreschool]);
+
+  // Next-Gen: Replace inline IIFE with memoized boolean
+  const showContextChips = useMemo(() => {
+    const st = String(learnerContext?.schoolType || '').toLowerCase();
+    return st.includes('preschool') || st.includes('ecd') || st.includes('early');
+  }, [learnerContext?.schoolType]);
+
   const showAdvancedControls = !isParentOrStudent;
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
   const usageLabel = tierStatus
@@ -657,26 +674,36 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   }, [keyboardVisible, scrollToBottom, messages.length]);
 
   // Render individual message
+  // Next-Gen perf fix: Remove messages.length from deps — it changes on every
+  // message, recreating the callback and defeating FlashList memoization.
+  // totalMessages is used only for "last message" styling which can use index.
+  const messagesLengthRef = useRef(messages.length);
+  messagesLengthRef.current = messages.length;
+  
   const renderMessage = useCallback((message: DashMessage, index: number) => {
+    // Animate only the last 2 messages (recent additions)
+    const isRecent = index >= messagesLengthRef.current - 2;
     return (
-      <DashMessageBubble
-        key={message.id}
-        message={message}
-        index={index}
-        totalMessages={messages.length}
-        speakingMessageId={speakingMessageId}
-        isLoading={isLoading}
-        voiceEnabled={voiceEnabled}
-        showFollowUps={autoSuggestQuestions}
-        onSpeak={speakResponse}
-        onRetry={(content) => sendMessage(content)}
-        onSendFollowUp={(text) => sendMessage(text)}
-        onSendTutorAnswer={(text, sourceMessageId) => sendTutorAnswer(text, sourceMessageId)}
-        extractFollowUps={extractFollowUps}
-        assistantLabel={roleCopy.assistantLabel}
-      />
+      <AnimatedMessageEntry animate={isRecent} delay={message.type === 'assistant' ? 60 : 0}>
+        <DashMessageBubble
+          key={message.id}
+          message={message}
+          index={index}
+          totalMessages={messagesLengthRef.current}
+          speakingMessageId={speakingMessageId}
+          isLoading={isLoading}
+          voiceEnabled={voiceEnabled}
+          showFollowUps={autoSuggestQuestions}
+          onSpeak={speakResponse}
+          onRetry={(content) => sendMessage(content)}
+          onSendFollowUp={(text) => sendMessage(text)}
+          onSendTutorAnswer={(text, sourceMessageId) => sendTutorAnswer(text, sourceMessageId)}
+          extractFollowUps={extractFollowUps}
+          assistantLabel={roleCopy.assistantLabel}
+        />
+      </AnimatedMessageEntry>
     );
-  }, [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
+  }, [speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
 
   // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
@@ -825,17 +852,14 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           stopSpeaking={stopSpeaking}
           handleNewChat={handleNewChat}
           toggleWakeWord={toggleWakeWord}
-          cleanup={dashInstance?.cleanup}
+          cleanup={dashInstance ? () => dashInstance.cleanup() : undefined}
           styles={styles}
           theme={theme}
         />
         )}
 
         {/* Context chips - only for preschool/ECD contexts */}
-        {headerVisible && contextChips.length > 0 && (() => {
-          const st = String(learnerContext?.schoolType || '').toLowerCase();
-          return st.includes('preschool') || st.includes('ecd') || st.includes('early');
-        })() && (
+        {headerVisible && contextChips.length > 0 && showContextChips && (
         <DashContextChips
           chips={contextChips}
           contextHint={contextHint}
@@ -845,7 +869,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         )}
 
         {/* Usage banner - auto-hide with header */}
-        {headerVisible && (
+        {headerVisible && !keyboardVisible && (
         <DashUsageBanner
           tierStatus={tierStatus}
           usageLabel={usageLabel}
@@ -854,15 +878,18 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         />
         )}
 
-        {/* Model selector - always visible for transparency */}
-        <DashModelSelector
-          models={safeModels}
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
-          estimatedRemaining={estimatedRemaining}
-          styles={styles}
-          theme={theme}
-        />
+        {/* Model selector - keep visible but compact while chatting/typing */}
+        {!keyboardVisible && (
+          <DashModelSelector
+            models={safeModels}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            estimatedRemaining={estimatedRemaining}
+            preferCompact={messages.length > 0}
+            styles={styles}
+            theme={theme}
+          />
+        )}
 
         {/* Messages */}
         <DashAssistantMessages

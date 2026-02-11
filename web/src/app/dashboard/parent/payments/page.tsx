@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { logger } from '@/lib/logger';
+import { resolveTuitionFeeStructure } from '@/lib/utils/feeStructureSelector';
 import { ParentShell } from '@/components/dashboard/parent/ParentShell';
 import { PendingDocumentsCard, type PendingDocumentStatus } from '@/components/dashboard/parent/PendingDocumentsCard';
 import {
@@ -28,6 +30,11 @@ interface Child {
   last_name: string;
   preschool_id: string;
   organization_id?: string | null;
+  class_id?: string | null;
+  class_name?: string | null;
+  grade_level?: string | null;
+  date_of_birth?: string | null;
+  enrollment_date?: string | null;
   preschool_name?: string;
   student_code: string; // Unique payment reference (e.g., YE-2026-0001)
   registration_fee_amount?: number;
@@ -80,6 +87,40 @@ interface POPUpload {
   created_at: string;
 }
 
+const TAG = 'ParentPayments';
+
+const isTuitionCategory = (feeCategory?: string | null, labelText?: string | null) => {
+  const category = String(feeCategory || '').toLowerCase();
+  const label = String(labelText || '').toLowerCase();
+  return (
+    ['tuition', 'school_fees', 'school_fee', 'monthly', 'monthly_fee'].includes(category) ||
+    /tuition|school\s*fee|monthly\s*fee/.test(label)
+  );
+};
+
+const describeTuitionResolution = (reason: string, className?: string | null) => {
+  const classLabel = className || 'this class';
+  if (reason.startsWith('multiple_grade_level_matches:')) {
+    return `Fee setup needs school review: multiple tuition structures match ${classLabel} by grade.`;
+  }
+  if (reason.startsWith('multiple_class_label_matches:')) {
+    return `Fee setup needs school review: multiple tuition structures match ${classLabel} by class label.`;
+  }
+  if (reason.startsWith('multiple_age_range_matches:')) {
+    return `Fee setup needs school review: multiple tuition structures match ${classLabel} by age range.`;
+  }
+  if (reason === 'no_deterministic_match') {
+    return `Fee setup needs school review: no active tuition structure matches ${classLabel}.`;
+  }
+  if (reason === 'insufficient_context_missing_grade_class_and_age') {
+    return 'Fee setup needs school review: learner class and age context are missing.';
+  }
+  if (reason === 'no_active_tuition_structures') {
+    return 'Fee setup needs school review: no active tuition structures are configured.';
+  }
+  return 'Fee setup needs school review before monthly tuition can be shown.';
+};
+
 export default function PaymentsPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -96,6 +137,7 @@ export default function PaymentsPage() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
   const [feeStructure, setFeeStructure] = useState<FeeStructure[]>([]);
+  const [feeSetupIssue, setFeeSetupIssue] = useState<string | null>(null);
   const [documentStatus, setDocumentStatus] = useState<PendingDocumentStatus[]>([]);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
 
@@ -306,7 +348,21 @@ export default function PaymentsPage() {
       // Fetch children linked to this parent via parent_id or guardian_id in students table
       const { data: directChildren } = await supabase
         .from('students')
-        .select('id, student_id, first_name, last_name, preschool_id, organization_id, registration_fee_amount, registration_fee_paid, payment_verified')
+        .select(`
+          id,
+          student_id,
+          first_name,
+          last_name,
+          preschool_id,
+          organization_id,
+          class_id,
+          date_of_birth,
+          enrollment_date,
+          registration_fee_amount,
+          registration_fee_paid,
+          payment_verified,
+          classes!students_class_id_fkey(name, grade_level)
+        `)
         .or(`parent_id.eq.${session.user.id},guardian_id.eq.${session.user.id}`);
 
       if (directChildren && directChildren.length > 0) {
@@ -339,6 +395,11 @@ export default function PaymentsPage() {
             last_name: student.last_name,
             preschool_id: student.preschool_id,
             organization_id: student.organization_id,
+            class_id: student.class_id,
+            class_name: Array.isArray(student.classes) ? student.classes[0]?.name || null : student.classes?.name || null,
+            grade_level: Array.isArray(student.classes) ? student.classes[0]?.grade_level || null : student.classes?.grade_level || null,
+            date_of_birth: student.date_of_birth,
+            enrollment_date: student.enrollment_date,
             preschool_name: schoolName,
             student_code: student.student_id || student.id.slice(0, 8).toUpperCase(),
             registration_fee_amount: student.registration_fee_amount,
@@ -362,6 +423,7 @@ export default function PaymentsPage() {
     if (!selectedChildId) return;
 
     const fetchFees = async () => {
+      setFeeSetupIssue(null);
       const { data: uploads } = await supabase
         .from('pop_uploads')
         .select('id, student_id, upload_type, status, payment_amount, payment_date, payment_reference, created_at')
@@ -378,18 +440,16 @@ export default function PaymentsPage() {
         .eq('student_id', selectedChildId)
         .order('due_date', { ascending: true });
 
-      if (fees && fees.length > 0) {
-        const mappedFees = (fees as StudentFee[]).map((fee) => {
-          const popStatus = resolvePopStatus(fee, popData);
-          const isPendingVerification = popStatus === 'pending' && fee.status !== 'paid' && fee.status !== 'waived';
-          return {
-            ...fee,
-            pop_status: popStatus,
-            status: isPendingVerification ? 'pending_verification' : fee.status,
-          };
-        });
-        setStudentFees(mappedFees);
-      }
+      const mappedFees = (fees as StudentFee[] || []).map((fee) => {
+        const popStatus = resolvePopStatus(fee, popData);
+        const isPendingVerification = popStatus === 'pending' && fee.status !== 'paid' && fee.status !== 'waived';
+        return {
+          ...fee,
+          pop_status: popStatus,
+          status: isPendingVerification ? 'pending_verification' : fee.status,
+        };
+      });
+      setStudentFees(mappedFees);
 
       // Get fee structure for the child's school
       const selectedChild = children.find(c => c.id === selectedChildId);
@@ -415,15 +475,71 @@ export default function PaymentsPage() {
             payment_frequency: f.billing_frequency,
             age_group: f.age_group,
           })));
-          
-          // Find the appropriate monthly fee based on child's age group
-          // For now, show the first tuition fee (principal should assign correct fee to student)
-          const monthlyFee = schoolFees.find((f: { fee_category: string }) => 
-            f.fee_category === 'tuition'
-          );
-          
-          if (monthlyFee && (!fees || fees.length === 0)) {
-            // If no student_fees exist yet, show the next month's fee as outstanding
+
+          const tuitionCandidates = schoolFees
+            .filter((f: { fee_category?: string | null; name?: string | null; description?: string | null }) =>
+              isTuitionCategory(f.fee_category, `${f.name || ''} ${f.description || ''}`),
+            )
+            .map((f: {
+              id: string;
+              amount_cents: number;
+              name?: string | null;
+              description?: string | null;
+              age_group?: string | null;
+              grade_level?: string | null;
+              created_at?: string | null;
+            }) => ({
+              id: f.id,
+              amount: f.amount_cents / 100,
+              name: f.name,
+              description: f.description,
+              age_group: f.age_group,
+              grade_level: f.grade_level,
+              grade_levels: f.grade_level ? [f.grade_level] : null,
+              created_at: f.created_at || null,
+              effective_from: null,
+            }));
+
+          if (!tuitionCandidates.length) {
+            const issue = 'Fee setup needs school review: no active tuition structure is configured.';
+            setFeeSetupIssue(issue);
+            logger.warn(TAG, 'No tuition structures found in school fee setup', {
+              childId: selectedChildId,
+              schoolId: childPreschoolId,
+            });
+            return;
+          }
+
+          const resolution = resolveTuitionFeeStructure(tuitionCandidates, {
+            dateOfBirth: selectedChild?.date_of_birth || undefined,
+            enrollmentDate: selectedChild?.enrollment_date || undefined,
+            ageGroupLabel: selectedChild?.class_name || undefined,
+            gradeLevel: selectedChild?.grade_level || selectedChild?.class_name || undefined,
+          });
+
+          if (resolution.status !== 'matched' || !resolution.fee) {
+            const issue = describeTuitionResolution(resolution.reason, selectedChild?.class_name);
+            setFeeSetupIssue(issue);
+            logger.warn(TAG, 'Unable to resolve tuition fee deterministically', {
+              childId: selectedChildId,
+              schoolId: childPreschoolId,
+              className: selectedChild?.class_name || null,
+              gradeLevel: selectedChild?.grade_level || null,
+              resolution,
+            });
+            return;
+          }
+
+          logger.info(TAG, 'Resolved tuition fee for parent display', {
+            childId: selectedChildId,
+            schoolId: childPreschoolId,
+            feeId: resolution.fee.id,
+            amount: resolution.fee.amount,
+            reason: resolution.reason,
+          });
+
+          if (!mappedFees.length) {
+            // If no student_fees exist yet, show the next month's deterministic fee as outstanding
             const nextFee = getNextFeeMonth();
             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                                'July', 'August', 'September', 'October', 'November', 'December'];
@@ -433,8 +549,8 @@ export default function PaymentsPage() {
               id: `pending-${monthNames[nextFee.month].toLowerCase()}-${nextFee.year}`,
               student_id: selectedChildId,
               fee_type: 'monthly_tuition',
-              description: `${monthNames[nextFee.month]} ${nextFee.year} School Fees${monthlyFee.age_group ? ` (${monthlyFee.age_group})` : ''}`,
-              amount: monthlyFee.amount_cents / 100, // Convert cents to rands
+              description: `${monthNames[nextFee.month]} ${nextFee.year} School Fees`,
+              amount: Number(resolution.fee.amount),
               due_date: dueDate,
               grace_period_days: 7, // Default 7 days grace period, principal can change this
               status: 'pending',
@@ -450,6 +566,9 @@ export default function PaymentsPage() {
               description: 'Registration Fee',
               payment_frequency: 'once-off',
             }]);
+          }
+          if (!mappedFees.length) {
+            setFeeSetupIssue('No active school fee setup found. Please contact the school to configure tuition fees.');
           }
         }
         
@@ -763,6 +882,28 @@ export default function PaymentsPage() {
             </div>
           )}
 
+          {selectedChild && feeSetupIssue && (
+            <div
+              className="card"
+              style={{
+                marginBottom: 'var(--space-4)',
+                padding: 'var(--space-3)',
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <Info className="w-4 h-4" style={{ color: '#f59e0b', marginTop: 2 }} />
+                <div>
+                  <div style={{ fontWeight: 700, color: '#f59e0b', marginBottom: 4 }}>
+                    Fee setup needs review
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text)' }}>{feeSetupIssue}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* No children message */}
           {children.length === 0 && (
             <div className="card" style={{ padding: 'var(--space-6)', textAlign: 'center' }}>
@@ -814,7 +955,9 @@ export default function PaymentsPage() {
                         {formatCurrency(outstandingBalance)}
                       </div>
                       <p className="muted" style={{ fontSize: 12, marginTop: 'var(--space-2)' }}>
-                        {outstandingBalance === 0 && pendingVerificationCount === 0
+                        {feeSetupIssue
+                          ? 'Fee setup needs school review'
+                          : outstandingBalance === 0 && pendingVerificationCount === 0
                           ? '✅ All caught up!'
                           : pendingVerificationCount > 0 && trulyPendingCount === 0
                             ? 'Payments pending approval'
@@ -961,9 +1104,19 @@ export default function PaymentsPage() {
                   
                   {upcomingFees.length === 0 ? (
                     <div className="card" style={{ padding: 'var(--space-6)', textAlign: 'center' }}>
-                      <CheckCircle2 className="w-12 h-12" style={{ color: 'var(--success)', margin: '0 auto var(--space-3)' }} />
-                      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>All Caught Up!</h3>
-                      <p className="muted">You have no outstanding payments at this time.</p>
+                      {feeSetupIssue ? (
+                        <>
+                          <Info className="w-12 h-12" style={{ color: '#f59e0b', margin: '0 auto var(--space-3)' }} />
+                          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>Fee Setup Needs Review</h3>
+                          <p className="muted">{feeSetupIssue}</p>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-12 h-12" style={{ color: 'var(--success)', margin: '0 auto var(--space-3)' }} />
+                          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 'var(--space-2)' }}>All Caught Up!</h3>
+                          <p className="muted">You have no outstanding payments at this time.</p>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gap: 'var(--space-3)' }}>

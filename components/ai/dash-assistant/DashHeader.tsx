@@ -49,7 +49,7 @@ interface DashHeaderProps {
   theme: Theme;
 }
 
-export const DashHeader: React.FC<DashHeaderProps> = ({
+export const DashHeader: React.FC<DashHeaderProps> = React.memo(function DashHeader({
   roleCopy,
   tier,
   subReady,
@@ -66,7 +66,10 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
   cleanup,
   styles,
   theme,
-}) => {
+}: DashHeaderProps) {
+  const compactActions = screenWidth < 410;
+  const iconSize = screenWidth < 400 ? 18 : 22;
+
   return (
     <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
       <View style={styles.headerLeft}>
@@ -117,33 +120,37 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
             accessibilityLabel="Stop speaking"
             onPress={stopSpeaking}
           >
-            <Ionicons name="stop" size={screenWidth < 400 ? 18 : 22} color={theme.onError || theme.background} />
+            <Ionicons name="stop" size={iconSize} color={theme.onError || theme.background} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
           style={styles.iconButton}
           accessibilityLabel="New chat"
           onPress={handleNewChat}
+          onLongPress={() => router.push('/screens/dash-conversations-history')}
+          delayLongPress={280}
         >
-          <Ionicons name="add-circle-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+          <Ionicons name="add-circle-outline" size={iconSize} color={theme.text} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.iconButton}
-          accessibilityLabel="Conversations"
-          onPress={() => router.push('/screens/dash-conversations-history')}
-        >
-          <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
-        </TouchableOpacity>
-        {showAdvancedControls && (
+        {!compactActions && (
+          <TouchableOpacity
+            style={styles.iconButton}
+            accessibilityLabel="Conversations"
+            onPress={() => router.push('/screens/dash-conversations-history')}
+          >
+            <Ionicons name="time-outline" size={iconSize} color={theme.text} />
+          </TouchableOpacity>
+        )}
+        {showAdvancedControls && !compactActions && (
           <TouchableOpacity
             style={styles.iconButton}
             accessibilityLabel="Open Dash Orb"
             onPress={() => router.push('/screens/dash-orb')}
           >
-            <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+            <Ionicons name="grid-outline" size={iconSize} color={theme.text} />
           </TouchableOpacity>
         )}
-        {showWakeWordToggle && (
+        {showWakeWordToggle && (!compactActions || wakeWordEnabled) && (
           <TouchableOpacity
             style={styles.iconButton}
             accessibilityLabel="Toggle wake word"
@@ -152,7 +159,7 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
           >
             <Ionicons
               name={wakeWordEnabled ? 'ear' : 'ear-outline'}
-              size={screenWidth < 400 ? 18 : 22}
+              size={iconSize}
               color={wakeWordEnabled ? theme.success : theme.text}
             />
           </TouchableOpacity>
@@ -162,14 +169,18 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
           accessibilityLabel="Settings"
           onPress={() => router.push('/screens/dash-ai-settings')}
         >
-          <Ionicons name="settings-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+          <Ionicons name="settings-outline" size={iconSize} color={theme.text} />
         </TouchableOpacity>
         {onClose && (
           <TouchableOpacity
             style={styles.closeButton}
             onPress={async () => {
               await stopSpeaking();
-              cleanup?.();
+              try {
+                cleanup?.();
+              } catch (error) {
+                console.warn('[DashHeader] cleanup failed:', error);
+              }
               onClose();
             }}
             accessibilityLabel="Close"
@@ -180,4 +191,4 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
       </View>
     </View>
   );
-};
+});

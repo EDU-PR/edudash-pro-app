@@ -8,7 +8,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
-const CRON_SECRET = Deno.env.get('CRON_SECRET') || 'your-cron-secret'
+const CRON_SECRET = Deno.env.get('CRON_SECRET')
+if (!CRON_SECRET) throw new Error('CRON_SECRET environment variable is required')
 
 serve(async (req: Request): Promise<Response> => {
   try {

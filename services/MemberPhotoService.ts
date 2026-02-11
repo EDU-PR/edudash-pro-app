@@ -5,7 +5,7 @@
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Platform } from 'react-native';
 import { base64ToUint8Array } from '@/lib/utils/base64';
 

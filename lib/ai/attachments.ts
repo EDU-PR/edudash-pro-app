@@ -5,7 +5,7 @@
  */
 
 import { assertSupabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { DashAttachment } from '@/services/dash-ai/types';
 

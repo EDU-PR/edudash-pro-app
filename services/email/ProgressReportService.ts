@@ -7,7 +7,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import type { ProgressReport, EmailSendResponse } from '@/types/email';
 import { getTemplates, renderTemplate, sendEmail } from './EmailTemplateCore';
 import { generateProgressReportPDFHTML } from './ProgressReportPDFGenerator';

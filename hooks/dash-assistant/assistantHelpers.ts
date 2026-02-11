@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import type { DashAttachment, DashMessage } from '@/services/dash-ai/types';

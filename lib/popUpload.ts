@@ -5,7 +5,7 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Platform } from 'react-native';
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 import { decode } from 'base64-arraybuffer';

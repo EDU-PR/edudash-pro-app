@@ -21,7 +21,7 @@
  * - Memory usage: < 10MB for 5min recording
  */
 
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { logger } from './logger';
 import { mark, measure, timeAsync } from './perf';
 import { track } from './analytics';

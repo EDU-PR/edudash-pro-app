@@ -13,3 +13,5 @@ export { DashHeader } from './DashHeader';
 export { DashUsageBanner } from './DashUsageBanner';
 export { DashModelSelector } from './DashModelSelector';
 export { DashContextChips } from './DashContextChips';
+export { SmartSuggest } from './SmartSuggest';
+export { AnimatedMessageEntry } from './AnimatedMessageEntry';

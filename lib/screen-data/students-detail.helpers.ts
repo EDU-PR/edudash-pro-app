@@ -77,6 +77,7 @@ export async function loadStudentsData(params: LoadStudentsParams): Promise<Load
   // Batch-fetch attendance rates
   const studentIds = (studentsData || []).map((s: any) => s.id);
   let attendanceMap: Record<string, { total: number; present: number; lastDate: string }> = {};
+  let feeSummaryMap: Record<string, { outstanding: number; lastPayment: string; paymentStatus: 'current' | 'overdue' | 'pending' }> = {};
 
   if (studentIds.length > 0) {
     const ninetyDaysAgo = new Date();
@@ -101,6 +102,56 @@ export async function loadStudentsData(params: LoadStudentsParams): Promise<Load
         }
       }
     }
+
+    const { data: feeData } = await supabase
+      .from('student_fees')
+      .select('student_id, status, amount_outstanding, paid_date')
+      .in('student_id', studentIds);
+
+    const workingMap: Record<string, { outstanding: number; lastPayment: string; hasOverdue: boolean; hasPending: boolean }> = {};
+    (feeData || []).forEach((fee: any) => {
+      if (!workingMap[fee.student_id]) {
+        workingMap[fee.student_id] = {
+          outstanding: 0,
+          lastPayment: '',
+          hasOverdue: false,
+          hasPending: false,
+        };
+      }
+
+      const amountOutstanding = Number(fee.amount_outstanding || 0);
+      if (['pending', 'overdue', 'partially_paid'].includes(String(fee.status || ''))) {
+        workingMap[fee.student_id].outstanding += amountOutstanding;
+      }
+
+      if (fee.status === 'overdue' && amountOutstanding > 0) {
+        workingMap[fee.student_id].hasOverdue = true;
+      }
+      if ((fee.status === 'pending' || fee.status === 'partially_paid') && amountOutstanding > 0) {
+        workingMap[fee.student_id].hasPending = true;
+      }
+
+      if (fee.paid_date) {
+        const currentLast = workingMap[fee.student_id].lastPayment;
+        if (!currentLast || new Date(fee.paid_date).getTime() > new Date(currentLast).getTime()) {
+          workingMap[fee.student_id].lastPayment = fee.paid_date;
+        }
+      }
+    });
+
+    feeSummaryMap = Object.entries(workingMap).reduce((acc, [studentId, summary]) => {
+      const paymentStatus: 'current' | 'overdue' | 'pending' = summary.hasOverdue
+        ? 'overdue'
+        : summary.hasPending
+          ? 'pending'
+          : 'current';
+      acc[studentId] = {
+        outstanding: Number(summary.outstanding.toFixed(2)),
+        lastPayment: summary.lastPayment,
+        paymentStatus,
+      };
+      return acc;
+    }, {} as Record<string, { outstanding: number; lastPayment: string; paymentStatus: 'current' | 'overdue' | 'pending' }>);
   }
 
   const getRecord = (value: any): any => (Array.isArray(value) ? value[0] || null : value || null);
@@ -141,7 +192,7 @@ export async function loadStudentsData(params: LoadStudentsParams): Promise<Load
       assignedTeacher: teacherRecord
         ? `${teacherRecord.first_name || ''} ${teacherRecord.last_name || ''}`.trim()
         : 'Not Assigned',
-      fees: { outstanding: 0, lastPayment: '', paymentStatus: 'current' as const },
+      fees: feeSummaryMap[db.id] || { outstanding: 0, lastPayment: '', paymentStatus: 'current' as const },
       schoolId: preschoolId,
       classId: db.class_id,
     };

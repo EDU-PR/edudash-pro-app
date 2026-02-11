@@ -21,7 +21,7 @@
 
 import { Tool, ToolCategory, RiskLevel, ToolParameter, ToolExecutionContext, ToolExecutionResult } from '../types';
 import { assertSupabase } from '@/lib/supabase';
-import { hasCapability } from '@/lib/ai/capabilities';
+import { hasCapability, normalizeCapabilityTier } from '@/lib/ai/capabilities';
 import type { Tier } from '@/lib/ai/capabilities';
 
 // Progress report types
@@ -169,7 +169,8 @@ export const LearningProgressTool: Tool = {
         include_benchmarks 
       } = params;
       
-      const userTier = (context.tier || 'free') as Tier;
+      const userTierRaw = String(context.tier || 'free');
+      const userTier = normalizeCapabilityTier(userTierRaw) as Tier;
       const supabase = assertSupabase();
       
       // Determine target student

@@ -433,7 +433,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
       const { data, error } = await this.invokeWithRetry(() =>
         supabase.functions.invoke('ai-proxy', {
           body: {
-            scope: 'admin',
+            scope: perception.userRole || 'parent',
             service_type: 'agent_plan',
             payload: {
               messages,
@@ -549,7 +549,7 @@ export class AgentOrchestratorClass implements IAgentOrchestrator {
       const { data, error } = await this.invokeWithRetry(() =>
         supabase.functions.invoke('ai-proxy', {
           body: {
-            scope: 'admin',
+            scope: perception.userRole || 'parent',
             service_type: 'agent_reflection',
             payload: {
               messages: [
@@ -642,7 +642,7 @@ Provide a brief reflection (1-2 sentences) on:
       const { data } = await this.invokeWithRetry(() =>
         supabase.functions.invoke('ai-proxy', {
           body: {
-            scope: 'admin',
+            scope: perception.userRole || 'parent',
             service_type: 'agent_reflection',
             payload: {
               messages: [

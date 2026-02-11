@@ -16,7 +16,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { decode } from 'base64-arraybuffer';
 import type {
   TesterFeedback,

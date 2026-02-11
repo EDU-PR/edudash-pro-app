@@ -1,8 +1,13 @@
 import { serve } from 'https://deno.land/std@0.214.0/http/server.ts';
+import { getCorsHeaders, handleCorsOptions } from '../_shared/cors.ts';
 
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return handleCorsOptions(req);
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response('Method not allowed', { status: 405, headers: getCorsHeaders(req) });
   }
 
   const authHeader = req.headers.get('Authorization') || '';
@@ -10,7 +15,7 @@ serve(async (req) => {
   if (!supabaseUrl) {
     return new Response(JSON.stringify({ error: 'Missing SUPABASE_URL' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 
@@ -58,6 +63,6 @@ serve(async (req) => {
   const proxyText = await proxyResponse.text();
   return new Response(proxyText, {
     status: proxyResponse.status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
   });
 });

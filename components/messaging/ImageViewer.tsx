@@ -8,7 +8,7 @@ import React, { useState, useRef } from 'react';
 import { View, Modal, Image, StyleSheet, Dimensions, TouchableOpacity, Text, StatusBar, Platform, Share, Animated, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as Sharing from 'expo-sharing';
 import { toast } from '@/components/ui/ToastProvider';
 import type { ParentAlertApi } from '@/components/ui/parentAlert';

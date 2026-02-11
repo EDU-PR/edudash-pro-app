@@ -6,6 +6,11 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function DebugUpdatesScreen() {
+  // Gate: only accessible in development
+  if (!__DEV__) {
+    return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Not available</Text></View>;
+  }
+
   const { checkForUpdates, applyUpdate, isDownloading, isUpdateDownloaded, updateError } = useUpdates();
   const [checking, setChecking] = useState(false);
 

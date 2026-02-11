@@ -20,7 +20,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.0?dts';
 // ─── Environment ─────────────────────────────────────────
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
-const CRON_SECRET = Deno.env.get('CRON_SECRET') || '';
+const CRON_SECRET = Deno.env.get('CRON_SECRET');
+if (!CRON_SECRET) throw new Error('CRON_SECRET env var is required');
 const EAS_WEBHOOK_SECRET = Deno.env.get('EAS_WEBHOOK_SECRET') || '';
 const DISCORD_WEBHOOK_URL = Deno.env.get('DISCORD_WEBHOOK_URL') || '';
 const SLACK_WEBHOOK_URL = Deno.env.get('SLACK_WEBHOOK_URL') || '';

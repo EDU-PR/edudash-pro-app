@@ -1,6 +1,6 @@
 import { assertSupabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 export interface ImageUploadResult {

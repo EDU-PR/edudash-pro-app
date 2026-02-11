@@ -17,6 +17,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { getQuotaStatus } from '@/lib/ai/api';
 import { logger } from '@/lib/logger';
+import { getCapabilityTier, getTierDisplayName, normalizeTierName, type CapabilityTier } from '@/lib/tiers';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -37,6 +38,28 @@ export interface UseRealtimeTierOptions {
   userId?: string;
   /** Callback when tier changes */
   onTierChange?: (newTier: string, oldTier: string) => void;
+}
+
+const CAPABILITY_RANK: Record<CapabilityTier, number> = {
+  free: 0,
+  starter: 1,
+  premium: 2,
+  enterprise: 3,
+};
+
+function resolveEffectiveTier(tableTier: string | null | undefined, contextTier: string | null | undefined): string {
+  const normalizedTable = normalizeTierName(String(tableTier || 'free'));
+  const normalizedContext = normalizeTierName(String(contextTier || 'free'));
+
+  const tableCapability = getCapabilityTier(normalizedTable);
+  const contextCapability = getCapabilityTier(normalizedContext);
+
+  // Prefer context tier when it has higher capability; context already includes school inheritance logic.
+  if (CAPABILITY_RANK[contextCapability] > CAPABILITY_RANK[tableCapability]) {
+    return normalizedContext;
+  }
+
+  return normalizedTable;
 }
 
 /**
@@ -84,13 +107,14 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
 
       if (usageError) throw usageError;
       
-      // Determine effective tier
-      const effectiveTier = tierData?.tier || usageData?.current_tier || contextTier || 'free';
+      // Determine effective tier (context can be higher for school-inherited staff plans).
+      const tableTier = tierData?.tier || usageData?.current_tier || 'free';
+      const effectiveTier = resolveEffectiveTier(tableTier, contextTier);
       
       // Get tier limits (daily chat quota)
       // Valid tiers: free, trial, parent_starter, parent_plus, teacher_starter, teacher_pro, 
       // school_starter, school_premium, school_pro, school_enterprise
-      const normalizedTier = effectiveTier.toLowerCase();
+      const normalizedTier = normalizeTierName(String(effectiveTier));
       const { data: limitsData, error: limitsError } = await supabase
         .from('ai_usage_tiers')
         .select('chat_messages_per_day, chat_messages_per_month, exams_per_month, explanations_per_month')
@@ -245,8 +269,15 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
  * Format tier name for display
  */
 function formatTierName(tier: string): string {
+  const canonical = normalizeTierName(String(tier || 'free'));
+  const canonicalDisplay = getTierDisplayName(canonical);
+  if (canonicalDisplay && canonicalDisplay !== canonical) {
+    return canonicalDisplay;
+  }
+
   const names: Record<string, string> = {
     free: 'Free',
+    trial: 'Trial',
     parent_starter: 'Parent Starter',
     parent_plus: 'Parent Plus',
     starter: 'Starter',

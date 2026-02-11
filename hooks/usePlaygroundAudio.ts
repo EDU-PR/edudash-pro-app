@@ -12,7 +12,7 @@
 
 import { useCallback, useRef, useEffect } from 'react';
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { logger } from '@/lib/logger';
 
 // ── Bundled SFX asset requires ──────────────────────────────

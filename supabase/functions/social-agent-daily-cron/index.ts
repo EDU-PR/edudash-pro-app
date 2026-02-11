@@ -13,7 +13,9 @@ import { z } from 'https://deno.land/x/zod@v3.23.8/mod.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
-const CRON_SECRET = Deno.env.get('CRON_SECRET') || 'your-cron-secret';
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
+const CRON_SECRET = Deno.env.get('CRON_SECRET');
+if (!CRON_SECRET) throw new Error('CRON_SECRET environment variable is required');
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',

@@ -17,7 +17,7 @@ export const ROLES = {
 
 export type Role = keyof typeof ROLES;
 export type SeatStatus = 'active' | 'inactive' | 'pending' | 'revoked';
-export type PlanTier = 'free' | 'starter' | 'premium' | 'enterprise';
+export type PlanTier = 'free' | 'starter' | 'basic' | 'premium' | 'pro' | 'enterprise';
 
 // Comprehensive capability flags
 export const CAPABILITIES = {
@@ -233,7 +233,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
 };
 
 // Plan tier capability additions
-export const TIER_CAPABILITIES: Record<PlanTier | 'basic' | 'pro', Capability[]> = {
+export const TIER_CAPABILITIES: Record<PlanTier, Capability[]> = {
   free: [
     'ai_homework_helper',
     'view_engagement_metrics',

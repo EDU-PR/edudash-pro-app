@@ -16,7 +16,7 @@
 
 import { AudioModule } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 import type { SupportedLanguage } from '@/lib/voice/types';
@@ -589,56 +589,14 @@ export class DashVoiceService {
     });
   }
 
-  // Tiers that have TTS access (aligned with tts-proxy Edge Function)
-  private static readonly TTS_ALLOWED_TIERS = [
-    'parent_starter', 'parent_plus', 'parent-starter', 'parent-plus',
-    'teacher_starter', 'teacher_pro', 'teacher-starter', 'teacher-pro',
-    'starter', 'basic', 'pro', 'premium', 'enterprise', 'trial',
-    'school_starter', 'school_pro', 'school_enterprise'
-  ];
-
   /**
    * Speak text using TTS with intelligent text normalization
-   * Note: TTS is a premium feature - free tier users will get an error callback
+   * Tier gating is handled by app-level voice budget controls and server-side checks.
+   * Do not block here using local tier tables; those can lag behind effective school tier.
    */
   public async speakText(text: string, callbacks?: SpeechCallbacks, options?: { language?: string }): Promise<void> {
     try {
       const voiceSettings = this.config.voiceSettings;
-      
-      // Check tier access for TTS (premium feature)
-      try {
-        const { useSubscription } = await import('@/contexts/SubscriptionContext');
-        // We can't use hooks here, so check via Supabase directly
-        const supabase = this.config.supabaseClient;
-        if (supabase) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: tierData } = await supabase
-              .from('user_ai_tiers')
-              .select('tier')
-              .eq('user_id', user.id)
-              .maybeSingle();
-            
-            const { data: usageData } = await supabase
-              .from('user_ai_usage')
-              .select('current_tier')
-              .eq('user_id', user.id)
-              .maybeSingle();
-            
-            const userTier = tierData?.tier || usageData?.current_tier || 'free';
-            const tierLower = String(userTier).toLowerCase().replace(/-/g, '_');
-            
-            if (!DashVoiceService.TTS_ALLOWED_TIERS.some(t => t.replace(/-/g, '_') === tierLower)) {
-              console.log(`[DashVoice] TTS blocked for free tier user`);
-              callbacks?.onError?.(new Error('TTS_FREE_TIER_BLOCKED'));
-              return;
-            }
-          }
-        }
-      } catch (tierErr) {
-        console.warn('[DashVoice] Could not check tier for TTS, allowing request:', tierErr);
-        // Allow request to proceed - Edge Function will do final tier check
-      }
       
       // Normalize text first
       const normalizedText = this.normalizeTextForSpeech(text);

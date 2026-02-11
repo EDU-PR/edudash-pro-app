@@ -275,6 +275,23 @@ export default function StudentFeeManagementScreen() {
             </Text>
           </TouchableOpacity>
 
+          {actions.tuitionSyncIssue && (
+            <View style={styles.tuitionWarningBanner}>
+              <Ionicons name="alert-circle-outline" size={14} color={theme.warning} />
+              <Text style={styles.tuitionWarningText}>{actions.tuitionSyncIssue.message}</Text>
+              <TouchableOpacity onPress={() => router.push('/screens/admin/fee-management')}>
+                <Text style={styles.tuitionWarningLink}>Open Fee Setup</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss tuition warning"
+                onPress={actions.clearTuitionSyncIssue}
+              >
+                <Ionicons name="close" size={14} color={theme.warning} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           {!isStudentInactive ? (
             <TouchableOpacity
               style={[
@@ -345,6 +362,12 @@ export default function StudentFeeManagementScreen() {
               {data.feeSetupStatus === 'school_only' && (
                 <Text style={styles.emptyFeesHint}>Fees are configured but haven't been generated for this student.</Text>
               )}
+              {data.feeSetupStatus === 'ambiguous' && (
+                <Text style={styles.emptyFeesHint}>Multiple tuition structures match this learner. Review fee setup to remove overlaps.</Text>
+              )}
+              {data.feeSetupStatus === 'unmatched' && (
+                <Text style={styles.emptyFeesHint}>No deterministic tuition match was found for this learner's class/age.</Text>
+              )}
               {data.feeSetupStatus === 'skipped_inactive' && (
                 <Text style={styles.emptyFeesHint}>Fee generation was skipped because this learner is not active.</Text>
               )}
@@ -353,7 +376,10 @@ export default function StudentFeeManagementScreen() {
                   <Text style={styles.generateFeesText}>{data.generatingFees ? 'Generating...' : 'Generate Fees'}</Text>
                 </TouchableOpacity>
               )}
-              {(data.feeSetupStatus === 'missing' || data.feeSetupStatus === 'school_only') && (
+              {(data.feeSetupStatus === 'missing' ||
+                data.feeSetupStatus === 'school_only' ||
+                data.feeSetupStatus === 'ambiguous' ||
+                data.feeSetupStatus === 'unmatched') && (
                 <TouchableOpacity style={styles.openFeeSetupButton} onPress={() => router.push('/screens/admin/fee-management')}>
                   <Text style={styles.openFeeSetupText}>Open Fee Setup</Text>
                 </TouchableOpacity>

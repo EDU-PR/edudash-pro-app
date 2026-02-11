@@ -191,11 +191,12 @@ interface PushDevice {
 // Environment variables
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
 const EXPO_ACCESS_TOKEN=REDACTED
 const WEB_PUSH_URL = Deno.env.get('WEB_PUSH_URL') || Deno.env.get('APP_URL') || '';
 
 // Create Supabase client with service role for bypassing RLS
-const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+const supabase = SUPABASE_URL
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
   : null;
 

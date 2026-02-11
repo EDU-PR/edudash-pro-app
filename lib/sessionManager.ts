@@ -490,69 +490,13 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
 }
 
 /**
- * Get user capabilities based on role and subscription tier
+ * Get user capabilities based on role and subscription tier.
+ * Delegates to the canonical RBAC module for the real capability set.
  */
 async function getUserCapabilities(role: string, planTier?: string): Promise<string[]> {
-  // Default to parent for unknown/missing roles to allow minimal mobile access
-  const normalizedRole = (String(role || 'parent').toLowerCase());
-  const baseCapabilities: Record<string, string[]> = {
-    super_admin: [
-      'access_mobile_app',
-      'view_all_organizations',
-      'manage_organizations',
-      'view_billing',
-      'manage_subscriptions',
-      'access_admin_tools',
-    ],
-    principal_admin: [
-      'access_mobile_app',
-      'view_school_metrics',
-      'manage_teachers',
-      'manage_students',
-      'access_principal_hub',
-      'generate_reports',
-    ],
-    principal: [
-      'access_mobile_app',
-      'view_school_metrics',
-      'manage_teachers',
-      'manage_students',
-      'access_principal_hub',
-      'generate_reports',
-    ],
-    teacher: [
-      'access_mobile_app',
-      'manage_classes',
-      'create_assignments',
-      'grade_assignments',
-      'view_class_analytics',
-    ],
-    parent: [
-      'access_mobile_app',
-      'view_child_progress',
-      'communicate_with_teachers',
-      'access_homework_help',
-    ],
-  };
-
-  const capabilities = baseCapabilities[normalizedRole] || baseCapabilities['parent'];
-
-  // Add tier-specific capabilities
-  if (planTier === 'premium' || planTier === 'enterprise') {
-    capabilities.push('ai_lesson_generation', 'advanced_analytics');
-  }
-
-  if (planTier === 'enterprise') {
-    capabilities.push(
-      'ai_grading_assistance',
-      'bulk_operations',
-      'custom_reports',
-      'sso_access',
-      'priority_support'
-    );
-  }
-
-  return capabilities;
+  // Import dynamically to avoid circular dependency at module load time
+  const { getUserCapabilities: rbacGetCapabilities } = await import('@/lib/rbac/profile-utils');
+  return rbacGetCapabilities(role as any, planTier as any);
 }
 
 /**

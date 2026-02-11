@@ -191,25 +191,10 @@ export async function searchCode(query: string, options?: {
   } catch (error) {
     console.error('GitHub code search failed:', error);
     
-    // Return mock data for demo/development
+    // Return empty results — never return mock data in production
     return {
-      totalCount: 5,
-      items: [
-        {
-          name: 'AuthContext.tsx',
-          path: 'contexts/AuthContext.tsx',
-          sha: 'abc123',
-          url: `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/contexts/AuthContext.tsx`,
-          htmlUrl: `https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/contexts/AuthContext.tsx`,
-          repository: `${REPO_OWNER}/${REPO_NAME}`,
-          textMatches: [
-            {
-              fragment: `export function useAuth() {\n  const context = useContext(AuthContext);\n  return context;\n}`,
-              matches: [{ text: query, indices: [0, query.length] }],
-            },
-          ],
-        },
-      ],
+      totalCount: 0,
+      items: [],
     };
   }
 }

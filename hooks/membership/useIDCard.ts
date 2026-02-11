@@ -97,8 +97,9 @@ function getMemberTierTemplate(tier: string): CardTemplate {
 
 export function useIDCard(memberId?: string) {
   const [loading, setLoading] = useState(true);
-  const [member, setMember] = useState<OrganizationMember>(FALLBACK_MEMBER);
-  const [card, setCard] = useState<MemberIDCard>(FALLBACK_CARD);
+  const [member, setMember] = useState<OrganizationMember | null>(null);
+  const [card, setCard] = useState<MemberIDCard | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<CardTemplate>('premium');
 
   const fetchMemberData = useCallback(async () => {
@@ -148,6 +149,7 @@ export function useIDCard(memberId?: string) {
             
             if (simpleError || !simpleMemberData) {
               console.error('[useIDCard] Simple query also failed:', simpleError);
+              setError('Could not load member data');
               setLoading(false);
               return;
             }
@@ -157,10 +159,12 @@ export function useIDCard(memberId?: string) {
             memberError = null; // Clear error since fallback succeeded
           } catch (fallbackError) {
             console.error('[useIDCard] Fallback query failed:', fallbackError);
+            setError('Could not load member data');
             setLoading(false);
             return;
           }
         } else {
+          setError('Could not load member data');
           setLoading(false);
           return;
         }
@@ -318,6 +322,7 @@ export function useIDCard(memberId?: string) {
     loading,
     member,
     card,
+    error,
     selectedTemplate,
     setSelectedTemplate,
     refetch: fetchMemberData,

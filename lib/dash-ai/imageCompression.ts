@@ -6,7 +6,7 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from '@/lib/platform/filesystem';
 
 export const MAX_IMAGE_BASE64_LEN = 4_000_000; // ~3MB payload after base64 encoding
 

@@ -454,11 +454,11 @@ export class FinancialDataService {
         totalOutstanding = feeRows.reduce((sum, fee) => sum + this.getOutstandingAmountForFee(fee), 0);
       }
 
-      // Get monthly expenses from petty cash
+      // Get monthly expenses from petty cash (include financial_transaction_id for dedup)
       const { data: expenseTransactions, error: expenseError } = await withPettyCashTenant((column, client) =>
         client
           .from('petty_cash_transactions')
-          .select('amount')
+          .select('amount, financial_transaction_id')
           .eq(column, preschoolId)
           .eq('type', 'expense')
           .in('status', ['approved', 'pending']) // Include pending for current spending
@@ -472,19 +472,29 @@ export class FinancialDataService {
 
       let monthlyExpenses = expenseTransactions?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
 
+      // Collect financial_transaction IDs already counted via petty cash to avoid double-counting
+      const linkedFtIds = new Set(
+        (expenseTransactions || [])
+          .map((t: any) => t.financial_transaction_id)
+          .filter(Boolean)
+      );
+
       // Include other expense sources from financial_transactions (completed/approved) for current month
+      // DEDUP: exclude rows already linked from petty_cash_transactions
       try {
-        const { data: otherExpTx } = await withFinanceTenant<Array<{ amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
+        const { data: otherExpTx } = await withFinanceTenant<Array<{ id?: string; amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
           assertSupabase()
             .from('financial_transactions')
-            .select('amount, type, status, created_at')
+            .select('id, amount, type, status, created_at')
             .eq(column, preschoolId)
             .in('type', ['expense','operational_expense','salary','purchase'])
             .in('status', ['approved','completed'])
             .gte('created_at', monthStart)
             .lt('created_at', nextMonthStart)
         );
-        const otherExp = (otherExpTx || []).reduce((sum: number, t: any) => sum + Math.abs(Number(t.amount) || 0), 0);
+        const otherExp = (otherExpTx || [])
+          .filter((t: any) => !linkedFtIds.has(t.id)) // skip already-counted
+          .reduce((sum: number, t: any) => sum + Math.abs(Number(t.amount) || 0), 0);
         monthlyExpenses += otherExp;
       } catch { /* Intentional: non-fatal */ }
 
@@ -516,15 +526,15 @@ export class FinancialDataService {
     } catch (error) {
       console.error('Error calculating financial metrics:', error);
       
-      // Return sample data as fallback
+      // Return zero data on error — never fake numbers
       return {
-        monthlyRevenue: 15000,
-        outstandingPayments: 2500,
-        monthlyExpenses: 8500,
-        netIncome: 6500,
-        paymentCompletionRate: 85.7,
-        totalStudents: 25,
-        averageFeePerStudent: 600
+        monthlyRevenue: 0,
+        outstandingPayments: 0,
+        monthlyExpenses: 0,
+        netIncome: 0,
+        paymentCompletionRate: 0,
+        totalStudents: 0,
+        averageFeePerStudent: 0,
       };
     }
   }
@@ -542,7 +552,8 @@ export class FinancialDataService {
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
         const monthStart = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const nextMonthStart = `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
+        const nextDate = new Date(year, month, 1); // JS Date handles Dec→Jan rollover
+        const nextMonthStart = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-01`;
 
         // Get revenue for this month (fee due-month basis)
         let revenue = 0;
@@ -595,7 +606,7 @@ export class FinancialDataService {
         const { data: monthlyExpenses } = await withPettyCashTenant((column, client) =>
           client
             .from('petty_cash_transactions')
-            .select('amount')
+            .select('amount, financial_transaction_id')
             .eq(column, preschoolId)
             .eq('type', 'expense')
             .eq('status', 'approved')
@@ -604,19 +615,27 @@ export class FinancialDataService {
         );
 
         const petty = monthlyExpenses?.reduce((sum, t) => sum + Math.abs(t.amount), 0) || 0;
+        // Collect linked financial_transaction IDs to avoid double-counting
+        const trendLinkedFtIds = new Set(
+          (monthlyExpenses || [])
+            .map((t: any) => t.financial_transaction_id)
+            .filter(Boolean)
+        );
         let otherExp = 0;
         try {
-          const { data: monthOther } = await withFinanceTenant<Array<{ amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
+          const { data: monthOther } = await withFinanceTenant<Array<{ id?: string; amount: number | null; type?: string | null; status?: string | null; created_at?: string | null }>>((column) =>
             assertSupabase()
               .from('financial_transactions')
-              .select('amount, type, status, created_at')
+              .select('id, amount, type, status, created_at')
               .eq(column, preschoolId)
               .in('type', ['expense','operational_expense','salary','purchase'])
               .in('status', ['approved','completed'])
               .gte('created_at', monthStart)
               .lt('created_at', nextMonthStart)
           );
-          otherExp = (monthOther || []).reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
+          otherExp = (monthOther || [])
+            .filter((t: any) => !trendLinkedFtIds.has(t.id)) // skip already-counted
+            .reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
         } catch { /* Intentional: non-fatal */ }
         const expenses = petty + otherExp;
 
@@ -633,15 +652,8 @@ export class FinancialDataService {
     } catch (error) {
       console.error('Error fetching trend data:', error);
       
-      // Return sample trend data as fallback
-      return [
-        { month: 'Aug', revenue: 12000, expenses: 7500, netIncome: 4500 },
-        { month: 'Sep', revenue: 14000, expenses: 8200, netIncome: 5800 },
-        { month: 'Oct', revenue: 13500, expenses: 8000, netIncome: 5500 },
-        { month: 'Nov', revenue: 15200, expenses: 8500, netIncome: 6700 },
-        { month: 'Dec', revenue: 14800, expenses: 8300, netIncome: 6500 },
-        { month: 'Jan', revenue: 15000, expenses: 8500, netIncome: 6500 }
-      ];
+      // Return empty trend data on error — never fake numbers
+      return [];
     }
   }
 

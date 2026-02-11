@@ -195,28 +195,9 @@ export async function getEASBuildStatus(): Promise<EASBuildStatusResponse> {
   } catch (error) {
     console.error('Failed to fetch EAS build status:', error);
     
-    // Return mock data for development/demo
+    // Return empty data — never return mock data in production
     return {
-      recentBuilds: [
-        {
-          id: 'demo-build-1',
-          platform: 'android',
-          status: 'finished',
-          profile: 'preview',
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 18 * 60 * 1000).toISOString(),
-          duration: 18 * 60,
-        },
-        {
-          id: 'demo-build-2',
-          platform: 'ios',
-          status: 'finished',
-          profile: 'preview',
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 24 * 60 * 1000).toISOString(),
-          duration: 24 * 60,
-        },
-      ],
+      recentBuilds: [],
       activeBuilds: [],
     };
   }

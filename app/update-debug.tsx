@@ -6,6 +6,11 @@ import { useUpdates } from '@/contexts/UpdatesProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function UpdateDebugScreen() {
+  // Gate: only accessible in development
+  if (!__DEV__) {
+    return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Not available</Text></View>;
+  }
+
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<string>('');
   const { checkForUpdates, isDownloading, isUpdateDownloaded, updateError } = useUpdates();

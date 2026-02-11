@@ -15,7 +15,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.48.1';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
-const CRON_SECRET = Deno.env.get('CRON_SECRET') || '';
+const CRON_SECRET = Deno.env.get('CRON_SECRET');
+if (!CRON_SECRET) throw new Error('CRON_SECRET env var is required');
 const FINANCE_MONTH_CUTOFF_DAY = parseInt(Deno.env.get('FINANCE_MONTH_CUTOFF_DAY') || '25', 10);
 
 // ── Age matching (port of lib/utils/feeStructureSelector.ts) ──────────────
@@ -27,6 +28,8 @@ interface FeeCandidate {
   description?: string | null;
   fee_type?: string | null;
   grade_levels?: string[] | null;
+  age_group?: string | null;
+  grade_level?: string | null;
   effective_from?: string | null;
   created_at?: string | null;
 }
@@ -36,7 +39,17 @@ interface StudentRow {
   date_of_birth?: string | null;
   enrollment_date?: string | null;
   class_name?: string | null;
+  grade_level?: string | null;
   preschool_id: string;
+}
+
+type TuitionResolutionStatus = 'matched' | 'ambiguous' | 'unmatched';
+
+interface TuitionResolution<T extends FeeCandidate = FeeCandidate> {
+  status: TuitionResolutionStatus;
+  fee?: T;
+  reason: string;
+  matches?: T[];
 }
 
 function computeAgeMonths(dob?: string | null): number | null {
@@ -110,54 +123,141 @@ function isAgeInRange(age: number, r: AgeRange): boolean {
 }
 
 function buildLabels(fee: FeeCandidate): string[] {
-  return [fee.name, fee.description, ...(fee.grade_levels ?? [])]
+  return [fee.name, fee.description, fee.age_group, fee.grade_level, ...(fee.grade_levels ?? [])]
     .filter((v): v is string => Boolean(v?.trim()));
 }
 
-function selectFee(structures: FeeCandidate[], student: StudentRow): FeeCandidate | null {
-  if (!structures.length) return null;
-  if (structures.length === 1) return structures[0];
+function normalizeLabel(value?: string | null): string | null {
+  if (!value) return null;
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+  return normalized || null;
+}
 
-  const ageMonths = computeAgeMonths(student.date_of_birth);
+function compareByRecency(a: FeeCandidate, b: FeeCandidate): number {
+  const ae = a.effective_from ? new Date(a.effective_from).getTime() : 0;
+  const be = b.effective_from ? new Date(b.effective_from).getTime() : 0;
+  if (ae !== be) return be - ae;
+  const ac = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bc = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bc - ac;
+}
 
+function selectFee(structures: FeeCandidate[], student: StudentRow): TuitionResolution<FeeCandidate> {
+  if (!structures.length) {
+    return { status: 'unmatched', reason: 'no_active_tuition_structures' };
+  }
+  if (structures.length === 1) {
+    return {
+      status: 'matched',
+      fee: structures[0],
+      reason: 'single_active_tuition_structure',
+      matches: [structures[0]],
+    };
+  }
 
-  const candidates = structures.map((fee) => {
-    const labels = buildLabels(fee);
-    const ranges = labels.map(parseAgeRange).filter((r): r is AgeRange => r !== null);
-    const labelText = labels.join(' ').toLowerCase();
-    return { fee, ranges, labelText };
-  });
-
-  if (ageMonths != null) {
-    const matching = candidates
-      .map((c) => {
-        const matchRanges = c.ranges.filter((r) => isAgeInRange(ageMonths, r));
-        if (!matchRanges.length) return null;
-        const best = Math.min(
-          ...matchRanges.map((r) => Math.max(0, (r.maxMonths ?? r.minMonths ?? 0) - (r.minMonths ?? 0)))
-        );
-        return { c, best };
-      })
-      .filter((v): v is NonNullable<typeof v> => v !== null);
-
-    if (matching.length) {
-      matching.sort((a, b) => {
-        if (a.best !== b.best) return a.best - b.best;
-        const ae = a.c.fee.effective_from ? new Date(a.c.fee.effective_from).getTime() : 0;
-        const be = b.c.fee.effective_from ? new Date(b.c.fee.effective_from).getTime() : 0;
-        return be - ae;
-      });
-      return matching[0].c.fee;
+  const normalizedGrade = normalizeLabel(student.grade_level);
+  if (normalizedGrade) {
+    const gradeMatches = structures.filter((fee) => {
+      const levels = [
+        normalizeLabel(fee.grade_level),
+        ...((fee.grade_levels || []).map((level) => normalizeLabel(level))),
+      ].filter((label): label is string => Boolean(label));
+      return levels.includes(normalizedGrade);
+    });
+    if (gradeMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: gradeMatches[0],
+        reason: 'grade_level_exact',
+        matches: gradeMatches,
+      };
+    }
+    if (gradeMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_grade_level_matches:${gradeMatches.length}`,
+        matches: [...gradeMatches].sort(compareByRecency),
+      };
     }
   }
 
-  const ageLabel = student.class_name?.toLowerCase().trim();
-  if (ageLabel) {
-    const match = candidates.find((c) => c.labelText.includes(ageLabel));
-    if (match) return match.fee;
+  const normalizedClass = normalizeLabel(student.class_name);
+  if (normalizedClass) {
+    const classMatches = structures.filter((fee) => {
+      const labels = buildLabels(fee)
+        .map((label) => normalizeLabel(label))
+        .filter((label): label is string => Boolean(label));
+      return labels.includes(normalizedClass);
+    });
+    if (classMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: classMatches[0],
+        reason: 'class_label_exact',
+        matches: classMatches,
+      };
+    }
+    if (classMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_class_label_matches:${classMatches.length}`,
+        matches: [...classMatches].sort(compareByRecency),
+      };
+    }
   }
 
-  return structures[0];
+  const ageMonths = computeAgeMonths(student.date_of_birth);
+  if (ageMonths != null) {
+    const ageMatches = structures.filter((fee) => {
+      const ranges = buildLabels(fee)
+        .map(parseAgeRange)
+        .filter((range): range is AgeRange => range !== null);
+      return ranges.some((range) => isAgeInRange(ageMonths, range));
+    });
+    if (ageMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: ageMatches[0],
+        reason: 'age_range_match',
+        matches: ageMatches,
+      };
+    }
+    if (ageMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_age_range_matches:${ageMatches.length}`,
+        matches: [...ageMatches].sort(compareByRecency),
+      };
+    }
+  }
+
+  if (ageMonths == null && !normalizedClass && !normalizedGrade) {
+    return {
+      status: 'unmatched',
+      reason: 'insufficient_context_missing_grade_class_and_age',
+    };
+  }
+
+  return {
+    status: 'unmatched',
+    reason: 'no_deterministic_match',
+  };
+}
+
+function normalizeStudentRow(row: any): StudentRow {
+  const classRecord = Array.isArray(row.classes) ? row.classes[0] : row.classes;
+  return {
+    id: row.id,
+    date_of_birth: row.date_of_birth || null,
+    enrollment_date: row.enrollment_date || null,
+    class_name: row.class_name || classRecord?.name || null,
+    grade_level: row.grade_level || classRecord?.grade_level || null,
+    preschool_id: row.preschool_id,
+  };
 }
 
 function isTuitionFee(feeType?: string | null, name?: string | null, desc?: string | null): boolean {
@@ -301,6 +401,8 @@ serve(async (req: Request): Promise<Response> => {
               fee_type: sf.fee_category,
               name: sf.name,
               description: sf.description,
+              age_group: sf.age_group,
+              grade_level: sf.grade_level,
               grade_levels: sf.grade_level ? [sf.grade_level] : null,
               effective_from: null,
               created_at: sf.created_at,
@@ -311,7 +413,7 @@ serve(async (req: Request): Promise<Response> => {
         // ── Fetch active students ──────────────────────────────────────
         const { data: students, error: stErr } = await supabase
           .from('students')
-          .select('id, date_of_birth, enrollment_date, class_name, preschool_id, organization_id')
+          .select('id, date_of_birth, enrollment_date, class_name, grade_level, preschool_id, organization_id, classes!students_class_id_fkey(name, grade_level)')
           .or(`preschool_id.eq.${school.id},organization_id.eq.${school.id}`)
           .eq('is_active', true)
           .eq('status', 'active');
@@ -358,8 +460,26 @@ serve(async (req: Request): Promise<Response> => {
             continue; // Already has a fee for this month
           }
 
-          const selected = selectFee(tuitionFees as FeeCandidate[], student as StudentRow);
-          if (!selected) continue;
+          const normalizedStudent = normalizeStudentRow(student);
+          const resolution = selectFee(tuitionFees as FeeCandidate[], normalizedStudent);
+          if (resolution.status !== 'matched' || !resolution.fee) {
+            const reason = `${resolution.status}:${resolution.reason}`;
+            schoolResult.errors.push(`Student ${student.id} unresolved tuition (${reason})`);
+            console.warn('[generate-monthly-fees] unresolved tuition', {
+              schoolId: school.id,
+              studentId: student.id,
+              className: normalizedStudent.class_name,
+              gradeLevel: normalizedStudent.grade_level,
+              reason,
+              matches: resolution.matches?.map((match) => ({
+                id: match.id,
+                amount: match.amount,
+                name: match.name,
+              })) || [],
+            });
+            continue;
+          }
+          const selected = resolution.fee;
 
           feesToInsert.push({
             student_id: student.id,

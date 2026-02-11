@@ -26,30 +26,32 @@ interface DashUsageBannerProps {
   theme: Theme;
 }
 
-export const DashUsageBanner: React.FC<DashUsageBannerProps> = ({
+export const DashUsageBanner: React.FC<DashUsageBannerProps> = React.memo(function DashUsageBanner({
   tierStatus,
   usageLabel,
   styles,
   theme,
-}) => {
+}) {
   if (!tierStatus) return null;
+  const shouldShowProgress = tierStatus.quotaLimit > 0 && tierStatus.quotaPercentage >= 60;
+  const progressColor = tierStatus.quotaPercentage >= 90 ? theme.error : theme.primary;
 
   return (
     <View style={[styles.usageBanner, { borderColor: theme.border, backgroundColor: theme.surface }]}>
       <Ionicons name="sparkles-outline" size={14} color={theme.primary} />
-      <Text style={[styles.usageBannerText, { color: theme.textSecondary }]}>
+      <Text numberOfLines={1} style={[styles.usageBannerText, { color: theme.textSecondary }]}>
         {usageLabel}
       </Text>
-      {tierStatus.quotaLimit > 0 && (
+      {shouldShowProgress && (
         <View style={[styles.usageProgress, { backgroundColor: theme.border }]}>
           <View
             style={[
               styles.usageProgressFill,
-              { backgroundColor: theme.primary, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
+              { backgroundColor: progressColor, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
             ]}
           />
         </View>
       )}
     </View>
   );
-};
+});

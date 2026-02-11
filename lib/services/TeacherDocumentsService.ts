@@ -1,5 +1,5 @@
 import { assertSupabase } from '@/lib/supabase'
-import * as FileSystem from 'expo-file-system/legacy'
+import * as FileSystem from '@/lib/platform/filesystem';
 
 export type TeacherDocType = 'cv' | 'qualifications' | 'id_copy' | 'contracts'
 

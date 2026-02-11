@@ -10,17 +10,32 @@ import { ArrowLeft, Calendar, User, Mail, Phone, MapPin, Users, FileText, Clock,
 
 interface StudentDetail {
   id: string;
+  student_id: string | null;
   first_name: string;
   last_name: string;
   date_of_birth: string | null;
   gender: string | null;
-  medical_info: string | null;
+  id_number: string | null;
+  home_address: string | null;
+  home_phone: string | null;
+  medical_conditions: string | null;
   allergies: string | null;
+  medication: string | null;
+  notes: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
   status: string;
   enrollment_date: string | null;
   guardian_id: string | null;
+  parent_id?: string | null;
   class_id: string | null;
   preschool_id: string;
+  organization_id?: string | null;
+  registration_fee_amount?: number | null;
+  registration_fee_paid?: boolean | null;
+  payment_verified?: boolean | null;
+  payment_date?: string | null;
   classes?: {
     id: string;
     name: string;
@@ -70,11 +85,34 @@ export default function StudentDetailPage() {
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [teacherName, setTeacherName] = useState<string | null>(null);
   const [lastContactDate, setLastContactDate] = useState<string | null>(null);
+  const [quickEditMode, setQuickEditMode] = useState(false);
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
+  const [quickEditData, setQuickEditData] = useState({
+    id_number: '',
+    home_address: '',
+    home_phone: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relation: '',
+    medical_conditions: '',
+    allergies: '',
+    medication: '',
+    notes: '',
+    registration_fee_amount: '',
+    payment_verified: false,
+    payment_date: '',
+  });
 
   const { profile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
   const preschoolId = profile?.preschoolId;
+  const tenantId =
+    (profile as any)?.organizationId ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschoolId ||
+    (profile as any)?.preschool_id ||
+    preschoolId;
 
   const studentId = params.id as string;
 
@@ -105,15 +143,15 @@ export default function StudentDetailPage() {
   useEffect(() => {
     if (studentId === 'enroll') return; // Skip for enroll route
     
-    if (!preschoolId || !studentId) {
-      console.log('Waiting for preschoolId or studentId...', { preschoolId, studentId });
+    if (!tenantId || !studentId) {
+      console.log('Waiting for tenantId or studentId...', { tenantId, studentId });
       return;
     }
 
     const loadStudent = async () => {
       setLoading(true);
       try {
-        // First try to get student with guardian_id relationship
+        // Fetch student using tenant-safe filters (preschool_id or organization_id)
         const { data, error } = await supabase
           .from('students')
           .select(`
@@ -138,18 +176,8 @@ export default function StudentDetailPage() {
             )
           `)
           .eq('id', studentId)
-          .eq('preschool_id', preschoolId)
+          .or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`)
           .single();
-        
-        // Merge guardian/parent data - prefer guardian, fallback to parent
-        if (data) {
-          const guardianData = data.guardian as any;
-          const parentData = data.parent as any;
-          data.profiles = guardianData || parentData;
-          // Clean up the separate fields
-          delete (data as any).guardian;
-          delete (data as any).parent;
-        }
 
         if (error) {
           console.error('Error loading student:', error);
@@ -157,11 +185,75 @@ export default function StudentDetailPage() {
           return;
         }
 
+        // Merge guardian/parent data - prefer guardian, fallback to parent,
+        // then resolve by auth_user_id when FK joins are empty.
+        let guardianData = (data?.guardian as any) || null;
+        let parentData = (data?.parent as any) || null;
+        const profileIdsToResolve = [data?.guardian_id, data?.parent_id]
+          .filter((id): id is string => Boolean(id));
+
+        if (profileIdsToResolve.length > 0 && (!guardianData || !parentData)) {
+          const profileMap: Record<string, any> = {};
+          const { data: profilesById } = await supabase
+            .from('profiles')
+            .select('id, auth_user_id, first_name, last_name, email, phone')
+            .in('id', profileIdsToResolve);
+          (profilesById || []).forEach((profileRow: any) => {
+            profileMap[profileRow.id] = profileRow;
+            if (profileRow.auth_user_id) {
+              profileMap[profileRow.auth_user_id] = profileRow;
+            }
+          });
+
+          const unresolved = profileIdsToResolve.filter((id) => !profileMap[id]);
+          if (unresolved.length > 0) {
+            const { data: profilesByAuthId } = await supabase
+              .from('profiles')
+              .select('id, auth_user_id, first_name, last_name, email, phone')
+              .in('auth_user_id', unresolved);
+            (profilesByAuthId || []).forEach((profileRow: any) => {
+              profileMap[profileRow.id] = profileRow;
+              if (profileRow.auth_user_id) {
+                profileMap[profileRow.auth_user_id] = profileRow;
+              }
+            });
+          }
+
+          if (!guardianData && data?.guardian_id && profileMap[data.guardian_id]) {
+            guardianData = profileMap[data.guardian_id];
+          }
+          if (!parentData && data?.parent_id && profileMap[data.parent_id]) {
+            parentData = profileMap[data.parent_id];
+          }
+        }
+
+        if (data) {
+          data.profiles = guardianData || parentData || null;
+          delete (data as any).guardian;
+          delete (data as any).parent;
+        }
+
         console.log('[Student Page] Loaded student data:', data);
         console.log('[Student Page] Has profiles?', !!data?.profiles);
         console.log('[Student Page] Profile data:', data?.profiles);
         
         setStudent(data);
+        setQuickEditData({
+          id_number: data.id_number || '',
+          home_address: data.home_address || '',
+          home_phone: data.home_phone || '',
+          emergency_contact_name: data.emergency_contact_name || '',
+          emergency_contact_phone: data.emergency_contact_phone || '',
+          emergency_contact_relation: data.emergency_contact_relation || '',
+          medical_conditions: data.medical_conditions || '',
+          allergies: data.allergies || '',
+          medication: data.medication || '',
+          notes: data.notes || '',
+          registration_fee_amount:
+            data.registration_fee_amount == null ? '' : Number(data.registration_fee_amount).toFixed(2),
+          payment_verified: Boolean(data.payment_verified),
+          payment_date: data.payment_date || '',
+        });
 
         // Load additional data in parallel
         Promise.all([
@@ -243,7 +335,7 @@ export default function StudentDetailPage() {
     };
 
     loadStudent();
-  }, [preschoolId, studentId, supabase]);
+  }, [tenantId, studentId, supabase]);
 
   const handleSendPasswordReset = async () => {
     if (!student?.profiles?.email) {
@@ -279,6 +371,55 @@ export default function StudentDetailPage() {
     const years = Math.floor((today.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
     const months = Math.floor(((today.getTime() - birth.getTime()) / (30.44 * 24 * 60 * 60 * 1000)) % 12);
     return `${years} years, ${months} months`;
+  };
+
+  const handleQuickEditSave = async () => {
+    if (!student || !tenantId) return;
+    setQuickEditSaving(true);
+    try {
+      const registrationFeeRaw = quickEditData.registration_fee_amount.trim();
+      const parsedRegistrationFee = registrationFeeRaw ? Number.parseFloat(registrationFeeRaw) : null;
+      const paymentDate = quickEditData.payment_verified
+        ? (quickEditData.payment_date || new Date().toISOString().split('T')[0])
+        : null;
+
+      const updates = {
+        id_number: quickEditData.id_number || null,
+        home_address: quickEditData.home_address || null,
+        home_phone: quickEditData.home_phone || null,
+        emergency_contact_name: quickEditData.emergency_contact_name || null,
+        emergency_contact_phone: quickEditData.emergency_contact_phone || null,
+        emergency_contact_relation: quickEditData.emergency_contact_relation || null,
+        medical_conditions: quickEditData.medical_conditions || null,
+        allergies: quickEditData.allergies || null,
+        medication: quickEditData.medication || null,
+        notes: quickEditData.notes || null,
+        registration_fee_amount:
+          parsedRegistrationFee != null && Number.isFinite(parsedRegistrationFee)
+            ? Number(parsedRegistrationFee.toFixed(2))
+            : null,
+        payment_verified: quickEditData.payment_verified,
+        payment_date: paymentDate,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('students')
+        .update(updates)
+        .eq('id', student.id)
+        .or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`);
+
+      if (error) throw error;
+
+      setStudent((prev) => (prev ? { ...prev, ...updates } : prev));
+      setQuickEditMode(false);
+      alert('Student details updated successfully.');
+    } catch (error: any) {
+      console.error('Error saving quick edit details:', error);
+      alert(`Failed to save details: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setQuickEditSaving(false);
+    }
   };
 
   // Guard: Don't render if this is the enroll route
@@ -409,6 +550,70 @@ export default function StudentDetailPage() {
             </div>
           </div>
 
+          {/* Additional Student Details */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <MapPin size={20} />
+              Additional Details
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Student Number</div>
+                <div>{student.student_id || 'Not provided'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>ID Number</div>
+                <div>{student.id_number || 'Not provided'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Home Address</div>
+                <div>{student.home_address || 'Not provided'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Home Phone</div>
+                <div>{student.home_phone || 'Not provided'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Emergency Contact</div>
+                <div>
+                  {student.emergency_contact_name || 'Not provided'}
+                  {student.emergency_contact_phone ? ` (${student.emergency_contact_phone})` : ''}
+                  {student.emergency_contact_relation ? ` - ${student.emergency_contact_relation}` : ''}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Medication</div>
+                <div>{student.medication || 'Not provided'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Notes</div>
+                <div>{student.notes || 'No notes available'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Registration Fee</div>
+                <div>
+                  {student.registration_fee_amount != null
+                    ? `R ${Number(student.registration_fee_amount).toFixed(2)}`
+                    : 'Not set'}
+                  {typeof student.registration_fee_paid === 'boolean'
+                    ? ` (${student.registration_fee_paid ? 'Paid' : 'Not paid'})`
+                    : ''}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Payment Verification</div>
+                <div>
+                  {typeof student.payment_verified === 'boolean'
+                    ? student.payment_verified
+                      ? 'Verified'
+                      : 'Not verified'
+                    : 'Unknown'}
+                  {student.payment_date ? ` (${new Date(student.payment_date).toLocaleDateString()})` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Guardian Information */}
           {student.profiles && (
             <div className="card">
@@ -485,9 +690,9 @@ export default function StudentDetailPage() {
                   backgroundColor: 'var(--surface)', 
                   borderRadius: 8,
                   minHeight: 60,
-                  color: student.medical_info ? 'inherit' : 'var(--muted)'
+                  color: student.medical_conditions ? 'inherit' : 'var(--muted)'
                 }}>
-                  {student.medical_info || 'No medical information provided'}
+                  {student.medical_conditions || 'No medical information provided'}
                 </div>
               </div>
             </div>
@@ -610,7 +815,7 @@ export default function StudentDetailPage() {
                 </div>
                 <button
                   className="btn btnSecondary"
-                  onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id}`)}
+                  onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id || student.parent_id || ''}`)}
                   style={{ width: '100%', justifyContent: 'center' }}
                 >
                   <MessageSquare size={16} style={{ marginRight: 8 }} />
@@ -651,9 +856,118 @@ export default function StudentDetailPage() {
           )}
         </div>
 
+        {quickEditMode && (
+          <div className="card" style={{ marginTop: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>Quick Edit (on this page)</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <input
+                value={quickEditData.id_number}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, id_number: e.target.value }))}
+                placeholder="ID number"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                value={quickEditData.home_phone}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, home_phone: e.target.value }))}
+                placeholder="Home phone"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                value={quickEditData.emergency_contact_name}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, emergency_contact_name: e.target.value }))}
+                placeholder="Emergency contact name"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                value={quickEditData.emergency_contact_phone}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, emergency_contact_phone: e.target.value }))}
+                placeholder="Emergency contact phone"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                value={quickEditData.emergency_contact_relation}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, emergency_contact_relation: e.target.value }))}
+                placeholder="Emergency relationship"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                value={quickEditData.registration_fee_amount}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, registration_fee_amount: e.target.value }))}
+                placeholder="Registration fee amount"
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <input
+                type="date"
+                value={quickEditData.payment_date}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, payment_date: e.target.value }))}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8 }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={quickEditData.payment_verified}
+                  onChange={(e) => setQuickEditData((prev) => ({ ...prev, payment_verified: e.target.checked }))}
+                />
+                Payment verified
+              </label>
+            </div>
+            <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+              <textarea
+                value={quickEditData.home_address}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, home_address: e.target.value }))}
+                placeholder="Home address"
+                rows={2}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, resize: 'vertical' }}
+              />
+              <textarea
+                value={quickEditData.medical_conditions}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, medical_conditions: e.target.value }))}
+                placeholder="Medical conditions"
+                rows={2}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, resize: 'vertical' }}
+              />
+              <textarea
+                value={quickEditData.allergies}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, allergies: e.target.value }))}
+                placeholder="Allergies"
+                rows={2}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, resize: 'vertical' }}
+              />
+              <textarea
+                value={quickEditData.medication}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, medication: e.target.value }))}
+                placeholder="Medication"
+                rows={2}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, resize: 'vertical' }}
+              />
+              <textarea
+                value={quickEditData.notes}
+                onChange={(e) => setQuickEditData((prev) => ({ ...prev, notes: e.target.value }))}
+                placeholder="Notes"
+                rows={3}
+                style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, resize: 'vertical' }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button className="btn btnSecondary" onClick={() => setQuickEditMode(false)} disabled={quickEditSaving}>
+                Cancel
+              </button>
+              <button className="btn btnPrimary" onClick={handleQuickEditSave} disabled={quickEditSaving}>
+                {quickEditSaving ? 'Saving...' : 'Save Quick Edit'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions Bar */}
         <div className="card" style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              className="btn btnPrimary"
+              onClick={() => setQuickEditMode((prev) => !prev)}
+            >
+              {quickEditMode ? 'Close Quick Edit' : 'Quick Edit Here'}
+            </button>
             <button 
               className="btn btnSecondary"
               onClick={() => router.push(`/dashboard/principal/students/${student.id}/edit`)}
@@ -668,7 +982,7 @@ export default function StudentDetailPage() {
             </button>
             <button 
               className="btn btnSecondary"
-              onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id}`)}
+              onClick={() => router.push(`/dashboard/principal/messages?to=${student.guardian_id || student.parent_id || ''}`)}
             >
               <MessageSquare size={16} style={{ marginRight: 8 }} />
               Message Parent
@@ -682,10 +996,14 @@ export default function StudentDetailPage() {
               }}
               onClick={async () => {
                 const newStatus = student.status === 'active' ? 'inactive' : 'active';
-                const { error } = await supabase
+                let query = supabase
                   .from('students')
                   .update({ status: newStatus })
                   .eq('id', student.id);
+                if (tenantId) {
+                  query = query.or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`);
+                }
+                const { error } = await query;
                 
                 if (!error) {
                   setStudent({ ...student, status: newStatus });

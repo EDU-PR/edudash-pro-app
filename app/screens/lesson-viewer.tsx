@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';

@@ -11,6 +11,11 @@ import { DevNotificationTester } from '@/components/dev/DevNotificationTester';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function DevNotificationTesterScreen() {
+  // Gate: only accessible in development
+  if (!__DEV__) {
+    return null;
+  }
+
   const insets = useSafeAreaInsets();
 
   // Only show in dev mode

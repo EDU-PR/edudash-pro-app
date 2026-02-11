@@ -307,6 +307,7 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
 
     setIsUploading(true);
     const uploaded: DashAttachment[] = [];
+    const failed: Array<{ name: string; reason: string }> = [];
 
     try {
       for (const attachment of attachments) {
@@ -327,18 +328,33 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
         } catch (error) {
           console.error(`[Attachments] Failed to upload ${attachment.name}:`, error);
           updateAttachmentProgress(attachment.id, 0, 'failed');
-          
-          onShowAlert?.({
-            title: 'Upload Failed',
-            message: `Failed to upload ${attachment.name}. ${error instanceof Error ? error.message : 'Please try again.'}`,
-            type: 'error',
-            icon: 'cloud-offline-outline',
-            buttons: [{ text: 'OK', style: 'default' }],
-          });
+
+          const reason = error instanceof Error ? error.message : 'Please try again.';
+          failed.push({ name: attachment.name, reason });
         }
       }
     } finally {
       setIsUploading(false);
+    }
+
+    if (failed.length > 0) {
+      const total = attachments.length;
+      const first = failed[0];
+      const message = failed.length === total
+        ? `All selected attachments failed to upload. ${first.reason}`
+        : `${failed.length} of ${total} attachment(s) failed to upload. First error: ${first.reason}`;
+
+      onShowAlert?.({
+        title: failed.length === total ? 'Upload Failed' : 'Some Uploads Failed',
+        message,
+        type: failed.length === total ? 'error' : 'warning',
+        icon: 'cloud-offline-outline',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
+
+    if (attachments.length > 0 && uploaded.length === 0 && failed.length > 0) {
+      throw new Error(failed[0].reason || 'Upload failed.');
     }
 
     return uploaded;

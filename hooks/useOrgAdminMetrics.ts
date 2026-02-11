@@ -93,12 +93,12 @@ export function useOrgAdminMetrics() {
       const activeLearners = uniqueStudentIds.size;
 
       // Calculate completion rate
-      // For now, we'll use a placeholder - in a real system, this would check completed courses
+      // Not yet implemented — requires a course_completions table or similar tracking
       const totalActive = enrollmentsData?.length || 0;
-      const completed = 0; // TODO: Implement actual completion tracking
+      const completed = 0; // Awaiting completion tracking implementation
       const completionRate = totalActive > 0 ? (completed / totalActive) * 100 : 0;
 
-      // Certification pipeline (placeholder - would track certifications in progress)
+      // Certification pipeline — not yet implemented
       const certPipeline = 0;
 
       // Calculate MRR from active subscriptions

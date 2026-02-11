@@ -1449,7 +1449,7 @@ function callAnthropicStreaming(
           for (const toolCall of serverTools) {
             try {
               const query = (toolCall.input as Record<string, unknown>).query as string || '';
-              const webResult = await performWebSearch(query);
+              const webResult = await webSearchTool({ query });
               const toolResultText = typeof webResult === 'string' ? webResult : JSON.stringify(webResult);
               fullContent += `\n\n[Web Search: ${query}]\n${toolResultText}`;
               const searchEvent = { type: 'content_block_delta', delta: { text: `\n\n${toolResultText}` } };
@@ -1957,7 +1957,14 @@ serve(async (req) => {
       });
 
       if (quota.error) {
-        console.warn('[ai-proxy] check_ai_usage_limit failed, allowing request:', quota.error);
+        console.error('[ai-proxy] check_ai_usage_limit failed, denying request (fail-closed):', quota.error);
+        return new Response(JSON.stringify({
+          error: 'quota_service_unavailable',
+          message: 'AI quota service temporarily unavailable. Please retry in a moment.',
+        }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
       } else {
         const quotaData = quota.data as JsonRecord | null;
         quotaDataForRequest = quotaData;
@@ -1990,7 +1997,9 @@ serve(async (req) => {
     ].filter(Boolean);
     const mergedContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
 
-    const systemPrompt = buildSystemPrompt(mergedContext);
+    // Redact PII from context BEFORE passing to system prompt
+    const safeContext = mergedContext ? redactPII(mergedContext) : undefined;
+    const systemPrompt = buildSystemPrompt(safeContext);
     const rawMessages = normalizeMessages(payload.payload, systemPrompt);
     // Redact PII before sending to AI providers
     const messages = redactMessagesForProvider(rawMessages);

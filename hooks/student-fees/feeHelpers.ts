@@ -14,7 +14,12 @@
 
 import { Linking } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
-import { selectFeeStructureForChild } from '@/lib/utils/feeStructureSelector';
+import { logger } from '@/lib/logger';
+import {
+  resolveTuitionFeeStructure,
+  selectFeeStructureForChild,
+  type TuitionResolution,
+} from '@/lib/utils/feeStructureSelector';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
 import { ReceiptService } from '@/lib/services/ReceiptService';
 import type {
@@ -26,7 +31,15 @@ import type {
 } from './types';
 import { isRegistrationFeeEntry } from './types';
 
-export type FeeSetupStatus = 'unknown' | 'ready' | 'missing' | 'school_only' | 'skipped_inactive';
+export type FeeSetupStatus =
+  | 'unknown'
+  | 'ready'
+  | 'missing'
+  | 'school_only'
+  | 'skipped_inactive'
+  | 'ambiguous'
+  | 'unmatched';
+export type SuggestedTuitionResolution = TuitionResolution<FeeStructureRow>;
 
 // ── Pure helpers ────────────────────────────────────────────────
 
@@ -122,14 +135,22 @@ export async function bootstrapFeesIfMissing(
       resolvedTuitionFees = result.fees!;
     }
 
-    const selectedFee = selectFeeStructureForChild(resolvedTuitionFees as FeeStructureRow[], {
+    const resolution = resolveTuitionFeeStructure(resolvedTuitionFees as FeeStructureRow[], {
       dateOfBirth: student.date_of_birth,
       enrollmentDate: student.enrollment_date,
       ageGroupLabel: student.class_name || undefined,
       gradeLevel: student.class_name || undefined,
     });
-
-    if (!selectedFee) return 'ready';
+    if (resolution.status !== 'matched' || !resolution.fee) {
+      logger.warn('StudentFeeManagement', 'Fee bootstrap unresolved', {
+        studentId: student.id,
+        organizationId: preschoolId,
+        className: student.class_name || null,
+        resolution,
+      });
+      return resolution.status === 'ambiguous' ? 'ambiguous' : 'unmatched';
+    }
+    const selectedFee = resolution.fee;
 
     const enrollmentDate = student.enrollment_date ? new Date(student.enrollment_date) : new Date();
     const startMonth = new Date(enrollmentDate.getFullYear(), enrollmentDate.getMonth(), 1);
@@ -181,14 +202,22 @@ async function resolveFromSchoolFees(
     created_at: fee.created_at,
   }));
 
-  const selected = selectFeeStructureForChild(mapped, {
+  const resolution = resolveTuitionFeeStructure(mapped, {
     dateOfBirth: student.date_of_birth,
     enrollmentDate: student.enrollment_date,
     ageGroupLabel: student.class_name || undefined,
     gradeLevel: student.class_name || undefined,
   });
-
-  if (!selected) return { status: 'school_only' };
+  if (resolution.status !== 'matched' || !resolution.fee) {
+    logger.warn('StudentFeeManagement', 'School fee bridge unresolved', {
+      studentId: student.id,
+      preschoolId,
+      className: student.class_name || null,
+      resolution,
+    });
+    return { status: resolution.status === 'ambiguous' ? 'ambiguous' : 'unmatched' };
+  }
+  const selected = resolution.fee;
 
   const frequency = tuitionSchoolFees.find(f => f.id === selected.id)?.billing_frequency || 'monthly';
   const gradeLevels = selected.grade_level ? [selected.grade_level] : undefined;
@@ -272,7 +301,8 @@ export async function resolveSuggestedTuitionFee(
   organizationId: string,
   student: Student | null,
   className?: string | null,
-): Promise<FeeStructureRow | null> {
+): Promise<SuggestedTuitionResolution> {
+  const TAG = 'StudentFeeManagement';
   try {
     const supabase = assertSupabase();
     const { data, error } = await supabase
@@ -288,31 +318,52 @@ export async function resolveSuggestedTuitionFee(
     const tuitionFees = (data || []).filter((fee: FeeStructureRow) =>
       isTuitionFee(fee.fee_type, fee.name, fee.description),
     );
-    if (!tuitionFees.length) return null;
-
-    const classNeedle = className?.trim().toLowerCase();
-    if (classNeedle) {
-      const match = tuitionFees.find((fee) => {
-        const text = [fee.name, fee.description, ...(fee.grade_levels || [])]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return text.includes(classNeedle);
+    if (!tuitionFees.length) {
+      const result: SuggestedTuitionResolution = {
+        status: 'unmatched',
+        reason: 'no_active_tuition_structures',
+      };
+      logger.warn(TAG, 'Suggested tuition fee unresolved', {
+        organizationId,
+        studentId: student?.id || null,
+        className: className || student?.class_name || null,
+        resolution: result,
       });
-      if (match) return match;
+      return result;
     }
 
-    const selected = selectFeeStructureForChild(tuitionFees as FeeStructureRow[], {
+    const resolution = resolveTuitionFeeStructure(tuitionFees as FeeStructureRow[], {
       dateOfBirth: student?.date_of_birth,
       enrollmentDate: student?.enrollment_date,
       ageGroupLabel: className || student?.class_name || undefined,
       gradeLevel: className || student?.class_name || undefined,
     });
 
-    return selected || tuitionFees[0] || null;
+    if (resolution.status !== 'matched') {
+      logger.warn(TAG, 'Suggested tuition fee unresolved', {
+        organizationId,
+        studentId: student?.id || null,
+        className: className || student?.class_name || null,
+        resolution,
+      });
+      return resolution;
+    }
+
+    logger.info(TAG, 'Suggested tuition fee resolved', {
+      organizationId,
+      studentId: student?.id || null,
+      className: className || student?.class_name || null,
+      feeId: resolution.fee?.id || null,
+      amount: resolution.fee?.amount ?? null,
+      reason: resolution.reason,
+    });
+    return resolution;
   } catch (error) {
-    console.warn('[StudentFeeManagement] Failed to resolve suggested tuition fee:', error);
-    return null;
+    logger.warn(TAG, 'Failed to resolve suggested tuition fee', error);
+    return {
+      status: 'unmatched',
+      reason: 'query_failed',
+    };
   }
 }
 

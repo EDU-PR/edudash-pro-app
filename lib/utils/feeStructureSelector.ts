@@ -18,6 +18,15 @@ export interface FeeStructureCandidate {
   created_at?: string | null;
 }
 
+export type TuitionResolutionStatus = 'matched' | 'ambiguous' | 'unmatched';
+
+export interface TuitionResolution<T extends FeeStructureCandidate = FeeStructureCandidate> {
+  status: TuitionResolutionStatus;
+  fee?: T;
+  reason: string;
+  matches?: T[];
+}
+
 interface AgeRange {
   minMonths?: number;
   maxMonths?: number;
@@ -127,6 +136,145 @@ function buildFeeLabels(fee: FeeStructureCandidate): string[] {
   ];
   const gradeLevels = fee.grade_levels ?? [];
   return [...labels, ...gradeLevels].filter((value): value is string => Boolean(value && value.trim()));
+}
+
+function normalizeLabel(value?: string | null): string | null {
+  if (!value) return null;
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+  return normalized || null;
+}
+
+function compareByRecency(a: FeeStructureCandidate, b: FeeStructureCandidate): number {
+  const aEffective = a.effective_from
+    ? new Date(a.effective_from).getTime()
+    : 0;
+  const bEffective = b.effective_from
+    ? new Date(b.effective_from).getTime()
+    : 0;
+  if (aEffective !== bEffective) {
+    return bEffective - aEffective;
+  }
+
+  const aCreated = a.created_at
+    ? new Date(a.created_at).getTime()
+    : 0;
+  const bCreated = b.created_at
+    ? new Date(b.created_at).getTime()
+    : 0;
+  return bCreated - aCreated;
+}
+
+export function resolveTuitionFeeStructure<T extends FeeStructureCandidate>(
+  structures: T[],
+  context: FeeSelectionContext
+): TuitionResolution<T> {
+  if (!structures.length) {
+    return { status: 'unmatched', reason: 'no_active_tuition_structures' };
+  }
+
+  if (structures.length === 1) {
+    return {
+      status: 'matched',
+      fee: structures[0],
+      reason: 'single_active_tuition_structure',
+      matches: [structures[0]],
+    };
+  }
+
+  const normalizedGrade = normalizeLabel(context.gradeLevel);
+  if (normalizedGrade) {
+    const gradeMatches = structures.filter((fee) => {
+      const grades = [
+        normalizeLabel(fee.grade_level),
+        ...((fee.grade_levels || []).map((level) => normalizeLabel(level))),
+      ].filter((label): label is string => Boolean(label));
+      return grades.includes(normalizedGrade);
+    });
+
+    if (gradeMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: gradeMatches[0],
+        reason: 'grade_level_exact',
+        matches: gradeMatches,
+      };
+    }
+    if (gradeMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_grade_level_matches:${gradeMatches.length}`,
+        matches: [...gradeMatches].sort(compareByRecency),
+      };
+    }
+  }
+
+  const normalizedClass = normalizeLabel(context.ageGroupLabel);
+  if (normalizedClass) {
+    const classMatches = structures.filter((fee) => {
+      const labels = buildFeeLabels(fee)
+        .map((label) => normalizeLabel(label))
+        .filter((label): label is string => Boolean(label));
+      return labels.includes(normalizedClass);
+    });
+
+    if (classMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: classMatches[0],
+        reason: 'class_label_exact',
+        matches: classMatches,
+      };
+    }
+    if (classMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_class_label_matches:${classMatches.length}`,
+        matches: [...classMatches].sort(compareByRecency),
+      };
+    }
+  }
+
+  const ageMonths = computeAgeMonths(context.dateOfBirth, context.enrollmentDate);
+  if (ageMonths != null) {
+    const ageMatches = structures.filter((fee) => {
+      const ranges = buildFeeLabels(fee)
+        .map(parseAgeRange)
+        .filter((range): range is AgeRange => range !== null);
+      return ranges.some((range) => isAgeInRange(ageMonths, range));
+    });
+
+    if (ageMatches.length === 1) {
+      return {
+        status: 'matched',
+        fee: ageMatches[0],
+        reason: 'age_range_match',
+        matches: ageMatches,
+      };
+    }
+    if (ageMatches.length > 1) {
+      return {
+        status: 'ambiguous',
+        reason: `multiple_age_range_matches:${ageMatches.length}`,
+        matches: [...ageMatches].sort(compareByRecency),
+      };
+    }
+  }
+
+  if (ageMonths == null && !normalizedClass && !normalizedGrade) {
+    return {
+      status: 'unmatched',
+      reason: 'insufficient_context_missing_grade_class_and_age',
+    };
+  }
+
+  return {
+    status: 'unmatched',
+    reason: 'no_deterministic_match',
+  };
 }
 
 export function selectFeeStructureForChild<T extends FeeStructureCandidate>(

@@ -2,7 +2,7 @@
 import { useCallback, useState } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { base64ToUint8Array } from '@/lib/utils/base64';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';

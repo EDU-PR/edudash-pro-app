@@ -183,11 +183,22 @@ export default function StudentDetailScreen() {
     } else {
       setEditMode(true);
       setEditedStudent({
+        student_id: student?.student_id,
         first_name: student?.first_name,
         last_name: student?.last_name,
+        date_of_birth: student?.date_of_birth,
+        enrollment_date: student?.enrollment_date,
+        gender: student?.gender,
+        id_number: student?.id_number,
+        home_address: student?.home_address,
+        home_phone: student?.home_phone,
         medical_conditions: student?.medical_conditions,
         allergies: student?.allergies,
         medication: student?.medication,
+        notes: student?.notes,
+        registration_fee_amount: student?.registration_fee_amount,
+        payment_verified: student?.payment_verified,
+        payment_date: student?.payment_date,
         emergency_contact_name: student?.emergency_contact_name,
         emergency_contact_phone: student?.emergency_contact_phone,
         emergency_contact_relation: student?.emergency_contact_relation,
@@ -206,11 +217,22 @@ export default function StudentDetailScreen() {
       const { error } = await assertSupabase()
         .from('students')
         .update({
+          student_id: editedStudent.student_id,
           first_name: editedStudent.first_name,
           last_name: editedStudent.last_name,
+          date_of_birth: editedStudent.date_of_birth,
+          enrollment_date: editedStudent.enrollment_date,
+          gender: editedStudent.gender,
+          id_number: editedStudent.id_number,
+          home_address: editedStudent.home_address,
+          home_phone: editedStudent.home_phone,
           medical_conditions: editedStudent.medical_conditions,
           allergies: editedStudent.allergies,
           medication: editedStudent.medication,
+          notes: editedStudent.notes,
+          registration_fee_amount: editedStudent.registration_fee_amount,
+          payment_verified: editedStudent.payment_verified,
+          payment_date: editedStudent.payment_date,
           emergency_contact_name: editedStudent.emergency_contact_name,
           emergency_contact_phone: editedStudent.emergency_contact_phone,
           emergency_contact_relation: editedStudent.emergency_contact_relation,
@@ -440,6 +462,9 @@ export default function StudentDetailScreen() {
         <StudentDetailsSection
           student={student}
           theme={theme}
+          editMode={editMode && canEditStudent}
+          editedStudent={editedStudent}
+          onEditChange={setEditedStudent}
         />
 
         {/* Class Information */}

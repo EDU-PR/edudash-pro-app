@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { isTuitionFee } from '@/lib/utils/feeUtils';
+import { logger } from '@/lib/logger';
 import type { Student, StudentFee, ClassOption, ModalType } from './types';
 import { isRegistrationFeeEntry } from './types';
 import {
@@ -17,10 +18,53 @@ import {
   openReceiptUrl,
   resolveSuggestedRegistrationFee,
   resolveSuggestedTuitionFee,
+  type SuggestedTuitionResolution,
 } from './feeHelpers';
 
 type ShowAlert = (title: string, message: string, type?: 'info' | 'warning' | 'success' | 'error', buttons?: any[]) => void;
 const STUDENT_DELETE_RETENTION_DAYS = 30;
+const TAG = 'StudentFees';
+
+type TuitionSyncIssue = {
+  status: 'ambiguous' | 'unmatched';
+  reason: string;
+  message: string;
+  className?: string;
+};
+
+type SyncPendingTuitionFeesResult = {
+  updated: number;
+  amount?: number | null;
+  className?: string;
+  resolutionStatus: SuggestedTuitionResolution['status'];
+  resolutionReason: string;
+};
+
+function describeTuitionResolution(reason: string, className?: string): string {
+  const classLabel = className || 'this class';
+  if (reason.startsWith('multiple_grade_level_matches:')) {
+    return `Multiple tuition structures match ${classLabel} by grade. Open Fee Setup to keep only one active match.`;
+  }
+  if (reason.startsWith('multiple_class_label_matches:')) {
+    return `Multiple tuition structures match ${classLabel} by class label. Open Fee Setup to remove overlapping labels.`;
+  }
+  if (reason.startsWith('multiple_age_range_matches:')) {
+    return `Multiple tuition structures match ${classLabel} by age range. Open Fee Setup to remove overlapping ranges.`;
+  }
+  if (reason === 'insufficient_context_missing_grade_class_and_age') {
+    return 'Cannot determine tuition because class and age context is missing.';
+  }
+  if (reason === 'no_deterministic_match') {
+    return `No active tuition structure matches ${classLabel}.`;
+  }
+  if (reason === 'no_active_tuition_structures') {
+    return 'No active tuition structures are configured.';
+  }
+  if (reason === 'query_failed') {
+    return 'Could not read tuition setup. Please retry and check connection.';
+  }
+  return `Tuition setup needs review (${reason}).`;
+}
 
 function toDayStart(dateValue?: string | null): Date | null {
   if (!dateValue) return null;
@@ -97,6 +141,8 @@ export interface StudentFeeActionsReturn {
   setClassFeeHint: (v: string) => void;
   loadingSuggestedFee: boolean;
   canSubmitClassCorrection: boolean;
+  tuitionSyncIssue: TuitionSyncIssue | null;
+  clearTuitionSyncIssue: () => void;
   // Handlers
   handleWaiveFee: () => Promise<void>;
   handleAdjustFee: () => Promise<void>;
@@ -139,6 +185,11 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const [classRegistrationFee, setClassRegistrationFee] = useState('');
   const [classFeeHint, setClassFeeHint] = useState('');
   const [loadingSuggestedFee, setLoadingSuggestedFee] = useState(false);
+  const [tuitionSyncIssue, setTuitionSyncIssue] = useState<TuitionSyncIssue | null>(null);
+
+  const clearTuitionSyncIssue = useCallback(() => {
+    setTuitionSyncIssue(null);
+  }, []);
 
   const logFeeAssignmentCorrection = useCallback(async (
     payload: {
@@ -206,8 +257,14 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
   const syncPendingTuitionFees = useCallback(async (
     targetStudent: Student,
     className?: string | null,
-  ): Promise<{ updated: number; amount?: number | null; className?: string }> => {
-    if (!organizationId) return { updated: 0 };
+  ): Promise<SyncPendingTuitionFeesResult> => {
+    if (!organizationId) {
+      return {
+        updated: 0,
+        resolutionStatus: 'unmatched',
+        resolutionReason: 'missing_organization_id',
+      };
+    }
 
     const supabase = assertSupabase();
     const resolvedClassName =
@@ -217,17 +274,50 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       '';
 
     if (!resolvedClassName) {
-      return { updated: 0 };
+      const reason = 'insufficient_context_missing_grade_class_and_age';
+      setTuitionSyncIssue({
+        status: 'unmatched',
+        reason,
+        message: describeTuitionResolution(reason),
+      });
+      logger.warn(TAG, 'Tuition sync skipped due to missing class context', {
+        studentId: targetStudent.id,
+      });
+      return {
+        updated: 0,
+        resolutionStatus: 'unmatched',
+        resolutionReason: reason,
+      };
     }
 
-    const selectedTuitionFee = await resolveSuggestedTuitionFee(
+    const resolution = await resolveSuggestedTuitionFee(
       organizationId,
       targetStudent,
       resolvedClassName,
     );
-    if (!selectedTuitionFee) {
-      return { updated: 0, className: resolvedClassName };
+    if (resolution.status !== 'matched' || !resolution.fee) {
+      const issueStatus = resolution.status === 'ambiguous' ? 'ambiguous' : 'unmatched';
+      const issueMessage = describeTuitionResolution(resolution.reason, resolvedClassName);
+      setTuitionSyncIssue({
+        status: issueStatus,
+        reason: resolution.reason,
+        message: issueMessage,
+        className: resolvedClassName,
+      });
+      logger.warn(TAG, 'Tuition sync unresolved', {
+        studentId: targetStudent.id,
+        className: resolvedClassName,
+        resolution,
+      });
+      return {
+        updated: 0,
+        className: resolvedClassName,
+        resolutionStatus: resolution.status,
+        resolutionReason: resolution.reason,
+      };
     }
+    setTuitionSyncIssue(null);
+    const selectedTuitionFee = resolution.fee;
 
     const { data: feeRows, error: feesError } = await supabase
       .from('student_fees')
@@ -263,7 +353,19 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       .map((row: any) => row.id as string);
 
     if (!eligibleFeeIds.length) {
-      return { updated: 0, className: resolvedClassName, amount: Number(selectedTuitionFee.amount) };
+      logger.info(TAG, 'Tuition sync found no eligible fee rows', {
+        studentId: targetStudent.id,
+        className: resolvedClassName,
+        feeId: selectedTuitionFee.id,
+        amount: Number(selectedTuitionFee.amount),
+      });
+      return {
+        updated: 0,
+        className: resolvedClassName,
+        amount: Number(selectedTuitionFee.amount),
+        resolutionStatus: 'matched',
+        resolutionReason: resolution.reason,
+      };
     }
 
     const nowIso = new Date().toISOString();
@@ -284,10 +386,21 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
       ),
     );
 
+    logger.info(TAG, 'Tuition sync updated fee rows', {
+      studentId: targetStudent.id,
+      className: resolvedClassName,
+      feeId: selectedTuitionFee.id,
+      amount: normalizedAmount,
+      updatedCount: eligibleFeeIds.length,
+      resolutionReason: resolution.reason,
+    });
+
     return {
       updated: eligibleFeeIds.length,
       amount: normalizedAmount,
       className: resolvedClassName,
+      resolutionStatus: 'matched',
+      resolutionReason: resolution.reason,
     };
   }, [classes, organizationId]);
 
@@ -416,14 +529,16 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
         tuitionAmount: tuitionSync.amount ?? null,
       });
       const tuitionSyncMessage =
-        tuitionSync.updated > 0
+        tuitionSync.resolutionStatus !== 'matched'
+          ? ` Tuition sync skipped: ${describeTuitionResolution(tuitionSync.resolutionReason, tuitionSync.className)}`
+          : tuitionSync.updated > 0
           ? ` Updated ${tuitionSync.updated} unpaid tuition fee entr${tuitionSync.updated === 1 ? 'y' : 'ies'} to match ${tuitionSync.className || 'the class'} pricing.`
           : ' No unpaid tuition fees needed syncing.';
 
       showAlert(
         'Student Updated',
         `Class set to ${newClass?.name || 'new class'} and registration fee updated to R${normalizedFee.toFixed(2)}.${tuitionSyncMessage}`,
-        'success',
+        tuitionSync.resolutionStatus === 'matched' ? 'success' : 'warning',
       );
       setModalType(null); setNewClassId(''); setClassRegistrationFee(''); setClassFeeHint('');
       const refreshed = await loadStudent();
@@ -452,7 +567,13 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
         updatedFeeRows: syncResult.updated,
         tuitionAmount: syncResult.amount ?? null,
       });
-      if (syncResult.updated > 0) {
+      if (syncResult.resolutionStatus !== 'matched') {
+        showAlert(
+          syncResult.resolutionStatus === 'ambiguous' ? 'Ambiguous Fee Setup' : 'Fee Setup Needs Review',
+          describeTuitionResolution(syncResult.resolutionReason, syncResult.className),
+          'warning',
+        );
+      } else if (syncResult.updated > 0) {
         showAlert(
           'Tuition Synced',
           `Updated ${syncResult.updated} unpaid tuition fee entr${syncResult.updated === 1 ? 'y' : 'ies'} to ${syncResult.className || 'class'} pricing.`,
@@ -818,6 +939,7 @@ export function useStudentFeeActions(params: StudentFeeActionsParams): StudentFe
     adjustAmount, setAdjustAmount, adjustReason, setAdjustReason,
     newClassId, setNewClassId, classRegistrationFee, setClassRegistrationFee,
     classFeeHint, setClassFeeHint, loadingSuggestedFee, canSubmitClassCorrection,
+    tuitionSyncIssue, clearTuitionSyncIssue,
     handleWaiveFee, handleAdjustFee, handleChangeClass, handleUpdateEnrollmentDate, handleDeactivateStudent,
     handleMarkPaid, handleMarkUnpaid, handleReceiptAction, handleSyncTuitionFeesToClass, handleSetRegistrationPaidStatus, prefillRegistrationFeeForClass,
   };

@@ -9,7 +9,7 @@
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Alert, Platform } from 'react-native';
 import type { Assignment } from '@/lib/models/Assignment';
 import type { Submission } from '@/lib/models/Submission';

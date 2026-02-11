@@ -42,5 +42,7 @@ export {
   getSecureDatabase,
 } from './audit';
 
-// Re-export types from existing types.ts for compatibility
-export * from './types';
+// Legacy compatibility aliases from old types.ts (System B)
+// These map the old role names to actual database roles
+/** @deprecated Use Role from constants.ts instead */
+export type RoleId = 'super_admin' | 'principal' | 'principal_admin' | 'teacher' | 'parent' | 'student';

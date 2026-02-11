@@ -148,8 +148,8 @@ export function useDashAI(options: UseDashAIOptions): UseDashAIReturn {
     const instance = dashInstance || (await initializeDash());
     if (!instance) return null;
     
-    // Check quota
-    const hasQuota = await checkQuota('homework_help');
+    // Check quota using actual service type
+    const hasQuota = await checkQuota('chat_message');
     if (!hasQuota) return null;
     
     setIsLoading(true);

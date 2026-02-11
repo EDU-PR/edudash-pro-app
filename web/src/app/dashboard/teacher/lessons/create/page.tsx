@@ -6,7 +6,21 @@ import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { Sparkles, BookOpen, Clock, Users, Target, Lightbulb, Save, Wand2 } from 'lucide-react';
+import { AlertCircle, BookOpen, CheckCircle2, Clock, Lightbulb, Save, Sparkles, Target, Wand2 } from 'lucide-react';
+import { splitTextareaLines } from '@/lib/utils/lessonContent';
+
+const PRINCIPAL_ROLES = ['principal', 'principal_admin', 'admin', 'super_admin', 'superadmin'];
+
+interface GeneratedLesson {
+  title: string;
+  content: string;
+  subject: string;
+  topic: string;
+  gradeLevel: string;
+  duration: number;
+  objectives: string;
+  generatedAt: string;
+}
 
 function CreateLessonPageInner() {
   const router = useRouter();
@@ -16,6 +30,8 @@ function CreateLessonPageInner() {
   const [authLoading, setAuthLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const quickDefaultsApplied = useRef(false);
   
   // Form state
@@ -24,7 +40,7 @@ function CreateLessonPageInner() {
   const [gradeLevel, setGradeLevel] = useState('');
   const [duration, setDuration] = useState('30');
   const [objectives, setObjectives] = useState('');
-  const [generatedLesson, setGeneratedLesson] = useState<any>(null);
+  const [generatedLesson, setGeneratedLesson] = useState<GeneratedLesson | null>(null);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -72,6 +88,8 @@ function CreateLessonPageInner() {
     }
 
     setGenerating(true);
+    setSaveError(null);
+    setSaveSuccess(null);
     try {
       // Call AI Edge Function to generate lesson plan
       const audienceLabel = isPreschool ? 'preschool/early childhood' : 'school';
@@ -111,8 +129,8 @@ Format the response in clear sections with practical, age-appropriate activities
 
       setGeneratedLesson({
         title: `${topic} - ${gradeLevel}`,
-        content: data.content,
-        subject,
+        content: String(data?.content || ''),
+        subject: subject || 'General',
         topic,
         gradeLevel,
         duration: parseInt(duration),
@@ -129,41 +147,84 @@ Format the response in clear sections with practical, age-appropriate activities
 
   const handleSaveLesson = async () => {
     if (!generatedLesson) return;
+    if (!userId) {
+      setSaveError('You must be signed in to save a lesson.');
+      return;
+    }
 
     setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
     try {
-      // Get user's profile (profiles-first architecture)
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, preschool_id')
-        .eq('id', userId)
-        .maybeSingle();
+      const role = String(profile?.role || '').toLowerCase();
+      const canPublishDirectly = PRINCIPAL_ROLES.includes(role);
+      const schoolId = profile?.organizationId || profile?.preschoolId || null;
 
-      if (!profile) throw new Error('Profile not found');
+      const contentText = String(generatedLesson.content || '').trim();
+      const firstMeaningfulLine = contentText
+        .split('\n')
+        .map((line: string) => line.trim())
+        .find((line: string) => line && !line.startsWith('#') && !line.match(/^\d+\./));
 
-      // Save to lessons table (adapt to your schema)
-      // const { error } = await supabase
-      //   .from('lessons')
-      //   .insert({
-      //     teacher_id: userId,
-      //     preschool_id: profile.preschool_id,
-      //     title: generatedLesson.title,
-      //     content: generatedLesson.content,
-      //     subject: generatedLesson.subject,
-      //     topic: generatedLesson.topic,
-      //     grade_level: generatedLesson.gradeLevel,
-      //     duration_minutes: generatedLesson.duration,
-      //     objectives: generatedLesson.objectives,
-      //     created_at: new Date().toISOString(),
-      //   });
+      const safeDuration = Number.isFinite(Number(generatedLesson.duration))
+        ? Math.max(10, Math.min(180, Math.round(Number(generatedLesson.duration))))
+        : 30;
 
-      // if (error) throw error;
+      const objectivesList = splitTextareaLines(
+        String(generatedLesson.objectives || objectives || ''),
+      );
 
-      alert('Lesson plan saved successfully!');
-      router.push('/dashboard/teacher/lessons');
+      const lessonPayload = {
+        teacher_id: userId,
+        preschool_id: schoolId,
+        title: String(generatedLesson.title || `${topic} - ${gradeLevel}`).trim(),
+        short_description: (firstMeaningfulLine || `${topic} lesson for ${gradeLevel}`).slice(0, 220),
+        description: (firstMeaningfulLine || `${topic} lesson for ${gradeLevel}`).slice(0, 800),
+        content: contentText || null,
+        subject: String(generatedLesson.subject || subject || 'General').trim() || 'General',
+        age_group: String(generatedLesson.gradeLevel || gradeLevel || 'All ages').trim() || 'All ages',
+        duration_minutes: safeDuration,
+        objectives: objectivesList.length > 0 ? objectivesList : null,
+        materials_needed: null as string | null,
+        is_ai_generated: true,
+        is_public: false,
+        language: 'en',
+        status: canPublishDirectly ? 'active' : 'draft',
+      };
+
+      const { data: insertedLesson, error: insertError } = await supabase
+        .from('lessons')
+        .insert(lessonPayload)
+        .select('id')
+        .single();
+
+      if (insertError) throw insertError;
+      if (!insertedLesson?.id) throw new Error('Lesson was created but no lesson ID was returned.');
+
+      if (!canPublishDirectly && schoolId) {
+        const { error: approvalError } = await supabase
+          .from('lesson_approvals')
+          .insert({
+            lesson_id: insertedLesson.id,
+            preschool_id: schoolId,
+            submitted_by: userId,
+            status: 'pending',
+          });
+
+        if (approvalError) {
+          // Do not block lesson creation if approval record fails.
+          console.warn('[CreateLessonPage] lesson_approvals insert failed:', approvalError.message);
+        }
+      }
+
+      setSaveSuccess(canPublishDirectly
+        ? 'Lesson saved and published successfully.'
+        : 'Lesson saved as draft and submitted for approval.');
+
+      router.push(`/dashboard/teacher/lessons/${insertedLesson.id}`);
     } catch (error) {
       console.error('Error saving lesson:', error);
-      alert('Failed to save lesson plan. Please try again.');
+      setSaveError(error instanceof Error ? error.message : 'Failed to save lesson plan. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -203,6 +264,24 @@ Format the response in clear sections with practical, age-appropriate activities
             </div>
           )}
         </div>
+
+        {saveError && (
+          <div className="section">
+            <div className="card p-md border border-red-500/40 bg-red-950/20 text-red-200 flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 mt-0.5" />
+              <span>{saveError}</span>
+            </div>
+          </div>
+        )}
+
+        {saveSuccess && (
+          <div className="section">
+            <div className="card p-md border border-emerald-500/40 bg-emerald-950/20 text-emerald-200 flex items-start gap-2">
+              <CheckCircle2 className="w-5 h-5 mt-0.5" />
+              <span>{saveSuccess}</span>
+            </div>
+          </div>
+        )}
 
         <div className="section">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

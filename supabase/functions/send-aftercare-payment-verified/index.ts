@@ -9,6 +9,7 @@ import { renderEduDashProEmail } from '../_shared/edudashproEmail.ts';
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY=REDACTED
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
 const FROM_EMAIL = 'EduDash Pro <support@edudashpro.org.za>';
 const SUPPORT_EMAIL = 'support@edudashpro.org.za';
 const WHATSAPP_GROUP_LINK = 'https://chat.whatsapp.com/FQVPXqY6daRLIonPjQqZTv';

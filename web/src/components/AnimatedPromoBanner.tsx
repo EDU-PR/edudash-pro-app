@@ -1,7 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
+
+/**
+ * Safely renders text that may contain <strong> tags as JSX.
+ * Prevents XSS — only <strong> is allowed; all other HTML is treated as text.
+ */
+function renderBoldText(text: string): ReactNode {
+  const parts = text.split(/(<strong>.*?<\/strong>)/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^<strong>(.*?)<\/strong>$/);
+    if (match) return <strong key={i}>{match[1]}</strong>;
+    return part;
+  });
+}
 
 const PROMO_MESSAGES = [
   {
@@ -139,7 +152,9 @@ export function AnimatedPromoBanner() {
           color: 'rgba(255, 255, 255, 0.95)',
           marginBottom: '10px',
           lineHeight: 1.6,
-        }} dangerouslySetInnerHTML={{ __html: message.description }} />
+        }}>
+          {renderBoldText(message.description)}
+        </p>
         
         <p style={{
           fontSize: '14px',

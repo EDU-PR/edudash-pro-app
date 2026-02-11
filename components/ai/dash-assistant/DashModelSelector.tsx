@@ -20,26 +20,31 @@ interface DashModelSelectorProps {
   selectedModel: string;
   setSelectedModel: (modelId: string) => void;
   estimatedRemaining: number | null;
+  preferCompact?: boolean;
   styles: any;
   theme: Theme;
 }
 
 const MODEL_SELECTOR_KEY = '@dash_ai_model_selector_collapsed';
 
-export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
+export const DashModelSelector: React.FC<DashModelSelectorProps> = React.memo(function DashModelSelector({
   models,
   selectedModel,
   setSelectedModel,
   estimatedRemaining,
+  preferCompact = false,
   styles,
   theme,
-}) => {
+}) {
   const hasModels = models.length > 0;
   const selectedModelInfo = useMemo(() => {
     if (!hasModels) return null;
     return models.find(model => model.id === selectedModel) || models[0];
   }, [hasModels, models, selectedModel]);
-  const defaultCollapsed = useMemo(() => Dimensions.get('window').width < 380, []);
+  const defaultCollapsed = useMemo(
+    () => preferCompact || Dimensions.get('window').width < 460,
+    [preferCompact],
+  );
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [toastLabel, setToastLabel] = useState('');
   const toastAnim = useRef(new Animated.Value(0)).current;
@@ -144,8 +149,10 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
       ) : null}
       <View style={[styles.modelSelectorHeader, { marginBottom: collapsed ? 0 : 8 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
-          {selectedModelInfo && (
+          <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>
+            {collapsed ? `Model • ${selectedModelInfo.displayName}` : 'Model'}
+          </Text>
+          {!collapsed && selectedModelInfo && (
             <Text style={[styles.modelSelectorHint, { color: theme.textSecondary }]}>
               {selectedModelInfo.displayName} • {estimatedRemaining === null ? 'Unlimited' : `~${estimatedRemaining} chats left`}
             </Text>
@@ -212,4 +219,4 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
       )}
     </View>
   );
-};
+});

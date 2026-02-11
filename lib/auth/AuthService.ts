@@ -1,7 +1,16 @@
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { assertSupabase } from '../supabase';
 import { getAppConfiguration } from '../config';
-import { RoleId, ROLES } from '../rbac/types';
+
+// Use actual database role values instead of dead System B types
+type RoleId = string;
+const ROLES = {
+  ADMIN: 'super_admin' as const,
+  INSTRUCTOR: 'teacher' as const,
+  STUDENT: 'student' as const,
+  PARENT: 'parent' as const,
+  PRINCIPAL: 'principal' as const,
+};
 
 // Types for authentication
 export interface LoginCredentials {

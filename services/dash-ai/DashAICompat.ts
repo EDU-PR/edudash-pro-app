@@ -264,8 +264,14 @@ export class DashAIAssistant implements IDashAIAssistant {
     }
     return this.core.initialize(initConfig); 
   }
-  dispose(): void { return this.core.dispose(); }
-  cleanup(): void { return this.core.dispose(); } // Alias for dispose
+  dispose = (): void => {
+    if (!this.core) return;
+    this.core.dispose();
+  };
+
+  cleanup = (): void => {
+    this.dispose();
+  }; // Alias for dispose
 
   // Voice - delegate to facade
   async startRecording(): Promise<void> { return this.core.voice.startRecording(); }

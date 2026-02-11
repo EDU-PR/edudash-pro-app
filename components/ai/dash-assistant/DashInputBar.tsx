@@ -48,7 +48,7 @@ interface DashInputBarProps {
   onQuickAction?: (text: string) => void;
 }
 
-export const DashInputBar: React.FC<DashInputBarProps> = ({
+export const DashInputBar: React.FC<DashInputBarProps> = React.memo(function DashInputBar({
   inputRef,
   inputText,
   setInputText,
@@ -71,7 +71,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onOpenTools,
   onRemoveAttachment,
   onQuickAction,
-}) => {
+}) {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
   const orbSize = screenWidth < 360 ? 42 : screenWidth < 400 ? 46 : 48;
@@ -449,4 +449,4 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
       </View>
     </View>
   );
-};
+});

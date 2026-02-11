@@ -314,9 +314,9 @@ export async function canUseAI(
     const result = await checkAIQuota(serviceType, userId, requestedUnits);
     return result.allowed;
   } catch (error) {
-    // On error, assume allowed (server-side will handle final enforcement)
-    console.warn('Error checking AI quota, assuming allowed:', error);
-    return true;
+    // On error, deny (fail-closed) — server-side will also deny
+    console.warn('Error checking AI quota, denying request:', error);
+    return false;
   }
 }
 

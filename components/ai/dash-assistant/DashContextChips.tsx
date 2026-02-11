@@ -18,12 +18,12 @@ interface DashContextChipsProps {
   theme: Theme;
 }
 
-export const DashContextChips: React.FC<DashContextChipsProps> = ({
+export const DashContextChips: React.FC<DashContextChipsProps> = React.memo(function DashContextChips({
   chips,
   contextHint,
   styles,
   theme,
-}) => {
+}) {
   if (chips.length === 0 && !contextHint) return null;
 
   return (
@@ -45,4 +45,4 @@ export const DashContextChips: React.FC<DashContextChipsProps> = ({
       )}
     </>
   );
-};
+});

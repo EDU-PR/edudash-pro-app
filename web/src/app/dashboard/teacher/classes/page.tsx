@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTeacherDashboard } from '@/lib/hooks/teacher/useTeacherDashboard';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
-import { Users, UserCheck, ClipboardList, MessageCircle, Plus } from 'lucide-react';
+import { Users, UserCheck, ClipboardList, Plus } from 'lucide-react';
 
 export default function TeacherClassesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
@@ -22,6 +23,19 @@ export default function TeacherClassesPage() {
   const userEmail = profile?.email;
   const userName = profile?.firstName;
   const preschoolName = profile?.preschoolName;
+  const role = String(profile?.role || '').toLowerCase();
+  const canCreateClass = ['principal', 'principal_admin', 'admin', 'super_admin', 'superadmin'].includes(role);
+  const rawQuery = (searchParams.get('q') || '').trim();
+  const query = rawQuery.toLowerCase();
+
+  const filteredClasses = useMemo(() => {
+    if (!query) return classes;
+    return classes.filter((cls) => {
+      const name = String(cls.name || '').toLowerCase();
+      const grade = String(cls.grade || '').toLowerCase();
+      return name.includes(query) || grade.includes(query);
+    });
+  }, [classes, query]);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -61,35 +75,52 @@ export default function TeacherClassesPage() {
               <h1 className="h1">My Classes</h1>
               <p className="muted">Manage your classes and students</p>
             </div>
-            <button 
-              onClick={() => router.push('/dashboard/teacher/classes/create')}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">New Class</span>
-            </button>
+            {canCreateClass && (
+              <button 
+                onClick={() => router.push('/dashboard/teacher/classes/create')}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center gap-2 shadow-lg"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Class</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {classes.length === 0 ? (
+        {filteredClasses.length === 0 ? (
           <div className="section">
             <div className="card p-md text-center py-16">
               <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-white mb-2">No Classes Yet</h3>
-              <p className="text-gray-400 mb-6">You don't have any classes assigned yet</p>
-              <button 
-                onClick={() => router.push('/dashboard/teacher/classes/create')}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg font-semibold transition-all duration-200 inline-flex items-center gap-2"
-              >
-                <Plus className="w-5 h-5" />
-                Create Your First Class
-              </button>
+              <h3 className="text-xl font-semibold text-white mb-2">
+                {rawQuery ? 'No Matching Classes' : 'No Classes Yet'}
+              </h3>
+              <p className="text-gray-400 mb-6">
+                {rawQuery
+                  ? `No classes matched "${rawQuery}".`
+                  : "You don't have any classes assigned yet"}
+              </p>
+              {canCreateClass ? (
+                <button 
+                  onClick={() => router.push('/dashboard/teacher/classes/create')}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg font-semibold transition-all duration-200 inline-flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Your First Class
+                </button>
+              ) : (
+                <p className="text-sm text-gray-500">Ask your principal/admin to create classes for this school.</p>
+              )}
             </div>
           </div>
         ) : (
           <div className="section">
+            {rawQuery && (
+              <p className="muted" style={{ marginBottom: 12 }}>
+                Showing {filteredClasses.length} result{filteredClasses.length === 1 ? '' : 's'} for "{rawQuery}".
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {classes.map((cls) => (
+              {filteredClasses.map((cls) => (
                 <div
                   key={cls.id}
                   className="card p-md hover:shadow-xl transition-all duration-200 cursor-pointer group hover:border-blue-500/50"

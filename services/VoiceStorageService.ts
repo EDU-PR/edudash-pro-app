@@ -5,7 +5,7 @@
  * for playback. Supports compression and metadata tracking.
  */
 
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';

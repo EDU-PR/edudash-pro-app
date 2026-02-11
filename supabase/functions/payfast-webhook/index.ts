@@ -201,6 +201,20 @@ Deno.serve(async (req) => {
     const seats = pfData.custom_int1 ? parseInt(pfData.custom_int1, 10) : 1;
     const subscriptionToken = pfData.token || null;
     
+    // Verify payment amount matches expected amount
+    if (paymentId) {
+      const { data: txRecord } = await supabase
+        .from('payment_transactions')
+        .select('amount')
+        .eq('id', paymentId)
+        .single();
+
+      if (txRecord?.amount && parseFloat(pfData.amount_gross || '0') < txRecord.amount) {
+        console.error('[payfast-webhook] Amount mismatch: received', pfData.amount_gross, 'expected', txRecord.amount);
+        return new Response('Amount mismatch', { status: 400 });
+      }
+    }
+
     // Update payment transaction record
     const { error: txUpdateError } = await supabase
       .from('payment_transactions')

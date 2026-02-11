@@ -15,13 +15,25 @@
  * - [ ] Quota tracking per capability (e.g., API calls/month)
  */
 
-import type { CapabilityTier } from '@/lib/tiers';
+import {
+  getCapabilityTier,
+  normalizeTierName,
+  type CapabilityTier,
+} from '@/lib/tiers';
 
 /**
  * Available subscription tiers in ascending order of features.
  * Re-exported from the canonical tier system in `@/lib/tiers`.
  */
 export type Tier = CapabilityTier;
+
+/**
+ * Normalize any product/raw tier string (school_pro, teacher_pro, premium, pro, etc.)
+ * into the 4-level capability tier used by this module.
+ */
+export function normalizeCapabilityTier(tier: Tier | string | null | undefined): Tier {
+  return getCapabilityTier(normalizeTierName(String(tier || 'free')));
+}
 
 /**
  * Granular capability identifiers for feature gating
@@ -384,8 +396,9 @@ export interface CapabilityMetadata {
  * }
  * ```
  */
-export function hasCapability(tier: Tier, capability: DashCapability): boolean {
-  const capabilities = CAPABILITY_MATRIX[tier];
+export function hasCapability(tier: Tier | string, capability: DashCapability): boolean {
+  const normalizedTier = normalizeCapabilityTier(tier);
+  const capabilities = CAPABILITY_MATRIX[normalizedTier];
   if (!capabilities) return false;
   return capabilities.includes(capability);
 }
@@ -402,8 +415,8 @@ export function hasCapability(tier: Tier, capability: DashCapability): boolean {
  * console.log(capabilities); // ['chat.basic', 'chat.streaming', ...]
  * ```
  */
-export function getCapabilities(tier: Tier): readonly DashCapability[] {
-  return CAPABILITY_MATRIX[tier] || [];
+export function getCapabilities(tier: Tier | string): readonly DashCapability[] {
+  return CAPABILITY_MATRIX[normalizeCapabilityTier(tier)] || [];
 }
 
 /**
@@ -446,16 +459,17 @@ export function getRequiredTier(capability: DashCapability): Tier | null {
  * // Returns capabilities only available in premium, not in basic
  * ```
  */
-export function getExclusiveCapabilities(tier: Tier): DashCapability[] {
+export function getExclusiveCapabilities(tier: Tier | string): DashCapability[] {
   const tiers: Tier[] = ['free', 'starter', 'premium', 'enterprise'];
-  const tierIndex = tiers.indexOf(tier);
+  const normalizedTier = normalizeCapabilityTier(tier);
+  const tierIndex = tiers.indexOf(normalizedTier);
   
   if (tierIndex === 0) {
-    return [...CAPABILITY_MATRIX[tier]];
+    return [...CAPABILITY_MATRIX[normalizedTier]];
   }
   
   const lowerTier = tiers[tierIndex - 1];
-  const currentCapabilities = new Set(CAPABILITY_MATRIX[tier]);
+  const currentCapabilities = new Set(CAPABILITY_MATRIX[normalizedTier]);
   const lowerCapabilities = new Set(CAPABILITY_MATRIX[lowerTier]);
   
   return Array.from(currentCapabilities).filter(cap => !lowerCapabilities.has(cap));
@@ -475,9 +489,9 @@ export function getExclusiveCapabilities(tier: Tier): DashCapability[] {
  * }
  * ```
  */
-export function compareTiers(tier1: Tier, tier2: Tier): number {
+export function compareTiers(tier1: Tier | string, tier2: Tier | string): number {
   const tiers: Tier[] = ['free', 'starter', 'premium', 'enterprise'];
-  return tiers.indexOf(tier1) - tiers.indexOf(tier2);
+  return tiers.indexOf(normalizeCapabilityTier(tier1)) - tiers.indexOf(normalizeCapabilityTier(tier2));
 }
 
 /**
@@ -539,11 +553,12 @@ export class FeatureGatedError extends Error {
  * ```
  */
 export function assertCapability(
-  tier: Tier,
+  tier: Tier | string,
   capability: DashCapability,
   customMessage?: string
 ): void {
-  if (!hasCapability(tier, capability)) {
+  const normalizedTier = normalizeCapabilityTier(tier);
+  if (!hasCapability(normalizedTier, capability)) {
     const requiredTier = getRequiredTier(capability);
     const message = customMessage || 
       `Feature '${capability}' requires ${requiredTier} tier or higher`;
@@ -552,7 +567,7 @@ export function assertCapability(
       message,
       capability,
       requiredTier || 'premium',
-      tier
+      normalizedTier
     );
   }
 }
@@ -574,11 +589,12 @@ export function assertCapability(
  * ```
  */
 export function checkCapabilities(
-  tier: Tier,
+  tier: Tier | string,
   capabilities: DashCapability[]
 ): Record<string, boolean> {
+  const normalizedTier = normalizeCapabilityTier(tier);
   return capabilities.reduce((acc, capability) => {
-    acc[capability] = hasCapability(tier, capability);
+    acc[capability] = hasCapability(normalizedTier, capability);
     return acc;
   }, {} as Record<string, boolean>);
 }
@@ -589,7 +605,7 @@ export function checkCapabilities(
  * @param tier - Tier to get info for
  * @returns Display information for the tier
  */
-export function getTierInfo(tier: Tier): {
+export function getTierInfo(tier: Tier | string): {
   id: Tier;
   name: string;
   color: string;
@@ -602,7 +618,8 @@ export function getTierInfo(tier: Tier): {
     enterprise: { name: 'Enterprise', color: '#007AFF', order: 3 },
   };
 
+  const normalizedTier = normalizeCapabilityTier(tier);
   const fallback = tiers.free;
-  const info = tiers[tier] || fallback;
-  return { id: (tiers[tier] ? tier : 'free'), ...info };
+  const info = tiers[normalizedTier] || fallback;
+  return { id: (tiers[normalizedTier] ? normalizedTier : 'free'), ...info };
 }

@@ -9,6 +9,7 @@ import {
   type DashCapability,
   CAPABILITY_MATRIX,
   hasCapability,
+  normalizeCapabilityTier,
   getCapabilities,
   getRequiredTier,
   getExclusiveCapabilities,
@@ -20,6 +21,23 @@ import {
 } from '../capabilities';
 
 describe('Capability System', () => {
+  describe('normalizeCapabilityTier', () => {
+    it('should normalize canonical school/teacher tiers to capability tiers', () => {
+      expect(normalizeCapabilityTier('school_starter')).toBe('starter');
+      expect(normalizeCapabilityTier('school_premium')).toBe('premium');
+      expect(normalizeCapabilityTier('school_pro')).toBe('premium');
+      expect(normalizeCapabilityTier('teacher_pro')).toBe('premium');
+      expect(normalizeCapabilityTier('school_enterprise')).toBe('enterprise');
+    });
+
+    it('should normalize legacy shorthand tiers', () => {
+      expect(normalizeCapabilityTier('pro')).toBe('premium');
+      expect(normalizeCapabilityTier('premium')).toBe('premium');
+      expect(normalizeCapabilityTier('enterprise')).toBe('enterprise');
+      expect(normalizeCapabilityTier('starter')).toBe('starter');
+    });
+  });
+
   describe('hasCapability', () => {
     it('should return true for capabilities available in tier', () => {
       expect(hasCapability('free', 'chat.basic')).toBe(true);
@@ -40,6 +58,12 @@ describe('Capability System', () => {
       tiers.forEach(tier => {
         expect(hasCapability(tier, 'chat.basic')).toBe(true);
       });
+    });
+
+    it('should allow premium-equivalent capabilities for pro/school_pro tiers', () => {
+      expect(hasCapability('pro', 'exam.pastpapers')).toBe(true);
+      expect(hasCapability('school_pro', 'exam.pastpapers')).toBe(true);
+      expect(hasCapability('teacher_pro', 'insights.learning')).toBe(true);
     });
   });
 

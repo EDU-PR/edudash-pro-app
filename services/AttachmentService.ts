@@ -8,10 +8,10 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import * as LegacyFileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as Crypto from 'expo-crypto';
 import { Platform, Alert } from 'react-native';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { assertSupabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 import { DashAttachment, DashAttachmentKind } from '@/services/dash-ai/types';
 import { base64ToUint8Array } from '@/lib/utils/base64';
@@ -62,10 +62,14 @@ function createImageAttachment(
   asset: ImagePicker.ImagePickerAsset,
   fallbackName: string
 ): DashAttachment {
+  const mimeType = asset.mimeType && asset.mimeType.startsWith('image/')
+    ? asset.mimeType
+    : 'image/jpeg';
+
   return {
     id: `attach_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     name: asset.fileName || fallbackName,
-    mimeType: 'image/jpeg',
+    mimeType,
     size: asset.fileSize || 0,
     bucket: 'attachments',
     storagePath: '',
@@ -106,6 +110,70 @@ async function ensureLocalUploadUri(uri: string, fallbackName?: string): Promise
   const targetPath = `${cacheRoot}dash-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   await FileSystem.copyAsync({ from: normalized, to: targetPath });
   return targetPath;
+}
+
+function sanitizeAttachmentName(name: string): string {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return `file_${Date.now()}.bin`;
+
+  // Keep extension while removing problematic path/URL characters.
+  const safe = trimmed
+    .replace(/[\/\\]/g, '_')
+    .replace(/[\s]+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '');
+
+  const collapsed = safe.replace(/_+/g, '_');
+  if (!collapsed) return `file_${Date.now()}.bin`;
+  if (!collapsed.includes('.')) return `${collapsed}.bin`;
+  return collapsed;
+}
+
+function encodeStoragePathForUrl(path: string): string {
+  return path
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+}
+
+async function compressImageForUploadFallback(
+  uri: string,
+  maxBytes: number,
+): Promise<{ uri: string; size: number; mimeType: string }> {
+  const compressionSteps = [
+    { width: 1600, quality: 0.8 },
+    { width: 1280, quality: 0.74 },
+    { width: 1024, quality: 0.68 },
+    { width: 768, quality: 0.6 },
+    { width: 640, quality: 0.54 },
+    { width: 512, quality: 0.5 },
+  ];
+
+  let currentUri = uri;
+  let bestSize = Number.POSITIVE_INFINITY;
+
+  for (const step of compressionSteps) {
+    const result = await manipulateAsync(
+      currentUri,
+      [{ resize: { width: step.width } }],
+      { compress: step.quality, format: SaveFormat.JPEG },
+    );
+    const info = await FileSystem.getInfoAsync(result.uri);
+    const nextSize = info.exists ? (info.size || 0) : 0;
+    if (nextSize > 0) {
+      bestSize = Math.min(bestSize, nextSize);
+    }
+    currentUri = result.uri;
+    if (nextSize > 0 && nextSize <= maxBytes) {
+      return { uri: currentUri, size: nextSize, mimeType: 'image/jpeg' };
+    }
+  }
+
+  if (!Number.isFinite(bestSize)) {
+    const fallbackInfo = await FileSystem.getInfoAsync(currentUri);
+    bestSize = fallbackInfo.exists ? (fallbackInfo.size || 0) : 0;
+  }
+
+  return { uri: currentUri, size: bestSize, mimeType: 'image/jpeg' };
 }
 
 /**
@@ -356,8 +424,10 @@ export async function uploadAttachment(
 
     // Generate storage path
     const timestamp = Date.now();
-    const fileName = `${timestamp}_${attachment.name}`;
+    const safeName = sanitizeAttachmentName(attachment.name || 'attachment');
+    const fileName = `${timestamp}_${safeName}`;
     const storagePath = `${user.id}/${conversationId}/${fileName}`;
+    let uploadContentType = attachment.mimeType || 'application/octet-stream';
     
     // Update attachment with storage path
     const updatedAttachment: DashAttachment = {
@@ -376,7 +446,7 @@ export async function uploadAttachment(
       const { error: uploadError } = await supabase.storage
         .from('attachments')
         .upload(storagePath, blob, {
-          contentType: attachment.mimeType,
+          contentType: uploadContentType,
           upsert: false,
         });
       if (uploadError) {
@@ -405,14 +475,15 @@ export async function uploadAttachment(
               size: fileSize,
               mimeType: attachment.mimeType,
             });
-            const endpoint = `${supabaseUrl}/storage/v1/object/attachments/${storagePath}`;
-            const response = await LegacyFileSystem.uploadAsync(endpoint, uploadUri, {
+            const endpointPath = encodeStoragePathForUrl(storagePath);
+            const endpoint = `${supabaseUrl}/storage/v1/object/attachments/${endpointPath}`;
+            const response = await FileSystem.uploadAsync(endpoint, uploadUri, {
               httpMethod: 'POST',
-              uploadType: LegacyFileSystem.FileSystemUploadType.BINARY_CONTENT,
+              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
               headers: {
                 Authorization: `Bearer ${accessToken}`,
                 apikey: supabaseAnonKey,
-                'content-type': attachment.mimeType,
+                'content-type': uploadContentType,
                 'x-upsert': 'false',
               },
             });
@@ -435,32 +506,55 @@ export async function uploadAttachment(
       }
 
       if (!binaryUploaded) {
-        if (fileSize > MAX_MOBILE_BASE64_FALLBACK_SIZE) {
-          console.warn('[upload_oom_guard] Blocking mobile base64 fallback for large attachment', {
-            storagePath,
-            size: fileSize,
-            max: MAX_MOBILE_BASE64_FALLBACK_SIZE,
-          });
-          throw new Error('Image too large for analysis/upload, please retake with lower resolution.');
+        let fallbackUri = uploadUri;
+        let fallbackSize = fileSize;
+
+        if (fallbackSize > MAX_MOBILE_BASE64_FALLBACK_SIZE && attachment.kind === 'image') {
+          try {
+            const compressed = await compressImageForUploadFallback(uploadUri, MAX_MOBILE_BASE64_FALLBACK_SIZE);
+            fallbackUri = compressed.uri;
+            fallbackSize = compressed.size;
+            uploadContentType = compressed.mimeType || uploadContentType;
+          } catch (compressionError) {
+            console.warn('[upload_image_compress_fail] Failed to compress image for fallback upload', {
+              storagePath,
+              error: compressionError,
+            });
+          }
         }
 
-        const base64Data = await FileSystem.readAsStringAsync(uploadUri, { encoding: 'base64' });
+        if (fallbackSize > MAX_MOBILE_BASE64_FALLBACK_SIZE) {
+          console.warn('[upload_oom_guard] Blocking mobile base64 fallback for large attachment', {
+            storagePath,
+            size: fallbackSize,
+            max: MAX_MOBILE_BASE64_FALLBACK_SIZE,
+          });
+          const tooLargeMessage = attachment.kind === 'image'
+            ? 'Image too large for analysis/upload, please retake with lower resolution.'
+            : 'File is too large to upload right now. Please use a smaller file.';
+          throw new Error(tooLargeMessage);
+        }
+
+        const base64Data = await FileSystem.readAsStringAsync(fallbackUri, { encoding: 'base64' });
         const fileData = base64ToUint8Array(base64Data);
         const { error: uploadError } = await supabase.storage
           .from('attachments')
           .upload(storagePath, fileData, {
-            contentType: attachment.mimeType,
+            contentType: uploadContentType,
             upsert: false,
           });
 
         if (uploadError) {
           throw new Error(`Upload failed: ${uploadError.message}`);
         }
+
+        updatedAttachment.size = fallbackSize || updatedAttachment.size;
       }
     }
 
     // Update status
     updatedAttachment.status = 'uploaded';
+    updatedAttachment.mimeType = uploadContentType;
     updatedAttachment.uploadProgress = 100;
     
     if (onProgress) {

@@ -404,7 +404,11 @@ export class DashAIClient {
           },
         };
 
-        const toolResultMessages: Array<{ role: string; content: string; tool_use_id?: string }> = [];
+        // Build proper Anthropic-format tool_use blocks for the assistant message
+        const assistantToolUseBlocks: Array<{ type: string; id: string; name: string; input: any }> = [];
+        // Build proper Anthropic-format tool_result blocks (one user message with all results)
+        const toolResultBlocks: Array<{ type: string; tool_use_id: string; content: string; is_error?: boolean }> = [];
+
         for (const toolCall of currentBatch) {
           try {
             const result = await unifiedToolRegistry.execute(
@@ -420,10 +424,16 @@ export class DashAIClient {
               success: result.success,
               trace_id: result.trace_id || traceId,
             });
-            toolResultMessages.push({
-              role: 'user',
-              content: `[Tool Result for ${toolCall.name}]: ${typeof output === 'string' ? output : JSON.stringify(output)}`,
+            assistantToolUseBlocks.push({
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.name,
+              input: toolCall.input || {},
+            });
+            toolResultBlocks.push({
+              type: 'tool_result',
               tool_use_id: toolCall.id,
+              content: typeof output === 'string' ? output : JSON.stringify(output),
             });
           } catch (toolError: any) {
             const message = toolError?.message || 'Unknown tool execution error';
@@ -434,22 +444,30 @@ export class DashAIClient {
               success: false,
               trace_id: traceId,
             });
-            toolResultMessages.push({
-              role: 'user',
-              content: `[Tool Result for ${toolCall.name}]: Error - ${message}`,
+            assistantToolUseBlocks.push({
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.name,
+              input: toolCall.input || {},
+            });
+            toolResultBlocks.push({
+              type: 'tool_result',
               tool_use_id: toolCall.id,
+              content: `Error: ${message}`,
+              is_error: true,
             });
           }
         }
 
-        if (toolResultMessages.length === 0) {
+        if (toolResultBlocks.length === 0) {
           break;
         }
 
+        // Use Anthropic-native message format: assistant with tool_use blocks, then user with tool_result blocks
         continuationMessages = [
           ...continuationMessages,
-          { role: 'assistant', content: assistantContent || 'I used the following tools to help you.' },
-          ...toolResultMessages,
+          { role: 'assistant', content: assistantToolUseBlocks },
+          { role: 'user', content: toolResultBlocks },
         ];
 
         try {

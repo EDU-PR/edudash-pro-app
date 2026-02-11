@@ -3,7 +3,7 @@
 
 import ExcelJS from 'exceljs';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import * as Print from 'expo-print';
 import { Alert } from 'react-native';
 import { Buffer } from 'buffer';

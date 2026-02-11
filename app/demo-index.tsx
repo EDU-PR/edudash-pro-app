@@ -16,6 +16,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 
 export default function DemoIndex() {
+  // Gate: only accessible in development
+  if (!__DEV__) {
+    return null;
+  }
+
   const { theme, isDark } = useTheme();
   const { t } = useTranslation();
 

@@ -1,5 +1,6 @@
 // 🔐 Authentication Demo Screen
 // Interactive showcase of all authentication components
+// PRODUCTION GUARD: Only accessible in development mode
 
 import React from 'react';
 import {
@@ -13,6 +14,12 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+
+if (!__DEV__) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  module.exports = { default: () => null };
+}
+
 import EnhancedSignIn from '../components/auth/EnhancedSignIn';
 import TwoFactorAuth from '../components/auth/TwoFactorAuth';
 import UserProfile from '../components/auth/UserProfile';

@@ -16,10 +16,10 @@ interface DashTypingIndicatorProps {
   loadingStatus: 'uploading' | 'analyzing' | 'thinking' | 'responding' | null;
 }
 
-export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
+export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = React.memo(function DashTypingIndicator({
   isLoading,
   loadingStatus,
-}) => {
+}) {
   const { theme } = useTheme();
   const isActive = isLoading || !!loadingStatus;
   
@@ -134,4 +134,4 @@ export const DashTypingIndicator: React.FC<DashTypingIndicatorProps> = ({
       </View>
     </View>
   );
-};
+});

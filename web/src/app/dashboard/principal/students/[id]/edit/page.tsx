@@ -10,17 +10,31 @@ import { ArrowLeft, Save, User } from 'lucide-react';
 
 interface StudentDetail {
   id: string;
+  student_id: string | null;
   first_name: string;
   last_name: string;
   date_of_birth: string | null;
   gender: string | null;
-  medical_info: string | null;
+  id_number: string | null;
+  home_address: string | null;
+  home_phone: string | null;
+  medical_conditions: string | null;
   allergies: string | null;
+  medication: string | null;
+  notes: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
   status: string;
   enrollment_date: string | null;
   guardian_id: string | null;
   class_id: string | null;
   preschool_id: string;
+  organization_id?: string | null;
+  registration_fee_amount?: number | null;
+  registration_fee_paid?: boolean | null;
+  payment_verified?: boolean | null;
+  payment_date?: string | null;
 }
 
 export default function EditStudentPage() {
@@ -34,10 +48,23 @@ export default function EditStudentPage() {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
+    student_id: '',
+    id_number: '',
     date_of_birth: '',
+    enrollment_date: '',
     gender: '',
-    medical_info: '',
+    home_address: '',
+    home_phone: '',
+    medical_conditions: '',
     allergies: '',
+    medication: '',
+    notes: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relation: '',
+    registration_fee_amount: '',
+    payment_verified: false,
+    payment_date: '',
     status: 'active',
     class_id: '',
   });
@@ -47,6 +74,12 @@ export default function EditStudentPage() {
   const { slug: tenantSlug } = useTenantSlug(userId);
   const preschoolName = profile?.preschoolName;
   const preschoolId = profile?.preschoolId;
+  const tenantId =
+    (profile as any)?.organizationId ||
+    (profile as any)?.organization_id ||
+    (profile as any)?.preschoolId ||
+    (profile as any)?.preschool_id ||
+    preschoolId;
 
   const studentId = params.id as string;
 
@@ -65,7 +98,7 @@ export default function EditStudentPage() {
 
   // Load student and classes
   useEffect(() => {
-    if (!preschoolId || !studentId) return;
+    if (!tenantId || !studentId) return;
 
     const loadData = async () => {
       setLoading(true);
@@ -75,7 +108,7 @@ export default function EditStudentPage() {
           .from('students')
           .select('*')
           .eq('id', studentId)
-          .eq('preschool_id', preschoolId)
+          .or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`)
           .single();
 
         if (studentError || !studentData) {
@@ -87,10 +120,26 @@ export default function EditStudentPage() {
         setFormData({
           first_name: studentData.first_name || '',
           last_name: studentData.last_name || '',
+          student_id: studentData.student_id || '',
+          id_number: studentData.id_number || '',
           date_of_birth: studentData.date_of_birth || '',
+          enrollment_date: studentData.enrollment_date || '',
           gender: studentData.gender || '',
-          medical_info: studentData.medical_info || '',
+          home_address: studentData.home_address || '',
+          home_phone: studentData.home_phone || '',
+          medical_conditions: studentData.medical_conditions || '',
           allergies: studentData.allergies || '',
+          medication: studentData.medication || '',
+          notes: studentData.notes || '',
+          emergency_contact_name: studentData.emergency_contact_name || '',
+          emergency_contact_phone: studentData.emergency_contact_phone || '',
+          emergency_contact_relation: studentData.emergency_contact_relation || '',
+          registration_fee_amount:
+            studentData.registration_fee_amount == null
+              ? ''
+              : Number(studentData.registration_fee_amount).toFixed(2),
+          payment_verified: Boolean(studentData.payment_verified),
+          payment_date: studentData.payment_date || '',
           status: studentData.status || 'active',
           class_id: studentData.class_id || '',
         });
@@ -99,7 +148,7 @@ export default function EditStudentPage() {
         const { data: classesData } = await supabase
           .from('classes')
           .select('id, name')
-          .eq('preschool_id', preschoolId)
+          .or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`)
           .order('name');
 
         if (classesData) {
@@ -113,26 +162,50 @@ export default function EditStudentPage() {
     };
 
     loadData();
-  }, [preschoolId, studentId, supabase]);
+  }, [tenantId, studentId, supabase]);
 
   const handleSave = async () => {
-    if (!student) return;
+    if (!student || !tenantId) return;
 
     setSaving(true);
     try {
+      const registrationFeeRaw = formData.registration_fee_amount.trim();
+      const parsedRegistrationFee = registrationFeeRaw ? Number.parseFloat(registrationFeeRaw) : null;
+      const paymentDate = formData.payment_verified
+        ? (formData.payment_date || new Date().toISOString().split('T')[0])
+        : null;
+
       const { error } = await supabase
         .from('students')
         .update({
+          student_id: formData.student_id || null,
           first_name: formData.first_name,
           last_name: formData.last_name,
+          id_number: formData.id_number || null,
           date_of_birth: formData.date_of_birth || null,
+          enrollment_date: formData.enrollment_date || null,
           gender: formData.gender || null,
-          medical_info: formData.medical_info || null,
+          home_address: formData.home_address || null,
+          home_phone: formData.home_phone || null,
+          medical_conditions: formData.medical_conditions || null,
           allergies: formData.allergies || null,
+          medication: formData.medication || null,
+          notes: formData.notes || null,
+          emergency_contact_name: formData.emergency_contact_name || null,
+          emergency_contact_phone: formData.emergency_contact_phone || null,
+          emergency_contact_relation: formData.emergency_contact_relation || null,
+          registration_fee_amount:
+            parsedRegistrationFee != null && Number.isFinite(parsedRegistrationFee)
+              ? Number(parsedRegistrationFee.toFixed(2))
+              : null,
+          payment_verified: formData.payment_verified,
+          payment_date: paymentDate,
           status: formData.status,
           class_id: formData.class_id || null,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', student.id);
+        .eq('id', student.id)
+        .or(`preschool_id.eq.${tenantId},organization_id.eq.${tenantId}`);
 
       if (error) {
         alert('Error saving student: ' + error.message);
@@ -284,6 +357,43 @@ export default function EditStudentPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Student Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.student_id}
+                    onChange={(e) => setFormData({ ...formData, student_id: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    ID Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.id_number}
+                    onChange={(e) => setFormData({ ...formData, id_number: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
                     Date of Birth
                   </label>
                   <input
@@ -321,6 +431,24 @@ export default function EditStudentPage() {
                   </select>
                 </div>
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                  Enrollment Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.enrollment_date}
+                  onChange={(e) => setFormData({ ...formData, enrollment_date: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -352,6 +480,103 @@ export default function EditStudentPage() {
             </div>
           </div>
 
+          {/* Contact & Emergency */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Contact & Emergency</h3>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                  Home Address
+                </label>
+                <textarea
+                  value={formData.home_address}
+                  onChange={(e) => setFormData({ ...formData, home_address: e.target.value })}
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: 14,
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Home Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.home_phone}
+                    onChange={(e) => setFormData({ ...formData, home_phone: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Emergency Contact Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact_name}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Emergency Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact_phone}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Emergency Relationship
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact_relation}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_relation: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Medical Information */}
           <div className="card">
             <h3 style={{ marginBottom: 16 }}>Medical Information</h3>
@@ -376,11 +601,11 @@ export default function EditStudentPage() {
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
-                  Medical Notes
+                  Medical Conditions
                 </label>
                 <textarea
-                  value={formData.medical_info}
-                  onChange={(e) => setFormData({ ...formData, medical_info: e.target.value })}
+                  value={formData.medical_conditions}
+                  onChange={(e) => setFormData({ ...formData, medical_conditions: e.target.value })}
                   placeholder="Any medical conditions, medications, or special requirements"
                   rows={4}
                   style={{
@@ -392,6 +617,97 @@ export default function EditStudentPage() {
                     resize: 'vertical',
                   }}
                 />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                  Medication
+                </label>
+                <textarea
+                  value={formData.medication}
+                  onChange={(e) => setFormData({ ...formData, medication: e.target.value })}
+                  placeholder="Regular medication details..."
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: 14,
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                  Notes
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="General notes..."
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: 14,
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Information */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Payment Information</h3>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                  Registration Fee Amount
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.registration_fee_amount}
+                  onChange={(e) => setFormData({ ...formData, registration_fee_amount: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500 }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.payment_verified}
+                    onChange={(e) => setFormData({ ...formData, payment_verified: e.target.checked })}
+                  />
+                  Payment Verified
+                </label>
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.payment_date}
+                    onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      fontSize: 14,
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>

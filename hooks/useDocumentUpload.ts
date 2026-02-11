@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Platform, Linking } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';

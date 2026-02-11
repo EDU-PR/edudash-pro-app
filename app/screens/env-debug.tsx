@@ -1,6 +1,11 @@
 import React from 'react'
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native'
 
+// SECURITY: This screen exposes environment variables — production gate required
+if (!__DEV__) {
+  module.exports = { default: () => null };
+}
+
 const keyStatus = (label: string, value?: string) => {
   const present = !!value
   const preview = present ? `${value!.slice(0, 16)}…` : 'MISSING'

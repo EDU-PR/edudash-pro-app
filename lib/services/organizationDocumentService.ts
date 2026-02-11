@@ -5,7 +5,7 @@
 
 import { assertSupabase } from '@/lib/supabase';
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from '@/lib/platform/filesystem';
 import { Platform } from 'react-native';
 
 // ============================================================================
