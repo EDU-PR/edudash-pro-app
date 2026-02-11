@@ -154,6 +154,31 @@ export default function PictureOfProgressScreen() {
               </View>
             </View>
           )}
+          {h.selectedFile ? (
+            <TouchableOpacity
+              style={[
+                styles.fileButton,
+                {
+                  marginTop: 10,
+                  opacity: h.analysisReady ? 1 : 0.7,
+                },
+              ]}
+              onPress={h.analyzePhoto}
+              disabled={!h.analysisReady}
+            >
+              {h.isAnalyzing ? (
+                <EduDashSpinner size="small" color={theme.primary} />
+              ) : (
+                <>
+                  <Ionicons name="sparkles-outline" size={20} color={theme.primary} />
+                  <Text style={styles.fileButtonText}>Analyze Photo</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : null}
+          {h.analysisError ? (
+            <Text style={[styles.helpText, { color: theme.error || '#ef4444' }]}>{h.analysisError}</Text>
+          ) : null}
           <Text style={styles.helpText}>📸 Tip: Take clear, well-lit photos that show your child's work clearly.</Text>
         </View>
 

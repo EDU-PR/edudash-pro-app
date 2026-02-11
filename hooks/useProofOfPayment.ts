@@ -10,8 +10,15 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import {
+  consumePendingCameraResult,
+  launchCameraWithRecovery,
+  normalizeMediaUri,
+} from '@/lib/utils/cameraRecovery';
 import { inferFeeCategoryCode } from '@/lib/utils/feeUtils';
 import type { FeeCategoryCode } from '@/types/finance';
+
+const POP_PAYMENT_CAMERA_CONTEXT = 'pop_proof_of_payment';
 
 type ShowAlert = (cfg: {
   title: string;
@@ -67,6 +74,27 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
 
   useEffect(() => { setCategoryCode(autoCategoryCode); }, [autoCategoryCode]);
 
+  const setFileFromImageAsset = useCallback((asset: ImagePicker.ImagePickerAsset) => {
+    setSelectedFile({
+      uri: normalizeMediaUri(asset.uri),
+      name: asset.fileName || `payment_receipt_${Date.now()}.jpg`,
+      size: asset.fileSize,
+      type: asset.type || 'image/jpeg',
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const recovered = await consumePendingCameraResult(POP_PAYMENT_CAMERA_CONTEXT);
+      if (cancelled || !recovered || recovered.canceled || !recovered.assets?.[0]) return;
+      setFileFromImageAsset(recovered.assets[0]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [setFileFromImageAsset]);
+
   const handleImagePicker = useCallback(async () => {
     try {
       const hasPermission = await ensureImageLibraryPermission();
@@ -77,16 +105,37 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
-        quality: 1,
+        quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setSelectedFile({ uri: asset.uri, name: asset.fileName || `payment_receipt_${Date.now()}.jpg`, size: asset.fileSize, type: asset.type || 'image/jpeg' });
+        setFileFromImageAsset(result.assets[0]);
       }
     } catch {
       showAlert({ title: t('common.error'), message: 'Failed to select image' });
     }
-  }, [showAlert, t]);
+  }, [showAlert, t, setFileFromImageAsset]);
+
+  const handleCameraPicker = useCallback(async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        showAlert({ title: t('common.error'), message: 'Camera permission is required to take photos.' });
+        return;
+      }
+      const result = await launchCameraWithRecovery(POP_PAYMENT_CAMERA_CONTEXT, {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.75,
+        exif: false,
+        base64: false,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setFileFromImageAsset(result.assets[0]);
+      }
+    } catch {
+      showAlert({ title: t('common.error'), message: 'Failed to take photo' });
+    }
+  }, [showAlert, t, setFileFromImageAsset]);
 
   const handleDocumentPicker = useCallback(async () => {
     try {
@@ -156,6 +205,6 @@ export function useProofOfPayment(showAlert: ShowAlert, t: (k: string, o?: any) 
     showPaymentMethods, setShowPaymentMethods,
     isUniformPayment, showPaymentForField, autoPaymentForMonth,
     createUpload, validateForm,
-    handleImagePicker, handleDocumentPicker, handleSubmit,
+    handleImagePicker, handleCameraPicker, handleDocumentPicker, handleSubmit,
   };
 }

@@ -48,6 +48,23 @@
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>fnbbanking</string>
+      <string>fnb</string>
+      <string>standardbank</string>
+      <string>absabanking</string>
+      <string>absa</string>
+      <string>nedbankmoneyapp</string>
+      <string>nedbank</string>
+      <string>capitecbank</string>
+      <string>capitec</string>
+      <string>tymebank</string>
+      <string>discoverybank</string>
+      <string>discovery</string>
+      <string>investec</string>
+      <string>africanbank</string>
+    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
       <key>NSAllowsArbitraryLoads</key>

@@ -8,6 +8,7 @@ import {
   View,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
+import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 
 export type HomeworkScanResult = {
   uri: string;
@@ -30,6 +32,12 @@ interface HomeworkScannerProps {
   title?: string;
 }
 
+type HomeworkPreview = {
+  uri: string;
+  width: number;
+  height: number;
+};
+
 export default function HomeworkScanner({
   visible,
   onClose,
@@ -40,7 +48,7 @@ export default function HomeworkScanner({
   const cameraRef = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<HomeworkScanResult | null>(null);
+  const [preview, setPreview] = useState<HomeworkPreview | null>(null);
   const [facing, setFacing] = useState<'front' | 'back'>('back');
 
   const hasCamera = Platform.OS !== 'web';
@@ -56,7 +64,7 @@ export default function HomeworkScanner({
     const initial = await ImageManipulator.manipulateAsync(
       uri,
       [],
-      { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      { compress: 0.88, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
     const cropWidth = Math.floor(initial.width * 0.92);
     const cropHeight = Math.floor(initial.height * 0.88);
@@ -66,15 +74,14 @@ export default function HomeworkScanner({
     const cropped = await ImageManipulator.manipulateAsync(
       initial.uri,
       [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }],
-      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: false }
     );
 
     return {
       uri: cropped.uri,
-      base64: cropped.base64 || '',
       width: cropped.width,
       height: cropped.height,
-    } as HomeworkScanResult;
+    } as HomeworkPreview;
   }, []);
 
   const capture = useCallback(async () => {
@@ -82,8 +89,8 @@ export default function HomeworkScanner({
     setBusy(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.9,
-        base64: true,
+        quality: 0.85,
+        base64: false,
       });
       if (!photo?.uri) return;
       const processed = await autoCropDocument(photo.uri);
@@ -100,11 +107,10 @@ export default function HomeworkScanner({
       const rotated = await ImageManipulator.manipulateAsync(
         preview.uri,
         [{ rotate: 90 }],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG, base64: false }
       );
       setPreview({
         uri: rotated.uri,
-        base64: rotated.base64 || preview.base64,
         width: rotated.width,
         height: rotated.height,
       });
@@ -133,11 +139,25 @@ export default function HomeworkScanner({
     }
   }, [autoCropDocument, busy]);
 
-  const submit = useCallback(() => {
-    if (!preview?.base64) return;
-    onScanned(preview);
-    setPreview(null);
-  }, [onScanned, preview]);
+  const submit = useCallback(async () => {
+    if (!preview?.uri || busy) return;
+    setBusy(true);
+    try {
+      const compressed = await compressImageForAI(preview.uri, 4_000_000);
+      onScanned({
+        uri: compressed.uri,
+        base64: compressed.base64,
+        width: compressed.width,
+        height: compressed.height,
+      });
+      setPreview(null);
+    } catch (error) {
+      console.warn('[upload_oom_guard] Homework scanner compression failed', error);
+      Alert.alert('Image Too Large', 'Image too large for analysis/upload, please retake with lower resolution.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, onScanned, preview]);
 
   const closeAndReset = useCallback(() => {
     setPreview(null);
@@ -334,4 +354,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

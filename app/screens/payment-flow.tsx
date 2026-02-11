@@ -46,13 +46,15 @@ export default function PaymentFlowScreen() {
     bankDetails,
     showUploadModal,
     setShowUploadModal,
-    availableBankApps,
+    bankApps,
     bankHint,
     copiedField,
     formattedAmount,
-    paymentInitiated,
+    launchState,
+    canUploadProof,
     copyToClipboard,
     openBankingApp,
+    confirmManualPayment,
     sharePaymentDetails,
   } = usePaymentFlow({
     feeId,
@@ -66,6 +68,9 @@ export default function PaymentFlowScreen() {
   });
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const uploadButtonLabel = launchState === 'idle' ? 'Complete Step 1 First' : 'Upload Proof of Payment';
+  const manualConfirmLabel =
+    launchState === 'manual_confirmed' ? 'Manual Payment Confirmed' : 'I Paid Manually';
 
   useEffect(() => {
     if (openUpload === '1') {
@@ -273,22 +278,47 @@ export default function PaymentFlowScreen() {
           <TouchableOpacity 
             style={[
               styles.secondaryButton, 
-              { borderColor: paymentInitiated ? theme.primary : theme.textSecondary },
-              !paymentInitiated && styles.disabledButton
+              { borderColor: canUploadProof ? theme.primary : theme.textSecondary },
+              !canUploadProof && styles.disabledButton
             ]}
-            onPress={() => paymentInitiated && setShowUploadModal(true)}
-            disabled={!paymentInitiated}
+            onPress={() => canUploadProof && setShowUploadModal(true)}
+            disabled={!canUploadProof}
           >
             <Ionicons 
               name="cloud-upload-outline" 
               size={20} 
-              color={paymentInitiated ? theme.primary : theme.textSecondary} 
+              color={canUploadProof ? theme.primary : theme.textSecondary} 
             />
             <Text style={[
               styles.secondaryButtonText, 
-              { color: paymentInitiated ? theme.primary : theme.textSecondary }
+              { color: canUploadProof ? theme.primary : theme.textSecondary }
             ]}>
-              {paymentInitiated ? 'Upload Proof of Payment' : 'Complete Step 1 First'}
+              {uploadButtonLabel}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.manualConfirmButton,
+              {
+                borderColor: launchState === 'manual_confirmed' ? theme.primary : theme.border,
+                backgroundColor: launchState === 'manual_confirmed' ? theme.primary + '12' : 'transparent',
+              },
+            ]}
+            onPress={confirmManualPayment}
+          >
+            <Ionicons
+              name={launchState === 'manual_confirmed' ? 'checkmark-circle' : 'checkmark-circle-outline'}
+              size={20}
+              color={launchState === 'manual_confirmed' ? theme.primary : theme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.manualConfirmButtonText,
+                { color: launchState === 'manual_confirmed' ? theme.primary : theme.textSecondary },
+              ]}
+            >
+              {manualConfirmLabel}
             </Text>
           </TouchableOpacity>
         </View>
@@ -301,9 +331,9 @@ export default function PaymentFlowScreen() {
         )}
 
         <BankingAppsPanel
-          banks={availableBankApps}
+          banks={bankApps}
           onSelect={(bank) => openBankingApp(bank)}
-          emptyMessage="No banking apps detected. Open your banking app manually and return to upload POP."
+          emptyMessage="No banking apps available in the catalog. Open your banking app manually and return to upload POP."
         />
 
         <Text style={styles.bankHelperText}>

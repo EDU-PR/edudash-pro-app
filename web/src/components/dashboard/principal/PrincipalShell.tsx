@@ -28,6 +28,7 @@ import {
   Shirt,
   ShieldCheck,
   Wallet,
+  ChefHat,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -92,6 +93,7 @@ export function PrincipalShell({
     { href: '/dashboard/principal/campaigns', label: 'Campaigns', icon: Activity },
     { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
     { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },
+    { href: '/dashboard/principal/menu', label: 'Weekly Menu', icon: ChefHat },
     { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
     { href: '/dashboard/principal/teacher-payroll', label: 'Teacher Payroll', icon: Wallet },
     { href: '/dashboard/principal/reports', label: 'Reports', icon: FileText },
@@ -108,6 +110,7 @@ export function PrincipalShell({
         { href: '/dashboard/principal/students', label: 'Students', icon: Users },
         { href: '/dashboard/principal/calendar', label: 'Calendar', icon: CalendarIcon },
         { href: '/dashboard/principal/announcements', label: 'Announcements', icon: Megaphone },
+        { href: '/dashboard/principal/menu', label: 'Weekly Menu', icon: ChefHat },
         { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
         { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
         { href: '/dashboard/principal/settings', label: 'Settings', icon: Settings },

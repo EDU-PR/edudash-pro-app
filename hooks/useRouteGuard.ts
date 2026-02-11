@@ -8,11 +8,13 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { usePathname, router } from 'expo-router';
+import { useLocalSearchParams, usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { isSignOutInProgress } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
+import { isPasswordRecoveryInProgress } from '@/lib/sessionManager';
+import { resolveIsRecoveryFlow } from '@/lib/auth/recoveryFlow';
 import {
   resolveExplicitSchoolTypeFromProfile,
   resolveOrganizationId,
@@ -37,6 +39,7 @@ export const useMobileWebGuard = () => {
  */
 export const useAuthGuard = () => {
   const pathname = usePathname();
+  const searchParams = useLocalSearchParams<Record<string, string | string[]>>();
   const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
   const lastAttemptAt = useRef(0);
@@ -104,6 +107,17 @@ export const useAuthGuard = () => {
         pathname.includes('reset-password') ||
         pathname.includes('auth-callback') ||
         pathname.includes('verify'));
+
+    const isAuthCallbackRoute =
+      typeof pathname === 'string' && pathname.includes('auth-callback');
+
+    const typeParam = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
+    const flowParam = Array.isArray(searchParams.flow) ? searchParams.flow[0] : searchParams.flow;
+    const isRecoveryFlow = resolveIsRecoveryFlow({
+      type: typeParam,
+      flow: flowParam,
+      hasRecoveryFlag: isPasswordRecoveryInProgress(),
+    });
     
     const isProfilesGate =
       typeof pathname === 'string' && pathname.includes('profiles-gate');
@@ -173,6 +187,11 @@ export const useAuthGuard = () => {
       }
       // Don't redirect if on reset-password (user might be changing password)
       if (pathname.includes('reset-password')) {
+        return;
+      }
+
+      // Auth callbacks and recovery flows must remain callback-controlled.
+      if (isAuthCallbackRoute || isRecoveryFlow) {
         return;
       }
 
@@ -289,6 +308,8 @@ export const useAuthGuard = () => {
     // setProfileLoading(false) → effect re-runs → cleanup resets hasNavigated → navigates → pathname changes → loop
   }, [
     pathname,
+    searchParams.type,
+    searchParams.flow,
     user,
     loading,
     profile?.role,

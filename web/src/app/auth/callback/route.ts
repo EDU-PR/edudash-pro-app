@@ -2,12 +2,15 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { resolveIsRecoveryFlow } from '@/lib/auth/recoveryFlow';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
   const next = searchParams.get('next');
   const isSignup = searchParams.get('signup') === 'true';
+  const type = searchParams.get('type');
+  const flow = searchParams.get('flow');
   const error_description = searchParams.get('error_description');
   const error_code = searchParams.get('error');
 
@@ -93,6 +96,16 @@ export async function GET(request: NextRequest) {
           console.error('[Auth Callback] Trial start error:', err);
           // Silent fail - don't block redirect
         }
+      }
+
+      // Role-based redirect
+      const isRecovery = resolveIsRecoveryFlow({
+        type,
+        flow,
+        recoverySentAt: (data.session.user as { recovery_sent_at?: string } | null)?.recovery_sent_at,
+      });
+      if (isRecovery) {
+        return NextResponse.redirect(`${origin}/reset-password`);
       }
 
       // Role-based redirect

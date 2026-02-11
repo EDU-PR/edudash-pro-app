@@ -9,6 +9,10 @@ export type BankApp = {
   marketUrl: string;
 };
 
+export type ResolvedBankApp = BankApp & {
+  detected: boolean;
+};
+
 export const SA_BANKING_APPS: BankApp[] = [
   {
     id: 'fnb',

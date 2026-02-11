@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { resolveIsRecoveryFlow } from '@/lib/auth/recoveryFlow';
 
 /**
  * Auth Callback Page
@@ -91,6 +92,14 @@ function AuthCallbackContent() {
           // Import Supabase client dynamically
           const { createClient } = await import('@/lib/supabase/client');
           const supabase = createClient();
+          const redirectForResolvedSession = (sessionUser?: { recovery_sent_at?: string } | null) => {
+            const isRecovery = resolveIsRecoveryFlow({
+              type: resolvedType,
+              flow,
+              recoverySentAt: sessionUser?.recovery_sent_at,
+            });
+            window.location.href = isRecovery ? '/reset-password' : '/dashboard';
+          };
 
           // Handle PKCE code exchange (for magic links with code parameter)
           if (code) {
@@ -108,18 +117,13 @@ function AuthCallbackContent() {
               return;
             }
 
-            // Redirect based on type
-          if (resolvedType === 'recovery') {
-            window.location.href = '/reset-password';
-          } else {
-            window.location.href = '/dashboard';
-          }
-        } else if (token_hash && resolvedType) {
-          // Magic link or email verification (legacy token_hash flow)
-          const { error: verifyError } = await supabase.auth.verifyOtp({
-            token_hash,
-            type: resolvedType as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
-          });
+            redirectForResolvedSession(data.session.user as { recovery_sent_at?: string } | null);
+          } else if (token_hash && resolvedType) {
+            // Magic link or email verification (legacy token_hash flow)
+            const { data, error: verifyError } = await supabase.auth.verifyOtp({
+              token_hash,
+              type: resolvedType as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
+            });
 
             if (verifyError) {
               setStatus('error');
@@ -127,13 +131,13 @@ function AuthCallbackContent() {
               return;
             }
 
-            // Redirect based on type
-          if (resolvedType === 'recovery') {
-            window.location.href = '/reset-password';
-          } else {
-            window.location.href = '/dashboard';
-          }
-        } else if (token && resolvedType === 'magiclink') {
+            if (data?.session?.user) {
+              redirectForResolvedSession(data.session.user as { recovery_sent_at?: string } | null);
+            } else {
+              const { data: sessionData } = await supabase.auth.getSession();
+              redirectForResolvedSession(sessionData.session?.user as { recovery_sent_at?: string } | null);
+            }
+          } else if (token && resolvedType === 'magiclink') {
             // PKCE token parameter (try verifyOtp)
             const { data, error: verifyError } = await supabase.auth.verifyOtp({
               token_hash: token,
@@ -152,10 +156,10 @@ function AuthCallbackContent() {
               return;
             }
 
-            window.location.href = '/dashboard';
+            redirectForResolvedSession(data.session.user as { recovery_sent_at?: string } | null);
           } else if (hashAccessToken) {
             // OAuth callback
-            const { error: sessionError } = await supabase.auth.setSession({
+            const { data, error: sessionError } = await supabase.auth.setSession({
               access_token: hashAccessToken,
               refresh_token: hashRefreshToken || '',
             });
@@ -166,7 +170,7 @@ function AuthCallbackContent() {
               return;
             }
 
-            window.location.href = '/dashboard';
+            redirectForResolvedSession(data.session?.user as { recovery_sent_at?: string } | null);
           } else {
             setStatus('error');
             setErrorMessage('Invalid authentication callback. Missing required parameters.');

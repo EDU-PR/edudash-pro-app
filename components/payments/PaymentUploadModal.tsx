@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ScrollView, TextInput, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,11 @@ import type { SelectedFile, PaymentChild } from '@/types/payments';
 import { uploadPOPFile, formatFileSize } from '@/lib/popUpload';
 import { assertSupabase } from '@/lib/supabase';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import {
+  consumePendingCameraResult,
+  launchCameraWithRecovery,
+  normalizeMediaUri,
+} from '@/lib/utils/cameraRecovery';
 import { inferFeeCategoryCode } from '@/lib/utils/feeUtils';
 import type { FeeCategoryCode } from '@/types/finance';
 import { SuccessModal } from '@/components/ui/SuccessModal';
@@ -16,6 +21,8 @@ import { ApprovalNotificationService } from '@/services/approvals/ApprovalNotifi
 import { useAlert } from '@/components/ui/StyledAlert';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+
+const PAYMENT_MODAL_CAMERA_CONTEXT = 'payment_upload_modal_camera';
 interface PaymentUploadModalProps {
   visible: boolean;
   onClose: () => void;
@@ -112,6 +119,28 @@ export function PaymentUploadModal({
     prevVisibleRef.current = visible;
   }, [visible, initialReference, initialAmount, paymentForDate, isUniformPayment, autoPaymentForMonth, autoCategoryCode]);
 
+  const setFileFromImageAsset = useCallback((asset: ImagePicker.ImagePickerAsset) => {
+    setSelectedFile({
+      uri: normalizeMediaUri(asset.uri),
+      name: asset.fileName || `payment_proof_${Date.now()}.jpg`,
+      size: asset.fileSize,
+      type: 'image/jpeg',
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    (async () => {
+      const recovered = await consumePendingCameraResult(PAYMENT_MODAL_CAMERA_CONTEXT);
+      if (cancelled || !recovered || recovered.canceled || !recovered.assets?.[0]) return;
+      setFileFromImageAsset(recovered.assets[0]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, setFileFromImageAsset]);
+
   const handleImagePicker = async () => {
     try {
       const hasPermission = await ensureImageLibraryPermission();
@@ -127,16 +156,34 @@ export function PaymentUploadModal({
       });
       
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setSelectedFile({
-          uri: asset.uri,
-          name: asset.fileName || `payment_proof_${Date.now()}.jpg`,
-          size: asset.fileSize,
-          type: 'image/jpeg',
-        });
+        setFileFromImageAsset(result.assets[0]);
       }
     } catch (error) {
       alert.showError('Error', 'Failed to select image');
+    }
+  };
+
+  const handleCameraPicker = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (permission.status !== 'granted') {
+        alert.showWarning('Permission Required', 'Camera permission is required.');
+        return;
+      }
+
+      const result = await launchCameraWithRecovery(PAYMENT_MODAL_CAMERA_CONTEXT, {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.75,
+        exif: false,
+        base64: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setFileFromImageAsset(result.assets[0]);
+      }
+    } catch {
+      alert.showError('Error', 'Failed to capture image');
     }
   };
 
@@ -391,6 +438,10 @@ export function PaymentUploadModal({
           <Text style={styles.modalLabel}>Select File *</Text>
           {!selectedFile ? (
             <View style={styles.filePickerRow}>
+              <TouchableOpacity style={styles.filePickerButton} onPress={handleCameraPicker}>
+                <Ionicons name="camera" size={24} color={theme.primary} />
+                <Text style={styles.filePickerText}>Camera</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.filePickerButton} onPress={handleImagePicker}>
                 <Ionicons name="image" size={24} color={theme.primary} />
                 <Text style={styles.filePickerText}>Gallery</Text>

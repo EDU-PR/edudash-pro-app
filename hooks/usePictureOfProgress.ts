@@ -7,13 +7,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Platform, Animated } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { router } from 'expo-router';
 import { useCreatePOPUpload, CreatePOPUploadData } from '@/hooks/usePOPUploads';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import {
+  consumePendingCameraResult,
+  launchCameraWithRecovery,
+  normalizeMediaUri,
+} from '@/lib/utils/cameraRecovery';
 import ProfileImageService from '@/services/ProfileImageService';
 import { PictureOfProgressAI, ImageAnalysisResult } from '@/services/PictureOfProgressAI';
 import { useCelebration } from '@/hooks/useCelebration';
+
+const POP_PROGRESS_CAMERA_CONTEXT = 'pop_picture_of_progress';
+const POP_PROGRESS_ANALYSIS_MAX_BASE64 = 4_000_000;
 export interface SelectedFile {
   uri: string;
   name: string;
@@ -53,6 +61,7 @@ export function usePictureOfProgress(showAlert: ShowAlert, t: (k: string) => str
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [showMilestoneAlert, setShowMilestoneAlert] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   // Animations
   const [celebrationScale] = useState(new Animated.Value(1));
   const [milestoneOpacity] = useState(new Animated.Value(0));
@@ -88,23 +97,76 @@ export function usePictureOfProgress(showAlert: ShowAlert, t: (k: string) => str
       }
     }
   }, [description, subject]);
-  // Vision analysis
+
+  const setFileFromAsset = useCallback((asset: ImagePicker.ImagePickerAsset) => {
+    setSelectedFile({
+      uri: normalizeMediaUri(asset.uri),
+      name: asset.fileName || `progress_${Date.now()}.jpg`,
+      size: asset.fileSize,
+      type: asset.type || 'image/jpeg',
+    });
+  }, []);
+
   useEffect(() => {
-    if (!selectedFile?.uri || Platform.OS === 'web') return;
     let cancelled = false;
     (async () => {
-      try {
-        setIsAnalyzing(true);
-        const b64 = await FileSystem.readAsStringAsync(selectedFile.uri, { encoding: FileSystem.EncodingType.Base64 });
-        if (cancelled) return;
-        const result = await PictureOfProgressAI.analyzeImage(b64, description, subject);
-        if (cancelled) return;
-        setAiSuggestions(result);
-        if (result.suggestedTags?.length) setSuggestedTags(prev => [...new Set([...prev, ...result.suggestedTags])]);
-        if (result.caption && !description.trim()) setDescription(result.caption);
-      } catch {} finally { if (!cancelled) setIsAnalyzing(false); }
+      const recovered = await consumePendingCameraResult(POP_PROGRESS_CAMERA_CONTEXT);
+      if (cancelled || !recovered || recovered.canceled || !recovered.assets?.[0]) return;
+      setFileFromAsset(recovered.assets[0]);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
+  }, [setFileFromAsset]);
+
+  useEffect(() => {
+    setAiSuggestions(null);
+    setAnalysisError(null);
+  }, [selectedFile?.uri, description, showAlert, subject, t]);
+
+  const analyzePhoto = useCallback(async () => {
+    if (!selectedFile?.uri || Platform.OS === 'web') return;
+
+    try {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+
+      const compressed = await ImageManipulator.manipulateAsync(
+        selectedFile.uri,
+        [{ resize: { width: 1280 } }],
+        {
+          compress: 0.7,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+
+      const compressedBase64 = compressed.base64 || '';
+      if (!compressedBase64 || compressedBase64.length > POP_PROGRESS_ANALYSIS_MAX_BASE64) {
+        console.warn('[upload_oom_guard] POP analysis skipped due image payload size', {
+          uri: selectedFile.uri,
+          base64Length: compressedBase64.length,
+        });
+        const message = 'Image too large for analysis/upload, please retake with lower resolution.';
+        setAnalysisError(message);
+        showAlert({ title: t('common.error'), message });
+        return;
+      }
+
+      const result = await PictureOfProgressAI.analyzeImage(compressedBase64, description, subject);
+      setAiSuggestions(result);
+      if (result.suggestedTags?.length) {
+        setSuggestedTags((prev) => [...new Set([...prev, ...result.suggestedTags])]);
+      }
+      if (result.caption && !description.trim()) {
+        setDescription(result.caption);
+      }
+    } catch (error) {
+      console.warn('[usePictureOfProgress] analyzePhoto failed', error);
+      setAnalysisError('Unable to analyze photo right now. You can still submit the upload.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   }, [selectedFile?.uri]);
   const triggerMilestoneAnimation = useCallback(() => {
     Animated.sequence([
@@ -118,18 +180,28 @@ export function usePictureOfProgress(showAlert: ShowAlert, t: (k: string) => str
   const handleImagePicker = useCallback(async () => {
     try {
       if (!(await ensureImageLibraryPermission())) { showAlert({ title: t('common.error'), message: 'Camera roll permission is required to select images.' }); return; }
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 1 });
-      if (!r.canceled && r.assets[0]) setSelectedFile({ uri: r.assets[0].uri, name: r.assets[0].fileName || `progress_${Date.now()}.jpg`, size: r.assets[0].fileSize, type: r.assets[0].type || 'image/jpeg' });
+      const r = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.78,
+      });
+      if (!r.canceled && r.assets[0]) setFileFromAsset(r.assets[0]);
     } catch { showAlert({ title: t('common.error'), message: 'Failed to select image' }); }
-  }, [showAlert, t]);
+  }, [showAlert, t, setFileFromAsset]);
   const handleCameraPicker = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') { showAlert({ title: t('common.error'), message: 'Camera permission is required to take photos.' }); return; }
-      const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
-      if (!r.canceled && r.assets[0]) setSelectedFile({ uri: r.assets[0].uri, name: r.assets[0].fileName || `progress_${Date.now()}.jpg`, size: r.assets[0].fileSize, type: r.assets[0].type || 'image/jpeg' });
+      const r = await launchCameraWithRecovery(POP_PROGRESS_CAMERA_CONTEXT, {
+        allowsEditing: true,
+        quality: 0.72,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        exif: false,
+        base64: false,
+      });
+      if (!r.canceled && r.assets[0]) setFileFromAsset(r.assets[0]);
     } catch { showAlert({ title: t('common.error'), message: 'Failed to take photo' }); }
-  }, [showAlert, t]);
+  }, [showAlert, t, setFileFromAsset]);
   const validateForm = useCallback((): string[] => {
     const errs: string[] = [];
     if (!title.trim()) errs.push('Title is required');
@@ -182,14 +254,20 @@ export function usePictureOfProgress(showAlert: ShowAlert, t: (k: string) => str
       showAlert({ title: t('common.error'), message: error instanceof Error ? error.message : 'Upload failed' });
     }
   }, [validateForm, showAlert, t, params, selectedFile, suggestedTags, description, subject, title, achievementLevel, learningArea, createUpload, celebrate]);
-  const clearFile = useCallback(() => { setSelectedFile(null); setDisplayUri(null); }, []);
+  const clearFile = useCallback(() => {
+    setSelectedFile(null);
+    setDisplayUri(null);
+    setAiSuggestions(null);
+    setAnalysisError(null);
+  }, []);
+  const analysisReady = Boolean(selectedFile?.uri) && !isAnalyzing;
   return {
     title, setTitle, description, setDescription, subject, achievementLevel, learningArea, setLearningArea,
     selectedFile, displayUri, showSubjects, setShowSubjects, showAchievements, setShowAchievements,
-    aiSuggestions, suggestedTags, showMilestoneAlert, isAnalyzing,
+    aiSuggestions, suggestedTags, showMilestoneAlert, isAnalyzing, analysisError, analysisReady,
     celebrationScale, milestoneOpacity, createUpload,
     handleSubjectSelect, handleAchievementSelect,
-    handleImagePicker, handleCameraPicker, validateForm, handleSubmit, clearFile,
+    handleImagePicker, handleCameraPicker, analyzePhoto, validateForm, handleSubmit, clearFile,
     lightHaptic,
   };
 }

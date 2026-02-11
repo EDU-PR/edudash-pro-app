@@ -9,15 +9,23 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { Platform, Alert } from 'react-native';
-import { assertSupabase } from '@/lib/supabase';
+import { assertSupabase, supabaseAnonKey, supabaseUrl } from '@/lib/supabase';
 import { DashAttachment, DashAttachmentKind } from '@/services/dash-ai/types';
 import { base64ToUint8Array } from '@/lib/utils/base64';
+import {
+  consumePendingCameraResult,
+  launchCameraWithRecovery,
+  normalizeMediaUri,
+} from '@/lib/utils/cameraRecovery';
 
 // File size limits (in bytes)
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_MOBILE_BASE64_FALLBACK_SIZE = 4 * 1024 * 1024; // 4MB fallback guard
+const DASH_ATTACHMENT_CAMERA_CONTEXT = 'dash_attachment_camera';
 
 // Supported file types
 const SUPPORTED_DOCUMENT_TYPES = [
@@ -49,6 +57,56 @@ const SUPPORTED_AUDIO_TYPES = [
   'audio/ogg',
   'audio/webm',
 ];
+
+function createImageAttachment(
+  asset: ImagePicker.ImagePickerAsset,
+  fallbackName: string
+): DashAttachment {
+  return {
+    id: `attach_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: asset.fileName || fallbackName,
+    mimeType: 'image/jpeg',
+    size: asset.fileSize || 0,
+    bucket: 'attachments',
+    storagePath: '',
+    kind: 'image',
+    status: 'pending',
+    uri: normalizeMediaUri(asset.uri),
+    previewUri: normalizeMediaUri(asset.uri),
+    uploadProgress: 0,
+    meta: {
+      width: asset.width,
+      height: asset.height,
+    },
+  };
+}
+
+function resolveAttachmentUri(attachment: DashAttachment): string {
+  return normalizeMediaUri(attachment.uri || attachment.previewUri || '');
+}
+
+function getFileExtensionFromName(name?: string): string {
+  if (!name) return 'bin';
+  const parts = name.split('.');
+  const ext = parts.length > 1 ? parts.pop() : null;
+  return (ext || 'bin').toLowerCase();
+}
+
+async function ensureLocalUploadUri(uri: string, fallbackName?: string): Promise<string> {
+  const normalized = normalizeMediaUri(uri);
+  if (!normalized.startsWith('content://')) {
+    return normalized;
+  }
+
+  const ext = getFileExtensionFromName(fallbackName);
+  const cacheRoot = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+  if (!cacheRoot) {
+    throw new Error('No writable cache directory available for upload.');
+  }
+  const targetPath = `${cacheRoot}dash-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  await FileSystem.copyAsync({ from: normalized, to: targetPath });
+  return targetPath;
+}
 
 /**
  * Pick documents using expo-document-picker
@@ -95,7 +153,8 @@ export async function pickDocuments(): Promise<DashAttachment[]> {
         storagePath: '', // Will be set during upload
         kind: determineAttachmentKind(asset.mimeType || ''),
         status: 'pending',
-        previewUri: asset.uri,
+        uri: normalizeMediaUri(asset.uri),
+        previewUri: normalizeMediaUri(asset.uri),
         uploadProgress: 0,
       };
 
@@ -144,8 +203,8 @@ export async function takePhoto(): Promise<DashAttachment[]> {
       return [];
     }
 
-    // Launch camera
-    const result = await ImagePicker.launchCameraAsync({
+    // Launch camera with Android process-restart recovery
+    const result = await launchCameraWithRecovery(DASH_ATTACHMENT_CAMERA_CONTEXT, {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
       allowsEditing: true,
@@ -178,22 +237,8 @@ export async function takePhoto(): Promise<DashAttachment[]> {
         continue;
       }
 
-      const attachment: DashAttachment = {
-        id: `attach_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: `photo_${Date.now()}.jpg`,
-        mimeType: 'image/jpeg',
-        size: fileInfo.exists ? (fileInfo.size || 0) : 0,
-        bucket: 'attachments',
-        storagePath: '', // Will be set during upload
-        kind: 'image',
-        status: 'pending',
-        previewUri: asset.uri,
-        uploadProgress: 0,
-        meta: {
-          width: asset.width,
-          height: asset.height,
-        },
-      };
+      const attachment = createImageAttachment(asset, `photo_${Date.now()}.jpg`);
+      attachment.size = fileInfo.exists ? (fileInfo.size || 0) : attachment.size;
 
       attachments.push(attachment);
     }
@@ -202,6 +247,17 @@ export async function takePhoto(): Promise<DashAttachment[]> {
   } catch (error) {
     console.error('Failed to take photo:', error);
     throw new Error('Failed to take photo. Please try again.');
+  }
+}
+
+export async function recoverPendingPhoto(): Promise<DashAttachment[]> {
+  try {
+    const result = await consumePendingCameraResult(DASH_ATTACHMENT_CAMERA_CONTEXT);
+    if (!result || result.canceled || !result.assets?.length) return [];
+    return result.assets.map((asset) => createImageAttachment(asset, `photo_${Date.now()}.jpg`));
+  } catch (error) {
+    console.warn('[camera_recovered] Failed to recover pending Dash attachment photo', error);
+    return [];
   }
 }
 
@@ -245,22 +301,8 @@ export async function pickImages(): Promise<DashAttachment[]> {
         continue;
       }
 
-      const attachment: DashAttachment = {
-        id: `attach_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: asset.fileName || `image_${Date.now()}.jpg`,
-        mimeType: 'image/jpeg', // Default for images
-        size: fileInfo.exists ? (fileInfo.size || 0) : 0,
-        bucket: 'attachments',
-        storagePath: '', // Will be set during upload
-        kind: 'image',
-        status: 'pending',
-        previewUri: asset.uri,
-        uploadProgress: 0,
-        meta: {
-          width: asset.width,
-          height: asset.height,
-        },
-      };
+      const attachment = createImageAttachment(asset, `image_${Date.now()}.jpg`);
+      attachment.size = fileInfo.exists ? (fileInfo.size || 0) : attachment.size;
 
       attachments.push(attachment);
     }
@@ -324,34 +366,97 @@ export async function uploadAttachment(
       status: 'uploading',
     };
 
-    // Read file content
-    let fileData: any;
-    
-    if (Platform.OS === 'web') {
-      // For web, use fetch to get blob
-      const response = await fetch(attachment.previewUri || '');
-      fileData = await response.blob();
-    } else {
-      // For mobile, read as base64 and convert to Uint8Array
-      const base64Data = await FileSystem.readAsStringAsync(
-        attachment.previewUri || '',
-        { encoding: 'base64' }
-      );
-      
-      const uint8Array = base64ToUint8Array(base64Data);
-      fileData = uint8Array;
+    if (onProgress) {
+      onProgress(10);
     }
 
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('attachments')
-      .upload(storagePath, fileData, {
-        contentType: attachment.mimeType,
-        upsert: false,
-      });
+    if (Platform.OS === 'web') {
+      const response = await fetch(resolveAttachmentUri(attachment));
+      const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage
+        .from('attachments')
+        .upload(storagePath, blob, {
+          contentType: attachment.mimeType,
+          upsert: false,
+        });
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+    } else {
+      const sourceUri = resolveAttachmentUri(attachment);
+      if (!sourceUri) {
+        throw new Error('Attachment file path is missing.');
+      }
+      const uploadUri = await ensureLocalUploadUri(sourceUri, attachment.name);
+      const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+      const fileSize = fileInfo.exists ? (fileInfo.size || attachment.size || 0) : (attachment.size || 0);
+      if (!fileInfo.exists) {
+        throw new Error('Attachment file could not be found.');
+      }
 
-    if (uploadError) {
-      throw new Error(`Upload failed: ${uploadError.message}`);
+      let binaryUploaded = false;
+      if (supabaseUrl && supabaseAnonKey) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+          if (accessToken) {
+            console.log('[upload_binary_start] Starting binary attachment upload', {
+              storagePath,
+              size: fileSize,
+              mimeType: attachment.mimeType,
+            });
+            const endpoint = `${supabaseUrl}/storage/v1/object/attachments/${storagePath}`;
+            const response = await LegacyFileSystem.uploadAsync(endpoint, uploadUri, {
+              httpMethod: 'POST',
+              uploadType: LegacyFileSystem.FileSystemUploadType.BINARY_CONTENT,
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                apikey: supabaseAnonKey,
+                'content-type': attachment.mimeType,
+                'x-upsert': 'false',
+              },
+            });
+            if (response.status >= 200 && response.status < 300) {
+              binaryUploaded = true;
+            } else {
+              console.warn('[upload_binary_fail] Binary attachment upload failed', {
+                storagePath,
+                status: response.status,
+                body: response.body?.slice(0, 200),
+              });
+            }
+          }
+        } catch (error) {
+          console.warn('[upload_binary_fail] Binary attachment upload threw', {
+            storagePath,
+            error,
+          });
+        }
+      }
+
+      if (!binaryUploaded) {
+        if (fileSize > MAX_MOBILE_BASE64_FALLBACK_SIZE) {
+          console.warn('[upload_oom_guard] Blocking mobile base64 fallback for large attachment', {
+            storagePath,
+            size: fileSize,
+            max: MAX_MOBILE_BASE64_FALLBACK_SIZE,
+          });
+          throw new Error('Image too large for analysis/upload, please retake with lower resolution.');
+        }
+
+        const base64Data = await FileSystem.readAsStringAsync(uploadUri, { encoding: 'base64' });
+        const fileData = base64ToUint8Array(base64Data);
+        const { error: uploadError } = await supabase.storage
+          .from('attachments')
+          .upload(storagePath, fileData, {
+            contentType: attachment.mimeType,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+      }
     }
 
     // Update status
@@ -365,13 +470,6 @@ export async function uploadAttachment(
     return updatedAttachment;
   } catch (error) {
     console.error('Failed to upload attachment:', error);
-    
-    const failedAttachment: DashAttachment = {
-      ...attachment,
-      status: 'failed',
-      uploadProgress: 0,
-    };
-    
     throw error;
   }
 }

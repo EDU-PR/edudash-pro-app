@@ -9,7 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import type { SchoolBankDetails } from '@/types/payments';
-import { SA_BANKING_APPS, type BankApp } from '@/lib/payments/bankingApps';
+import { SA_BANKING_APPS, type BankApp, type ResolvedBankApp } from '@/lib/payments/bankingApps';
 
 // Lazy load IntentLauncher - prevents crashes if the module isn't available in OTA builds
 let IntentLauncher: typeof import('expo-intent-launcher') | null = null;
@@ -19,6 +19,9 @@ try {
 } catch {
   logger.debug('usePaymentFlow', 'expo-intent-launcher not available (needs rebuild)');
 }
+
+type LaunchState = 'idle' | 'launched' | 'manual_confirmed';
+type LaunchMethod = 'package' | 'scheme';
 
 interface PaymentFlowParams {
   feeId?: string;
@@ -36,30 +39,40 @@ interface UsePaymentFlowReturn {
   bankDetails: SchoolBankDetails | null;
   showUploadModal: boolean;
   setShowUploadModal: (show: boolean) => void;
-  availableBankApps: BankApp[];
+  bankApps: ResolvedBankApp[];
   bankHint: string | null;
   copiedField: string | null;
   formattedAmount: string;
-  paymentInitiated: boolean; // Track if user has clicked "Open Banking App"
+  launchState: LaunchState;
+  canUploadProof: boolean;
   copyToClipboard: (text: string, field: string) => Promise<void>;
   openBankingApp: (bank?: BankApp) => Promise<void>;
+  confirmManualPayment: () => void;
   sharePaymentDetails: () => Promise<void>;
 }
 
+type LaunchAttemptResult = {
+  opened: boolean;
+  method?: LaunchMethod;
+};
+
 export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn {
   const { preschoolId, preschoolName, feeAmount, feeDescription, studentCode } = params;
-  
+
   const [loading, setLoading] = useState(true);
   const [bankDetails, setBankDetails] = useState<SchoolBankDetails | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [availableBankApps, setAvailableBankApps] = useState<BankApp[]>([]);
+  const [bankApps, setBankApps] = useState<ResolvedBankApp[]>(
+    SA_BANKING_APPS.map((bank) => ({ ...bank, detected: false }))
+  );
   const [bankHint, setBankHint] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [paymentInitiated, setPaymentInitiated] = useState(false); // Track if banking app was opened
+  const [launchState, setLaunchState] = useState<LaunchState>('idle');
 
   // Parse amount from params
   const parsedAmount = feeAmount ? parseFloat(feeAmount) : 0;
   const formattedAmount = `R ${parsedAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`;
+  const canUploadProof = launchState !== 'idle';
 
   // Fetch school bank details
   useEffect(() => {
@@ -69,28 +82,42 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
   useEffect(() => {
     let cancelled = false;
 
-    const resolveAvailableBanks = async () => {
-      const checks = await Promise.all(
+    const resolveBankDetection = async () => {
+      const resolvedBanks = await Promise.all(
         SA_BANKING_APPS.map(async (bank) => {
+          let detected = false;
+
           for (const scheme of bank.schemes) {
             try {
               const canOpen = await Linking.canOpenURL(scheme);
-              if (canOpen) return true;
+              if (canOpen) {
+                detected = true;
+                break;
+              }
             } catch (error) {
               logger.warn('usePaymentFlow', `Scheme check failed for ${scheme}`, error);
             }
           }
-          return false;
+
+          return {
+            ...bank,
+            detected,
+          };
         })
       );
 
-      const available = SA_BANKING_APPS.filter((_, index) => checks[index]);
       if (!cancelled) {
-        setAvailableBankApps(available);
+        const detectedCount = resolvedBanks.filter((bank) => bank.detected).length;
+        logger.debug('usePaymentFlow', 'Bank detection summary', {
+          total: resolvedBanks.length,
+          detectedCount,
+          undetectedCount: resolvedBanks.length - detectedCount,
+        });
+        setBankApps(resolvedBanks);
       }
     };
 
-    resolveAvailableBanks();
+    resolveBankDetection();
 
     return () => {
       cancelled = true;
@@ -99,19 +126,19 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
 
   const fetchBankDetails = async () => {
     if (!preschoolId) {
-      console.log('[usePaymentFlow] No preschoolId provided, skipping bank details fetch');
+      logger.debug('usePaymentFlow', 'No preschoolId provided, skipping bank details fetch');
       setLoading(false);
       return;
     }
 
-    console.log('[usePaymentFlow] Fetching bank details for preschoolId:', preschoolId);
+    logger.debug('usePaymentFlow', 'Fetching bank details', { preschoolId });
 
     try {
       const supabase = assertSupabase();
-      
+
       // For preschools, the organization_id in organization_bank_accounts IS the preschool_id
       // (preschools use their own ID as the organization_id for bank accounts)
-      
+
       // First try to get primary bank account using preschoolId as organization_id
       const { data: bankAccount, error: bankError } = await supabase
         .from('organization_bank_accounts')
@@ -120,7 +147,10 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
         .eq('is_primary', true)
         .maybeSingle(); // Use maybeSingle to avoid error when no rows found
 
-      console.log('[usePaymentFlow] Primary bank account query result:', { bankAccount, bankError });
+      logger.debug('usePaymentFlow', 'Primary bank account query result', {
+        hasBankAccount: !!bankAccount,
+        hasError: !!bankError,
+      });
 
       if (bankAccount) {
         setBankDetails({
@@ -145,7 +175,10 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
         .eq('is_active', true)
         .limit(1);
 
-      console.log('[usePaymentFlow] Any bank account query result:', { anyAccounts, anyError });
+      logger.debug('usePaymentFlow', 'Any active bank account query result', {
+        count: anyAccounts?.length || 0,
+        hasError: !!anyError,
+      });
 
       if (anyAccounts && anyAccounts.length > 0) {
         const anyAccount = anyAccounts[0];
@@ -164,14 +197,17 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       }
 
       // Final fallback - try organization_payment_methods table
-      const { data: paymentMethod, error: pmError } = await supabase
+      const { data: paymentMethod, error: paymentMethodError } = await supabase
         .from('organization_payment_methods')
         .select('*')
         .eq('organization_id', preschoolId)
         .eq('method_name', 'bank_transfer')
         .maybeSingle();
 
-      console.log('[usePaymentFlow] Payment methods query result:', { paymentMethod, pmError });
+      logger.debug('usePaymentFlow', 'Payment methods query result', {
+        hasPaymentMethod: !!paymentMethod,
+        hasError: !!paymentMethodError,
+      });
 
       if (paymentMethod) {
         setBankDetails({
@@ -182,10 +218,10 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
           branch_code: paymentMethod.branch_code,
         });
       } else {
-        console.log('[usePaymentFlow] No bank details found for preschoolId:', preschoolId);
+        logger.warn('usePaymentFlow', 'No bank details found for school', { preschoolId });
       }
     } catch (error) {
-      console.error('[usePaymentFlow] Error fetching bank details:', error);
+      logger.error('usePaymentFlow', 'Error fetching bank details', error);
     } finally {
       setLoading(false);
     }
@@ -196,12 +232,94 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
       await Clipboard.setStringAsync(text);
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to copy to clipboard');
     }
   }, []);
 
-  const tryOpenBankApp = useCallback(async (bank: BankApp): Promise<boolean> => {
+  const confirmManualPayment = useCallback(() => {
+    setLaunchState((prev) => (prev === 'launched' ? prev : 'manual_confirmed'));
+    setBankHint('Manual payment confirmed. Upload your proof of payment once your transfer is complete.');
+    logger.debug('usePaymentFlow', 'Fallback outcome', { action: 'manual_confirmed' });
+  }, []);
+
+  const openStoreForBank = useCallback(async (bank: BankApp) => {
+    const primaryPackage = bank.packageIds[0];
+
+    try {
+      if (Platform.OS === 'android' && primaryPackage) {
+        await Linking.openURL(`market://details?id=${primaryPackage}`);
+      } else {
+        await Linking.openURL(bank.marketUrl);
+      }
+
+      logger.debug('usePaymentFlow', 'Fallback outcome', {
+        action: 'store',
+        bankId: bank.id,
+      });
+    } catch (error) {
+      logger.warn('usePaymentFlow', `Store deep link failed for ${bank.id}`, error);
+
+      try {
+        await Linking.openURL(bank.marketUrl);
+        logger.debug('usePaymentFlow', 'Fallback outcome', {
+          action: 'store_web',
+          bankId: bank.id,
+        });
+      } catch (fallbackError) {
+        logger.error('usePaymentFlow', 'Unable to open store fallback', fallbackError);
+      }
+    }
+  }, []);
+
+  const openWebsiteForBank = useCallback(async (bank: BankApp) => {
+    try {
+      await Linking.openURL(bank.fallbackUrl);
+      logger.debug('usePaymentFlow', 'Fallback outcome', {
+        action: 'website',
+        bankId: bank.id,
+      });
+    } catch (error) {
+      logger.error('usePaymentFlow', 'Unable to open bank website fallback', error);
+    }
+  }, []);
+
+  const showBankFallbackOptions = useCallback((bank: BankApp) => {
+    Alert.alert(
+      bank.name,
+      `${bank.name} could not be opened automatically. Choose a fallback option.`,
+      [
+        {
+          text: 'Open Store',
+          onPress: () => {
+            void openStoreForBank(bank);
+          },
+        },
+        {
+          text: 'Open Website',
+          onPress: () => {
+            void openWebsiteForBank(bank);
+          },
+        },
+        {
+          text: 'I paid manually',
+          onPress: confirmManualPayment,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            logger.debug('usePaymentFlow', 'Fallback outcome', {
+              action: 'cancel',
+              bankId: bank.id,
+            });
+          },
+        },
+      ]
+    );
+  }, [confirmManualPayment, openStoreForBank, openWebsiteForBank]);
+
+  const tryOpenBankApp = useCallback(async (bank: BankApp): Promise<LaunchAttemptResult> => {
     if (Platform.OS === 'android' && IntentLauncher) {
       for (const packageName of bank.packageIds) {
         try {
@@ -209,8 +327,7 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
             packageName,
             category: 'android.intent.category.LAUNCHER',
           });
-          logger.debug('usePaymentFlow', `Opened ${bank.name} via IntentLauncher: ${packageName}`);
-          return true;
+          return { opened: true, method: 'package' };
         } catch (error) {
           logger.warn('usePaymentFlow', `IntentLauncher failed for ${packageName}`, error);
         }
@@ -222,45 +339,65 @@ export function usePaymentFlow(params: PaymentFlowParams): UsePaymentFlowReturn 
         const canOpen = await Linking.canOpenURL(scheme);
         if (canOpen) {
           await Linking.openURL(scheme);
-          logger.debug('usePaymentFlow', `Opened ${bank.name} via scheme: ${scheme}`);
-          return true;
+          return { opened: true, method: 'scheme' };
         }
       } catch (error) {
         logger.warn('usePaymentFlow', `Scheme open failed for ${scheme}`, error);
       }
     }
 
-    return false;
+    return { opened: false };
+  }, []);
+
+  const handleLaunchResult = useCallback((bank: BankApp, launchResult: LaunchAttemptResult): boolean => {
+    if (!launchResult.opened || !launchResult.method) {
+      return false;
+    }
+
+    setLaunchState('launched');
+    setBankHint(`${bank.name} opened. Complete payment and upload your proof once done.`);
+    logger.debug('usePaymentFlow', 'Bank launch success', {
+      bankId: bank.id,
+      method: launchResult.method,
+    });
+    return true;
   }, []);
 
   const openBankingApp = useCallback(async (bank?: BankApp) => {
-    // Mark payment as initiated - enables Upload POP button
-    setPaymentInitiated(true);
     setBankHint(null);
 
     if (bank) {
-      const opened = await tryOpenBankApp(bank);
-      if (!opened) {
-        setBankHint(`Could not open ${bank.name}. Please open it manually.`);
+      const launchResult = await tryOpenBankApp(bank);
+      if (!handleLaunchResult(bank, launchResult)) {
+        setBankHint(`Could not open ${bank.name} automatically. Use a fallback option below.`);
+        showBankFallbackOptions(bank);
       }
       return;
     }
 
-    if (availableBankApps.length === 1) {
-      const opened = await tryOpenBankApp(availableBankApps[0]);
-      if (!opened) {
-        setBankHint('We could not open your banking app. Please open it manually.');
+    const detectedBanks = bankApps.filter((entry) => entry.detected);
+
+    if (detectedBanks.length === 1) {
+      const detectedBank = detectedBanks[0];
+      const launchResult = await tryOpenBankApp(detectedBank);
+      if (!handleLaunchResult(detectedBank, launchResult)) {
+        setBankHint(`Could not open ${detectedBank.name} automatically. Use a fallback option below.`);
+        showBankFallbackOptions(detectedBank);
       }
       return;
     }
 
-    if (availableBankApps.length > 1) {
-      setBankHint('Choose your bank below to open it.');
+    if (detectedBanks.length > 1) {
+      logger.debug('usePaymentFlow', 'Multiple detected banking apps', {
+        detectedBankIds: detectedBanks.map((entry) => entry.id),
+      });
+      setBankHint('Choose your bank below to open it. If opening fails, use the fallback options.');
       return;
     }
 
-    setBankHint('No banking apps detected. Please open your banking app manually.');
-  }, [availableBankApps, tryOpenBankApp]);
+    logger.debug('usePaymentFlow', 'No detected banking apps', { totalBanks: bankApps.length });
+    setBankHint('No bank app was detected. Select your bank below and use fallback options if needed.');
+  }, [bankApps, handleLaunchResult, showBankFallbackOptions, tryOpenBankApp]);
 
   const sharePaymentDetails = useCallback(async () => {
     const paymentRef = studentCode || 'N/A';
@@ -284,7 +421,7 @@ Please use the reference number when making payment.`;
         title: 'Payment Details',
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      logger.error('usePaymentFlow', 'Error sharing payment details', error);
     }
   }, [preschoolName, formattedAmount, studentCode, feeDescription, bankDetails]);
 
@@ -293,13 +430,15 @@ Please use the reference number when making payment.`;
     bankDetails,
     showUploadModal,
     setShowUploadModal,
-    availableBankApps,
+    bankApps,
     bankHint,
     copiedField,
     formattedAmount,
-    paymentInitiated,
+    launchState,
+    canUploadProof,
     copyToClipboard,
     openBankingApp,
+    confirmManualPayment,
     sharePaymentDetails,
   };
 }
