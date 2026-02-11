@@ -21,10 +21,13 @@ import {
   Users,
   Calendar,
   Send,
+  ChefHat,
 } from 'lucide-react';
 import { AnnouncementCard } from '@/components/announcements/AnnouncementCard';
 import { CreateAnnouncementModal } from '@/components/announcements/CreateAnnouncementModal';
+import { CreateWeeklyMenuModal } from '@/components/announcements/CreateWeeklyMenuModal';
 import { ViewAnnouncementModal } from '@/components/announcements/ViewAnnouncementModal';
+import { isWeeklyMenuBridgeEnabled } from '@/lib/services/schoolMenuFeatureFlags';
 
 interface Announcement {
   id: string;
@@ -58,8 +61,10 @@ export default function PrincipalAnnouncementsPage() {
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showWeeklyMenuModal, setShowWeeklyMenuModal] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const weeklyMenuBridgeEnabled = isWeeklyMenuBridgeEnabled();
 
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
@@ -210,17 +215,29 @@ export default function PrincipalAnnouncementsPage() {
                 Communicate important updates to your school community
               </p>
             </div>
-            <button
-              className="btn btnPrimary"
-              onClick={() => {
-                setEditingAnnouncement(null);
-                setShowCreateModal(true);
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-            >
-              <Plus className="icon20" />
-              New Announcement
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {weeklyMenuBridgeEnabled && (
+                <button
+                  className="btn btnSecondary"
+                  onClick={() => setShowWeeklyMenuModal(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <ChefHat className="icon18" />
+                  Upload Weekly Menu
+                </button>
+              )}
+              <button
+                className="btn btnPrimary"
+                onClick={() => {
+                  setEditingAnnouncement(null);
+                  setShowCreateModal(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <Plus className="icon20" />
+                New Announcement
+              </button>
+            </div>
           </div>
         </div>
 
@@ -340,6 +357,18 @@ export default function PrincipalAnnouncementsPage() {
           onSave={() => {
             setShowCreateModal(false);
             setEditingAnnouncement(null);
+            loadAnnouncements();
+          }}
+        />
+      )}
+
+      {weeklyMenuBridgeEnabled && showWeeklyMenuModal && preschoolId && userId && (
+        <CreateWeeklyMenuModal
+          preschoolId={preschoolId}
+          authorId={userId}
+          onClose={() => setShowWeeklyMenuModal(false)}
+          onPublished={() => {
+            setShowWeeklyMenuModal(false);
             loadAnnouncements();
           }}
         />

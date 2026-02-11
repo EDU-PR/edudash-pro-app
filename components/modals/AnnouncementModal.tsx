@@ -28,6 +28,7 @@ interface AnnouncementModalProps {
   visible: boolean;
   onClose: () => void;
   onSend: (announcement: AnnouncementData) => void;
+  onOpenWeeklyMenu?: () => void;
 }
 
 export interface AnnouncementData {
@@ -43,6 +44,7 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
   visible,
   onClose,
   onSend,
+  onOpenWeeklyMenu,
 }) => {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
@@ -147,6 +149,15 @@ export const AnnouncementModal: React.FC<AnnouncementModalProps> = ({
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {onOpenWeeklyMenu && (
+            <View style={styles.section}>
+              <TouchableOpacity style={styles.menuShortcutBtn} onPress={onOpenWeeklyMenu}>
+                <Ionicons name="restaurant-outline" size={18} color="#fff" />
+                <Text style={styles.menuShortcutText}>Upload Weekly Menu</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Title Input */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>{t('announcement.title')}</Text>
@@ -354,6 +365,21 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+  },
+  menuShortcutBtn: {
+    backgroundColor: '#0F766E',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  menuShortcutText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   sectionHeader: {
     flexDirection: 'row',

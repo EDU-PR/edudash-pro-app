@@ -144,7 +144,7 @@ export default function ProofOfPaymentScreen() {
           <Text style={styles.fileSectionTitle}>{t('pop.uploadReceipt')} *</Text>
           {!h.selectedFile ? (
             <View style={styles.fileButtons}>
-              <TouchableOpacity style={styles.fileButton} onPress={h.handleImagePicker}><Ionicons name="camera" size={24} color={theme.primary} /><Text style={styles.fileButtonText}>{t('pop.takePhoto')}</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.fileButton} onPress={h.handleCameraPicker}><Ionicons name="camera" size={24} color={theme.primary} /><Text style={styles.fileButtonText}>{t('pop.takePhoto')}</Text></TouchableOpacity>
               <TouchableOpacity style={styles.fileButton} onPress={h.handleDocumentPicker}><Ionicons name="document" size={24} color={theme.primary} /><Text style={styles.fileButtonText}>{t('pop.selectFile')}</Text></TouchableOpacity>
             </View>
           ) : (

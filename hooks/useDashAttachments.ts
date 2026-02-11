@@ -5,12 +5,13 @@
  * Handles picking, uploading, compression, and preview.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { DashAttachment, DashConversation } from '@/services/dash-ai/types';
 import {
   pickDocuments,
   pickImages,
   takePhoto,
+  recoverPendingPhoto,
   uploadAttachment,
 } from '@/services/AttachmentService';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
@@ -64,6 +65,24 @@ export function useDashAttachments(options: UseDashAttachmentsOptions): UseDashA
   const [selectedAttachments, setSelectedAttachments] = useState<DashAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [attachmentProgress, setAttachmentProgress] = useState<Map<string, AttachmentProgress>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const recovered = await recoverPendingPhoto();
+      if (cancelled || recovered.length === 0) return;
+      setSelectedAttachments((prev) => [...prev, ...recovered].slice(0, 10));
+      onShowAlert?.({
+        title: 'Camera Recovery',
+        message: 'Recovered photo from previous camera session.',
+        type: 'info',
+        icon: 'camera-outline',
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onShowAlert]);
 
   // Update attachment progress
   const updateAttachmentProgress = useCallback((

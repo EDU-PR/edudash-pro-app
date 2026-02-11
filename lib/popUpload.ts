@@ -6,8 +6,10 @@
 
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 import { supabase, supabaseAnonKey, supabaseUrl } from './supabase';
 import { decode } from 'base64-arraybuffer';
+import { normalizeMediaUri } from './utils/cameraRecovery';
 
 // Upload types
 export type POPUploadType = 'proof_of_payment' | 'picture_of_progress';
@@ -21,6 +23,8 @@ export const FILE_VALIDATION = {
   maxImageDimension: 2048, // Max width/height for images
   compressionQuality: 0.8,
 };
+
+const MAX_BASE64_FALLBACK_SIZE_BYTES = 4 * 1024 * 1024; // 4MB guard for fallback path
 
 // Storage buckets - matching existing database buckets
 export const STORAGE_BUCKETS = {
@@ -217,6 +221,34 @@ export const compressImageIfNeeded = async (
   }
 };
 
+const getFileExtension = (fileNameOrUri?: string): string => {
+  if (!fileNameOrUri) return 'jpg';
+  const cleaned = fileNameOrUri.split('?')[0];
+  const extension = cleaned.split('.').pop()?.toLowerCase();
+  return extension || 'jpg';
+};
+
+const normalizeUploadUri = async (inputUri: string, fallbackName?: string): Promise<string> => {
+  const normalized = normalizeMediaUri(inputUri);
+  if (!normalized.startsWith('content://')) {
+    return normalized;
+  }
+
+  const cacheRoot = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+  if (!cacheRoot) {
+    throw new Error('No writable cache directory available for upload.');
+  }
+
+  const extension = getFileExtension(fallbackName || inputUri);
+  const target = `${cacheRoot}pop-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+  await FileSystem.copyAsync({
+    from: normalized,
+    to: target,
+  });
+
+  return target;
+};
+
 /**
  * Generate unique file path for storage
  */
@@ -246,9 +278,11 @@ export const uploadPOPFile = async (
 ): Promise<UploadResult> => {
   try {
     console.log('Starting POP file upload:', { uploadType, fileUri, originalFileName });
+
+    const normalizedInputUri = await normalizeUploadUri(fileUri, originalFileName);
     
     // Validate file
-    const validation = await validatePOPFile(fileUri, uploadType);
+    const validation = await validatePOPFile(normalizedInputUri, uploadType);
     if (!validation.isValid) {
       return {
         success: false,
@@ -256,13 +290,13 @@ export const uploadPOPFile = async (
       };
     }
     
-    let uploadUri = fileUri;
+    let uploadUri = normalizedInputUri;
     let finalFileSize = validation.fileSize || 0;
     let finalFileType = validation.fileType || 'unknown';
     
     // Compress image if it's an image and too large
     if (FILE_VALIDATION.allowedImageTypes.includes(finalFileType)) {
-      const compressed = await compressImageIfNeeded(fileUri, finalFileSize);
+      const compressed = await compressImageIfNeeded(normalizedInputUri, finalFileSize);
       if (compressed) {
         uploadUri = compressed.uri;
         finalFileSize = compressed.fileSize;
@@ -275,14 +309,20 @@ export const uploadPOPFile = async (
     const storagePath = generateStorageFilePath(uploadType, userId, studentId, originalFileName);
     const bucket = STORAGE_BUCKETS[uploadType];
 
-    // Prefer direct binary upload using FileSystem for mobile stability
-    // Skip if we only have a content:// URI (uploadAsync can be flaky with content URIs)
-    if (!uploadUri.startsWith('content://') && supabaseUrl && supabaseAnonKey) {
+    // Prefer direct binary upload using FileSystem for mobile stability.
+    if (Platform.OS !== 'web' && supabaseUrl && supabaseAnonKey) {
       try {
         const session = await supabase.auth.getSession();
         const accessToken = session?.data?.session?.access_token;
         if (accessToken) {
           const uploadEndpoint = `${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`;
+          console.log('[upload_binary_start] POP upload binary start', {
+            uploadType,
+            bucket,
+            storagePath,
+            fileType: finalFileType,
+            fileSize: finalFileSize,
+          });
           const uploadResponse = await FileSystem.uploadAsync(uploadEndpoint, uploadUri, {
             httpMethod: 'POST',
             uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
@@ -305,16 +345,34 @@ export const uploadPOPFile = async (
             };
           }
 
-          console.warn('Binary upload failed, falling back to standard upload:', {
+          console.warn('[upload_binary_fail] POP binary upload failed, falling back to standard upload:', {
             status: uploadResponse.status,
             body: uploadResponse.body?.slice(0, 200),
+            storagePath,
           });
         } else {
-          console.warn('No access token available for binary upload, falling back.');
+          console.warn('[upload_binary_fail] No access token available for binary upload, falling back.', {
+            storagePath,
+          });
         }
       } catch (binaryUploadError) {
-        console.warn('Binary upload path failed, falling back:', binaryUploadError);
+        console.warn('[upload_binary_fail] Binary upload path threw, falling back:', binaryUploadError);
       }
+    }
+
+    const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+    const fallbackFileSize = (fileInfo as any)?.size || finalFileSize;
+    if (Platform.OS !== 'web' && fallbackFileSize > MAX_BASE64_FALLBACK_SIZE_BYTES) {
+      console.warn('[upload_oom_guard] Blocking POP base64 fallback due file size', {
+        uploadType,
+        storagePath,
+        fileSize: fallbackFileSize,
+        max: MAX_BASE64_FALLBACK_SIZE_BYTES,
+      });
+      return {
+        success: false,
+        error: 'Image too large for analysis/upload, please retake with lower resolution.',
+      };
     }
     
     // Read file as base64 for upload

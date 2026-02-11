@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { assertSupabase } from '@/lib/supabase';
 import { setPasswordRecoveryInProgress, signOut as signOutSession } from '@/lib/sessionManager';
+import { resolveIsRecoveryFlow } from '@/lib/auth/recoveryFlow';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 import { logger } from '@/lib/logger';
 
@@ -90,27 +91,17 @@ export default function AuthCallback() {
       }
 
       const supabase = await assertSupabase();
-      const recoveryHint =
-        urlStr.includes('type=recovery') ||
-        urlStr.includes('flow=recovery') ||
-        normalizedLocalParams['type'] === 'recovery';
+      const recoveryHint = resolveIsRecoveryFlow({
+        type: normalizedLocalParams['type'],
+        flow: normalizedLocalParams['flow'],
+        hasRecoveryFlag:
+          urlStr.includes('type=recovery') ||
+          urlStr.includes('flow=recovery'),
+      });
       if (recoveryHint) {
         // Set recovery flag early so AuthContext does not auto-route away.
         try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
       }
-
-      /**
-       * Detect a password-recovery session even when Supabase strips the
-       * `type=recovery` query param during PKCE redirect.  The server always
-       * sets `recovery_sent_at` on the user record when a recovery email is
-       * sent, so we can use it as a reliable fallback signal.
-       */
-      const isRecoverySession = (user?: { recovery_sent_at?: string } | null): boolean => {
-        if (!user?.recovery_sent_at) return false;
-        const sentAt = new Date(user.recovery_sent_at).getTime();
-        const oneHourAgo = Date.now() - 60 * 60 * 1000;
-        return sentAt > oneHourAgo;
-      };
 
       const routeToResetPassword = (session: { access_token: string; refresh_token: string }) => {
         const params = new URLSearchParams();
@@ -187,9 +178,15 @@ export default function AuthCallback() {
           if (error) throw error;
 
           const normalizedFlow = (flowType || '').toLowerCase();
-          const isRecovery = normalizedFlow === 'recovery' || recoveryHint;
+          const isRecovery = resolveIsRecoveryFlow({
+            type: flowType,
+            flow: flowType,
+            recoverySentAt: (data.session?.user as { recovery_sent_at?: string } | null)?.recovery_sent_at,
+            hasRecoveryFlag: recoveryHint,
+          });
 
           if (isRecovery) {
+            try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
             const session = data.session;
             if (session?.access_token && session?.refresh_token) {
               setMessage('Opening password reset...');
@@ -296,25 +293,28 @@ export default function AuthCallback() {
           if (debugEnabled) logger.debug('AuthCallback', 'PKCE magic link successful');
 
           // Detect recovery even when Supabase strips the type=recovery param
-          const isRecoveryCodeExchange =
-            type === 'recovery' || isRecoverySession(data.session?.user);
+          const isRecoveryCodeExchange = resolveIsRecoveryFlow({
+            type,
+            flow: normalizedLocalParams['flow'],
+            recoverySentAt: (data.session?.user as { recovery_sent_at?: string } | null)?.recovery_sent_at,
+            hasRecoveryFlag: recoveryHint,
+          });
 
-          if (isRecoveryCodeExchange && type !== 'recovery') {
-            if (debugEnabled) logger.debug('AuthCallback', 'Late-detected recovery via user metadata (recovery_sent_at)');
+          if (isRecoveryCodeExchange && data.session) {
+            if (debugEnabled) logger.debug('AuthCallback', 'Recovery detected - routing to native reset-password');
             try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+            routeToResetPassword(data.session);
+            return;
           }
-          
-          // Give AuthContext time to process the SIGNED_IN event
+
+          if (type === 'email_change' && data.session) {
+            if (debugEnabled) logger.debug('AuthCallback', 'Email change detected - finalizing and signing out');
+            void handleEmailChange(data.session);
+            return;
+          }
+
           setTimeout(() => {
-            if (isRecoveryCodeExchange && data.session) {
-              if (debugEnabled) logger.debug('AuthCallback', 'Recovery type detected - routing to native reset-password');
-              routeToResetPassword(data.session);
-            } else if (type === 'email_change' && data.session) {
-              if (debugEnabled) logger.debug('AuthCallback', 'Email change detected - finalizing and signing out');
-              void handleEmailChange(data.session);
-            } else {
-              router.replace('/profiles-gate');
-            }
+            router.replace('/profiles-gate');
           }, 300);
           
           return;
@@ -370,25 +370,28 @@ export default function AuthCallback() {
           if (debugEnabled) logger.debug('AuthCallback', 'Magic link verification successful');
 
           // Detect recovery even when type param is missing
-          const isRecoveryOtp =
-            type === 'recovery' || isRecoverySession(sessionData.session?.user);
+          const isRecoveryOtp = resolveIsRecoveryFlow({
+            type,
+            flow: normalizedLocalParams['flow'],
+            recoverySentAt: (sessionData.session?.user as { recovery_sent_at?: string } | null)?.recovery_sent_at,
+            hasRecoveryFlag: recoveryHint,
+          });
 
-          if (isRecoveryOtp && type !== 'recovery') {
-            if (debugEnabled) logger.debug('AuthCallback', 'Late-detected recovery via user metadata (recovery_sent_at)');
+          if (isRecoveryOtp && sessionData.session) {
+            if (debugEnabled) logger.debug('AuthCallback', 'Recovery detected - routing to native reset-password');
             try { setPasswordRecoveryInProgress(true); } catch { /* non-fatal */ }
+            routeToResetPassword(sessionData.session);
+            return;
           }
-          
-          // Give AuthContext time to process the SIGNED_IN event
+
+          if (type === 'email_change' && sessionData.session) {
+            if (debugEnabled) logger.debug('AuthCallback', 'Email change detected - finalizing and signing out');
+            void handleEmailChange(sessionData.session);
+            return;
+          }
+
           setTimeout(() => {
-            if (isRecoveryOtp && sessionData.session) {
-              if (debugEnabled) logger.debug('AuthCallback', 'Recovery type detected - routing to native reset-password');
-              routeToResetPassword(sessionData.session);
-            } else if (type === 'email_change' && sessionData.session) {
-              if (debugEnabled) logger.debug('AuthCallback', 'Email change detected - finalizing and signing out');
-              void handleEmailChange(sessionData.session);
-            } else {
-              router.replace('/profiles-gate');
-            }
+            router.replace('/profiles-gate');
           }, 300);
           
           return;

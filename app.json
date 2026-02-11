@@ -34,7 +34,23 @@
           "background-fetch",
           "fetch"
         ],
-        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition."
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
+        "LSApplicationQueriesSchemes": [
+          "fnbbanking",
+          "fnb",
+          "standardbank",
+          "absabanking",
+          "absa",
+          "nedbankmoneyapp",
+          "nedbank",
+          "capitecbank",
+          "capitec",
+          "tymebank",
+          "discoverybank",
+          "discovery",
+          "investec",
+          "africanbank"
+        ]
       },
       "bitcode": false
     },

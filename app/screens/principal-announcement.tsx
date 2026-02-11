@@ -76,6 +76,10 @@ export default function PrincipalAnnouncementScreen() {
         visible={visible}
         onClose={onClose}
         onSend={onSend}
+        onOpenWeeklyMenu={() => {
+          setVisible(false)
+          router.push('/screens/principal-menu')
+        }}
       />
       <AlertModal {...alertProps} />
     </SafeAreaView>

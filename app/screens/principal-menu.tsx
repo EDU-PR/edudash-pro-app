@@ -1,0 +1,466 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from 'react-native';
+import { Stack, router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { extractOrganizationId } from '@/lib/tenant/compat';
+import { MenuParsingService } from '@/lib/services/menuParsingService';
+import { SchoolMenuAnnouncementService } from '@/lib/services/schoolMenuAnnouncementService';
+import { SchoolMenuService } from '@/lib/services/schoolMenuService';
+import type { WeeklyMenuDay, WeeklyMenuDraft } from '@/lib/services/schoolMenu.types';
+import { isWeeklyMenuBridgeEnabled, isWeeklyMenuDedicatedEnabled } from '@/lib/services/schoolMenuFeatureFlags';
+
+function listToText(value: string[]): string {
+  return value.join(', ');
+}
+
+function textToList(value: string): string[] {
+  return value
+    .split(/[\n,;|]/g)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function getCurrentMonday(): string {
+  return SchoolMenuService.startOfWeekMonday(new Date());
+}
+
+interface PickedFile {
+  uri: string;
+  mimeType: string;
+  name: string;
+}
+
+export default function PrincipalMenuScreen() {
+  const { theme } = useTheme();
+  const { user, profile } = useAuth();
+
+  const preschoolId = extractOrganizationId(profile);
+  const weeklyMenuPublishingEnabled = isWeeklyMenuBridgeEnabled() || isWeeklyMenuDedicatedEnabled();
+  const [weekStartDate, setWeekStartDate] = useState(getCurrentMonday());
+  const [draft, setDraft] = useState<WeeklyMenuDraft>(() => SchoolMenuService.buildEmptyWeekDraft(getCurrentMonday()));
+  const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [allowBlankDays, setAllowBlankDays] = useState(false);
+  const [allowIncompleteMeals, setAllowIncompleteMeals] = useState(false);
+  const [parseNeedsReview, setParseNeedsReview] = useState(false);
+  const [confirmParseReview, setConfirmParseReview] = useState(false);
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const blankDays = useMemo(() => {
+    return draft.days.filter((day) => {
+      const notes = (day.notes || '').trim();
+      return day.breakfast.length === 0 && day.lunch.length === 0 && day.snack.length === 0 && notes.length === 0;
+    });
+  }, [draft.days]);
+
+  const incompleteMealDays = useMemo(() => {
+    return draft.days.filter((day) => {
+      const notes = (day.notes || '').trim();
+      const isCompletelyBlank = day.breakfast.length === 0 && day.lunch.length === 0 && day.snack.length === 0 && notes.length === 0;
+      if (isCompletelyBlank) return false;
+      return day.breakfast.length === 0 || day.lunch.length === 0 || day.snack.length === 0;
+    });
+  }, [draft.days]);
+
+  const updateDay = (date: string, patch: Partial<WeeklyMenuDay>) => {
+    setDraft((prev) => ({
+      ...prev,
+      days: prev.days.map((day) => (day.date === date ? { ...day, ...patch } : day)),
+    }));
+  };
+
+  const updateWeekStart = (text: string) => {
+    setWeekStartDate(text);
+    const normalized = SchoolMenuService.startOfWeekMonday(text);
+    setDraft(SchoolMenuService.buildEmptyWeekDraft(normalized));
+    setAllowBlankDays(false);
+    setAllowIncompleteMeals(false);
+    setParseNeedsReview(false);
+    setConfirmParseReview(false);
+  };
+
+  const handlePickFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['image/*', 'application/pdf'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setPickedFile({
+      uri: asset.uri,
+      mimeType: asset.mimeType || 'application/octet-stream',
+      name: asset.name || `menu-${Date.now()}`,
+    });
+    setAllowIncompleteMeals(false);
+    setParseNeedsReview(false);
+    setConfirmParseReview(false);
+  };
+
+  const handleParse = async () => {
+    if (!pickedFile) {
+      Alert.alert('Menu file required', 'Please choose a weekly menu file first.');
+      return;
+    }
+
+    setParsing(true);
+    try {
+      let imageDataUrl: string | undefined;
+      if (pickedFile.mimeType.startsWith('image/')) {
+        const base64 = await FileSystem.readAsStringAsync(pickedFile.uri, { encoding: 'base64' });
+        imageDataUrl = `data:${pickedFile.mimeType};base64,${base64}`;
+      }
+
+      const result = await MenuParsingService.parseWeeklyMenuFromUpload({
+        weekStartDate,
+        mimeType: pickedFile.mimeType,
+        fileName: pickedFile.name,
+        imageDataUrl,
+      });
+
+      setDraft(result.draft);
+      setWeekStartDate(result.draft.week_start_date);
+      setAllowIncompleteMeals(false);
+      setParseNeedsReview(result.lowConfidence);
+      setConfirmParseReview(false);
+
+      if (result.issues.length > 0) {
+        Alert.alert('Parse completed with review needed', result.issues.join('\n'));
+      } else {
+        Alert.alert('Parse complete', 'Review the menu and publish when ready.');
+      }
+    } catch (error: unknown) {
+      Alert.alert('Parse failed', error instanceof Error ? error.message : 'Could not parse menu.');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!weeklyMenuPublishingEnabled) {
+      Alert.alert('Feature disabled', 'Weekly menu publishing is currently disabled by feature flag.');
+      return;
+    }
+
+    if (!preschoolId || !user?.id) {
+      Alert.alert('Missing school info', 'Please sign in again and try.');
+      return;
+    }
+
+    if (blankDays.length > 0 && !allowBlankDays) {
+      Alert.alert('Blank days detected', 'Please confirm intentionally blank days before publishing.');
+      return;
+    }
+
+    if (incompleteMealDays.length > 0 && !allowIncompleteMeals) {
+      Alert.alert('Missing meal slots', 'Please confirm days with missing breakfast/lunch/snack items before publishing.');
+      return;
+    }
+
+    if (parseNeedsReview && !confirmParseReview) {
+      Alert.alert('Review required', 'Please confirm you reviewed and corrected low-confidence OCR results before publishing.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await SchoolMenuAnnouncementService.publishWeeklyMenu({
+        preschoolId,
+        publishedBy: user.id,
+        draft,
+        priority: 'low',
+        sourceFile: pickedFile
+          ? {
+              fileName: pickedFile.name,
+              mimeType: pickedFile.mimeType,
+              uri: pickedFile.uri,
+            }
+          : undefined,
+      });
+
+      Alert.alert('Published', 'Weekly menu published for parents.', [
+        {
+          text: 'OK',
+          onPress: () => router.back(),
+        },
+      ]);
+    } catch (error: unknown) {
+      Alert.alert('Publish failed', error instanceof Error ? error.message : 'Could not publish weekly menu.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <Stack.Screen options={{ title: 'Weekly Menu', headerBackTitle: 'Back' }} />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <View style={styles.headerCard}>
+          <Text style={styles.title}>Weekly Menu</Text>
+          <Text style={styles.subtitle}>Publish a school-wide menu parents can view in their Menu tab.</Text>
+          {!weeklyMenuPublishingEnabled && (
+            <Text style={[styles.subtitle, { color: theme.error, marginTop: 8 }]}>
+              Weekly menu publishing is disabled by feature flag.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Week Start (Monday, YYYY-MM-DD)</Text>
+          <TextInput
+            value={weekStartDate}
+            onChangeText={updateWeekStart}
+            placeholder="2026-02-16"
+            autoCapitalize="none"
+            style={styles.input}
+          />
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={handlePickFile}>
+            <Ionicons name="attach-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{pickedFile ? `File: ${pickedFile.name}` : 'Choose Menu File'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButton, parsing && styles.buttonDisabled]}
+            onPress={handleParse}
+            disabled={parsing}
+          >
+            <Ionicons name="sparkles-outline" size={18} color="#fff" />
+            <Text style={styles.buttonText}>{parsing ? 'Parsing...' : 'Parse with Dash OCR'}</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.hint}>OCR parsing works best with clear JPG/PNG scans. PDFs can still be edited manually.</Text>
+        </View>
+
+        {draft.days.map((day) => (
+          <View key={day.date} style={styles.card}>
+            <Text style={styles.dayTitle}>
+              {new Date(`${day.date}T00:00:00.000Z`).toLocaleDateString('en-ZA', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'short',
+              })}
+            </Text>
+
+            <Text style={styles.label}>Breakfast</Text>
+            <TextInput
+              value={listToText(day.breakfast)}
+              onChangeText={(text) => updateDay(day.date, { breakfast: textToList(text) })}
+              placeholder="Porridge, fruit"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Lunch</Text>
+            <TextInput
+              value={listToText(day.lunch)}
+              onChangeText={(text) => updateDay(day.date, { lunch: textToList(text) })}
+              placeholder="Rice, chicken stew"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Snack</Text>
+            <TextInput
+              value={listToText(day.snack)}
+              onChangeText={(text) => updateDay(day.date, { snack: textToList(text) })}
+              placeholder="Yoghurt, crackers"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Notes (optional)</Text>
+            <TextInput
+              value={day.notes || ''}
+              onChangeText={(text) => updateDay(day.date, { notes: text })}
+              placeholder="Allergen notes or substitutions"
+              style={[styles.input, styles.textArea]}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+        ))}
+
+        {blankDays.length > 0 && (
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setAllowBlankDays((prev) => !prev)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={allowBlankDays ? 'checkbox-outline' : 'square-outline'}
+              size={22}
+              color={theme.primary}
+            />
+            <Text style={styles.checkboxText}>
+              I confirm {blankDays.length} day(s) are intentionally blank.
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {incompleteMealDays.length > 0 && (
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setAllowIncompleteMeals((prev) => !prev)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={allowIncompleteMeals ? 'checkbox-outline' : 'square-outline'}
+              size={22}
+              color={theme.primary}
+            />
+            <Text style={styles.checkboxText}>
+              I confirm {incompleteMealDays.length} day(s) intentionally have missing meal slots.
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {parseNeedsReview && (
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setConfirmParseReview((prev) => !prev)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={confirmParseReview ? 'checkbox-outline' : 'square-outline'}
+              size={22}
+              color={theme.primary}
+            />
+            <Text style={styles.checkboxText}>
+              I reviewed and corrected low-confidence OCR results.
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          style={[styles.primaryButton, saving && styles.buttonDisabled]}
+          onPress={handlePublish}
+          disabled={saving}
+        >
+          <Ionicons name="send-outline" size={18} color="#fff" />
+          <Text style={styles.buttonText}>{saving ? 'Publishing...' : 'Publish Weekly Menu'}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (theme: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.background,
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
+    gap: 12,
+    paddingBottom: 32,
+  },
+  headerCard: {
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 14,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  subtitle: {
+    marginTop: 4,
+    color: theme.textSecondary,
+    fontSize: 13,
+  },
+  card: {
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    padding: 14,
+  },
+  dayTitle: {
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  label: {
+    color: theme.text,
+    fontWeight: '600',
+    fontSize: 13,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 8,
+    backgroundColor: theme.background,
+    color: theme.text,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  textArea: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  hint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: theme.textSecondary,
+  },
+  secondaryButton: {
+    marginTop: 10,
+    backgroundColor: '#334155',
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  primaryButton: {
+    marginTop: 8,
+    backgroundColor: theme.primary,
+    borderRadius: 12,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  checkboxRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkboxText: {
+    flex: 1,
+    color: theme.textSecondary,
+    fontSize: 13,
+  },
+});

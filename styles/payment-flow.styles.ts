@@ -252,6 +252,19 @@ export const createStyles = (theme: ThemeColors) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  manualConfirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  manualConfirmButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   disabledButton: {
     opacity: 0.6,
   },

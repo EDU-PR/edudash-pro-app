@@ -29,7 +29,6 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
 import { assertSupabase } from '../../lib/supabase';
 import { getWelcomeMessage } from '../../lib/ai/constants';
 import { createDashOrbStyles } from './DashOrb.styles';
@@ -59,6 +58,7 @@ import type { DashAttachment } from '@/services/dash-ai/types';
 import { pickImages } from '@/services/AttachmentService';
 import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 
 let AsyncStorage: any = null;
 try {
@@ -906,28 +906,6 @@ export default function DashOrb({
     return () => clearTimeout(timer);
   }, [whisperModeEnabled, isProcessing, isSpeaking, isListeningForCommand]);
 
-  const readBase64FromUri = useCallback(async (uri: string): Promise<string | null> => {
-    if (!uri) return null;
-    try {
-      if (Platform.OS !== 'web') {
-        return await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-      }
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Failed to read image blob'));
-        reader.readAsDataURL(blob);
-      });
-      const commaIndex = dataUrl.indexOf(',');
-      return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
-    } catch (error) {
-      console.warn('[DashOrb] Failed to read base64 image:', error);
-      return null;
-    }
-  }, []);
-
   const buildImagePayloads = useCallback(async (attachments: DashAttachment[]) => {
     const images: Array<{ data: string; media_type: string }> = [];
     for (const attachment of attachments) {
@@ -935,9 +913,21 @@ export default function DashOrb({
       const metaData = typeof attachment.meta?.image_base64 === 'string'
         ? attachment.meta.image_base64
         : typeof attachment.meta?.base64 === 'string'
-          ? attachment.meta.base64
-          : null;
-      const base64 = metaData || await readBase64FromUri(attachment.previewUri || '');
+        ? attachment.meta.base64
+        : null;
+      let base64 = metaData;
+      if (!base64 && attachment.previewUri) {
+        try {
+          const compressed = await compressImageForAI(attachment.previewUri, 4_000_000);
+          base64 = compressed.base64;
+        } catch (error) {
+          console.warn('[upload_oom_guard] [DashOrb] Failed to compress image for AI payload', {
+            name: attachment.name,
+            error,
+          });
+          base64 = null;
+        }
+      }
       if (!base64) continue;
       images.push({
         data: base64,
@@ -945,7 +935,7 @@ export default function DashOrb({
       });
     }
     return images;
-  }, [readBase64FromUri]);
+  }, []);
 
   const handleOrbAttach = useCallback(async () => {
     if (isProcessing) return;

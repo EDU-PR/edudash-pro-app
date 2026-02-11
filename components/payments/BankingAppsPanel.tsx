@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import type { BankApp } from '@/lib/payments/bankingApps';
+import type { ResolvedBankApp } from '@/lib/payments/bankingApps';
 
 interface BankingAppsPanelProps {
-  banks: BankApp[];
-  onSelect: (bank: BankApp) => void;
+  banks: ResolvedBankApp[];
+  onSelect: (bank: ResolvedBankApp) => void;
   title?: string;
   subtitle?: string;
   emptyMessage?: string;
@@ -22,7 +22,7 @@ export function BankingAppsPanel({
   onSelect,
   title = 'Banking Apps',
   subtitle = 'Open your banking app to complete payment',
-  emptyMessage = 'No banking apps detected on this device.',
+  emptyMessage = 'No banking apps are configured for this payment flow.',
 }: BankingAppsPanelProps) {
   const { theme } = useTheme();
 
@@ -38,7 +38,13 @@ export function BankingAppsPanel({
           {banks.map((bank) => (
             <TouchableOpacity
               key={bank.id}
-              style={[styles.bankTile, { backgroundColor: theme.background, borderColor: theme.border }]}
+              style={[
+                styles.bankTile,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: bank.detected ? theme.primary : theme.border,
+                },
+              ]}
               onPress={() => onSelect(bank)}
               activeOpacity={0.75}
             >
@@ -49,6 +55,14 @@ export function BankingAppsPanel({
               </View>
               <Text style={[styles.bankName, { color: theme.text }]} numberOfLines={2}>
                 {bank.name}
+              </Text>
+              <Text
+                style={[
+                  styles.bankStatus,
+                  { color: bank.detected ? theme.primary : theme.textSecondary },
+                ]}
+              >
+                {bank.detected ? 'Detected' : 'Manual Open'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -102,6 +116,12 @@ const styles = StyleSheet.create({
   bankName: {
     marginTop: 8,
     fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  bankStatus: {
+    marginTop: 4,
+    fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
   },
