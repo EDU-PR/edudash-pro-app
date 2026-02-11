@@ -1,14 +1,22 @@
-import { Share, Platform } from 'react-native';
+import { Share } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
-import { isUniformLabel } from '@/lib/utils/feeUtils';
 import type { UniformEntry, UniformRegisterSummary } from './types';
 
 const TAG = 'UniformRegisterActions';
 
-/* ── Verify payment ─────────────────────────────────────────── */
+/** Escape HTML special chars to prevent XSS when interpolating user data into HTML. */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function verifyUniformPayment(studentId: string, preschoolId: string): Promise<void> {
   const supabase = assertSupabase();
   const { error } = await supabase
@@ -24,7 +32,6 @@ export async function verifyUniformPayment(studentId: string, preschoolId: strin
   }
 }
 
-/* ── HTML generation ────────────────────────────────────────── */
 export function generatePrintableHtml(
   entries: UniformEntry[],
   summary: UniformRegisterSummary,
@@ -35,9 +42,9 @@ export function generatePrintableHtml(
     .map(
       (e, i) => `<tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
         <td style="padding:8px;border:1px solid #e5e7eb">${i + 1}</td>
-        <td style="padding:8px;border:1px solid #e5e7eb">${e.student_name}</td>
-        <td style="padding:8px;border:1px solid #e5e7eb">${e.parent_name || '—'}</td>
-        <td style="padding:8px;border:1px solid #e5e7eb">${e.parent_phone || '—'}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${escapeHtml(e.student_name)}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${escapeHtml(e.parent_name || '—')}</td>
+        <td style="padding:8px;border:1px solid #e5e7eb">${escapeHtml(e.parent_phone || '—')}</td>
         <td style="padding:8px;border:1px solid #e5e7eb">${e.filled_out ? '✅ Yes' : '❌ No'}</td>
         <td style="padding:8px;border:1px solid #e5e7eb">R${e.total_amount.toFixed(2)}</td>
         <td style="padding:8px;border:1px solid #e5e7eb">R${e.amount_paid.toFixed(2)}</td>
@@ -50,9 +57,10 @@ export function generatePrintableHtml(
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Uniform Register</title>
 <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin-top:16px}
 th{background:#1e40af;color:#fff;padding:10px 8px;border:1px solid #1e40af;text-align:left;font-size:13px}
-.summary{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}.stat{background:#f0f9ff;border-radius:8px;padding:12px 16px;min-width:140px}
+.summary{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}
+.stat{background:#f0f9ff;border-radius:8px;padding:12px 16px;min-width:140px}
 .stat b{display:block;font-size:20px;color:#1e40af}</style></head><body>
-<h1 style="color:#1e40af">📋 Uniform Register — ${schoolName}</h1>
+<h1 style="color:#1e40af">📋 Uniform Register — ${escapeHtml(schoolName)}</h1>
 <p style="color:#6b7280">Generated: ${new Date().toLocaleDateString('en-ZA')}</p>
 <div class="summary">
   <div class="stat"><b>${summary.total_students}</b>Total Students</div>
@@ -63,14 +71,13 @@ th{background:#1e40af;color:#fff;padding:10px 8px;border:1px solid #1e40af;text-
   <div class="stat"><b>R${summary.total_revenue.toFixed(2)}</b>Revenue</div>
   <div class="stat"><b>R${summary.total_outstanding.toFixed(2)}</b>Outstanding</div>
 </div>
-<table><thead><tr><th>#</th><th>Student</th><th>Parent/Guardian</th><th>Phone</th>
+<table><thead><tr><th>#</th><th>Student</th><th>Parent</th><th>Phone</th>
 <th>Form</th><th>Total</th><th>Paid</th><th>Status</th></tr></thead>
 <tbody>${rows}</tbody></table>
 <p style="margin-top:24px;color:#9ca3af;font-size:12px">EduDash Pro — Uniform Register Report</p>
 </body></html>`;
 }
 
-/* ── Print ──────────────────────────────────────────────────── */
 export async function printRegister(
   entries: UniformEntry[],
   summary: UniformRegisterSummary,
@@ -85,7 +92,6 @@ export async function printRegister(
   }
 }
 
-/* ── Share as PDF ───────────────────────────────────────────── */
 export async function shareRegisterPdf(
   entries: UniformEntry[],
   summary: UniformRegisterSummary,
@@ -107,12 +113,11 @@ export async function shareRegisterPdf(
   }
 }
 
-/* ── Share as text (WhatsApp-friendly) ──────────────────────── */
-export function generateShareableText(
+export async function sendListViaShare(
   entries: UniformEntry[],
   summary: UniformRegisterSummary,
   schoolName: string,
-): string {
+): Promise<void> {
   const sorted = [...entries].sort((a, b) => a.student_name.localeCompare(b.student_name));
   const lines = [
     `📋 *Uniform Register — ${schoolName}*`,
@@ -128,17 +133,9 @@ export function generateShareableText(
     const icon = e.payment_status === 'paid' ? '✅' : e.payment_status === 'partial' ? '⏳' : '❌';
     lines.push(`${i + 1}. ${e.student_name} — ${icon} R${e.amount_paid.toFixed(2)}/R${e.total_amount.toFixed(2)}`);
   });
-  return lines.join('\n');
-}
 
-export async function sendListViaShare(
-  entries: UniformEntry[],
-  summary: UniformRegisterSummary,
-  schoolName: string,
-): Promise<void> {
-  const text = generateShareableText(entries, summary, schoolName);
   try {
-    await Share.share({ message: text, title: `Uniform Register — ${schoolName}` });
+    await Share.share({ message: lines.join('\n'), title: `Uniform Register — ${schoolName}` });
   } catch (err) {
     logger.error(TAG, 'Share text failed', err);
     throw new Error('Failed to share uniform list');

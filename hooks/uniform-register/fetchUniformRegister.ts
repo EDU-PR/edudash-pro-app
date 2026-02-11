@@ -11,7 +11,6 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
 }> {
   const supabase = assertSupabase();
 
-  // 1. Active students with parent profile
   const { data: students, error: studentsErr } = await supabase
     .from('students')
     .select('id, full_name, parent_id, profiles:parent_id(id, full_name, phone, email)')
@@ -24,7 +23,6 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
     throw new Error('Failed to load student list');
   }
 
-  // 2. All fee records for this school
   const { data: feeRecords, error: feeErr } = await supabase
     .from('student_fees')
     .select('*')
@@ -36,7 +34,6 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
     throw new Error('Failed to load fee records');
   }
 
-  // 3. Filter to uniform-related fees using existing utility
   const uniformFees = (feeRecords || []).filter(
     (f: any) =>
       isUniformLabel(f.fee_type) ||
@@ -44,7 +41,7 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
       isUniformLabel(f.label),
   );
 
-  // 4. Try fetching uniform_orders (table may not exist yet)
+  // Graceful fallback if uniform_orders table doesn't exist yet
   let uniformOrders: any[] = [];
   try {
     const { data, error: orderErr } = await supabase
@@ -56,11 +53,8 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
     logger.info(TAG, 'uniform_orders table not found, using fee records only');
   }
 
-  // 5. Build entries per student
   const entries: UniformEntry[] = (students || []).map((student: any) => {
-    const parent = Array.isArray(student.profiles)
-      ? student.profiles[0]
-      : student.profiles;
+    const parent = Array.isArray(student.profiles) ? student.profiles[0] : student.profiles;
     const fees = uniformFees.filter((f: any) => f.student_id === student.id);
     const order = uniformOrders.find((o: any) => o.student_id === student.id);
 
@@ -104,10 +98,7 @@ export async function fetchUniformRegister(preschoolId: string): Promise<{
     total_partial: entries.filter((e) => e.payment_status === 'partial').length,
     total_unpaid: entries.filter((e) => e.payment_status === 'unpaid').length,
     total_revenue: entries.reduce((s, e) => s + e.amount_paid, 0),
-    total_outstanding: entries.reduce(
-      (s, e) => s + Math.max(0, e.total_amount - e.amount_paid),
-      0,
-    ),
+    total_outstanding: entries.reduce((s, e) => s + Math.max(0, e.total_amount - e.amount_paid), 0),
   };
 
   return { entries, summary };
