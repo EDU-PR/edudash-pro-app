@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     display: 'standalone',
     background_color: '#0a0a0f',
     theme_color: '#00f5ff',
-    // Prefer native app over PWA install
-    prefer_related_applications: true,
+    // Allow PWA install prompt (iOS users get manual Add to Home Screen instructions)
+    prefer_related_applications: false,
     related_applications: [
       {
         platform: 'play',
