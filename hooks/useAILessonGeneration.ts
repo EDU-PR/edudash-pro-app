@@ -13,6 +13,7 @@ import { isAIEnabled } from '@/lib/ai/aiConfig';
 import { track } from '@/lib/analytics';
 import { getCombinedUsage, incrementUsage, logUsageEvent, getUsage } from '@/lib/ai/usage';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
+import { formatAIGatewayErrorMessage, invokeAIGatewayWithRetry } from '@/lib/ai-gateway/invokeWithRetry';
 import { toast } from '@/components/ui/ToastProvider';
 
 interface GeneratedLesson {
@@ -212,7 +213,10 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
 
       if (controller.signal.aborted) throw new Error('Generation cancelled');
 
-      const invokePromise = assertSupabase().functions.invoke('ai-gateway', { body: payload });
+      const invokePromise = invokeAIGatewayWithRetry(payload, {
+        retries: 1,
+        retryDelayMs: 1200,
+      });
       const { data, error } = await invokeWithTimeout(invokePromise, 30000);
 
       clearInterval(interval);
@@ -220,7 +224,9 @@ export function useAILessonGeneration(): UseAILessonGenerationReturn {
       setProgress(95);
       setProgressMessage('Processing results...');
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(formatAIGatewayErrorMessage(error, 'Failed to generate lesson.'));
+      }
 
       const lessonText = data?.content || '';
       setProgress(100);
