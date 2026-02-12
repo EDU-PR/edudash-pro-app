@@ -43,6 +43,7 @@ import { getCombinedUsage, incrementUsage, logUsageEvent } from '@/lib/ai/usage'
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { track } from '@/lib/analytics';
+import { formatAIGatewayErrorMessage, invokeAIGatewayWithRetry } from '@/lib/ai-gateway/invokeWithRetry';
 import {
   buildQuickLessonThemeHint,
   loadQuickLessonThemeContext,
@@ -408,13 +409,18 @@ ${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint
         lessonType: isSTEMSubject ? (selectedSubject === 'ai' ? 'ai_enhanced' : selectedSubject === 'robotics' ? 'robotics' : 'computer_literacy') : 'standard',
       };
 
-      const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: payload });
+      const { data, error } = await invokeAIGatewayWithRetry(payload, {
+        retries: 1,
+        retryDelayMs: 1200,
+      });
 
       clearInterval(progressTimer);
       setProgress(95);
       setProgressMessage('Processing results...');
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(formatAIGatewayErrorMessage(error, 'Failed to generate preschool lesson.'));
+      }
 
       const content = data?.content || '';
       setProgress(100);

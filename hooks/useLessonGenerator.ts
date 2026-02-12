@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/ToastProvider';
 import { track } from '@/lib/analytics';
 import { assertSupabase } from '@/lib/supabase';
 import { incrementUsage, logUsageEvent } from '@/lib/ai/usage';
+import { formatAIGatewayErrorMessage, invokeAIGatewayWithRetry } from '@/lib/ai-gateway/invokeWithRetry';
 import { DashAIAssistant } from '@/services/dash-ai/DashAICompat';
 
 export type LessonGenOptions = {
@@ -38,8 +39,13 @@ export function useLessonGenerator() {
         model: opts.model || 'claude-3-5-sonnet-20241022',
       } as any;
 
-      const { data, error } = await assertSupabase().functions.invoke('ai-gateway', { body: payload });
-      if (error) throw error;
+      const { data, error } = await invokeAIGatewayWithRetry(payload, {
+        retries: 1,
+        retryDelayMs: 1200,
+      });
+      if (error) {
+        throw new Error(formatAIGatewayErrorMessage(error, 'Failed to generate lesson.'));
+      }
 
       if (data && (data as any).provider_error) {
         try { toast.warn('AI provider error – used safe fallback'); } catch { /* Intentional: non-fatal */ }
