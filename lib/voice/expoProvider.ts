@@ -40,6 +40,11 @@ class ExpoSpeechSession implements VoiceSession {
   private static readonly MAX_AUTO_RESTARTS = 50;
   /** Delay before auto-restart (ms) — short for seamless whisper-flow */
   private static readonly AUTO_RESTART_DELAY_MS = 300;
+  /** Delay for network recovery restarts */
+  private static readonly NETWORK_RETRY_DELAY_MS = 700;
+  /** Cap transient network retries to prevent runaway loops */
+  private static readonly MAX_NETWORK_RETRIES = 6;
+  private networkRetryCount = 0;
 
   async start(opts: VoiceStartOptions): Promise<boolean> {
     try {
@@ -100,7 +105,8 @@ class ExpoSpeechSession implements VoiceSession {
         }
       }
       
-      // Set up event listeners
+      // Set up event listeners (clear previous listeners first to avoid duplication).
+      this.cleanupListeners();
       ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         if (this.muted) return;
         
@@ -121,13 +127,47 @@ class ExpoSpeechSession implements VoiceSession {
       
       ExpoSpeechRecognitionModule.addListener('error', (event: any) => {
         const errorText = event?.error ? String(event.error) : 'Speech recognition error';
+        const normalized = errorText.toLowerCase();
         // "no-speech" is normal on Android — just means silence; auto-restart handles it
         if (errorText === 'no-speech') {
           if (__DEV__) console.log('[ExpoProvider] No speech detected — will auto-restart');
           return;
         }
+
+        const isNetwork =
+          normalized.includes('network') ||
+          normalized.includes('timeout') ||
+          normalized.includes('connection') ||
+          normalized.includes('unreachable') ||
+          normalized.includes('service-unavailable');
+
+        // Treat transient network failures as recoverable while live listening is active.
+        if (isNetwork && !this.explicitlyStopped && this.currentOpts) {
+          if (this.networkRetryCount < ExpoSpeechSession.MAX_NETWORK_RETRIES) {
+            this.networkRetryCount += 1;
+            if (__DEV__) {
+              console.warn(
+                `[ExpoProvider] Transient network STT error, retrying (${this.networkRetryCount}/${ExpoSpeechSession.MAX_NETWORK_RETRIES})`
+              );
+            }
+            this.active = false;
+            this.cleanupListeners();
+            if (this.autoRestartTimer) {
+              clearTimeout(this.autoRestartTimer);
+            }
+            this.autoRestartTimer = setTimeout(() => {
+              if (this.explicitlyStopped || !this.currentOpts) return;
+              this.start(this.currentOpts).catch((err) => {
+                console.error('[ExpoProvider] Network retry failed:', err);
+              });
+            }, ExpoSpeechSession.NETWORK_RETRY_DELAY_MS);
+            return;
+          }
+        }
+
         console.error('[ExpoProvider] Recognition error:', errorText);
         this.active = false;
+        this.networkRetryCount = 0;
         this.currentOpts?.onError?.(errorText);
         this.stop().catch(() => {});
       });
@@ -162,6 +202,7 @@ class ExpoSpeechSession implements VoiceSession {
       });
       
       this.active = true;
+      this.networkRetryCount = 0;
       if (__DEV__) console.log('[ExpoProvider] Recognition started successfully');
       return true;
     } catch (e) {
@@ -187,6 +228,7 @@ class ExpoSpeechSession implements VoiceSession {
       if (__DEV__) console.log('[ExpoProvider] Stopping recognition...');
       this.explicitlyStopped = true;
       this.autoRestartCount = 0;
+      this.networkRetryCount = 0;
       if (this.autoRestartTimer) {
         clearTimeout(this.autoRestartTimer);
         this.autoRestartTimer = null;

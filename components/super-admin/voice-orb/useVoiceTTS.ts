@@ -30,9 +30,47 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
+const DEFAULT_AZURE_RATE = 0;
+/** Slower rate for phonics — children need time to hear each sound clearly */
+const DEFAULT_PHONICS_AZURE_RATE = -15;
+const DEFAULT_DEVICE_RATE = 1.0;
+const DEFAULT_PHONICS_DEVICE_RATE = 0.85;
+const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
+  process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
+
+const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
+  a: 'ah',
+  b: 'buh',
+  c: 'kuh',
+  d: 'duh',
+  e: 'eh',
+  f: 'fff',
+  g: 'guh',
+  h: 'hhh',
+  i: 'ih',
+  j: 'juh',
+  k: 'kuh',
+  l: 'lll',
+  m: 'mmm',
+  n: 'nnn',
+  o: 'aw',
+  p: 'puh',
+  q: 'kuh',
+  r: 'rrr',
+  s: 'sss',
+  t: 'tuh',
+  u: 'uh',
+  v: 'vvv',
+  w: 'wuh',
+  x: 'ks',
+  y: 'yuh',
+  z: 'zzz',
+};
+
 export type TTSErrorCategory =
   | 'auth_missing'
   | 'service_unconfigured'
+  | 'phonics_requires_azure'
   | 'network_error'
   | 'playback_error'
   | 'unknown';
@@ -43,6 +81,27 @@ const mapToDeviceLocale = (language: string): string => {
   if (normalized.startsWith('zu')) return 'zu-ZA';
   if (normalized.startsWith('en')) return 'en-ZA';
   return 'en-ZA';
+};
+
+const prepareDevicePhonicsText = (text: string): string => {
+  let next = String(text || '');
+  // /s/ -> sss, /m/ -> mmm, etc.
+  next = next.replace(/\/([a-z])\//gi, (_m, letter: string) => {
+    const key = String(letter || '').toLowerCase();
+    return DEVICE_PHONICS_SOUND_MAP[key] || key;
+  });
+  // [s] -> sss
+  next = next.replace(/\[([a-z])\]/gi, (_m, letter: string) => {
+    const key = String(letter || '').toLowerCase();
+    return DEVICE_PHONICS_SOUND_MAP[key] || key;
+  });
+  // c-a-t -> kuh ... ah ... tuh (so device TTS doesn't read punctuation oddly)
+  next = next.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (token) => {
+    const letters = token.split('-').map((v) => v.trim().toLowerCase()).filter(Boolean);
+    if (letters.some((v) => v.length !== 1)) return token;
+    return letters.map((l) => DEVICE_PHONICS_SOUND_MAP[l] || l).join(' ... ');
+  });
+  return next;
 };
 
 export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
@@ -56,6 +115,14 @@ export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
     normalized.includes('403')
   ) {
     return 'auth_missing';
+  }
+
+  if (
+    normalized.includes('phonics_requires_azure') ||
+    normalized.includes('phonics mode requires azure') ||
+    normalized.includes('phonics_needs_azure')
+  ) {
+    return 'phonics_requires_azure';
   }
 
   if (
@@ -93,6 +160,8 @@ export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
   switch (category) {
     case 'auth_missing':
       return 'Voice needs an active login session.';
+    case 'phonics_requires_azure':
+      return 'Phonics voice needs cloud TTS. Please check connection and retry.';
     case 'service_unconfigured':
       return 'Voice service is unavailable. Using device voice.';
     case 'network_error':
@@ -314,8 +383,22 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     });
   }, [clearPlaybackTimers, cleanupPlayer]);
 
-  const speakWithDeviceTTS = useCallback(async (text: string, language: string): Promise<void> => {
+  const speakWithDeviceTTS = useCallback(async (
+    text: string,
+    language: string,
+    options: TTSOptions = {}
+  ): Promise<void> => {
     const locale = mapToDeviceLocale(language);
+    const phonicsMode = options.phonicsMode === true;
+    const safeRate = Number(options.rate);
+    const effectiveRate = Number.isFinite(safeRate)
+      ? Math.max(0.5, Math.min(safeRate, 2.0))
+      : (phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE);
+    const safePitch = Number(options.pitch);
+    const effectivePitch = Number.isFinite(safePitch)
+      ? Math.max(0.5, Math.min(safePitch, 2.0))
+      : 1.0;
+    const spokenText = phonicsMode ? prepareDevicePhonicsText(text) : text;
     await stopPlayback();
     // Delay after Speech.stop() to prevent Android race condition where
     // an immediate Speech.speak() call is silently ignored.
@@ -329,10 +412,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         resolve();
       }, 30000);
 
-      Speech.speak(text, {
+      Speech.speak(spokenText, {
         language: locale,
-        rate: 1.0,
-        pitch: 1.0,
+        rate: effectiveRate,
+        pitch: effectivePitch,
         onDone: () => { clearTimeout(safetyTimer); resolve(); },
         onStopped: () => { clearTimeout(safetyTimer); resolve(); },
         onError: (err) => {
@@ -369,7 +452,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     const phonicsMode = options.phonicsMode === true;
     const effectiveRate = Number.isFinite(options.rate as number)
       ? Number(options.rate)
-      : phonicsMode ? -25 : 0;
+      : (phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE);
     const effectivePitch = Number.isFinite(options.pitch as number) ? Number(options.pitch) : 0;
 
     let response: Response;
@@ -396,13 +479,47 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
     if (!response.ok) {
       const status = response.status;
+      const requestId =
+        response.headers.get('sb-request-id') ||
+        response.headers.get('x-sb-request-id') ||
+        '';
+      let backendDetails = '';
+      try {
+        const bodyText = await response.text();
+        if (bodyText) {
+          try {
+            const payload = JSON.parse(bodyText) as {
+              error?: string;
+              details?: string;
+              provider?: string;
+              fallback?: string;
+            };
+            backendDetails = [
+              payload.error || '',
+              payload.details || '',
+              payload.provider ? `provider=${payload.provider}` : '',
+              payload.fallback ? `fallback=${payload.fallback}` : '',
+            ]
+              .filter(Boolean)
+              .join(' | ');
+          } catch {
+            backendDetails = bodyText.slice(0, 260);
+          }
+        }
+      } catch {
+        // ignore body parsing errors
+      }
+      const diagnostic = [requestId ? `req=${requestId}` : '', backendDetails ? `details=${backendDetails}` : '']
+        .filter(Boolean)
+        .join(' | ');
+
       if (status === 401 || status === 403) {
-        throw new Error(`AUTH_MISSING_${status}`);
+        throw new Error(`AUTH_MISSING_${status}${diagnostic ? `:${diagnostic}` : ''}`);
       }
       if (status >= 500 || status === 404 || status === 422) {
-        throw new Error(`SERVICE_UNCONFIGURED_${status}`);
+        throw new Error(`SERVICE_UNCONFIGURED_${status}${diagnostic ? `:${diagnostic}` : ''}`);
       }
-      throw new Error(`NETWORK_ERROR_STATUS_${status}`);
+      throw new Error(`NETWORK_ERROR_STATUS_${status}${diagnostic ? `:${diagnostic}` : ''}`);
     }
 
     const data = await response.json();
@@ -491,18 +608,22 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       // Azure supports en/af/zu in this client path; device fallback will cover the rest.
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
       const baseLang = language.split('-')[0];
+      const phonicsMode = typeof options.phonicsMode === 'boolean'
+        ? options.phonicsMode
+        : shouldUsePhonicsMode(text);
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
         console.warn(`[VoiceTTS] Language ${language} not supported by Azure path. Falling back to device TTS.`);
-        await speakWithDeviceTTS(text, language);
+        const fallbackRate = phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE;
+        await speakWithDeviceTTS(text, language, {
+          ...options,
+          phonicsMode,
+          rate: Number.isFinite(options.rate as number) ? Number(options.rate) : fallbackRate,
+        });
         return;
       }
       
       const effectiveLanguage: SupportedLanguage = language;
-      
-      const phonicsMode = typeof options.phonicsMode === 'boolean'
-        ? options.phonicsMode
-        : shouldUsePhonicsMode(text);
       const cleanText = normalizeForTTS(text, {
         phonicsMode,
         preservePhonicsMarkers: phonicsMode,
@@ -530,10 +651,25 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           });
           anyChunkSucceeded = true;
         } catch (azureErr) {
+          if (phonicsMode && !ALLOW_DEVICE_FALLBACK_IN_PHONICS) {
+            const phonicsErr = azureErr instanceof Error
+              ? new Error(`PHONICS_REQUIRES_AZURE:${azureErr.message}`)
+              : new Error('PHONICS_REQUIRES_AZURE');
+            console.warn('[VoiceTTS] Azure chunk failed in phonics mode; device fallback disabled:', azureErr);
+            reportTTSError(phonicsErr);
+            lastErr = phonicsErr;
+            break;
+          }
+
           console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', azureErr);
           reportTTSError(azureErr);
           try {
-            await speakWithDeviceTTS(chunk, effectiveLanguage);
+            const fallbackRate = phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE;
+            await speakWithDeviceTTS(chunk, effectiveLanguage, {
+              ...options,
+              phonicsMode,
+              rate: Number.isFinite(options.rate as number) ? Number(options.rate) : fallbackRate,
+            });
             anyChunkSucceeded = true;
           } catch (deviceErr) {
             console.warn('[VoiceTTS] Device fallback also failed:', deviceErr);

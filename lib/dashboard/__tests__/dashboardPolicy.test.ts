@@ -22,6 +22,6 @@ describe('dashboardPolicy', () => {
       { id: 'settings', title: 'Settings' },
     ];
     const filtered = filterActionsByDashboardPolicy(actions, 'principal_admin', 'preschool');
-    expect(filtered.map((item) => item.id)).toEqual(['create-lesson', 'settings']);
+    expect(filtered.map((item) => item.id)).toEqual(['create-lesson', 'curriculum-themes', 'settings']);
   });
 });

@@ -61,7 +61,7 @@ export interface IDashRealTimeAwareness {
   getAwareness(conversationId: string): Promise<DashAwareness>;
   openScreen(route: string, params?: Record<string, any>): Promise<void>;
   generateContextualGreeting(awareness: DashAwareness): string;
-  buildAwareSystemPrompt(awareness: DashAwareness): string;
+  buildAwareSystemPrompt(awareness: DashAwareness, options?: { voiceMode?: boolean }): string;
   shouldAutoExecute(intent: string, awareness: DashAwareness): boolean;
   dispose(): void;
 }
@@ -391,13 +391,15 @@ export class DashRealTimeAwareness implements IDashRealTimeAwareness {
   /**
    * Build system prompt with REAL awareness
    */
-  public buildAwareSystemPrompt(awareness: DashAwareness): string {
+  public buildAwareSystemPrompt(awareness: DashAwareness, options?: { voiceMode?: boolean }): string {
     const { user, app, conversation } = awareness;
+    const isVoice = options?.voiceMode ?? false;
+    const interfaceLabel = isVoice ? 'VOICE-enabled' : 'TEXT-BASED';
     
     let prompt = `You are Dash, the educational assistant for EduDash Pro.
 
 🚨 CRITICAL: NO THEATRICAL NARRATION 🚨
-You are a TEXT-BASED assistant. NEVER use:
+You are a ${interfaceLabel} assistant. NEVER use:
 - Asterisks or actions: "*clears throat*", "*speaks*", "*opens*", "*points*"
 - First-person action verbs: "Let me open", "I'll check", "I'm looking"
 - Stage directions or roleplaying

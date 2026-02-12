@@ -136,10 +136,18 @@ export class EnhancedBiometricAuth {
 
   private static async getActiveUserId(): Promise<string | null> {
     try {
+      // Use the same `storage` backend as getSessionsMap() to avoid
+      // reading from a different store on Android (SecureStore vs AsyncStorage).
+      const raw = await storage.getItem(BIOMETRIC_ACTIVE_USER_ID_KEY);
+      if (raw) return raw;
+      // One-time migration: check legacy SecureStore location
       if (SecureStore) {
-        return await SecureStore.getItemAsync(BIOMETRIC_ACTIVE_USER_ID_KEY);
-      } else if (AsyncStorage) {
-        return await AsyncStorage.getItem(BIOMETRIC_ACTIVE_USER_ID_KEY);
+        const legacy = await SecureStore.getItemAsync(BIOMETRIC_ACTIVE_USER_ID_KEY).catch(() => null);
+        if (legacy) {
+          await storage.setItem(BIOMETRIC_ACTIVE_USER_ID_KEY, legacy);
+          await SecureStore.deleteItemAsync(BIOMETRIC_ACTIVE_USER_ID_KEY).catch(() => { /* Intentional */ });
+          return legacy;
+        }
       }
     } catch { /* Intentional: non-fatal */ }
     return null;
@@ -147,11 +155,7 @@ export class EnhancedBiometricAuth {
 
   public static async setActiveUserId(userId: string): Promise<void> {
     try {
-      if (SecureStore) {
-        await SecureStore.setItemAsync(BIOMETRIC_ACTIVE_USER_ID_KEY, userId);
-      } else if (AsyncStorage) {
-        await AsyncStorage.setItem(BIOMETRIC_ACTIVE_USER_ID_KEY, userId);
-      }
+      await storage.setItem(BIOMETRIC_ACTIVE_USER_ID_KEY, userId);
     } catch { /* Intentional: non-fatal */ }
   }
 
@@ -463,25 +467,25 @@ export class EnhancedBiometricAuth {
         }
       } catch (sessionError) {
         console.error('Error during session restoration:', sessionError);
-        // Don't continue - if we can't restore the session, biometric auth is useless
-        // Clear the invalid biometric session so user can sign in fresh
-        await this.removeBiometricSession(sessionData.userId);
+        // Don't delete the session — let the user re-sign-in to refresh the token.
+        // The account stays in the quick-switch list.
         return {
           success: false,
-          error: 'Session expired. Please sign in with your email and password.',
+          error: 'Session could not be restored. Please sign in with your email and password.',
           sessionRestored: false
         };
       }
 
-      // CRITICAL: If session was NOT restored, we must return an error
-      // This happens when all refresh tokens are invalid (e.g., after sign-out)
+      // CRITICAL: If session was NOT restored, we must return an error.
+      // This happens when all refresh tokens are invalid (e.g., after sign-out).
+      // IMPORTANT: Do NOT delete the biometric session here — the user should
+      // be able to re-authenticate by signing in with password instead of
+      // losing their account from the quick-switch list permanently.
       if (!sessionRestored) {
         if (__DEV__) console.log('Failed to restore Supabase session, biometric login cannot proceed');
-        // Clear the invalid biometric session data so user doesn't keep getting failed attempts
-        await this.removeBiometricSession(sessionData.userId);
         return {
           success: false,
-          error: 'Your session has expired. Please sign in with your email and password to re-enable biometric login.',
+          error: 'Your session has expired. Please sign in with your email and password to refresh your saved account.',
           sessionRestored: false
         };
       }
@@ -615,14 +619,41 @@ export class EnhancedBiometricAuth {
       try {
         const { assertSupabase } = await import('@/lib/supabase');
         {
-          const refresh = await this.getRefreshTokenForUser(userId);
-          if (refresh) {
-            const { data: refreshed, error: refreshErr } = await assertSupabase().auth.refreshSession({ refresh_token: refresh });
-            if (!refreshErr && refreshed?.session?.user) {
-              sessionRestored = true;
-              // Store the rotated refresh token so the next switch attempt also works
-              if (refreshed.session.refresh_token && refreshed.session.refresh_token !== refresh) {
-                await this.setRefreshTokenForUser(userId, refreshed.session.refresh_token);
+          // First check if there's already a valid session for this user
+          const { data: existingSession } = await assertSupabase().auth.getSession();
+          if (existingSession?.session?.user?.id === userId) {
+            sessionRestored = true;
+          }
+
+          if (!sessionRestored) {
+            const refresh = await this.getRefreshTokenForUser(userId);
+            if (refresh) {
+              const { data: refreshed, error: refreshErr } = await assertSupabase().auth.refreshSession({ refresh_token: refresh });
+              if (!refreshErr && refreshed?.session?.user) {
+                sessionRestored = true;
+                // Store the rotated refresh token so the next switch attempt also works
+                if (refreshed.session.refresh_token && refreshed.session.refresh_token !== refresh) {
+                  await this.setRefreshTokenForUser(userId, refreshed.session.refresh_token);
+                }
+              }
+            }
+          }
+
+          // Fallback: try global biometric refresh token
+          if (!sessionRestored) {
+            let globalRefresh: string | null = null;
+            try {
+              globalRefresh = SecureStore
+                ? await SecureStore.getItemAsync(BIOMETRIC_REFRESH_TOKEN_KEY)
+                : await AsyncStorage?.getItem(BIOMETRIC_REFRESH_TOKEN_KEY);
+            } catch { /* Intentional: non-fatal */ }
+            if (globalRefresh) {
+              const { data: refreshed, error: refreshErr } = await assertSupabase().auth.refreshSession({ refresh_token: globalRefresh });
+              if (!refreshErr && refreshed?.session?.user?.id === userId) {
+                sessionRestored = true;
+                if (refreshed.session.refresh_token) {
+                  await this.setRefreshTokenForUser(userId, refreshed.session.refresh_token);
+                }
               }
             }
           }
@@ -631,7 +662,8 @@ export class EnhancedBiometricAuth {
         console.warn('Switch account session restore error:', e);
       }
 
-      // Update active user and last used
+      // Update active user and last used — NEVER delete the account on failure.
+      // The account stays in the list; the caller shows a "re-sign-in" prompt.
       sessionData.lastUsed = new Date().toISOString();
       const newMap = await this.getSessionsMap();
       newMap[userId] = sessionData;

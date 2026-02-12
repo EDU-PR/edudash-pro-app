@@ -59,6 +59,17 @@ export function LanguageDropdown({ visible, onClose, selectedLanguage, onSelect,
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <TouchableOpacity
             style={styles.item}
+            onPress={() => {
+              onClose();
+              router.push('/screens/dash-ai-settings');
+            }}
+          >
+            <Ionicons name="settings-outline" size={18} color={theme.textSecondary} />
+            <Text style={[styles.label, { color: theme.text, marginLeft: 8 }]}>Dash Settings</Text>
+          </TouchableOpacity>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <TouchableOpacity
+            style={styles.item}
             onPress={async () => {
               onClose();
               if (onOpenFullChat) {

@@ -209,7 +209,7 @@ export function useDashConversation(userId?: string): UseDashConversationReturn 
     
     // Set as last active
     if (userId) {
-      setLastActiveConversationId(newConversation.id, userId);
+      setLastActiveConversationId(userId, newConversation.id);
     }
     
     logger.info('[DashConversation] Created', { id: newConversation.id });

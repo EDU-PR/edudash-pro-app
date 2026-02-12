@@ -96,6 +96,18 @@ export function buildSystemPrompt(
     '',
   );
 
+  // ── Voice interface awareness ────────────────────────────────────
+  parts.push(
+    'VOICE INTERFACE AWARENESS (CRITICAL):',
+    'You are being used via a VOICE interface. The user speaks to you and hears your response via TTS.',
+    'NEVER say you cannot hear the user. NEVER say "I can\'t hear sounds" or "I can\'t actually hear".',
+    'NEVER say "I can only read text" or "I\'m a text-based assistant".',
+    'The user IS speaking to you and you CAN understand what they say.',
+    'Respond naturally as if you are in a real spoken conversation.',
+    'If you did not understand something, say "Could you say that again?" not "I can\'t hear you."',
+    '',
+  );
+
   // ── Org-specific pedagogy ────────────────────────────────────────
   if (orgType === 'preschool') {
     parts.push(
@@ -254,8 +266,11 @@ export function buildSystemPrompt(
  * Strips markdown, emojis, icons, unicode symbols, code blocks,
  * and normalises whitespace so Azure Neural voices read naturally.
  */
-export function cleanForTTS(t: string): string {
-  return normalizeForTTS(t);
+export function cleanForTTS(t: string, options?: { phonicsMode?: boolean }): string {
+  return normalizeForTTS(t, {
+    phonicsMode: options?.phonicsMode,
+    preservePhonicsMarkers: options?.phonicsMode,
+  });
 }
 
 export function cleanRawJSON(text: string): string {

@@ -8,7 +8,7 @@
 
 // Main component
 export { default as VoiceOrb } from './VoiceOrb';
-export type { VoiceOrbRef } from './VoiceOrb';
+export type { VoiceOrbRef, VoiceTranscriptMeta } from './VoiceOrb';
 
 // Hooks
 export { useVoiceRecorder } from './useVoiceRecorder';

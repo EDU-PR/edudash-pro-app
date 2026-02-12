@@ -12,6 +12,7 @@
 import DashAICore, { type DashAICoreConfig } from './DashAICore';
 import type { TranscriptionResult } from './DashVoiceService';
 import type {
+  ConversationContextMessage,
   DashMessage,
   DashReminder,
   DashTask,
@@ -119,7 +120,11 @@ export interface IDashAIAssistant {
     conversationId?: string,
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null; modelOverride?: string | null }
+    options?: {
+      contextOverride?: string | null;
+      modelOverride?: string | null;
+      messagesOverride?: ConversationContextMessage[];
+    }
   ): Promise<DashMessage>;
 
   // Tasks & Reminders
@@ -264,8 +269,14 @@ export class DashAIAssistant implements IDashAIAssistant {
     }
     return this.core.initialize(initConfig); 
   }
-  dispose(): void { return this.core.dispose(); }
-  cleanup(): void { return this.core.dispose(); } // Alias for dispose
+  dispose = (): void => {
+    try {
+      this.core?.dispose?.();
+    } catch (error) {
+      console.warn('[DashAICompat] dispose failed safely:', error);
+    }
+  };
+  cleanup = (): void => { this.dispose(); }; // Alias for dispose
 
   // Voice - delegate to facade
   async startRecording(): Promise<void> { return this.core.voice.startRecording(); }
@@ -289,7 +300,11 @@ export class DashAIAssistant implements IDashAIAssistant {
     conversationId?: string, 
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null; modelOverride?: string | null }
+    options?: {
+      contextOverride?: string | null;
+      modelOverride?: string | null;
+      messagesOverride?: ConversationContextMessage[];
+    }
   ): Promise<DashMessage> {
     // Delegate to DashAICore which now handles AI calls
     return this.core.sendMessage(content, conversationId, attachments, onStreamChunk, options);

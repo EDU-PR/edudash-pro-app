@@ -316,16 +316,18 @@ export class DashUserProfileManager {
   }
 
   /**
-   * Get personalized greeting based on role
+   * Get personalized greeting based on role + time of day
    */
   public getPersonalizedGreeting(personality: DashPersonality): string {
-    if (!this.userProfile) {
-      return personality.greeting;
-    }
+    const hour = new Date().getHours();
+    const timePrefix = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const name = this.userProfile?.name?.split(' ')[0] || '';
 
     const roleGreeting =
-      personality.role_specializations[this.userProfile.role]?.greeting;
-    return roleGreeting || personality.greeting;
+      personality.role_specializations[this.userProfile?.role || '']?.greeting;
+    const baseGreeting = roleGreeting || personality.greeting;
+    const greeting = name ? `${timePrefix}, ${name}! ${baseGreeting}` : `${timePrefix}! ${baseGreeting}`;
+    return greeting;
   }
 
   /**

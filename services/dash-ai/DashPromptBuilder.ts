@@ -457,7 +457,19 @@ IMPORTANT: Always use tools to access real data. Never make up information. Neve
       }
     }
     
-    messages.push({ role: 'user', content: currentInput });
+    const normalizedCurrentInput = String(currentInput || '').trim();
+    if (!normalizedCurrentInput) {
+      return messages;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    const duplicatesLastUserMessage = !!lastMessage
+      && lastMessage.role === 'user'
+      && String(lastMessage.content || '').trim() === normalizedCurrentInput;
+
+    if (!duplicatesLastUserMessage) {
+      messages.push({ role: 'user', content: normalizedCurrentInput });
+    }
     return messages;
   }
   

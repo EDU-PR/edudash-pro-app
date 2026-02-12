@@ -12,6 +12,7 @@ import {
 } from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 import { trackDashboardRouteResolution } from '@/lib/dashboard/dashboardRoutingTelemetry';
+import { resolveTeacherApproval } from '@/lib/utils/resolveTeacherApproval';
 
 const debugEnabled = process.env.EXPO_PUBLIC_DEBUG_MODE === 'true' || __DEV__;
 const debugLog = (...args: unknown[]) => {
@@ -59,38 +60,15 @@ async function resolveTeacherApprovalRoute(profile: EnhancedUserProfile): Promis
   const schoolId = profile.organization_id || (profile as any)?.preschool_id || null;
   if (!teacherId || !schoolId) return null;
 
-  try {
-    const { data: approval, error } = await assertSupabase()
-      .from('teacher_approvals')
-      .select('status')
-      .eq('teacher_id', teacherId)
-      .eq('preschool_id', schoolId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const result = await resolveTeacherApproval(teacherId, schoolId);
 
-    if (error) {
-      console.warn('[ROUTE DEBUG] Teacher approval lookup failed, skipping gate:', error.message);
-      return null;
-    }
+  if (result.allowed) return null;
 
-    if (!approval?.status || approval.status === 'approved') {
-      return null;
-    }
-
-    if (approval.status === 'pending') {
-      return { path: '/screens/teacher-approval-pending' };
-    }
-
-    if (approval.status === 'rejected') {
-      return { path: '/screens/teacher-approval-pending', params: { state: 'rejected' } };
-    }
-
-    return null;
-  } catch (lookupError) {
-    console.warn('[ROUTE DEBUG] Teacher approval gate exception, skipping:', lookupError);
-    return null;
+  if (result.status === 'rejected') {
+    return { path: '/screens/teacher-approval-pending', params: { state: 'rejected' } };
   }
+
+  return { path: '/screens/teacher-approval-pending' };
 }
 
 export function isNavigationLocked(userId: string): boolean {

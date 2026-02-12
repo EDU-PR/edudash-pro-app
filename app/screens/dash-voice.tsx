@@ -35,6 +35,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
+import { DashOrb } from '@/components/dash-orb/DashOrb';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/LanguageDropdown';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
@@ -82,6 +83,7 @@ export default function DashVoiceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceErrorBanner, setVoiceErrorBanner] = useState<string | null>(null);
   const [preferredLanguage, setPreferredLanguage] = useState<SupportedLanguage>('en-ZA');
   const [attachedImage, setAttachedImage] = useState<{ uri: string; base64: string } | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
@@ -109,6 +111,28 @@ export default function DashVoiceScreen() {
     }
   }, [isListening, isSpeaking]);
 
+  // ── Smart auto-greeting: greet once per NEW conversation ──────────
+  const hasGreetedRef = useRef(false);
+  useEffect(() => {
+    if (hasGreetedRef.current) return;
+    if (conversationHistory.length > 0) return; // Resumed conversation — skip
+    if (isProcessing) return;
+    // Delay to let saved messages load first + orb animate in
+    const timer = setTimeout(() => {
+      if (conversationHistoryRef.current.length > 0 || hasGreetedRef.current) return;
+      hasGreetedRef.current = true;
+      const hour = new Date().getHours();
+      const tg = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
+      const greetPrompt = name
+        ? `Greet the user briefly — their name is ${name}. Say "${tg}" and ask how you can help. Keep it to one sentence.`
+        : `Greet the user briefly. Say "${tg}" and ask how you can help. Keep it to one sentence.`;
+      sendMessage(greetPrompt);
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const quickActions = useMemo(() => getQuickActions(orgType, role), [orgType, role]);
   // Final safety net: strip any SSE artifacts that leaked into streaming/response text
   const rawDisplayed = streamingText || lastResponse;
@@ -123,9 +147,10 @@ export default function DashVoiceScreen() {
   // ── TTS Queue ─────────────────────────────────────────────────────
   const speakResponse = useCallback(async (text: string) => {
     if (!voiceOrbRef.current) return;
-    const clean = cleanForTTS(text);
+    // Detect phonics BEFORE cleaning so slash markers are preserved.
+    const phonicsMode = shouldUsePhonicsMode(text, { organizationType: orgType });
+    const clean = cleanForTTS(text, { phonicsMode });
     if (!clean) return;
-    const phonicsMode = shouldUsePhonicsMode(clean, { organizationType: orgType });
     try {
       isSpeakingRef.current = true;
       setIsSpeaking(true);
@@ -146,11 +171,29 @@ export default function DashVoiceScreen() {
   }, [speakResponse]);
 
   const enqueueSpeech = useCallback((text: string) => {
-    const clean = cleanForTTS(text);
-    if (!clean) return;
-    speechQueueRef.current.push(clean);
+    // Push raw text — speakResponse handles phonics detection + cleaning
+    if (!text?.trim()) return;
+    speechQueueRef.current.push(text.trim());
     processSpeechQueue();
   }, [processSpeechQueue]);
+
+  const handleVoiceError = useCallback((message: string) => {
+    const normalized = String(message || '').toLowerCase();
+    if (!normalized) return;
+    if (normalized.includes('phonics') && normalized.includes('cloud tts')) {
+      setVoiceErrorBanner('Phonics voice needs Azure cloud TTS. It is currently unavailable, so letter sounds may fail.');
+      return;
+    }
+    if (normalized.includes('service_unconfigured') || normalized.includes('502')) {
+      setVoiceErrorBanner('Azure voice is unavailable right now. Check tts-proxy Azure secrets/config.');
+      return;
+    }
+    if (normalized.includes('network') || normalized.includes('timeout') || normalized.includes('fetch')) {
+      setVoiceErrorBanner('Voice recognition needs a stable connection. Check internet and try again.');
+      return;
+    }
+    setVoiceErrorBanner('Voice encountered an error. Please try again.');
+  }, []);
 
   // ── Media Picker ──────────────────────────────────────────────────
   const pickMedia = useCallback(async () => {
@@ -333,7 +376,12 @@ export default function DashVoiceScreen() {
 
   // ── Handlers ──────────────────────────────────────────────────────
   const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
-    const formatted = formatTranscript(transcript, language);
+    const formatted = formatTranscript(transcript, language, {
+      whisperFlow: true,
+      summarize: true,
+      preschoolMode: orgType === 'preschool',
+      maxSummaryWords: orgType === 'preschool' ? 16 : 20,
+    });
     if (language) setPreferredLanguage(language);
     if (formatted.trim()) sendMessage(formatted);
   }, [sendMessage]);
@@ -395,6 +443,9 @@ export default function DashVoiceScreen() {
           <Text style={[s.headerTitle, { color: theme.text }]}>Dash</Text>
           <Text style={[s.headerSub, { color: theme.textSecondary }]}>{statusLabel}</Text>
         </View>
+        <TouchableOpacity onPress={() => router.push('/screens/dash-ai-settings')} style={s.headerBtn}>
+          <Ionicons name="settings-outline" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowLangMenu(true)} style={[s.langBtn, { borderColor: theme.border }]}>
           <Ionicons name="language-outline" size={16} color={theme.primary} />
           <Text style={[s.langBtnText, { color: theme.primary }]}>{langLabel}</Text>
@@ -417,15 +468,25 @@ export default function DashVoiceScreen() {
                 onStartListening={() => setIsListening(true)}
                 onStopListening={() => setIsListening(false)}
                 onTranscript={handleVoiceInput}
+                onVoiceError={handleVoiceError}
                 onTTSStart={() => setIsSpeaking(true)}
                 onTTSEnd={() => setIsSpeaking(false)}
                 onLanguageChange={(lang: SupportedLanguage) => setPreferredLanguage(lang)}
                 language={preferredLanguage}
                 autoStartListening
                 autoRestartAfterTTS
+                preschoolMode={orgType === 'preschool'}
               />
             ) : (
-              <CosmicOrb size={ORB_SIZE} isProcessing={isProcessing} isSpeaking={isSpeaking} />
+              <DashOrb
+                size={ORB_SIZE}
+                state={
+                  isProcessing ? 'thinking'
+                    : isSpeaking ? 'speaking'
+                    : isListening ? 'listening'
+                    : 'idle'
+                }
+              />
             )}
           </View>
 
@@ -436,6 +497,28 @@ export default function DashVoiceScreen() {
               <Text style={[s.processingText, { color: theme.textSecondary }]}>Thinking...</Text>
             </View>
           )}
+
+          {voiceErrorBanner ? (
+            <View style={{
+              marginTop: 12,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: `${theme.error || '#ef4444'}66`,
+              backgroundColor: `${theme.error || '#ef4444'}20`,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}>
+              <Ionicons name="warning-outline" size={16} color={theme.error || '#ef4444'} />
+              <Text style={{ color: theme.error || '#ef4444', flex: 1, fontSize: 12, marginLeft: 8, marginRight: 8 }}>
+                {voiceErrorBanner}
+              </Text>
+              <TouchableOpacity onPress={() => setVoiceErrorBanner(null)}>
+                <Ionicons name="close" size={14} color={theme.error || '#ef4444'} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {/* Response */}
           {displayedText ? (
@@ -471,8 +554,8 @@ export default function DashVoiceScreen() {
             </View>
           )}
 
-          {/* Quick actions */}
-          {!displayedText && !isProcessing && (
+          {/* Quick actions — only show once before first interaction */}
+          {!displayedText && !isProcessing && conversationHistory.length === 0 && (
             <View style={s.quickActions}>
               {quickActions.map((action) => (
                 <TouchableOpacity

@@ -64,29 +64,8 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         .eq('id', userId)
         .maybeSingle();
 
-      if (profileError) {
-        console.error('❌ Profile fetch error:', profileError);
-      }
-
-      if (!profileData) {
-        console.warn('⚠️ No profile found for user:', userId);
-        console.warn('⚠️ User may need to complete registration or profile is missing');
-      } else if (!profileData.preschool_id) {
-        // Standalone user - this is expected and perfectly fine!
-        console.log('✅ [useUserProfile] Standalone user detected:', {
-          userId,
-          role: profileData.role,
-          usageType: profileData.usage_type,
-          name: `${profileData.first_name} ${profileData.last_name}`,
-          community: '(standalone user)'
-        });
-      } else {
-        console.log('✅ [useUserProfile] School-linked user:', {
-          userId,
-          role: profileData.role,
-          preschoolId: profileData.preschool_id,
-          name: `${profileData.first_name} ${profileData.last_name}`
-        });
+      if (profileError || !profileData) {
+        // Profile fetch error or no profile — will render empty/error state
       }
 
       // Use preschool_id from profiles table
@@ -107,16 +86,7 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
           .eq('id', preschoolId)
           .maybeSingle();
 
-        if (preschoolError) {
-          console.error('❌ Preschool fetch error:', preschoolError);
-        }
-
-        if (!preschoolData) {
-          console.warn('⚠️ No preschool found with ID:', preschoolId);
-          console.warn('⚠️ Preschool may have been deleted or ID is invalid');
-        } else {
-          console.log('✅ Preschool loaded:', preschoolData.name, '- Tier:', preschoolData.subscription_tier);
-        }
+        // Errors handled gracefully — empty preschool name is acceptable
 
         preschoolName = preschoolData?.name;
         preschoolSlug = undefined; // slug column doesn't exist in schema
@@ -127,7 +97,6 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         preschoolName = 'My School';
         schoolSubscriptionTier = 'free'; // Default tier for standalone users
         schoolType = profileData?.usage_type || undefined;
-        console.log('🏘️ [useUserProfile] Displaying as: standalone user (no preschool linked)');
       }
 
       // Organization data - use organization_id when available, fallback to preschool
@@ -167,7 +136,6 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       
       setProfile(profileObj);
     } catch (err) {
-      console.error('Failed to load user profile:', err);
       setProfile(null);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
     } finally {

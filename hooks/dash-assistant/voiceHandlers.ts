@@ -9,6 +9,7 @@ import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { track } from '@/lib/analytics';
 import { cleanForTTS, splitForTTS, detectTextLanguage } from '@/lib/dash-voice-utils';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 type VoiceRefs = {
   voiceSessionRef: React.MutableRefObject<VoiceSession | null>;
@@ -148,7 +149,8 @@ export async function speakDashResponse(params: {
         console.warn('[useDashAssistant] Voice budget update failed, continuing with playback:', budgetError);
       }
     }
-    const cleaned = cleanForTTS(message.content || '');
+    const isPhonics = shouldUsePhonicsMode(message.content || '');
+    const cleaned = cleanForTTS(message.content || '', { phonicsMode: isPhonics });
     const chunks = splitForTTS(cleaned, 900);
     if (chunks.length === 0) {
       setIsSpeaking(false);
@@ -302,6 +304,12 @@ export async function handleDashVoiceInputPress(params: {
   setIsRecording: (value: boolean) => void;
   setPartialTranscript: (value: string) => void;
   setInputText: (value: string) => void;
+  voiceAutoSend?: boolean;
+  voiceAutoSendSilenceMs?: number;
+  voiceWhisperFlowEnabled?: boolean;
+  voiceWhisperFlowSummaryEnabled?: boolean;
+  isPreschoolMode?: boolean;
+  onFinalTranscript?: (text: string, options: { autoSend: boolean; delayMs: number }) => void | Promise<void>;
   voiceRefs: VoiceRefs;
 }) {
   const {
@@ -319,6 +327,12 @@ export async function handleDashVoiceInputPress(params: {
     setIsRecording,
     setPartialTranscript,
     setInputText,
+    voiceAutoSend = false,
+    voiceAutoSendSilenceMs = 1500,
+    voiceWhisperFlowEnabled = true,
+    voiceWhisperFlowSummaryEnabled = true,
+    isPreschoolMode = false,
+    onFinalTranscript,
     voiceRefs,
   } = params;
 
@@ -440,7 +454,12 @@ export async function handleDashVoiceInputPress(params: {
         setInputText(text);
       },
       onFinal: (text: string) => {
-        const formatted = formatTranscript(text, voiceLocale);
+        const formatted = formatTranscript(text, voiceLocale, {
+          whisperFlow: voiceWhisperFlowEnabled,
+          summarize: voiceWhisperFlowSummaryEnabled,
+          preschoolMode: isPreschoolMode,
+          maxSummaryWords: isPreschoolMode ? 16 : 20,
+        });
         setInputText(formatted);
         setPartialTranscript('');
         setIsRecording(false);
@@ -456,6 +475,10 @@ export async function handleDashVoiceInputPress(params: {
           transcript_length: text.length,
           user_tier: tier || 'free',
         });
+
+        const autoSend = !!voiceAutoSend;
+        const delayMs = Math.max(400, Math.min(2000, Number(voiceAutoSendSilenceMs) || 600));
+        onFinalTranscript?.(formatted, { autoSend, delayMs });
       },
       onError: (error: string) => {
         const msg = String(error || '');

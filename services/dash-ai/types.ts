@@ -114,6 +114,15 @@ export interface DashMessage {
 }
 
 /**
+ * Normalized chat history entry used when explicitly overriding model context.
+ * This keeps prompt assembly deterministic across Dash clients.
+ */
+export interface ConversationContextMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
  * DashConversation represents a conversation thread
  * 
  * **Storage**: AsyncStorage (active conversations)

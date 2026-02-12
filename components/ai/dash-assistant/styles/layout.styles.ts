@@ -42,6 +42,11 @@ export const layoutStyles = StyleSheet.create({
     flex: 1,
     zIndex: 1,
   },
+  topDeck: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    gap: 8,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -101,7 +101,6 @@ export default function MyClassScreen() {
         .order('first_name', { ascending: true });
 
       if (error) {
-        console.error('Error fetching students:', error);
         throw error;
       }
       
@@ -489,7 +488,12 @@ export default function MyClassScreen() {
         {students && students.length > 0 ? (
           <View style={styles.studentsGrid}>
             {students.map((student) => (
-              <View key={student.id} style={styles.studentCard}>
+              <TouchableOpacity
+                key={student.id}
+                style={styles.studentCard}
+                onPress={() => router.push({ pathname: '/screens/student-profile', params: { id: student.id } } as any)}
+                activeOpacity={0.7}
+              >
                 <View style={styles.studentAvatar}>
                   <Text style={styles.studentInitials}>
                     {getInitials(student.first_name, student.last_name)}
@@ -508,7 +512,7 @@ export default function MyClassScreen() {
                   size={20} 
                   color={isDark ? '#64748b' : '#94a3b8'} 
                 />
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         ) : (

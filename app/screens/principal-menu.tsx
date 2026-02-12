@@ -11,7 +11,7 @@ import {
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -123,7 +123,9 @@ export default function PrincipalMenuScreen() {
     try {
       let imageDataUrl: string | undefined;
       if (pickedFile.mimeType.startsWith('image/')) {
-        const base64 = await FileSystem.readAsStringAsync(pickedFile.uri, { encoding: 'base64' });
+        const base64 = await LegacyFileSystem.readAsStringAsync(pickedFile.uri, {
+          encoding: LegacyFileSystem.EncodingType.Base64,
+        });
         imageDataUrl = `data:${pickedFile.mimeType};base64,${base64}`;
       }
 

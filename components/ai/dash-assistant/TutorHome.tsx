@@ -399,6 +399,26 @@ export const TutorHome: React.FC<TutorHomeProps> = ({
         </TouchableOpacity>
       )}
 
+      {/* Dedicated tutor mode link */}
+      <TouchableOpacity
+        style={[styles.resumeCard, { borderColor: theme.primary + '40', backgroundColor: theme.primary + '08' }]}
+        onPress={() => router.push({
+          pathname: '/screens/dash-tutor',
+          params: {
+            ageBand: ageBand !== 'auto' ? ageBand : undefined,
+            mode: isPreschool ? 'play' : undefined,
+          },
+        })}
+      >
+        <View style={styles.resumeLeft}>
+          <Ionicons name="school-outline" size={18} color={theme.primary} />
+          <Text style={[styles.resumeText, { color: theme.primary, fontWeight: '600' }]}>
+            {isPreschool ? 'Open play & learn mode' : 'Open focused tutor mode'}
+          </Text>
+        </View>
+        <Ionicons name="open-outline" size={16} color={theme.primary} />
+      </TouchableOpacity>
+
       <View style={styles.sectionBlock}>
         <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Quick starts</Text>
         <View style={styles.quickActionsContainer}>

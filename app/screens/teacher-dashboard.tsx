@@ -6,7 +6,7 @@ import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
-import { assertSupabase } from '@/lib/supabase';
+import { resolveTeacherApproval } from '@/lib/utils/resolveTeacherApproval';
 
 export default function TeacherDashboardScreen() {
   const { user, profile, profileLoading, loading } = useAuth();
@@ -19,7 +19,7 @@ export default function TeacherDashboardScreen() {
   const [approvalGateLoading, setApprovalGateLoading] = React.useState(false);
 
   // Handle both organization_id (new RBAC) and preschool_id (legacy) fields
-  const orgId = profile?.organization_id || (profile as any)?.preschool_id;
+  const orgId = profile?.organization_id || profile?.preschool_id;
   
   // Wait for auth and profile to finish loading before making routing decisions
   const isStillLoading = loading || profileLoading;
@@ -52,30 +52,18 @@ export default function TeacherDashboardScreen() {
     const checkTeacherApproval = async () => {
       try {
         setApprovalGateLoading(true);
-        const { data: approval, error } = await assertSupabase()
-          .from('teacher_approvals')
-          .select('status')
-          .eq('teacher_id', user.id)
-          .eq('preschool_id', orgId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const result = await resolveTeacherApproval(user.id, orgId);
 
-        if (cancelled || error || !approval?.status || approval.status === 'approved') {
-          return;
-        }
+        if (cancelled) return;
+
+        if (result.allowed) return;
 
         navigationAttempted.current = true;
-        if (approval.status === 'rejected') {
+        if (result.status === 'rejected') {
           router.replace({ pathname: '/screens/teacher-approval-pending', params: { state: 'rejected' } } as any);
-          return;
-        }
-
-        if (approval.status === 'pending') {
+        } else {
           router.replace('/screens/teacher-approval-pending');
         }
-      } catch (approvalError) {
-        console.warn('[TeacherDashboard] Approval gate check failed:', approvalError);
       } finally {
         if (!cancelled) {
           setApprovalGateLoading(false);

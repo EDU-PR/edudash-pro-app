@@ -109,6 +109,49 @@ export class DashAIClient {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getRateLimitRetryDelayMs(): number {
+    return this.parseIntegerEnv(
+      process.env.EXPO_PUBLIC_DASH_AI_429_RETRY_MS,
+      900,
+      250,
+      5000
+    );
+  }
+
+  private async invokeAIProxyWith429Retry(
+    body: Record<string, unknown>,
+    traceId: string,
+    phase: 'initial' | 'continuation'
+  ): Promise<{ data: any; error: any }> {
+    const first = await this.supabaseClient.functions.invoke('ai-proxy', { body });
+    if (!first?.error) return first;
+
+    const firstError = this.parseEdgeFunctionError(first.error);
+    const code = String(firstError.code || '').toLowerCase();
+    const isRateLimited = firstError.status === 429;
+    const isHardQuota = code === 'quota_exceeded';
+
+    // Quota exhausted is deterministic; no retry loop.
+    if (!isRateLimited || isHardQuota) {
+      return first;
+    }
+
+    const retryDelayMs = this.getRateLimitRetryDelayMs();
+    console.warn('[DashAIClient] ai-proxy returned 429, retrying once', {
+      phase,
+      trace_id: traceId,
+      delay_ms: retryDelayMs,
+      code: firstError.code,
+    });
+    await this.sleep(retryDelayMs);
+
+    return this.supabaseClient.functions.invoke('ai-proxy', { body });
+  }
+
   private parseIntegerEnv(
     value: string | undefined,
     fallback: number,
@@ -339,43 +382,53 @@ export class DashAIClient {
       const clientToolDefs = this.getClientToolDefs(role, userTier);
       const toolPlan = this.buildToolPlanMetadata(role, userTier);
       
-      const { data, error } = await this.supabaseClient.functions.invoke('ai-proxy', {
-        body: {
-          scope,
-          service_type: effectiveServiceType,
-          payload: {
-            prompt: messagesArr.length > 0 ? undefined : promptText,
-            context: mergedContext,
-            messages: messagesArr.length > 0 ? messagesArr : undefined,
-            images: images.length > 0 ? images : undefined,
-            ocr_mode: params.ocrMode || undefined,
-            ocr_task: params.ocrTask || undefined,
-            ocr_response_format: params.ocrResponseFormat || undefined,
-            model: params.model || undefined,
-          },
-          stream: false,
-          enable_tools: ENABLE_TOOLS,
-          client_tools: clientToolDefs,
-          metadata: {
-            role: scope,
-            model: params.model || undefined,
-            trace_id: traceId,
-            tool_plan: toolPlan,
-            orchestration_mode: orchestration.orchestration_mode,
-            loop_budget: orchestration.loop_budget,
-            confidence_threshold: orchestration.confidence_threshold,
-          }
+      const initialRequestBody = {
+        scope,
+        service_type: effectiveServiceType,
+        payload: {
+          prompt: messagesArr.length > 0 ? undefined : promptText,
+          context: mergedContext,
+          messages: messagesArr.length > 0 ? messagesArr : undefined,
+          images: images.length > 0 ? images : undefined,
+          ocr_mode: params.ocrMode || undefined,
+          ocr_task: params.ocrTask || undefined,
+          ocr_response_format: params.ocrResponseFormat || undefined,
+          model: params.model || undefined,
         },
-      });
+        stream: false,
+        enable_tools: ENABLE_TOOLS,
+        client_tools: clientToolDefs,
+        metadata: {
+          role: scope,
+          model: params.model || undefined,
+          trace_id: traceId,
+          tool_plan: toolPlan,
+          orchestration_mode: orchestration.orchestration_mode,
+          loop_budget: orchestration.loop_budget,
+          confidence_threshold: orchestration.confidence_threshold,
+        },
+      } as const;
+
+      const { data, error } = await this.invokeAIProxyWith429Retry(
+        initialRequestBody as unknown as Record<string, unknown>,
+        traceId,
+        'initial'
+      );
       
       if (error) {
         const errorDetails = this.parseEdgeFunctionError(error);
-        console.error('[DashAIClient] AI service error:', {
+        const logPayload = {
           error,
           status: errorDetails.status,
           code: errorDetails.code,
           message: errorDetails.message,
-        });
+          details: errorDetails.details,
+        };
+        if (errorDetails.status === 429) {
+          console.warn('[DashAIClient] AI service rate-limited:', logPayload);
+        } else {
+          console.error('[DashAIClient] AI service error:', logPayload);
+        }
         return {
           content: this.getFriendlyErrorMessage(errorDetails),
           error: errorDetails.message || 'AI service error',
@@ -495,33 +548,37 @@ export class DashAIClient {
         ];
 
         try {
-          const { data: followUp, error: followUpError } = await this.supabaseClient.functions.invoke('ai-proxy', {
-            body: {
-              scope,
-              service_type: params.serviceType || 'chat_message',
-              payload: {
-                context: mergedContext,
-                messages: continuationMessages,
-                model: params.model || undefined,
-              },
-              stream: false,
-              enable_tools: continuationPass < orchestration.loop_budget.max_continuation_passes,
-              client_tools: clientToolDefs,
-              metadata: {
-                role: scope,
-                continuation: true,
-                trace_id: traceId,
-                orchestration_mode: orchestration.orchestration_mode,
-                loop_budget: orchestration.loop_budget,
-                confidence_threshold: orchestration.confidence_threshold,
-                tool_plan: {
-                  source: 'ai-proxy.continuation',
-                  continuation_pass: continuationPass,
-                  executed_tool_names: currentBatch.map((call: any) => call?.name).filter(Boolean),
-                },
+          const continuationBody = {
+            scope,
+            service_type: params.serviceType || 'chat_message',
+            payload: {
+              context: mergedContext,
+              messages: continuationMessages,
+              model: params.model || undefined,
+            },
+            stream: false,
+            enable_tools: continuationPass < orchestration.loop_budget.max_continuation_passes,
+            client_tools: clientToolDefs,
+            metadata: {
+              role: scope,
+              continuation: true,
+              trace_id: traceId,
+              orchestration_mode: orchestration.orchestration_mode,
+              loop_budget: orchestration.loop_budget,
+              confidence_threshold: orchestration.confidence_threshold,
+              tool_plan: {
+                source: 'ai-proxy.continuation',
+                continuation_pass: continuationPass,
+                executed_tool_names: currentBatch.map((call: any) => call?.name).filter(Boolean),
               },
             },
-          });
+          } as const;
+
+          const { data: followUp, error: followUpError } = await this.invokeAIProxyWith429Retry(
+            continuationBody as unknown as Record<string, unknown>,
+            traceId,
+            'continuation'
+          );
 
           if (followUpError) {
             throw followUpError;
@@ -599,8 +656,16 @@ export class DashAIClient {
     message?: string;
     details?: unknown;
   } {
-    const err = error as { context?: { status?: number; body?: string | object } };
-    const status = err?.context?.status;
+    const err = error as {
+      status?: number;
+      code?: string;
+      message?: string;
+      details?: unknown;
+      context?: { status?: number; body?: string | object };
+    };
+    const status =
+      (typeof err?.context?.status === 'number' ? err.context.status : undefined) ??
+      (typeof err?.status === 'number' ? err.status : undefined);
     const body = err?.context?.body;
     let parsedBody: any = null;
 
@@ -614,16 +679,33 @@ export class DashAIClient {
       parsedBody = body;
     }
 
+    if (!parsedBody && err?.details && typeof err.details === 'object') {
+      parsedBody = err.details;
+    }
+
     const fallbackMessage =
-      (error as any)?.message ||
-      (error as any)?.context?.body ||
+      err?.message ||
+      err?.context?.body ||
       'AI service error';
+
+    const parsedError = parsedBody?.error;
+    const code =
+      (typeof parsedError === 'string' ? parsedError : undefined) ||
+      (typeof parsedError?.code === 'string' ? parsedError.code : undefined) ||
+      (typeof parsedBody?.code === 'string' ? parsedBody.code : undefined) ||
+      (typeof err?.code === 'string' ? err.code : undefined);
+
+    const message =
+      (typeof parsedBody?.message === 'string' ? parsedBody.message : undefined) ||
+      (typeof parsedError?.message === 'string' ? parsedError.message : undefined) ||
+      (typeof parsedError === 'string' ? parsedError : undefined) ||
+      fallbackMessage;
 
     return {
       status,
-      code: parsedBody?.error,
-      message: parsedBody?.message || parsedBody?.error || fallbackMessage,
-      details: parsedBody?.details || parsedBody,
+      code,
+      message,
+      details: parsedBody?.details || parsedBody || err?.details,
     };
   }
 
@@ -633,12 +715,15 @@ export class DashAIClient {
     message?: string;
     details?: any;
   }): string {
-    if (error.status === 429 || error.code === 'quota_exceeded') {
+    if (error.code === 'quota_exceeded') {
       const quotaInfo = error.details as { usage_count?: number; limit?: number; tier?: string } | undefined;
       if (quotaInfo?.usage_count && quotaInfo?.limit) {
         return `You've used ${quotaInfo.usage_count} of ${quotaInfo.limit} AI requests this month (${quotaInfo.tier || 'Free'} tier). Upgrade your plan for more requests!`;
       }
       return "You've reached your AI usage limit. Upgrade your plan for unlimited access, or contact support to increase your quota.";
+    }
+    if (error.status === 429) {
+      return 'Dash is handling a lot of requests right now. Please try again in a few seconds.';
     }
     if (error.status === 401) {
       return 'Your session expired. Please sign in again to continue.';

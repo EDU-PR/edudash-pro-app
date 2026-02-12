@@ -36,6 +36,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
+import { formatTranscript } from '@/lib/voice/formatTranscript';
 
 // Local imports
 import { styles, COLORS, ORB_SIZE } from './VoiceOrb.styles';
@@ -65,6 +66,13 @@ export interface VoiceOrbRef {
   isSpeaking: boolean;
 }
 
+export interface VoiceTranscriptMeta {
+  source: 'live' | 'recorded';
+  capturedAt: number;
+  audioBase64?: string;
+  audioContentType?: string;
+}
+
 interface VoiceOrbProps {
   isListening: boolean;
   isSpeaking: boolean;
@@ -72,7 +80,7 @@ interface VoiceOrbProps {
   isParentProcessing?: boolean;
   onStartListening: () => void;
   onStopListening: () => void;
-  onTranscript: (text: string, language?: SupportedLanguage) => void;
+  onTranscript: (text: string, language?: SupportedLanguage, meta?: VoiceTranscriptMeta) => void;
   onSpeakStart?: () => void;
   onSpeakEnd?: () => void;
   /** Called when TTS starts */
@@ -91,6 +99,8 @@ interface VoiceOrbProps {
   autoStartListening?: boolean;
   /** Auto-restart listening after TTS ends (default: true) */
   autoRestartAfterTTS?: boolean;
+  /** Preschool mode: longer silence timeout, lower speech threshold for children */
+  preschoolMode?: boolean;
 }
 
 // ============================================================================
@@ -114,6 +124,7 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   size = ORB_SIZE,
   autoStartListening = true,
   autoRestartAfterTTS = true,
+  preschoolMode = false,
 }, ref) => {
   const { theme } = useTheme();
   const { profile } = useAuth();
@@ -135,11 +146,11 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   }, [externalLanguage]);
 
   const LIVE_TRANSCRIPTION_ENABLED = process.env.EXPO_PUBLIC_VOICE_LIVE_TRANSCRIPTION_ENABLED !== 'false';
-  const liveSilenceTimeoutRaw = Number.parseInt(process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || '2800', 10);
+  const liveSilenceTimeoutRaw = Number.parseInt(process.env.EXPO_PUBLIC_VOICE_LIVE_SILENCE_TIMEOUT_MS || '4200', 10);
   const LIVE_SILENCE_TIMEOUT_MS = Number.isFinite(liveSilenceTimeoutRaw)
-    ? Math.min(8000, Math.max(1200, liveSilenceTimeoutRaw))
-    : 2800;
-  const LIVE_FINAL_FALLBACK_MS = 700;
+    ? Math.min(12000, Math.max(1800, liveSilenceTimeoutRaw))
+    : 4200;
+  const LIVE_FINAL_FALLBACK_MS = 1300;
   const usingLiveSTTRef = useRef(false);
   const liveSessionRef = useRef(0);
   const liveFinalizedRef = useRef(false);
@@ -155,11 +166,15 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     transcribeRef.current?.('silence');
   }, []);
   
-  const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected);
+  const [recorderState, recorderActions] = useVoiceRecorder(handleSilenceDetected, preschoolMode
+    ? { speechThreshold: -35, silenceDuration: 4000 }
+    : undefined,
+  );
   const { transcribe, isTranscribing, error: sttError } = useVoiceSTT({ preschoolId: tenantId });
-  const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking } = useVoiceTTS();
+  const { speak, stop: stopSpeaking, isSpeaking: ttsIsSpeaking, error: ttsError } = useVoiceTTS();
   const isSpeakingRef = useRef(isSpeaking);
   const ttsSpeakingRef = useRef(ttsIsSpeaking);
+  const skipNextAutoRestartRef = useRef(false);
   const resetLiveSilenceTimerRef = useRef<(() => void) | null>(null);
   const finalizeLiveRef = useRef<((text: string) => void) | null>(null);
 
@@ -182,6 +197,15 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     const timer = setTimeout(() => setStatusText('Listening...'), 2500);
     return () => clearTimeout(timer);
   }, [sttError, onVoiceError]);
+
+  useEffect(() => {
+    if (!ttsError) return;
+    skipNextAutoRestartRef.current = true;
+    setStatusText('Voice synthesis error');
+    onVoiceError?.(ttsError);
+    const timer = setTimeout(() => setStatusText('Listening...'), 3000);
+    return () => clearTimeout(timer);
+  }, [ttsError, onVoiceError]);
 
   const clearLiveTimers = useCallback(() => {
     if (liveSilenceTimerRef.current) {
@@ -233,18 +257,35 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
     setUsingLiveSTT(false);
     setIsProcessing(false);
 
-    const cleaned = (text || '').trim();
+    const formatted = formatTranscript(text || '', selectedLanguage, {
+      whisperFlow: true,
+      summarize: true,
+      preschoolMode: (profile as any)?.school_type === 'preschool' || (profile as any)?.organization_type === 'preschool',
+      maxSummaryWords: 16,
+    });
+    const cleaned = formatted.trim();
     if (cleaned) {
       setLastDetectedLanguage(selectedLanguage);
-      onTranscript(cleaned, selectedLanguage);
+      onTranscript(cleaned, selectedLanguage, {
+        source: 'live',
+        capturedAt: Date.now(),
+      });
       setStatusText('Listening...');
       return;
     }
 
-    const fallback = lastPartialRef.current.trim();
+    const fallback = formatTranscript(lastPartialRef.current, selectedLanguage, {
+      whisperFlow: true,
+      summarize: true,
+      preschoolMode: (profile as any)?.school_type === 'preschool' || (profile as any)?.organization_type === 'preschool',
+      maxSummaryWords: 16,
+    }).trim();
     if (fallback) {
       setLastDetectedLanguage(selectedLanguage);
-      onTranscript(fallback, selectedLanguage);
+      onTranscript(fallback, selectedLanguage, {
+        source: 'live',
+        capturedAt: Date.now(),
+      });
       setStatusText('Listening...');
       return;
     }
@@ -315,14 +356,23 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
       
       setStatusText('Transcribing...');
       const sttLanguage: TranscribeLanguage = selectedLanguage === 'en-ZA' ? 'auto' : selectedLanguage;
-      const result = await transcribe(uri, sttLanguage);
+      const result = await transcribe(uri, sttLanguage, { includeAudioBase64: true });
       
       if (result?.text) {
         const detected = result.language;
         if (detected === 'en-ZA' || detected === 'af-ZA' || detected === 'zu-ZA') {
           setLastDetectedLanguage(detected);
         }
-        onTranscript(result.text, result.language as SupportedLanguage | undefined);
+        onTranscript(
+          result.text,
+          result.language as SupportedLanguage | undefined,
+          {
+            source: 'recorded',
+            capturedAt: Date.now(),
+            audioBase64: result.audio_base64,
+            audioContentType: result.audio_content_type,
+          }
+        );
         setStatusText('Listening...');
       } else {
         setStatusText('No speech detected');
@@ -405,6 +455,11 @@ const VoiceOrb = forwardRef<VoiceOrbRef, VoiceOrbProps>(({
   useEffect(() => {
     // Detect real TTS stop transition (was speaking, now stopped)
     if (prevTtsSpeaking.current && !ttsIsSpeaking && !isSpeaking && autoRestartAfterTTS && !isMuted && !isProcessing) {
+      if (skipNextAutoRestartRef.current) {
+        skipNextAutoRestartRef.current = false;
+        prevTtsSpeaking.current = ttsIsSpeaking;
+        return;
+      }
       console.log('[VoiceOrb] TTS finished (confirmed stop), auto-restarting listening in 800ms...');
       // Delay before restarting to ensure TTS audio has fully stopped
       const timer = setTimeout(() => {

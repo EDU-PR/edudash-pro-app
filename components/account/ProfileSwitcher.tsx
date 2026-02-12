@@ -289,10 +289,13 @@ export function ProfileSwitcher({
     });
   }, [t, loadAccounts, showAlert]);
 
-  // Add new account (sign out and go to sign in)
+  // Add new account — navigate to sign-in WITHOUT signing out.
+  // Supabase replaces the session when signInWithPassword is called for a
+  // different user, so the current user's refresh token stays valid in the
+  // server-side token table. Signing out first would invalidate it.
   const handleAddAccount = useCallback(async () => {
-    // Persist the CURRENT user's session before signing out so they
-    // appear in the quick-switch list after the new sign-in completes.
+    // Persist the CURRENT user's session so they appear in the quick-switch
+    // list after the new sign-in completes.
     if (user?.id && user?.email) {
       try {
         const { getCurrentSession } = await import('@/lib/sessionManager');
@@ -304,12 +307,13 @@ export function ProfileSwitcher({
           currentSession?.refresh_token,
         );
       } catch (storeErr) {
-        // Non-fatal: proceed with sign-out even if storage fails
         if (__DEV__) console.warn('[ProfileSwitcher] Failed to store current account before add:', storeErr);
       }
     }
     onClose();
-    signOutAndRedirect({ clearBiometrics: false, resetApp: false, redirectTo: '/(auth)/sign-in?switch=1' });
+    // Navigate directly — DO NOT sign out. This keeps the current user's
+    // refresh token valid so biometric switching back works.
+    router.push('/(auth)/sign-in?switch=1&addAccount=1');
   }, [onClose, user?.id, user?.email, profile]);
 
   // Format last used date

@@ -71,10 +71,16 @@ export default function SignIn() {
   // Safety net: clear local loading once auth resolves AND profile is loaded.
   // Normally the component unmounts when routeAfterLogin navigates away,
   // so loading stays true (spinner visible) until the route change.
+  // Add a minimum 3s delay to avoid clearing spinner during the brief
+  // profileLoading=false gap between session setup and SIGNED_IN handler.
+  const mountTimeRef = useRef(Date.now());
   useEffect(() => {
     if (loading && user && !profileLoading) {
-      logger.debug('SignIn', 'Auth user + profile resolved, clearing loading state');
-      stopLoadingState();
+      const elapsed = Date.now() - mountTimeRef.current;
+      if (elapsed > 3000) {
+        logger.debug('SignIn', 'Auth user + profile resolved, clearing loading state');
+        stopLoadingState();
+      }
     }
   }, [loading, user, profileLoading, stopLoadingState]);
 
@@ -525,6 +531,22 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
             stopLoadingState();
             return;
           }
+          // Check if profile is already resolved — route directly instead of
+          // bouncing through profiles-gate which can get stuck.
+          try {
+            const { fetchEnhancedUserProfile } = await import('@/lib/rbac');
+            const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
+            const quickProfile = await Promise.race([
+              fetchEnhancedUserProfile(sessionData.session.user.id, { user: sessionData.session.user as any }),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+            ]);
+            if (quickProfile) {
+              logger.info('SignIn', 'Watchdog resolved profile — routing directly');
+              stopLoadingState();
+              await routeAfterLogin(sessionData.session.user, quickProfile);
+              return;
+            }
+          } catch { /* fall through to profiles-gate */ }
           logger.warn('SignIn', 'Post sign-in route watchdog fired - forcing profiles-gate fallback');
           stopLoadingState();
           router.replace('/profiles-gate');
@@ -532,7 +554,7 @@ logger.debug('SignIn', 'Component rendering, theme:', theme);
           logger.warn('SignIn', 'Route watchdog failed (non-fatal):', watchdogError);
           stopLoadingState();
         }
-      }, 6000);
+      }, 10000);
     } catch (_error: any) {
       // Enhanced debug logging to trace error source
       logger.error('SignIn', '=== SIGN IN ERROR DEBUG ===');

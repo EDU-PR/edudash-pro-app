@@ -27,6 +27,8 @@ import { assertSupabase } from '@/lib/supabase';
 import { getWelcomeMessage } from '@/lib/ai/constants';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
+import { detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
+import { assessPhonicsAttempt } from '@/lib/dash-ai/phonicsAssessmentClient';
 import { styles } from '@/components/super-admin/dash-ai-chat/DashAIChat.styles';
 import { ChatMessage, ChatMessageData } from '@/components/super-admin/dash-ai-chat/ChatMessage';
 import { ChatInput } from '@/components/super-admin/dash-ai-chat/ChatInput';
@@ -38,8 +40,10 @@ import {
   splitForTTS,
   detectTextLanguage,
 } from '@/lib/dash-voice-utils';
+import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
 import { SUPPORTED_LANGUAGES } from '@/components/super-admin/voice-orb/useVoiceSTT';
+import type { VoiceTranscriptMeta } from '@/components/super-admin/voice-orb';
 
 const isWeb = Platform.OS === 'web';
 let VoiceOrb: React.ForwardRefExoticComponent<any> | null = null;
@@ -49,7 +53,11 @@ if (!isWeb) {
 }
 
 type VoiceOrbRefType = {
-  speakText: (text: string, language?: SupportedLanguage) => Promise<void>;
+  speakText: (
+    text: string,
+    language?: SupportedLanguage,
+    options?: { phonicsMode?: boolean }
+  ) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   isSpeaking: boolean;
 };
@@ -62,6 +70,42 @@ const findLanguageName = (code: SupportedLanguage | null) => {
 
 const CHAT_HISTORY_KEY = '@dash_tutor_voice_history';
 const MAX_STORED_MESSAGES = 50;
+const PHONICS_TARGET_STALE_MS = 20 * 60 * 1000;
+
+type PendingPhonicsTarget = {
+  referenceText: string;
+  targetPhoneme: string;
+  updatedAt: number;
+  source: 'assistant' | 'learner';
+};
+
+const extractPhonicsTarget = (text: string, source: 'assistant' | 'learner'): PendingPhonicsTarget | null => {
+  const value = String(text || '').trim().toLowerCase();
+  if (!value || !detectPhonicsIntent(value)) return null;
+
+  const slashMatch = value.match(/\/([a-z]{1,3})\//i);
+  const blendMatch = value.match(/\b([a-z](?:-[a-z]){1,7})\b/i);
+  const guidedWordMatch = value.match(/\b(?:say|repeat|read|sound out|blend)\s+["'“]?([a-z]{1,24})["'”]?/i);
+
+  let referenceText = '';
+  if (guidedWordMatch?.[1]) {
+    referenceText = guidedWordMatch[1].toLowerCase();
+  } else if (blendMatch?.[1]) {
+    referenceText = blendMatch[1].replace(/-/g, '').toLowerCase();
+  } else if (slashMatch?.[1]) {
+    referenceText = slashMatch[1].toLowerCase();
+  }
+
+  if (!referenceText) return null;
+  const targetPhoneme = String(slashMatch?.[1] || referenceText[0] || 'unknown').toLowerCase();
+
+  return {
+    referenceText,
+    targetPhoneme,
+    updatedAt: Date.now(),
+    source,
+  };
+};
 
 export default function DashTutorVoiceChat() {
   const { theme } = useTheme();
@@ -84,6 +128,7 @@ export default function DashTutorVoiceChat() {
   const isSpeakingRef = useRef(false);
   const speechQueueRef = useRef<string[]>([]);
   const ttsSessionRef = useRef<string | null>(null);
+  const phonicsTargetRef = useRef<PendingPhonicsTarget | null>(null);
 
   const welcomeMessage: ChatMessageData = useMemo(() => ({
     id: 'welcome',
@@ -269,6 +314,7 @@ export default function DashTutorVoiceChat() {
     try {
       setIsSpeaking(true);
       isSpeakingRef.current = true;
+      const phonicsMode = Boolean(phonicsTargetRef.current) || shouldUsePhonicsMode(cleanText);
       for (let idx = 0; idx < chunks.length; idx += 1) {
         const chunk = chunks[idx];
         if (ttsSessionRef.current !== sessionId || !isSpeakingRef.current) {
@@ -283,8 +329,9 @@ export default function DashTutorVoiceChat() {
           total: chunks.length,
           length: chunk.length,
           language: chunkLang,
+          phonicsMode,
         });
-        await voiceOrbRef.current.speakText(chunk, chunkLang);
+        await voiceOrbRef.current.speakText(chunk, chunkLang, { phonicsMode });
         console.log('[DashTutorVoiceChat][TTS] chunk:end', { sessionId, index: idx + 1, total: chunks.length });
       }
     } catch (error) {
@@ -340,6 +387,9 @@ export default function DashTutorVoiceChat() {
     if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('timeout')) {
       return 'Voice recognition needs a stable internet connection. Check connection and retry.';
     }
+    if (normalized.includes('phonics') && normalized.includes('cloud tts')) {
+      return 'Phonics voice needs cloud TTS. Azure voice is unavailable right now, so letter sounds may fail.';
+    }
     return 'Voice recognition failed. Please try again or use text input.';
   }, []);
 
@@ -348,6 +398,57 @@ export default function DashTutorVoiceChat() {
     console.warn('[DashTutorVoiceChat] Voice recognition error:', errorMessage);
     setVoiceErrorBanner(banner);
   }, [mapVoiceErrorToBanner]);
+
+  const updatePhonicsTarget = useCallback((assistantText: string) => {
+    const extracted = extractPhonicsTarget(assistantText, 'assistant');
+    if (extracted) {
+      phonicsTargetRef.current = extracted;
+    }
+  }, []);
+
+  const submitPhonicsAssessment = useCallback(async (
+    transcript: string,
+    language?: SupportedLanguage,
+    meta?: VoiceTranscriptMeta
+  ) => {
+    if (!meta?.audioBase64) return;
+
+    const normalizedTranscript = String(transcript || '').trim();
+    if (!normalizedTranscript) return;
+
+    const activeTarget = phonicsTargetRef.current;
+    const targetIsFresh = !!activeTarget && (Date.now() - activeTarget.updatedAt) < PHONICS_TARGET_STALE_MS;
+    const learnerTarget = extractPhonicsTarget(normalizedTranscript, 'learner');
+    const shouldAssess =
+      Boolean(learnerTarget) ||
+      Boolean(targetIsFresh);
+
+    if (!shouldAssess) return;
+
+    const resolvedTarget = targetIsFresh ? activeTarget : learnerTarget;
+    const referenceText = resolvedTarget?.referenceText || normalizedTranscript;
+    const targetPhoneme = resolvedTarget?.targetPhoneme || null;
+
+    try {
+      const result = await assessPhonicsAttempt({
+        referenceText,
+        targetPhoneme,
+        targetLanguage: language || preferredLanguage || 'en-ZA',
+        audioBase64: meta.audioBase64,
+        audioContentType: meta.audioContentType,
+      });
+
+      if (result?.assessment) {
+        console.log('[DashTutorVoiceChat] Phonics attempt saved', {
+          attemptId: result.attemptId,
+          targetPhoneme: result.assessment.target_phoneme,
+          accuracy: result.assessment.target_phoneme_accuracy ?? result.assessment.accuracy_score,
+        });
+      }
+    } catch (error) {
+      console.warn('[DashTutorVoiceChat] Phonics assessment failed:', error);
+    }
+  }, [preferredLanguage]);
 
   const sendMessageRegular = async (
     text: string,
@@ -400,6 +501,7 @@ export default function DashTutorVoiceChat() {
           : msg
       )
     );
+    updatePhonicsTarget(responseText);
 
     if (isVoiceModeRef.current && responseText) {
       enqueueSpeech(responseText);
@@ -489,6 +591,7 @@ export default function DashTutorVoiceChat() {
             : msg
         )
       );
+      updatePhonicsTarget(cleanedText);
       if (isVoiceModeRef.current && cleanedText) {
         enqueueSpeech(cleanedText);
       }
@@ -595,6 +698,7 @@ export default function DashTutorVoiceChat() {
             : msg
         )
       );
+      updatePhonicsTarget(cleanedResponse);
     } catch (error) {
       console.error('[DashTutorVoiceChat] Streaming error:', error);
       
@@ -608,6 +712,7 @@ export default function DashTutorVoiceChat() {
               : msg
           )
         );
+        updatePhonicsTarget(cleanedResponse);
         
         // Still try to speak if in voice mode
         if (isVoiceModeRef.current && cleanedResponse) {
@@ -680,14 +785,20 @@ export default function DashTutorVoiceChat() {
     }
   };
 
-  const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage) => {
-    const formatted = formatTranscript(transcript, language);
+  const handleVoiceInput = useCallback((transcript: string, language?: SupportedLanguage, meta?: VoiceTranscriptMeta) => {
+    const formatted = formatTranscript(transcript, language, {
+      whisperFlow: true,
+      summarize: true,
+      preschoolMode: orgType === 'preschool',
+      maxSummaryWords: orgType === 'preschool' ? 16 : 20,
+    });
     if (language) setPreferredLanguage(language);
     if (voiceErrorBanner) setVoiceErrorBanner(null);
     if (formatted.trim()) {
+      void submitPhonicsAssessment(formatted, language, meta);
       sendMessage(formatted);
     }
-  }, [sendMessage, voiceErrorBanner]);
+  }, [sendMessage, submitPhonicsAssessment, voiceErrorBanner]);
 
   const statusLabel = isProcessing
     ? 'Thinking...'

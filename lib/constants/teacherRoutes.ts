@@ -203,6 +203,14 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
     color: 'warning',
     category: 'reports',
   },
+  tutor_analytics: {
+    path: '/screens/teacher-tutor-analytics' as Href,
+    title: 'Tutor Analytics',
+    titleKey: 'teacher.tutor_analytics',
+    icon: 'analytics',
+    color: '#8B5CF6',
+    category: 'reports',
+  },
   family_activity_review: {
     path: '/screens/family-activity-review' as Href,
     title: 'Family Activity Review',

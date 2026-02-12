@@ -6,6 +6,7 @@ import type {
   PreschoolPlayType,
   PhonicsStage,
 } from '@/hooks/dash-assistant/tutorTypes';
+import { getMascotPersonality } from '@/lib/dash-ai/tutorTheme';
 
 const PHONICS_STAGE_ORDER: PhonicsStage[] = ['letter_sounds', 'cvc_blending', 'rhyming', 'segmenting'];
 
@@ -210,18 +211,22 @@ export const buildTutorSystemContext = (
         'PHONICS PROGRESSION MODE:',
         `- Current stage: ${phonicsStage.replace(/_/g, ' ')}.`,
         '- Use sounds, not letter names.',
-        '- Write sustained sounds like "sss", "mmm", "fff", and "buh".',
-        '- Never write spaced letter repetition like "s s s" or "m m m".',
+        '- CRITICAL: Wrap ALL letter sounds in slash markers: /s/, /m/, /f/, /b/, /a/, etc.',
+        '- Example: "This letter makes the sound /s/. Can you hiss like a snake? /s/!"',
+        '- NEVER write bare sustained text like "sss", "mmm", "fff" — always /s/, /m/, /f/.',
         '- Use blending format: "c-a-t becomes cat".',
         '- Ask ONE phonics prompt at a time and wait for the learner answer.',
         '- Keep examples playful and concrete with 3-5 year old vocabulary.',
       ].join('\n')
     : null;
 
+  const mascotPersonality = getMascotPersonality(ageBand);
+
   const baseLines = [
     'TUTOR MODE OVERRIDE:',
     `Mode: ${session.mode}.`,
     `Difficulty target: ${session.difficulty || 1}/3.`,
+    `Personality: ${mascotPersonality}.`,
     learner?.learnerName ? `Learner: ${learner.learnerName}.` : null,
     learner?.grade ? `Grade: ${learner.grade}.` : session.grade ? `Grade: ${session.grade}.` : null,
     session.subject ? `Subject: ${session.subject}.` : null,
@@ -230,6 +235,12 @@ export const buildTutorSystemContext = (
     learner?.schoolType ? `School type: ${learner.schoolType}.` : null,
     levelGuidance,
     phonicsGuidance,
+    '',
+    'CAPS CURRICULUM TOOLS (for K-12 learners):',
+    '- You can search the CAPS curriculum database using the search_caps_curriculum tool.',
+    '- Use it when generating grade-specific questions to ensure alignment with official CAPS content.',
+    '- Include CAPS content area references in your questions where relevant.',
+    '- Example: For Grade 4 Mathematics on fractions, search "fractions Grade 4" to get official CAPS outcomes.',
     '',
     'INTERACTIVE TEACHING TOOLS:',
     '- For math: Show visual representations (use emoji grids for counting, simple ASCII diagrams for shapes)',
@@ -262,6 +273,15 @@ export const buildTutorSystemContext = (
     '- NEVER use markdown formatting symbols when in voice mode.',
     '- Use short, conversational sentences.',
     '- Pause between concepts (use periods, not semicolons).',
+    '',
+    'PRONUNCIATION RULES (CRITICAL — these affect how TTS reads your text):',
+    '- "EduDash Pro" is ONE compound brand name — never split it as "Edu Dash Pro".',
+    '- South African language names are single words: "isiZulu" (not "isi Zulu"), "isiXhosa" (not "isi Xhosa"), "Sesotho" (not "Se sotho"), "Sepedi" (not "Se pedi").',
+    '- When greeting in another language, write the word as-is: "Sawubona!" or "Molo!" or "Dumela!"',
+    '- For phonics, ALWAYS use slash markers for sounds: write "/s/" not "sss" or "the letter S".',
+    '- For blending, use hyphen format: "c-a-t becomes cat".',
+    '- When switching languages mid-sentence, keep the foreign word intact — do not transliterate or add pronunciation guides in parentheses.',
+    '- Common abbreviations: say "caps" (not C-A-P-S), "stem" (not S-T-E-M), "A.I." (spell out).',
     '',
     'Ask ONE question only and stop. Do not add extra questions or commentary.',
     'Keep responses very short (2-4 short lines max) unless explaining a concept.',

@@ -1,212 +1,312 @@
-/**
- * Lessons Search Screen (Stub)
- * 
- * Placeholder screen to prevent routing errors.
- * This will be built out later with full search and filtering capabilities.
- */
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
+  FlatList,
+  RefreshControl,
   StyleSheet,
-  TouchableOpacity,
-  ScrollView,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/contexts/ThemeContext';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTeacherLessons, type TeacherLesson } from '@/hooks/useTeacherLessons';
+
+type SortMode = 'newest' | 'oldest' | 'title';
 
 export default function LessonsSearchScreen() {
   const { theme } = useTheme();
-  const { query, featured, sort } = useLocalSearchParams();
-  const [searchQuery, setSearchQuery] = useState((query as string) || '');
+  const { user, profile } = useAuth();
+  const params = useLocalSearchParams<{ query?: string; sort?: string }>();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const [searchQuery, setSearchQuery] = useState((params.query as string) || '');
+  const [sortMode, setSortMode] = useState<SortMode>(
+    params.sort === 'oldest' || params.sort === 'title' ? (params.sort as SortMode) : 'newest',
+  );
+  const [refreshing, setRefreshing] = useState(false);
+
+  const teacherId = user?.id || (profile as any)?.id;
+  const { lessons, isLoading, error, refetch } = useTeacherLessons({
+    includeOrganization: true,
+    limit: 250,
+  });
+
+  const filteredLessons = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    let items = lessons.filter((lesson) => {
+      const scopeMatch =
+        lesson.teacher_id === teacherId ||
+        lesson.preschool_id === (profile as any)?.organization_id ||
+        lesson.preschool_id === (profile as any)?.preschool_id;
+      if (!scopeMatch) return false;
+
+      if (!query) return true;
+      return (
+        lesson.title.toLowerCase().includes(query) ||
+        String(lesson.subject || '').toLowerCase().includes(query) ||
+        String(lesson.description || '').toLowerCase().includes(query) ||
+        String(lesson.age_group || '').toLowerCase().includes(query)
+      );
+    });
+
+    items = [...items].sort((a, b) => {
+      if (sortMode === 'title') return a.title.localeCompare(b.title);
+      if (sortMode === 'oldest') return a.created_at.localeCompare(b.created_at);
+      return b.created_at.localeCompare(a.created_at);
+    });
+
+    return items;
+  }, [lessons, profile, searchQuery, sortMode, teacherId]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const onLessonPress = (lesson: TeacherLesson) => {
+    router.push({
+      pathname: '/screens/lesson-viewer',
+      params: { lessonId: lesson.id },
+    });
+  };
+
+  const renderSortChip = (mode: SortMode, label: string) => {
+    const selected = sortMode === mode;
+    return (
+      <TouchableOpacity
+        key={mode}
+        onPress={() => setSortMode(mode)}
+        style={[styles.sortChip, selected && styles.sortChipActive]}
+      >
+        <Text style={[styles.sortChipText, selected && styles.sortChipTextActive]}>{label}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderLesson = ({ item }: { item: TeacherLesson }) => {
+    const isMine = item.teacher_id === teacherId;
+    return (
+      <TouchableOpacity style={styles.lessonCard} onPress={() => onLessonPress(item)}>
+        <View style={styles.lessonHeader}>
+          <Text style={styles.lessonTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          {item.is_ai_generated ? (
+            <View style={styles.aiBadge}>
+              <Ionicons name="sparkles" size={12} color={theme.primary} />
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.lessonMeta}>
+          {item.subject || 'General'} • {item.age_group || '3-6'} • {item.duration_minutes || 30} min
+        </Text>
+        {item.description ? (
+          <Text style={styles.lessonDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+        ) : null}
+        <Text style={styles.lessonFooter}>
+          {isMine ? 'Created by you' : 'School lesson'} • {new Date(item.created_at).toLocaleDateString('en-ZA')}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Header */}
+    <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          Search Lessons
-        </Text>
+        <Text style={styles.headerTitle}>Search Lessons</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View
-            style={[
-              styles.searchBar,
-              {
-                backgroundColor: theme.inputBackground,
-                borderColor: theme.inputBorder,
-              },
-            ]}
-          >
-            <Ionicons name="search" size={20} color={theme.textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: theme.inputText }]}
-              placeholder="Search lessons, topics, or skills..."
-              placeholderTextColor={theme.inputPlaceholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery('')}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={theme.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search title, subject, age group..."
+            placeholderTextColor={theme.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
+      </View>
 
-        {/* Parameters Info (for debugging/development) */}
-        {(query || featured || sort) && (
-          <View style={styles.paramsContainer}>
-            <Text style={[styles.paramsTitle, { color: theme.textSecondary }]}>
-              Search Parameters:
-            </Text>
-            {query && (
-              <Text style={[styles.paramItem, { color: theme.textSecondary }]}>
-                Query: {query}
-              </Text>
-            )}
-            {featured && (
-              <Text style={[styles.paramItem, { color: theme.textSecondary }]}>
-                Featured: {featured}
-              </Text>
-            )}
-            {sort && (
-              <Text style={[styles.paramItem, { color: theme.textSecondary }]}>
-                Sort: {sort}
-              </Text>
-            )}
-          </View>
-        )}
+      <View style={styles.sortRow}>
+        {renderSortChip('newest', 'Newest')}
+        {renderSortChip('oldest', 'Oldest')}
+        {renderSortChip('title', 'A-Z')}
+      </View>
 
-        {/* Coming Soon Content */}
-        <View style={styles.comingSoonContainer}>
-          <Ionicons name="search-outline" size={64} color={theme.textSecondary} />
-          <Text style={[styles.comingSoonTitle, { color: theme.text }]}>
-            Coming Soon
-          </Text>
-          <Text style={[styles.comingSoonDescription, { color: theme.textSecondary }]}>
-            Advanced lesson search and filtering capabilities are currently under development. 
-            For now, you can browse lessons from the Lessons Hub.
-          </Text>
-          
-          <TouchableOpacity
-            style={[styles.backToHubButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="library-outline" size={20} color={theme.onPrimary} />
-            <Text style={[styles.backToHubText, { color: theme.onPrimary }]}>
-              Back to Lessons Hub
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+      <FlatList
+        data={filteredLessons}
+        keyExtractor={(item) => item.id}
+        renderItem={renderLesson}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="book-outline" size={56} color={theme.textSecondary} />
+              <Text style={styles.emptyTitle}>No lessons found</Text>
+              <Text style={styles.emptySubtitle}>
+                {error
+                  ? 'Could not load lessons right now.'
+                  : searchQuery
+                    ? 'Try a broader search term.'
+                    : 'Your school has no lessons yet.'}
+              </Text>
+            </View>
+          ) : null
+        }
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-  },
-  paramsContainer: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(128, 128, 128, 0.1)',
-  },
-  paramsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  paramItem: {
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  comingSoonContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 16,
-  },
-  comingSoonTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 24,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  comingSoonDescription: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
-  },
-  backToHubButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-    gap: 8,
-  },
-  backToHubText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingTop: 56,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      gap: 10,
+    },
+    backButton: {
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    searchContainer: {
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      backgroundColor: theme.card,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.text,
+      paddingVertical: 10,
+      marginLeft: 8,
+      fontSize: 15,
+    },
+    sortRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    sortChip: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: theme.card,
+    },
+    sortChipActive: {
+      borderColor: theme.primary,
+      backgroundColor: `${theme.primary}22`,
+    },
+    sortChipText: {
+      color: theme.textSecondary,
+      fontWeight: '600',
+      fontSize: 12,
+    },
+    sortChipTextActive: {
+      color: theme.primary,
+    },
+    listContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 20,
+      gap: 10,
+    },
+    lessonCard: {
+      backgroundColor: theme.card,
+      borderColor: theme.border,
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 12,
+      gap: 4,
+    },
+    lessonHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    lessonTitle: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    aiBadge: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: `${theme.primary}22`,
+    },
+    lessonMeta: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    lessonDescription: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    lessonFooter: {
+      marginTop: 2,
+      color: theme.textSecondary,
+      fontSize: 11,
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 64,
+      gap: 8,
+    },
+    emptyTitle: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    emptySubtitle: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      textAlign: 'center',
+      paddingHorizontal: 20,
+    },
+  });

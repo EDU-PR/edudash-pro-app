@@ -15,12 +15,19 @@ import {
   RecordingPresets,
 } from 'expo-audio';
 
-// Silence detection settings
+// Silence detection settings (defaults, overridable via options)
 // Speech threshold is configurable via env (default -30dB for better sensitivity in quiet environments)
-const SPEECH_THRESHOLD = parseFloat(process.env.EXPO_PUBLIC_VOICE_SPEECH_THRESHOLD || '-30');
-const SILENCE_DURATION_MS = 2500; // Auto-send after 2.5 seconds without speech (increased from 1.5s to allow full sentences)
-const MIN_RECORDING_MS = 800; // Minimum recording time before allowing auto-send
-const MAX_RECORDING_MS = 30000; // Maximum recording time (30 seconds)
+const DEFAULT_SPEECH_THRESHOLD = parseFloat(process.env.EXPO_PUBLIC_VOICE_SPEECH_THRESHOLD || '-30');
+const DEFAULT_SILENCE_DURATION_MS = 2500; // Auto-send after 2.5s silence
+const MIN_RECORDING_MS = 800;
+const MAX_RECORDING_MS = 30000;
+
+export interface VoiceRecorderOptions {
+  /** Override speech threshold dB (default -30). Use -35 for children. */
+  speechThreshold?: number;
+  /** Override silence duration ms (default 2500). Use 4000 for children. */
+  silenceDuration?: number;
+}
 
 export interface VoiceRecorderState {
   isRecording: boolean;
@@ -35,8 +42,11 @@ export interface VoiceRecorderActions {
 }
 
 export function useVoiceRecorder(
-  onSilenceDetected?: () => void
+  onSilenceDetected?: () => void,
+  options?: VoiceRecorderOptions,
 ): [VoiceRecorderState, VoiceRecorderActions, number | null] {
+  const SPEECH_THRESHOLD = options?.speechThreshold ?? DEFAULT_SPEECH_THRESHOLD;
+  const SILENCE_DURATION_MS = options?.silenceDuration ?? DEFAULT_SILENCE_DURATION_MS;
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasSpeechStarted, setHasSpeechStarted] = useState(false);
   

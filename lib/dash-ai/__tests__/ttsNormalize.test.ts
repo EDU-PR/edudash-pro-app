@@ -15,6 +15,17 @@ describe('ttsNormalize', () => {
     expect(out).not.toContain('m m m');
   });
 
+  it('converts repeated letter cues to phoneme markers in phonics mode', () => {
+    const out = normalizeForTTS('say s s s, then m-m-m', {
+      phonicsMode: true,
+      preservePhonicsMarkers: true,
+    });
+    expect(out).toContain('/s/');
+    expect(out).toContain('/m/');
+    expect(out).not.toContain('s s s');
+    expect(out).not.toContain('m-m-m');
+  });
+
   it('preserves phonics markers in phonics mode', () => {
     const out = normalizeForTTS('/b/ and [c] and c-a-t', {
       phonicsMode: true,
@@ -29,5 +40,20 @@ describe('ttsNormalize', () => {
     const out = normalizeForTTSPhonics('blend c-a-t with /b/');
     expect(out).toContain('c-a-t');
     expect(out).toContain('/b/');
+  });
+
+  it('strips slash markers in non-phonics output so TTS does not read "/"', () => {
+    const out = normalizeForTTS('Say /s/ then /m/ for me.', {
+      phonicsMode: false,
+      preservePhonicsMarkers: false,
+    });
+    expect(out).toContain('s');
+    expect(out).toContain('m');
+    expect(out).not.toContain('/');
+  });
+
+  it('fixes common contraction typo: "It socks" -> "It\'s socks"', () => {
+    const out = normalizeForTTS('It socks.');
+    expect(out).toContain("It's socks");
   });
 });

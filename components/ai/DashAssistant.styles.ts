@@ -624,13 +624,17 @@ export const styles = StyleSheet.create({
   },
   voiceStatusRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 10,
+  },
+  voiceStatusContent: {
+    flex: 1,
+    gap: 4,
   },
   voiceStatusText: {
     fontSize: 12,
@@ -639,8 +643,12 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   voiceTranscript: {
-    fontSize: 12,
-    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  voiceHint: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   tutorChipRow: {
     paddingBottom: 10,

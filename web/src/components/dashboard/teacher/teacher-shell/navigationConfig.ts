@@ -49,6 +49,9 @@ export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
       label: 'Lessons & Activities',
       items: [
         { href: '/dashboard/teacher/lessons', label: 'Lesson Plans', icon: BookOpen },
+        { href: '/dashboard/teacher/activities', label: 'Activities', icon: Sparkles },
+        { href: '/dashboard/teacher/interactive-activities', label: 'Interactive Activities', icon: Sparkles },
+        { href: '/dashboard/teacher/weekly-plans', label: 'Weekly Plans', icon: Calendar },
         { href: '/dashboard/teacher/assignments', label: 'Assignments', icon: ClipboardCheck },
         { href: '/dashboard/teacher/homework', label: 'Homework', icon: FileText },
       ],
@@ -82,6 +85,7 @@ export function getTeacherNavSections(unreadCount: number = 0): NavSection[] {
       label: 'Reports & Analytics',
       items: [
         { href: '/dashboard/teacher/reports', label: 'Student Reports', icon: BarChart3 },
+        { href: '/dashboard/teacher/tutor-analytics', label: 'Tutor Analytics', icon: Sparkles },
         { href: '/dashboard/teacher/family-review', label: 'Family Activity', icon: Home },
         { href: '/dashboard/teacher/reputation', label: 'My Reputation', icon: Star },
       ],

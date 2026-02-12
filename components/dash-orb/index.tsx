@@ -262,7 +262,12 @@ export default function DashOrb({
       setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
       setIsListeningForCommand(false);
       const language = normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA';
-      const formatted = formatTranscript(text, language);
+      const formatted = formatTranscript(text, language, {
+        whisperFlow: true,
+        summarize: true,
+        preschoolMode: orgType === 'preschool',
+        maxSummaryWords: orgType === 'preschool' ? 16 : 20,
+      });
       shouldRestartListeningRef.current = whisperModeEnabledRef.current;
       await handleSendRef.current(formatted);
     },
@@ -833,7 +838,13 @@ export default function DashOrb({
                 // Process the voice command
                 const formatted = formatTranscript(
                   transcriptResult.text,
-                  transcriptResult.language || normalized || undefined
+                  transcriptResult.language || normalized || undefined,
+                  {
+                    whisperFlow: true,
+                    summarize: true,
+                    preschoolMode: orgType === 'preschool',
+                    maxSummaryWords: orgType === 'preschool' ? 16 : 20,
+                  }
                 );
                 shouldRestartListeningRef.current = whisperModeEnabledRef.current;
                 await handleSend(formatted);
@@ -1158,7 +1169,11 @@ export default function DashOrb({
             schoolType: learnerContext?.schoolType || null,
             organizationType: learnerContext?.schoolType || null,
           });
-          await speak(result, ttsLanguage, { phonicsMode });
+          await speak(result, ttsLanguage, {
+            phonicsMode,
+            // Keep parent/student ORB responses at normal-or-faster speed.
+            rate: phonicsMode ? 12 : 0,
+          });
         } catch (ttsErr) {
           console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
           // Surface TTS failure as a system message so user knows

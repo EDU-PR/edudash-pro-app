@@ -59,4 +59,6 @@ export type TutorPayload = {
   next_expected_answer?: string;
   hint?: string;
   steps?: string;
+  /** CAPS curriculum content area or topic ID when aligned */
+  caps_content_area?: string;
 };
