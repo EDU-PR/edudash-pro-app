@@ -66,7 +66,11 @@ export class SeatService {
         console.error('Error assigning staff seat:', error);
         
         // Map specific error messages to error codes
+        const rawCode = String((error as any)?.code || '');
         const message = String(error.message || '');
+        const details = String((error as any)?.details || '');
+        const hint = String((error as any)?.hint || '');
+        const combined = `${message} ${details} ${hint}`.toLowerCase();
         if (message.includes('Only principals can assign')) {
           throw SeatService.createError('PERMISSION_DENIED', 'Only principals can assign staff seats');
         }
@@ -81,6 +85,22 @@ export class SeatService {
         }
         if (message.includes('No active subscription found')) {
           throw SeatService.createError('LIMIT_EXCEEDED', 'No active school subscription was found for seat assignment.');
+        }
+        if (combined.includes('seat assignment in progress')) {
+          throw SeatService.createError('NETWORK_ERROR', 'Another seat assignment is in progress. Please retry in a moment.');
+        }
+        if (combined.includes('uniq_active_subscription_user')) {
+          throw SeatService.createError('ALREADY_ASSIGNED', 'This staff member already has an active seat.');
+        }
+        if (
+          rawCode === '23505' &&
+          (combined.includes('users_pkey') || combined.includes('users_auth_user_id'))
+        ) {
+          throw SeatService.createError(
+            'NETWORK_ERROR',
+            'Seat assignment hit an account-link conflict. Please retry.',
+            message
+          );
         }
         
         throw SeatService.createError('NETWORK_ERROR', 'Failed to assign staff seat', message);

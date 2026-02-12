@@ -110,10 +110,18 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
   const { theme } = useTheme();
   const { t } = useTranslation();
 
-  const otherParticipant = thread.participants?.find((p: any) => p.role === 'parent');
-  const participantName = otherParticipant?.user_profile
-    ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-    : 'Parent';
+  const isGroupThread = Boolean(
+    thread.is_group ||
+    ['class_group', 'parent_group', 'teacher_group', 'announcement', 'custom'].includes(String(thread.type || thread.group_type || ''))
+  );
+  const otherParticipant =
+    thread.participants?.find((p: any) => p.role !== 'teacher') ||
+    thread.participants?.find((p: any) => p.role === 'teacher');
+  const participantName = isGroupThread
+    ? thread.group_name || thread.subject || t('common.group', { defaultValue: 'Group' })
+    : (otherParticipant?.user_profile
+      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+      : thread.subject || t('common.contact', { defaultValue: 'Contact' }));
 
   const studentName = thread.student
     ? `${thread.student.first_name} ${thread.student.last_name}`.trim()
@@ -129,6 +137,9 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
     .slice(0, 2);
 
   const styles = useMemo(() => createThreadItemStyles(theme, hasUnread), [theme, hasUnread]);
+  const roleLabel = isGroupThread
+    ? String(thread.group_type || thread.type || 'group').replace(/_/g, ' ')
+    : (otherParticipant?.role || t('common.contact', { defaultValue: 'contact' }));
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
@@ -149,9 +160,9 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
 
           <View style={styles.contextRow}>
             <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>Parent</Text>
+              <Text style={styles.roleText}>{roleLabel}</Text>
             </View>
-            {studentName && <Text style={styles.studentText}>• {studentName}</Text>}
+            {!isGroupThread && studentName && <Text style={styles.studentText}>• {studentName}</Text>}
           </View>
 
           <View style={styles.bottomRow}>

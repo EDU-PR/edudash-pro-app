@@ -229,7 +229,11 @@ export default function TeacherDashboard() {
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/teacher/messages')}>
             <MessageCircle className="icon20" />
-            <span>Message Parents</span>
+            <span>Messaging Hub</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/teacher/groups')}>
+            <Calendar className="icon20" />
+            <span>Staff Planning Room</span>
           </button>
           {/* Quick Call Button - Moved from FAB */}
           <button 

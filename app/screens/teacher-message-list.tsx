@@ -46,17 +46,25 @@ export default function TeacherMessageListScreen() {
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   const handleThreadPress = useCallback((thread: MessageThread) => {
-    const otherParticipant = thread.participants?.find((p: any) => p.role === 'parent');
-    const participantName = otherParticipant?.user_profile
-      ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
-      : 'Parent';
+    const isGroupThread = Boolean(
+      thread.is_group ||
+      ['class_group', 'parent_group', 'teacher_group', 'announcement', 'custom'].includes(String(thread.type || thread.group_type || ''))
+    );
+    const otherParticipant =
+      thread.participants?.find((p: any) => p.role !== 'teacher') ||
+      thread.participants?.find((p: any) => p.role === 'teacher');
+    const participantName = isGroupThread
+      ? thread.group_name || thread.subject || 'Group'
+      : (otherParticipant?.user_profile
+        ? `${otherParticipant.user_profile.first_name} ${otherParticipant.user_profile.last_name}`.trim()
+        : thread.subject || 'Contact');
 
     router.push({
       pathname: '/screens/teacher-message-thread',
       params: {
         threadId: thread.id,
         title: participantName,
-        parentId: otherParticipant?.user_id || '',
+        parentId: isGroupThread ? '' : (otherParticipant?.user_id || ''),
         parentName: participantName,
       },
     });
@@ -175,7 +183,7 @@ export default function TeacherMessageListScreen() {
             {t('teacher.noMessagesTitle', { defaultValue: 'No Messages Yet' })}
           </Text>
           <Text style={styles.emptySubtitle}>
-            {t('teacher.noMessagesDesc', { defaultValue: 'When parents send you messages about your students, they\'ll appear here.' })}
+            {t('teacher.noMessagesDesc', { defaultValue: 'Parent and staff conversations will appear here once messages start.' })}
           </Text>
           <TouchableOpacity style={styles.emptyButton} onPress={handleStartNewMessage}>
             <Ionicons name="chatbubble-outline" size={20} color={theme.onPrimary} />

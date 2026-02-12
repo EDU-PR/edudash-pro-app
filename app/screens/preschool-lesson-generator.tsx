@@ -43,6 +43,12 @@ import { getCombinedUsage, incrementUsage, logUsageEvent } from '@/lib/ai/usage'
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits';
 import { track } from '@/lib/analytics';
+import {
+  buildQuickLessonThemeHint,
+  loadQuickLessonThemeContext,
+  summarizeQuickLessonContext,
+  type QuickLessonThemeContext,
+} from '@/lib/lesson-planning/quickLessonThemeContext';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 // Preschool-specific constants
@@ -86,7 +92,7 @@ interface GeneratedContent {
 
 export default function PreschoolLessonGeneratorScreen() {
   const { theme } = useTheme();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const params = useLocalSearchParams();
   const modeParam = Array.isArray(params?.mode) ? params.mode[0] : params?.mode;
   const isQuickMode = modeParam === 'quick';
@@ -193,6 +199,8 @@ export default function PreschoolLessonGeneratorScreen() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'lesson' | 'insights' | 'homework'>('lesson');
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
+  const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
+  const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
   
   // Usage state
   const [usage, setUsage] = useState({ lesson_generation: 0 });
@@ -242,6 +250,7 @@ export default function PreschoolLessonGeneratorScreen() {
 
   const selectedSubjectInfo = PRESCHOOL_SUBJECTS.find(s => s.id === selectedSubject);
   const selectedAgeGroupInfo = AGE_GROUPS.find(a => a.id === selectedAgeGroup);
+  const schoolId = profile?.organization_id || profile?.preschool_id || null;
 
   useEffect(() => {
     if (!isQuickMode || quickDefaultsApplied.current) return;
@@ -251,6 +260,29 @@ export default function PreschoolLessonGeneratorScreen() {
     setIncludeHomework(false);
     quickDefaultsApplied.current = true;
   }, [isQuickMode, selectedAgeGroup, selectedSubject]);
+
+  useEffect(() => {
+    if (!isQuickMode || !schoolId || !user?.id) return;
+    let cancelled = false;
+
+    const loadContext = async () => {
+      setQuickLessonContextLoading(true);
+      const context = await loadQuickLessonThemeContext({
+        supabase: assertSupabase(),
+        preschoolId: schoolId,
+        teacherId: user.id,
+      });
+      if (!cancelled) {
+        setQuickLessonContext(context);
+        setQuickLessonContextLoading(false);
+      }
+    };
+
+    void loadContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuickMode, schoolId, user?.id]);
 
   const buildPrompt = useCallback(() => {
     const durationNum = parseInt(duration, 10) || 30;
@@ -262,6 +294,7 @@ export default function PreschoolLessonGeneratorScreen() {
     const quickModeNote = isQuickMode
       ? '\n\n**QUICK LESSON MODE:** Create a low-prep, high-engagement lesson that fits within the time limit. Use minimal materials, clear transitions, and simple instructions.'
       : '';
+    const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
     
     let prompt = `You are a highly experienced early childhood educator and curriculum specialist creating an engaging, developmentally appropriate preschool lesson plan. Your expertise spans child development, educational psychology, and hands-on learning methodologies.${quickModeNote}
 
@@ -272,6 +305,7 @@ export default function PreschoolLessonGeneratorScreen() {
 - Duration: ${duration} minutes
 - Language: ${language === 'af' ? 'Afrikaans' : language === 'zu' ? 'Zulu' : language === 'st' ? 'Sesotho' : 'English'}
 ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate Artificial Intelligence concepts through play and discovery' : selectedSubject === 'robotics' ? 'Robotics and sequencing through movement and simple programming' : 'Digital literacy and computer basics for young learners'}` : ''}
+${planningHint ? `\n**SCHOOL PLANNING ALIGNMENT (MUST FOLLOW):**\n${planningHint}` : ''}
 
 **CRITICAL GUIDELINES FOR HIGH-QUALITY PRESCHOOL LESSONS:**\n\n**Age-Appropriate Design:**\n- Use simple, concrete language and concepts children can understand\n- Design activities that match developmental milestones for ages ${ageRange}\n- Consider attention spans: ${selectedAgeGroup === 'toddlers' ? '2-5 minutes per activity with frequent transitions' : selectedAgeGroup === 'preschool' ? '5-10 minutes per activity with engaging variety' : selectedAgeGroup === 'prek' ? '10-15 minutes per activity with structured progression' : '10-20 minutes per activity with clear objectives'}\n- Include multiple learning modalities (visual, auditory, kinesthetic, tactile)\n\n**Engagement & Learning:**\n- Start with a captivating hook or story element to grab attention\n- Include hands-on, sensory-rich activities that children can touch, see, and manipulate\n- Incorporate movement, songs, or rhymes to maintain engagement\n- Use repetition and reinforcement of key concepts throughout\n- Add social interaction opportunities for peer learning\n- Include reflection and discussion moments\n\n**Practical Implementation:**\n- Provide clear, step-by-step instructions teachers can easily follow\n- Specify exact materials needed with common classroom alternatives\n- Include timing estimates for each activity section\n- Add smooth transitions between activities with clear cues\n- Consider classroom management tips for group activities\n- Include adaptations for different learning needs and abilities\n${selectedSubject === 'ai' ? `\n**AI-SPECIFIC GUIDELINES:**\n- Introduce AI as "smart helpers" or "learning machines"\n- Use simple analogies (like teaching a robot to recognize shapes)\n- Focus on pattern recognition through games\n- Include activities like sorting, matching, and predicting\n- Emphasize that AI learns from examples (like children do)\n- Keep concepts concrete and visual` : ''}${selectedSubject === 'robotics' ? `\n**ROBOTICS-SPECIFIC GUIDELINES:**\n- Introduce robots as helpers and friends\n- Focus on movement sequences (forward, backward, turn left/right)\n- Use simple programming concepts through physical movement\n- Include activities like "programming" a friend to move\n- Emphasize sequencing and following instructions\n- Use building blocks or simple robot toys if available` : ''}${selectedSubject === 'computer_literacy' ? `\n**COMPUTER LITERACY-SPECIFIC GUIDELINES:**\n- Introduce basic computer parts (screen, keyboard, mouse)\n- Focus on mouse control through simple games\n- Teach keyboard basics (finding letters, numbers)\n- Include online safety basics (asking before clicking)\n- Use age-appropriate apps and games\n- Emphasize taking breaks and screen time limits` : ''}\n\n**FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:**\n\n## 📚 LESSON PLAN: [Create an engaging, descriptive title related to ${topicStr}]\n\n### Learning Objectives\n- [List 3-4 specific, measurable learning objectives that children will achieve]\n- [Focus on skills like: identifying, naming, sorting, creating, demonstrating, etc.]\n- [Ensure objectives match the ${ageRange} age group developmental stage]\n\n### Materials Needed\n**Primary Materials:**\n- [List 5-8 essential materials with specific quantities when relevant]\n- [Include both purchased and DIY/recyclable options]\n\n**Optional Extensions:**\n- [2-3 additional materials for extended activities]\n\n### Opening Circle Time (${Math.floor(durationNum * 0.15)} minutes)\n**Hook Activity:**\n- [Captivating opening - story, song, mystery box, or dramatic element]\n- [Clear connection to the lesson topic]\n- [Engagement questions to activate prior knowledge]\n\n### Main Learning Activities (${Math.floor(durationNum * 0.6)} minutes)\n**Activity 1: [Descriptive Name] (${Math.floor(durationNum * 0.3)} minutes)**\n- **Setup:** [Brief preparation instructions]\n- **Instructions:** [Step-by-step process with 3-5 clear steps]\n- **Teacher Facilitation:** [Specific questions and prompts to guide learning]\n- **Learning Check:** [How to assess children are understanding]\n\n**Activity 2: [Descriptive Name] (${Math.floor(durationNum * 0.3)} minutes)**\n- **Setup:** [Brief preparation instructions]\n- **Instructions:** [Step-by-step process with 3-5 clear steps]\n- **Teacher Facilitation:** [Specific questions and prompts to guide learning]\n- **Learning Check:** [How to assess children are understanding]\n\n### Movement & Transition (${Math.floor(durationNum * 0.1)} minutes)\n- [Physical activity that reinforces learning concepts]\n- [Clear transition cues and instructions]\n- [Connection between movement and lesson theme]\n\n### Closing & Reflection (${Math.floor(durationNum * 0.15)} minutes)\n- [Review key concepts learned]\n- [Children share what they discovered or created]\n- [Preview of take-home activity or next steps]\n- [Closing song or ritual]\n\n---`;
 
@@ -284,7 +318,7 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
     }
 
     return prompt;
-  }, [topic, selectedSubject, selectedAgeGroup, duration, language, includeInsights, includeHomework, selectedSubjectInfo, selectedAgeGroupInfo, isQuickMode]);
+  }, [topic, selectedSubject, selectedAgeGroup, duration, language, includeInsights, includeHomework, selectedSubjectInfo, selectedAgeGroupInfo, isQuickMode, quickLessonContext]);
 
   const handleGenerate = useCallback(async () => {
     if (isQuotaExhausted) {
@@ -642,9 +676,16 @@ ${isSTEMSubject ? `- STEM Focus: ${selectedSubject === 'ai' ? 'Age-appropriate A
       {isQuickMode && (
         <View style={[styles.quickModeBanner, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
           <Ionicons name="flash" size={16} color={theme.primary} />
-          <Text style={[styles.quickModeText, { color: theme.primary }]}>
-            Quick Lesson Mode • 15 min • Low prep
-          </Text>
+          <View style={styles.quickModeTextWrap}>
+            <Text style={[styles.quickModeText, { color: theme.primary }]}>
+              Quick Lesson Mode • 15 min • Low prep
+            </Text>
+            <Text style={[styles.quickModeSubText, { color: palette.textSec }]}>
+              {quickLessonContextLoading
+                ? 'Loading weekly planning alignment...'
+                : summarizeQuickLessonContext(quickLessonContext)}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -959,7 +1000,7 @@ const styles = StyleSheet.create({
   },
   quickModeBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginHorizontal: 16,
     marginTop: 6,
     marginBottom: 4,
@@ -969,7 +1010,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
   },
+  quickModeTextWrap: { flex: 1 },
   quickModeText: { fontSize: 12, fontWeight: '700' },
+  quickModeSubText: { fontSize: 11, marginTop: 3, lineHeight: 16 },
   heroText: { color: '#FFF', fontWeight: '700', fontSize: 14, marginLeft: 6 },
   heroStats: { marginLeft: 'auto' },
   heroStat: { color: '#FFF', fontSize: 12, opacity: 0.9 },

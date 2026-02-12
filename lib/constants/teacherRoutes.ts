@@ -262,7 +262,7 @@ export const getTeacherRouteForSchoolType = (
   }
   if (action === 'quick_lesson') {
     return (schoolType === 'k12_school'
-      ? '/screens/ai-lesson-generator'
+      ? '/screens/ai-lesson-generator?mode=quick'
       : '/screens/preschool-lesson-generator?mode=quick') as Href;
   }
   return getTeacherRoute(action);

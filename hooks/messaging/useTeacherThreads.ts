@@ -32,6 +32,9 @@ export const useTeacherThreads = () => {
             subject,
             student_id,
             preschool_id,
+            is_group,
+            group_name,
+            group_type,
             last_message_at,
             created_at,
             student:students(id, first_name, last_name),
@@ -124,10 +127,14 @@ export const useTeacherThreads = () => {
         // Deduplicate by contact (keep most recent thread per parent)
         const uniqueThreadMap = new Map<string, MessageThread>();
         enrichedThreads.forEach((thread) => {
+          const isGroupThread = Boolean(
+            thread.is_group ||
+            ['class_group', 'parent_group', 'teacher_group', 'announcement', 'custom'].includes(String(thread.type || thread.group_type || ''))
+          );
           const otherParticipant = thread.participants?.find(
             (p: any) => p.user_id !== user.id
           );
-          const key = otherParticipant?.user_id || thread.id;
+          const key = isGroupThread ? `group:${thread.id}` : (otherParticipant?.user_id || thread.id);
           
           const existing = uniqueThreadMap.get(key);
           if (!existing || new Date(thread.last_message_at) > new Date(existing.last_message_at)) {

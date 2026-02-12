@@ -4,7 +4,7 @@
  * @module app/screens/ai-lesson-generator
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,15 +19,23 @@ import { useLessonGeneratorModels, useTierInfo } from '@/hooks/useAIModelSelecti
 import { useAILessonGeneration } from '@/hooks/useAILessonGeneration';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/ToastProvider';
 import { EducationalPDFService } from '@/lib/services/EducationalPDFService';
 import { QuotaBar } from '@/components/ai-lesson-generator';
+import {
+  buildQuickLessonThemeHint,
+  loadQuickLessonThemeContext,
+  summarizeQuickLessonContext,
+  type QuickLessonThemeContext,
+} from '@/lib/lesson-planning/quickLessonThemeContext';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 type LanguageCode = 'en' | 'es' | 'fr' | 'pt' | 'de' | 'af' | 'zu' | 'st';
 
 export default function AILessonGeneratorScreen() {
   const { theme } = useTheme();
+  const { profile, user } = useAuth();
   const palette = useMemo(() => ({
     bg: theme.background, text: theme.text, textSec: theme.textSecondary,
     outline: theme.border, surface: theme.surface, primary: theme.primary, accent: theme.accent,
@@ -41,9 +49,15 @@ export default function AILessonGeneratorScreen() {
   const [objectives, setObjectives] = useState('Understand proper fractions; Compare simple fractions');
   const [language, setLanguage] = useState<LanguageCode>('en');
   const [saving, setSaving] = useState(false);
+  const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
+  const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
+  const quickDefaultsApplied = useRef(false);
 
   // Search params for prefill
-  const searchParams = useLocalSearchParams<{ topic?: string; subject?: string; gradeLevel?: string; duration?: string; objectives?: string; model?: string; language?: string }>();
+  const searchParams = useLocalSearchParams<{ topic?: string; subject?: string; gradeLevel?: string; duration?: string; objectives?: string; model?: string; language?: string; mode?: string }>();
+  const modeParam = Array.isArray(searchParams?.mode) ? searchParams.mode[0] : searchParams?.mode;
+  const isQuickMode = modeParam === 'quick';
+  const schoolId = profile?.organization_id || profile?.preschool_id || null;
 
   // Hooks
   const { generated, setGenerated, pending, progress, progressMessage, errorMsg, lastPayload, usage, quotaStatus, isQuotaExhausted, onGenerate, onCancel, refreshUsage } = useAILessonGeneration();
@@ -95,11 +109,48 @@ export default function AILessonGeneratorScreen() {
     }
   }, [searchParams, setSelectedModel]);
 
+  useEffect(() => {
+    if (!isQuickMode || quickDefaultsApplied.current) return;
+    setDuration('20');
+    setObjectives((prev) => {
+      if (prev?.trim()) return prev;
+      return 'Fast lesson warm-up; One core practice activity; Quick exit check';
+    });
+    quickDefaultsApplied.current = true;
+  }, [isQuickMode]);
+
+  useEffect(() => {
+    if (!isQuickMode || !schoolId || !user?.id) return;
+    let cancelled = false;
+
+    const loadContext = async () => {
+      setQuickLessonContextLoading(true);
+      const context = await loadQuickLessonThemeContext({
+        supabase: assertSupabase(),
+        preschoolId: schoolId,
+        teacherId: user.id,
+      });
+      if (!cancelled) {
+        setQuickLessonContext(context);
+        setQuickLessonContextLoading(false);
+      }
+    };
+
+    void loadContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuickMode, schoolId, user?.id]);
+
   const buildDashPrompt = useCallback(() => {
     const objs = (objectives || '').split(';').map(s => s.trim()).filter(Boolean);
     const langSuffix = language && language !== 'en' ? `\nPlease respond in ${language}.` : '';
-    return `Generate a ${Number(duration) || 45} minute lesson plan for Grade ${Number(gradeLevel) || 3} in ${subject} on "${topic}". Learning objectives: ${objs.join('; ') || 'derive objectives'}. Provide objectives, warm-up, activities, assessment, and closure.${langSuffix}`;
-  }, [topic, subject, gradeLevel, duration, objectives, language]);
+    const quickHint = isQuickMode
+      ? '\nThis is QUICK MODE: keep prep minimal, use common classroom materials, and deliver in compact timed steps.'
+      : '';
+    const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
+    return `Generate a ${Number(duration) || 45} minute lesson plan for Grade ${Number(gradeLevel) || 3} in ${subject} on "${topic}". Learning objectives: ${objs.join('; ') || 'derive objectives'}. Provide objectives, warm-up, activities, assessment, and closure.${quickHint}${planningHint ? `\nPlanning Alignment Context:\n${planningHint}` : ''}.${langSuffix}`;
+  }, [topic, subject, gradeLevel, duration, objectives, language, isQuickMode, quickLessonContext]);
 
   const onOpenWithDash = useCallback(() => {
     const initialMessage = buildDashPrompt();
@@ -183,6 +234,22 @@ export default function AILessonGeneratorScreen() {
         <TouchableOpacity style={[styles.actionBtn, { borderColor: palette.outline, marginRight: 8 }]} onPress={onExportPDF}><Ionicons name="document-outline" size={16} color={palette.text} /><Text style={[styles.actionBtnText, { color: palette.text }]}>PDF</Text></TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, { borderColor: palette.outline }]} onPress={onOpenWithDash}><Ionicons name="chatbubbles-outline" size={16} color={palette.text} /><Text style={[styles.actionBtnText, { color: palette.text }]}>Dash</Text></TouchableOpacity>
       </View>
+
+      {isQuickMode && (
+        <View style={[styles.quickModeBanner, { backgroundColor: theme.primary + '20', borderColor: theme.primary }]}>
+          <Ionicons name="flash" size={16} color={theme.primary} />
+          <View style={styles.quickModeTextWrap}>
+            <Text style={[styles.quickModeText, { color: theme.primary }]}>
+              Quick Lesson Mode • Low prep • Fast classroom recovery
+            </Text>
+            <Text style={[styles.quickModeSubText, { color: palette.textSec }]}>
+              {quickLessonContextLoading
+                ? 'Loading weekly planning alignment...'
+                : summarizeQuickLessonContext(quickLessonContext)}
+            </Text>
+          </View>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefreshHandler} tintColor="#3B82F6" />}>
         {/* Parameters Card */}
@@ -285,6 +352,20 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16 },
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, marginTop: 16 },
+  quickModeBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  quickModeTextWrap: { flex: 1 },
+  quickModeText: { fontSize: 12, fontWeight: '700' },
+  quickModeSubText: { fontSize: 11, marginTop: 3, lineHeight: 16 },
   avatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerText: { fontSize: 14, fontWeight: '700' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
