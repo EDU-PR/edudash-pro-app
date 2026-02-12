@@ -67,106 +67,118 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
   styles,
   theme,
 }) => {
+  const iconSize = screenWidth < 400 ? 18 : 20;
+  const actionBg = theme.surfaceVariant || theme.surface;
+  const actionBorder = theme.border;
+  const actionFg = theme.text;
+  // Parents/students get a ultra-clean header — no tier badge, no Live pill, minimal icons
+  const isSimplifiedView = !showAdvancedControls;
+
   return (
-    <View style={[styles.header, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+    <View style={[styles.header, { backgroundColor: 'transparent' }]}>
       <View style={styles.headerLeft}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={[styles.headerTitle, { color: theme.text }]}>
-              {roleCopy.title}
-            </Text>
-            {subReady && tier && (
-              <TierBadge tier={tier as any} size="sm" />
-            )}
-          </View>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
-            {roleCopy.subtitle}
+        <View style={styles.headerTitleRow}>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            {roleCopy.title}
           </Text>
-          {tutorSession && tutorSession.maxQuestions > 0 && (
-            <View style={{ marginTop: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '500' }}>
-                  Question {tutorSession.totalQuestions + 1} of {tutorSession.maxQuestions}
-                </Text>
-                <Text style={{ fontSize: 11, color: theme.success, fontWeight: '600' }}>
-                  • {tutorSession.correctCount} correct
-                </Text>
-              </View>
-              <View style={{ 
-                height: 3, 
-                backgroundColor: theme.border, 
-                borderRadius: 2, 
-                marginTop: 4,
-                overflow: 'hidden'
-              }}>
-                <View style={{ 
-                  height: '100%', 
-                  width: `${Math.min(100, (tutorSession.totalQuestions / tutorSession.maxQuestions) * 100)}%`,
-                  backgroundColor: theme.primary,
-                }} />
-              </View>
-            </View>
+          {!isSimplifiedView && subReady && tier && (
+            <TierBadge tier={tier as any} size="sm" />
           )}
         </View>
+        <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+          {roleCopy.subtitle}
+        </Text>
+        {tutorSession && tutorSession.maxQuestions > 0 && (
+          <View>
+            <View style={styles.tutorMetaRow}>
+              <Text style={[styles.tutorMetaText, { color: theme.textSecondary }]}>
+                Question {tutorSession.totalQuestions + 1} / {tutorSession.maxQuestions}
+              </Text>
+              <Text style={[styles.tutorMetaText, { color: theme.success }]}>
+                {tutorSession.correctCount} correct
+              </Text>
+            </View>
+            <View style={[styles.tutorTrack, { backgroundColor: theme.border }]}>
+              <View
+                style={[
+                  styles.tutorTrackFill,
+                  {
+                    width: `${Math.min(100, (tutorSession.totalQuestions / tutorSession.maxQuestions) * 100)}%`,
+                    backgroundColor: theme.primary,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        )}
       </View>
 
       <View style={styles.headerRight}>
+        <View style={[styles.actionRail, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {isSpeaking && (
           <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: theme.error }]}
+            style={[
+              styles.iconButton,
+              styles.iconButtonDanger,
+              { backgroundColor: theme.error, borderColor: theme.error },
+            ]}
             accessibilityLabel="Stop speaking"
             onPress={stopSpeaking}
           >
-            <Ionicons name="stop" size={screenWidth < 400 ? 18 : 22} color={theme.onError || theme.background} />
+            <Ionicons name="stop" size={iconSize} color={theme.onError || theme.background} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={styles.iconButton}
+          style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
           accessibilityLabel="New chat"
           onPress={handleNewChat}
         >
-          <Ionicons name="add-circle-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+          <Ionicons name="add-circle-outline" size={iconSize} color={actionFg} />
         </TouchableOpacity>
+        {!isSimplifiedView && (
         <TouchableOpacity
-          style={styles.iconButton}
+          style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
           accessibilityLabel="Conversations"
           onPress={() => router.push('/screens/dash-conversations-history')}
         >
-          <Ionicons name="time-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+          <Ionicons name="time-outline" size={iconSize} color={actionFg} />
         </TouchableOpacity>
+        )}
         {showAdvancedControls && (
           <TouchableOpacity
-            style={styles.iconButton}
+            style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
             accessibilityLabel="Open Dash Orb"
             onPress={() => router.push('/screens/dash-orb')}
           >
-            <Ionicons name="grid-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+            <Ionicons name="grid-outline" size={iconSize} color={actionFg} />
           </TouchableOpacity>
         )}
         {showWakeWordToggle && (
           <TouchableOpacity
-            style={styles.iconButton}
+            style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
             accessibilityLabel="Toggle wake word"
             onPress={toggleWakeWord}
             disabled={!wakeWordLoaded}
           >
             <Ionicons
               name={wakeWordEnabled ? 'ear' : 'ear-outline'}
-              size={screenWidth < 400 ? 18 : 22}
+              size={iconSize}
               color={wakeWordEnabled ? theme.success : theme.text}
             />
           </TouchableOpacity>
         )}
+        {!isSimplifiedView && (
         <TouchableOpacity
-          style={styles.iconButton}
+          style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
           accessibilityLabel="Settings"
           onPress={() => router.push('/screens/dash-ai-settings')}
         >
-          <Ionicons name="settings-outline" size={screenWidth < 400 ? 18 : 22} color={theme.text} />
+          <Ionicons name="settings-outline" size={iconSize} color={actionFg} />
         </TouchableOpacity>
+        )}
         {onClose && (
           <TouchableOpacity
-            style={styles.closeButton}
+            style={[styles.closeButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
             onPress={async () => {
               await stopSpeaking();
               cleanup?.();
@@ -174,9 +186,10 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
             }}
             accessibilityLabel="Close"
           >
-            <Ionicons name="close" size={screenWidth < 400 ? 20 : 24} color={theme.text} />
+            <Ionicons name="close" size={screenWidth < 400 ? 20 : 22} color={actionFg} />
           </TouchableOpacity>
         )}
+        </View>
       </View>
     </View>
   );

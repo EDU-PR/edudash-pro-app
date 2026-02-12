@@ -22,7 +22,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
-import { normalizeTierName, getCapabilityTier, type CapabilityTier } from '@/lib/tiers';
+import { normalizeTierName, type CapabilityTier } from '@/lib/tiers';
+import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 
 const TAG = 'SubscriptionContext';
 
@@ -403,7 +404,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             setTrialHoursRemaining(undefined);
           }
           
-          const capTier = getCapabilityTier(normalizeTierName(String(finalTier)));
+          const capTier = resolveCapabilityTier(String(finalTier));
           setCapabilityTier(capTier);
 
           setTier(finalTier);

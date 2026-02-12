@@ -20,7 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 import type { SupportedLanguage } from '@/lib/voice/types';
-import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
+import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 
 // Declare global window for web platform type safety
 declare const window: any;
@@ -598,30 +598,12 @@ export class DashVoiceService {
 
   private static readonly CAPABILITY_TIER_ORDER = ['free', 'starter', 'premium', 'enterprise'] as const;
 
-  private resolveCapabilityTier(rawTier: unknown): string {
-    const raw = String(rawTier || '').trim().toLowerCase();
-    if (!raw) return 'free';
-
-    if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') return 'starter';
-    if (raw === 'pro' || raw === 'group_10') return 'premium';
-    if (raw === 'free' || raw === 'starter' || raw === 'premium' || raw === 'enterprise') return raw;
-
-    try {
-      return getCapabilityTier(normalizeTierName(raw));
-    } catch {
-      if (raw.includes('enterprise')) return 'enterprise';
-      if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
-      if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
-      return 'free';
-    }
-  }
-
   private selectHighestCapabilityTier(candidates: unknown[]): string {
     let best = 'free';
     let bestIndex = 0;
 
     for (const candidate of candidates) {
-      const tier = this.resolveCapabilityTier(candidate);
+      const tier = resolveCapabilityTier(String(candidate || ''));
       const index = DashVoiceService.CAPABILITY_TIER_ORDER.indexOf(tier as any);
       if (index > bestIndex) {
         best = tier;

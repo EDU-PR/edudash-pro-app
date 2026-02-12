@@ -90,6 +90,73 @@ export interface WeeklyPlan {
   updated_at: string;
 }
 
+export type DailyProgramBlockType =
+  | 'circle_time'
+  | 'learning'
+  | 'movement'
+  | 'outdoor'
+  | 'meal'
+  | 'nap'
+  | 'assessment'
+  | 'transition'
+  | 'other';
+
+export type DayOfWeek = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export interface DailyProgramBlock {
+  id?: string;
+  weekly_program_id?: string;
+  preschool_id?: string;
+  class_id?: string | null;
+  created_by?: string;
+  day_of_week: DayOfWeek;
+  block_order: number;
+  block_type: DailyProgramBlockType;
+  title: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  objectives: string[];
+  materials: string[];
+  transition_cue?: string | null;
+  notes?: string | null;
+  parent_tip?: string | null;
+}
+
+export interface WeeklyProgramDraft {
+  id?: string;
+  preschool_id: string;
+  class_id?: string | null;
+  term_id?: string | null;
+  theme_id?: string | null;
+  created_by?: string;
+  week_start_date: string;
+  week_end_date: string;
+  age_group?: string;
+  title?: string | null;
+  summary?: string | null;
+  generated_by_ai?: boolean;
+  source?: 'manual' | 'ai';
+  status?: 'draft' | 'submitted' | 'approved' | 'published' | 'archived';
+  published_by?: string | null;
+  published_at?: string | null;
+  blocks: DailyProgramBlock[];
+}
+
+export interface WeeklyProgramPublishInput {
+  weeklyProgram: WeeklyProgramDraft;
+  publishNow?: boolean;
+  publishSummaryToAnnouncements?: boolean;
+}
+
+export interface WeeklyProgramGenerationConstraints {
+  dailyMinutes?: number;
+  budgetLevel?: 'low' | 'medium' | 'high';
+  indoorOnly?: boolean;
+  includeAssessmentBlock?: boolean;
+  includeParentTipPerDay?: boolean;
+  maxMaterialsPerDay?: number;
+}
+
 export const DEVELOPMENTAL_DOMAINS = [
   'cognitive',
   'physical',

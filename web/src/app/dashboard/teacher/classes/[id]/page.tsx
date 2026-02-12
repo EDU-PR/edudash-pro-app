@@ -42,21 +42,24 @@ export default function ClassDetailPage() {
       try {
         setLoading(true);
         
-        // Get user's profile (profiles-first architecture)
+        // Get user's profile — prefer organization_id, fall back to preschool_id
         const { data: profile } = await supabase
           .from('profiles')
-          .select('id, preschool_id')
+          .select('id, preschool_id, organization_id')
           .eq('id', userId)
           .maybeSingle();
 
         if (!profile) throw new Error('Profile not found');
 
-        // Fetch class details
+        const schoolId = profile.organization_id || profile.preschool_id;
+
+        // Fetch class details — teacher_id guard ensures ownership
         const { data: cls, error: clsError } = await supabase
           .from('classes')
           .select('id, name, grade, age_group, teacher_id, preschool_id')
           .eq('id', classId)
-          .eq('preschool_id', profile.preschool_id)
+          .eq('preschool_id', schoolId)
+          .eq('teacher_id', userId)
           .single();
 
         if (clsError) throw clsError;
@@ -67,14 +70,14 @@ export default function ClassDetailPage() {
           .from('students')
           .select('id, first_name, last_name, date_of_birth, is_active, class_id, preschool_id')
           .eq('class_id', classId)
-          .eq('preschool_id', profile.preschool_id)
+          .eq('preschool_id', schoolId)
           .eq('is_active', true)
           .order('last_name', { ascending: true });
 
         if (studentsError) throw studentsError;
         setStudents(studentsData || []);
-      } catch (error) {
-        console.error('Error fetching class data:', error);
+      } catch {
+        // Non-critical — will show empty state
       } finally {
         setLoading(false);
       }

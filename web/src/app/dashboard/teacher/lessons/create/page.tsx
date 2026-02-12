@@ -135,29 +135,56 @@ Format the response in clear sections with practical, age-appropriate activities
       // Get user's profile (profiles-first architecture)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id, preschool_id')
+        .select('id, preschool_id, organization_id')
         .eq('id', userId)
         .maybeSingle();
 
       if (!profile) throw new Error('Profile not found');
+      const schoolId = profile.organization_id || profile.preschool_id;
+      if (!schoolId) throw new Error('School not found for this teacher');
 
-      // Save to lessons table (adapt to your schema)
-      // const { error } = await supabase
-      //   .from('lessons')
-      //   .insert({
-      //     teacher_id: userId,
-      //     preschool_id: profile.preschool_id,
-      //     title: generatedLesson.title,
-      //     content: generatedLesson.content,
-      //     subject: generatedLesson.subject,
-      //     topic: generatedLesson.topic,
-      //     grade_level: generatedLesson.gradeLevel,
-      //     duration_minutes: generatedLesson.duration,
-      //     objectives: generatedLesson.objectives,
-      //     created_at: new Date().toISOString(),
-      //   });
+      const now = new Date().toISOString();
+      const normalizedContent =
+        typeof generatedLesson.content === 'string'
+          ? {
+              sections: [
+                {
+                  title: generatedLesson.title,
+                  content: generatedLesson.content,
+                },
+              ],
+            }
+          : generatedLesson.content;
 
-      // if (error) throw error;
+      const { error } = await supabase
+        .from('lessons')
+        .insert({
+          teacher_id: profile.id,
+          preschool_id: schoolId,
+          title: generatedLesson.title,
+          description:
+            typeof generatedLesson.content === 'string'
+              ? generatedLesson.content.slice(0, 280)
+              : `AI-generated lesson for ${generatedLesson.topic}`,
+          content: normalizedContent,
+          objectives: generatedLesson.objectives
+            ? generatedLesson.objectives
+                .split('\n')
+                .map((line: string) => line.replace(/^[-•]\s*/, '').trim())
+                .filter(Boolean)
+            : [],
+          age_group: generatedLesson.gradeLevel || (isPreschool ? '3-6' : 'Grade 1'),
+          subject: generatedLesson.subject || 'general',
+          duration_minutes: Number(generatedLesson.duration) || 30,
+          status: 'active',
+          is_ai_generated: true,
+          created_at: now,
+          updated_at: now,
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
 
       alert('Lesson plan saved successfully!');
       router.push('/dashboard/teacher/lessons');

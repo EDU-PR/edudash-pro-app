@@ -6,13 +6,13 @@ import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
+import { ReportCard, getStatusColor } from '@/components/dashboard/teacher/ReportCard';
 import { 
   FileText, 
   Plus, 
   CheckCircle, 
   Clock, 
   XCircle,
-  Eye,
   Users
 } from 'lucide-react';
 
@@ -77,26 +77,40 @@ export default function TeacherReportsPage() {
     const loadData = async () => {
       setLoadingReports(true);
       try {
-        // Load students for this teacher's classes
-        const { data: studentsData, error: studentsError } = await supabase
-          .from('students')
-          .select(`
-            id,
-            first_name,
-            last_name,
-            class_id,
-            classes (name)
-          `)
-          .eq('preschool_id', preschoolId);
+        // First get this teacher's class IDs
+        const { data: teacherClasses } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('preschool_id', preschoolId)
+          .eq('teacher_id', userId);
 
-        if (studentsError) {
-          console.error('Error loading students:', studentsError);
-        } else {
-          setStudents(studentsData?.map((s: any) => ({
-            ...s,
-            class: s.classes ? { name: s.classes.name } : undefined
-          })) || []);
+        const classIds = teacherClasses?.map((c: { id: string }) => c.id) || [];
+
+        // Load students only for this teacher's classes
+        let studentsResult: Student[] = [];
+        if (classIds.length > 0) {
+          const { data: studentsData, error: studentsError } = await supabase
+            .from('students')
+            .select(`
+              id,
+              first_name,
+              last_name,
+              class_id,
+              classes (name)
+            `)
+            .eq('preschool_id', preschoolId)
+            .in('class_id', classIds);
+
+          if (studentsError) {
+            // Non-critical — reports can still be shown
+          } else {
+            studentsResult = studentsData?.map((s: any) => ({
+              ...s,
+              class: s.classes ? { name: s.classes.name } : undefined
+            })) || [];
+          }
         }
+        setStudents(studentsResult);
 
         // Load reports created by this teacher
         const { data: reportsData, error: reportsError } = await supabase
@@ -117,13 +131,11 @@ export default function TeacherReportsPage() {
           .eq('teacher_id', userId)
           .order('created_at', { ascending: false });
 
-        if (reportsError) {
-          console.error('Error loading reports:', reportsError);
-        } else {
+        if (!reportsError) {
           setReports(reportsData || []);
         }
-      } catch (err) {
-        console.error('Error loading data:', err);
+      } catch {
+        // Non-critical: data will show empty state
       } finally {
         setLoadingReports(false);
       }
@@ -135,32 +147,6 @@ export default function TeacherReportsPage() {
   const filteredReports = selectedTab === 'all' 
     ? reports 
     : reports.filter(r => r.approval_status === selectedTab);
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <CheckCircle size={16} color="#10b981" />;
-      case 'pending_review':
-        return <Clock size={16} color="#f59e0b" />;
-      case 'rejected':
-        return <XCircle size={16} color="#ef4444" />;
-      default:
-        return <FileText size={16} color="#6b7280" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return '#10b981';
-      case 'pending_review':
-        return '#f59e0b';
-      case 'rejected':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
-  };
 
   if (loading || profileLoading) {
     return (
@@ -292,86 +278,9 @@ export default function TeacherReportsPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filteredReports.map(report => {
-              const studentName = report.students 
-                ? `${report.students.first_name} ${report.students.last_name}` 
-                : 'Unknown Student';
-              const statusColor = getStatusColor(report.approval_status);
-
-              return (
-                <div 
-                  key={report.id} 
-                  className="card" 
-                  style={{ borderLeft: `4px solid ${statusColor}`, cursor: 'pointer' }}
-                  onClick={() => router.push(`/dashboard/teacher/reports/create?student_id=${report.student_id}&report_id=${report.id}`)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        {getStatusIcon(report.approval_status)}
-                        <span style={{ 
-                          fontSize: 12, 
-                          fontWeight: 600, 
-                          color: statusColor,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
-                        }}>
-                          {report.report_type} Report
-                        </span>
-                        <span style={{ color: 'var(--muted)', fontSize: 12 }}>•</span>
-                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                          {report.report_period}
-                        </span>
-                      </div>
-                      
-                      <h3 style={{ marginBottom: 4, fontSize: 18, fontWeight: 700 }}>
-                        {studentName}
-                      </h3>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                        {report.overall_grade && (
-                          <span style={{ 
-                            background: '#10b981', 
-                            color: 'white',
-                            padding: '2px 8px', 
-                            borderRadius: 6, 
-                            fontSize: 12,
-                            fontWeight: 600
-                          }}>
-                            Grade: {report.overall_grade}
-                          </span>
-                        )}
-                        <span style={{ 
-                          background: `${statusColor}20`, 
-                          color: statusColor,
-                          padding: '2px 8px', 
-                          borderRadius: 6, 
-                          fontSize: 12,
-                          fontWeight: 600,
-                          textTransform: 'capitalize'
-                        }}>
-                          {report.approval_status.replace('_', ' ')}
-                        </span>
-                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                          {new Date(report.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <button 
-                      className="btn btnSecondary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/dashboard/teacher/reports/create?student_id=${report.student_id}&report_id=${report.id}`);
-                      }}
-                    >
-                      <Eye size={16} style={{ marginRight: 6 }} />
-                      View
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredReports.map(report => (
+              <ReportCard key={report.id} report={report} />
+            ))}
           </div>
         )}
 

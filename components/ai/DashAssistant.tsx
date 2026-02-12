@@ -35,7 +35,6 @@ import { router } from 'expo-router';
 import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
 import { DashToolsModal } from '@/components/ai/DashToolsModal';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
-import { TierBadge } from '@/components/ui/TierBadge';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
 import { useRealtimeTier } from '@/hooks/useRealtimeTier';
@@ -126,7 +125,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [showToolsModal, setShowToolsModal] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [staffActionsExpanded, setStaffActionsExpanded] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -224,6 +222,9 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     hideAlert,
     learnerContext,
     tutorSession,
+    parentChildren,
+    activeChildId,
+    setActiveChildId,
     flashListRef,
     inputRef,
     sendMessage,
@@ -313,6 +314,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isParentOrStudent = ['parent', 'student'].includes(normalizedRole);
   const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
+
+  // Derive activeChild for parent UI
+  const activeChild = useMemo(() => {
+    if (!parentChildren.length) return null;
+    return parentChildren.find((c: any) => c.id === activeChildId) || parentChildren[0] || null;
+  }, [parentChildren, activeChildId]);
+
   const orgType = getOrganizationType(profile);
   const isPreschool = orgType === 'preschool';
   const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
@@ -349,6 +357,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     return 'Step-by-step focus with quick checks for understanding.';
   }, [learnerContext, isPreschool]);
+  const shouldShowPreschoolContext = useMemo(() => {
+    if (contextChips.length === 0) return false;
+    const st = String(learnerContext?.schoolType || '').toLowerCase();
+    return st.includes('preschool') || st.includes('ecd') || st.includes('early');
+  }, [contextChips.length, learnerContext?.schoolType]);
   const showAdvancedControls = !isParentOrStudent;
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
   const usageLabel = tierStatus
@@ -363,10 +376,6 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     return null;
   }, [messages]);
-
-  useEffect(() => {
-    setStaffActionsExpanded(false);
-  }, [latestAssistantMessage?.id]);
 
   const ensureLessonAccess = useCallback(async () => {
     if (!capsReady) {
@@ -834,38 +843,39 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         />
         )}
 
-        {/* Context chips - only for preschool/ECD contexts */}
-        {headerVisible && contextChips.length > 0 && (() => {
-          const st = String(learnerContext?.schoolType || '').toLowerCase();
-          return st.includes('preschool') || st.includes('ecd') || st.includes('early');
-        })() && (
-        <DashContextChips
-          chips={contextChips}
-          contextHint={contextHint}
-          styles={styles}
-          theme={theme}
-        />
-        )}
+        <View style={layoutStyles.topDeck}>
+          {/* Context chips, usage banner, model selector - staff only */}
+          {showAdvancedControls && headerVisible && shouldShowPreschoolContext && (
+            <DashContextChips
+              chips={contextChips}
+              contextHint={contextHint}
+              styles={styles}
+              theme={theme}
+            />
+          )}
 
-        {/* Usage banner - auto-hide with header */}
-        {headerVisible && (
-        <DashUsageBanner
-          tierStatus={tierStatus}
-          usageLabel={usageLabel}
-          styles={styles}
-          theme={theme}
-        />
-        )}
+          {/* Usage banner - staff only (parents see quota on settings page) */}
+          {showAdvancedControls && headerVisible && (
+            <DashUsageBanner
+              tierStatus={tierStatus}
+              usageLabel={usageLabel}
+              styles={styles}
+              theme={theme}
+            />
+          )}
 
-        {/* Model selector - always visible for transparency */}
-        <DashModelSelector
-          models={safeModels}
-          selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
-          estimatedRemaining={estimatedRemaining}
-          styles={styles}
-          theme={theme}
-        />
+          {/* Model selector - staff only (parents auto-get best model for tier) */}
+          {showAdvancedControls && (
+          <DashModelSelector
+            models={safeModels}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            estimatedRemaining={estimatedRemaining}
+            styles={styles}
+            theme={theme}
+          />
+          )}
+        </View>
 
         {/* Messages */}
         <DashAssistantMessages
@@ -887,6 +897,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           learnerContext={learnerContext}
           bottomInset={insets.bottom}
           keyboardVisible={keyboardVisible}
+          parentChildren={parentChildren}
+          activeChild={activeChild}
+          onSelectChild={(childId) => setActiveChildId(childId)}
+          onOpenScanner={openScanner}
+          userRole={normalizedRole}
         />
 
         {isStaff && latestAssistantMessage && (
@@ -894,69 +909,56 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
             <View style={inputStyles.staffActionsHeader}>
               <View style={inputStyles.staffActionsTitleWrap}>
                 <Ionicons name="flash-outline" size={14} color={theme.primary} />
-                <Text style={[inputStyles.staffActionsTitle, { color: theme.text }]}>Quick actions</Text>
+                <Text style={[inputStyles.staffActionsTitle, { color: theme.text }]}>Command deck</Text>
               </View>
-              <TouchableOpacity
-                style={[inputStyles.staffActionsToggle, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
-                onPress={() => setStaffActionsExpanded((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Text style={[inputStyles.staffActionsToggleText, { color: theme.text }]}>
-                  {staffActionsExpanded ? 'Hide' : 'Show'}
-                </Text>
-                <Ionicons
-                  name={staffActionsExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color={theme.textSecondary}
-                />
-              </TouchableOpacity>
+              <Text style={[inputStyles.staffActionsToggleText, { color: theme.textSecondary }]}>
+                Tap to apply
+              </Text>
             </View>
 
-            <TouchableOpacity
-              style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
-              onPress={saveLessonFromMessage}
-              activeOpacity={0.85}
+            <View
+              style={[
+                inputStyles.staffActionScroll,
+                { flexDirection: 'row', flexWrap: 'wrap', paddingRight: 0, paddingBottom: 2 },
+              ]}
             >
-              <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
-              <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
-            </TouchableOpacity>
-
-            {staffActionsExpanded && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={inputStyles.staffActionScroll}
+              <TouchableOpacity
+                style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
+                onPress={saveLessonFromMessage}
+                activeOpacity={0.85}
               >
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveRoutineFromMessage}
-                >
-                  <Ionicons name="time-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveThemeFromMessage}
-                >
-                  <Ionicons name="color-palette-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveActivityFromMessage}
-                >
-                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={() => router.push('/screens/teacher-activity-builder')}
-                >
-                  <Ionicons name="hammer-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            )}
+                <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
+                <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                onPress={saveRoutineFromMessage}
+              >
+                <Ionicons name="time-outline" size={16} color={theme.text} />
+                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                onPress={saveThemeFromMessage}
+              >
+                <Ionicons name="color-palette-outline" size={16} color={theme.text} />
+                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                onPress={saveActivityFromMessage}
+              >
+                <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
+                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                onPress={() => router.push('/screens/teacher-activity-builder')}
+              >
+                <Ionicons name="hammer-outline" size={16} color={theme.text} />
+                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -999,10 +1001,11 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onMicPress={handleInputMicPress}
           onTakePhoto={openScanner}
           onAttachFile={handleAttachFile}
-          onOpenTools={toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
+          onOpenTools={showAdvancedControls && toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
           onRemoveAttachment={handleRemoveAttachment}
           onQuickAction={(text) => sendMessage(text)}
           bottomInset={insets.bottom}
+          hideQuickChips={messages.length === 0}
         />
 
         {/* Command Palette Modal */}

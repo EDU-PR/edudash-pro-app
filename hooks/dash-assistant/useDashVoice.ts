@@ -49,10 +49,12 @@ interface UseDashVoiceOptions {
   userId?: string;
   tier?: string;
   canUseVoice?: boolean;
+  /** BCP-47 locale for STT recognition (default: 'en-ZA') */
+  sttLanguage?: string;
 }
 
 export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
-  const { userId, tier, canUseVoice } = options;
+  const { userId, tier, canUseVoice, sttLanguage = 'en-ZA' } = options;
   
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -146,7 +148,7 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
       voiceSessionRef.current = session;
       finalTranscriptRef.current = null;
       await session.start({
-        language: 'en-ZA',
+        language: sttLanguage,
         onPartial: (text) => {
           if (text) setPartialTranscript(text);
         },

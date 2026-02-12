@@ -18,6 +18,8 @@ import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 // Azure TTS languages (short codes accepted by tts-proxy)
 const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
+const DEFAULT_AZURE_RATE = 0;
+const DEFAULT_PHONICS_AZURE_RATE = -6;
 
 export interface VoiceSettings {
   rate: number;
@@ -106,7 +108,7 @@ export class DashVoiceController {
       try {
         await this.speakWithAzureTTS(normalizedText, shortCode, callbacks, {
           phonicsMode,
-          rate: phonicsMode ? -25 : 0,
+          rate: phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE,
           pitch: 0,
         });
         if (this.isSpeechAborted) callbacks?.onStopped?.();

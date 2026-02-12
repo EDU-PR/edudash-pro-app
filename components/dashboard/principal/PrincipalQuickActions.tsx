@@ -286,31 +286,13 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/principal-activities');
         break;
       case 'curriculum-themes':
-        // TODO: Create screen - for now show coming soon
-        alert.show(
-          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.curriculum_themes_coming_soon', { defaultValue: 'Curriculum Themes management is coming in the next update.' }),
-          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
-          { type: 'info' }
-        );
+        router.push('/screens/principal-curriculum-themes');
         break;
       case 'lesson-templates':
-        // TODO: Create screen - for now show coming soon
-        alert.show(
-          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.lesson_templates_coming_soon', { defaultValue: 'Lesson Templates are coming in the next update.' }),
-          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
-          { type: 'info' }
-        );
+        router.push('/screens/principal-lesson-templates');
         break;
       case 'weekly-plans':
-        // TODO: Create screen - for now show coming soon
-        alert.show(
-          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('ecd.weekly_plans_coming_soon', { defaultValue: 'Weekly Plans management is coming in the next update.' }),
-          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
-          { type: 'info' }
-        );
+        router.push('/screens/principal-weekly-plans');
         break;
       case 'birthday-chart':
         router.push('/screens/birthday-chart');

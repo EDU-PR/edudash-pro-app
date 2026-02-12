@@ -57,7 +57,7 @@ export default function ProfilesGateScreen() {
   const recoveryAttemptedRef = useRef(false);
 
   useEffect(() => {
-    if (loading || !user) return;
+    // Allow recovery to proceed even if AuthContext `loading` stays true for too long\n    // (e.g., network timeout). After 5s we force through.\n    if (!user) return;\n    if (loading && !pendingTimeout) return;
 
     const noteOnboardingNeeds = () => {
       if (!profile || !user) return;
@@ -129,7 +129,7 @@ export default function ProfilesGateScreen() {
       // Try to handle existing users who may not have proper profile data
       void handleExistingUser();
     }
-  }, [profile, user, loading, isOnboardingComplete, refreshProfile, selectedRole]);
+  }, [profile, user, loading, isOnboardingComplete, refreshProfile, selectedRole, pendingTimeout]);
 
   const handleRoleSelection = (role: Role) => {
     setSelectedRole(role);
@@ -254,7 +254,16 @@ export default function ProfilesGateScreen() {
     }
   };
 
+  // Timeout escape: after 12s total, stop showing the pending spinner
+  // regardless of loading state to prevent infinite stuck screen.
+  const [pendingTimeout, setPendingTimeout] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setPendingTimeout(true), 12000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const isProfilePending =
+    !pendingTimeout &&
     !!user &&
     !profile &&
     (loading || profileLoading || isRecoveringProfile || !recoveryAttemptedRef.current);

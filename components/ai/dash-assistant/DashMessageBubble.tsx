@@ -14,6 +14,8 @@ import type { DashMessage } from '@/services/dash-ai/types';
 import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MathRenderer } from './MathRenderer';
+import { MermaidRenderer } from './MermaidRenderer';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -215,6 +217,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
   const [inlineAnswer, setInlineAnswer] = React.useState('');
+  const [showRawToolPayload, setShowRawToolPayload] = React.useState(false);
   
   // Enhanced gradients for better visual appeal
   const userGradient = isDark
@@ -223,6 +226,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 
   React.useEffect(() => {
     setInlineAnswer('');
+    setShowRawToolPayload(false);
   }, [message.id]);
 
   const getTutorPhase = () => {
@@ -452,7 +456,75 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     if (term) pills.push(`Term ${term}`.replace(/\bterm term\b/i, 'Term'));
     return pills.slice(0, 4);
   })();
+  const toolRawPayload = React.useMemo(() => {
+    if (!toolExecution) return null;
+    try {
+      return JSON.stringify(toolPayload ?? toolExecution, null, 2);
+    } catch {
+      return null;
+    }
+  }, [toolExecution, toolPayload]);
   const markdownStyles = React.useMemo(() => buildMarkdownStyles(theme, isUser), [theme, isUser]);
+
+  type RichSegment =
+    | { type: 'markdown'; content: string }
+    | { type: 'math'; content: string }
+    | { type: 'inlineMath'; content: string }
+    | { type: 'mermaid'; content: string };
+
+  const parseRichSegments = (content: string): RichSegment[] => {
+    const splitByPattern = (
+      input: RichSegment[],
+      regex: RegExp,
+      mapper: (value: string) => RichSegment,
+    ): RichSegment[] => {
+      const next: RichSegment[] = [];
+      for (const segment of input) {
+        if (segment.type !== 'markdown') {
+          next.push(segment);
+          continue;
+        }
+        const text = segment.content || '';
+        let cursor = 0;
+        regex.lastIndex = 0;
+        let match: RegExpExecArray | null = null;
+        while ((match = regex.exec(text)) !== null) {
+          const [raw, captured] = match;
+          const start = match.index;
+          const end = start + raw.length;
+          if (start > cursor) {
+            next.push({ type: 'markdown', content: text.slice(cursor, start) });
+          }
+          next.push(mapper(String(captured || '').trim()));
+          cursor = end;
+        }
+        if (cursor < text.length) {
+          next.push({ type: 'markdown', content: text.slice(cursor) });
+        }
+      }
+      return next;
+    };
+
+    const base: RichSegment[] = [{ type: 'markdown', content }];
+    const withMermaid = splitByPattern(base, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
+      type: 'mermaid',
+      content: value,
+    }));
+    const withMath = splitByPattern(withMermaid, /\$\$([\s\S]*?)\$\$/g, (value) => ({
+      type: 'math',
+      content: value,
+    }));
+    // Inline math: $...$ (single dollar, not preceded/followed by space+dollar)
+    const withInlineMath = splitByPattern(withMath, /(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)/g, (value) => ({
+      type: 'inlineMath',
+      content: value,
+    }));
+
+    return withInlineMath.filter((segment) => {
+      if (segment.type === 'markdown') return segment.content.trim().length > 0;
+      return segment.content.length > 0;
+    });
+  };
 
   const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
   const bubbleSurfaceProps = isUser
@@ -600,6 +672,60 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </View>
               )}
 
+              {toolRawPayload && (
+                <TouchableOpacity
+                  onPress={() => setShowRawToolPayload((prev) => !prev)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                  }}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showRawToolPayload ? 'Hide raw tool output' : 'View raw tool output'}
+                >
+                  <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>
+                    {showRawToolPayload ? 'Hide raw output' : 'View raw output'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {showRawToolPayload && toolRawPayload && (
+                <View
+                  style={{
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: '#0f172a',
+                    maxHeight: 220,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <ScrollView
+                    style={{ maxHeight: 220 }}
+                    contentContainerStyle={{ padding: 10 }}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={true}
+                  >
+                    <Text
+                      selectable
+                      style={{
+                        color: '#cbd5e1',
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        lineHeight: 16,
+                      }}
+                    >
+                      {toolRawPayload}
+                    </Text>
+                  </ScrollView>
+                </View>
+              )}
+
               {!toolSuccess && toolError && (
                 <Text style={{ color: theme.error, fontSize: 12, lineHeight: 17 }}>
                   {toolError}
@@ -620,7 +746,39 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
             </Text>
           ) : (
             <View style={{ flex: 1 }}>
-              <Markdown style={markdownStyles}>{assistantContent}</Markdown>
+              {parseRichSegments(assistantContent).map((segment, segmentIndex) => {
+                if (segment.type === 'math') {
+                  return (
+                    <MathRenderer
+                      key={`math-${message.id}-${segmentIndex}`}
+                      expression={segment.content}
+                      displayMode
+                    />
+                  );
+                }
+                if (segment.type === 'inlineMath') {
+                  return (
+                    <MathRenderer
+                      key={`imath-${message.id}-${segmentIndex}`}
+                      expression={segment.content}
+                      displayMode={false}
+                    />
+                  );
+                }
+                if (segment.type === 'mermaid') {
+                  return (
+                    <MermaidRenderer
+                      key={`mermaid-${message.id}-${segmentIndex}`}
+                      definition={segment.content}
+                    />
+                  );
+                }
+                return (
+                  <Markdown key={`md-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                    {segment.content}
+                  </Markdown>
+                );
+              })}
             </View>
           )}
           

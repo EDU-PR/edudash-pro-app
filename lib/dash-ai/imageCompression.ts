@@ -6,7 +6,7 @@
  */
 
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 
 export const MAX_IMAGE_BASE64_LEN = 4_000_000; // ~3MB payload after base64 encoding
 
@@ -103,7 +103,7 @@ export async function compressImagesForAI(
  */
 export async function getImageSize(uri: string): Promise<number> {
   try {
-    const info = await FileSystem.getInfoAsync(uri);
+    const info = await LegacyFileSystem.getInfoAsync(uri);
     return info.exists ? info.size || 0 : 0;
   } catch {
     return 0;

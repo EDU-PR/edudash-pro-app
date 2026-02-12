@@ -23,10 +23,16 @@ export type TranscribeLanguage = SupportedLanguage | 'auto';
 export interface STTResult {
   text: string;
   language: string;
+  audio_base64?: string;
+  audio_content_type?: string;
 }
 
 export interface UseVoiceSTTReturn {
-  transcribe: (audioUri: string, language?: TranscribeLanguage) => Promise<STTResult | null>;
+  transcribe: (
+    audioUri: string,
+    language?: TranscribeLanguage,
+    options?: { includeAudioBase64?: boolean }
+  ) => Promise<STTResult | null>;
   isTranscribing: boolean;
   error: string | null;
 }
@@ -51,7 +57,8 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
 
   const transcribe = useCallback(async (
     audioUri: string, 
-    language: TranscribeLanguage = 'auto'
+    language: TranscribeLanguage = 'auto',
+    options?: { includeAudioBase64?: boolean }
   ): Promise<STTResult | null> => {
     setIsTranscribing(true);
     setError(null);
@@ -97,6 +104,7 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
       // Read audio file as base64
       const response = await fetch(audioUri);
       const blob = await response.blob();
+      const audioContentType = blob.type || 'audio/m4a';
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -170,7 +178,12 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
       if (text && text.trim()) {
         console.log('[VoiceSTT] Transcribed:', text.substring(0, 50) + '...');
         const normalized = normalizeDetectedLanguage(detectedLang) || normalizeDetectedLanguage(language) || 'en-ZA';
-        return { text, language: normalized };
+        return {
+          text,
+          language: normalized,
+          audio_base64: options?.includeAudioBase64 ? base64 : undefined,
+          audio_content_type: options?.includeAudioBase64 ? audioContentType : undefined,
+        };
       } else {
         console.log('[VoiceSTT] No speech in audio');
         return null;

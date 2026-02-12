@@ -9,6 +9,7 @@ export { DashMessageBubble } from './DashMessageBubble';
 export { DashInputBar } from './DashInputBar';
 export { DashTypingIndicator } from './DashTypingIndicator';
 export { TutorHome } from './TutorHome';
+export { ParentDashHome } from './ParentDashHome';
 export { DashHeader } from './DashHeader';
 export { DashUsageBanner } from './DashUsageBanner';
 export { DashModelSelector } from './DashModelSelector';

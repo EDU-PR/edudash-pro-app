@@ -5,6 +5,7 @@ import type { SupportedLanguage, VoicePreference } from '@/lib/voice/types';
 
 const CACHE_KEY = '@dash_ai_cache.voice_preferences';
 const VOICE_CHAT_PREFS_KEY = '@dash_voice_prefs';
+const VOICE_INPUT_PREFS_KEY = '@dash_voice_input_prefs';
 const CHAT_UI_PREFS_KEY = '@dash_ai_chat_ui_prefs';
 const MIGRATION_FLAG = '@dash_ai_migrated_v1';
 
@@ -31,12 +32,38 @@ export type ChatUIPrefs = {
   contextualHelp: boolean;
 };
 
+export type VoiceInputPrefs = {
+  autoSend: boolean;
+  autoSendSilenceMs: number;
+  whisperFlowEnabled: boolean;
+  whisperFlowSummaryEnabled: boolean;
+};
+
 const DEFAULT_CHAT_UI_PREFS: ChatUIPrefs = {
   enterToSend: true,
   showTypingIndicator: true,
   autoSuggestQuestions: true,
   contextualHelp: true,
 };
+
+const DEFAULT_VOICE_INPUT_PREFS: VoiceInputPrefs = {
+  autoSend: false,
+  autoSendSilenceMs: 600,
+  whisperFlowEnabled: true,
+  whisperFlowSummaryEnabled: true,
+};
+
+export function getDefaultVoiceAutoSendForRole(role?: string | null): boolean {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  // Auto-send ON for students/learners AND parents — they expect voice-first UX
+  return ['student', 'learner', 'parent'].includes(normalizedRole);
+}
+
+export function getDefaultWhisperSummaryForRole(role?: string | null): boolean {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  // Learners + parents benefit most from concise correction/summaries.
+  return ['student', 'learner', 'parent'].includes(normalizedRole);
+}
 
 // Map various legacy language codes to supported SA set
 export function normalizeLanguageCode(input?: string): SupportedLanguage {
@@ -131,6 +158,51 @@ export async function setChatUIPrefs(prefs: Partial<ChatUIPrefs>): Promise<void>
   const current = await getChatUIPrefs();
   const next = { ...current, ...prefs };
   try { await AsyncStorage.setItem(CHAT_UI_PREFS_KEY, JSON.stringify(next)); } catch { /* Intentional: cache write failure is non-fatal */ }
+}
+
+export async function getVoiceInputPrefs(role?: string | null): Promise<VoiceInputPrefs> {
+  const roleDefault = getDefaultVoiceAutoSendForRole(role);
+  const summaryDefault = getDefaultWhisperSummaryForRole(role);
+  try {
+    const raw = await AsyncStorage.getItem(VOICE_INPUT_PREFS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<VoiceInputPrefs>;
+      const silenceMs = Number(parsed.autoSendSilenceMs);
+      return {
+        autoSend: typeof parsed.autoSend === 'boolean' ? parsed.autoSend : roleDefault,
+        autoSendSilenceMs: Number.isFinite(silenceMs) ? Math.max(800, Math.min(5000, silenceMs)) : DEFAULT_VOICE_INPUT_PREFS.autoSendSilenceMs,
+        whisperFlowEnabled:
+          typeof parsed.whisperFlowEnabled === 'boolean'
+            ? parsed.whisperFlowEnabled
+            : DEFAULT_VOICE_INPUT_PREFS.whisperFlowEnabled,
+        whisperFlowSummaryEnabled:
+          typeof parsed.whisperFlowSummaryEnabled === 'boolean'
+            ? parsed.whisperFlowSummaryEnabled
+            : summaryDefault,
+      };
+    }
+  } catch { /* Intentional: cache read failure returns defaults */ }
+
+  return {
+    ...DEFAULT_VOICE_INPUT_PREFS,
+    autoSend: roleDefault,
+    whisperFlowSummaryEnabled: summaryDefault,
+  };
+}
+
+export async function setVoiceInputPrefs(
+  prefs: Partial<VoiceInputPrefs>,
+  role?: string | null,
+): Promise<void> {
+  const current = await getVoiceInputPrefs(role);
+  const next: VoiceInputPrefs = {
+    ...current,
+    ...prefs,
+    autoSendSilenceMs: Math.max(800, Math.min(5000, Number(prefs.autoSendSilenceMs ?? current.autoSendSilenceMs))),
+  };
+  try {
+    await AsyncStorage.setItem(VOICE_INPUT_PREFS_KEY, JSON.stringify(next));
+  } catch { /* Intentional: cache write failure is non-fatal */ }
 }
 
 export function getPersonality() {

@@ -33,15 +33,19 @@ export const inputStyles = StyleSheet.create({
 
   // Staff Actions Row
   staffActionsShell: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: 1,
+    marginHorizontal: 14,
+    marginTop: 4,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   staffActionsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   staffActionsTitleWrap: {
     flexDirection: 'row',
@@ -49,9 +53,9 @@ export const inputStyles = StyleSheet.create({
     gap: 6,
   },
   staffActionsTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
   staffActionsToggle: {
@@ -65,28 +69,28 @@ export const inputStyles = StyleSheet.create({
   },
   staffActionsToggleText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   staffActionPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     borderRadius: 999,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   staffActionScroll: {
     gap: 8,
-    paddingRight: 10,
+    paddingRight: 2,
   },
   staffActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
   },

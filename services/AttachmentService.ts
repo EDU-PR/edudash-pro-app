@@ -8,7 +8,6 @@
 
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as Crypto from 'expo-crypto';
 import { Platform, Alert } from 'react-native';
@@ -99,12 +98,12 @@ async function ensureLocalUploadUri(uri: string, fallbackName?: string): Promise
   }
 
   const ext = getFileExtensionFromName(fallbackName);
-  const cacheRoot = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+  const cacheRoot = LegacyFileSystem.cacheDirectory || LegacyFileSystem.documentDirectory;
   if (!cacheRoot) {
     throw new Error('No writable cache directory available for upload.');
   }
   const targetPath = `${cacheRoot}dash-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  await FileSystem.copyAsync({ from: normalized, to: targetPath });
+  await LegacyFileSystem.copyAsync({ from: normalized, to: targetPath });
   return targetPath;
 }
 
@@ -224,7 +223,7 @@ export async function takePhoto(): Promise<DashAttachment[]> {
       // Get file info to check size
       let fileInfo = { exists: false, size: 0 } as { exists: boolean; size?: number };
       try {
-        fileInfo = await FileSystem.getInfoAsync(asset.uri);
+        fileInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
       } catch (infoError) {
         console.warn('[Camera] Failed to read file info, continuing without size check:', infoError);
       }
@@ -291,7 +290,7 @@ export async function pickImages(): Promise<DashAttachment[]> {
 
     for (const asset of result.assets) {
       // Get file info to check size
-      const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+      const fileInfo = await LegacyFileSystem.getInfoAsync(asset.uri);
       
       if (fileInfo.exists && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
         Alert.alert(
@@ -388,7 +387,7 @@ export async function uploadAttachment(
         throw new Error('Attachment file path is missing.');
       }
       const uploadUri = await ensureLocalUploadUri(sourceUri, attachment.name);
-      const fileInfo = await FileSystem.getInfoAsync(uploadUri);
+      const fileInfo = await LegacyFileSystem.getInfoAsync(uploadUri);
       const fileSize = fileInfo.exists ? (fileInfo.size || attachment.size || 0) : (attachment.size || 0);
       if (!fileInfo.exists) {
         throw new Error('Attachment file could not be found.');
@@ -444,7 +443,7 @@ export async function uploadAttachment(
           throw new Error('Image too large for analysis/upload, please retake with lower resolution.');
         }
 
-        const base64Data = await FileSystem.readAsStringAsync(uploadUri, { encoding: 'base64' });
+        const base64Data = await LegacyFileSystem.readAsStringAsync(uploadUri, { encoding: LegacyFileSystem.EncodingType.Base64 });
         const fileData = base64ToUint8Array(base64Data);
         const { error: uploadError } = await supabase.storage
           .from('attachments')

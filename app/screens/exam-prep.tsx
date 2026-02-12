@@ -11,9 +11,11 @@ import { Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, Touchable
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
+import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import {
   GRADES,
   EXAM_TYPES,
@@ -40,6 +42,7 @@ function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'seni
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
   const flags = getFeatureFlagsSync();
+  const { tier } = useSubscription();
  
   // State
   const [selectedGrade, setSelectedGrade] = useState<string>('grade_4');
@@ -52,6 +55,9 @@ export default function ExamPrepScreen() {
   // Get subjects for current grade
   const phase = getPhaseFromGrade(selectedGrade);
   const subjects = SUBJECTS_BY_PHASE[phase] || [];
+  const tierForCaps: Tier = getCapabilityTier(normalizeTierName(tier || 'free'));
+  const canUseExamPrep = hasCapability(tierForCaps, 'exam.practice');
+  const requiredExamTier = getRequiredTier('exam.practice');
 
   // Get grade info
   const gradeInfo = GRADES.find((g) => g.value === selectedGrade);
@@ -383,6 +389,29 @@ export default function ExamPrepScreen() {
             onPress={() => router.back()}
           >
             <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (!canUseExamPrep) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ title: 'Exam Prep' }} />
+        <View style={styles.disabledContainer}>
+          <Ionicons name="lock-closed-outline" size={64} color={theme.muted} />
+          <Text style={[styles.disabledText, { color: theme.text }]}>
+            Exam Prep is locked
+          </Text>
+          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
+            Upgrade to {requiredExamTier || 'Starter'} to unlock exam practice features.
+          </Text>
+          <TouchableOpacity
+            style={[styles.backButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.push('/screens/manage-subscription')}
+          >
+            <Text style={styles.backButtonText}>Manage Plan</Text>
           </TouchableOpacity>
         </View>
       </View>

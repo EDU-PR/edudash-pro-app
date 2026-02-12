@@ -181,8 +181,7 @@ export const CAPABILITY_MATRIX: Readonly<Record<Tier, readonly DashCapability[]>
     'voice.output',
     // Lessons
     'lessons.basic',
-    // Exam prep (limited)
-    'exam.practice',
+    // Exam prep teaser only (full exam prep starts at Starter tier)
     'exam.flashcards',
     // Student features
     'student.tutor',

@@ -7,6 +7,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { useTeacherDashboard } from '@/lib/hooks/teacher/useTeacherDashboard';
 import { useTeacherUnreadMessages } from '@/lib/hooks/teacher/useTeacherUnreadMessages';
+import { useTeacherApproval } from '@/lib/hooks/teacher/useTeacherApproval';
 import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { MetricCard } from '@/components/dashboard/parent/MetricCard';
 import { QuickActionCard } from '@/components/dashboard/parent/QuickActionCard';
@@ -89,7 +90,18 @@ export default function TeacherDashboard() {
   // Load unread message count with real-time updates
   const { unreadCount } = useTeacherUnreadMessages(userId, preschoolId);
 
-  const loading = authLoading || profileLoading || dashboardLoading;
+  // Approval gate — redirect pending/rejected teachers
+  const { approvalState, loading: approvalLoading, allowed: approvalAllowed } = useTeacherApproval(userId, preschoolId);
+
+  useEffect(() => {
+    if (approvalLoading || !userId) return;
+    if (!approvalAllowed) {
+      const params = approvalState === 'rejected' ? '?state=rejected' : '';
+      router.replace(`/dashboard/teacher/approval-pending${params}`);
+    }
+  }, [approvalLoading, approvalAllowed, approvalState, userId, router]);
+
+  const loading = authLoading || profileLoading || dashboardLoading || approvalLoading;
 
   if (loading) {
     return (

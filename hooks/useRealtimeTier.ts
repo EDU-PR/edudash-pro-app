@@ -17,7 +17,8 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { track } from '@/lib/analytics';
 import { getQuotaStatus } from '@/lib/ai/api';
 import { logger } from '@/lib/logger';
-import { getCapabilityTier, getTierDisplayName, normalizeTierName } from '@/lib/tiers';
+import { getTierDisplayName, normalizeTierName } from '@/lib/tiers';
+import { selectEffectiveTier } from '@/lib/tiers/resolveEffectiveTier';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -39,42 +40,6 @@ export interface UseRealtimeTierOptions {
   /** Callback when tier changes */
   onTierChange?: (newTier: string, oldTier: string) => void;
 }
-
-const CAPABILITY_TIER_ORDER = ['free', 'starter', 'premium', 'enterprise'] as const;
-
-const resolveCapabilityTier = (rawTier?: string | null): (typeof CAPABILITY_TIER_ORDER)[number] => {
-  const raw = String(rawTier || '').trim().toLowerCase();
-  if (!raw) return 'free';
-  if (raw === 'free' || raw === 'starter' || raw === 'premium' || raw === 'enterprise') return raw;
-  if (raw === 'basic' || raw === 'solo' || raw === 'group_5' || raw === 'trialing') return 'starter';
-  if (raw === 'pro' || raw === 'group_10') return 'premium';
-  try {
-    return getCapabilityTier(normalizeTierName(raw));
-  } catch {
-    if (raw.includes('enterprise')) return 'enterprise';
-    if (raw.includes('premium') || raw.includes('pro') || raw.includes('plus')) return 'premium';
-    if (raw.includes('starter') || raw.includes('basic') || raw.includes('trial')) return 'starter';
-    return 'free';
-  }
-};
-
-const selectBestTier = (tiers: Array<string | null | undefined>): string => {
-  let bestTier = 'free';
-  let bestIndex = 0;
-
-  for (const candidate of tiers) {
-    const raw = String(candidate || '').trim();
-    if (!raw) continue;
-    const capability = resolveCapabilityTier(raw);
-    const capabilityIndex = CAPABILITY_TIER_ORDER.indexOf(capability);
-    if (capabilityIndex > bestIndex) {
-      bestIndex = capabilityIndex;
-      bestTier = raw;
-    }
-  }
-
-  return bestTier;
-};
 
 const normalizeTierForLimits = (tier: string): string => {
   const raw = String(tier || '').trim().toLowerCase();
@@ -159,7 +124,7 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       // Determine effective tier from all available sources.
       // We choose the highest capability-equivalent tier to avoid false "free"
       // displays when one source lags behind (common during tier propagation).
-      const effectiveTier = selectBestTier([
+      const effectiveTier = selectEffectiveTier([
         contextTier,
         tierData?.tier,
         usageData?.current_tier,

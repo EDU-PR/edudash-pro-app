@@ -46,6 +46,8 @@ interface DashInputBarProps {
   onOpenTools?: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onQuickAction?: (text: string) => void;
+  /** Hide quick chips when an empty state component already shows actions */
+  hideQuickChips?: boolean;
 }
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
@@ -71,6 +73,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onOpenTools,
   onRemoveAttachment,
   onQuickAction,
+  hideQuickChips = false,
 }) => {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
@@ -221,7 +224,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const hasMessages = messages && messages.length > 0;
-  const canShowTutorChips = !hasContent && !isRecording && !isLoading && !hasMessages;
+  // Quick chips only show once (no messages) and never alongside the empty-state component
+  const canShowTutorChips = !hideQuickChips && !hasContent && !isRecording && !isLoading && !hasMessages;
   const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
   const isPreschool = normalizedSchool.includes('preschool') || normalizedSchool.includes('ecd') || normalizedSchool.includes('early') || ['3-5', '6-8'].includes(learnerContext?.ageBand || '');
 
@@ -255,15 +259,24 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 
       {(isRecording || partialTranscript) && (
         <View style={[styles.voiceStatusRow, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
-          <Ionicons name={isRecording ? 'mic' : 'chatbubble-ellipses-outline'} size={14} color={isRecording ? theme.error : theme.primary} />
-          <Text style={[styles.voiceStatusText, { color: theme.textSecondary }]}>
-            {isRecording ? 'Listening…' : 'Transcript'}
-          </Text>
-          {!!partialTranscript && (
-            <Text style={[styles.voiceTranscript, { color: theme.text }]} numberOfLines={1}>
-              {partialTranscript}
+          <Ionicons
+            name={isRecording ? 'mic' : 'chatbubble-ellipses-outline'}
+            size={16}
+            color={isRecording ? theme.error : theme.primary}
+          />
+          <View style={styles.voiceStatusContent}>
+            <Text style={[styles.voiceStatusText, { color: theme.textSecondary }]}>
+              {isRecording ? 'Listening' : 'Transcript ready'}
             </Text>
-          )}
+            {!!partialTranscript && (
+              <Text style={[styles.voiceTranscript, { color: theme.text }]} numberOfLines={3}>
+                {partialTranscript}
+              </Text>
+            )}
+            <Text style={[styles.voiceHint, { color: theme.textTertiary }]}>
+              Keep speaking naturally. Dash will prepare your response as soon as you finish.
+            </Text>
+          </View>
         </View>
       )}
 

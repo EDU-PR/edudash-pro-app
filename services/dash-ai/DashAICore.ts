@@ -28,42 +28,48 @@ import {
   DashAINavigationFacade,
 } from './facades';
 
-import type { DashAttachment, DashMessage, DashPersonality, DashUserProfile } from './types';
+import type {
+  ConversationContextMessage,
+  DashAttachment,
+  DashMessage,
+  DashPersonality,
+  DashUserProfile,
+} from './types';
 
 /**
  * Default personality configuration
  */
 const DEFAULT_PERSONALITY: DashPersonality = {
   name: 'Dash',
-  greeting: "Hi! I'm Dash, your AI teaching assistant. How can I help you today?",
+  greeting: 'Ready when you are! What would you like to work on?',
   personality_traits: ['helpful', 'encouraging', 'knowledgeable', 'patient', 'creative'],
   response_style: 'adaptive',
   expertise_areas: ['education', 'lesson planning', 'student assessment'],
   voice_settings: { rate: 1.0, pitch: 1.0, language: 'en-ZA' },
   role_specializations: {
     teacher: {
-      greeting: "Hello! I'm Dash, your teaching assistant.",
+      greeting: 'Ready to plan something great!',
       capabilities: ['lesson_planning', 'grading_assistance'],
       tone: 'encouraging and professional',
       proactive_behaviors: ['suggest_lesson_improvements'],
       task_categories: ['academic', 'administrative'],
     },
     principal: {
-      greeting: "Good day! I'm Dash, here to help you lead your school.",
+      greeting: 'How can I help lead today?',
       capabilities: ['staff_management', 'budget_analysis'],
       tone: 'professional and strategic',
       proactive_behaviors: ['monitor_school_metrics'],
       task_categories: ['administrative', 'strategic'],
     },
     parent: {
-      greeting: "Hi! I'm Dash, your family's education assistant.",
+      greeting: 'What shall we explore today?',
       capabilities: ['homework_assistance', 'progress_tracking'],
       tone: 'friendly and supportive',
       proactive_behaviors: ['remind_homework_deadlines'],
       task_categories: ['academic_support', 'communication'],
     },
     student: {
-      greeting: "Hey! I'm Dash, your study buddy.",
+      greeting: 'What are we working on?',
       capabilities: ['homework_help', 'study_techniques'],
       tone: 'friendly and encouraging',
       proactive_behaviors: ['remind_study_sessions'],
@@ -533,7 +539,11 @@ export class DashAICore {
     conversationId?: string,
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
-    options?: { contextOverride?: string | null; modelOverride?: string | null }
+    options?: {
+      contextOverride?: string | null;
+      modelOverride?: string | null;
+      messagesOverride?: ConversationContextMessage[];
+    }
   ): Promise<DashMessage> {
     let convId = conversationId || this.conversation.getCurrentConversationId();
     if (!convId) {
@@ -559,7 +569,8 @@ export class DashAICore {
       attachments,
       onStreamChunk,
       options?.contextOverride,
-      options?.modelOverride
+      options?.modelOverride,
+      options?.messagesOverride
     );
 
     await this.conversation.addMessageToConversation(convId, assistantMessage);
@@ -573,7 +584,8 @@ export class DashAICore {
     attachments?: any[],
     onStreamChunk?: (chunk: string) => void,
     contextOverride?: string | null,
-    modelOverride?: string | null
+    modelOverride?: string | null,
+    messagesOverride?: ConversationContextMessage[]
   ): Promise<DashMessage> {
     try {
       const conversation = await this.conversation.getConversation(conversationId);
@@ -619,9 +631,18 @@ export class DashAICore {
         contextOverride || null,
       ].filter(Boolean);
 
+      const normalizedMessagesOverride = Array.isArray(messagesOverride) && messagesOverride.length > 0
+        ? messagesOverride
+            .map((msg) => ({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              content: String(msg.content || '').trim(),
+            }))
+            .filter((msg) => msg.content.length > 0)
+        : null;
+
       const response = await this.aiClient.callAIService({
         action: 'general_assistance',
-        messages: this.promptBuilder.buildMessageHistory(recentMessages, userInput),
+        messages: normalizedMessagesOverride || this.promptBuilder.buildMessageHistory(recentMessages, userInput),
         context: contextParts.join('\n'),
         attachments,
         serviceType,

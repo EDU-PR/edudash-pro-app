@@ -28,7 +28,13 @@ import { track } from '@/lib/analytics';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
-import { getChatUIPrefs, getVoiceChatPrefs, initAndMigrate, normalizeLanguageCode } from '@/lib/ai/dashSettings';
+import {
+  getChatUIPrefs,
+  getVoiceChatPrefs,
+  getVoiceInputPrefs,
+  initAndMigrate,
+  normalizeLanguageCode,
+} from '@/lib/ai/dashSettings';
 import { assertSupabase } from '@/lib/supabase';
 import { calculateAge } from '@/lib/date-utils';
 import { fetchParentChildren } from '@/lib/parent-children';
@@ -40,6 +46,10 @@ import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences';
 import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import { useDashAttachments, type AttachmentProgress } from '@/hooks/useDashAttachments';
 import {
+  buildConversationContext,
+  resolveConversationWindowByTier,
+} from '@/hooks/dash-assistant/conversationContext';
+import {
   getConversationSnapshot,
   saveConversationSnapshot,
   getLastActiveConversationId,
@@ -48,6 +58,12 @@ import {
 import { ToolRegistry } from '@/services/AgentTools';
 import { formatToolResultMessage } from '@/lib/ai/toolUtils';
 import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
+import {
+  saveTutorSession,
+  loadTutorSession,
+  flushTutorSession,
+  clearTutorSession,
+} from '@/lib/dash-ai/tutorSessionStore';
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 import { handleDashVoiceInputPress, speakDashResponse, stopDashVoiceRecording } from '@/hooks/dash-assistant/voiceHandlers';
 import {
@@ -158,6 +174,11 @@ interface UseDashAssistantReturn {
   learnerContext: LearnerContext | null;
   tutorSession: TutorSession | null;
   
+  // Parent child management
+  parentChildren: any[];
+  activeChildId: string | null;
+  setActiveChildId: (id: string | null) => void;
+  
   // Refs
   flashListRef: React.RefObject<any>;
   inputRef: React.RefObject<any>;
@@ -246,6 +267,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [partialTranscript, setPartialTranscript] = useState('');
+  const [voiceAutoSend, setVoiceAutoSend] = useState(false);
+  const [voiceAutoSendSilenceMs, setVoiceAutoSendSilenceMs] = useState(1500);
+  const [voiceWhisperFlowEnabled, setVoiceWhisperFlowEnabled] = useState(true);
+  const [voiceWhisperFlowSummaryEnabled, setVoiceWhisperFlowSummaryEnabled] = useState(true);
   const [showTypingIndicator, setShowTypingIndicator] = useState(true);
   const [autoSuggestQuestions, setAutoSuggestQuestions] = useState(true);
   const [contextualHelp, setContextualHelp] = useState(true);
@@ -291,6 +316,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   }, [availableModels, isSuperAdmin, selectedModel, setSelectedModel]);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
+  const [parentChildren, setParentChildren] = useState<any[]>([]);
   const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
   
   // Alert state for premium modals (replaces native Alert.alert)
@@ -327,14 +353,50 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const tutorSessionRef = useRef<TutorSession | null>(null);
   const tutorOverridesRef = useRef<Record<string, string>>({});
   const learnerContextRef = useRef<LearnerContext | null>(null);
+  const inputTextRef = useRef('');
+  const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
+  const voiceAutoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     tutorSessionRef.current = tutorSession;
   }, [tutorSession]);
 
+  // Persist tutor session to AsyncStorage on every change (debounced inside store)
+  useEffect(() => {
+    if (!user?.id) return;
+    const convId = conversation?.id ?? null;
+    saveTutorSession(user.id, tutorSession, convId);
+  }, [tutorSession, user?.id, conversation?.id]);
+
+  // Restore persisted tutor session on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    loadTutorSession(user.id).then((restored) => {
+      if (cancelled || !restored) return;
+      // Only restore if we don't already have an active session
+      if (!tutorSessionRef.current) {
+        setTutorSession(restored.session);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Flush pending tutor session writes on unmount
+  useEffect(() => {
+    return () => {
+      flushTutorSession().catch(() => {});
+    };
+  }, []);
+
   useEffect(() => {
     learnerContextRef.current = learnerContext;
   }, [learnerContext]);
+
+  useEffect(() => {
+    inputTextRef.current = inputText;
+  }, [inputText]);
 
   useEffect(() => {
     messagesLengthRef.current = messages.length;
@@ -487,6 +549,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (role === 'parent') {
         const schoolId = profile?.organization_id || profile?.preschool_id;
         const children = await fetchParentChildren(user.id, { includeInactive: false, schoolId });
+        if (!cancelled) setParentChildren(children);
         const activeChild = children.find(child => child.id === activeChildId) || children[0];
         if (!activeChild) {
           const parentName = profile?.full_name || profile?.first_name || null;
@@ -768,15 +831,20 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } catch (e) {
         if (__DEV__) console.warn('[useDashAssistant] migration warn', e);
       }
-      const [voiceChatPrefs, chatUiPrefs] = await Promise.all([
+      const [voiceChatPrefs, chatUiPrefs, voiceInputPrefs] = await Promise.all([
         getVoiceChatPrefs(),
         getChatUIPrefs(),
+        getVoiceInputPrefs(profile?.role || null),
       ]);
       setVoiceEnabled(voiceChatPrefs.voiceEnabled ?? true);
       setAutoSpeakResponses(voiceChatPrefs.autoSpeak ?? true);
       setShowTypingIndicator(chatUiPrefs.showTypingIndicator ?? true);
       setAutoSuggestQuestions(chatUiPrefs.autoSuggestQuestions ?? true);
       setContextualHelp(chatUiPrefs.contextualHelp ?? true);
+      setVoiceAutoSend(voiceInputPrefs.autoSend);
+      setVoiceAutoSendSilenceMs(voiceInputPrefs.autoSendSilenceMs);
+      setVoiceWhisperFlowEnabled(voiceInputPrefs.whisperFlowEnabled ?? true);
+      setVoiceWhisperFlowSummaryEnabled(voiceInputPrefs.whisperFlowSummaryEnabled ?? true);
       if (typeof chatUiPrefs.enterToSend === 'boolean') {
         setEnterToSend(chatUiPrefs.enterToSend);
       }
@@ -792,7 +860,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         }
       } catch {}
     }
-  }, []);
+  }, [profile?.role]);
 
   // hasFreeVoiceBudget check - used by voice gating and quota checks
   const hasFreeVoiceBudget = voiceBudgetRemainingMs === null
@@ -1054,6 +1122,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       const streamingEnabled = Platform.OS === 'web' && (streamingEnabledPref || envStreamingEnabled);
       
       let response: DashMessage;
+      const contextWindow = resolveConversationWindowByTier(capabilityTier);
+      const contextSeedMessages: DashMessage[] = [
+        ...messages,
+        localUserMessage,
+        ...(autoToolContext
+          ? [{
+              id: `ctx_tool_${Date.now()}`,
+              type: 'assistant' as const,
+              content: autoToolContext,
+              timestamp: Date.now(),
+            }]
+          : []),
+      ];
+      const messagesOverride = buildConversationContext(contextSeedMessages, {
+        maxMessages: contextWindow.maxMessages,
+        maxTokens: contextWindow.maxTokens,
+      });
       
       if (streamingEnabled) {
         const tempStreamingMsgId = `streaming_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1070,7 +1155,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         
         response = await dashInstance.sendMessage(
           outgoingText, 
-          undefined, 
+          conversationIdForUpload || undefined, 
           aiAttachments.length > 0 ? aiAttachments : undefined,
           (chunk: string) => {
             setStreamingContent(prev => {
@@ -1089,6 +1174,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           {
             contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
+            messagesOverride,
           }
         );
         
@@ -1098,12 +1184,13 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } else {
         response = await dashInstance.sendMessage(
           outgoingText, 
-          undefined, 
+          conversationIdForUpload || undefined, 
           aiAttachments.length > 0 ? aiAttachments : undefined,
           undefined,
           {
             contextOverride: mergedContextOverride,
             modelOverride: selectedModel,
+            messagesOverride,
           }
         );
       }
@@ -1331,6 +1418,21 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         setConversation(updatedConv);
         scrollToBottom({ animated: true, delay: 150 });
         persistConversationSnapshot(updatedConv).catch(() => {});
+
+        // Server-side conversation trim to prevent unbounded DB row growth
+        if (
+          updatedConv.messages.length > LOCAL_SNAPSHOT_MAX &&
+          user?.id &&
+          (profile?.organization_id || profile?.preschool_id)
+        ) {
+          try {
+            const svc = new (await import('@/services/dash-ai/DashConversationService')).DashConversationService(
+              user.id,
+              String(profile.organization_id || profile.preschool_id),
+            );
+            svc.trimConversation(updatedConv.id, LOCAL_SNAPSHOT_MAX).catch(() => {});
+          } catch {}
+        }
       }
 
       // Check for lesson generator intent
@@ -1430,6 +1532,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     user?.id,
     profile?.role,
     tier,
+    capabilityTier,
   ]);
 
   // Process queue
@@ -1450,7 +1553,38 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, [sendMessageInternal]);
 
+  const handleVoiceFinalTranscript = useCallback(
+    (transcript: string, options: { autoSend: boolean; delayMs: number }) => {
+      if (voiceAutoSendTimeoutRef.current) {
+        clearTimeout(voiceAutoSendTimeoutRef.current);
+        voiceAutoSendTimeoutRef.current = null;
+      }
+
+      const trimmed = transcript.trim();
+      if (!trimmed || !options.autoSend) return;
+
+      const delayMs = Math.max(400, Math.min(2000, Number(options.delayMs) || 600));
+      voiceAutoSendTimeoutRef.current = setTimeout(() => {
+        const latestInput = inputTextRef.current.trim();
+        if (!latestInput || latestInput !== trimmed) {
+          voiceAutoSendTimeoutRef.current = null;
+          return;
+        }
+        sendMessageRef.current(trimmed).catch((error) => {
+          console.warn('[useDashAssistant] Voice auto-send failed:', error);
+        }).finally(() => {
+          voiceAutoSendTimeoutRef.current = null;
+        });
+      }, delayMs);
+    },
+    []
+  );
+
   const stopVoiceRecording = useCallback(async () => {
+    if (voiceAutoSendTimeoutRef.current) {
+      clearTimeout(voiceAutoSendTimeoutRef.current);
+      voiceAutoSendTimeoutRef.current = null;
+    }
     await stopDashVoiceRecording({
       voiceRefs: {
         voiceSessionRef,
@@ -1471,6 +1605,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     // If voice capture is active, stop listening before sending.
     if (isRecording) {
       await stopVoiceRecording();
+    }
+
+    if (voiceAutoSendTimeoutRef.current) {
+      clearTimeout(voiceAutoSendTimeoutRef.current);
+      voiceAutoSendTimeoutRef.current = null;
     }
 
     if ((!text && dashAttachments.selectedAttachments.length === 0) || !dashInstance) return;
@@ -1531,6 +1670,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     processQueue();
   }, [inputText, dashAttachments, dashInstance, user?.id, tier, processQueue, wantsLessonGenerator, isRecording, stopVoiceRecording]);
 
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
+
   const sendTutorAnswer = useCallback(async (answer: string, sourceMessageId?: string) => {
     const trimmed = answer.trim();
     if (!trimmed) return;
@@ -1567,6 +1710,12 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       setIsRecording,
       setPartialTranscript,
       setInputText,
+      voiceAutoSend,
+      voiceAutoSendSilenceMs,
+      voiceWhisperFlowEnabled,
+      voiceWhisperFlowSummaryEnabled,
+      isPreschoolMode: learnerContext?.schoolType === 'preschool',
+      onFinalTranscript: handleVoiceFinalTranscript,
       voiceRefs: {
         voiceSessionRef,
         voiceProviderRef,
@@ -1575,7 +1724,25 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         ttsSessionIdRef,
       },
     });
-  }, [hasTTSAccess, isRecording, stopVoiceRecording, tier, showAlert, hideAlert, dashInstance, profile?.preferred_language, resolveVoiceLocale, isFreeTier, consumeVoiceBudget]);
+  }, [
+    hasTTSAccess,
+    isRecording,
+    stopVoiceRecording,
+    tier,
+    showAlert,
+    hideAlert,
+    dashInstance,
+    profile?.preferred_language,
+    resolveVoiceLocale,
+    isFreeTier,
+    consumeVoiceBudget,
+    voiceAutoSend,
+    voiceAutoSendSilenceMs,
+    voiceWhisperFlowEnabled,
+    voiceWhisperFlowSummaryEnabled,
+    learnerContext?.schoolType,
+    handleVoiceFinalTranscript,
+  ]);
 
   // Voice session cleanup handled locally
 
@@ -1697,7 +1864,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         if (!dash) throw new Error('DashAIAssistant unavailable');
         await dash.initialize();
         setDashInstance(dash);
-        setIsInitialized(true);
+        // NOTE: setIsInitialized(true) is deferred to AFTER all messages load
+        // to prevent a flash of the empty state before orb/conversation data arrives
 
         const preferOrbHandoff = handoffSource === 'orb' || handoffSource === 'dash_voice_orb';
         let hasExistingMessages = false;
@@ -1782,26 +1950,47 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         await loadChatPrefs();
 
         // Check for ORB session messages to carry over
+        // Supports both voice orb format ({conversationId, messages, updatedAt})
+        // and text orb format (plain array of ChatMessage objects)
         let orbMessagesLoaded = false;
         if ((preferOrbHandoff || !hasExistingMessages) && user?.id) {
           try {
             const legacyProfileId = profile?.id && profile.id !== user.id ? profile.id : null;
+            // Check voice orb keys first, then text orb keys as fallback
             const candidateKeys = [
               `dash:orb-session:${user.id}`,
               legacyProfileId ? `dash:orb-session:${legacyProfileId}` : null,
+              `@dash_orb_chat_${user.id}`,
+              legacyProfileId ? `@dash_orb_chat_${legacyProfileId}` : null,
             ].filter((key): key is string => Boolean(key));
 
             let orbData: any = null;
             const consumedKeys: string[] = [];
+            // Allow 2-hour window (was 30 min) — parents may take a while before continuing
+            const ORB_EXPIRY_MS = 2 * 60 * 60 * 1000;
             for (const key of candidateKeys) {
               const raw = await AsyncStorage.getItem(key);
               if (!raw) continue;
               consumedKeys.push(key);
               try {
                 const parsed = JSON.parse(raw);
-                if (parsed?.messages?.length > 0 && (Date.now() - (parsed.updatedAt || 0)) < 30 * 60 * 1000) {
+                // Voice orb format: { messages: [...], updatedAt, conversationId }
+                if (parsed?.messages?.length > 0 && (Date.now() - (parsed.updatedAt || 0)) < ORB_EXPIRY_MS) {
                   orbData = parsed;
                   break;
+                }
+                // Text orb format: plain array of ChatMessage objects
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  const filtered = parsed.filter((m: any) => (m.role === 'user' || m.role === 'assistant') && m.content);
+                  if (filtered.length > 0) {
+                    // Check expiry using last message timestamp
+                    const lastTs = filtered[filtered.length - 1]?.timestamp;
+                    const lastTime = lastTs ? new Date(lastTs).getTime() : 0;
+                    if (lastTime > 0 && (Date.now() - lastTime) < ORB_EXPIRY_MS) {
+                      orbData = { messages: filtered.map((m: any) => ({ role: m.role, content: m.content })), updatedAt: lastTime };
+                      break;
+                    }
+                  }
                 }
               } catch {
                 // ignore malformed orb payloads
@@ -1887,6 +2076,9 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
           };
           setMessages([greeting]);
         }
+
+        // Mark initialized AFTER all data is loaded — prevents flash of empty state
+        setIsInitialized(true);
       } catch (error) {
         console.error('Failed to initialize Dash:', error);
         Alert.alert('Error', 'Failed to initialize AI Assistant.');
@@ -1981,6 +2173,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
+      if (voiceAutoSendTimeoutRef.current) {
+        clearTimeout(voiceAutoSendTimeoutRef.current);
+        voiceAutoSendTimeoutRef.current = null;
+      }
       if (dashInstance) {
         stopSpeaking().catch(() => {});
         dashInstance.cleanup();
@@ -2047,6 +2243,11 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     hideAlert,
     learnerContext,
     tutorSession,
+    
+    // Parent child management
+    parentChildren,
+    activeChildId,
+    setActiveChildId,
     
     // Refs
     flashListRef,

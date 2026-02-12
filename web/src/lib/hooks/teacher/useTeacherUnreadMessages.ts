@@ -47,7 +47,6 @@ export function useTeacherUnreadMessages(
         .eq('preschool_id', preschoolId);
 
       if (threadsError) {
-        console.error('Error fetching teacher threads:', threadsError);
         setUnreadCount(0);
         return;
       }
@@ -73,7 +72,6 @@ export function useTeacherUnreadMessages(
         .neq('sender_id', userId);
 
       if (countError) {
-        console.error('Error counting teacher unread messages:', countError);
         setUnreadCount(0);
         return;
       }
@@ -83,7 +81,6 @@ export function useTeacherUnreadMessages(
       // Update app badge with unread message count
       badgeManager.setUnreadMessages(countUnreadMessages(unreadMessages, teacherThreadsData));
     } catch (err) {
-      console.error('Failed to load teacher unread messages:', err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
       setUnreadCount(0);
     } finally {

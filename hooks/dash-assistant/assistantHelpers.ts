@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import type { DashAttachment, DashMessage } from '@/services/dash-ai/types';
@@ -205,7 +205,9 @@ export const prepareAttachmentsForAI = async (attachments: DashAttachment[]) => 
 
     if (!base64) {
       try {
-        const fallback = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        const fallback = await LegacyFileSystem.readAsStringAsync(uri, {
+          encoding: LegacyFileSystem.EncodingType.Base64,
+        });
         if (fallback && fallback.length <= MAX_IMAGE_BASE64_LEN) {
           base64 = fallback;
           mediaType = attachment.mimeType || 'image/jpeg';

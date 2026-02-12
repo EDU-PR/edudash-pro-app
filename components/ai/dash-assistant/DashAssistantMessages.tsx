@@ -2,6 +2,7 @@ import React from 'react';
 import { Platform, View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import TutorHome from './TutorHome';
+import { ParentDashHome, type ParentChild } from './ParentDashHome';
 
 type LearnerContext = {
   learnerName?: string | null;
@@ -31,6 +32,18 @@ export interface DashAssistantMessagesProps {
   learnerContext?: LearnerContext | null;
   bottomInset?: number;
   onScroll?: (scrollY: number) => void;
+  /** Parent-specific: list of children */
+  parentChildren?: ParentChild[];
+  /** Parent-specific: currently selected child */
+  activeChild?: ParentChild | null;
+  /** Parent-specific: switch active child */
+  onSelectChild?: (childId: string) => void;
+  /** Parent-specific: open homework scanner */
+  onOpenScanner?: () => void;
+  /** Last conversation ID for resume link */
+  lastConversationId?: string | null;
+  /** Actual user role from profile (not learnerContext which may be overridden) */
+  userRole?: string | null;
 }
 
 export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
@@ -52,6 +65,12 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   onScroll,
   bottomInset = 0,
   keyboardVisible = false,
+  parentChildren,
+  activeChild,
+  onSelectChild,
+  onOpenScanner,
+  lastConversationId,
+  userRole,
 }) => {
   const getTutorPhase = (message: any) => {
     const explicitPhase = message?.metadata?.tutor_phase || message?.metadata?.phase;
@@ -85,22 +104,42 @@ export const DashAssistantMessages: React.FC<DashAssistantMessagesProps> = ({
   const phaseOrder = ['Diagnose', 'Teach', 'Practice'];
   const phaseIndex = currentPhase ? phaseOrder.indexOf(currentPhase) : -1;
   
-  // Only show phase indicator for parent/student/learner roles (tutoring context)
-  // Teachers/principals/admins don't need it - they're the educators, not students
+  // Only show phase indicator for student/learner roles in tutoring context
+  // Parents and staff don't need clinical Diagnose→Teach→Practice labels
   const showPhaseIndicator = React.useMemo(() => {
-    const role = learnerContext?.role?.toLowerCase();
-    return !role || ['parent', 'student', 'learner'].includes(role);
-  }, [learnerContext?.role]);
+    const role = (userRole || learnerContext?.role || '').toLowerCase();
+    return ['student', 'learner'].includes(role);
+  }, [userRole, learnerContext?.role]);
 
-  const renderEmptyState = () => (
-    <TutorHome
-      styles={styles}
-      theme={theme}
-      onSendMessage={onSendMessage}
-      onAgeBandChange={onAgeBandChange}
-      learnerContext={learnerContext}
-    />
-  );
+  // Use actual profile role — learnerContext.role is 'student' for parents with children
+  const isParent = (userRole || learnerContext?.role || '').toLowerCase() === 'parent';
+
+  const renderEmptyState = () => {
+    // Parents always get the #NEXT-GEN ParentDashHome — with or without children
+    if (isParent) {
+      return (
+        <ParentDashHome
+          children={parentChildren || []}
+          activeChild={activeChild ?? null}
+          onSelectChild={onSelectChild || (() => {})}
+          onSendMessage={onSendMessage || (() => {})}
+          onOpenScanner={onOpenScanner}
+          lastConversationId={lastConversationId}
+        />
+      );
+    }
+
+    // All other roles get the standard TutorHome
+    return (
+      <TutorHome
+        styles={styles}
+        theme={theme}
+        onSendMessage={onSendMessage}
+        onAgeBandChange={onAgeBandChange}
+        learnerContext={learnerContext}
+      />
+    );
+  };
 
   const listStyle = StyleSheet.flatten([
     styles.messagesContainer,
