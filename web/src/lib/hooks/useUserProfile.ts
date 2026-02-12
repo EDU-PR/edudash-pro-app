@@ -21,6 +21,8 @@ export interface UserProfile {
   trial_end_date?: string;
   trial_plan_tier?: string;
   subscription_tier?: string;
+  seat_status?: 'active' | 'inactive' | 'pending' | 'revoked' | string;
+  has_active_seat?: boolean;
 }
 
 interface UseUserProfileReturn {
@@ -60,8 +62,8 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       // Get profile data from profiles table (includes role, usage_type, and trial info)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('first_name, last_name, preschool_id, organization_id, role, usage_type, is_trial, trial_ends_at, trial_plan_tier, subscription_tier')
-        .eq('id', userId)
+        .select('id, auth_user_id, first_name, last_name, preschool_id, organization_id, role, usage_type, is_trial, trial_ends_at, trial_plan_tier, subscription_tier')
+        .or(`id.eq.${userId},auth_user_id.eq.${userId}`)
         .maybeSingle();
 
       if (profileError || !profileData) {
@@ -77,6 +79,8 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
       let preschoolSlug: string | undefined;
       let schoolSubscriptionTier: string | undefined;
       let schoolType: string | undefined;
+      let hasActiveSeat: boolean | undefined;
+      let seatStatus: UserProfile['seat_status'];
 
       // Fetch preschool details if we have an ID, otherwise use "EduDash Pro Community"
       if (preschoolId) {
@@ -112,6 +116,23 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         organizationName = preschoolName;
       }
 
+      // Resolve teacher seat status from seat-management RPC.
+      // This reflects principal seat assignment in real-time data model.
+      if (profileData?.role === 'teacher') {
+        try {
+          const { data: activeSeat } = await supabase.rpc('user_has_active_seat', {
+            p_user_id: user.id,
+          });
+
+          if (typeof activeSeat === 'boolean') {
+            hasActiveSeat = activeSeat;
+            seatStatus = activeSeat ? 'active' : 'inactive';
+          }
+        } catch {
+          // Keep seat status undefined on RPC errors.
+        }
+      }
+
       const profileObj = {
         id: userId,
         email: user.email!,
@@ -131,6 +152,8 @@ export function useUserProfile(userId: string | undefined): UseUserProfileReturn
         trial_plan_tier: profileData?.trial_plan_tier,
         // Use school's tier (from preschools table) if available, fall back to user's tier
         subscription_tier: schoolSubscriptionTier || profileData?.subscription_tier || 'starter',
+        seat_status: seatStatus,
+        has_active_seat: hasActiveSeat,
       };
       
       

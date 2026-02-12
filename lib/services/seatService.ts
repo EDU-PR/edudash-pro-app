@@ -18,6 +18,143 @@ import {
 } from '@/lib/types/seats';
 
 export class SeatService {
+  private static isSeatManagementError(error: unknown): error is SeatManagementError {
+    if (!error || typeof error !== 'object') return false;
+    const maybeCode = (error as any).code;
+    const maybeName = (error as any).name;
+    return (
+      maybeName === 'SeatManagementError' ||
+      [
+        'LIMIT_EXCEEDED',
+        'PERMISSION_DENIED',
+        'USER_NOT_FOUND',
+        'ALREADY_ASSIGNED',
+        'NO_ACTIVE_SEAT',
+        'NETWORK_ERROR',
+        'UNKNOWN',
+      ].includes(String(maybeCode))
+    );
+  }
+
+  private static parseSeatAssignError(error: any): {
+    code: SeatManagementError['code'];
+    message: string;
+    details: string;
+    retryable: boolean;
+  } {
+    const rawCode = String(error?.code || '');
+    const message = String(error?.message || '');
+    const details = String(error?.details || '');
+    const hint = String(error?.hint || '');
+    const status = String(error?.status || error?.statusCode || '');
+    const combined = `${message} ${details} ${hint}`.toLowerCase();
+    const composedDetails = JSON.stringify({
+      code: rawCode || null,
+      status: status || null,
+      message: message || null,
+      details: details || null,
+      hint: hint || null,
+    });
+
+    if (rawCode === '42501' || combined.includes('only principals can assign')) {
+      return {
+        code: 'PERMISSION_DENIED',
+        message: 'Only principals can assign staff seats.',
+        details: composedDetails,
+        retryable: false,
+      };
+    }
+
+    if (
+      combined.includes('no staff seats available') ||
+      combined.includes('no teacher seats available') ||
+      combined.includes('no active subscription found')
+    ) {
+      return {
+        code: 'LIMIT_EXCEEDED',
+        message: 'No staff seats are available for this school plan.',
+        details: composedDetails,
+        retryable: false,
+      };
+    }
+
+    if (
+      combined.includes('target must be a teacher') ||
+      combined.includes('target must be school staff') ||
+      combined.includes('cannot infer preschool') ||
+      combined.includes('target staff account is not linked to auth user') ||
+      combined.includes('cannot find user record for target user id')
+    ) {
+      return {
+        code: 'USER_NOT_FOUND',
+        message: 'Target user is not a valid staff account in this school.',
+        details: composedDetails,
+        retryable: false,
+      };
+    }
+
+    if (
+      combined.includes('already_assigned') ||
+      combined.includes('already assigned') ||
+      combined.includes('uniq_active_subscription_user') ||
+      (combined.includes('subscription_seats') && combined.includes('duplicate key')) ||
+      (rawCode === '23505' && combined.includes('subscription_seats'))
+    ) {
+      return {
+        code: 'ALREADY_ASSIGNED',
+        message: 'This staff member already has an active seat.',
+        details: composedDetails,
+        retryable: false,
+      };
+    }
+
+    if (combined.includes('seat assignment in progress')) {
+      return {
+        code: 'NETWORK_ERROR',
+        message: 'Another seat assignment is in progress. Please retry in a moment.',
+        details: composedDetails,
+        retryable: true,
+      };
+    }
+
+    if (
+      rawCode === '23505' &&
+      (combined.includes('users_pkey') ||
+        combined.includes('users_auth_user_id') ||
+        combined.includes('users_email') ||
+        combined.includes('duplicate key'))
+    ) {
+      return {
+        code: 'NETWORK_ERROR',
+        message: 'Seat assignment hit an account-link conflict. Please retry.',
+        details: composedDetails,
+        retryable: true,
+      };
+    }
+
+    if (
+      combined.includes('audit_logs_user_id_fkey') ||
+      (rawCode === '23503' && combined.includes('audit_logs'))
+    ) {
+      return {
+        code: 'NETWORK_ERROR',
+        message: 'Seat assignment is blocked by an audit-link mismatch. Apply the latest DB migration and retry.',
+        details: composedDetails,
+        retryable: false,
+      };
+    }
+
+    return {
+      code: 'NETWORK_ERROR',
+      message: message || 'Failed to assign staff seat.',
+      details: composedDetails,
+      retryable: false,
+    };
+  }
+
+  private static async wait(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
   
   /**
    * Get current seat limits and usage for the caller's school
@@ -45,7 +182,7 @@ export class SeatService {
         available: result.available
       };
     } catch (error) {
-      if (error instanceof Error && 'code' in error) {
+      if (SeatService.isSeatManagementError(error)) {
         throw error; // Re-throw SeatManagementError
       }
       console.error('Unexpected error fetching seat limits:', error);
@@ -59,56 +196,40 @@ export class SeatService {
    */
   static async assignTeacherSeat({ teacherUserId }: AssignSeatParams): Promise<SeatAssignResponse> {
     try {
-      const { data, error } = await assertSupabase()
-        .rpc('rpc_assign_teacher_seat', { target_user_id: teacherUserId });
+      const invoke = async () =>
+        assertSupabase().rpc('rpc_assign_teacher_seat', { target_user_id: teacherUserId });
 
+      let { data, error } = await invoke();
       if (error) {
-        console.error('Error assigning staff seat:', error);
-        
-        // Map specific error messages to error codes
-        const rawCode = String((error as any)?.code || '');
-        const message = String(error.message || '');
-        const details = String((error as any)?.details || '');
-        const hint = String((error as any)?.hint || '');
-        const combined = `${message} ${details} ${hint}`.toLowerCase();
-        if (message.includes('Only principals can assign')) {
-          throw SeatService.createError('PERMISSION_DENIED', 'Only principals can assign staff seats');
+        const parsed = SeatService.parseSeatAssignError(error);
+        console.error('Error assigning staff seat:', parsed.details);
+
+        if (parsed.retryable) {
+          await SeatService.wait(300);
+          const retry = await invoke();
+          data = retry.data;
+          error = retry.error;
+          if (error) {
+            const retryParsed = SeatService.parseSeatAssignError(error);
+            throw SeatService.createError(retryParsed.code, retryParsed.message, retryParsed.details);
+          }
+        } else {
+          throw SeatService.createError(parsed.code, parsed.message, parsed.details);
         }
-        if (message.includes('No teacher seats available') || message.includes('No staff seats available')) {
-          throw SeatService.createError('LIMIT_EXCEEDED', 'No staff seats available for this plan');
-        }
-        if (message.includes('Target must be a teacher') || message.includes('Target must be school staff')) {
-          throw SeatService.createError('USER_NOT_FOUND', 'Target user must be school staff in the same school');
-        }
-        if (message.includes('Cannot find user record for target user ID')) {
-          throw SeatService.createError('USER_NOT_FOUND', 'Staff account is not fully provisioned yet. Please retry in a few seconds.');
-        }
-        if (message.includes('No active subscription found')) {
-          throw SeatService.createError('LIMIT_EXCEEDED', 'No active school subscription was found for seat assignment.');
-        }
-        if (combined.includes('seat assignment in progress')) {
-          throw SeatService.createError('NETWORK_ERROR', 'Another seat assignment is in progress. Please retry in a moment.');
-        }
-        if (combined.includes('uniq_active_subscription_user')) {
-          throw SeatService.createError('ALREADY_ASSIGNED', 'This staff member already has an active seat.');
-        }
-        if (
-          rawCode === '23505' &&
-          (combined.includes('users_pkey') || combined.includes('users_auth_user_id'))
-        ) {
-          throw SeatService.createError(
-            'NETWORK_ERROR',
-            'Seat assignment hit an account-link conflict. Please retry.',
-            message
-          );
-        }
-        
-        throw SeatService.createError('NETWORK_ERROR', 'Failed to assign staff seat', message);
       }
 
-      return data as SeatAssignResponse;
+      const normalized = Array.isArray(data) ? data[0] : data;
+      if (!normalized || typeof normalized !== 'object' || typeof (normalized as any).status !== 'string') {
+        throw SeatService.createError(
+          'UNKNOWN',
+          'Seat assignment returned an unexpected response.',
+          JSON.stringify(data ?? null)
+        );
+      }
+
+      return normalized as SeatAssignResponse;
     } catch (error) {
-      if (error instanceof Error && 'code' in error) {
+      if (SeatService.isSeatManagementError(error)) {
         throw error; // Re-throw SeatManagementError
       }
       console.error('Unexpected error assigning staff seat:', error);
@@ -138,7 +259,7 @@ export class SeatService {
 
       return data as SeatRevokeResponse;
     } catch (error) {
-      if (error instanceof Error && 'code' in error) {
+      if (SeatService.isSeatManagementError(error)) {
         throw error; // Re-throw SeatManagementError
       }
       console.error('Unexpected error revoking staff seat:', error);
@@ -161,7 +282,7 @@ export class SeatService {
 
       return data as TeacherSeat[];
     } catch (error) {
-      if (error instanceof Error && 'code' in error) {
+      if (SeatService.isSeatManagementError(error)) {
         throw error; // Re-throw SeatManagementError
       }
       console.error('Unexpected error listing staff seats:', error);

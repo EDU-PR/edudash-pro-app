@@ -46,7 +46,7 @@ export default function TeacherDashboard() {
   const { startVoiceCall, startVideoCall } = useCall();
 
   // Fetch user profile with preschool data
-  const { profile, loading: profileLoading } = useUserProfile(userId);
+  const { profile, loading: profileLoading, refetch: refetchProfile } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
 
   const userEmail = profile?.email;
@@ -57,6 +57,8 @@ export default function TeacherDashboard() {
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Teacher';
   const subscriptionTier = profile?.subscription_tier || 'starter';
   const isPreschool = profile?.usageType === 'preschool' || profile?.schoolType === 'preschool';
+  const teacherSeatStatus = profile?.seat_status;
+  const isTeacherSeatActive = profile?.has_active_seat === true || teacherSeatStatus === 'active';
 
   // Initialize auth
   useEffect(() => {
@@ -83,6 +85,31 @@ export default function TeacherDashboard() {
 
     initAuth();
   }, [router, supabase]);
+
+  // Keep seat status reasonably fresh for PWA sessions.
+  useEffect(() => {
+    if (!userId || userRole !== 'teacher') return;
+
+    const refreshProfile = () => {
+      void refetchProfile();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshProfile();
+      }
+    };
+
+    const intervalId = window.setInterval(refreshProfile, 30000);
+    window.addEventListener('focus', refreshProfile);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshProfile);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [refetchProfile, userId, userRole]);
 
   // Load dashboard data
   const { metrics, classes, loading: dashboardLoading, refetch } = useTeacherDashboard(userId);
@@ -170,6 +197,23 @@ export default function TeacherDashboard() {
                 <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>{roleDisplay}</p>
                 <span style={{ opacity: 0.7 }}>•</span>
                 <TierBadge userId={userId} size="sm" showUpgrade />
+                {userRole === 'teacher' && (
+                  <span
+                    style={{
+                      marginLeft: 4,
+                      padding: '2px 10px',
+                      borderRadius: 999,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: 0.2,
+                      textTransform: 'uppercase',
+                      background: isTeacherSeatActive ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.22)',
+                      border: `1px solid ${isTeacherSeatActive ? 'rgba(16,185,129,0.65)' : 'rgba(239,68,68,0.65)'}`,
+                    }}
+                  >
+                    Seat {isTeacherSeatActive ? 'Active' : 'Inactive'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
