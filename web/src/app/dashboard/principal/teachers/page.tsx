@@ -372,9 +372,11 @@ export default function TeachersPage() {
                     onClick={async (e) => {
                       e.stopPropagation();
                       try {
-                        await supabase.rpc('rpc_assign_teacher_seat', { target_user_id: teacher.id });
+                        const { error: assignError } = await supabase.rpc('rpc_assign_teacher_seat', { target_user_id: teacher.id });
+                        if (assignError) throw assignError;
                         // refresh seat limits
                         const seat = await supabase.rpc('rpc_teacher_seat_limits');
+                        if (seat.error) throw seat.error;
                         if (seat.data && seat.data.length > 0) setSeatLimits(seat.data[0]);
                         alert('Seat assigned');
                       } catch (err: any) {
@@ -388,8 +390,10 @@ export default function TeachersPage() {
                     onClick={async (e) => {
                       e.stopPropagation();
                       try {
-                        await supabase.rpc('rpc_revoke_teacher_seat', { target_user_id: teacher.id });
+                        const { error: revokeError } = await supabase.rpc('rpc_revoke_teacher_seat', { target_user_id: teacher.id });
+                        if (revokeError) throw revokeError;
                         const seat = await supabase.rpc('rpc_teacher_seat_limits');
+                        if (seat.error) throw seat.error;
                         if (seat.data && seat.data.length > 0) setSeatLimits(seat.data[0]);
                         alert('Seat revoked');
                       } catch (err: any) {

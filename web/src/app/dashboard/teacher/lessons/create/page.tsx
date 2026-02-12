@@ -7,6 +7,12 @@ import { TeacherShell } from '@/components/dashboard/teacher/TeacherShell';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { Sparkles, BookOpen, Clock, Users, Target, Lightbulb, Save, Wand2 } from 'lucide-react';
+import {
+  buildQuickLessonThemeHint,
+  loadQuickLessonThemeContext,
+  summarizeQuickLessonContext,
+  type QuickLessonThemeContext,
+} from '@/lib/lesson-planning/quickLessonThemeContext';
 
 function CreateLessonPageInner() {
   const router = useRouter();
@@ -25,12 +31,15 @@ function CreateLessonPageInner() {
   const [duration, setDuration] = useState('30');
   const [objectives, setObjectives] = useState('');
   const [generatedLesson, setGeneratedLesson] = useState<any>(null);
+  const [quickLessonContext, setQuickLessonContext] = useState<QuickLessonThemeContext | null>(null);
+  const [quickLessonContextLoading, setQuickLessonContextLoading] = useState(false);
   
   const { profile, loading: profileLoading } = useUserProfile(userId);
   const { slug: tenantSlug } = useTenantSlug(userId);
   const isQuickMode = searchParams.get('mode') === 'quick';
   const stemParam = searchParams.get('stem');
   const isPreschool = profile?.usageType === 'preschool' || profile?.schoolType === 'preschool';
+  const schoolId = profile?.organizationId || profile?.preschoolId;
 
   useEffect(() => {
     const initAuth = async () => {
@@ -65,6 +74,29 @@ function CreateLessonPageInner() {
     }
   }, [isQuickMode, stemParam, profileLoading, subject, objectives]);
 
+  useEffect(() => {
+    if (!isQuickMode || !schoolId || !userId) return;
+    let cancelled = false;
+
+    const loadContext = async () => {
+      setQuickLessonContextLoading(true);
+      const context = await loadQuickLessonThemeContext({
+        supabase,
+        preschoolId: schoolId,
+        teacherId: userId,
+      });
+      if (!cancelled) {
+        setQuickLessonContext(context);
+        setQuickLessonContextLoading(false);
+      }
+    };
+
+    void loadContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuickMode, schoolId, supabase, userId]);
+
   const handleGenerateWithAI = async () => {
     if (!topic || !gradeLevel) {
       alert('Please fill in at least the topic and grade level');
@@ -78,6 +110,7 @@ function CreateLessonPageInner() {
       const quickHint = isQuickMode
         ? 'This is a QUICK, low-prep lesson. Use minimal materials, high engagement, and clear step-by-step guidance.'
         : '';
+      const planningHint = isQuickMode ? buildQuickLessonThemeHint(quickLessonContext) : '';
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
         body: {
           prompt: `Generate a ${isQuickMode ? 'quick, engaging' : 'comprehensive'} lesson plan for ${audienceLabel}:
@@ -88,6 +121,7 @@ Grade Level: ${gradeLevel}
 Duration: ${duration} minutes
 Learning Objectives: ${objectives || 'Age-appropriate learning goals'}
 ${quickHint ? `\nQuick Lesson Guidance: ${quickHint}\n` : ''}
+${planningHint ? `\nPlanning Alignment Context:\n${planningHint}\n` : ''}
 
 Please provide:
 1. Lesson Title
@@ -224,9 +258,16 @@ Format the response in clear sections with practical, age-appropriate activities
             </div>
           </div>
           {isQuickMode && (
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-green-900/40 px-3 py-1 text-sm text-green-200">
-              <Wand2 className="h-4 w-4" />
-              Quick Lesson Mode • 15 minutes • Low prep
+            <div className="mt-4 rounded-2xl border border-green-700/70 bg-green-900/35 px-4 py-3 text-sm text-green-200">
+              <div className="inline-flex items-center gap-2 font-semibold">
+                <Wand2 className="h-4 w-4" />
+                Quick Lesson Mode • 15 minutes • Low prep
+              </div>
+              <p className="mt-2 text-xs text-green-100/90">
+                {quickLessonContextLoading
+                  ? 'Loading this week’s planning alignment...'
+                  : summarizeQuickLessonContext(quickLessonContext)}
+              </p>
             </div>
           )}
         </div>

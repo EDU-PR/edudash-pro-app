@@ -284,6 +284,7 @@ function TeacherMessagesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const threadFromUrl = searchParams.get('thread');
+  const createParam = searchParams.get('create');
   useBodyScrollLock(true);
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
@@ -400,6 +401,12 @@ function TeacherMessagesPage() {
       setSelectedThreadId(threadFromUrl);
     }
   }, [threadFromUrl]);
+
+  useEffect(() => {
+    if (createParam === 'group') {
+      setShowCreateGroupModal(true);
+    }
+  }, [createParam]);
 
   const scrollToBottom = (instant = false) => {
     messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
