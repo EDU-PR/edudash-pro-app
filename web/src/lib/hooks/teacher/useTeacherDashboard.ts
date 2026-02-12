@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 interface TeacherMetrics {
@@ -30,17 +30,17 @@ export function useTeacherDashboard(userId?: string) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!userId) return;
     
     try {
       setLoading(true);
       const supabase = createClient();
 
-      // Get teacher's profile (profiles-first architecture)
+      // Get teacher's profile — prefer organization_id, fall back to preschool_id
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, preschool_id')
+        .select('id, preschool_id, organization_id')
         .eq('id', userId)
         .maybeSingle();
 
@@ -48,9 +48,15 @@ export function useTeacherDashboard(userId?: string) {
         throw new Error('Failed to fetch profile data');
       }
 
-      // userId is already auth.uid() which equals profiles.id
       const teacherId = userId;
-      const preschoolId = profile.preschool_id;
+      const preschoolId = profile.organization_id || profile.preschool_id;
+
+      if (!preschoolId) {
+        // Standalone teacher — no school-linked data to show
+        setClasses([]);
+        setMetrics({ totalStudents: 0, totalClasses: 0, pendingGrading: 0, upcomingLessons: 0 });
+        return;
+      }
 
       // Fetch classes assigned to this teacher
       const { data: classesData, error: classesError } = await supabase
@@ -61,58 +67,79 @@ export function useTeacherDashboard(userId?: string) {
 
       if (classesError) throw classesError;
 
-      // For each class, get student count and pending assignments
-      const classesWithMetrics = await Promise.all(
-        (classesData || []).map(async (cls: any) => {
-          // Get student count
-          const { count: studentCount } = await supabase
-            .from('students')
-            .select('*', { count: 'exact', head: true })
-            .eq('class_id', cls.id)
-            .eq('preschool_id', preschoolId);
+      const classIds = (classesData || []).map((c: { id: string }) => c.id);
 
-          // Get pending assignments count (simplified - would need proper assignment tracking)
-          const pendingAssignments = 0; // Placeholder - implement based on your schema
-          const upcomingLessons = 0; // Placeholder - implement based on your schema
+      // Single aggregate query for student counts per class (fixes N+1)
+      let studentCountsByClass: Record<string, number> = {};
+      if (classIds.length > 0) {
+        const { data: studentRows } = await supabase
+          .from('students')
+          .select('class_id')
+          .eq('preschool_id', preschoolId)
+          .in('class_id', classIds);
 
-          return {
-            id: cls.id,
-            name: cls.name,
-            grade: cls.grade,
-            studentCount: studentCount || 0,
-            pendingAssignments,
-            upcomingLessons,
-          };
-        })
-      );
+        for (const row of studentRows || []) {
+          if (row.class_id) {
+            studentCountsByClass[row.class_id] = (studentCountsByClass[row.class_id] || 0) + 1;
+          }
+        }
+      }
+
+      // Fetch pending homework submissions (ungraded) for this teacher
+      let pendingGradingCount = 0;
+      if (classIds.length > 0) {
+        const { count } = await supabase
+          .from('homework_submissions')
+          .select('*', { count: 'exact', head: true })
+          .in('class_id', classIds)
+          .eq('status', 'submitted');
+        pendingGradingCount = count || 0;
+      }
+
+      // Fetch upcoming lessons count
+      let upcomingLessonCount = 0;
+      if (classIds.length > 0) {
+        const { count } = await supabase
+          .from('lesson_assignments')
+          .select('*', { count: 'exact', head: true })
+          .eq('preschool_id', preschoolId)
+          .in('class_id', classIds)
+          .gte('due_date', new Date().toISOString())
+          .eq('status', 'assigned');
+        upcomingLessonCount = count || 0;
+      }
+
+      const classesWithMetrics: ClassData[] = (classesData || []).map((cls: { id: string; name: string; grade: string }) => ({
+        id: cls.id,
+        name: cls.name,
+        grade: cls.grade,
+        studentCount: studentCountsByClass[cls.id] || 0,
+        pendingAssignments: 0,
+        upcomingLessons: 0,
+      }));
 
       setClasses(classesWithMetrics);
 
-      // Calculate aggregate metrics
       const totalStudents = classesWithMetrics.reduce((sum, cls) => sum + cls.studentCount, 0);
-      const totalClasses = classesWithMetrics.length;
-      const pendingGrading = classesWithMetrics.reduce((sum, cls) => sum + cls.pendingAssignments, 0);
-      const upcomingLessons = classesWithMetrics.reduce((sum, cls) => sum + cls.upcomingLessons, 0);
 
       setMetrics({
         totalStudents,
-        totalClasses,
-        pendingGrading,
-        upcomingLessons,
+        totalClasses: classesWithMetrics.length,
+        pendingGrading: pendingGradingCount,
+        upcomingLessons: upcomingLessonCount,
       });
 
       setError(null);
     } catch (err) {
-      console.error('Error fetching teacher dashboard data:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     fetchDashboardData();
-  }, [userId]);
+  }, [fetchDashboardData]);
 
   return {
     metrics,
