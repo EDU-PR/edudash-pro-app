@@ -480,7 +480,32 @@ export function VideoCallInterface({
               meeting_url: roomUrl,
             });
 
-            // CRITICAL: Send push notification to wake callee's app when backgrounded
+            // CRITICAL: Send FCM data-only message to wake callee's app when killed (Android)
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-fcm-call`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                callee_user_id: calleeId,
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'video',
+                meeting_url: roomUrl,
+              }),
+            }).then(res => res.json()).then(result => {
+              if (result.success) {
+                console.log('[VideoCall] ✅ FCM wake-on-call message sent');
+              } else {
+                console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
+              }
+            }).catch(err => {
+              console.warn('[VideoCall] FCM call failed:', err);
+            });
+
+            // Send Expo push notification (visible banner + sound for backgrounded apps)
             fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
               method: 'POST',
               headers: {

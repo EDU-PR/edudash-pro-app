@@ -102,7 +102,8 @@ export function useVoiceCallAudio({
    * expo-audio is the PRIMARY and ONLY method for ringback playback.
    */
   const playCustomRingback = useCallback(async (retryAttempt = 0) => {
-    if (ringbackStartedRef.current) {
+    // Allow retry if player exists but isn't actually playing
+    if (ringbackStartedRef.current && ringbackPlayerRef.current?.playing) {
       console.log('[VoiceCallAudio] Ringback already playing, skipping');
       return;
     }
@@ -248,49 +249,22 @@ export function useVoiceCallAudio({
   }, []);
 
   // Earpiece enforcement during ringing/connecting states ONLY
-  // CRITICAL FIX: Do NOT run aggressive enforcement during 'connected' state!
-  // The 250ms enforcement loop was fighting with WebRTC's internal audio routing,
-  // causing both parties to not hear each other. During connected state, we let
-  // Daily.co/WebRTC manage the audio pipeline and only enforce once on connect.
-  //
-  // During connecting/ringing: enforce every 500ms to prevent speaker during ringback
-  // During connected: single enforcement on transition (handled in connected state effect)
+  // Single enforcement on state transition — no interval loop, which disrupts
+  // the expo-audio ringback pipeline. WebRTC manages routing when connected.
   useEffect(() => {
     if (!InCallManager) return;
     
-    // Only enforce during pre-connection states (NOT connected)
     const shouldEnforceEarpiece = (
       callState === 'connecting' || 
       callState === 'ringing'
     ) && !isSpeakerEnabled;
     
     if (shouldEnforceEarpiece) {
-      // Immediately enforce earpiece
       try {
         InCallManager.setForceSpeakerphoneOn(false);
-        console.log('[VoiceCallAudio] Earpiece enforced immediately');
+        console.log('[VoiceCallAudio] Earpiece enforced on state transition');
       } catch (e) {
-        console.warn('[VoiceCallAudio] Initial earpiece enforcement failed:', e);
-      }
-      
-      // Periodic enforcement only during ringing/connecting (NOT connected)
-      // 500ms is sufficient - 250ms was too aggressive and interfered with audio
-      if (!earpieceEnforcerRef.current) {
-        console.log('[VoiceCallAudio] Starting earpiece enforcement (pre-connect only)');
-        earpieceEnforcerRef.current = setInterval(() => {
-          try {
-            InCallManager.setForceSpeakerphoneOn(false);
-          } catch (e) {
-            // Ignore errors during enforcement
-          }
-        }, 500);
-      }
-    } else {
-      // Clear the enforcer when state changes to connected, speaker is enabled, or call ends
-      if (earpieceEnforcerRef.current) {
-        clearInterval(earpieceEnforcerRef.current);
-        earpieceEnforcerRef.current = null;
-        console.log('[VoiceCallAudio] Stopped earpiece enforcement loop');
+        console.warn('[VoiceCallAudio] Earpiece enforcement failed:', e);
       }
     }
     
@@ -314,79 +288,51 @@ export function useVoiceCallAudio({
       try {
         console.log('[VoiceCallAudio] Initializing audio for', isOwner ? 'caller' : 'callee');
         
-        // CRITICAL: Set audio mode via expo-audio FIRST to establish earpiece routing
-        // Use 'duckOthers' to allow WebRTC audio alongside our audio session
+        if (InCallManager) {
+          // STEP 1: Start InCallManager FIRST — this acquires the audio session.
+          // Must be done before setAudioModeAsync, otherwise InCallManager.start()
+          // resets the expo-audio mode and kills ringback playback.
+          if (isOwner) {
+            InCallManager.start({ 
+              media: 'audio',
+              auto: false,
+              ringback: '' // Empty — we use expo-audio for ringback
+            });
+          } else {
+            InCallManager.start({ 
+              media: 'audio',
+              auto: false,
+              ringback: ''
+            });
+          }
+          console.log('[VoiceCallAudio] ✅ InCallManager started');
+          
+          // STEP 2: Set earpiece routing after InCallManager owns the session
+          InCallManager.setForceSpeakerphoneOn(false);
+          setIsSpeakerEnabled(false);
+          
+          // STEP 3: Small delay to let system audio session stabilize
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        
+        // STEP 4: Set expo-audio mode AFTER InCallManager is stable
         await setAudioModeAsync({
           playsInSilentMode: true,
           interruptionMode: 'duckOthers',
           allowsRecording: true,
           shouldPlayInBackground: true,
-          // ANDROID SPECIFIC: Route through earpiece for phone-like experience
           shouldRouteThroughEarpiece: !isSpeakerEnabled,
         });
-        console.log('[VoiceCallAudio] ✅ Pre-initialized audio mode for earpiece');
+        console.log('[VoiceCallAudio] ✅ Audio mode set');
+        
+        // STEP 5: Play ringback for caller AFTER audio pipeline is stable
+        if (isOwner) {
+          await playCustomRingback();
+          console.log('[VoiceCallAudio] ✅ Ringback initiated');
+        }
         
         if (InCallManager) {
-          // CRITICAL: Set earpiece via InCallManager BEFORE starting 
-          InCallManager.setForceSpeakerphoneOn(false);
-          
-          if (isOwner) {
-            // Caller: NO system ringback - it forces speaker on Android
-            // Instead, use empty ringback and play custom tone via expo-audio
-            // expo-audio respects InCallManager's earpiece routing
-            InCallManager.start({ 
-              media: 'audio',
-              auto: false,
-              ringback: '' // Empty - no system ringback (prevents speaker routing)
-            });
-            console.log('[VoiceCallAudio] Caller: Audio initialized (no system ringback to prevent speaker routing)');
-            
-            // CRITICAL: Set earpiece AGAIN after start to override any default
-            InCallManager.setForceSpeakerphoneOn(false);
-            
-            // Play custom ringback via expo-audio (respects earpiece routing)
-            // Fire and forget - don't await to avoid blocking
-            playCustomRingback().catch(err => 
-              console.warn('[VoiceCallAudio] Ringback playback failed:', err)
-            );
-          } else {
-            // Callee: No ringback needed, just setup audio routing
-            InCallManager.start({ 
-              media: 'audio',
-              auto: false,
-              ringback: '' // No ringback for callee
-            });
-            console.log('[VoiceCallAudio] Callee: Audio routing only, no ringback');
-          }
-          
-          // Default to earpiece (WhatsApp-like) - enforce multiple times
-          InCallManager.setForceSpeakerphoneOn(false);
-          setIsSpeakerEnabled(false);
-          
-          // Additional enforcement after short delays to catch any automatic speaker switches
-          setTimeout(() => {
-            try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              console.log('[VoiceCallAudio] Earpiece enforcement (100ms post-init)');
-            } catch (e) { /* ignore */ }
-          }, 100);
-          
-          setTimeout(() => {
-            try {
-              InCallManager.setForceSpeakerphoneOn(false);
-              console.log('[VoiceCallAudio] Earpiece enforcement (300ms post-init)');
-            } catch (e) { /* ignore */ }
-          }, 300);
-          
-          // For earpiece calls: Don't force screen to stay on
-          // This allows the proximity sensor to turn off the screen when phone is near ear
-          // For speaker calls, we'll enable keepScreenOn in the connected state effect
           InCallManager.setKeepScreenOn(false);
-        } else if (isOwner) {
-          // Fallback: if InCallManager isn't available, still play ringback and rely on expo-audio routing
-          playCustomRingback().catch(err => 
-            console.warn('[VoiceCallAudio] Ringback playback failed (no InCallManager):', err)
-          );
         }
         
         audioInitializedRef.current = true;

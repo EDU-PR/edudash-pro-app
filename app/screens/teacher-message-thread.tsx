@@ -20,7 +20,9 @@ import {
   MediaGalleryView,
   StarredMessagesView,
 } from '@/components/messaging';
+import { SwipeableMessageRow } from '@/components/messaging/SwipeableMessageRow';
 import { ChatHeader } from '@/components/messaging/ChatHeader';
+import { TypingIndicator } from '@/components/messaging/TypingIndicator';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
 import { useTeacherMessageThread, type ChatRow } from '@/hooks/teacher-messaging';
@@ -79,6 +81,14 @@ export default function TeacherMessageThreadScreen() {
     refetch, setReplyTo,
   } = useTeacherMessageThread();
 
+  // Scroll to a quoted message when tapped
+  const handleScrollToMessage = useCallback((messageId: string) => {
+    const idx = rowsAsc.findIndex((r: ChatRow) => r.type === 'message' && r.msg?.id === messageId);
+    if (idx >= 0 && listRef?.current) {
+      listRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    }
+  }, [rowsAsc, listRef]);
+
   const renderRow = useCallback(({ item }: { item: ChatRow }) => {
     if (item.type === 'date') return <DateSeparator label={item.label} />;
     const msg = item.msg;
@@ -87,23 +97,28 @@ export default function TeacherMessageThreadScreen() {
     const hasPreviousVoice = voiceIndex > 0;
 
     return (
-      <MessageBubble
-        msg={msg}
-        isOwn={msg.sender_id === user?.id}
-        onLongPress={() => handleLongPress(msg)}
-        onPlaybackFinished={msg.voice_url ? () => {
-          setCurrentlyPlayingVoiceId(hasNextVoice ? voiceMessageIdsAsc[voiceIndex + 1] : null);
-        } : undefined}
-        onPlayNext={hasNextVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
-        onPlayPrevious={hasPreviousVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1]) : undefined}
-        hasNextVoice={hasNextVoice}
-        hasPreviousVoice={hasPreviousVoice}
-        autoPlayVoice={!!msg.voice_url && currentlyPlayingVoiceId === msg.id}
-        otherParticipantIds={otherIds}
-        onReactionPress={handleReactionPress}
-      />
+      <SwipeableMessageRow onSwipeReply={() => setReplyTo(msg)}>
+        <MessageBubble
+          msg={msg}
+          isOwn={msg.sender_id === user?.id}
+          onLongPress={() => handleLongPress(msg)}
+          onPlaybackFinished={msg.voice_url ? () => {
+            setCurrentlyPlayingVoiceId(hasNextVoice ? voiceMessageIdsAsc[voiceIndex + 1] : null);
+          } : undefined}
+          onPlayNext={hasNextVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
+          onPlayPrevious={hasPreviousVoice ? () => setCurrentlyPlayingVoiceId(voiceMessageIdsAsc[voiceIndex - 1]) : undefined}
+          hasNextVoice={hasNextVoice}
+          hasPreviousVoice={hasPreviousVoice}
+          autoPlayVoice={!!msg.voice_url && currentlyPlayingVoiceId === msg.id}
+          otherParticipantIds={otherIds}
+          onReactionPress={handleReactionPress}
+          onReplyPress={handleScrollToMessage}
+          isFirstInGroup={item.isFirstInGroup}
+          isLastInGroup={item.isLastInGroup}
+        />
+      </SwipeableMessageRow>
     );
-  }, [currentlyPlayingVoiceId, handleLongPress, handleReactionPress, otherIds, user?.id, voiceMessageIdsAsc, setCurrentlyPlayingVoiceId]);
+  }, [currentlyPlayingVoiceId, handleLongPress, handleReactionPress, handleScrollToMessage, otherIds, user?.id, voiceMessageIdsAsc, setCurrentlyPlayingVoiceId, setReplyTo]);
 
   // Loading state
   if (isLoading) {
@@ -188,6 +203,14 @@ export default function TeacherMessageThreadScreen() {
           />
         </MessageListWrapper>
       </View>
+
+      {/* Typing Indicator */}
+      {isOtherTyping && (
+        <View style={{ position: 'absolute', left: 20, bottom: messageViewportInset + 4, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(30, 41, 59, 0.85)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 }}>
+          <TypingIndicator color="#94a3b8" size={5} />
+          <Text style={{ color: '#94a3b8', fontSize: 12, marginLeft: 6 }}>{typingText}</Text>
+        </View>
+      )}
 
       {/* Floating Composer */}
       <View style={[styles.composerKeyboard, { bottom: composerKeyboardOffset }]}>

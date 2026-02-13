@@ -9,6 +9,8 @@ import { View, Text, TouchableOpacity, Pressable, StyleSheet, Image, Dimensions 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MessageTicks } from './MessageTicks';
+import { ReplyBubbleQuote } from './ReplyBubbleQuote';
+import { LinkedText } from './LinkedText';
 import { formatTime, isVoiceNote, getVoiceNoteDuration, getSenderName } from './utils';
 import { toast } from '@/components/ui/ToastProvider';
 import type { Message, MessageStatus } from './types';
@@ -31,6 +33,9 @@ interface MessageBubbleProps {
   autoPlayVoice?: boolean;
   otherParticipantIds?: string[];
   onReactionPress?: (messageId: string, emoji: string) => void;
+  onReplyPress?: (messageId: string) => void;
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
@@ -45,6 +50,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   autoPlayVoice = false,
   otherParticipantIds = [],
   onReactionPress,
+  onReplyPress,
+  isFirstInGroup = true,
+  isLastInGroup = true,
 }) => {
   const name = getSenderName(msg.sender);
 
@@ -115,8 +123,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
   const activeReactions = msg.reactions?.filter(r => r.count > 0) || [];
 
   return (
-    <View style={[styles.container, activeReactions.length > 0 && styles.containerWithReactions, isOwn ? styles.own : styles.other]}>
-      {!isOwn && (
+    <View style={[
+      styles.container,
+      activeReactions.length > 0 && styles.containerWithReactions,
+      isOwn ? styles.own : styles.other,
+      !isFirstInGroup && styles.groupedMessage,
+    ]}>
+      {!isOwn && isFirstInGroup && (
         <Text style={styles.name}>{name}</Text>
       )}
       {msg.forwarded_from_id && (
@@ -139,8 +152,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               styles.bubble,
               isOwn ? styles.bubbleOwn : styles.bubbleOther,
               isVoice && styles.voiceBubble,
+              !isLastInGroup && styles.bubbleMiddle,
             ]}
           >
+            {/* Reply-to quote */}
+            {msg.reply_to && (
+              <ReplyBubbleQuote
+                replyTo={msg.reply_to}
+                isOwn={isOwn}
+                onPress={msg.reply_to_id ? () => onReplyPress?.(msg.reply_to_id!) : undefined}
+              />
+            )}
             {isVoice ? (
               <View style={styles.voiceContainer}>
                 <View style={styles.voiceRow}>
@@ -192,9 +214,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                 );
               }
               return (
-                <Text style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}>
-                  {msg.content}
-                </Text>
+                <LinkedText
+                  text={msg.content}
+                  style={[styles.text, { color: isOwn ? '#ffffff' : '#e2e8f0' }]}
+                  linkColor={isOwn ? '#bbdefb' : '#93c5fd'}
+                />
               );
             })()}
             <View style={styles.footer}>
@@ -250,17 +274,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
          prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
          prevProps.msg.forwarded_from_id === nextProps.msg.forwarded_from_id &&
          prevProps.msg.edited_at === nextProps.msg.edited_at &&
+         prevProps.msg.reply_to_id === nextProps.msg.reply_to_id &&
+         prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
+         prevProps.isLastInGroup === nextProps.isLastInGroup &&
          JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
 });
 
 const styles = StyleSheet.create({
   container: {
     marginVertical: 4,
+    paddingHorizontal: 4,
     width: '100%',
     maxWidth: '100%',
   },
   containerWithReactions: {
     marginBottom: 8,
+  },
+  groupedMessage: {
+    marginVertical: 1,
+  },
+  bubbleMiddle: {
+    borderTopRightRadius: 18,
+    borderTopLeftRadius: 18,
   },
   own: {
     alignSelf: 'stretch',
@@ -294,7 +329,7 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     fontWeight: '600', 
     marginBottom: 6, 
-    marginLeft: 12,
+    marginLeft: 16,
     color: '#a78bfa',
   },
   bubble: { 

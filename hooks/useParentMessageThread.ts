@@ -25,7 +25,7 @@ try { assertSupabase = require('@/lib/supabase').assertSupabase; } catch { asser
 try { const h = require('@/hooks/useParentMessaging'); useThreadMessages = h.useThreadMessages; useSendMessage = h.useSendMessage; useMarkThreadRead = h.useMarkThreadRead; useRealtimeMessages = h.useParentMessagesRealtime || (() => {}); } catch { useThreadMessages = () => ({ data: [], isLoading: false, error: null, refetch: () => {} }); useSendMessage = () => ({ mutateAsync: async () => ({}), isLoading: false }); useMarkThreadRead = () => ({ mutate: () => {} }); }
 try { const w = require('@/components/messaging/ChatWallpaperPicker'); getStoredWallpaper = w.getStoredWallpaper; WALLPAPER_PRESETS = w.WALLPAPER_PRESETS || []; } catch {}
 try { uploadVoiceNote = require('@/services/VoiceStorageService').uploadVoiceNote; } catch {}
-export type ChatRow = { type: 'date'; key: string; label: string } | { type: 'message'; key: string; msg: Message };
+export type ChatRow = { type: 'date'; key: string; label: string } | { type: 'message'; key: string; msg: Message; isFirstInGroup: boolean; isLastInGroup: boolean };
 
 export function useParentMessageThread(threadId: string, userId: string | undefined, userEmail: string | undefined) {
   const listRef = useRef<FlashListRef<any> | null>(null);
@@ -112,10 +112,16 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
   const rowsAsc = useMemo<ChatRow[]>(() => {
     const rows: ChatRow[] = [];
     let lastDateKey = '';
-    for (const msg of allMessages) {
+    const GROUP_GAP_MS = 2 * 60 * 1000; // 2 minutes
+    for (let i = 0; i < allMessages.length; i++) {
+      const msg = allMessages[i];
       const dateKey = getDateKey(msg.created_at);
       if (dateKey !== lastDateKey) { rows.push({ type: 'date', key: `date-${dateKey}`, label: getDateSeparatorLabel(msg.created_at) }); lastDateKey = dateKey; }
-      rows.push({ type: 'message', key: `msg-${msg.id}`, msg });
+      const prev = allMessages[i - 1];
+      const next = allMessages[i + 1];
+      const prevSame = prev && prev.sender_id === msg.sender_id && getDateKey(prev.created_at) === dateKey && (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < GROUP_GAP_MS;
+      const nextSame = next && next.sender_id === msg.sender_id && getDateKey(next?.created_at) === dateKey && (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < GROUP_GAP_MS;
+      rows.push({ type: 'message', key: `msg-${msg.id}`, msg, isFirstInGroup: !prevSame, isLastInGroup: !nextSame });
     }
     return rows;
   }, [allMessages]);
@@ -123,11 +129,12 @@ export function useParentMessageThread(threadId: string, userId: string | undefi
   // Handlers
   const handleSend = useCallback(async (content: string) => {
     if (!content || !threadId || sending) return;
+    const replyToId = replyingTo?.id;
     clearTyping();
     setSending(true);
     setReplyingTo(null);
-    try { await sendMessage({ threadId, content }); setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60); } catch (err) { logger.error('ParentMessageThread', 'Send failed:', err); toast.error('Failed to send message. Please try again.'); } finally { setSending(false); }
-  }, [threadId, sending, sendMessage, clearTyping]);
+    try { await sendMessage({ threadId, content, replyToId }); setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60); } catch (err) { logger.error('ParentMessageThread', 'Send failed:', err); toast.error('Failed to send message. Please try again.'); } finally { setSending(false); }
+  }, [threadId, sending, sendMessage, clearTyping, replyingTo]);
 
   const handleVoiceRecording = useCallback(async (uri: string, duration: number) => {
     if (!threadId) return;
