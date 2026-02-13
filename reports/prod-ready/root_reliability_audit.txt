@@ -1,0 +1,14 @@
+
+> edudash-pro@1.0.26 verify:reliability-audit
+> npm run verify:dash-caps-contracts && npm run verify:read-receipts-rollout
+
+
+> edudash-pro@1.0.26 verify:dash-caps-contracts
+> tsx scripts/acceptance/verify-dash-caps-contracts.ts
+
+Dash + CAPS contract verification passed.
+
+> edudash-pro@1.0.26 verify:read-receipts-rollout
+> tsx scripts/acceptance/verify-read-receipts-rollout.ts
+
+Read-receipts rollout verification passed.

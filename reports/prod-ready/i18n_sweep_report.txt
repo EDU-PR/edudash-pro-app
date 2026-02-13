@@ -1,0 +1,10 @@
+
+> edudash-pro@1.0.26 i18n:sweep:report
+> node scripts/i18n-sweep.js
+
+
+🌍 i18n sweep complete
+- Report: scripts/reports/i18n-sweep-report.json
+- Missing before apply: 69
+
+✅ Done
