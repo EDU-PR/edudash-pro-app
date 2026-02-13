@@ -119,7 +119,7 @@ describe('Homework Submission Flow', () => {
     };
 
     const { data, error } = await supabase
-      .from('homework')
+      .from('homework_assignments')
       .insert(homeworkData)
       .select()
       .single();
@@ -155,7 +155,7 @@ describe('Homework Submission Flow', () => {
 
     // Query homework for student
     const { data: homework, error } = await supabase
-      .from('homework')
+      .from('homework_assignments')
       .select('*')
       .eq('school_id', TEST_SCHOOL_ID)
       .eq('status', 'active')
@@ -537,7 +537,7 @@ describe('Performance Tests', () => {
     const startTime = Date.now();
     
     const { data, error } = await supabase
-      .from('homework')
+      .from('homework_assignments')
       .select('id, title, due_date, status')
       .eq('status', 'active')
       .order('due_date', { ascending: true })
