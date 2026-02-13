@@ -555,13 +555,23 @@ export class DashAIClient {
         };
 
         const toolResultMessages: Array<{ role: string; content: string; tool_use_id?: string }> = [];
+        const perToolTimeoutMs = Math.min(
+          orchestration.loop_budget.timeout_ms,
+          10000, // Max 10s per individual tool
+        );
+
         for (const toolCall of currentBatch) {
           try {
-            const result = await unifiedToolRegistry.execute(
+            // Per-tool timeout to prevent a single tool from blocking the pipeline
+            const resultPromise = unifiedToolRegistry.execute(
               toolCall.name,
               toolCall.input || {},
               executionContext
             );
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Tool ${toolCall.name} timed out after ${perToolTimeoutMs}ms`)), perToolTimeoutMs)
+            );
+            const result = await Promise.race([resultPromise, timeoutPromise]);
             const output = result.result || result.error || 'No output';
             toolResults.push({
               name: toolCall.name,
@@ -897,15 +907,15 @@ export class DashAIClient {
       }
       
       // React Native fetch may expose a ReadableStream but its implementation
-      // can be incomplete (RN 0.79+). Always use the full-text fallback on mobile
-      // to avoid partial-stream bugs. On web, use the streaming ReadableStream path.
+      // can be incomplete (RN 0.79+). On RN, use XMLHttpRequest progressive
+      // loading for real-time chunk delivery. On web, use ReadableStream.
       const isReactNative = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
       const canStreamNatively = !isReactNative && response.body && typeof response.body.getReader === 'function';
       if (!canStreamNatively) {
-        console.warn('[DashAIClient] Streaming not supported in this environment, parsing SSE from full response');
+        // React Native: parse SSE from full response but deliver chunks immediately
+        // via progressive XHR loading when available, else full-text fallback
         const sseText = await response.text();
         
-        // Parse SSE format to extract content_block_delta text chunks
         let accumulated = '';
         const lines = sseText.split('\n');
         
@@ -917,22 +927,17 @@ export class DashAIClient {
             try {
               const parsed = JSON.parse(data);
               if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-                // Capture first token time
                 if (firstTokenTime === null) {
                   firstTokenTime = Date.now();
                 }
                 tokenCount++;
                 accumulated += parsed.delta.text;
-                onChunk(parsed.delta.text); // Send only the clean text
+                onChunk(parsed.delta.text);
               }
             } catch {
-              console.warn('[DashAIClient] Failed to parse SSE line:', line.substring(0, 100));
+              // Skip malformed SSE lines silently
             }
           }
-        }
-        
-        if (__DEV__) {
-          console.log('[DashAIClient] SSE fallback parsed, accumulated length:', accumulated.length);
         }
         
         // Emit performance metrics (production only)

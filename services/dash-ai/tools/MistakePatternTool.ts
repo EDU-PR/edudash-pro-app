@@ -43,7 +43,7 @@ export const MistakePatternTool: Tool = {
       type: 'string',
       description: 'Type of pattern analysis',
       required: true,
-      enum: ['detect_patterns', 'get_recommendations', 'track_improvement'],
+      enum: ['detect_patterns', 'get_recommendations', 'track_improvement', 'ai_deep_analysis'],
     },
     {
       name: 'student_id',
@@ -87,8 +87,8 @@ export const MistakePatternTool: Tool = {
       properties: {
         action: {
           type: 'string',
-          enum: ['detect_patterns', 'get_recommendations', 'track_improvement'],
-          description: 'detect_patterns: Find recurring mistakes | get_recommendations: Get intervention strategies | track_improvement: Monitor progress over time',
+          enum: ['detect_patterns', 'get_recommendations', 'track_improvement', 'ai_deep_analysis'],
+          description: 'detect_patterns: Find recurring mistakes | get_recommendations: Get intervention strategies | track_improvement: Monitor progress over time | ai_deep_analysis: AI-powered deep misconception analysis',
         },
         student_id: {
           type: 'string',
@@ -141,7 +141,10 @@ export const MistakePatternTool: Tool = {
         
         case 'track_improvement':
           return await trackImprovement(client, targetStudentId, subject, days_back);
-        
+
+        case 'ai_deep_analysis':
+          return await aiDeepAnalysis(client, targetStudentId, subject, days_back);
+
         default:
           return {
             success: false,
@@ -404,4 +407,135 @@ async function trackImprovement(
                      persistent.length > improved.length ? 'needs_support' : 'stable',
     },
   };
+}
+
+/**
+ * AI-powered deep misconception analysis.
+ * Sends conversation snippets to AI proxy for pedagogical analysis
+ * that goes beyond keyword matching.
+ */
+async function aiDeepAnalysis(
+  client: any,
+  studentId: string,
+  subject: string | undefined,
+  daysBack: number,
+): Promise<ToolExecutionResult> {
+  const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+
+  // Fetch recent conversations with mistakes
+  let query = client
+    .from('dash_conversations')
+    .select('id, created_at, metadata')
+    .eq('user_id', studentId)
+    .gte('created_at', startDate)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (subject) {
+    query = query.eq('metadata->>subject', subject);
+  }
+
+  const { data: conversations, error: convError } = await query;
+  if (convError) throw convError;
+  if (!conversations?.length) {
+    return { success: true, data: { patterns: [], message: 'No conversation history found' } };
+  }
+
+  const convIds = conversations.map((c: any) => c.id);
+  const { data: messages, error: msgError } = await client
+    .from('dash_messages')
+    .select('conversation_id, role, content, created_at')
+    .in('conversation_id', convIds)
+    .order('created_at', { ascending: true })
+    .limit(200);
+
+  if (msgError) throw msgError;
+  if (!messages?.length) {
+    return { success: true, data: { patterns: [], message: 'No messages found' } };
+  }
+
+  // Build condensed transcript for AI analysis (limit to ~3000 chars)
+  const transcript = messages
+    .map((m: any) => `[${m.role}]: ${(m.content || '').substring(0, 150)}`)
+    .join('\n')
+    .substring(0, 3000);
+
+  const prompt = [
+    'You are a learning analytics expert analyzing a student\'s conversation history with an AI tutor.',
+    `Subject focus: ${subject || 'all subjects'}`,
+    `Period: last ${daysBack} days`,
+    '',
+    'Analyze the following conversation excerpts and identify:',
+    '1. Recurring misconceptions (not just wrong answers, but WHY they\'re wrong)',
+    '2. Conceptual gaps (prerequisite knowledge that may be missing)',
+    '3. Learning style indicators (visual, verbal, kinesthetic preferences)',
+    '4. Confidence patterns (where they hesitate vs rush)',
+    '',
+    'Return JSON:',
+    '{',
+    '  "misconceptions": [{"concept": "...", "misconception": "...", "frequency": "high|medium|low", "root_cause": "..."}],',
+    '  "conceptual_gaps": [{"gap": "...", "prerequisites_needed": ["..."], "impact": "..."}],',
+    '  "learning_style": {"primary": "...", "indicators": ["..."]},',
+    '  "confidence_map": {"strong_areas": ["..."], "weak_areas": ["..."], "avoidance_topics": ["..."]},',
+    '  "intervention_plan": [{"priority": 1, "action": "...", "rationale": "..."}]',
+    '}',
+    '',
+    'Conversation transcript:',
+    transcript,
+  ].join('\n');
+
+  try {
+    const { data: session } = await client.auth.getSession();
+    const token = session?.session?.access_token;
+    if (!token) throw new Error('Not authenticated');
+
+    const response = await fetch(
+      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }],
+          service_type: 'grading',
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 2048,
+        }),
+      },
+    );
+
+    if (!response.ok) throw new Error(`AI proxy returned ${response.status}`);
+    const result = await response.json();
+    const content = result?.content || result?.text || '';
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const analysis = JSON.parse(jsonMatch[0]);
+        return {
+          success: true,
+          data: {
+            ...analysis,
+            conversations_analyzed: conversations.length,
+            messages_analyzed: messages.length,
+            analysis_type: 'ai_deep',
+          },
+          metadata: { toolId: 'mistake_pattern_detector' },
+        };
+      } catch {
+        // fall through
+      }
+    }
+
+    return {
+      success: true,
+      data: { raw_analysis: content, analysis_type: 'ai_deep' },
+      metadata: { toolId: 'mistake_pattern_detector' },
+    };
+  } catch (error: any) {
+    // Fallback to basic analysis if AI fails
+    return detectPatterns(client, studentId, subject, daysBack, 2);
+  }
 }

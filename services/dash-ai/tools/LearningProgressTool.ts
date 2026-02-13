@@ -589,6 +589,90 @@ async function generateProgressReport(
       const recs = await generateLearningRecommendations(supabase, studentId, subject, grade);
       report.recommendations = recs;
       break;
+
+    case 'time_analysis': {
+      // Analyze study time patterns from quiz sessions and conversations
+      const { data: sessions } = await supabase
+        .from('dash_quiz_sessions')
+        .select('created_at, completed_at, subject, total_questions, correct_answers')
+        .eq('user_id', studentId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (sessions?.length) {
+        const sessionDurations = sessions
+          .filter((s: any) => s.completed_at)
+          .map((s: any) => ({
+            date: s.created_at,
+            duration_min: Math.round(
+              (new Date(s.completed_at).getTime() - new Date(s.created_at).getTime()) / 60000,
+            ),
+            subject: s.subject || 'General',
+            accuracy: s.total_questions > 0
+              ? Math.round((s.correct_answers / s.total_questions) * 100)
+              : 0,
+          }));
+
+        const totalMinutes = sessionDurations.reduce((a: number, b: any) => a + b.duration_min, 0);
+        const avgAccuracy = sessionDurations.length > 0
+          ? Math.round(sessionDurations.reduce((a: number, b: any) => a + b.accuracy, 0) / sessionDurations.length)
+          : 0;
+
+        report.timeAnalysis = {
+          totalStudyMinutes: totalMinutes,
+          sessionsCompleted: sessionDurations.length,
+          avgSessionDuration: Math.round(totalMinutes / (sessionDurations.length || 1)),
+          avgAccuracy,
+          recentSessions: sessionDurations.slice(0, 10),
+          studyPattern: totalMinutes > 300 ? 'consistent' : totalMinutes > 100 ? 'moderate' : 'needs_more',
+        };
+      } else {
+        report.timeAnalysis = { message: 'No study session data available yet' };
+      }
+      break;
+    }
+
+    case 'comparison': {
+      // Compare student performance to class/grade benchmarks
+      const { data: orgMembers } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('organization_id', (await supabase.auth.getUser()).data?.user?.user_metadata?.organization_id)
+        .eq('role', 'student')
+        .limit(100);
+
+      const studentIds = (orgMembers || []).map((m: any) => m.id);
+
+      if (studentIds.length > 1) {
+        const { data: allProgress } = await supabase
+          .from('student_progress')
+          .select('student_id, mastery_score, subject')
+          .in('student_id', studentIds)
+          .limit(500);
+
+        const classMastery = (allProgress || []).map((p: any) => p.mastery_score || 0);
+        const classAvg = classMastery.length > 0
+          ? Math.round(classMastery.reduce((a: number, b: number) => a + b, 0) / classMastery.length)
+          : 0;
+
+        report.comparison = {
+          classAverage: classAvg,
+          studentAverage: summary.averageMastery,
+          percentile: classMastery.length > 0
+            ? Math.round(
+                (classMastery.filter((m: number) => m <= summary.averageMastery).length /
+                  classMastery.length) * 100,
+              )
+            : 50,
+          totalClassmates: studentIds.length - 1,
+          standout: summary.averageMastery > classAvg + 10 ? 'above_average' :
+                    summary.averageMastery < classAvg - 10 ? 'needs_support' : 'on_track',
+        };
+      } else {
+        report.comparison = { message: 'Not enough classmates for comparison' };
+      }
+      break;
+    }
   }
   
   if (includeGoals) {

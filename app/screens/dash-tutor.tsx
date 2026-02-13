@@ -197,6 +197,11 @@ export default function DashTutorScreen() {
           conversationId={conversationId}
           handoffSource="tutor"
           onClose={handleClose}
+          tutorMode={(params?.mode as TutorMode) || null}
+          tutorConfig={{
+            subject: params?.subject,
+            grade: params?.grade,
+          }}
         />
       </View>
     </View>

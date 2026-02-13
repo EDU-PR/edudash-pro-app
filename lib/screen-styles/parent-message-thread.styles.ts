@@ -4,9 +4,9 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const COMPOSER_OVERLAY_HEIGHT = 84;
+export const COMPOSER_OVERLAY_HEIGHT = 64;
 export const COMPOSER_FLOAT_MARGIN = 10;
-export const COMPOSER_FLOAT_GAP = 8;
+export const COMPOSER_FLOAT_GAP = 4;
 
 export const WALLPAPER_ACCENTS: Record<string, string> = {
   'purple-glow': '#a78bfa',

@@ -206,7 +206,7 @@ export default function ParentMessageThreadScreen() {
                 isOtherTyping: h.isOtherTyping,
                 keyboardHeight: h.keyboardHeight,
               }}
-              contentContainerStyle={[styles.messagesContent, { paddingBottom: messageViewportInset + 24 }]} />
+              contentContainerStyle={[styles.messagesContent, { paddingBottom: messageViewportInset + 4 }]} />
           )}
         </View>
 
@@ -227,7 +227,7 @@ export default function ParentMessageThreadScreen() {
         )}
 
         {/* Composer */}
-        <View style={[styles.composerArea, { bottom: h.keyboardHeight + COMPOSER_FLOAT_GAP, paddingBottom: composerBottomInset + 2 }]} onLayout={h.handleComposerLayout}>
+        <View style={[styles.composerArea, { bottom: h.keyboardHeight + COMPOSER_FLOAT_GAP, paddingBottom: composerBottomInset }]} onLayout={h.handleComposerLayout}>
           <View style={[styles.composerGlass, { backgroundColor: composerSurfaceColor, borderColor: composerBorderColor }]} />
           <MessageComposer
             onSend={actions.editingMessage ? actions.confirmEdit : h.handleSend}

@@ -10,3 +10,4 @@ export { registerCAPSTools } from './CAPSTools';
 export { registerNavigationTools } from './NavigationTools';
 export { registerSuperAdminTools } from './SuperAdminTools';
 export { registerSupportTools } from './SupportTools';
+export { registerTeacherTools } from './TeacherTools';

@@ -16,6 +16,7 @@ import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MathRenderer } from './MathRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
+import { InlineQuizCard, parseQuizPayload, extractPreQuizText } from './InlineQuizCard';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -479,7 +480,8 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     | { type: 'markdown'; content: string }
     | { type: 'math'; content: string }
     | { type: 'inlineMath'; content: string }
-    | { type: 'mermaid'; content: string };
+    | { type: 'mermaid'; content: string }
+    | { type: 'quiz'; content: string };
 
   const parseRichSegments = (content: string): RichSegment[] => {
     const splitByPattern = (
@@ -515,7 +517,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     };
 
     const base: RichSegment[] = [{ type: 'markdown', content }];
-    const withMermaid = splitByPattern(base, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
+    // Quiz blocks: ```quiz ... ```
+    const withQuiz = splitByPattern(base, /```quiz\s*([\s\S]*?)```/gi, (value) => ({
+      type: 'quiz' as const,
+      content: value,
+    }));
+    const withMermaid = splitByPattern(withQuiz, /```mermaid\s*([\s\S]*?)```/gi, (value) => ({
       type: 'mermaid',
       content: value,
     }));
@@ -756,6 +763,25 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           ) : (
             <View style={{ flex: 1 }}>
               {parseRichSegments(assistantDisplayText).map((segment, segmentIndex) => {
+                if (segment.type === 'quiz') {
+                  try {
+                    const quizData = JSON.parse(segment.content.trim());
+                    if (quizData?.type === 'quiz_question' && quizData.question) {
+                      return (
+                        <InlineQuizCard
+                          key={`quiz-${message.id}-${segmentIndex}`}
+                          payload={quizData}
+                          onAnswer={(answer, correct) => {
+                            onSendTutorAnswer?.(answer, message.id);
+                          }}
+                        />
+                      );
+                    }
+                  } catch {
+                    // Invalid quiz JSON — fall through to markdown
+                  }
+                  return null;
+                }
                 if (segment.type === 'math') {
                   return (
                     <MathRenderer
