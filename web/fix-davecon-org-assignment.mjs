@@ -13,12 +13,18 @@
 import { createClient } from '@supabase/supabase-js';
 
 // EduDashPro (Education Platform)
-const EDUDASH_URL = 'https://lvvvjywrmpcqrpvuptdi.supabase.co';
-const EDUDASH_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2dnZqeXdybXBjcXJwdnVwdGRpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MzAzNzgzOCwiZXhwIjoyMDY4NjEzODM4fQ.p8cRGywZP4qVglovv-T3VCDi9evfeCVZEBQM2LTeCmc';
+const EDUDASH_URL = process.env.EDUDASH_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://lvvvjywrmpcqrpvuptdi.supabase.co';
+const EDUDASH_SERVICE_KEY = process.env.EDUDASH_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // EduSitePro (CMS Platform)
-const EDUSITE_URL = 'https://bppuzibjlxgfwrujzfsz.supabase.co';
-const EDUSITE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwcHV6aWJqbHhnZndydWp6ZnN6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mzc0MzczMCwiZXhwIjoyMDY5MzE5NzMwfQ.5zPPaAo1Jj5-SknVMDwvo1DBCXhmS60obAEckJV7o1I';
+const EDUSITE_URL = process.env.EDUSITE_SUPABASE_URL || 'https://bppuzibjlxgfwrujzfsz.supabase.co';
+const EDUSITE_SERVICE_KEY = process.env.EDUSITE_SUPABASE_SERVICE_ROLE_KEY || '';
+
+if (!EDUDASH_SERVICE_KEY || !EDUSITE_SERVICE_KEY) {
+  console.error('❌ Missing required env vars.');
+  console.error('Set EDUDASH_SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_ROLE_KEY) and EDUSITE_SUPABASE_SERVICE_ROLE_KEY.');
+  process.exit(1);
+}
 
 const edudashClient = createClient(EDUDASH_URL, EDUDASH_SERVICE_KEY);
 const edusiteClient = createClient(EDUSITE_URL, EDUSITE_SERVICE_KEY);
