@@ -53,7 +53,7 @@ export async function removeTeacherFromSchool(params: {
 /**
  * Remove a directly-added teacher who has no auth account.
  * Since there's no user profile or org membership to clean up,
- * we just deactivate the teacher record.
+ * we delete the teacher record entirely.
  */
 export async function removeTeacherDirect(params: {
   teacherRecordId: string;
@@ -67,7 +67,7 @@ export async function removeTeacherDirect(params: {
   const supabase = assertSupabase();
   const { error } = await supabase
     .from('teachers')
-    .update({ is_active: false })
+    .delete()
     .eq('id', teacherRecordId)
     .eq('preschool_id', organizationId);
 

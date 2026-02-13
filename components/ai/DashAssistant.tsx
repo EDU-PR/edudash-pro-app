@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Platform, Dimensions, KeyboardAvoidingView, Keyboard, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView, Keyboard, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { layoutStyles, headerStyles, messageStyles, inputStyles } from './dash-assistant/styles';
@@ -50,7 +50,6 @@ import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
 import { ToolRegistry } from '@/services/AgentTools';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-const { width: screenWidth } = Dimensions.get('window');
 
 // Merge all style domains for backward compatibility with child components
 const styles = {
@@ -128,6 +127,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [commandDeckExpanded, setCommandDeckExpanded] = useState(false);
+  const lastScrollYRef = useRef(0);
+  const headerVisibleRef = useRef(true);
+  const modeInitializedRef = useRef(false);
   const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
   const remaining = tierStatus && tierStatus.quotaLimit > 0
     ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
@@ -150,6 +153,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    headerVisibleRef.current = headerVisible;
+  }, [headerVisible]);
 
   useEffect(() => {
     let mounted = true;
@@ -313,8 +320,36 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isParentOrStudent = ['parent', 'student', 'learner'].includes(normalizedRole);
-  const isStudentOnly = ['student', 'learner'].includes(normalizedRole);
   const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
+  const [dashMode, setDashMode] = useState<'advisor' | 'tutor' | 'orb'>(() => (isStaff ? 'advisor' : 'tutor'));
+  const modeOptions = useMemo(() => {
+    const options: Array<{ id: 'advisor' | 'tutor' | 'orb'; label: string; icon: string; hint: string }> = [];
+    if (isStaff) {
+      options.push({
+        id: 'advisor',
+        label: 'Advisor',
+        icon: 'sparkles-outline',
+        hint: 'Operations and planning',
+      });
+    }
+    options.push(
+      {
+        id: 'tutor',
+        label: 'Tutor',
+        icon: 'school-outline',
+        hint: 'Teaching and practice',
+      },
+    );
+    if (!['parent'].includes(normalizedRole)) {
+      options.push({
+        id: 'orb',
+        label: 'Orb',
+        icon: 'planet-outline',
+        hint: 'Live voice mode',
+      });
+    }
+    return options;
+  }, [isStaff, normalizedRole]);
 
   // Derive activeChild for parent UI
   const activeChild = useMemo(() => {
@@ -366,6 +401,53 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const showAdvancedControls = !isParentOrStudent;
   const showOrbLink = !['parent'].includes(normalizedRole); // Students can reach DashOrb voice
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
+
+  useEffect(() => {
+    if (!modeInitializedRef.current) {
+      setDashMode(isStaff ? 'advisor' : 'tutor');
+      modeInitializedRef.current = true;
+      return;
+    }
+    if (!showOrbLink && dashMode === 'orb') {
+      setDashMode(isStaff ? 'advisor' : 'tutor');
+    }
+    if (!isStaff && dashMode === 'advisor') {
+      setDashMode('tutor');
+    }
+  }, [dashMode, isStaff, showOrbLink]);
+
+  const activeMode = useMemo(() => {
+    if (dashMode === 'advisor') {
+      return {
+        label: 'Advisor Mode',
+        hint: 'Dash prioritizes operations, planning, and communication.',
+        inputPlaceholder: 'Ask Dash to plan workflows, reports, or communications...',
+      };
+    }
+    if (dashMode === 'orb') {
+      return {
+        label: 'Orb Voice',
+        hint: 'Hands-free voice mode for realtime interactions.',
+        inputPlaceholder: 'Voice mode is active. You can still type here...',
+      };
+    }
+    return {
+      label: 'Tutor Mode',
+      hint: isPreschool
+        ? 'Play-based teaching prompts and age-aware guidance.'
+        : 'Stepwise teaching with checks for understanding.',
+      inputPlaceholder: roleCopy.inputPlaceholder,
+    };
+  }, [dashMode, isPreschool, roleCopy.inputPlaceholder]);
+
+  const handleModeChange = useCallback((mode: 'advisor' | 'tutor' | 'orb') => {
+    if (mode === 'orb') {
+      router.push('/screens/dash-voice?mode=orb');
+      return;
+    }
+    setDashMode(mode);
+  }, []);
+
   const usageLabel = tierStatus
     ? (remaining === null ? 'Unlimited requests available' : `${remaining} left this month`)
     : '';
@@ -378,6 +460,10 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
     return null;
   }, [messages]);
+
+  useEffect(() => {
+    setCommandDeckExpanded(false);
+  }, [latestAssistantMessage?.id]);
 
   const ensureLessonAccess = useCallback(async () => {
     if (!capsReady) {
@@ -659,6 +745,28 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }).catch(() => {});
   }, [dashInstance]);
 
+  const handleMessagesScroll = useCallback((scrollY: number) => {
+    const lastScroll = lastScrollYRef.current;
+    const delta = scrollY - lastScroll;
+    lastScrollYRef.current = scrollY;
+
+    if (scrollY <= 24) {
+      if (!headerVisibleRef.current) {
+        setHeaderVisible(true);
+      }
+      return;
+    }
+
+    if (delta > 16 && headerVisibleRef.current) {
+      setHeaderVisible(false);
+      return;
+    }
+
+    if (delta < -14 && !headerVisibleRef.current) {
+      setHeaderVisible(true);
+    }
+  }, []);
+
   // Scroll to bottom when keyboard shows to keep messages visible
   useEffect(() => {
     if (keyboardVisible && messages.length > 0) {
@@ -827,6 +935,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         {headerVisible && (
         <DashHeader
           roleCopy={roleCopy}
+          activeModeLabel={activeMode.label}
+          activeModeHint={activeMode.hint}
           tier={tier}
           subReady={subReady}
           isSpeaking={isSpeaking}
@@ -846,39 +956,89 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         />
         )}
 
-        <View style={layoutStyles.topDeck}>
-          {/* Context chips, usage banner, model selector - staff only */}
-          {showAdvancedControls && headerVisible && shouldShowPreschoolContext && (
-            <DashContextChips
-              chips={contextChips}
-              contextHint={contextHint}
-              styles={styles}
-              theme={theme}
-            />
-          )}
+        {headerVisible && (
+          <View style={layoutStyles.topDeck}>
+            <View style={[layoutStyles.controlHub, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+              <View style={layoutStyles.controlHubHeader}>
+                <View style={layoutStyles.controlHubTitleWrap}>
+                  <View style={[layoutStyles.controlHubIcon, { backgroundColor: theme.primary + '1F' }]}>
+                    <Ionicons name="sparkles-outline" size={13} color={theme.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[layoutStyles.controlHubTitle, { color: theme.text }]}>Dash Workspace</Text>
+                    <Text style={[layoutStyles.controlHubHint, { color: theme.textSecondary }]}>
+                      {activeMode.hint}
+                    </Text>
+                  </View>
+                </View>
+              </View>
 
-          {/* Usage banner - staff only (parents see quota on settings page) */}
-          {showAdvancedControls && headerVisible && (
-            <DashUsageBanner
-              tierStatus={tierStatus}
-              usageLabel={usageLabel}
-              styles={styles}
-              theme={theme}
-            />
-          )}
+              <View style={layoutStyles.modeStrip}>
+                {modeOptions.map((mode) => {
+                  const active = dashMode === mode.id;
+                  return (
+                    <TouchableOpacity
+                      key={mode.id}
+                      style={[
+                        layoutStyles.modeChip,
+                        {
+                          borderColor: active ? theme.primary : theme.border,
+                          backgroundColor: active ? theme.primary + '20' : theme.surfaceVariant,
+                        },
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={() => handleModeChange(mode.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Switch to ${mode.label}`}
+                    >
+                      <Ionicons name={mode.icon as any} size={14} color={active ? theme.primary : theme.textSecondary} />
+                      <View>
+                        <Text style={[layoutStyles.modeChipText, { color: active ? theme.primary : theme.text }]}>
+                          {mode.label}
+                        </Text>
+                        <Text style={[layoutStyles.modeChipSub, { color: theme.textTertiary }]}>
+                          {mode.hint}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-          {/* Model selector - staff only (parents auto-get best model for tier) */}
-          {showAdvancedControls && (
-          <DashModelSelector
-            models={safeModels}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            estimatedRemaining={estimatedRemaining}
-            styles={styles}
-            theme={theme}
-          />
-          )}
-        </View>
+              {/* Context chips, usage banner, model selector - staff only */}
+              {showAdvancedControls && shouldShowPreschoolContext && (
+                <DashContextChips
+                  chips={contextChips}
+                  contextHint={contextHint}
+                  styles={styles}
+                  theme={theme}
+                />
+              )}
+
+              {/* Usage banner - staff only (parents see quota on settings page) */}
+              {showAdvancedControls && (
+                <DashUsageBanner
+                  tierStatus={tierStatus}
+                  usageLabel={usageLabel}
+                  styles={styles}
+                  theme={theme}
+                />
+              )}
+
+              {/* Model selector - staff only (parents auto-get best model for tier) */}
+              {showAdvancedControls && (
+              <DashModelSelector
+                models={safeModels}
+                selectedModel={selectedModel}
+                setSelectedModel={setSelectedModel}
+                estimatedRemaining={estimatedRemaining}
+                styles={styles}
+                theme={theme}
+              />
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Messages */}
         <DashAssistantMessages
@@ -905,63 +1065,100 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onSelectChild={(childId) => setActiveChildId(childId)}
           onOpenScanner={openScanner}
           userRole={normalizedRole}
+          onScroll={handleMessagesScroll}
         />
 
         {isStaff && latestAssistantMessage && (
           <View style={[inputStyles.staffActionsShell, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-            <View style={inputStyles.staffActionsHeader}>
+            <TouchableOpacity
+              style={inputStyles.staffActionsHeader}
+              activeOpacity={0.85}
+              onPress={() => setCommandDeckExpanded((prev) => !prev)}
+            >
               <View style={inputStyles.staffActionsTitleWrap}>
                 <Ionicons name="flash-outline" size={14} color={theme.primary} />
                 <Text style={[inputStyles.staffActionsTitle, { color: theme.text }]}>Command deck</Text>
               </View>
-              <Text style={[inputStyles.staffActionsToggleText, { color: theme.textSecondary }]}>
-                Tap to apply
-              </Text>
-            </View>
+              <View
+                style={[
+                  inputStyles.staffActionsToggle,
+                  { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
+                ]}
+              >
+                <Text style={[inputStyles.staffActionsToggleText, { color: theme.textSecondary }]}>
+                  {commandDeckExpanded ? 'Hide' : 'Show'}
+                </Text>
+                <Ionicons
+                  name={commandDeckExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={14}
+                  color={theme.textSecondary}
+                />
+              </View>
+            </TouchableOpacity>
 
-            <View
-              style={[
-                inputStyles.staffActionScroll,
-                { flexDirection: 'row', flexWrap: 'wrap', paddingRight: 0, paddingBottom: 2 },
-              ]}
-            >
-              <TouchableOpacity
-                style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
-                onPress={saveLessonFromMessage}
-                activeOpacity={0.85}
+            {!commandDeckExpanded ? (
+              <View style={inputStyles.staffActionsCompactRow}>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
+                  onPress={saveLessonFromMessage}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveActivityFromMessage}
+                >
+                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View
+                style={[
+                  inputStyles.staffActionScroll,
+                  { flexDirection: 'row', flexWrap: 'wrap', paddingRight: 0, paddingBottom: 2 },
+                ]}
               >
-                <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
-                <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                onPress={saveRoutineFromMessage}
-              >
-                <Ionicons name="time-outline" size={16} color={theme.text} />
-                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                onPress={saveThemeFromMessage}
-              >
-                <Ionicons name="color-palette-outline" size={16} color={theme.text} />
-                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                onPress={saveActivityFromMessage}
-              >
-                <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                onPress={() => router.push('/screens/teacher-activity-builder')}
-              >
-                <Ionicons name="hammer-outline" size={16} color={theme.text} />
-                <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
+                  onPress={saveLessonFromMessage}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveRoutineFromMessage}
+                >
+                  <Ionicons name="time-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveThemeFromMessage}
+                >
+                  <Ionicons name="color-palette-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={saveActivityFromMessage}
+                >
+                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                  onPress={() => router.push('/screens/teacher-activity-builder')}
+                >
+                  <Ionicons name="hammer-outline" size={16} color={theme.text} />
+                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -998,7 +1195,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           isRecording={isRecording}
           isSpeaking={isSpeaking}
           partialTranscript={partialTranscript}
-          placeholder={roleCopy.inputPlaceholder}
+          placeholder={activeMode.inputPlaceholder}
           messages={messages}
           onSend={() => sendMessage()}
           onMicPress={handleInputMicPress}

@@ -18,7 +18,7 @@ import { track } from '@/lib/analytics';
 import { getQuotaStatus } from '@/lib/ai/api';
 import { logger } from '@/lib/logger';
 import { getTierDisplayName, normalizeTierName } from '@/lib/tiers';
-import { selectEffectiveTier } from '@/lib/tiers/resolveEffectiveTier';
+import { resolveEffectiveTier } from '@/lib/tiers/resolveEffectiveTier';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface TierStatus {
@@ -124,11 +124,11 @@ export function useRealtimeTier(options: UseRealtimeTierOptions = {}) {
       // Determine effective tier from all available sources.
       // We choose the highest capability-equivalent tier to avoid false "free"
       // displays when one source lags behind (common during tier propagation).
-      const effectiveTier = selectEffectiveTier([
-        contextTier,
-        tierData?.tier,
-        usageData?.current_tier,
-      ]);
+      const effectiveTier = resolveEffectiveTier({
+        profileTier: contextTier,
+        usageTier: usageData?.current_tier,
+        candidates: [tierData?.tier],
+      }).rawTier;
       
       // Get tier limits (daily chat quota)
       // Valid tiers: free, trial, parent_starter, parent_plus, teacher_starter, teacher_pro, 

@@ -56,6 +56,9 @@ export default function ProfilesGateScreen() {
   const navigationInProgressRef = useRef(false);
   const recoveryAttemptedRef = useRef(false);
 
+  // Timeout escape: after 12s total, stop showing the pending spinner
+  const [pendingTimeout, setPendingTimeout] = useState(false);
+
   useEffect(() => {
     // Allow recovery to proceed even if AuthContext `loading` stays true for too long\n    // (e.g., network timeout). After 5s we force through.\n    if (!user) return;\n    if (loading && !pendingTimeout) return;
 
@@ -256,7 +259,6 @@ export default function ProfilesGateScreen() {
 
   // Timeout escape: after 12s total, stop showing the pending spinner
   // regardless of loading state to prevent infinite stuck screen.
-  const [pendingTimeout, setPendingTimeout] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setPendingTimeout(true), 12000);
     return () => clearTimeout(timer);

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
+import { usePrincipalHub } from '@/lib/hooks/principal/usePrincipalHub';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import {
   Users,
@@ -16,39 +17,19 @@ import {
   Calendar,
   AlertTriangle,
   CheckCircle,
-  Clock,
   Activity,
+  ShieldCheck,
+  Wallet,
+  ClipboardList,
+  Clock,
   Search,
-  X,
   Sparkles,
   BookOpen,
   Megaphone,
 } from 'lucide-react';
-import { ParentApprovalWidget } from '@/components/dashboard/principal/ParentApprovalWidget';
-import { ChildRegistrationWidget } from '@/components/dashboard/principal/ChildRegistrationWidget';
-import { UniformOrdersWidget } from '@/components/dashboard/principal/UniformOrdersWidget';
-import { AskAIWidget } from '@/components/dashboard/AskAIWidget';
+import { PrincipalSidebar } from '@/components/dashboard/principal/PrincipalSidebar';
+import { DashAIFullscreenModal } from '@/components/dashboard/principal/DashAIFullscreenModal';
 import { TierBadge } from '@/components/ui/TierBadge';
-import { showLocalNotification } from '@/lib/services/pushNotificationService';
-
-interface PrincipalMetrics {
-  totalStudents: number;
-  totalTeachers: number;
-  totalClasses: number;
-  revenue: number;
-  pendingPayments: number;
-  activeEnrollments: number;
-  staffAttendance: number;
-  upcomingEvents: number;
-}
-
-interface RecentActivity {
-  id: string;
-  type: 'registration' | 'student' | 'system';
-  title: string;
-  description: string;
-  timestamp: string;
-}
 
 export default function PrincipalDashboard() {
   const router = useRouter();
@@ -56,19 +37,7 @@ export default function PrincipalDashboard() {
   const [userId, setUserId] = useState<string>();
   const [authLoading, setAuthLoading] = useState(true);
   const [greeting, setGreeting] = useState('');
-  const [metrics, setMetrics] = useState<PrincipalMetrics>({
-    totalStudents: 0,
-    totalTeachers: 0,
-    totalClasses: 0,
-    revenue: 0,
-    pendingPayments: 0,
-    activeEnrollments: 0,
-    staffAttendance: 0,
-    upcomingEvents: 0,
-  });
-  const [metricsLoading, setMetricsLoading] = useState(true);
   const [dashAIFullscreen, setDashAIFullscreen] = useState(false);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
 
   // Fetch user profile with preschool data
   const { profile, loading: profileLoading } = useUserProfile(userId);
@@ -80,6 +49,9 @@ export default function PrincipalDashboard() {
   const preschoolId = profile?.preschoolId || profile?.organizationId;
   const userRole = profile?.role;
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Principal';
+
+  // Data layer — replaces inline Supabase queries
+  const { metrics, activities: recentActivities, loading: hubLoading } = usePrincipalHub(preschoolId);
 
   // Initialize auth
   useEffect(() => {
@@ -95,7 +67,6 @@ export default function PrincipalDashboard() {
 
       setUserId(session.user.id);
 
-      // Set greeting based on time of day
       const hour = new Date().getHours();
       if (hour < 12) setGreeting('Good Morning');
       else if (hour < 18) setGreeting('Good Afternoon');
@@ -107,123 +78,7 @@ export default function PrincipalDashboard() {
     initAuth();
   }, [router, supabase]);
 
-  // Load dashboard metrics
-  useEffect(() => {
-    if (!preschoolId) return;
-
-    const loadMetrics = async () => {
-      try {
-        setMetricsLoading(true);
-
-        // Fetch students count
-        const { count: studentCount } = await supabase
-          .from('students')
-          .select('*', { count: 'exact', head: true })
-          .eq('preschool_id', preschoolId)
-          .eq('status', 'active');
-
-        // Fetch teachers count
-        const { count: teacherCount } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('preschool_id', preschoolId)
-          .eq('role', 'teacher');
-
-        // Fetch classes count
-        const { count: classCount } = await supabase
-          .from('classes')
-          .select('*', { count: 'exact', head: true })
-          .eq('preschool_id', preschoolId);
-
-        // Fetch financial data from registration_requests table (synced from EduSitePro)
-        // Use payment_verified to count only verified payments for revenue
-        const { data: registrations } = await supabase
-          .from('registration_requests')
-          .select('registration_fee_amount, registration_fee_paid, payment_verified, status')
-          .eq('organization_id', preschoolId);
-
-        let revenue = 0;
-        let pendingPayments = 0;
-
-        if (registrations) {
-          // Only count verified payments from approved registrations
-          const paidAndVerified = registrations.filter((r: any) => 
-            r.payment_verified && r.status === 'approved'
-          );
-          
-          // Pending = approved but not verified, or have amount but not paid
-          const pending = registrations.filter((r: any) => 
-            !r.payment_verified && r.registration_fee_amount && r.status !== 'rejected'
-          );
-          
-          revenue = paidAndVerified.reduce((sum: number, r: any) => 
-            sum + (parseFloat(r.registration_fee_amount as any) || 0), 0
-          );
-          pendingPayments = pending.length;
-        }
-
-        setMetrics({
-          totalStudents: studentCount || 0,
-          totalTeachers: teacherCount || 0,
-          totalClasses: classCount || 0,
-          revenue,
-          pendingPayments,
-          activeEnrollments: studentCount || 0,
-          staffAttendance: teacherCount || 0,
-          upcomingEvents: 0,
-        });
-      } catch (error) {
-        console.error('Error loading metrics:', error);
-      } finally {
-        setMetricsLoading(false);
-      }
-    };
-
-    loadMetrics();
-  }, [preschoolId, supabase]);
-
-  // Load recent activities
-  useEffect(() => {
-    if (!preschoolId) return;
-
-    const loadActivities = async () => {
-      try {
-        const activities: RecentActivity[] = [];
-
-        // Get recently enrolled students (registration_requests table is in EduSitePro, not EduDashPro)
-        // Once approved, students are synced to students table
-        const { data: students } = await supabase
-          .from('students')
-          .select('id, first_name, last_name, enrollment_date, created_at, status')
-          .eq('preschool_id', preschoolId)
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (students) {
-          students.forEach((student: any) => {
-            const timestamp = student.enrollment_date || student.created_at;
-            activities.push({
-              id: `student-${student.id}`,
-              type: 'student',
-              title: student.status === 'active' ? 'Student Enrolled' : 'Student Added',
-              description: `${student.first_name} ${student.last_name}`,
-              timestamp,
-            });
-          });
-        }
-
-        // Sort by timestamp and take top 5
-        activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setRecentActivities(activities.slice(0, 5));
-      } catch (error) {
-        console.error('Error loading activities:', error);
-      }
-    };
-
-    loadActivities();
-  }, [preschoolId, supabase]);
-
-  const loading = authLoading || profileLoading || metricsLoading;
+  const loading = authLoading || profileLoading || hubLoading;
 
   if (loading) {
     return (
@@ -240,95 +95,15 @@ export default function PrincipalDashboard() {
     );
   }
 
-  // Debug logging
-  console.log('🎓 [PrincipalDashboard] preschoolId:', preschoolId);
-  console.log('🎓 [PrincipalDashboard] userId:', userId);
-
   // Right sidebar content
   const rightSidebar = (
-    <>
-      {/* At a Glance */}
-      <div className="card">
-        <div className="sectionTitle">At a glance</div>
-        <ul style={{ display: 'grid', gap: 8 }}>
-          <li className="listItem">
-            <span>Total Students</span>
-            <span className="badge">{metrics.totalStudents}</span>
-          </li>
-          <li className="listItem">
-            <span>Teaching Staff</span>
-            <span className="badge">{metrics.totalTeachers}</span>
-          </li>
-          <li className="listItem">
-            <span>Active Classes</span>
-            <span className="badge">{metrics.totalClasses}</span>
-          </li>
-        </ul>
-      </div>
-
-      {/* Child Registration Requests */}
-      <ChildRegistrationWidget preschoolId={preschoolId} userId={userId} />
-
-      {/* Parent Link Approval Requests */}
-      <ParentApprovalWidget preschoolId={preschoolId} userId={userId} />
-
-      {/* Uniform Sizes */}
-      <UniformOrdersWidget schoolId={preschoolId} />
-
-      {/* Recent Activity */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Activity size={18} style={{ color: 'var(--primary)' }} />
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Recent Activity</h3>
-        </div>
-        {recentActivities.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
-            <Clock size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-            <p style={{ fontSize: 14 }}>No recent activity</p>
-          </div>
-        ) : (
-          <ul style={{ display: 'grid', gap: 12 }}>
-            {recentActivities.map((activity) => (
-              <li key={activity.id} style={{ display: 'flex', gap: 12, fontSize: 13 }}>
-                {activity.type === 'registration' ? (
-                  <FileText size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: 2 }} />
-                ) : activity.type === 'student' ? (
-                  <UserPlus size={14} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
-                ) : (
-                  <Clock size={14} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 2 }} />
-                )}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 500 }}>{activity.title}</div>
-                  <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>
-                    {activity.description}
-                  </div>
-                  <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>
-                    {new Date(activity.timestamp).toLocaleString('en-ZA', {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Ask Dash AI Assistant - Wrapped in div with data-dash-ai for mobile detection */}
-      <div data-dash-ai onClick={(e) => {
-        // On mobile, intercept click and open fullscreen
-        if (window.innerWidth < 1024) {
-          e.preventDefault();
-          e.stopPropagation();
-          setDashAIFullscreen(true);
-        }
-      }}>
-        <AskAIWidget inline userId={userId} />
-      </div>
-    </>
+    <PrincipalSidebar
+      metrics={metrics}
+      recentActivities={recentActivities}
+      preschoolId={preschoolId}
+      userId={userId}
+      onOpenDashAI={() => setDashAIFullscreen(true)}
+    />
   );
 
   return (
@@ -404,10 +179,6 @@ export default function PrincipalDashboard() {
             <div className="metricValue">{metrics.totalClasses}</div>
             <div className="metricLabel">Active Classes</div>
           </div>
-          <div className="card tile">
-            <div className="metricValue">{metrics.staffAttendance}</div>
-            <div className="metricLabel">Staff Present Today</div>
-          </div>
         </div>
       </div>
 
@@ -426,10 +197,6 @@ export default function PrincipalDashboard() {
               {metrics.pendingPayments}
             </div>
             <div className="metricLabel">Pending Payments</div>
-          </div>
-          <div className="card tile">
-            <div className="metricValue">{metrics.activeEnrollments}</div>
-            <div className="metricLabel">Active Enrollments</div>
           </div>
           <div className="card tile">
             <div className="metricValue">{metrics.upcomingEvents}</div>
@@ -466,10 +233,6 @@ export default function PrincipalDashboard() {
             <Users className="icon20" />
             <span>Create Group</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/announcements')}>
-            <Megaphone className="icon20" />
-            <span>Announcements</span>
-          </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/calendar')}>
             <Calendar className="icon20" />
             <span>School Calendar</span>
@@ -501,6 +264,14 @@ export default function PrincipalDashboard() {
             <Activity className="icon20" />
             <span>Weekly Plans</span>
           </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/stem-programs')}>
+            <Sparkles className="icon20" />
+            <span>STEM Programs</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/timetable')}>
+            <Clock className="icon20" />
+            <span>Timetable</span>
+          </button>
         </div>
       </div>
 
@@ -520,35 +291,38 @@ export default function PrincipalDashboard() {
             <span style={{ fontSize: 20 }}>🎨</span>
             <span>Activity Library</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/announcements')}>
-            <Megaphone className="icon20" />
-            <span>Announcements</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Curriculum Control & STEM Management */}
-      <div className="section">
-        <div className="sectionTitle">Curriculum & STEM Programs</div>
-        <div className="grid2">
-          <button className="qa" onClick={() => router.push('/dashboard/principal/curriculum')}>
-            <FileText className="icon20" />
-            <span>Curriculum Control</span>
-          </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/lesson-approvals')}>
             <CheckCircle className="icon20" />
             <span>Lesson Approvals</span>
           </button>
-          <button className="qa" onClick={() => router.push('/dashboard/principal/stem-programs')}>
-            <Sparkles className="icon20" />
-            <span>STEM Programs</span>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/announcements')}>
+            <Megaphone className="icon20" />
+            <span>Announcements</span>
           </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/analytics')}>
             <TrendingUp className="icon20" />
             <span>School Analytics</span>
           </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/staff-leave')}>
+            <Calendar className="icon20" />
+            <span>Staff Leave</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/waitlist')}>
+            <ClipboardList className="icon20" />
+            <span>Waitlist</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/compliance')}>
+            <ShieldCheck className="icon20" />
+            <span>Compliance</span>
+          </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/budget-overview')}>
+            <Wallet className="icon20" />
+            <span>Budget Overview</span>
+          </button>
         </div>
       </div>
+
+
 
       {/* Alerts & Notifications */}
       <div className="section">
@@ -579,40 +353,11 @@ export default function PrincipalDashboard() {
       </div>
       </PrincipalShell>
       
-      {/* Mobile Fullscreen Dash AI Modal */}
       {dashAIFullscreen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'var(--background)',
-          zIndex: 10000,
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 'var(--space-4)',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface-1)',
-          }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Ask Dash AI</h2>
-            <button
-              onClick={() => setDashAIFullscreen(false)}
-              className="iconBtn"
-              aria-label="Close"
-            >
-              <X className="icon20" />
-            </button>
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <AskAIWidget fullscreen userId={userId} />
-          </div>
-        </div>
+        <DashAIFullscreenModal
+          userId={userId}
+          onClose={() => setDashAIFullscreen(false)}
+        />
       )}
     </>
   );

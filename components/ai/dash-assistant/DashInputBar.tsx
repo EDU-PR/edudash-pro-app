@@ -9,7 +9,7 @@ import React from 'react';
 import { View, TextInput, TouchableOpacity, ScrollView, Text, Platform, Dimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { styles } from '../DashAssistant.styles';
+import { inputStyles as styles } from './styles/input.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashAttachment } from '@/services/dash-ai/types';
 import type { AttachmentProgress } from '@/hooks/useDashAttachments';

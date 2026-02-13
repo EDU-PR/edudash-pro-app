@@ -62,8 +62,8 @@ export default function PrincipalSeatManagementScreen() {
       navigationAttempted.current = true;
       try {
         router.replace('/screens/principal-onboarding');
-      } catch (e) {
-        console.debug('Redirect to onboarding failed', e);
+      } catch (_e) {
+        // Redirect to onboarding silently failed
       }
     }
   }, [isStillLoading, user, orgId]);

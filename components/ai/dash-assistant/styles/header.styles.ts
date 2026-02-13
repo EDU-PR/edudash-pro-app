@@ -14,13 +14,25 @@ export const headerStyles = StyleSheet.create({
   // Header
   header: {
     paddingHorizontal: 14,
-    paddingBottom: 12,
-    paddingTop: Platform.OS === 'ios' ? 56 : 12,
+    paddingBottom: 8,
+    paddingTop: Platform.OS === 'ios' ? 8 : 8,
     borderBottomWidth: 0,
+  },
+  headerShell: {
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   headerLeft: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 6,
   },
   dashAvatar: {
     width: 40,
@@ -31,15 +43,20 @@ export const headerStyles = StyleSheet.create({
     marginRight: 12,
   },
   headerTitle: {
-    fontSize: 30,
+    fontSize: 29,
     fontWeight: '800',
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  headerAccentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   headerMetaPill: {
     borderRadius: 999,
@@ -54,10 +71,10 @@ export const headerStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerSubtitle: {
-    fontSize: 13,
-    marginTop: 3,
-    fontWeight: '500',
-    lineHeight: 18,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   tierBadge: {
     marginLeft: 8,
@@ -71,13 +88,13 @@ export const headerStyles = StyleSheet.create({
     fontWeight: '600',
   },
   headerRight: {
-    marginTop: 10,
+    marginTop: 0,
   },
   actionRail: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: 16,
     paddingHorizontal: 5,
     paddingVertical: 5,
   },
@@ -101,6 +118,32 @@ export const headerStyles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 2,
     borderWidth: 1,
+  },
+  headerStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    flexWrap: 'wrap',
+  },
+  headerStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    minHeight: 28,
+  },
+  headerStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  headerStatusSubtle: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   tutorMetaRow: {
     flexDirection: 'row',
@@ -132,8 +175,6 @@ export const headerStyles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
   usageBannerText: {
@@ -142,7 +183,7 @@ export const headerStyles = StyleSheet.create({
     flex: 1,
   },
   usageProgress: {
-    width: 90,
+    width: '100%',
     height: 6,
     borderRadius: 999,
     overflow: 'hidden',
@@ -178,9 +219,9 @@ export const headerStyles = StyleSheet.create({
   contextHint: {
     marginHorizontal: 0,
     marginBottom: 0,
-    marginTop: 2,
+    marginTop: 1,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   // Model Selector

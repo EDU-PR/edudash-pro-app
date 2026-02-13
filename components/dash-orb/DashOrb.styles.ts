@@ -255,6 +255,22 @@ export const createDashOrbStyles = (theme: ThemeColors) =>
       fontSize: 15,
       lineHeight: 22,
     },
+    toolSummaryCard: {
+      marginTop: 8,
+      borderWidth: 1,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    toolSummaryText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 16,
+    },
     imagePreviewRow: {
       marginTop: 10,
       flexDirection: 'row',

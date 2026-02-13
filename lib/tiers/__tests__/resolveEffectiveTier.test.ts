@@ -1,6 +1,7 @@
 import {
   isCapabilityTierAtLeast,
   resolveCapabilityTier,
+  resolveEffectiveTier,
   selectEffectiveTier,
 } from '@/lib/tiers/resolveEffectiveTier';
 
@@ -20,5 +21,25 @@ describe('resolveEffectiveTier', () => {
     expect(isCapabilityTierAtLeast('teacher_starter', 'starter')).toBe(true);
     expect(isCapabilityTierAtLeast('teacher_starter', 'premium')).toBe(false);
     expect(isCapabilityTierAtLeast('school_enterprise', 'premium')).toBe(true);
+  });
+
+  it('resolves effective tier with role override and candidate priority', () => {
+    expect(resolveEffectiveTier({ role: 'super_admin', profileTier: 'free' })).toEqual({
+      rawTier: 'enterprise',
+      capabilityTier: 'enterprise',
+    });
+
+    expect(
+      resolveEffectiveTier({
+        role: 'parent',
+        profileTier: 'parent_starter',
+        organizationTier: 'school_premium',
+        usageTier: 'free',
+        candidates: ['group_10'],
+      })
+    ).toEqual({
+      rawTier: 'school_premium',
+      capabilityTier: 'premium',
+    });
   });
 });

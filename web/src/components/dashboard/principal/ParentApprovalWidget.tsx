@@ -82,8 +82,8 @@ export function ParentApprovalWidget({ preschoolId, userId }: ParentApprovalWidg
         }));
 
         setRequests(mapped);
-      } catch (error) {
-        console.error('Error loading parent requests:', error);
+      } catch (_error) {
+        // Parent requests load failed — user sees empty state
       } finally {
         setLoading(false);
       }

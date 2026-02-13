@@ -388,91 +388,182 @@ export function createStreamingRequest(
   onDone: (finalText: string) => void,
   onError: (error: Error) => void,
 ): { abort: () => void } {
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', url, true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+  const max429Retries = Math.max(
+    0,
+    Math.min(
+      3,
+      Number.parseInt(String(process.env.EXPO_PUBLIC_DASH_VOICE_429_RETRIES || '1'), 10) || 1
+    )
+  );
+  const retryBaseMs = Math.max(
+    300,
+    Math.min(
+      6000,
+      Number.parseInt(String(process.env.EXPO_PUBLIC_DASH_VOICE_429_RETRY_MS || '900'), 10) || 900
+    )
+  );
 
-  let processedLen = 0;
-  let accumulated = '';
-  let serverError = '';
+  let xhr: XMLHttpRequest | null = null;
+  let aborted = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryCount = 0;
 
-  const processNewData = (newData: string) => {
-    for (const line of newData.split('\n')) {
-      if (!line.startsWith('data: ')) continue;
-      const payload = line.slice(6).trim();
-      if (payload === '[DONE]') continue;
-      try {
-        const parsed = JSON.parse(payload);
-        // Extract streaming content
-        if (parsed.delta?.text) accumulated += parsed.delta.text;
-        else if (parsed.content) accumulated += parsed.content;
-        // Capture server-side error events so they reach the user
-        else if (parsed.type === 'error' && parsed.error) {
-          serverError = typeof parsed.error === 'string'
-            ? parsed.error
-            : JSON.stringify(parsed.error);
+  const clearRetryTimer = () => {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const parseRetryAfterHeader = (value: string | null): number | null => {
+    if (!value) return null;
+    const seconds = Number.parseFloat(value);
+    if (!Number.isFinite(seconds) || seconds <= 0) return null;
+    return Math.round(seconds * 1000);
+  };
+
+  const scheduleRetry = (delayMs: number) => {
+    clearRetryTimer();
+    retryTimer = setTimeout(() => {
+      if (aborted) return;
+      sendAttempt();
+    }, delayMs);
+  };
+
+  const sendAttempt = () => {
+    if (aborted) return;
+
+    const request = new XMLHttpRequest();
+    xhr = request;
+    request.open('POST', url, true);
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    let processedLen = 0;
+    let accumulated = '';
+    let serverError = '';
+
+    const processNewData = (newData: string) => {
+      for (const line of newData.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(payload);
+          // Extract streaming content
+          if (parsed.delta?.text) accumulated += parsed.delta.text;
+          else if (parsed.content) accumulated += parsed.content;
+          // Capture server-side error events so they reach the user
+          else if (parsed.type === 'error' && parsed.error) {
+            serverError = typeof parsed.error === 'string'
+              ? parsed.error
+              : JSON.stringify(parsed.error);
+          }
+        } catch {
+          /* skip malformed JSON */
         }
-      } catch {
-        /* skip malformed JSON */
       }
-    }
-    if (accumulated) onChunk(accumulated);
-  };
+      if (accumulated) onChunk(accumulated);
+    };
 
-  // Fires as data arrives (incremental streaming on supported runtimes)
-  xhr.onreadystatechange = () => {
-    if (xhr.readyState >= 3 && xhr.responseText) {
-      const newData = xhr.responseText.substring(processedLen);
-      processedLen = xhr.responseText.length;
-      if (newData) processNewData(newData);
-    }
-  };
-
-  xhr.onload = () => {
-    // Handle non-200 HTTP responses (auth errors, Edge Function failures)
-    if (xhr.status >= 400) {
-      let errMsg = `Request failed (${xhr.status})`;
-      try {
-        const errJson = JSON.parse(xhr.responseText);
-        errMsg = errJson.message || errJson.error || errMsg;
-      } catch { /* use default message */ }
-      onError(new Error(errMsg));
-      return;
-    }
-
-    // Process any remaining data
-    if (xhr.responseText) {
-      const remaining = xhr.responseText.substring(processedLen);
-      if (remaining) processNewData(remaining);
-    }
-
-    // If a server-side error was captured, surface it
-    if (!accumulated && serverError) {
-      onError(new Error(serverError));
-      return;
-    }
-
-    // If no SSE data was captured, try JSON fallback then SSE parse
-    if (!accumulated && xhr.responseText) {
-      try {
-        const json = JSON.parse(xhr.responseText);
-        accumulated = json.content || json.response || '';
-      } catch {
-        // Try proper SSE parsing instead of using raw text
-        const sseParsed = parseSSEText(xhr.responseText);
-        accumulated = sseParsed || '';
+    // Fires as data arrives (incremental streaming on supported runtimes)
+    request.onreadystatechange = () => {
+      if (request.readyState >= 3 && request.responseText) {
+        const newData = request.responseText.substring(processedLen);
+        processedLen = request.responseText.length;
+        if (newData) processNewData(newData);
       }
-    }
+    };
 
-    const final = cleanRawJSON(accumulated);
-    onDone(final);
+    request.onload = () => {
+      if (aborted) return;
+
+      // Handle rate limiting with a short jittered retry for voice turns.
+      if (request.status === 429 && retryCount < max429Retries) {
+        retryCount += 1;
+        const retryAfterMs = parseRetryAfterHeader(request.getResponseHeader('retry-after'));
+        const expBackoff = retryBaseMs * Math.pow(1.6, retryCount - 1);
+        const jitterFactor = 0.8 + Math.random() * 0.4;
+        const delayMs = retryAfterMs ?? Math.round(expBackoff * jitterFactor);
+        scheduleRetry(delayMs);
+        return;
+      }
+
+      // Handle non-200 HTTP responses (auth errors, Edge Function failures)
+      if (request.status >= 400) {
+        let errMsg = `Request failed (${request.status})`;
+        try {
+          const errJson = JSON.parse(request.responseText);
+          errMsg = errJson.message || errJson.error || errMsg;
+        } catch {
+          /* use default message */
+        }
+        onError(new Error(errMsg));
+        return;
+      }
+
+      // Process any remaining data
+      if (request.responseText) {
+        const remaining = request.responseText.substring(processedLen);
+        if (remaining) processNewData(remaining);
+      }
+
+      // If a server-side error was captured, surface it
+      if (!accumulated && serverError) {
+        onError(new Error(serverError));
+        return;
+      }
+
+      // If no SSE data was captured, try JSON fallback then SSE parse
+      if (!accumulated && request.responseText) {
+        try {
+          const json = JSON.parse(request.responseText);
+          accumulated = json.content || json.response || '';
+        } catch {
+          // Try proper SSE parsing instead of using raw text
+          const sseParsed = parseSSEText(request.responseText);
+          accumulated = sseParsed || '';
+        }
+      }
+
+      const final = cleanRawJSON(accumulated);
+      onDone(final);
+    };
+
+    request.onerror = () => {
+      if (aborted) return;
+      if (retryCount < max429Retries) {
+        retryCount += 1;
+        const expBackoff = retryBaseMs * Math.pow(1.6, retryCount - 1);
+        const jitterFactor = 0.8 + Math.random() * 0.4;
+        scheduleRetry(Math.round(expBackoff * jitterFactor));
+        return;
+      }
+      onError(new Error('Network error — check your connection'));
+    };
+
+    request.ontimeout = () => {
+      if (aborted) return;
+      if (retryCount < max429Retries) {
+        retryCount += 1;
+        const expBackoff = retryBaseMs * Math.pow(1.6, retryCount - 1);
+        const jitterFactor = 0.8 + Math.random() * 0.4;
+        scheduleRetry(Math.round(expBackoff * jitterFactor));
+        return;
+      }
+      onError(new Error('Request timed out'));
+    };
+    request.timeout = 60000;
+    request.send(body);
   };
 
-  xhr.onerror = () => onError(new Error('Network error — check your connection'));
-  xhr.ontimeout = () => onError(new Error('Request timed out'));
-  xhr.timeout = 60000;
-  xhr.send(body);
+  sendAttempt();
 
-  return { abort: () => xhr.abort() };
+  return {
+    abort: () => {
+      aborted = true;
+      clearRetryTimer();
+      xhr?.abort();
+    },
+  };
 }

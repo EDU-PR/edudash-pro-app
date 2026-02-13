@@ -97,13 +97,13 @@ export function createSeatHandlers(ctx: SeatContext) {
     }
 
     safeAlert({
-      title: 'Revoke Staff Seat',
-      message: `Are you sure you want to revoke the staff seat from ${teacherName}?\n\nThey will lose access to the staff portal until a new seat is assigned.`,
+      title: 'Remove Teacher',
+      message: `Are you sure you want to remove ${teacherName} from your school?\n\nThis will revoke their seat, remove them from all classes, and delete their teacher record.`,
       type: 'warning',
       buttons: [
         { text: 'Cancel', style: 'cancel' } as AlertButton,
         {
-          text: 'Revoke Seat',
+          text: 'Remove Teacher',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -111,7 +111,7 @@ export function createSeatHandlers(ctx: SeatContext) {
               await fetchTeachers();
               safeAlert({
                 title: 'Success',
-                message: `Seat revoked from ${teacherName} successfully!`,
+                message: `${teacherName} has been removed from your school.`,
                 type: 'success',
               });
             } catch (_error) {

@@ -93,7 +93,6 @@ export default function PrincipalParentsScreen() {
 
       setParents(merged);
     } catch (e: any) {
-      console.error('Load parents failed', e);
       Alert.alert('Error', e?.message || 'Failed to load parents');
     } finally {
       setLoading(false);
@@ -165,7 +164,6 @@ export default function PrincipalParentsScreen() {
       Alert.alert('Success', 'Parent details updated.');
       closeEdit();
     } catch (e: any) {
-      console.error('Update parent failed', e);
       Alert.alert('Error', e?.message || 'Failed to update parent details');
     } finally {
       setSavingEdit(false);

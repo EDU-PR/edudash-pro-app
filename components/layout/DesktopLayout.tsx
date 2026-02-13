@@ -28,21 +28,26 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   // Dashboard items
-  { id: 'dashboard', label: 'Dashboard', icon: 'grid-outline', route: '/screens/principal-dashboard', roles: ['principal'] },
+  { id: 'dashboard', label: 'Dashboard', icon: 'grid-outline', route: '/screens/principal-dashboard', roles: ['principal', 'principal_admin'] },
   { id: 'teacher-dash', label: 'Dashboard', icon: 'grid-outline', route: '/screens/teacher-dashboard', roles: ['teacher'] },
   { id: 'parent-dash', label: 'Dashboard', icon: 'grid-outline', route: '/screens/parent-dashboard', roles: ['parent'] },
   { id: 'super-admin-dash', label: 'Dashboard', icon: 'shield-checkmark-outline', route: '/screens/super-admin-dashboard', roles: ['super_admin'] },
   
   // Principal/Teacher items
-  { id: 'students', label: 'Students', icon: 'people-outline', route: '/screens/student-management', roles: ['principal', 'teacher'] },
-  { id: 'teachers', label: 'Teachers', icon: 'school-outline', route: '/screens/teacher-management', roles: ['principal'] },
-  { id: 'registrations', label: 'Registrations', icon: 'person-add-outline', route: '/screens/principal-registrations', roles: ['principal'] },
-  { id: 'classes', label: 'Classes', icon: 'book-outline', route: '/screens/class-teacher-management', roles: ['principal', 'teacher'] },
-  { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle-outline', route: '/screens/attendance', roles: ['principal', 'teacher'] },
-  { id: 'messages', label: 'Messages', icon: 'mail-outline', route: '/screens/teacher-message-list', roles: ['principal', 'teacher'] },
-  { id: 'financials', label: 'Financials', icon: 'cash-outline', route: '/screens/finance-control-center?tab=overview', roles: ['principal'] },
-  { id: 'campaigns', label: 'Campaigns', icon: 'megaphone-outline', route: '/screens/campaigns', roles: ['principal'] },
-  { id: 'reports', label: 'Reports', icon: 'document-text-outline', route: '/screens/teacher-reports', roles: ['principal', 'teacher'] },
+  { id: 'students', label: 'Students', icon: 'people-outline', route: '/screens/student-management', roles: ['principal', 'principal_admin', 'teacher'] },
+  { id: 'teachers', label: 'Teachers', icon: 'school-outline', route: '/screens/teacher-management', roles: ['principal', 'principal_admin'] },
+  { id: 'registrations', label: 'Registrations', icon: 'person-add-outline', route: '/screens/principal-registrations', roles: ['principal', 'principal_admin'] },
+  { id: 'classes', label: 'Classes', icon: 'book-outline', route: '/screens/class-teacher-management', roles: ['principal', 'principal_admin', 'teacher'] },
+  { id: 'attendance', label: 'Attendance', icon: 'checkmark-circle-outline', route: '/screens/attendance', roles: ['principal', 'principal_admin', 'teacher'] },
+  { id: 'messages', label: 'Messages', icon: 'mail-outline', route: '/screens/teacher-message-list', roles: ['principal', 'principal_admin', 'teacher'] },
+  { id: 'financials', label: 'Financials', icon: 'cash-outline', route: '/screens/finance-control-center?tab=overview', roles: ['principal', 'principal_admin'] },
+  { id: 'campaigns', label: 'Campaigns', icon: 'megaphone-outline', route: '/screens/campaigns', roles: ['principal', 'principal_admin'] },
+  { id: 'timetable', label: 'Timetable', icon: 'time-outline', route: '/screens/timetable-management', roles: ['principal', 'principal_admin'] },
+  { id: 'staff-leave', label: 'Staff Leave', icon: 'calendar-outline', route: '/screens/staff-leave', roles: ['principal', 'principal_admin'] },
+  { id: 'waitlist', label: 'Waitlist', icon: 'list-outline', route: '/screens/waitlist-management', roles: ['principal', 'principal_admin'] },
+  { id: 'compliance', label: 'Compliance', icon: 'shield-outline', route: '/screens/compliance-dashboard', roles: ['principal', 'principal_admin'] },
+  { id: 'budget', label: 'Budget', icon: 'wallet-outline', route: '/screens/budget-management', roles: ['principal', 'principal_admin'] },
+  { id: 'reports', label: 'Reports', icon: 'document-text-outline', route: '/screens/teacher-reports', roles: ['principal', 'principal_admin', 'teacher'] },
   
   // Parent items
   { id: 'parent-messages', label: 'Messages', icon: 'mail-outline', route: '/screens/parent-messages', roles: ['parent'] },
@@ -56,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'ai-quotas', label: 'AI Quotas', icon: 'flash-outline', route: '/screens/super-admin-ai-quotas', roles: ['super_admin'] },
   
   // Common items
-  { id: 'settings', label: 'Settings', icon: 'settings-outline', route: '/screens/settings', roles: ['principal', 'teacher', 'parent', 'super_admin'] },
+  { id: 'settings', label: 'Settings', icon: 'settings-outline', route: '/screens/settings', roles: ['principal', 'principal_admin', 'teacher', 'parent', 'super_admin'] },
 ];
 
 /**

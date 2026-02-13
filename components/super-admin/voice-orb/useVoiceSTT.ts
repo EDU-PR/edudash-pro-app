@@ -41,7 +41,7 @@ export interface UseVoiceSTTOptions {
   preschoolId?: string | null;
 }
 
-export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn {
+export function useVoiceSTT(hookOptions: UseVoiceSTTOptions = {}): UseVoiceSTTReturn {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,7 +72,7 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
       }
       
       const resolveTenantId = async (): Promise<string | null> => {
-        if (options.preschoolId) return options.preschoolId;
+        if (hookOptions?.preschoolId) return hookOptions.preschoolId;
         const userMeta = (session.user?.user_metadata || {}) as Record<string, any>;
         const appMeta = (session.user?.app_metadata || {}) as Record<string, any>;
         const metaCandidate =
@@ -196,7 +196,7 @@ export function useVoiceSTT(options: UseVoiceSTTOptions = {}): UseVoiceSTTReturn
     } finally {
       setIsTranscribing(false);
     }
-  }, [options.preschoolId]);
+  }, [hookOptions.preschoolId]);
 
   return { transcribe, isTranscribing, error };
 }

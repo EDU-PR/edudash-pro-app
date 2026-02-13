@@ -4,9 +4,7 @@
  * Core container, background, and layout styles for Dash AI interface
  */
 
-import { StyleSheet, Dimensions } from 'react-native';
-
-const { width: screenWidth } = Dimensions.get('window');
+import { StyleSheet } from 'react-native';
 
 export const layoutStyles = StyleSheet.create({
   container: {
@@ -45,7 +43,74 @@ export const layoutStyles = StyleSheet.create({
   topDeck: {
     paddingHorizontal: 14,
     paddingTop: 6,
+    paddingBottom: 4,
+    gap: 10,
+  },
+  controlHub: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 10,
+  },
+  controlHubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
+  },
+  controlHubTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  controlHubIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlHubTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  controlHubHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  modeStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    minHeight: 36,
+  },
+  modeChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modeChipSub: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  modeHint: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 17,
   },
   loadingContainer: {
     flex: 1,

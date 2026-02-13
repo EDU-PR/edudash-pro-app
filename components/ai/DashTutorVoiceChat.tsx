@@ -111,6 +111,7 @@ export default function DashTutorVoiceChat() {
   const { theme } = useTheme();
   const { profile } = useAuth();
   const normalizedRole = String(profile?.role || 'parent').toLowerCase();
+  const orgType = getOrganizationType(profile);
 
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [inputText, setInputText] = useState('');

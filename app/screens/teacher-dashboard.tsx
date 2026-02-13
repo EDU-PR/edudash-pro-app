@@ -59,7 +59,7 @@ export default function TeacherDashboardScreen() {
         if (result.allowed) return;
 
         navigationAttempted.current = true;
-        if (result.status === 'rejected') {
+        if ('status' in result && result.status === 'rejected') {
           router.replace({ pathname: '/screens/teacher-approval-pending', params: { state: 'rejected' } } as any);
         } else {
           router.replace('/screens/teacher-approval-pending');

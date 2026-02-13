@@ -482,6 +482,10 @@ export async function handleDashVoiceInputPress(params: {
       },
       onError: (error: string) => {
         const msg = String(error || '');
+        if (/network_retrying/i.test(msg)) {
+          setPartialTranscript('I lost connection, retrying...');
+          return;
+        }
         const isNetwork = /network|internet|offline|timeout|connection/i.test(msg);
         setIsRecording(false);
         setPartialTranscript('');

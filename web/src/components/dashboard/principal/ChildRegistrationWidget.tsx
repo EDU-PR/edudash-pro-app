@@ -42,14 +42,12 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         .single();
 
       if (!profile || !['principal', 'admin', 'superadmin'].includes(profile.role)) {
-        console.log('👶 [ChildRegistrationWidget] Non-admin user - skipping registration queries');
         setLoading(false);
         return;
       }
 
       try {
         setLoading(true);
-        console.log('👶 [ChildRegistrationWidget] Loading requests for preschool:', preschoolId);
         
         // Check if this is a platform school (Community or Main)
         const COMMUNITY_SCHOOL_ID = '00000000-0000-0000-0000-000000000001';
@@ -76,7 +74,6 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
         if (isPlatformSchool) {
           // Admin sees requests for BOTH Community School and Main School
           query = query.in('organization_id', [COMMUNITY_SCHOOL_ID, MAIN_SCHOOL_ID]);
-          console.log('👶 [ChildRegistrationWidget] Platform admin - showing all platform requests');
         } else {
           // Regular schools only see their own requests
           query = query.eq('organization_id', preschoolId);
@@ -90,16 +87,13 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
           // If table doesn't exist (code 42P01) or column doesn't exist (code 42703), silently skip
           // This is expected - registration_requests is in EduSitePro, not EduDashPro
           if (error.code === '42P01' || error.code === '42703' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-            console.log('ℹ️ [ChildRegistrationWidget] registration_requests table/columns not found in EduDashPro - skipping (this is normal)');
+            // registration_requests table not in EduDashPro — expected
             setRequests([]);
             setLoading(false);
             return;
           }
-          console.error('❌ [ChildRegistrationWidget] Error fetching requests:', error);
           throw error;
         }
-
-        console.log('✅ [ChildRegistrationWidget] Found requests:', data?.length || 0);
 
         // Format the data to match the old interface
         const mapped: ChildRegistration[] = (data || []).map((r: any) => ({
@@ -119,7 +113,7 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
 
         setRequests(mapped);
       } catch (error) {
-        console.error('Error loading child registration requests:', error);
+        // Registration load failed — user sees empty state
       } finally {
         setLoading(false);
       }
@@ -144,8 +138,6 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
 
       if (error) throw error;
 
-      console.log('✅ Registration synced:', data);
-
       // Update local status
       const { error: updateError } = await supabase
         .from('registration_requests')
@@ -163,7 +155,6 @@ export function ChildRegistrationWidget({ preschoolId, userId }: ChildRegistrati
       
       alert(`✅ ${childFirstName} ${childLastName} has been enrolled!\n\nA parent account has been created and the student is now active.`);
     } catch (error: any) {
-      console.error('❌ Approval error:', error);
       alert(`❌ Error: ${error.message || 'Failed to approve registration'}`);
     } finally {
       setProcessingId(null);

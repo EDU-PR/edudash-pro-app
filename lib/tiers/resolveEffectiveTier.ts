@@ -41,6 +41,40 @@ export const selectEffectiveTier = (tiers: Array<string | null | undefined>): st
   return bestTier;
 };
 
+export interface EffectiveTierResolutionInput {
+  role?: string | null;
+  profileTier?: string | null;
+  organizationTier?: string | null;
+  usageTier?: string | null;
+  candidates?: Array<string | null | undefined>;
+}
+
+export interface EffectiveTierResolutionResult {
+  rawTier: string;
+  capabilityTier: CapabilityTier;
+}
+
+export const resolveEffectiveTier = (
+  input: EffectiveTierResolutionInput = {},
+): EffectiveTierResolutionResult => {
+  const role = String(input.role || '').trim().toLowerCase();
+  if (role === 'super_admin' || role === 'superadmin') {
+    return { rawTier: 'enterprise', capabilityTier: 'enterprise' };
+  }
+
+  const rawTier = selectEffectiveTier([
+    input.profileTier,
+    input.organizationTier,
+    input.usageTier,
+    ...(input.candidates || []),
+  ]);
+
+  return {
+    rawTier,
+    capabilityTier: resolveCapabilityTier(rawTier),
+  };
+};
+
 export const isCapabilityTierAtLeast = (
   rawTier: string | null | undefined,
   required: CapabilityTier
@@ -48,4 +82,3 @@ export const isCapabilityTierAtLeast = (
   const actual = resolveCapabilityTier(rawTier);
   return CAPABILITY_TIER_ORDER.indexOf(actual) >= CAPABILITY_TIER_ORDER.indexOf(required);
 };
-

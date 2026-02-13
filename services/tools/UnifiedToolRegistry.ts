@@ -1,4 +1,5 @@
 import { normalizeRole } from '@/lib/rbac';
+import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 import {
   ToolRegistry as ModuleToolRegistry,
   type AgentTool as ModuleAgentTool,
@@ -126,20 +127,21 @@ function parseToolTier(value?: string | null): { tier: ToolTier; known: boolean 
   const raw = String(value || '').toLowerCase().trim();
   if (!raw) return { tier: 'free', known: true };
 
-  if (raw === 'solo') return { tier: 'starter', known: true };
-  if (raw === 'group_5') return { tier: 'basic', known: true };
-  if (raw === 'group_10') return { tier: 'premium', known: true };
-  if (raw === 'trial' || raw === 'trialing') return { tier: 'starter', known: true };
-
   if ((TIER_ORDER as string[]).includes(raw)) {
     return { tier: raw as ToolTier, known: true };
   }
 
-  if (raw.includes('enterprise')) return { tier: 'enterprise', known: true };
-  if (raw.includes('pro')) return { tier: 'pro', known: true };
-  if (raw.includes('premium')) return { tier: 'premium', known: true };
-  if (raw.includes('basic')) return { tier: 'basic', known: true };
-  if (raw.includes('starter')) return { tier: 'starter', known: true };
+  if (raw === 'group_5' || raw === 'solo' || raw === 'trial' || raw === 'trialing') {
+    return { tier: 'starter', known: true };
+  }
+  if (raw === 'group_10') return { tier: 'premium', known: true };
+
+  // Canonical capability-tier fallback for product-specific aliases.
+  const capabilityTier = resolveCapabilityTier(raw);
+  if (capabilityTier === 'enterprise') return { tier: 'enterprise', known: true };
+  if (capabilityTier === 'premium') return { tier: 'premium', known: true };
+  if (capabilityTier === 'starter') return { tier: 'starter', known: true };
+  if (capabilityTier === 'free') return { tier: 'free', known: true };
 
   return { tier: 'free', known: false };
 }

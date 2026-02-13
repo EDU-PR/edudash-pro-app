@@ -65,6 +65,8 @@ export function buildSchoolStats(
     },
     pendingPayments: {
       total: raw.combinedPendingPayments,
+      amount: raw.pendingPaymentsAmount,
+      overdueAmount: raw.pendingPaymentsOverdueAmount,
       trend:
         raw.combinedPendingPayments > 5
           ? t('trends.high')

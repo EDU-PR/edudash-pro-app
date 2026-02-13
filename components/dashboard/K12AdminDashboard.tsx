@@ -213,7 +213,7 @@ export function K12AdminDashboard() {
         title: 'Dash AI Advisor',
         icon: 'sparkles-outline',
         color: '#7C3AED',
-        onPress: () => router.push('/screens/dash-orb'),
+        onPress: () => router.push('/screens/dash-voice?mode=advisor'),
       },
       {
         id: 'social-agent',

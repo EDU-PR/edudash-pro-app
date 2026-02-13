@@ -18,16 +18,18 @@ import type { IDashAIAssistant } from '@/services/dash-ai/DashAICompat';
 import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
+import {
   pickDocuments, 
   pickImages,
   takePhoto,
   uploadAttachment,
 } from '@/services/AttachmentService';
 import { track } from '@/lib/analytics';
+import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTelemetry';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import type { AIQuotaFeature } from '@/lib/ai/limits';
 import { type VoiceSession, type VoiceProvider } from '@/lib/voice/unifiedProvider';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import {
   getChatUIPrefs,
   getVoiceChatPrefs,
@@ -59,11 +61,9 @@ import { ToolRegistry } from '@/services/AgentTools';
 import { formatToolResultMessage } from '@/lib/ai/toolUtils';
 import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
 import {
-  saveTutorSession,
-  loadTutorSession,
-  flushTutorSession,
-  clearTutorSession,
-} from '@/lib/dash-ai/tutorSessionStore';
+  createTutorSessionId,
+} from '@/lib/dash-ai/tutorSessionService';
+import { useDashTutorSessionPersistence } from '@/hooks/dash-assistant/useDashTutorSessionPersistence';
 import { planToolCall, shouldAttemptToolPlan } from '@/lib/ai/toolPlanner';
 import { handleDashVoiceInputPress, speakDashResponse, stopDashVoiceRecording } from '@/hooks/dash-assistant/voiceHandlers';
 import {
@@ -221,6 +221,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
   const { can, ready: capsReady } = useCapability();
+  const tutorSessionsV1Enabled = useMemo(
+    () => getFeatureFlagsSync().dash_tutor_sessions_v1,
+    []
+  );
 
   const toolShortcuts = useMemo(() => {
     const shortcuts = getDashToolShortcutsForRole(profile?.role || null);
@@ -350,45 +354,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const prevLengthRef = useRef<number>(0);
   const messagesLengthRef = useRef<number>(0);
   const isSpeakingStateRef = useRef<boolean>(false);
-  const tutorSessionRef = useRef<TutorSession | null>(null);
   const tutorOverridesRef = useRef<Record<string, string>>({});
   const learnerContextRef = useRef<LearnerContext | null>(null);
   const inputTextRef = useRef('');
   const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
   const voiceAutoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    tutorSessionRef.current = tutorSession;
-  }, [tutorSession]);
-
-  // Persist tutor session to AsyncStorage on every change (debounced inside store)
-  useEffect(() => {
-    if (!user?.id) return;
-    const convId = conversation?.id ?? null;
-    saveTutorSession(user.id, tutorSession, convId);
-  }, [tutorSession, user?.id, conversation?.id]);
-
-  // Restore persisted tutor session on mount
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    loadTutorSession(user.id).then((restored) => {
-      if (cancelled || !restored) return;
-      // Only restore if we don't already have an active session
-      if (!tutorSessionRef.current) {
-        setTutorSession(restored.session);
-      }
-    });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  // Flush pending tutor session writes on unmount
-  useEffect(() => {
-    return () => {
-      flushTutorSession().catch(() => {});
-    };
-  }, []);
+  const { tutorSessionRef } = useDashTutorSessionPersistence({
+    userId: user?.id,
+    profileRole: profile?.role,
+    organizationId: profile?.organization_id,
+    preschoolId: profile?.preschool_id,
+    activeChildId,
+    conversationId: conversation?.id,
+    tutorSession,
+    setTutorSession,
+    remoteSyncEnabled: tutorSessionsV1Enabled,
+  });
 
   useEffect(() => {
     learnerContextRef.current = learnerContext;
@@ -921,6 +903,28 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   // Internal message sender
   const sendMessageInternal = useCallback(async (text: string, attachments: DashAttachment[]) => {
     if (!dashInstance) return;
+    const turnId = createDashTurnId('dash_assistant_turn');
+    const turnStartedAt = Date.now();
+    const normalizedRole = String(profile?.role || '').toLowerCase();
+    const turnModeHint = (
+      tutorSessionRef.current ||
+      detectTutorIntent(text) ||
+      detectPhonicsTutorRequest(text)
+    )
+      ? 'tutor'
+      : ['teacher', 'principal', 'principal_admin', 'admin', 'super_admin'].includes(normalizedRole)
+        ? 'advisor'
+        : 'assistant';
+    const baseTurnTelemetry = buildDashTurnTelemetry({
+      conversationId: resolveActiveConversationId(),
+      turnId,
+      mode: turnModeHint,
+      tier: tier || null,
+      voiceProvider: 'none',
+      fallbackReason: 'none',
+      source: 'useDashAssistant.sendMessageInternal',
+    });
+    track('dash.turn.started', baseTurnTelemetry);
 
     try {
       setIsLoading(true);
@@ -986,8 +990,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       }
 
       const activeSession = tutorSessionRef.current;
-      const normalizedRole = String(profile?.role || '').toLowerCase();
-      const isLearnerRole = ['parent', 'student', 'learner'].includes(normalizedRole);
+      const roleForTutor = String(profile?.role || '').toLowerCase();
+      const isLearnerRole = ['parent', 'student', 'learner'].includes(roleForTutor);
       const phonicsRequested = isLearnerRole && detectPhonicsTutorRequest(userText);
       const hasLearningAttachment = attachments.some(
         (attachment) => attachment.kind === 'image' || attachment.kind === 'document'
@@ -1020,7 +1024,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         const context = extractLearningContext(userText, learnerContextRef.current || learnerContext);
         const phonicsMode = phonicsRequested;
         const newSession: TutorSession = {
-          id: `tutor_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: createTutorSessionId(),
           mode: tutorIntent,
           subject: context.subject,
           grade: context.grade,
@@ -1493,8 +1497,29 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         speakResponse(response);
       }
 
+      track(
+        'dash.turn.completed',
+        buildDashTurnTelemetry({
+          ...baseTurnTelemetry,
+          conversationId: dashInstance.getCurrentConversationId?.() || baseTurnTelemetry.conversation_id,
+          mode: tutorAction ? 'tutor' : baseTurnTelemetry.mode,
+          latencyMs: Date.now() - turnStartedAt,
+        })
+      );
+
     } catch (error) {
       console.error('Failed to send message:', error);
+      track(
+        'dash.turn.failed',
+        {
+          ...buildDashTurnTelemetry({
+            ...baseTurnTelemetry,
+            conversationId: resolveActiveConversationId() || baseTurnTelemetry.conversation_id,
+            latencyMs: Date.now() - turnStartedAt,
+          }),
+          error: error instanceof Error ? error.message : String(error || 'unknown_error'),
+        }
+      );
       const errorMessage = error instanceof Error ? error.message : '';
       showAlert({
         title: 'Error',
@@ -1519,6 +1544,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     voiceEnabled,
     streamingEnabledPref,
     detectTutorIntent,
+    detectPhonicsTutorRequest,
     isTutorStopIntent,
     extractLearningContext,
     buildDashContextOverride,

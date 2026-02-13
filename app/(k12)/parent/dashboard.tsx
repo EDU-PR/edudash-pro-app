@@ -405,7 +405,6 @@ export default function K12ParentDashboardScreen() {
                 <TouchableOpacity
                   key={action.id}
                   ref={tourRef}
-                  collapsable={false}
                   style={[styles.quickActionCard, { backgroundColor: theme.surface }]}
                   onPress={() => handleQuickAction(action.route, action.id)}
                   activeOpacity={0.7}

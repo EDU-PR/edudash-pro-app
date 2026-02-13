@@ -190,8 +190,8 @@ export const PrincipalMetricsSection: React.FC<PrincipalMetricsSectionProps> = (
       case 'pop_uploads':
         try {
           router.push('/screens/pop-review' as any);
-        } catch (error) {
-          console.error('[PrincipalMetricsSection] Failed to navigate to pop-review:', error);
+        } catch (_error) {
+          // Navigation to pop-review failed silently
         }
         break;
       case 'fees_collected':

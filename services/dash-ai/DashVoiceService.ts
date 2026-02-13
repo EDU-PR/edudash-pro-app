@@ -20,7 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { DashPersonality } from './types';
 import type { SupportedLanguage } from '@/lib/voice/types';
-import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
+import { resolveEffectiveTier } from '@/lib/tiers/resolveEffectiveTier';
 
 // Declare global window for web platform type safety
 declare const window: any;
@@ -596,24 +596,6 @@ export class DashVoiceService {
     'enterprise',
   ]);
 
-  private static readonly CAPABILITY_TIER_ORDER = ['free', 'starter', 'premium', 'enterprise'] as const;
-
-  private selectHighestCapabilityTier(candidates: unknown[]): string {
-    let best = 'free';
-    let bestIndex = 0;
-
-    for (const candidate of candidates) {
-      const tier = resolveCapabilityTier(String(candidate || ''));
-      const index = DashVoiceService.CAPABILITY_TIER_ORDER.indexOf(tier as any);
-      if (index > bestIndex) {
-        best = tier;
-        bestIndex = index;
-      }
-    }
-
-    return best;
-  }
-
   /**
    * Speak text using TTS with intelligent text normalization
    * Note: TTS is a premium feature - free tier users will get an error callback
@@ -697,14 +679,17 @@ export class DashVoiceService {
               }
             }
 
-            const resolvedTier = this.selectHighestCapabilityTier([
-              directTierData?.tier,
-              directUsageData?.current_tier,
-              profileTierData?.tier,
-              profileUsageData?.current_tier,
-              profile?.subscription_tier,
-              orgTier,
-            ]);
+            const resolvedTier = resolveEffectiveTier({
+              role: profile?.role,
+              profileTier: profile?.subscription_tier,
+              organizationTier: orgTier,
+              usageTier: directUsageData?.current_tier,
+              candidates: [
+                directTierData?.tier,
+                profileTierData?.tier,
+                profileUsageData?.current_tier,
+              ],
+            }).capabilityTier;
 
             if (!DashVoiceService.TTS_ALLOWED_CAPABILITY_TIERS.has(resolvedTier)) {
               console.log(`[DashVoice] TTS blocked for free tier user`);

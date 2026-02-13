@@ -144,7 +144,7 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
       ) : null}
       <View style={[styles.modelSelectorHeader, { marginBottom: collapsed ? 0 : 8 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model</Text>
+          <Text style={[styles.modelSelectorTitle, { color: theme.text }]}>Model Engine</Text>
           {selectedModelInfo && (
             <Text style={[styles.modelSelectorHint, { color: theme.textSecondary }]}>
               {selectedModelInfo.displayName} • {estimatedRemaining === null ? 'Unlimited' : `~${estimatedRemaining} chats left`}
@@ -199,9 +199,16 @@ export const DashModelSelector: React.FC<DashModelSelectorProps> = ({
                   }
                 }}
               >
-                <Text style={[styles.modelChipTitle, { color: isActive ? theme.primary : theme.text }]}>
-                  {model.displayName}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons
+                    name={isActive ? 'radio-button-on' : 'radio-button-off'}
+                    size={12}
+                    color={isActive ? theme.primary : theme.textSecondary}
+                  />
+                  <Text style={[styles.modelChipTitle, { color: isActive ? theme.primary : theme.text }]}>
+                    {model.displayName}
+                  </Text>
+                </View>
                 <Text style={[styles.modelChipSub, { color: theme.textSecondary }]}>
                   {model.relativeCost}x usage
                 </Text>
