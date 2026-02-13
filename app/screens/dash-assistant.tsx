@@ -32,7 +32,6 @@ export default function DashAssistantScreen() {
       case 'parent':
         return '/screens/parent-dashboard';
       case 'student':
-      case 'learner':
         return '/screens/learner-dashboard';
       case 'super_admin':
         return '/screens/super-admin-dashboard';

@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Theme = ReturnType<typeof useTheme>['theme'];
@@ -41,7 +42,10 @@ export const DashContextChips: React.FC<DashContextChipsProps> = ({
         </View>
       )}
       {contextHint && (
-        <Text style={[styles.contextHint, { color: theme.textSecondary }]}>{contextHint}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Ionicons name="sparkles-outline" size={12} color={theme.primary} />
+          <Text style={[styles.contextHint, { color: theme.textSecondary, flex: 1 }]}>{contextHint}</Text>
+        </View>
       )}
     </>
   );

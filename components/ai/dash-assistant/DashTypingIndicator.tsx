@@ -8,7 +8,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { styles } from '../DashAssistant.styles';
+import { messageStyles as styles } from './styles/message.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 
 interface DashTypingIndicatorProps {

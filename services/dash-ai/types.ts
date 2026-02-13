@@ -110,6 +110,29 @@ export interface DashMessage {
     tool_results?: any;
     tool_name?: string;
     tool_result?: any;
+    tool_summary?: string;
+
+    /** Render helpers for richer chat UIs */
+    render_hints?: {
+      compact_tool_card?: boolean;
+      highlight_mode?: 'advisor' | 'tutor' | 'orb';
+      [key: string]: any;
+    };
+
+    /** Server-provided generated image metadata (if not mapped to attachments) */
+    generated_images?: Array<{
+      id?: string;
+      bucket?: string;
+      path?: string;
+      signed_url?: string;
+      prompt?: string;
+      mime_type?: string;
+      width?: number;
+      height?: number;
+      provider?: string;
+      model?: string;
+      expires_at?: string;
+    }>;
   };
 }
 

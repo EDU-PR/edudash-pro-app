@@ -24,6 +24,8 @@ export interface StatsRawResult {
   pendingReportsCount: number;
   pendingRegistrationsCount: number;
   pendingPaymentsCount: number;
+  pendingPaymentsAmount: number;
+  pendingPaymentsOverdueAmount: number;
   pendingPOPUploadsCount: number;
   pendingActivityApprovalsCount: number;
   pendingHomeworkApprovalsCount: number;
@@ -176,11 +178,15 @@ export async function fetchStatsAndCounts(
   }
 
   let pendingPaymentsCount = legacyPendingPaymentsCount;
+  let pendingPaymentsAmount = 0;
+  let pendingPaymentsOverdueAmount = 0;
   try {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const receivables = await FinancialDataService.getReceivablesSnapshot(preschoolId, currentMonth);
     pendingPaymentsCount = Number(receivables?.summary?.outstanding_students || 0);
+    pendingPaymentsAmount = Number(receivables?.summary?.outstanding_amount || 0);
+    pendingPaymentsOverdueAmount = Number(receivables?.summary?.overdue_amount || 0);
   } catch (receivablesError: any) {
     logger.info('Using legacy pending payments count fallback', {
       reason: receivablesError?.message || 'Unknown receivables error',
@@ -213,6 +219,8 @@ export async function fetchStatsAndCounts(
     pendingReportsCount,
     pendingRegistrationsCount,
     pendingPaymentsCount,
+    pendingPaymentsAmount,
+    pendingPaymentsOverdueAmount,
     pendingPOPUploadsCount,
     pendingActivityApprovalsCount,
     pendingHomeworkApprovalsCount,

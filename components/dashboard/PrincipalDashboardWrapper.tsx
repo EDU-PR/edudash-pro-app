@@ -86,14 +86,14 @@ const PrincipalDashboardWrapperComponent: React.FC<PrincipalDashboardWrapperProp
         }
 
         if (orgError && orgError.code !== 'PGRST116') {
-          console.debug('[DashboardWrapper] Organization type lookup warning:', orgError.message);
+          // Organization type lookup warning — non-critical
         }
         if (preschoolError && preschoolError.code !== 'PGRST116') {
-          console.debug('[DashboardWrapper] Preschool type lookup warning:', preschoolError.message);
+          // Preschool type lookup warning — non-critical
         }
       } catch (e) {
         if (!cancelled) {
-          console.debug('[DashboardWrapper] Org type check failed, using profile fallback');
+          // Org type check failed — use profile fallback
           setResolvedSchoolType(fallbackType);
         }
       } finally {

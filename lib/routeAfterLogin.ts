@@ -64,7 +64,7 @@ async function resolveTeacherApprovalRoute(profile: EnhancedUserProfile): Promis
 
   if (result.allowed) return null;
 
-  if (result.status === 'rejected') {
+  if ('status' in result && result.status === 'rejected') {
     return { path: '/screens/teacher-approval-pending', params: { state: 'rejected' } };
   }
 

@@ -1,28 +1,70 @@
 /**
  * Principal Dashboard - Quick Actions Section
- * 
- * Action buttons for common principal tasks.
+ *
+ * Core shortcuts (badged, high-urgency) + tabbed groups.
+ * Each destination appears at most ONCE within this component.
+ * Contextual sections (Metrics, SchoolPulse, DoNow) may also
+ * link to the same screens — that is intentional drill-down UX.
  */
 
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAlert } from '@/components/ui/StyledAlert';
-import { logger } from '@/lib/logger';
 import { QuickActionCard } from '../shared/QuickActionCard';
 import { CollapsibleSection } from '../shared/CollapsibleSection';
 import { getFeatureFlagsSync, isNextGenDashPolicyEnabled } from '@/lib/featureFlags';
 import { isDashboardActionAllowed } from '@/lib/dashboard/dashboardPolicy';
+import { createQuickActionsStyles } from './PrincipalQuickActions.styles';
 import type { ResolvedSchoolType } from '@/lib/schoolTypeResolver';
 
-const { width } = Dimensions.get('window');
-const isTablet = width > 768;
-const isSmallScreen = width < 380;
-const cardGap = isTablet ? 12 : isSmallScreen ? 6 : 8;
-
 type QuickActionGroup = 'people' | 'money' | 'learning' | 'more';
+type ActionItem = { id: string; title: string; icon: string; color: string; badge?: number };
+
+/** Route map — single source of truth for action→screen mapping */
+const ROUTE_MAP: Record<string, string> = {
+  students: '/screens/student-management',
+  registrations: '/screens/principal-registrations',
+  payments: '/screens/pop-review',
+  'teacher-approval': '/screens/teacher-approval',
+  'uniform-orders': '/screens/principal-uniforms',
+  'dash-advisor': '/screens/dash-voice?mode=advisor',
+  teachers: '/screens/teacher-management',
+  classes: '/screens/class-teacher-management',
+  'parent-links': '/screens/principal-parent-requests',
+  groups: '/screens/group-management',
+  'seat-management': '/screens/principal-seat-management',
+  'unpaid-fees': '/screens/finance-control-center?tab=receivables',
+  'fee-management': '/screens/finance-control-center?tab=overview',
+  'log-expense': '/screens/log-expense',
+  aftercare: '/screens/aftercare-admin',
+  'browse-lessons': '/screens/teacher-lessons',
+  'assign-lessons': '/screens/assign-lesson',
+  reports: '/screens/principal-reports',
+  'family-activity-review': '/screens/family-activity-review',
+  activities: '/screens/aftercare-activities',
+  calendar: '/screens/calendar-management',
+  'weekly-menu': '/screens/principal-menu',
+  'year-planner': '/screens/principal-year-planner',
+  'ai-year-planner': '/screens/principal-ai-year-planner',
+  'live-lessons': '/screens/start-live-lesson',
+  announcements: '/screens/principal-announcement',
+  'dash-studio': '/screens/dash-studio',
+  'birthday-chart': '/screens/birthday-chart',
+  excursions: '/screens/principal-excursions',
+  meetings: '/screens/principal-meetings',
+  settings: '/screens/school-settings',
+  'curriculum-themes': '/screens/principal-curriculum-themes',
+  'lesson-templates': '/screens/principal-lesson-templates',
+  'weekly-plans': '/screens/principal-weekly-plans',
+  timetable: '/screens/timetable-management',
+  'staff-leave': '/screens/staff-leave',
+  waitlist: '/screens/waitlist-management',
+  compliance: '/screens/compliance-dashboard',
+  budget: '/screens/budget-management',
+};
 
 interface PrincipalQuickActionsProps {
   stats?: {
@@ -56,13 +98,10 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   const { t } = useTranslation();
   const { theme } = useTheme();
   const alert = useAlert();
-  const styles = createStyles(theme);
+  const styles = createQuickActionsStyles(theme);
   const flags = getFeatureFlagsSync();
   const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
-  const applyNextGenPolicy = isNextGenDashPolicyEnabled({
-    organizationId,
-    resolvedSchoolType,
-  });
+  const applyNextGenPolicy = isNextGenDashPolicyEnabled({ organizationId, resolvedSchoolType });
 
   const registrationsBadge = stats?.pendingRegistrations?.total ?? pendingRegistrationsCount;
   const popBadge = stats?.pendingPOPUploads?.total ?? pendingPOPUploadsCount;
@@ -77,87 +116,43 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   const [activeGroup, setActiveGroup] = useState<QuickActionGroup>(defaultTab);
 
   const groupHint = useMemo(() => {
-    switch (activeGroup) {
-      case 'people':
-        return t('dashboard.qa.people_hint', { defaultValue: 'Students, teachers, classes, and parent links.' });
-      case 'money':
-        return t('dashboard.qa.money_hint', { defaultValue: 'Payments, proof of payment, and expenses.' });
-      case 'learning':
-        return t('dashboard.qa.learning_hint', { defaultValue: 'Lessons, reports, announcements, and planning.' });
-      case 'more':
-      default:
-        return t('dashboard.qa.more_hint', { defaultValue: 'Less-used tools and settings.' });
-    }
+    const hints: Record<QuickActionGroup, string> = {
+      people: t('dashboard.qa.people_hint', { defaultValue: 'Students, teachers, classes, and parent links.' }),
+      money: t('dashboard.qa.money_hint', { defaultValue: 'Fees, expenses, and financial tools.' }),
+      learning: t('dashboard.qa.learning_hint', { defaultValue: 'Lessons, reports, planning, and calendar.' }),
+      more: t('dashboard.qa.more_hint', { defaultValue: 'Announcements, settings, and less-used tools.' }),
+    };
+    return hints[activeGroup];
   }, [activeGroup, t]);
 
-  const coreShortcuts = useMemo(() => {
-    return [
-      {
-        id: 'registrations',
-        title: t('dashboard.review_registrations', { defaultValue: 'Registrations' }),
-        icon: 'person-add',
-        color: '#6366F1',
-        badge: registrationsBadge,
-      },
-      {
-        id: 'payments',
-        title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }),
-        icon: 'document-text',
-        color: '#F59E0B',
-        badge: popBadge,
-      },
-      {
-        id: 'uniform-orders',
-        title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }),
-        icon: 'shirt',
-        color: '#0EA5E9',
-      },
-      {
-        id: 'teachers',
-        title: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }),
-        icon: 'people',
-        color: '#06B6D4',
-      },
-      {
-        id: 'dash-advisor',
-        title: t('dashboard.dash_ai_advisor', { defaultValue: 'Dash AI Advisor' }),
-        icon: 'sparkles',
-        color: '#7C3AED',
-      },
-      {
-        id: 'announcements',
-        title: t('dashboard.send_announcement', { defaultValue: 'Announcement' }),
-        icon: 'megaphone',
-        color: '#F59E0B',
-      },
-      {
-        id: 'weekly-menu',
-        title: t('dashboard.weekly_menu', { defaultValue: 'Weekly Menu' }),
-        icon: 'restaurant',
-        color: '#F97316',
-      },
-    ];
-  }, [popBadge, registrationsBadge, t]);
+  // Core shortcuts — badged/high-urgency items. Each appears ONLY here.
+  const coreShortcuts = useMemo<ActionItem[]>(() => [
+    { id: 'registrations', title: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', color: '#6366F1', badge: registrationsBadge },
+    { id: 'payments', title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }), icon: 'document-text', color: '#F59E0B', badge: popBadge },
+    { id: 'teacher-approval', title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }), icon: 'checkmark-circle', color: '#06B6D4', badge: pendingTeacherApprovalsCount },
+    { id: 'uniform-orders', title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }), icon: 'shirt', color: '#0EA5E9' },
+    { id: 'dash-advisor', title: t('dashboard.dash_ai_advisor', { defaultValue: 'Dash AI Advisor' }), icon: 'sparkles', color: '#7C3AED' },
+  ], [pendingTeacherApprovalsCount, popBadge, registrationsBadge, t]);
 
+  // Tabbed groups — NO overlap with core shortcuts
   const actionsByGroup = useMemo(() => {
-    const groups: Record<QuickActionGroup, Array<{ id: string; title: string; icon: string; color: string; badge?: number }>> = {
+    const groups: Record<QuickActionGroup, ActionItem[]> = {
       people: [
         { id: 'students', title: t('dashboard.manage_students', { defaultValue: 'Students' }), icon: 'school', color: '#6366F1' },
         { id: 'teachers', title: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }), icon: 'people', color: '#06B6D4' },
-        { id: 'parent-links', title: t('dashboard.parent_links', { defaultValue: 'Connect Parents' }), icon: 'link', color: '#14B8A6' },
         { id: 'classes', title: t('dashboard.manage_classes', { defaultValue: 'Classes' }), icon: 'library', color: '#14B8A6' },
+        { id: 'parent-links', title: t('dashboard.parent_links', { defaultValue: 'Connect Parents' }), icon: 'link', color: '#14B8A6' },
         { id: 'groups', title: t('dashboard.manage_groups', { defaultValue: 'Groups' }), icon: 'people-circle', color: '#14B8A6' },
-        { id: 'teacher-approval', title: t('dashboard.approve_teachers', { defaultValue: 'Approve Teachers' }), icon: 'checkmark-circle', color: '#06B6D4', badge: pendingTeacherApprovalsCount },
         { id: 'seat-management', title: t('dashboard.seat_management', { defaultValue: 'Seats' }), icon: 'people-circle', color: '#8B5CF6' },
-        { id: 'registrations', title: t('dashboard.review_registrations', { defaultValue: 'Registrations' }), icon: 'person-add', color: '#6366F1', badge: registrationsBadge },
+        { id: 'waitlist', title: t('dashboard.waitlist', { defaultValue: 'Waitlist' }), icon: 'list', color: '#3B82F6' },
+        { id: 'staff-leave', title: t('dashboard.staff_leave', { defaultValue: 'Staff Leave' }), icon: 'calendar-outline', color: '#F59E0B' },
       ],
       money: [
-        { id: 'payments', title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }), icon: 'document-text', color: '#F59E0B', badge: popBadge },
-        { id: 'uniform-orders', title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }), icon: 'shirt', color: '#0EA5E9' },
         { id: 'unpaid-fees', title: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }), icon: 'alert-circle', color: '#EF4444', badge: unpaidBadge },
         { id: 'fee-management', title: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', color: '#10B981' },
         { id: 'log-expense', title: t('dashboard.log_expense', { defaultValue: 'Log Expense' }), icon: 'add-circle', color: '#6366F1' },
         { id: 'aftercare', title: t('dashboard.aftercare_registrations', { defaultValue: 'Aftercare' }), icon: 'school', color: '#8B5CF6' },
+        { id: 'budget', title: t('dashboard.budget_management', { defaultValue: 'Budget' }), icon: 'pie-chart', color: '#3B82F6' },
       ],
       learning: [
         { id: 'browse-lessons', title: t('dashboard.browse_lessons', { defaultValue: 'Browse Lessons' }), icon: 'book', color: '#F59E0B' },
@@ -170,179 +165,57 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'weekly-menu', title: t('dashboard.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant', color: '#F97316' },
         { id: 'year-planner', title: t('dashboard.year_planner', { defaultValue: 'Year Planner' }), icon: 'calendar', color: '#3B82F6' },
         { id: 'ai-year-planner', title: t('dashboard.ai_year_planner', { defaultValue: 'AI Year Planner' }), icon: 'sparkles', color: '#8B5CF6' },
-        ...(canLiveLessons
-          ? [{ id: 'live-lessons', title: t('dashboard.live_lessons', { defaultValue: 'Live Lessons' }), icon: 'videocam', color: '#EC4899' }]
-          : []),
+        ...(canLiveLessons ? [{ id: 'live-lessons', title: t('dashboard.live_lessons', { defaultValue: 'Live Lessons' }), icon: 'videocam', color: '#EC4899' }] : []),
+        { id: 'timetable', title: t('dashboard.timetable', { defaultValue: 'Timetable' }), icon: 'grid', color: '#6366F1' },
       ],
       more: [
+        { id: 'announcements', title: t('dashboard.send_announcement', { defaultValue: 'Announcements' }), icon: 'megaphone', color: '#F59E0B' },
         { id: 'dash-studio', title: t('dashboard.dash_studio', { defaultValue: 'Dash Studio' }), icon: 'sparkles', color: '#6366F1' },
         { id: 'birthday-chart', title: t('dashboard.birthday_chart', { defaultValue: 'Birthday Chart' }), icon: 'gift', color: '#F472B6' },
         { id: 'excursions', title: t('dashboard.excursions', { defaultValue: 'Excursions' }), icon: 'bus', color: '#10B981' },
         { id: 'meetings', title: t('dashboard.meetings', { defaultValue: 'Meetings' }), icon: 'people', color: '#F59E0B' },
         { id: 'settings', title: t('dashboard.school_settings', { defaultValue: 'School Settings' }), icon: 'settings', color: '#64748B' },
+        { id: 'compliance', title: t('dashboard.compliance', { defaultValue: 'Compliance' }), icon: 'shield-checkmark', color: '#10B981' },
         { id: 'curriculum-themes', title: t('dashboard.curriculum_themes', { defaultValue: 'Curriculum Themes' }), icon: 'book', color: '#6366F1' },
         { id: 'lesson-templates', title: t('dashboard.lesson_templates', { defaultValue: 'Lesson Templates' }), icon: 'document-text', color: '#14B8A6' },
         { id: 'weekly-plans', title: t('dashboard.weekly_plans', { defaultValue: 'Weekly Plans' }), icon: 'list', color: '#64748B' },
       ],
     };
 
-    if (!applyNextGenPolicy) {
-      return groups;
+    if (applyNextGenPolicy) {
+      (Object.keys(groups) as QuickActionGroup[]).forEach((key) => {
+        groups[key] = groups[key].filter((a) => isDashboardActionAllowed('principal', resolvedSchoolType, a.id));
+      });
     }
-
-    (Object.keys(groups) as QuickActionGroup[]).forEach((groupKey) => {
-      groups[groupKey] = groups[groupKey].filter((action) =>
-        isDashboardActionAllowed('principal', resolvedSchoolType, action.id)
-      );
-    });
-
     return groups;
-  }, [applyNextGenPolicy, canLiveLessons, popBadge, registrationsBadge, resolvedSchoolType, t, unpaidBadge]);
+  }, [applyNextGenPolicy, canLiveLessons, resolvedSchoolType, t, unpaidBadge]);
 
   const handleActionPress = (actionId: string) => {
-    // Allow custom handler first
-    if (onAction) {
-      onAction(actionId);
+    onAction?.(actionId);
+
+    // create-lesson has conditional routing based on school type
+    if (actionId === 'create-lesson') {
+      router.push(resolvedSchoolType === 'k12_school' ? '/screens/ai-lesson-generator' : '/screens/preschool-lesson-generator');
+      return;
     }
 
-    // Default navigation
-    switch (actionId) {
-      case 'students':
-        router.push('/screens/student-management');
-        break;
-      case 'registrations':
-        router.push('/screens/principal-registrations');
-        break;
-      case 'aftercare':
-        router.push('/screens/aftercare-admin');
-        break;
-      case 'payments':
-        try {
-          router.push('/screens/pop-review' as any);
-        } catch (error) {
-          logger.error('PrincipalQuickActions', 'Failed to navigate to pop-review:', error);
-          alert.show(
-            'Navigation Error',
-            'Could not open payment reviews. Please try again.',
-            [{ text: 'Close', style: 'cancel' }],
-            { type: 'error' }
-          );
-        }
-        break;
-      case 'unpaid-fees':
-        router.push('/screens/finance-control-center?tab=receivables');
-        break;
-      case 'uniform-orders':
-        router.push('/screens/principal-uniforms');
-        break;
-      case 'teacher-approval':
-        router.push('/screens/teacher-approval');
-        break;
-      case 'activities':
-        router.push('/screens/aftercare-activities');
-        break;
-      case 'browse-lessons':
-        router.push('/screens/teacher-lessons');
-        break;
-      case 'create-lesson':
-        router.push(
-          resolvedSchoolType === 'k12_school'
-            ? '/screens/ai-lesson-generator'
-            : '/screens/preschool-lesson-generator'
-        );
-        break;
-      case 'assign-lessons':
-        router.push('/screens/assign-lesson');
-        break;
-      case 'reports':
-        router.push('/screens/principal-reports');
-        break;
-      case 'family-activity-review':
-        router.push('/screens/family-activity-review');
-        break;
-      case 'announcements':
-        router.push('/screens/principal-announcement');
-        break;
-      case 'weekly-menu':
-        router.push('/screens/principal-menu');
-        break;
-      case 'calendar':
-        router.push('/screens/calendar-management');
-        break;
-      case 'live-lessons':
-        router.push('/screens/start-live-lesson');
-        break;
-      case 'teachers':
-        router.push('/screens/teacher-management');
-        break;
-      case 'parent-links':
-        router.push('/screens/principal-parent-requests');
-        break;
-      case 'groups':
-        router.push('/screens/group-management');
-        break;
-      case 'classes':
-        router.push('/screens/class-teacher-management');
-        break;
-      case 'seat-management':
-        router.push('/screens/principal-seat-management');
-        break;
-      case 'settings':
-        router.push('/screens/school-settings');
-        break;
-      case 'year-planner':
-        router.push('/screens/principal-year-planner');
-        break;
-      case 'ai-year-planner':
-        router.push('/screens/principal-ai-year-planner');
-        break;
-      case 'excursions':
-        router.push('/screens/principal-excursions');
-        break;
-      case 'meetings':
-        router.push('/screens/principal-meetings');
-        break;
-      case 'activity-library':
-        router.push('/screens/principal-activities');
-        break;
-      case 'curriculum-themes':
-        router.push('/screens/principal-curriculum-themes');
-        break;
-      case 'lesson-templates':
-        router.push('/screens/principal-lesson-templates');
-        break;
-      case 'weekly-plans':
-        router.push('/screens/principal-weekly-plans');
-        break;
-      case 'birthday-chart':
-        router.push('/screens/birthday-chart');
-        break;
-      case 'fee-management':
-        router.push('/screens/finance-control-center?tab=overview');
-        break;
-      case 'log-expense':
-        router.push('/screens/log-expense');
-        break;
-      case 'dash-studio':
-        router.push('/screens/dash-studio');
-        break;
-      case 'dash-advisor':
-        router.push('/screens/dash-orb');
-        break;
-      default:
-        alert.show(
-          t('common.coming_soon', { defaultValue: 'Coming Soon' }),
-          t('common.feature_in_development', { defaultValue: 'This feature is coming soon.' }),
-          [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
-          { type: 'info' }
-        );
+    const route = ROUTE_MAP[actionId];
+    if (route) {
+      router.push(route as any);
+    } else {
+      alert.show(
+        t('common.coming_soon', { defaultValue: 'Coming Soon' }),
+        t('common.feature_in_development', { defaultValue: 'This feature is coming soon.' }),
+        [{ text: t('common.close', { defaultValue: 'Close' }), style: 'cancel' }],
+        { type: 'info' },
+      );
     }
   };
 
   return (
-    <CollapsibleSection 
-      title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })} 
-      sectionId="quick-actions" 
+    <CollapsibleSection
+      title={t('dashboard.quick_actions', { defaultValue: 'Quick Actions' })}
+      sectionId="quick-actions"
       icon="⚡"
       hint={t('dashboard.hints.principal_quick_actions', { defaultValue: 'Approve, message, and jump to key workflows.' })}
       defaultCollapsed={collapsedSections.has('quick-actions')}
@@ -351,35 +224,22 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       <View style={styles.coreGrid}>
         {coreShortcuts.map((action) => (
           <View key={action.id} style={styles.gridItem}>
-            <QuickActionCard
-              title={action.title}
-              icon={action.icon}
-              color={action.color}
-              badgeCount={action.badge}
-              onPress={() => handleActionPress(action.id)}
-            />
+            <QuickActionCard title={action.title} icon={action.icon} color={action.color} badgeCount={action.badge} onPress={() => handleActionPress(action.id)} />
           </View>
         ))}
       </View>
 
       <View style={styles.groupTabs}>
         {([
-          { id: 'people', label: t('dashboard.qa.people', { defaultValue: 'People' }) },
-          { id: 'money', label: t('dashboard.qa.money', { defaultValue: 'Money' }) },
-          { id: 'learning', label: t('dashboard.qa.learning', { defaultValue: 'Learning' }) },
-          { id: 'more', label: t('dashboard.qa.more', { defaultValue: 'More' }) },
-        ] as Array<{ id: QuickActionGroup; label: string }>).map((tab) => {
+          { id: 'people' as const, label: t('dashboard.qa.people', { defaultValue: 'People' }) },
+          { id: 'money' as const, label: t('dashboard.qa.money', { defaultValue: 'Money' }) },
+          { id: 'learning' as const, label: t('dashboard.qa.learning', { defaultValue: 'Learning' }) },
+          { id: 'more' as const, label: t('dashboard.qa.more', { defaultValue: 'More' }) },
+        ]).map((tab) => {
           const active = activeGroup === tab.id;
           return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.groupTab, active && styles.groupTabActive]}
-              onPress={() => setActiveGroup(tab.id)}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.groupTabText, active && styles.groupTabTextActive]}>
-                {tab.label}
-              </Text>
+            <TouchableOpacity key={tab.id} style={[styles.groupTab, active && styles.groupTabActive]} onPress={() => setActiveGroup(tab.id)} activeOpacity={0.85}>
+              <Text style={[styles.groupTabText, active && styles.groupTabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -390,71 +250,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       <View style={styles.actionsGrid}>
         {(actionsByGroup[activeGroup] || []).map((action) => (
           <View key={action.id} style={styles.gridItem}>
-            <QuickActionCard
-              title={action.title}
-              icon={action.icon}
-              color={action.color}
-              badgeCount={action.badge}
-              onPress={() => handleActionPress(action.id)}
-            />
+            <QuickActionCard title={action.title} icon={action.icon} color={action.color} badgeCount={action.badge} onPress={() => handleActionPress(action.id)} />
           </View>
         ))}
       </View>
     </CollapsibleSection>
   );
 };
-
-const createStyles = (theme: any) => StyleSheet.create({
-  coreGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: cardGap,
-    marginBottom: 4,
-  },
-  gridItem: {
-    width: isTablet ? '23%' : '48%',
-    flexGrow: 1,
-  },
-  groupTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 6,
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  groupTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: theme.cardBackground || theme.surface,
-  },
-  groupTabActive: {
-    borderColor: `${theme.primary}55`,
-    backgroundColor: `${theme.primary}12`,
-  },
-  groupTabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.textSecondary,
-  },
-  groupTabTextActive: {
-    color: theme.primary,
-  },
-  groupHint: {
-    paddingHorizontal: 6,
-    marginBottom: 8,
-    fontSize: 12,
-    color: theme.textSecondary,
-    lineHeight: 16,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: cardGap,
-  },
-});
 
 export default PrincipalQuickActions;

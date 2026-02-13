@@ -10,7 +10,7 @@ export interface SchoolStats {
   classes: { total: number; trend: string };
   pendingApplications: { total: number; trend: string };
   pendingRegistrations: { total: number; trend: string };
-  pendingPayments: { total: number; trend: string };
+  pendingPayments: { total: number; trend: string; amount?: number; overdueAmount?: number };
   pendingPOPUploads?: { total: number; trend: string };
   monthlyRevenue: { total: number; trend: string };
   attendanceRate: { percentage: number; trend: string };

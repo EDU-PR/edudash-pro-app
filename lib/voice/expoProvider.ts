@@ -151,6 +151,9 @@ class ExpoSpeechSession implements VoiceSession {
                 `[ExpoProvider] Transient network STT error, retrying (${this.networkRetryCount}/${ExpoSpeechSession.MAX_NETWORK_RETRIES})`
               );
             }
+            this.currentOpts?.onError?.(
+              `network_retrying_${this.networkRetryCount}/${ExpoSpeechSession.MAX_NETWORK_RETRIES}`
+            );
             this.active = false;
             this.cleanupListeners();
             if (this.autoRestartTimer) {

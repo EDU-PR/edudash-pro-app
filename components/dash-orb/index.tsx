@@ -49,6 +49,7 @@ import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { isSuperAdmin } from '../../lib/roleUtils';
+import { getOrganizationType } from '../../lib/tenant/compat';
 import { calculateAge } from '../../lib/date-utils';
 import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
@@ -118,6 +119,7 @@ export default function DashOrb({
   const userRole = profile?.role?.toLowerCase() || '';
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
+  const orgType = getOrganizationType(profile);
   const learnerAgeYears = typeof learnerContext?.ageYears === 'number' ? learnerContext.ageYears : null;
   const learnerGrade = learnerContext?.grade || null;
   const learnerName = learnerContext?.name || null;
@@ -1230,7 +1232,7 @@ export default function DashOrb({
               schoolType: learnerContext?.schoolType || null,
               organizationType: learnerContext?.schoolType || null,
             });
-            await speak(result, ttsLanguage, { phonicsMode, rate: phonicsMode ? 12 : 0 });
+            await speak(result, ttsLanguage, { phonicsMode });
           } catch (ttsErr) {
             console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
           }
@@ -1288,7 +1290,7 @@ export default function DashOrb({
               schoolType: learnerContext?.schoolType || null,
               organizationType: learnerContext?.schoolType || null,
             });
-            await speak(nextSentence, ttsLang, { phonicsMode: pm, rate: pm ? 12 : 0 });
+            await speak(nextSentence, ttsLang, { phonicsMode: pm });
           } catch (e) {
             console.warn('[DashOrb] Sentence TTS error:', e);
           } finally {

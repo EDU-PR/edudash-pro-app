@@ -12,9 +12,15 @@ import { Platform } from 'react-native';
 import * as Speech from 'expo-speech';
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { assertSupabase } from '../../../lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { SupportedLanguage } from './useVoiceSTT';
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import {
+  consumePremiumVoiceActivity,
+  getVoicePolicyDecision,
+} from '@/lib/dash-ai/voicePolicy';
 
 export interface TTSOptions {
   voice?: string;
@@ -30,11 +36,11 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
-const DEFAULT_AZURE_RATE = 0;
+const DEFAULT_AZURE_RATE = 5;
 /** Slower rate for phonics — children need time to hear each sound clearly */
-const DEFAULT_PHONICS_AZURE_RATE = -15;
-const DEFAULT_DEVICE_RATE = 1.0;
-const DEFAULT_PHONICS_DEVICE_RATE = 0.85;
+const DEFAULT_PHONICS_AZURE_RATE = -22;
+const DEFAULT_DEVICE_RATE = 1.05;
+const DEFAULT_PHONICS_DEVICE_RATE = 0.82;
 const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
   process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
 
@@ -65,9 +71,15 @@ const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
   x: 'ks',
   y: 'yuh',
   z: 'zzz',
+  sh: 'shhh',
+  ch: 'chh',
+  th: 'thh',
+  ph: 'fff',
+  ng: 'nnng',
 };
 
 export type TTSErrorCategory =
+  | 'quota_exhausted'
   | 'auth_missing'
   | 'service_unconfigured'
   | 'phonics_requires_azure'
@@ -118,14 +130,13 @@ const shouldRetryAzureChunk = (error: unknown): boolean => {
 
 const prepareDevicePhonicsText = (text: string): string => {
   let next = String(text || '');
-  // /s/ -> sss, /m/ -> mmm, etc.
-  next = next.replace(/\/([a-z])\//gi, (_m, letter: string) => {
-    const key = String(letter || '').toLowerCase();
+  // /s/ -> sss, /sh/ -> shhh, [m] -> mmm, etc.
+  next = next.replace(/\/([a-z]{1,8})\//gi, (_m, token: string) => {
+    const key = String(token || '').toLowerCase();
     return DEVICE_PHONICS_SOUND_MAP[key] || key;
   });
-  // [s] -> sss
-  next = next.replace(/\[([a-z])\]/gi, (_m, letter: string) => {
-    const key = String(letter || '').toLowerCase();
+  next = next.replace(/\[([a-z]{1,8})\]/gi, (_m, token: string) => {
+    const key = String(token || '').toLowerCase();
     return DEVICE_PHONICS_SOUND_MAP[key] || key;
   });
   // c-a-t -> kuh ... ah ... tuh (so device TTS doesn't read punctuation oddly)
@@ -134,12 +145,21 @@ const prepareDevicePhonicsText = (text: string): string => {
     if (letters.some((v) => v.length !== 1)) return token;
     return letters.map((l) => DEVICE_PHONICS_SOUND_MAP[l] || l).join(' ... ');
   });
+  // Ensure marker punctuation is never spoken literally.
+  next = next.replace(/[\/[\]]/g, ' ');
   return next;
 };
 
 export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
   const message = error instanceof Error ? error.message : String(error || '');
   const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('free_quota_exhausted') ||
+    normalized.includes('premium voice quota')
+  ) {
+    return 'quota_exhausted';
+  }
 
   if (
     normalized.includes('auth_missing') ||
@@ -191,6 +211,8 @@ export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
 
 export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
   switch (category) {
+    case 'quota_exhausted':
+      return 'Premium voice limit reached. Using standard voice until reset.';
     case 'auth_missing':
       return 'Voice needs an active login session.';
     case 'phonics_requires_azure':
@@ -207,6 +229,8 @@ export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
 };
 
 export function useVoiceTTS(): UseVoiceTTSReturn {
+  const { user, profile } = useAuth();
+  const { tier } = useSubscription();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
@@ -635,6 +659,14 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     try {
       // Stop any current playback without cancelling this session
       await stopPlayback();
+
+      const policy = await getVoicePolicyDecision(
+        {
+          role: profile?.role,
+          profileTier: tier,
+        },
+        user?.id,
+      );
       
       // Azure supports en/af/zu in this client path; device fallback will cover the rest.
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
@@ -666,9 +698,22 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       console.log('[VoiceTTS] Speaking text, length:', cleanText.length);
       const chunks = splitIntoChunks(cleanText, phonicsMode ? 800 : 1200);
+
+      if (!policy.shouldUseCloudVoice) {
+        reportTTSError(new Error('FREE_QUOTA_EXHAUSTED_DEVICE_VOICE'));
+        for (const chunk of chunks) {
+          if (stopRequestedRef.current) break;
+          await speakWithDeviceTTS(chunk, effectiveLanguage, {
+            ...options,
+            phonicsMode,
+          });
+        }
+        return;
+      }
       
       // Speak chunks sequentially so speech never cuts off mid-sentence
       let anyChunkSucceeded = false;
+      let cloudChunkSucceeded = false;
       let lastErr: Error | null = null;
 
       for (const chunk of chunks) {
@@ -679,6 +724,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
             phonicsMode,
           });
           anyChunkSucceeded = true;
+          cloudChunkSucceeded = true;
         } catch (azureErr) {
           let effectiveAzureErr: unknown = azureErr;
           if (shouldRetryAzureChunk(azureErr) && !stopRequestedRef.current) {
@@ -689,6 +735,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
                 phonicsMode,
               });
               anyChunkSucceeded = true;
+              cloudChunkSucceeded = true;
               continue;
             } catch (retryErr) {
               effectiveAzureErr = retryErr;
@@ -726,6 +773,10 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       if (!anyChunkSucceeded && lastErr) {
         throw lastErr;
       }
+
+      if (!policy.isPremiumTier && cloudChunkSucceeded) {
+        await consumePremiumVoiceActivity(user?.id);
+      }
       
     } catch (err) {
       console.error('[VoiceTTS] Error:', err);
@@ -733,7 +784,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     } finally {
       setIsSpeaking(false);
     }
-  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS, reportTTSError]);
+  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS, reportTTSError, profile?.role, tier, user?.id]);
 
   return { speak, stop, isSpeaking, error };
 }

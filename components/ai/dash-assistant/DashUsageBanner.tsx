@@ -78,14 +78,19 @@ export const DashUsageBanner: React.FC<DashUsageBannerProps> = ({
       </View>
 
       {tierStatus.quotaLimit > 0 && (
-        <View style={[styles.usageProgress, { marginTop: 8, width: '100%', backgroundColor: theme.border }]}>
-          <View
-            style={[
-              styles.usageProgressFill,
-              { backgroundColor: progressColor, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
-            ]}
-          />
-        </View>
+        <>
+          <View style={[styles.usageProgress, { marginTop: 2, backgroundColor: theme.border }]}>
+            <View
+              style={[
+                styles.usageProgressFill,
+                { backgroundColor: progressColor, width: `${Math.min(tierStatus.quotaPercentage, 100)}%` },
+              ]}
+            />
+          </View>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: theme.textTertiary, alignSelf: 'flex-end' }}>
+            {Math.round(tierStatus.quotaPercentage)}% used
+          </Text>
+        </>
       )}
     </View>
   );

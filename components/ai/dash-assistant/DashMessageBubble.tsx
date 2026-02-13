@@ -8,7 +8,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { styles } from '../DashAssistant.styles';
+import { messageStyles as styles } from './styles/message.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
@@ -399,6 +399,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
 
   const assistantContent = getAssistantDisplayContent();
   const userContent = sanitizeUserDisplayContent(message.content || '');
+  const hasAssistantContent = assistantContent.trim().length > 0;
+  const assistantFallbackText = isLoading && isLatestMessage
+    ? 'Working on your request...'
+    : 'I completed that step. Ask a follow-up and I will refine it.';
+  const assistantDisplayText = hasAssistantContent ? assistantContent : assistantFallbackText;
   const metadata = (message.metadata || {}) as Record<string, any>;
   const rawToolName = firstText(metadata.tool_name);
   const toolExecution = metadata.tool_result as Record<string, any> | undefined;
@@ -406,7 +411,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const toolPayload = toolExecution ? (toolExecution.result ?? toolExecution.data ?? null) : null;
   const toolSuccess = toolExecution ? toolExecution.success !== false : true;
   const toolError = toolExecution ? firstText(toolExecution.error) : null;
+  const generatedImages = (Array.isArray(metadata.generated_images) ? metadata.generated_images : [])
+    .filter((img) => typeof img?.signed_url === 'string' && String(img.signed_url).trim().length > 0);
   const toolSummary = (() => {
+    const explicitSummary = firstText(metadata.tool_summary);
+    if (explicitSummary) return explicitSummary;
     if (!toolExecution) return null;
     const summary = firstText(
       toolPayload?.summary,
@@ -742,11 +751,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               selectable={true}
               selectionColor={isUser ? 'rgba(255,255,255,0.3)' : theme.primaryLight}
             >
-              {isUser ? userContent : assistantContent}
+              {isUser ? userContent : assistantDisplayText}
             </Text>
           ) : (
             <View style={{ flex: 1 }}>
-              {parseRichSegments(assistantContent).map((segment, segmentIndex) => {
+              {parseRichSegments(assistantDisplayText).map((segment, segmentIndex) => {
                 if (segment.type === 'math') {
                   return (
                     <MathRenderer
@@ -825,6 +834,25 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
               .map((attachment, idx) => (
                 <AttachmentImagePreview key={`${attachment.id}-${idx}`} attachment={attachment} isUser={isUser} />
               ))}
+          </ScrollView>
+        )}
+        {generatedImages.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.imagePreviewRow}
+          >
+            {generatedImages.map((image, idx) => (
+              <View
+                key={`generated-${message.id}-${idx}`}
+                style={[
+                  styles.imagePreviewCard,
+                  { borderColor: isUser ? 'rgba(255,255,255,0.2)' : theme.border },
+                ]}
+              >
+                <Image source={{ uri: String(image.signed_url) }} style={styles.imagePreview} />
+              </View>
+            ))}
           </ScrollView>
         )}
 

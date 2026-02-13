@@ -40,7 +40,16 @@ export type {
   FinanceTenantColumn,
 } from './financial/types';
 
-import type { FinanceTenantColumn } from './financial/types';
+import type {
+  UnifiedTransaction,
+  FinancialMetrics,
+  MonthlyTrendData,
+  DateRange,
+  TransactionRecord,
+  FinanceOverviewData,
+  FinanceMonthPaymentBreakdown,
+  FinanceTenantColumn,
+} from './financial/types';
 
 const PRIMARY_FINANCE_COLUMN: FinanceTenantColumn = 'preschool_id';
 const SECONDARY_FINANCE_COLUMN: FinanceTenantColumn = 'organization_id';
@@ -1560,46 +1569,68 @@ export class FinancialDataService {
     orgId: string,
     monthIso?: string,
   ): Promise<FinanceMonthPaymentBreakdown> {
-    const supabase = assertSupabase();
     const month = this.normalizeMonthIso(monthIso);
     const monthDate = new Date(month);
     const extendedStartDate = new Date(monthDate.getFullYear(), monthDate.getMonth() - 2, 1);
     const extendedEndDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + 3, 1);
     const extendedStart = `${extendedStartDate.getFullYear()}-${String(extendedStartDate.getMonth() + 1).padStart(2, '0')}-01`;
     const extendedEnd = `${extendedEndDate.getFullYear()}-${String(extendedEndDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const supabase = assertSupabase();
 
     const [paymentsResult, popResult] = await Promise.all([
-      supabase
-        .from('payments')
-        .select(
-          'id, student_id, amount, amount_cents, status, billing_month, transaction_date, category_code, payment_method, payment_reference, metadata, description, created_at',
-        )
-        .eq('preschool_id', orgId)
-        .in('status', ['completed', 'approved', 'paid', 'successful'])
-        .gte('transaction_date', extendedStart)
-        .lt('transaction_date', extendedEnd)
-        .order('transaction_date', { ascending: false })
-        .limit(2000),
-      supabase
-        .from('pop_uploads')
-        .select(
-          'id, student_id, payment_amount, payment_for_month, payment_date, payment_method, payment_reference, category_code, description, title, created_at, status',
-        )
-        .eq('preschool_id', orgId)
-        .eq('upload_type', 'proof_of_payment')
-        .in('status', ['approved', 'completed', 'verified'])
-        .gte('created_at', extendedStart)
-        .lt('created_at', extendedEnd)
-        .order('created_at', { ascending: false })
-        .limit(2000),
+      withFinanceTenant<Array<any>>((column) =>
+        supabase
+          .from('payments')
+          .select(
+            'id, student_id, amount, amount_cents, status, billing_month, transaction_date, category_code, payment_method, payment_reference, metadata, description, created_at',
+          )
+          .eq(column, orgId)
+          .in('status', ['completed', 'approved', 'paid', 'successful'])
+          .gte('created_at', extendedStart)
+          .lt('created_at', extendedEnd)
+          .order('created_at', { ascending: false })
+          .limit(3000),
+      ),
+      withFinanceTenant<Array<any>>((column) =>
+        supabase
+          .from('pop_uploads')
+          .select(
+            'id, student_id, payment_amount, payment_for_month, payment_date, payment_method, payment_reference, category_code, description, title, created_at, status',
+          )
+          .eq(column, orgId)
+          .eq('upload_type', 'proof_of_payment')
+          .in('status', ['approved', 'completed', 'verified'])
+          .gte('created_at', extendedStart)
+          .lt('created_at', extendedEnd)
+          .order('created_at', { ascending: false })
+          .limit(3000),
+      ),
     ]);
 
-    const data = paymentsResult.data;
-    const error = paymentsResult.error;
+    let paymentsData = paymentsResult.data || [];
+    if (paymentsResult.error) {
+      console.error('[FinancialDataService] payment breakdown query failed:', paymentsResult.error);
+      throw new Error(paymentsResult.error.message || 'Failed to load month payment breakdown');
+    }
 
-    if (error) {
-      console.error('[FinancialDataService] payment breakdown query failed:', error);
-      throw new Error(error.message || 'Failed to load month payment breakdown');
+    // If created_at-based window misses records (legacy rows), try transaction_date fallback.
+    if (paymentsData.length === 0) {
+      const fallbackResult = await withFinanceTenant<Array<any>>((column) =>
+        supabase
+          .from('payments')
+          .select(
+            'id, student_id, amount, amount_cents, status, billing_month, transaction_date, category_code, payment_method, payment_reference, metadata, description, created_at',
+          )
+          .eq(column, orgId)
+          .in('status', ['completed', 'approved', 'paid', 'successful'])
+          .gte('transaction_date', extendedStart)
+          .lt('transaction_date', extendedEnd)
+          .order('transaction_date', { ascending: false })
+          .limit(3000),
+      );
+      if (!fallbackResult.error && Array.isArray(fallbackResult.data)) {
+        paymentsData = fallbackResult.data;
+      }
     }
 
     const categoryMap = new Map<string, { amount: number; count: number }>();
@@ -1608,7 +1639,7 @@ export class FinancialDataService {
     const seenSignatures = new Set<string>();
     let totalCollected = 0;
 
-    for (const payment of data || []) {
+    for (const payment of paymentsData) {
       const accountingMonth = this.resolvePaymentAccountingMonth(payment);
       if (accountingMonth !== month) continue;
 

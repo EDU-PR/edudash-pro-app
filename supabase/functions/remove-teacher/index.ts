@@ -118,28 +118,30 @@ serve(async (req) => {
       console.log('[remove-teacher] ✅ Classes unassigned');
     }
 
-    // Step 2: Deactivate teacher record
+    // Step 2: DELETE teacher record (fully remove, not just deactivate)
     if (teacher_record_id) {
       const { error: teacherError } = await adminClient
         .from('teachers')
-        .update({ is_active: false })
+        .delete()
+        .eq('preschool_id', organization_id)
         .or(`user_id.eq.${teacher_user_id},id.eq.${teacher_record_id}`);
       if (teacherError) {
-        console.error('[remove-teacher] Teacher deactivate error:', teacherError);
+        console.error('[remove-teacher] Teacher delete error:', teacherError);
         errors.push(`Teacher record: ${teacherError.message}`);
       } else {
-        console.log('[remove-teacher] ✅ Teacher record deactivated');
+        console.log('[remove-teacher] ✅ Teacher record deleted');
       }
     } else {
       const { error: teacherError } = await adminClient
         .from('teachers')
-        .update({ is_active: false })
-        .eq('user_id', teacher_user_id);
+        .delete()
+        .eq('user_id', teacher_user_id)
+        .eq('preschool_id', organization_id);
       if (teacherError) {
-        console.error('[remove-teacher] Teacher deactivate error:', teacherError);
+        console.error('[remove-teacher] Teacher delete error:', teacherError);
         errors.push(`Teacher record: ${teacherError.message}`);
       } else {
-        console.log('[remove-teacher] ✅ Teacher record deactivated');
+        console.log('[remove-teacher] ✅ Teacher record deleted');
       }
     }
 
@@ -173,7 +175,17 @@ serve(async (req) => {
       console.log('[remove-teacher] ✅ Profile cleared');
     }
 
-    // Step 5: Also remove any pending invites for this teacher's email
+    // Step 5: Revoke subscription seat (full delete via RPC)
+    const { error: seatError } = await adminClient
+      .rpc('rpc_revoke_teacher_seat', { target_user_id: teacher_user_id });
+    if (seatError) {
+      // Non-fatal — teacher might not have a seat
+      console.warn('[remove-teacher] Seat revoke (non-fatal):', seatError.message);
+    } else {
+      console.log('[remove-teacher] ✅ Subscription seat revoked');
+    }
+
+    // Step 6: Also remove any pending invites for this teacher's email
     const { data: teacherProfile } = await adminClient
       .from('profiles')
       .select('email')

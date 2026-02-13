@@ -34,6 +34,15 @@ export interface ChatMessage {
   isLoading?: boolean;
   isStreaming?: boolean;
   attachments?: DashAttachment[];
+  metadata?: {
+    tool_summary?: string;
+    generated_images?: Array<{
+      signed_url?: string;
+      path?: string;
+      prompt?: string;
+    }>;
+    [key: string]: any;
+  };
   toolCalls?: Array<{
     name: string;
     status: 'pending' | 'running' | 'success' | 'error';
@@ -254,6 +263,27 @@ export const ChatModal: React.FC<ChatModalProps> = ({
     }, [attachment.bucket, attachment.storagePath, imageUrl]);
 
     if (hasError || !imageUrl) return null;
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.imagePreviewCard,
+          { borderColor: isUser ? 'rgba(255,255,255,0.18)' : theme.border },
+        ]}
+        activeOpacity={0.9}
+        onPress={() => setImageViewerUri(imageUrl)}
+      >
+        <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+      </TouchableOpacity>
+    );
+  };
+
+  const GeneratedImagePreview: React.FC<{
+    image: { signed_url?: string; path?: string; prompt?: string };
+    isUser: boolean;
+  }> = ({ image, isUser }) => {
+    const imageUrl = String(image?.signed_url || '').trim();
+    if (!imageUrl) return null;
 
     return (
       <TouchableOpacity
@@ -541,6 +571,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                 const showInlineReply = inlineReplyEnabled && message.role === 'assistant' && isQuestionLike(displayContent);
                 const showQuickReplies = inlineReplyEnabled && message.role === 'assistant' && !message.isLoading;
                 const inlineValue = inlineReplies[message.id] ?? '';
+                const toolSummary = typeof message.metadata?.tool_summary === 'string'
+                  ? message.metadata.tool_summary.trim()
+                  : '';
+                const generatedImages = Array.isArray(message.metadata?.generated_images)
+                  ? message.metadata.generated_images.filter((img) => !!img?.signed_url)
+                  : [];
                 const quickReplies = [
                   { label: 'Hint', prompt: 'Give me a hint.' },
                   { label: 'Explain', prompt: 'Explain it step by step.' },
@@ -577,6 +613,37 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                         {displayContent}
                       </Text>
                     )
+                  )}
+                  {!message.isLoading && !!toolSummary && (
+                    <View
+                      style={[
+                        styles.toolSummaryCard,
+                        {
+                          backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : theme.surface,
+                          borderColor: message.role === 'user' ? 'rgba(255,255,255,0.25)' : theme.border,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="checkmark-done-outline"
+                        size={14}
+                        color={message.role === 'user' ? '#fff' : theme.primary}
+                      />
+                      <Text style={[styles.toolSummaryText, { color: message.role === 'user' ? '#fff' : theme.text }]}>
+                        {toolSummary}
+                      </Text>
+                    </View>
+                  )}
+                  {generatedImages.length > 0 && (
+                    <View style={styles.imagePreviewRow}>
+                      {generatedImages.map((img, idx) => (
+                        <GeneratedImagePreview
+                          key={`${message.id}-generated-${idx}`}
+                          image={img}
+                          isUser={message.role === 'user'}
+                        />
+                      ))}
+                    </View>
                   )}
                   {message.attachments && message.attachments.some((a) => a.kind === 'image') && (
                     <View style={styles.imagePreviewRow}>

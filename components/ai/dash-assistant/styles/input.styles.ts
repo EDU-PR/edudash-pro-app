@@ -34,11 +34,11 @@ export const inputStyles = StyleSheet.create({
   // Staff Actions Row
   staffActionsShell: {
     marginHorizontal: 14,
-    marginTop: 4,
+    marginTop: 2,
     marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
   },
   staffActionsHeader: {
@@ -71,6 +71,12 @@ export const inputStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  staffActionsCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   staffActionPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -102,13 +108,17 @@ export const inputStyles = StyleSheet.create({
   // Voice Status Row
   voiceStatusRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 10,
+  },
+  voiceStatusContent: {
+    flex: 1,
+    gap: 4,
   },
   voiceStatusText: {
     fontSize: 12,
@@ -117,8 +127,13 @@ export const inputStyles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   voiceTranscript: {
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 18,
     flex: 1,
+  },
+  voiceHint: {
+    fontSize: 11,
+    lineHeight: 15,
   },
 
   // Tutor Chip Row
@@ -261,6 +276,66 @@ export const inputStyles = StyleSheet.create({
     minWidth: 200,
     maxWidth: 250,
     overflow: 'hidden',
+  },
+  attachmentImageCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    marginRight: 8,
+    width: 160,
+    height: 160,
+    overflow: 'hidden',
+  },
+  attachmentImageWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  attachmentImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  attachmentImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentImageBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentImageRemove: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  attachmentImageSize: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  attachmentImageSizeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   attachmentChipContent: {
     flexDirection: 'row',

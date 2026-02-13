@@ -43,6 +43,12 @@ export interface FeatureFlags {
   production_db_dev_mode: boolean;
   adaptive_admin_dashboard_mobile_v1: boolean;
   NEXT_GEN_DASH_POLICY_V1: boolean;
+  dash_unified_shell_v1: boolean;
+  dash_voice_policy_v1: boolean;
+  dash_phonics_quality_v1: boolean;
+  dash_context_window_v1: boolean;
+  dash_tutor_sessions_v1: boolean;
+  dash_phoneme_mastery_v1: boolean;
   
   // Language Features
   enableMultilanguageSupport: boolean;
@@ -154,6 +160,12 @@ const DEFAULT_FLAGS: FeatureFlags = {
   production_db_dev_mode: process.env.EXPO_PUBLIC_USE_PRODUCTION_DB_AS_DEV === 'true',
   adaptive_admin_dashboard_mobile_v1: process.env.EXPO_PUBLIC_ADAPTIVE_ADMIN_DASHBOARD_MOBILE_V1 !== 'false',
   NEXT_GEN_DASH_POLICY_V1: process.env.EXPO_PUBLIC_NEXT_GEN_DASH_POLICY_V1 !== 'false',
+  dash_unified_shell_v1: process.env.EXPO_PUBLIC_DASH_UNIFIED_SHELL_V1 !== 'false',
+  dash_voice_policy_v1: process.env.EXPO_PUBLIC_DASH_VOICE_POLICY_V1 !== 'false',
+  dash_phonics_quality_v1: process.env.EXPO_PUBLIC_DASH_PHONICS_QUALITY_V1 !== 'false',
+  dash_context_window_v1: process.env.EXPO_PUBLIC_DASH_CONTEXT_WINDOW_V1 !== 'false',
+  dash_tutor_sessions_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_SESSIONS_V1 === 'true',
+  dash_phoneme_mastery_v1: process.env.EXPO_PUBLIC_DASH_PHONEME_MASTERY_V1 !== 'false',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',
@@ -297,6 +309,18 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
         flags.adaptive_admin_dashboard_mobile_v1 ?? DEFAULT_FLAGS.adaptive_admin_dashboard_mobile_v1,
       NEXT_GEN_DASH_POLICY_V1:
         flags.next_gen_dash_policy_v1 ?? DEFAULT_FLAGS.NEXT_GEN_DASH_POLICY_V1,
+      dash_unified_shell_v1:
+        flags.dash_unified_shell_v1 ?? DEFAULT_FLAGS.dash_unified_shell_v1,
+      dash_voice_policy_v1:
+        flags.dash_voice_policy_v1 ?? DEFAULT_FLAGS.dash_voice_policy_v1,
+      dash_phonics_quality_v1:
+        flags.dash_phonics_quality_v1 ?? DEFAULT_FLAGS.dash_phonics_quality_v1,
+      dash_context_window_v1:
+        flags.dash_context_window_v1 ?? DEFAULT_FLAGS.dash_context_window_v1,
+      dash_tutor_sessions_v1:
+        flags.dash_tutor_sessions_v1 ?? DEFAULT_FLAGS.dash_tutor_sessions_v1,
+      dash_phoneme_mastery_v1:
+        flags.dash_phoneme_mastery_v1 ?? DEFAULT_FLAGS.dash_phoneme_mastery_v1,
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,

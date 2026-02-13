@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Wallet,
   ChefHat,
+  ClipboardList,
 } from 'lucide-react';
 import { TierBadge } from '@/components/ui/TierBadge';
 
@@ -96,6 +97,11 @@ export function PrincipalShell({
     { href: '/dashboard/principal/menu', label: 'Weekly Menu', icon: ChefHat },
     { href: '/dashboard/principal/financials', label: 'Financials', icon: DollarSign },
     { href: '/dashboard/principal/teacher-payroll', label: 'Teacher Payroll', icon: Wallet },
+    { href: '/dashboard/principal/budget-overview', label: 'Budget', icon: DollarSign },
+    { href: '/dashboard/principal/timetable', label: 'Timetable', icon: Clock },
+    { href: '/dashboard/principal/staff-leave', label: 'Staff Leave', icon: CalendarIcon },
+    { href: '/dashboard/principal/waitlist', label: 'Waitlist', icon: ClipboardList },
+    { href: '/dashboard/principal/compliance', label: 'Compliance', icon: ShieldCheck },
     { href: '/dashboard/principal/reports', label: 'Reports', icon: FileText },
     { href: '/dashboard/principal/messages', label: 'Messages', icon: MessageCircle, badge: unreadCount },
     { href: '/admin/caps-mapping', label: 'CAPS Mapping', icon: BookMarked },
@@ -289,7 +295,6 @@ export function PrincipalShell({
                     key={it.href} 
                     className={`navItem ${active ? 'navItemActive' : ''}`}
                     onClick={() => {
-                      console.log('🔗 Navigating to:', it.href);
                       setMobileNavOpen(false);
                       setTimeout(() => {
                         router.push(it.href);

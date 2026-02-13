@@ -1,5 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import DashOrb from '@/components/dash-orb';
 import DashTutorVoiceChat from '@/components/ai/DashTutorVoiceChat';
@@ -30,15 +30,16 @@ export default function DashOrbScreen() {
   ].includes(tierLower);
   const locked = isTutorRole && !isDashOrbUnlocked;
 
+  useEffect(() => {
+    if (!isTutorRole) {
+      router.replace('/screens/dash-voice?mode=orb');
+    }
+  }, [isTutorRole]);
+
   if (!isTutorRole) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <DashOrb
-          autoOpen
-          hideButton
-          position="bottom-right"
-          size={64}
-        />
+      <View style={{ flex: 1, backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="small" color={theme.primary} />
       </View>
     );
   }

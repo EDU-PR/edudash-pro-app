@@ -11,3 +11,14 @@ export { PrincipalRecentActivity } from './PrincipalRecentActivity';
 export { PrincipalDoNowInbox } from './PrincipalDoNowInbox';
 export { PrincipalSchoolPulse } from './PrincipalSchoolPulse';
 export { PrincipalGettingStartedCard } from './PrincipalGettingStartedCard';
+export { PrincipalDailyOps } from './PrincipalDailyOps';
+export { PrincipalAdmissionsCashflow } from './PrincipalAdmissionsCashflow';
+export { PrincipalLearnersSection } from './PrincipalLearnersSection';
+export {
+  OperationRow,
+  MetricTile,
+  MetricInline,
+  InfoRow,
+  ProgressBar,
+  formatCurrency,
+} from './PrincipalMetricComponents';

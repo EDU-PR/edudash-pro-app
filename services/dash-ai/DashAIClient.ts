@@ -122,34 +122,86 @@ export class DashAIClient {
     );
   }
 
+  private getRateLimitRetryAttempts(): number {
+    return this.parseIntegerEnv(
+      process.env.EXPO_PUBLIC_DASH_AI_429_RETRIES,
+      2,
+      1,
+      4
+    );
+  }
+
+  private getRateLimitRetryJitter(): number {
+    return this.parseFloatEnv(
+      process.env.EXPO_PUBLIC_DASH_AI_429_RETRY_JITTER,
+      0.35,
+      0,
+      1
+    );
+  }
+
+  private extractRetryAfterMs(details: unknown): number | null {
+    if (!details || typeof details !== 'object') return null;
+    const raw = details as {
+      retry_after_ms?: number;
+      retry_after?: number;
+      retryAfterMs?: number;
+    };
+    const candidate = raw.retry_after_ms ?? raw.retryAfterMs ?? raw.retry_after;
+    const parsed = Number(candidate);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.min(60_000, Math.max(250, Math.round(parsed)));
+  }
+
+  private getBackoffDelayMs(baseDelayMs: number, attempt: number, details?: unknown): number {
+    const retryAfterMs = this.extractRetryAfterMs(details);
+    if (retryAfterMs) return retryAfterMs;
+
+    const expBackoff = baseDelayMs * Math.pow(1.7, Math.max(0, attempt - 1));
+    const jitter = this.getRateLimitRetryJitter();
+    const jitterFactor = 1 + ((Math.random() * 2 - 1) * jitter);
+    return Math.min(10_000, Math.max(250, Math.round(expBackoff * jitterFactor)));
+  }
+
   private async invokeAIProxyWith429Retry(
     body: Record<string, unknown>,
     traceId: string,
     phase: 'initial' | 'continuation'
   ): Promise<{ data: any; error: any }> {
-    const first = await this.supabaseClient.functions.invoke('ai-proxy', { body });
-    if (!first?.error) return first;
+    const maxRetryAttempts = this.getRateLimitRetryAttempts();
+    const baseDelayMs = this.getRateLimitRetryDelayMs();
 
-    const firstError = this.parseEdgeFunctionError(first.error);
-    const code = String(firstError.code || '').toLowerCase();
-    const isRateLimited = firstError.status === 429;
-    const isHardQuota = code === 'quota_exceeded';
+    let attempt = 0;
+    let result = await this.supabaseClient.functions.invoke('ai-proxy', { body });
 
-    // Quota exhausted is deterministic; no retry loop.
-    if (!isRateLimited || isHardQuota) {
-      return first;
+    while (result?.error) {
+      const parsedError = this.parseEdgeFunctionError(result.error);
+      const code = String(parsedError.code || '').toLowerCase();
+      const isRateLimited = parsedError.status === 429;
+      const isHardQuota = code === 'quota_exceeded';
+
+      // Quota exhausted is deterministic; no retry loop.
+      if (!isRateLimited || isHardQuota || attempt >= maxRetryAttempts) {
+        return result;
+      }
+
+      attempt += 1;
+      const retryDelayMs = this.getBackoffDelayMs(baseDelayMs, attempt, parsedError.details);
+
+      console.warn('[DashAIClient] ai-proxy returned 429, retrying', {
+        phase,
+        trace_id: traceId,
+        attempt,
+        max_attempts: maxRetryAttempts,
+        delay_ms: retryDelayMs,
+        code: parsedError.code,
+      });
+
+      await this.sleep(retryDelayMs);
+      result = await this.supabaseClient.functions.invoke('ai-proxy', { body });
     }
 
-    const retryDelayMs = this.getRateLimitRetryDelayMs();
-    console.warn('[DashAIClient] ai-proxy returned 429, retrying once', {
-      phase,
-      trace_id: traceId,
-      delay_ms: retryDelayMs,
-      code: firstError.code,
-    });
-    await this.sleep(retryDelayMs);
-
-    return this.supabaseClient.functions.invoke('ai-proxy', { body });
+    return result;
   }
 
   private parseIntegerEnv(
