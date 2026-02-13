@@ -31,7 +31,7 @@ interface TabItem {
 }
 
 /** Roles that have the Dash center tab in the bottom nav (FAB hidden for these) */
-export const ROLES_WITH_CENTER_TAB = ['parent', 'student', 'learner', 'principal', 'principal_admin'];
+export const ROLES_WITH_CENTER_TAB = ['parent', 'student', 'learner', 'principal', 'principal_admin', 'teacher'];
 
 const SCHOOL_ADMIN_DASH_TAB: TabItem = {
   id: 'school-admin-dash',
@@ -104,6 +104,15 @@ const TAB_ITEMS: TabItem[] = [
     roles: ['teacher'] 
   },
   { 
+    id: 'teacher-dash', 
+    label: 'Dash', 
+    icon: 'sparkles-outline', 
+    activeIcon: 'sparkles', 
+    route: '/screens/dash-voice', 
+    roles: ['teacher'],
+    isCenterTab: true,
+  },
+  { 
     id: 'teacher-message-list', 
     label: 'Messages', 
     icon: 'chatbubble-outline', 
@@ -117,14 +126,6 @@ const TAB_ITEMS: TabItem[] = [
     icon: 'calendar-outline', 
     activeIcon: 'calendar', 
     route: '/screens/calendar', 
-    roles: ['teacher'] 
-  },
-  { 
-    id: 'teacher-settings', 
-    label: 'Settings', 
-    icon: 'settings-outline', 
-    activeIcon: 'settings', 
-    route: '/screens/settings', 
     roles: ['teacher'] 
   },
   

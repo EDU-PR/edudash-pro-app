@@ -107,6 +107,12 @@ interface NotificationContext {
   warning_deadline_date?: string;
   resolution_reason?: string;
   inactive_on?: string;
+  // Build update notifications
+  version?: string;
+  build_number?: string;
+  store_url?: string;
+  mandatory?: boolean;
+  platform?: string;
 }
 
 // Notification template type
@@ -183,6 +189,12 @@ interface NotificationRequest {
   target_user_id?: string;
   channel?: string;
   case_id?: string;
+  // Build update notifications
+  version?: string;
+  build_number?: string;
+  store_url?: string;
+  mandatory?: boolean;
+  platform?: string;
   email_template_override?: {
     subject?: string;
     text?: string;
@@ -542,6 +554,25 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       channelId: 'incoming-calls',
       _contentAvailable: true,
       categoryId: 'incoming_call'
+    },
+    build_update_available: {
+      title: context.mandatory ? 'Required App Update' : 'New App Version Available',
+      body: context.version
+        ? `Version ${context.version}${context.build_number ? ` (${context.build_number})` : ''} is ready. Open the store to update.`
+        : 'A new app build is available. Open the store to update.',
+      data: {
+        type: 'build_update_available',
+        store_url: context.store_url,
+        version: context.version,
+        build_number: context.build_number,
+        mandatory: context.mandatory ?? false,
+        platform: context.platform || 'android',
+        screen: 'store'
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'default'
     },
     lesson_assigned: {
       title: '📚 New Lesson Assigned',
@@ -1236,6 +1267,25 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
 
   // Get users based on event context
   switch (request.event_type) {
+    case 'build_update_available': {
+      const platform = String(request.platform || request.custom_payload?.platform || '').toLowerCase();
+      let query = supabase
+        .from('push_devices')
+        .select('user_id')
+        .eq('is_active', true)
+        .not('expo_push_token', 'is', null);
+
+      if (platform === 'android' || platform === 'ios' || platform === 'web') {
+        query = query.eq('platform', platform);
+      }
+
+      const { data: devices } = await query;
+      if (devices) {
+        userIds.push(...devices.map((row: { user_id: string }) => row.user_id));
+      }
+      break;
+    }
+
     case 'new_message':
       if (request.thread_id) {
         const { data: thread } = await supabase
@@ -2041,6 +2091,31 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         context.meeting_url = request.meeting_url;
         break;
 
+      case 'build_update_available': {
+        const customPayload = request.custom_payload || {};
+        context.version =
+          request.version ||
+          String(customPayload.version || context.version || '').trim() ||
+          undefined;
+        context.build_number =
+          request.build_number ||
+          String(customPayload.build_number || customPayload.buildNumber || context.build_number || '').trim() ||
+          undefined;
+        context.store_url =
+          request.store_url ||
+          String(customPayload.store_url || customPayload.storeUrl || context.store_url || '').trim() ||
+          undefined;
+        context.platform =
+          request.platform ||
+          String(customPayload.platform || context.platform || 'android').trim() ||
+          'android';
+        context.mandatory =
+          request.mandatory === true ||
+          customPayload.mandatory === true ||
+          context.mandatory === true;
+        break;
+      }
+
       case 'lesson_assigned':
         // Get assignment and student details for notification
         if (request.assignment_id) {
@@ -2639,6 +2714,7 @@ function mapEventTypeToNotificationType(
   const normalized = eventType.toLowerCase();
 
   if (normalized.includes('message')) return 'message';
+  if (normalized.includes('build_update')) return 'reminder';
   if (normalized.includes('inactivity')) return 'reminder';
   if (
     normalized.includes('announcement') ||
@@ -2710,6 +2786,7 @@ function getNotificationCategory(eventType: string): string {
     'student_inactivity_warning',
     'student_inactivity_resolved',
     'student_inactivity_marked_inactive',
+    'build_update_available',
   ];
   
   if (schoolEvents.includes(eventType)) return 'school';
@@ -3091,6 +3168,40 @@ async function dispatchNotification(request: Request): Promise<Response> {
     const expoResult = expoResults.length > 0 ? expoResults[0] : undefined;
     if (filteredUserIds.length > 0) {
       await recordNotification(filteredUserIds, template, notificationRequest, expoResult);
+    }
+
+    // Mark messages as delivered server-side when push is sent for message events.
+    // This is the most reliable delivery receipt — the server confirms the push was
+    // accepted by Expo/APNS/FCM, meaning the message reached the recipient's device.
+    if (
+      notificationRequest.event_type === 'new_message' &&
+      notificationRequest.thread_id &&
+      supabase &&
+      expoResults.some((r) => r.success)
+    ) {
+      try {
+        const deliveredUserIds = pushTokens
+          .filter((_, i) => expoResults[i]?.success)
+          .map((t) => t.user_id);
+        // Use direct UPDATE (not RPC) because service-role has no auth.uid() context.
+        // Logic matches mark_messages_delivered: set delivered_at on messages NOT sent
+        // by the recipient in this thread.
+        for (const uid of deliveredUserIds) {
+          const { error: deliveryError, count } = await supabase
+            .from('messages')
+            .update({ delivered_at: new Date().toISOString() })
+            .eq('thread_id', notificationRequest.thread_id)
+            .neq('sender_id', uid)
+            .is('delivered_at', null)
+            .is('deleted_at', null);
+          if (deliveryError) {
+            console.warn(`[dispatch] mark_delivered failed for ${uid}:`, deliveryError.message);
+          }
+        }
+        console.log(`[dispatch] ✅ Marked messages as delivered for ${deliveredUserIds.length} user(s) in thread ${notificationRequest.thread_id}`);
+      } catch (deliveryErr) {
+        console.warn('[dispatch] Failed to mark messages as delivered:', deliveryErr);
+      }
     }
 
     const isInvoiceEvent = [

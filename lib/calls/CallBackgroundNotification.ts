@@ -417,7 +417,7 @@ async function handleBackgroundNotification(notification: Notifications.Notifica
   // This works even when app is backgrounded or killed (WhatsApp-style)
   if (data?.type === 'message' || data?.type === 'chat') {
     try {
-      const { assertSupabase } = require('./supabase');
+      const { assertSupabase } = require('@/lib/supabase');
       const supabase = assertSupabase();
       
       // Get current user from session (if available)

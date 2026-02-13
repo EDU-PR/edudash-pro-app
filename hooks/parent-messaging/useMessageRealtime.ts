@@ -133,18 +133,48 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
             }
           }
 
-          // Fetch reply_to content if message is a reply
-          let replyTo = null;
+          // Fetch reply_to content if message is a reply (normalize reply_to shape for rendering)
+          let replyTo: Message['reply_to'] = null;
           if (payload.new.reply_to_id) {
             const { data: replyMsg } = await client
               .from('messages')
-              .select('id, content, content_type, sender_id, sender:profiles(first_name, last_name)')
+              .select('id, thread_id, sender_id, content, content_type, created_at, edited_at, deleted_at')
               .eq('id', payload.new.reply_to_id)
               .single();
-            if (replyMsg) replyTo = replyMsg;
+
+            if (replyMsg) {
+              const { data: replySenderProfile } = await client
+                .from('profiles')
+                .select('first_name, last_name, role')
+                .eq('id', replyMsg.sender_id)
+                .single();
+
+              replyTo = {
+                id: replyMsg.id,
+                thread_id: replyMsg.thread_id,
+                content: replyMsg.content,
+                content_type: (replyMsg.content_type || 'text') as Message['content_type'],
+                sender_id: replyMsg.sender_id,
+                created_at: replyMsg.created_at,
+                edited_at: replyMsg.edited_at ?? null,
+                deleted_at: replyMsg.deleted_at ?? null,
+                sender: replySenderProfile
+                  ? {
+                      first_name: replySenderProfile.first_name,
+                      last_name: replySenderProfile.last_name,
+                      role: replySenderProfile.role,
+                    }
+                  : undefined,
+              };
+            }
           }
 
-          const newMessage = { ...payload.new, sender: senderProfile || null, reactions: [], reply_to: replyTo } as Message;
+          const newMessage = {
+            ...payload.new,
+            sender: senderProfile || null,
+            reactions: [],
+            reply_to: replyTo,
+          } as Message;
           queryClient.setQueryData(['messages', threadId], (old: Message[] | undefined) => updateMessageCache(old, newMessage));
           queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
         }

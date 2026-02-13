@@ -11,7 +11,7 @@ import { useTypingIndicator } from '@/hooks/useTypingIndicator';
 import { useThreadOptions } from '@/hooks/useThreadOptions';
 import { type Message, getDateKey, getDateSeparatorLabel } from '@/components/messaging';
 import {
-  COMPOSER_OVERLAY_HEIGHT, COMPOSER_FLOAT_GAP, WALLPAPER_ACCENTS, hexToRgba,
+  COMPOSER_OVERLAY_HEIGHT, COMPOSER_FLOAT_GAP,
 } from '@/app/screens/teacher-message-thread.styles';
 
 let useTheme: () => { theme: any; isDark: boolean };
@@ -176,14 +176,6 @@ export function useMessageThreadState() {
   const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
   const messageViewportInset = composerKeyboardOffset + composerBottomInset + safeComposerHeight + COMPOSER_FLOAT_GAP;
   const messageBottomReserve = 8;
-  const wallpaperAccent = wallpaper?.type === 'preset'
-    ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
-  const composerSurfaceColor = bgSource
-    ? 'rgba(15, 23, 42, 0.62)'
-    : wallpaper?.type === 'preset'
-      ? hexToRgba(wallpaperAccent, 0.2, 'rgba(15, 23, 42, 0.66)') : 'rgba(15, 23, 42, 0.68)';
-  const composerBorderColor = wallpaper?.type === 'preset'
-    ? hexToRgba(wallpaperAccent, 0.32, 'rgba(148, 163, 184, 0.18)') : 'rgba(148, 163, 184, 0.16)';
 
   return {
     theme, user, insets, t, threadId, displayName, parentId,
@@ -199,7 +191,6 @@ export function useMessageThreadState() {
     bgSource, bgColor, getWallpaperGradient, rowsAsc,
     composerBottomInset, composerKeyboardOffset,
     messageViewportInset, messageBottomReserve,
-    composerSurfaceColor, composerBorderColor,
     ...threadOptions,
   };
 }

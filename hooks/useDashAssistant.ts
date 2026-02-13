@@ -117,7 +117,7 @@ interface UseDashAssistantOptions {
   handoffSource?: string;
   onClose?: () => void;
   /** Pre-configured tutor mode — bypasses intent detection */
-  externalTutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | null;
+  externalTutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
   /** Tutor session config for programmatic start */
   tutorConfig?: {
     subject?: string;
@@ -195,6 +195,7 @@ interface UseDashAssistantReturn {
   // Actions
   sendMessage: (text?: string) => Promise<void>;
   sendTutorAnswer: (answer: string, sourceMessageId?: string) => Promise<void>;
+  cancelGeneration: () => void;
   speakResponse: (message: DashMessage) => Promise<void>;
   stopSpeaking: () => Promise<void>;
   scrollToBottom: (opts?: { animated?: boolean; delay?: number }) => void;

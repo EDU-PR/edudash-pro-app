@@ -152,13 +152,5 @@ export const styles = StyleSheet.create({
   composerArea: {
     paddingHorizontal: 0,
     paddingTop: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(148, 163, 184, 0.18)',
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
   },
 });

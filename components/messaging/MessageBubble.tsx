@@ -24,6 +24,7 @@ try {
 interface MessageBubbleProps {
   msg: Message;
   isOwn: boolean;
+  showSenderName?: boolean;
   onLongPress: () => void;
   onPlaybackFinished?: () => void;
   onPlayNext?: () => void;
@@ -41,6 +42,7 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ 
   msg, 
   isOwn, 
+  showSenderName = true,
   onLongPress,
   onPlaybackFinished,
   onPlayNext,
@@ -100,7 +102,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
               }
               isOwnMessage={isOwn}
               timestamp={formatTime(msg.created_at)}
-              senderName={!isOwn ? name : undefined}
+              senderName={!isOwn && showSenderName && name ? name : undefined}
               isRead={msg.read_by?.some(id => otherParticipantIds.includes(id))}
               onLongPress={onLongPress}
               onPlaybackFinished={onPlaybackFinished}
@@ -129,7 +131,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
       isOwn ? styles.own : styles.other,
       !isFirstInGroup && styles.groupedMessage,
     ]}>
-      {!isOwn && isFirstInGroup && (
+      {!isOwn && showSenderName && isFirstInGroup && !!name && (
         <Text style={styles.name}>{name}</Text>
       )}
       {msg.forwarded_from_id && (
@@ -269,12 +271,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 }, (prevProps, nextProps) => {
   return prevProps.msg.id === nextProps.msg.id &&
          prevProps.isOwn === nextProps.isOwn &&
+         prevProps.showSenderName === nextProps.showSenderName &&
          prevProps.msg.content === nextProps.msg.content &&
          JSON.stringify(prevProps.msg.read_by) === JSON.stringify(nextProps.msg.read_by) &&
          prevProps.msg.delivered_at === nextProps.msg.delivered_at &&
          prevProps.msg.forwarded_from_id === nextProps.msg.forwarded_from_id &&
          prevProps.msg.edited_at === nextProps.msg.edited_at &&
          prevProps.msg.reply_to_id === nextProps.msg.reply_to_id &&
+         (prevProps.msg.reply_to?.id ?? null) === (nextProps.msg.reply_to?.id ?? null) &&
+         (prevProps.msg.reply_to?.content ?? null) === (nextProps.msg.reply_to?.content ?? null) &&
+         (prevProps.msg.reply_to?.sender?.first_name ?? null) === (nextProps.msg.reply_to?.sender?.first_name ?? null) &&
+         (prevProps.msg.reply_to?.sender?.last_name ?? null) === (nextProps.msg.reply_to?.sender?.last_name ?? null) &&
          prevProps.isFirstInGroup === nextProps.isFirstInGroup &&
          prevProps.isLastInGroup === nextProps.isLastInGroup &&
          JSON.stringify(prevProps.msg.reactions) === JSON.stringify(nextProps.msg.reactions);
@@ -336,6 +343,7 @@ const styles = StyleSheet.create({
     borderRadius: 18, 
     paddingHorizontal: 14, 
     paddingVertical: 10,
+    minWidth: 96,
     borderWidth: 1,
   },
   bubbleOwn: {

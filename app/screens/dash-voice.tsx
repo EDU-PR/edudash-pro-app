@@ -143,22 +143,61 @@ export default function DashVoiceScreen() {
   }, [isListening, isSpeaking]);
 
   // ── Smart auto-greeting: greet once per NEW conversation ──────────
+  // IMPORTANT: Never send internal instructions as a user message — it leaks
+  // raw system text into the visible chat bubble. Instead, build a concise
+  // greeting and send it as a hidden system directive via the "context" field.
   const hasGreetedRef = useRef(false);
   useEffect(() => {
     if (hasGreetedRef.current) return;
     if (conversationHistory.length > 0) return; // Resumed conversation — skip
     if (isProcessing) return;
     // Delay to let saved messages load first + orb animate in
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (conversationHistoryRef.current.length > 0 || hasGreetedRef.current) return;
       hasGreetedRef.current = true;
       const hour = new Date().getHours();
       const tg = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
       const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
-      const greetPrompt = name
+      const greetDirective = name
         ? `Greet the user briefly — their name is ${name}. Say "${tg}" and ask how you can help. Keep it to one sentence.`
         : `Greet the user briefly. Say "${tg}" and ask how you can help. Keep it to one sentence.`;
-      sendMessage(greetPrompt);
+      // Send as system-level context without adding to visible user history
+      try {
+        const supabase = assertSupabase();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            scope: role,
+            service_type: 'chat_message',
+            payload: {
+              messages: [{ role: 'user', content: 'Hello' }],
+              context: buildSystemPrompt(orgType, role, preferredLanguage) + '\n\n' + greetDirective,
+            },
+            stream: false,
+            metadata: { role, source: 'dash_voice_greeting', dash_mode: dashMode },
+          }),
+        });
+        const data = await res.json().catch(() => ({} as Record<string, any>));
+        const greeting = typeof data?.content === 'string' ? data.content : (tg + '! How can I help you today?');
+        // Add only the assistant response to conversation history
+        const updatedHistory = [{ role: 'assistant' as const, content: greeting }];
+        conversationHistoryRef.current = updatedHistory;
+        setConversationHistory(updatedHistory);
+        setLastResponse(greeting);
+        // Speak the greeting
+        if (voiceOrbRef.current && typeof voiceOrbRef.current.speakText === 'function') {
+          voiceOrbRef.current.speakText(greeting);
+        }
+      } catch (err) {
+        console.warn('[dash-voice] Auto-greeting failed:', err);
+      }
     }, 1500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

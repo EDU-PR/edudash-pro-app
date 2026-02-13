@@ -569,13 +569,13 @@ function ParentMessagesContent() {
           thread_id,
           sender_id,
           content,
+          content_type,
           created_at,
           delivered_at,
           read_by,
           deleted_at,
           reply_to_id,
-          forwarded_from_id,
-          sender:profiles(first_name, last_name, role)
+          forwarded_from_id
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -584,6 +584,20 @@ function ParentMessagesContent() {
       if (error) throw error;
       
       let messagesWithDetails = data || [];
+
+      if (messagesWithDetails.length > 0) {
+        const senderIds = [...new Set(messagesWithDetails.map((message: any) => message.sender_id))];
+        const { data: senderProfiles } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, role')
+          .in('id', senderIds);
+
+        const profileMap = new Map((senderProfiles || []).map((profile: any) => [profile.id, profile]));
+        messagesWithDetails = messagesWithDetails.map((message: any) => ({
+          ...message,
+          sender: profileMap.get(message.sender_id) || null,
+        }));
+      }
       
       // Fetch reply_to message content for messages that are replies
       const replyIds = messagesWithDetails
@@ -607,7 +621,7 @@ function ParentMessagesContent() {
         const replyMap = new Map((replyMessages || [])
           .map((r: any) => [r.id, {
             ...r,
-            sender: replySenderMap.get(r.sender_id),
+            sender: replySenderMap.get(r.sender_id) || null,
           }]));
         
         messagesWithDetails = messagesWithDetails.map((msg: any) => ({
@@ -1288,6 +1302,7 @@ function ParentMessagesContent() {
 
   // Get the messages to display (Dash AI or regular)
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
+  const isGroupThread = !isDashAISelected && (currentThread?.is_group || ((currentThread?.message_participants?.length || 0) > 2));
 
   const handleSelectThread = (threadId: string) => {
     if (threadId === DASH_AI_THREAD_ID) {
@@ -1866,11 +1881,11 @@ function ParentMessagesContent() {
                     {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const isDashAIMessage = message.sender_id === DASH_AI_USER_ID;
-                      const senderName = isDashAIMessage 
+                      const senderName = isDashAIMessage
                         ? 'Dash AI'
                         : (message.sender
-                          ? `${message.sender.first_name} ${message.sender.last_name}`
-                          : 'Unknown');
+                          ? `${message.sender.first_name || ''} ${message.sender.last_name || ''}`.trim()
+                          : '');
 
                       // Get other participant IDs (excluding current user) for read status
                       const otherParticipantIds = (currentThread?.message_participants || [])
@@ -1894,7 +1909,8 @@ function ParentMessagesContent() {
                               isOwn={isOwn}
                               isDesktop={isDesktop}
                               formattedTime={formatMessageTime(message.created_at)}
-                              senderName={!isOwn ? senderName : undefined}
+                              senderName={!isOwn && senderName ? senderName : undefined}
+                              showSenderName={isGroupThread}
                               otherParticipantIds={otherParticipantIds}
                               hideAvatars={!isDesktop}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}

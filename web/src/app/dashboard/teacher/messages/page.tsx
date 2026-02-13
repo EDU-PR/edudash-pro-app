@@ -1239,6 +1239,11 @@ function TeacherMessagesPage() {
     : contactParticipant?.user_profile
       ? `${contactParticipant.user_profile.first_name} ${contactParticipant.user_profile.last_name}`.trim()
       : 'Contact';
+  const isGroupSelected = !isDashAISelected && (
+    Boolean(selectedThread?.is_group) ||
+    Boolean((selectedThread as any)?.group_type) ||
+    selectedParticipants.length > 2
+  );
   
   // Display messages - use Dash AI messages when that thread is selected
   const displayMessages = isDashAISelected ? dashAIMessages : messages;
@@ -1984,8 +1989,8 @@ function TeacherMessagesPage() {
                     {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
-                        ? `${message.sender.first_name} ${message.sender.last_name}`
-                        : 'Unknown';
+                        ? `${message.sender.first_name || ''} ${message.sender.last_name || ''}`.trim()
+                        : '';
                       const otherParticipantIds = selectedParticipants
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
@@ -2007,7 +2012,8 @@ function TeacherMessagesPage() {
                               isOwn={isOwn}
                               isDesktop={isDesktop}
                               formattedTime={formatMessageTime(message.created_at)}
-                              senderName={!isOwn ? senderName : undefined}
+                              senderName={!isOwn && senderName ? senderName : undefined}
+                              showSenderName={isGroupSelected}
                               otherParticipantIds={otherParticipantIds}
                               hideAvatars={!isDesktop}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}

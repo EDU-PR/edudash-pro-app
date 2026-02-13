@@ -13,6 +13,7 @@ export const useTeacherMarkThreadRead = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
+    retry: false,
     mutationFn: async (threadId: string) => {
       if (!user?.id) throw new Error('User not authenticated');
       

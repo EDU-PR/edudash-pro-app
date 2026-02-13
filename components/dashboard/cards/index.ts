@@ -1,10 +1,12 @@
+import { AnnouncementsCard } from './AnnouncementsCard';
+import { ScheduleCard } from './ScheduleCard';
+import { AssignmentsCard } from './AssignmentsCard';
+import { GradesCard } from './GradesCard';
+import { FixturesCard } from './FixturesCard';
+import { CertificationsCard } from './CertificationsCard';
+
 export { DashboardCard } from './DashboardCard';
-export { AnnouncementsCard } from './AnnouncementsCard';
-export { ScheduleCard } from './ScheduleCard';
-export { AssignmentsCard } from './AssignmentsCard';
-export { GradesCard } from './GradesCard';
-export { FixturesCard } from './FixturesCard';
-export { CertificationsCard } from './CertificationsCard';
+export { AnnouncementsCard, ScheduleCard, AssignmentsCard, GradesCard, FixturesCard, CertificationsCard };
 
 // Widget key to component mapping
 export const WIDGET_COMPONENTS = {

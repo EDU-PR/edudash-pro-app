@@ -112,8 +112,8 @@ interface DashAssistantProps {
   onClose?: () => void;
   initialMessage?: string;
   handoffSource?: string;
-  /** Pre-configured tutor mode (quiz/practice/diagnostic/play) — bypasses intent detection */
-  tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | null;
+  /** Pre-configured tutor mode (quiz/practice/diagnostic/play/explain) — bypasses intent detection */
+  tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
   /** Tutor session config for programmatic tutor start */
   tutorConfig?: {
     subject?: string;

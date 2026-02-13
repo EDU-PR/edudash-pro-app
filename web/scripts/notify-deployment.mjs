@@ -22,6 +22,28 @@ const webhookUrl = process.env.DEPLOYMENT_WEBHOOK_URL ||
 const webhookSecret = process.env.DEPLOYMENT_WEBHOOK_SECRET;
 const appVersion = process.env.npm_package_version || process.env.NEXT_PUBLIC_APP_VERSION || '1.0.2';
 const environment = process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.VERCEL_ENV || 'production';
+const releaseType = String(process.env.RELEASE_TYPE || process.env.DEPLOY_RELEASE_TYPE || 'ota').toLowerCase();
+const notifyUsers =
+  String(process.env.DEPLOY_NOTIFY_USERS || '').toLowerCase() === 'true' ||
+  String(process.env.NOTIFY_USERS || '').toLowerCase() === 'true' ||
+  ['major', 'native', 'build', 'store'].includes(releaseType);
+const platform = String(process.env.DEPLOY_PLATFORM || 'android').toLowerCase();
+const packageId =
+  process.env.EXPO_PUBLIC_ANDROID_PACKAGE ||
+  process.env.NEXT_PUBLIC_ANDROID_PACKAGE ||
+  'com.edudashpro.app';
+const storeUrl =
+  process.env.DEPLOY_STORE_URL ||
+  process.env.STORE_URL ||
+  `market://details?id=${packageId}`;
+const mandatory =
+  String(process.env.DEPLOY_MANDATORY_UPDATE || '').toLowerCase() === 'true' ||
+  String(process.env.MANDATORY_UPDATE || '').toLowerCase() === 'true';
+const buildNumber =
+  process.env.ANDROID_VERSION_CODE ||
+  process.env.EXPO_ANDROID_VERSION_CODE ||
+  process.env.BUILD_NUMBER ||
+  undefined;
 
 // Skip if running locally
 if (environment === 'development' && !webhookUrl.includes('vercel')) {
@@ -37,6 +59,8 @@ if (!webhookSecret) {
 console.log(`🚀 Sending deployment notification to: ${webhookUrl}`);
 console.log(`📦 Version: ${appVersion}`);
 console.log(`🌍 Environment: ${environment}`);
+console.log(`🔖 Release type: ${releaseType}`);
+console.log(`📣 Notify users: ${notifyUsers}`);
 
 const payload = JSON.stringify({
   version: appVersion,
@@ -44,6 +68,13 @@ const payload = JSON.stringify({
   timestamp: new Date().toISOString(),
   buildId: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
   branch: process.env.VERCEL_GIT_COMMIT_REF || 'main',
+  release_type: releaseType,
+  notify_users: notifyUsers,
+  platform,
+  package_id: packageId,
+  store_url: storeUrl,
+  mandatory,
+  build_number: buildNumber,
 });
 
 const url = new URL(webhookUrl);

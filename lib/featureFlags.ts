@@ -52,6 +52,9 @@ export interface FeatureFlags {
   learner_activity_lifecycle_v1: boolean;
   learner_inactivity_automation_v1: boolean;
   learner_duplicate_queue_v1: boolean;
+  send_fcm_call_v2_enabled: boolean;
+  push_device_rpc_enabled: boolean;
+  build_update_push_enabled: boolean;
   
   // Language Features
   enableMultilanguageSupport: boolean;
@@ -174,6 +177,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   learner_activity_lifecycle_v1: process.env.EXPO_PUBLIC_LEARNER_ACTIVITY_LIFECYCLE_V1 !== 'false',
   learner_inactivity_automation_v1: process.env.EXPO_PUBLIC_LEARNER_INACTIVITY_AUTOMATION_V1 === 'true',
   learner_duplicate_queue_v1: process.env.EXPO_PUBLIC_LEARNER_DUPLICATE_QUEUE_V1 === 'true',
+  send_fcm_call_v2_enabled: process.env.EXPO_PUBLIC_SEND_FCM_CALL_V2_ENABLED !== 'false',
+  push_device_rpc_enabled: process.env.EXPO_PUBLIC_PUSH_DEVICE_RPC_ENABLED !== 'false',
+  build_update_push_enabled: process.env.EXPO_PUBLIC_BUILD_UPDATE_PUSH_ENABLED !== 'false',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',
@@ -329,6 +335,12 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
         flags.dash_tutor_sessions_v1 ?? DEFAULT_FLAGS.dash_tutor_sessions_v1,
       dash_phoneme_mastery_v1:
         flags.dash_phoneme_mastery_v1 ?? DEFAULT_FLAGS.dash_phoneme_mastery_v1,
+      send_fcm_call_v2_enabled:
+        flags.send_fcm_call_v2_enabled ?? DEFAULT_FLAGS.send_fcm_call_v2_enabled,
+      push_device_rpc_enabled:
+        flags.push_device_rpc_enabled ?? DEFAULT_FLAGS.push_device_rpc_enabled,
+      build_update_push_enabled:
+        flags.build_update_push_enabled ?? DEFAULT_FLAGS.build_update_push_enabled,
       
       // Language - env default with PostHog override
       enableMultilanguageSupport: flags.multilanguage_support ?? DEFAULT_FLAGS.enableMultilanguageSupport,

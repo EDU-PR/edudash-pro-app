@@ -57,6 +57,7 @@ export const HomeworkModal: React.FC<HomeworkModalProps> = ({
         question_length: question.length,
         success: true,
         duration_ms: Date.now() - start,
+        response_length: result?.text?.length || 0,
         source: 'parent_dashboard',
         has_child_context: !!activeChildId,
         tools_used: result?.toolsUsed?.length || 0,

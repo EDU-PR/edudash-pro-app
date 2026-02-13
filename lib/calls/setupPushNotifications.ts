@@ -10,6 +10,7 @@ import { assertSupabase } from '@/lib/supabase';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFCMToken } from './CallHeadlessTask';
+import { upsertPushDeviceViaRPC } from '@/lib/notifications';
 
 // Get project ID from EAS config (matches extra.eas.projectId in app.json)
 const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc';
@@ -90,6 +91,19 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
     }
 
     const supabase = assertSupabase();
+
+    // Guard for sign-out races: skip quietly if session is gone or belongs to another user.
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const sessionUserId = sessionData?.session?.user?.id;
+      if (sessionError || !sessionUserId || sessionUserId !== userId) {
+        console.log('[PushNotifications] Skipping push save: no active session for user');
+        return false;
+      }
+    } catch {
+      console.log('[PushNotifications] Skipping push save: session check failed');
+      return false;
+    }
     
     // Save to BOTH profiles (for call notifications) and push_devices (for general notifications)
     // This ensures compatibility with all Edge Functions that send push notifications
@@ -125,15 +139,13 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
       console.warn('[PushNotifications] FCM token retrieval failed:', e);
     }
     
-    const deviceData = {
-      user_id: userId,
-      expo_push_token: token,
-      fcm_token: fcmToken,
+    const rpcResult = await upsertPushDeviceViaRPC(supabase, {
+      expoPushToken: token,
+      fcmToken,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
-      is_active: true,
-      device_id: deviceId,
-      device_installation_id: deviceId, // Use same ID for both columns
-      device_metadata: {
+      deviceId,
+      deviceInstallationId: deviceId,
+      deviceMetadata: {
         brand: Device?.brand,
         model: Device?.modelName,
         osVersion: Device?.osVersion,
@@ -141,42 +153,20 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
         expo_project_id: EXPO_PROJECT_ID,
         updated_for_calls: true,
       },
-      last_seen_at: new Date().toISOString(),
-    };
+    });
 
-    let { error: deviceError } = await supabase
-      .from('push_devices')
-      .upsert(deviceData, {
-        onConflict: 'user_id,device_installation_id' // Match unique index push_devices_user_device_unique
-      });
-
-    // Handle 409 conflict - try delete + insert as fallback
-    if (deviceError && (deviceError.code === '23505' || deviceError.message?.includes('409') || deviceError.message?.includes('conflict'))) {
-      console.log('[PushNotifications] Conflict detected, trying delete + insert fallback...');
-      
-      // Delete existing record for this user+device
-      await supabase
-        .from('push_devices')
-        .delete()
-        .eq('user_id', userId)
-        .eq('device_installation_id', deviceId);
-      
-      // Insert fresh record
-      const insertResult = await supabase
-        .from('push_devices')
-        .insert(deviceData);
-      
-      deviceError = insertResult.error;
+    if (rpcResult.usedFallback) {
+      console.log('[PushNotifications] Using legacy push_devices fallback path (upsert_push_device RPC not yet deployed)');
     }
 
-    if (deviceError) {
-      console.error('[PushNotifications] Failed to save token to push_devices:', deviceError);
+    if (!rpcResult.success) {
+      console.error('[PushNotifications] Failed to save token to push_devices:', rpcResult.error);
     } else {
       console.log('[PushNotifications] ✅ Push token saved to push_devices');
     }
 
-    // Return true if at least profiles was updated successfully
-    return !profileError;
+    // Incoming calls and dispatcher rely on push_devices; mark ready only if that registration succeeded.
+    return rpcResult.success;
   } catch (error) {
     console.error('[PushNotifications] Save token error:', error);
     return false;

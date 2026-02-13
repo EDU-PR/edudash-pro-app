@@ -2,10 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAgeGroup } from '@/lib/hooks/useAgeGroup';
-import { useFeatureFlags } from '@/lib/hooks/useFeatureFlags';
-import { DashboardRegistry } from './registry/DashboardRegistry';
-import { DASHBOARD_CARDS } from './cards';
+import { WIDGET_COMPONENTS, type WidgetKey } from './cards';
 import type { OrganizationType } from '@/lib/types/organization';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
@@ -41,36 +38,26 @@ export function DashboardRouter({
   debug = false,
 }: DashboardRouterProps) {
   const { profile } = useAuth();
-  const { data: ageData, isLoading: ageLoading } = useAgeGroup(profile?.id);
-  const { data: featureFlags, isLoading: flagsLoading } = useFeatureFlags();
-
-  const isLoading = ageLoading || flagsLoading;
 
   // Determine effective organization type
-  const effectiveOrgType = organizationType || profile?.preschool?.organization_type || 'preschool';
+  const effectiveOrgType = organizationType || (profile as any)?.preschool?.organization_type || 'preschool';
 
-  // Get applicable widgets from registry
+  // Static widget list — DashboardRegistry was never implemented
   const applicableWidgets = useMemo(() => {
-    if (!profile || !ageData || !featureFlags) return [];
+    if (!profile) return [];
 
-    const widgets = DashboardRegistry.getWidgetsForHub(
-      hubType,
-      effectiveOrgType as OrganizationType,
-      ageData.ageGroup
-    );
-
-    // Filter by feature flags
-    return widgets.filter(widget => {
-      // If no feature key, always show
-      if (!widget.featureKey) return true;
-      
-      // Check if feature is enabled
-      return featureFlags[widget.featureKey] === true;
-    });
-  }, [profile, ageData, featureFlags, hubType, effectiveOrgType]);
+    // Return all available widget keys as basic entries
+    return (Object.keys(WIDGET_COMPONENTS) as WidgetKey[]).map((key, idx) => ({
+      id: key,
+      name: key,
+      component: key,
+      displayOrder: idx,
+      featureKey: null as string | null,
+    }));
+  }, [profile]);
 
   // Render loading state
-  if (isLoading) {
+  if (!profile) {
     return (
       <View style={styles.loadingContainer}>
         <EduDashSpinner size="large" />
@@ -86,7 +73,7 @@ export function DashboardRouter({
         <Text style={styles.emptyText}>No dashboard widgets available</Text>
         {debug && (
           <Text style={styles.debugText}>
-            Hub: {hubType} | Org: {effectiveOrgType} | Age: {ageData?.ageGroup}
+            Hub: {hubType} | Org: {effectiveOrgType}
           </Text>
         )}
       </View>
@@ -99,7 +86,7 @@ export function DashboardRouter({
       <FlashList
         data={applicableWidgets}
         renderItem={({ item }) => {
-          const WidgetComponent = DASHBOARD_CARDS[item.component];
+          const WidgetComponent = WIDGET_COMPONENTS[item.component as WidgetKey];
           
           if (!WidgetComponent) {
             console.warn(`Widget component not found: ${item.component}`);
