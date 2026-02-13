@@ -43,6 +43,7 @@ import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/Langua
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
+import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
 import {
   buildSystemPrompt,
   cleanForTTS,
@@ -75,6 +76,19 @@ export default function DashVoiceScreen() {
   const insets = useSafeAreaInsets();
   const role = String(profile?.role || 'parent').toLowerCase();
   const orgType = getOrganizationType(profile);
+  const dashPolicy = useMemo(
+    () =>
+      resolveDashPolicy({
+        profile: profile || null,
+        role,
+        orgType,
+        learnerContext: {
+          ageBand: (profile as any)?.age_group || null,
+          grade: (profile as any)?.grade_level || null,
+        },
+      }),
+    [orgType, profile, role]
+  );
 
   // ── State ──────────────────────────────────────────────────────────
   const [lastResponse, setLastResponse] = useState('');
@@ -157,10 +171,20 @@ export default function DashVoiceScreen() {
             service_type: 'chat_message',
             payload: {
               messages: [{ role: 'user', content: 'Hello' }],
-              context: buildSystemPrompt(orgType, role, preferredLanguage) + '\n\n' + greetDirective,
+              context:
+                buildSystemPrompt(orgType, role, preferredLanguage) +
+                '\n\n' +
+                dashPolicy.systemPromptAddendum +
+                '\n\n' +
+                greetDirective,
             },
             stream: false,
-            metadata: { role, source: 'dash_voice_greeting' },
+            metadata: {
+              role,
+              source: 'dash_voice_greeting',
+              dash_mode: dashPolicy.defaultMode,
+              org_type: dashPolicy.orgType,
+            },
           }),
         });
         const data = await res.json().catch(() => ({} as Record<string, any>));
@@ -182,12 +206,7 @@ export default function DashVoiceScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const quickActions = useMemo(() => [
-    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this to me in simple terms.' },
-    { id: 'write', label: 'Write', icon: 'create-outline', prompt: 'Help me write something.' },
-    { id: 'brainstorm', label: 'Brainstorm', icon: 'sparkles-outline', prompt: 'Help me brainstorm ideas.' },
-    { id: 'summarize', label: 'Summarize', icon: 'document-text-outline', prompt: 'Summarize this for me.' },
-  ], []);
+  const quickActions = useMemo(() => dashPolicy.quickActions, [dashPolicy.quickActions]);
   const rawDisplayed = streamingText || lastResponse;
   const displayedText = rawDisplayed && /^\s*data:\s*(\[DONE\])?\s*$/i.test(rawDisplayed)
     ? '' : rawDisplayed;
@@ -316,7 +335,10 @@ export default function DashVoiceScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Please log in');
 
-      const systemPrompt = buildSystemPrompt(orgType, role, preferredLanguage);
+      const systemPrompt =
+        buildSystemPrompt(orgType, role, preferredLanguage) +
+        '\n\n' +
+        dashPolicy.systemPromptAddendum;
       const hasImage = !!attachedImage?.base64;
       const ocrTask = hasImage ? detectOCRTask(text) : null;
       const ocrMode = hasImage && (isOCRIntent(text) || ocrTask !== null);
@@ -351,6 +373,7 @@ export default function DashVoiceScreen() {
           role,
           source: 'dash_voice_orb',
           org_type: orgType,
+          dash_mode: dashPolicy.defaultMode,
           language: preferredLanguage || undefined,
           has_image: hasImage,
           ocr_mode: ocrMode,
@@ -465,7 +488,7 @@ export default function DashVoiceScreen() {
         error: msg,
       });
     }
-  }, [isProcessing, orgType, role, preferredLanguage, attachedImage, enqueueSpeech, persistOrbMessages, profile]);
+  }, [isProcessing, orgType, role, preferredLanguage, attachedImage, enqueueSpeech, persistOrbMessages, profile, dashPolicy.defaultMode, dashPolicy.systemPromptAddendum]);
 
   useEffect(() => () => { activeRequestRef.current?.abort(); }, []);
 
