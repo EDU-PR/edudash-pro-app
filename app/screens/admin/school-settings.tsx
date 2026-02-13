@@ -102,6 +102,21 @@ interface SchoolSettings {
     backupFrequency: 'daily' | 'weekly' | 'monthly';
     dataRetentionMonths: number;
   };
+
+  attendanceLifecycle: {
+    enabled: boolean;
+    trigger_absent_days: number;
+    grace_days: number;
+    require_principal_approval: boolean;
+    billing_behavior: string;
+    auto_unassign_class_on_inactive: boolean;
+    notify_channels: {
+      push: boolean;
+      email: boolean;
+      sms: boolean;
+      whatsapp: boolean;
+    };
+  };
 }
 
 const DEFAULT_SETTINGS: SchoolSettings = {
@@ -189,6 +204,20 @@ const DEFAULT_SETTINGS: SchoolSettings = {
     autoBackupEnabled: true,
     backupFrequency: 'daily',
     dataRetentionMonths: 12,
+  },
+  attendanceLifecycle: {
+    enabled: true,
+    trigger_absent_days: 5,
+    grace_days: 7,
+    require_principal_approval: false,
+    billing_behavior: 'stop_new_fees_keep_debt',
+    auto_unassign_class_on_inactive: true,
+    notify_channels: {
+      push: true,
+      email: false,
+      sms: false,
+      whatsapp: false,
+    },
   },
 };
 

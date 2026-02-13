@@ -25,23 +25,31 @@ import {
 
 export default function ParentAnnouncementsScreen() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const styles = useMemo(() => createAnnouncementStyles(theme), [theme]);
 
+  // Resolve the correct parent ID (profile.id may differ from auth user.id)
+  const parentId = (profile as any)?.id || user?.id;
+
   // Fetch announcements
   const { data: announcements = [], isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['parent-announcements', user?.id],
+    queryKey: ['parent-announcements', parentId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!parentId) return [];
 
       const supabase = assertSupabase();
 
-      // Get user's children to find their preschools
+      // Get user's children to find their preschools (check parent_id AND guardian_id)
+      const parentFilters = [`parent_id.eq.${parentId}`, `guardian_id.eq.${parentId}`];
+      if (user?.id && user.id !== parentId) {
+        parentFilters.push(`parent_id.eq.${user.id}`, `guardian_id.eq.${user.id}`);
+      }
+      
       const { data: children } = await supabase
         .from('students')
         .select('preschool_id')
-        .eq('parent_id', user.id);
+        .or(parentFilters.join(','));
 
       if (!children || children.length === 0) return [];
 

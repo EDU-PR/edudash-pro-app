@@ -24,18 +24,21 @@ export async function exportUniformPdf(params: {
     .map(({ name, count }) => '<span class="chip"><span>' + escapeHtml(name) + '</span><strong>' + count + '</strong></span>')
     .join('');
 
-  const rows = filtered.map((row, i) => {
-    const updated = row.updatedAt || row.submittedAt;
-    const updatedText = updated ? new Date(updated).toLocaleDateString('en-ZA') : '-';
-    const firstName = row.childName.split(' ')[0] || row.childName;
+  const sortedRows = [...filtered].sort((a, b) => a.childName.localeCompare(b.childName));
+
+  const rows = sortedRows.map((row) => {
+    const statusLabel = row.paymentStatus === 'paid' ? 'PAID' : 'UNPAID';
+    const statusClass = row.paymentStatus === 'paid' ? 'payment-paid' : 'payment-unpaid';
     return '<tr>' +
-      '<td>' + (i + 1) + '</td><td>' + escapeHtml(firstName) + '</td><td>' + escapeHtml(row.className) + '</td>' +
-      '<td>' + escapeHtml(row.ageYears ?? '-') + '</td><td>' + escapeHtml(row.tshirtSize || '-') + '</td>' +
-      '<td>' + escapeHtml(row.tshirtQuantity ?? '-') + '</td><td>' + escapeHtml(row.shortsQuantity ?? '-') + '</td>' +
-      '<td>' + (row.isReturning ? 'Yes' : 'No') + '</td><td>' + escapeHtml(row.tshirtNumber || '-') + '</td>' +
-      '<td>' + (row.sampleSupplied ? 'Yes' : 'No') + '</td><td>' + escapeHtml(row.studentCode || '-') + '</td>' +
-      '<td>' + escapeHtml(row.parentName || '-') + '</td><td>' + escapeHtml(updatedText) + '</td>' +
-      '<td>' + escapeHtml(row.status) + '</td><td>' + escapeHtml(row.paymentStatus) + '</td></tr>';
+      '<td>' + escapeHtml(row.childName || '-') + '</td>' +
+      '<td>' + escapeHtml(row.ageYears ?? '-') + '</td>' +
+      '<td>' + escapeHtml(row.tshirtSize || '-') + '</td>' +
+      '<td>' + escapeHtml(row.tshirtQuantity ?? '-') + '</td>' +
+      '<td>' + escapeHtml(row.shortsQuantity ?? '-') + '</td>' +
+      '<td>' + escapeHtml(row.tshirtNumber || '-') + '</td>' +
+      '<td>' + (row.sampleSupplied ? 'YES' : 'NO') + '</td>' +
+      '<td><span class="payment-chip ' + statusClass + '">' + statusLabel + '</span></td>' +
+      '</tr>';
   }).join('');
 
   const css = '@page{size:A4;margin:20mm}body{font-family:Arial,sans-serif;color:#111827}' +
@@ -44,12 +47,14 @@ export async function exportUniformPdf(params: {
     '.chip{display:inline-flex;gap:6px;align-items:center;padding:4px 8px;border-radius:999px;background:#f3f4f6;font-size:11px}' +
     '.chip strong{font-size:11px;color:#111827}table{width:100%;border-collapse:collapse;font-size:11px}' +
     'th,td{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f9fafb;font-weight:700}' +
-    'thead{display:table-header-group}.footer{margin-top:16px;font-size:10px;color:#6b7280;text-align:right}';
+    'thead{display:table-header-group}' +
+    '.payment-chip{display:inline-block;padding:3px 8px;border-radius:999px;font-weight:700;font-size:10px;letter-spacing:0.2px}' +
+    '.payment-paid{color:#166534;background:#dcfce7;border:1px solid #86efac}' +
+    '.payment-unpaid{color:#991b1b;background:#fee2e2;border:1px solid #fca5a5}' +
+    '.footer{margin-top:16px;font-size:10px;color:#6b7280;text-align:right}';
 
-  const headers = '<th>#</th><th>Child</th><th>Class</th><th>Age</th><th>Size</th>' +
-    '<th># T-shirt</th><th># Shorts</th><th>Returning</th><th>Back #</th>' +
-    '<th>Sample</th><th>Student Code</th><th>Submitted By</th>' +
-    '<th>Last Updated</th><th>Status</th><th>Payment</th>';
+  const headers = '<th>CHILD</th><th>AGE</th><th>SIZE</th><th># T-SHIRT(S)</th>' +
+    '<th># SHORT(S)</th><th>BACK #</th><th>SAMPLE-SUPPLIED</th><th>PAYMENT</th>';
 
   const html = '<html><head><meta charset="utf-8"/><style>' + css + '</style></head><body>' +
     '<h1>Uniform Sizes</h1>' +

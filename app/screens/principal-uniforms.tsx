@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,9 @@ export default function PrincipalUniformsScreen() {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { showAlert, alertProps } = useAlertModal();
+  const params = useLocalSearchParams<{ autoAction?: string | string[] }>();
+  const autoAction = Array.isArray(params.autoAction) ? params.autoAction[0] : params.autoAction;
+  const handledAutoActionRef = useRef<string | null>(null);
 
   const schoolId = (profile?.organization_id as string) || (profile as any)?.preschool_id || null;
 
@@ -38,7 +41,7 @@ export default function PrincipalUniformsScreen() {
     () => new Map()
   );
 
-  const { bulkMessaging, bulkMessageMissing, bulkMessageUnpaid } = useUniformMessaging({
+  const { bulkMessaging, bulkMessageUnpaid, bulkMessageNoOrder } = useUniformMessaging({
     userId: user?.id, schoolId, profile, showAlert,
   });
 
@@ -282,6 +285,19 @@ export default function PrincipalUniformsScreen() {
     return { label: 'Unpaid', bg: theme.error + '22', border: theme.error + '55', text: theme.error };
   }, [theme]);
 
+  useEffect(() => {
+    if (!autoAction || loading || !schoolId) return;
+    if (handledAutoActionRef.current === autoAction) return;
+    handledAutoActionRef.current = autoAction;
+    if (autoAction === 'unpaid') {
+      bulkMessageUnpaid(submittedRows).catch(() => {});
+      return;
+    }
+    if (autoAction === 'no_order' || autoAction === 'missing') {
+      bulkMessageNoOrder(missingRows).catch(() => {});
+    }
+  }, [autoAction, bulkMessageNoOrder, bulkMessageUnpaid, loading, missingRows, schoolId, submittedRows]);
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: 'Uniform Sizes', headerShown: false }} />
@@ -337,12 +353,12 @@ export default function PrincipalUniformsScreen() {
             </View>
             <TouchableOpacity
               style={[styles.bulkButton, { backgroundColor: theme.warning || '#f59e0b' }]}
-              onPress={() => bulkMessageMissing(missingRows)}
+              onPress={() => bulkMessageNoOrder(missingRows)}
               disabled={bulkMessaging !== null || missingContactableCount === 0}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={16} color="#fff" />
               <Text style={styles.bulkButtonText}>
-                {bulkMessaging === 'missing' ? 'Sending...' : 'Message Missing (' + missingContactableCount + ')'}
+                {bulkMessaging === 'no_order' ? 'Sending...' : 'Message No Order (' + missingContactableCount + ')'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity

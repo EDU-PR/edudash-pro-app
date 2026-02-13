@@ -16,6 +16,7 @@ export const SIZE_OPTIONS = [
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type EntryStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type PastNumberChoice = '' | 'yes' | 'no';
 
 export interface UniformEntry {
   childName: string;
@@ -24,6 +25,7 @@ export interface UniformEntry {
   tshirtQuantity: string;
   shortsQuantity: string;
   isReturning: boolean;
+  pastNumberChoice: PastNumberChoice;
   tshirtNumber: string;
   sampleSupplied: boolean;
   status: EntryStatus;
@@ -178,6 +180,27 @@ export const createUniformStyles = (theme: ThemeColors) => StyleSheet.create({
   },
   picker: { color: theme.text },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  choiceButton: {
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: theme.surface,
+  },
+  choiceButtonActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary + '14',
+  },
+  choiceButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.textSecondary,
+  },
+  choiceButtonTextActive: {
+    color: theme.primary,
+  },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
   saveButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   saveButtonText: { color: '#fff', fontWeight: '700' },

@@ -94,7 +94,9 @@ export async function processTeachers(
       } else if (classIds.length > 0) {
         const { count } = await supabase
           .from('students').select('id', { count: 'exact', head: true })
-          .in('class_id', classIds);
+          .in('class_id', classIds)
+          .eq('status', 'active')
+          .eq('is_active', true);
         studentsInClasses = count || 0;
       }
 
@@ -102,7 +104,11 @@ export async function processTeachers(
       let teacherAttendanceRate = 0;
       if (classIds.length > 0) {
         const studentIds = await supabase
-          .from('students').select('id').in('class_id', classIds)
+          .from('students')
+          .select('id')
+          .in('class_id', classIds)
+          .eq('status', 'active')
+          .eq('is_active', true)
           .then((res: { data: any[] | null }) => (res.data || []).map((s: any) => s.id));
 
         if (studentIds.length > 0) {

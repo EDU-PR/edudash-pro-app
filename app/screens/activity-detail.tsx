@@ -174,10 +174,12 @@ export default function ActivityDetailScreen() {
       
       if (userRole === 'parent') {
         // Parents see announcements and activities related to their children
+        // Check both parent_id and guardian_id columns
+        const parentFilters = [`parent_id.eq.${userId}`, `guardian_id.eq.${userId}`];
         const { data: studentIds } = await supabase
           .from('students')
           .select('id')
-          .eq('parent_id', userId)
+          .or(parentFilters.join(','))
           .eq('preschool_id', schoolId);
           
         const myStudentIds = studentIds?.map(s => s.id) || [];

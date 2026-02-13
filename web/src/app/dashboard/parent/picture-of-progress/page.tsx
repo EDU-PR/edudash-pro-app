@@ -63,10 +63,11 @@ export default function PictureOfProgressPage() {
       if (!user) { router.push('/sign-in'); return; }
       setUserId(user.id);
 
+      // Check both parent_id and guardian_id (in case user was linked via either)
       const { data: childrenData } = await supabase
         .from('students')
         .select('id, first_name, last_name')
-        .eq('parent_id', user.id);
+        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`);
 
       if (childrenData && childrenData.length > 0) {
         setChildren(childrenData);

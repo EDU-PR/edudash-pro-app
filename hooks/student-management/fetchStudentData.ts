@@ -53,6 +53,7 @@ export async function fetchStudentData(
        classes (name)`,
     )
     .eq('preschool_id', preschoolId)
+    .eq('status', 'active')
     .eq('is_active', true)
     .order('first_name');
 

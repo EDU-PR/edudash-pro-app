@@ -217,6 +217,10 @@ export default function PrincipalDashboard() {
             <School className="icon20" />
             <span>Manage Teachers</span>
           </button>
+          <button className="qa" onClick={() => router.push('/dashboard/principal/learner-activity-control')}>
+            <AlertTriangle className="icon20" />
+            <span>Learner Activity</span>
+          </button>
           <button className="qa" onClick={() => router.push('/dashboard/principal/dash-chat')} style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)', color: 'white', border: 'none' }}>
             <Sparkles className="icon20" />
             <span>Chat with Dash AI</span>

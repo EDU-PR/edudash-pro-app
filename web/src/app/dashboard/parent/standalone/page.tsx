@@ -115,11 +115,11 @@ export default function StandaloneParentDashboard() {
         }
       }
 
-      // Fetch children (for standalone parents, these might be limited or self-registered)
+      // Fetch children (check parent_id AND guardian_id)
       const { data: childrenData } = await supabase
         .from('students')
         .select('id, first_name, last_name, date_of_birth, grade')
-        .eq('parent_id', session.user.id)
+        .or(`parent_id.eq.${session.user.id},guardian_id.eq.${session.user.id}`)
         .order('first_name');
 
       if (childrenData && childrenData.length > 0) {

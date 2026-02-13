@@ -17,6 +17,37 @@ let signOutSequence = 0;
 let activeSignOutId = 0;
 const STALE_SIGNOUT_THRESHOLD = 35000; // Consider sign-out stale after 35 seconds
 
+// ── Account switch flag ──────────────────────────────────────────
+// Set synchronously BEFORE calling router.push to guarantee the
+// route guard sees it on its very next render — even before the
+// URL search params have propagated.
+let _accountSwitchPending = false;
+let _accountSwitchTimestamp = 0;
+const ACCOUNT_SWITCH_STALE_MS = 15_000; // auto-expire after 15s
+
+/** Mark that an add-account navigation is about to happen. */
+export function setAccountSwitchPending(): void {
+  _accountSwitchPending = true;
+  _accountSwitchTimestamp = Date.now();
+}
+
+/** Clear the add-account flag (called from sign-in mount). */
+export function clearAccountSwitchPending(): void {
+  _accountSwitchPending = false;
+  _accountSwitchTimestamp = 0;
+}
+
+/** Check if an account-switch intent is pending (auto-expires). */
+export function isAccountSwitchPending(): boolean {
+  if (!_accountSwitchPending) return false;
+  if (_accountSwitchTimestamp && Date.now() - _accountSwitchTimestamp > ACCOUNT_SWITCH_STALE_MS) {
+    _accountSwitchPending = false;
+    _accountSwitchTimestamp = 0;
+    return false;
+  }
+  return true;
+}
+
 // Timeout constants for sign-out operations
 const TOKEN_DEACTIVATION_TIMEOUT = 6000; // 6 seconds
 const SIGNOUT_TIMEOUT = 8000; // 8 seconds

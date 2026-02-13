@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Alert, Switch, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import type { ViewStyle, TextStyle } from 'react-native';
 
 interface BiometricState {
@@ -45,6 +46,7 @@ export function SecuritySection({
 }: SecuritySectionProps) {
   const { theme } = useTheme();
   const { t } = useTranslation('common');
+  const { showAlert, alertProps } = useAlertModal();
 
   const getBiometricStatusText = () => {
     if (!biometric.supported) return t('settings.biometric.notAvailable');
@@ -93,14 +95,23 @@ export function SecuritySection({
           onPress={() => {
             if (biometric.supported && biometric.enrolled) {
               onToggleBiometric();
+            } else if (!biometric.supported) {
+              showAlert({
+                title: t('settings.biometric.title'),
+                message: t('settings.biometric.notAvailable'),
+                type: 'info',
+                icon: 'information-circle',
+                buttons: [{ text: t('common.ok') }],
+              });
             } else {
-              Alert.alert(
-                t('settings.biometric.title'),
-                !biometric.supported 
-                  ? t('settings.biometric.notAvailable')
-                  : t('settings.biometric.setupRequired'),
-                [{ text: t('common.ok') }]
-              );
+              // supported but not enrolled
+              showAlert({
+                title: t('settings.biometric.title'),
+                message: t('settings.biometric.setupRequired'),
+                type: 'warning',
+                icon: 'settings-outline',
+                buttons: [{ text: t('common.ok') }],
+              });
             }
           }}
         >
@@ -133,11 +144,13 @@ export function SecuritySection({
               />
             ) : biometric.supported && !biometric.enrolled ? (
               <TouchableOpacity onPress={() => {
-                Alert.alert(
-                  t('settings.biometric_alerts.setup_required_title'),
-                  t('settings.biometric_alerts.setup_required_message'),
-                  [{ text: t('common.ok') }]
-                );
+                showAlert({
+                  title: t('settings.biometric_alerts.setup_required_title'),
+                  message: t('settings.biometric_alerts.setup_required_message'),
+                  type: 'warning',
+                  icon: 'settings-outline',
+                  buttons: [{ text: t('common.ok') }],
+                });
               }}>
                 <Ionicons
                   name="settings"
@@ -205,10 +218,13 @@ export function SecuritySection({
         <TouchableOpacity
           style={styles.settingItem}
           onPress={() =>
-            Alert.alert(
-              t('settings.privacy_alert.title'),
-              t('settings.privacy_alert.message'),
-            )
+            showAlert({
+              title: t('settings.privacy_alert.title'),
+              message: t('settings.privacy_alert.message'),
+              type: 'info',
+              icon: 'shield-checkmark',
+              buttons: [{ text: t('common.ok') }],
+            })
           }
         >
           <View style={styles.settingLeft}>
@@ -274,6 +290,8 @@ export function SecuritySection({
           </Text>
         </View>
       )}
+
+      <AlertModal {...alertProps} />
     </View>
   );
 }

@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { assertSupabase } from '@/lib/supabase';
-import { SchoolSettingsService } from '@/lib/services/SchoolSettingsService';
+import {
+  SchoolSettingsService,
+  DEFAULT_SCHOOL_SETTINGS,
+  type AttendanceLifecyclePolicy,
+} from '@/lib/services/SchoolSettingsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import { useEduDashAlert } from '@/components/ui/EduDashAlert';
 import { logger } from '@/lib/logger';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BankDetails {
@@ -33,10 +38,18 @@ export default function SchoolSettingsScreen() {
   const { profile } = useAuth();
   const { t } = useTranslation();
   const { showError, showWarning, AlertComponent } = useEduDashAlert();
+  const lifecycleEnabled = React.useMemo(
+    () => getFeatureFlagsSync().learner_activity_lifecycle_v1 !== false,
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingBank, setSavingBank] = useState(false);
+  const [savingLifecycle, setSavingLifecycle] = useState(false);
   const [number, setNumber] = useState('');
+  const [attendanceLifecycle, setAttendanceLifecycle] = useState<AttendanceLifecyclePolicy>(
+    DEFAULT_SCHOOL_SETTINGS.attendanceLifecycle
+  );
   const [bankDetails, setBankDetails] = useState<BankDetails>({
     bank_name: '',
     account_name: '',
@@ -79,6 +92,11 @@ export default function SchoolSettingsScreen() {
         
         const configured = data?.settings?.whatsapp_number || data?.phone || '';
         if (active) setNumber(configured);
+
+        const mergedSettings = await SchoolSettingsService.get(profile.organization_id);
+        if (active && mergedSettings?.attendanceLifecycle) {
+          setAttendanceLifecycle(mergedSettings.attendanceLifecycle);
+        }
 
         // Load bank details
         const { data: bankData } = await supabase
@@ -186,6 +204,26 @@ export default function SchoolSettingsScreen() {
     } finally { setSavingBank(false); }
   };
 
+  const saveLifecyclePolicy = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      setSavingLifecycle(true);
+      const updated = await SchoolSettingsService.update(profile.organization_id, {
+        attendanceLifecycle,
+      });
+      setAttendanceLifecycle(updated.attendanceLifecycle);
+      setSuccessModal({
+        visible: true,
+        title: '✓ Saved',
+        message: 'Learner lifecycle policy updated successfully.',
+      });
+    } catch (e: any) {
+      showError('Error', e?.message || 'Failed to save learner lifecycle policy');
+    } finally {
+      setSavingLifecycle(false);
+    }
+  };
+
   const styles = createStyles(theme);
 
   return (
@@ -271,6 +309,161 @@ export default function SchoolSettingsScreen() {
                   )}
                 </TouchableOpacity>
               </View>
+
+              {/* Learner Lifecycle Section */}
+              {lifecycleEnabled ? (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="pulse-outline" size={24} color={theme.primary} />
+                  <Text style={styles.sectionTitle}>Learner Lifecycle</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Class-register driven automation for at-risk and inactive learner handling.
+                </Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Enable automation</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, attendanceLifecycle.enabled && styles.switchPillActive]}
+                    onPress={() =>
+                      setAttendanceLifecycle((prev) => ({ ...prev, enabled: !prev.enabled }))
+                    }
+                  >
+                    <Text style={[styles.switchPillText, attendanceLifecycle.enabled && styles.switchPillTextActive]}>
+                      {attendanceLifecycle.enabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.stepperRow}>
+                  <Text style={styles.switchLabel}>Trigger absences</Text>
+                  <View style={styles.stepperControl}>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() =>
+                        setAttendanceLifecycle((prev) => ({
+                          ...prev,
+                          trigger_absent_days: Math.max(1, prev.trigger_absent_days - 1),
+                        }))
+                      }
+                    >
+                      <Ionicons name="remove" size={16} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperValue}>{attendanceLifecycle.trigger_absent_days}</Text>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() =>
+                        setAttendanceLifecycle((prev) => ({
+                          ...prev,
+                          trigger_absent_days: prev.trigger_absent_days + 1,
+                        }))
+                      }
+                    >
+                      <Ionicons name="add" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.stepperRow}>
+                  <Text style={styles.switchLabel}>Grace period (days)</Text>
+                  <View style={styles.stepperControl}>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() =>
+                        setAttendanceLifecycle((prev) => ({
+                          ...prev,
+                          grace_days: Math.max(1, prev.grace_days - 1),
+                        }))
+                      }
+                    >
+                      <Ionicons name="remove" size={16} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperValue}>{attendanceLifecycle.grace_days}</Text>
+                    <TouchableOpacity
+                      style={styles.stepperButton}
+                      onPress={() =>
+                        setAttendanceLifecycle((prev) => ({
+                          ...prev,
+                          grace_days: prev.grace_days + 1,
+                        }))
+                      }
+                    >
+                      <Ionicons name="add" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Require principal approval</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.switchPill,
+                      attendanceLifecycle.require_principal_approval && styles.switchPillActive,
+                    ]}
+                    onPress={() =>
+                      setAttendanceLifecycle((prev) => ({
+                        ...prev,
+                        require_principal_approval: !prev.require_principal_approval,
+                      }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.switchPillText,
+                        attendanceLifecycle.require_principal_approval && styles.switchPillTextActive,
+                      ]}
+                    >
+                      {attendanceLifecycle.require_principal_approval ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.subsectionLabel}>Notify channels</Text>
+                <View style={styles.notifyGrid}>
+                  {(['push', 'email', 'sms', 'whatsapp'] as const).map((channel) => {
+                    const enabled = attendanceLifecycle.notify_channels[channel];
+                    return (
+                      <TouchableOpacity
+                        key={channel}
+                        style={[styles.notifyChip, enabled && styles.notifyChipActive]}
+                        onPress={() =>
+                          setAttendanceLifecycle((prev) => ({
+                            ...prev,
+                            notify_channels: {
+                              ...prev.notify_channels,
+                              [channel]: !prev.notify_channels[channel],
+                            },
+                          }))
+                        }
+                      >
+                        <Text style={[styles.notifyChipText, enabled && styles.notifyChipTextActive]}>
+                          {channel.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <TouchableOpacity style={styles.btn} onPress={saveLifecyclePolicy} disabled={savingLifecycle}>
+                  {savingLifecycle ? (
+                    <EduDashSpinner color={theme.onPrimary} />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.btnText}>Save Learner Lifecycle Policy</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.secondaryBtn]}
+                  onPress={() => router.push('/screens/principal-learner-activity-control')}
+                >
+                  <Ionicons name="open-outline" size={16} color={theme.primary} style={{ marginRight: 8 }} />
+                  <Text style={styles.secondaryBtnText}>Open Learner Activity Control</Text>
+                </TouchableOpacity>
+              </View>
+              ) : null}
 
               {/* WhatsApp Section */}
               <View style={styles.section}>
@@ -410,5 +603,113 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   accountTypeBtnTextActive: {
     color: theme.onPrimary,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  switchLabel: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 10,
+  },
+  switchPill: {
+    minWidth: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    alignItems: 'center',
+  },
+  switchPillActive: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  switchPillText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  switchPillTextActive: {
+    color: theme.onPrimary,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  stepperControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.primary,
+  },
+  stepperValue: {
+    minWidth: 24,
+    textAlign: 'center',
+    color: theme.text,
+    fontWeight: '700',
+  },
+  subsectionLabel: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  notifyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  notifyChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+  },
+  notifyChipActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primary + '20',
+  },
+  notifyChipText: {
+    color: theme.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notifyChipTextActive: {
+    color: theme.primary,
+  },
+  secondaryBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.primary + '55',
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    flexDirection: 'row',
+    backgroundColor: theme.primary + '12',
+  },
+  secondaryBtnText: {
+    color: theme.primary,
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

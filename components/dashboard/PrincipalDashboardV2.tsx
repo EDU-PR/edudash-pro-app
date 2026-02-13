@@ -131,8 +131,26 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
   const isYoungEagles = (schoolName || '').toLowerCase().includes('young eagles');
   const showUniformSection = Boolean(
     uniformSummary &&
-    (uniformSummary.paidCount > 0 || uniformSummary.pendingCount > 0 || uniformSummary.pendingUploads > 0 || isYoungEagles)
+    (
+      uniformSummary.totalStudents > 0 ||
+      uniformSummary.paidCount > 0 ||
+      uniformSummary.pendingCount > 0 ||
+      uniformSummary.pendingUploads > 0 ||
+      isYoungEagles
+    )
   );
+
+  const openUniformHub = useCallback(() => {
+    router.push('/screens/principal-uniforms');
+  }, []);
+
+  const messageUnpaidUniformParents = useCallback(() => {
+    router.push({ pathname: '/screens/principal-uniforms', params: { autoAction: 'unpaid' } } as any);
+  }, []);
+
+  const messageNoOrderParents = useCallback(() => {
+    router.push({ pathname: '/screens/principal-uniforms', params: { autoAction: 'no_order' } } as any);
+  }, []);
 
   const {
     collapsedSections,
@@ -387,6 +405,9 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
             uniformSummary={uniformSummary}
             showUniformSection={showUniformSection}
             isYoungEagles={isYoungEagles}
+            onOpenUniforms={openUniformHub}
+            onMessageUnpaid={messageUnpaidUniformParents}
+            onMessageNoOrder={messageNoOrderParents}
           />
         ))}
 

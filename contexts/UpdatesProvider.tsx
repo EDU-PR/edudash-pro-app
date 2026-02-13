@@ -40,6 +40,9 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     lastCheckTime: null,
   });
   const updatesBlockedRef = React.useRef(false);
+  const updateAlreadyDownloadedRef = React.useRef(false);
+  const isCheckingRef = React.useRef(false);
+  const lastCheckTimestampRef = React.useRef(0);
 
   const UPDATE_BLOCK_KEY = 'edudash_ota_block_until';
   const UPDATE_LAST_RELOAD_KEY = 'edudash_ota_last_reload';
@@ -145,6 +148,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         trackOTAUpdateFetch(result);
         // Download complete - this will also trigger the UPDATE_DOWNLOADED event
         updateState({ isDownloading: false, isUpdateDownloaded: true });
+        updateAlreadyDownloadedRef.current = true;
         
         // Send system notification instead of showing banner
         await sendUpdateNotification();
@@ -255,7 +259,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
     }
   };
 
-  // Handle notification taps for updates
+  // Handle notification taps for updates — show confirmation instead of auto-applying
   useEffect(() => {
     if (Platform.OS === 'web') return;
     
@@ -263,8 +267,24 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
       async (response) => {
         const data = response.notification.request.content.data;
         if (data?.type === 'update_ready' && state.isUpdateDownloaded) {
-          logger.info('[Updates] Update notification tapped, applying update...');
-          await applyUpdate();
+          logger.info('[Updates] Update notification tapped, showing confirmation...');
+          // Import Alert lazily to avoid issues in non-RN contexts
+          const { Alert } = require('react-native');
+          Alert.alert(
+            'Update Ready',
+            'A new version has been downloaded. Restart now to apply the update?',
+            [
+              { text: 'Later', style: 'cancel' },
+              {
+                text: 'Update Now',
+                onPress: async () => {
+                  logger.info('[Updates] User chose to apply update from notification');
+                  await applyUpdate();
+                },
+              },
+            ],
+            { cancelable: true }
+          );
         }
       }
     );
@@ -286,6 +306,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
   // Dismiss the update (clear badge)
   const dismissUpdate = () => {
     updateState({ isUpdateDownloaded: false });
+    updateAlreadyDownloadedRef.current = false;
     // Clear badge when update is dismissed
     if (Platform.OS !== 'web') {
       BadgeCoordinator.clearCategory('updates').catch(() => {});
@@ -299,32 +320,51 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
 
   // Background update checking
   const backgroundCheck = useCallback(async () => {
-    if (await isUpdatesBlocked()) {
-      logger.warn('[Updates] OTA checks blocked - skipping background check');
+    // Skip if an update was already downloaded but not yet applied
+    if (updateAlreadyDownloadedRef.current) {
+      logger.info('[Updates] Update already downloaded - skipping background check');
       return;
     }
-    // Log detailed update info for debugging
-    logger.info('[Updates] Background check - Update environment:', {
-      isEnabled: Updates.isEnabled,
-      isDev: __DEV__,
-      channel: Updates.channel,
-      runtimeVersion: Updates.runtimeVersion,
-      updateId: Updates.updateId,
-    });
+    // Prevent concurrent background checks (race condition on mount + AppState)
+    if (isCheckingRef.current) {
+      logger.info('[Updates] Background check already in progress - skipping');
+      return;
+    }
+    // Throttle: skip if last check was less than 30 seconds ago
+    const now = Date.now();
+    if (now - lastCheckTimestampRef.current < 30_000) {
+      logger.info('[Updates] Background check throttled (last check < 30s ago)');
+      return;
+    }
+    lastCheckTimestampRef.current = now;
+    isCheckingRef.current = true;
     
-    if (!Updates.isEnabled) {
-      logger.info('[Updates] Updates disabled - skipping background check (likely development build)');
-      return;
-    }
-    
-    // Allow OTA updates in preview/production builds even if __DEV__ is true
-    const enableOTAUpdates = process.env.EXPO_PUBLIC_ENABLE_OTA_UPDATES === 'true';
-    if (__DEV__ && !enableOTAUpdates) {
-      logger.info('[Updates] Skipping background check - development build without OTA enabled');
-      return;
-    }
-
     try {
+      if (await isUpdatesBlocked()) {
+        logger.warn('[Updates] OTA checks blocked - skipping background check');
+        return;
+      }
+      // Log detailed update info for debugging
+      logger.info('[Updates] Background check - Update environment:', {
+        isEnabled: Updates.isEnabled,
+        isDev: __DEV__,
+        channel: Updates.channel,
+        runtimeVersion: Updates.runtimeVersion,
+        updateId: Updates.updateId,
+      });
+      
+      if (!Updates.isEnabled) {
+        logger.info('[Updates] Updates disabled - skipping background check (likely development build)');
+        return;
+      }
+      
+      // Allow OTA updates in preview/production builds even if __DEV__ is true
+      const enableOTAUpdates = process.env.EXPO_PUBLIC_ENABLE_OTA_UPDATES === 'true';
+      if (__DEV__ && !enableOTAUpdates) {
+        logger.info('[Updates] Skipping background check - development build without OTA enabled');
+        return;
+      }
+
       logger.info('[Updates] Background check for updates...');
       const update = await Updates.checkForUpdateAsync();
       if (!update.isAvailable && (update as any).reason === 'updatePreviouslyFailed') {
@@ -351,6 +391,7 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
           isUpdateDownloaded: true,
           lastCheckTime: new Date()
         });
+        updateAlreadyDownloadedRef.current = true;
         
         // Send system notification for background update
         await sendUpdateNotification();
@@ -379,6 +420,8 @@ export function UpdatesProvider({ children }: UpdatesProviderProps) {
         isDownloading: false,
         lastCheckTime: new Date()
       });
+    } finally {
+      isCheckingRef.current = false;
     }
   }, [blockUpdates, isUpdatesBlocked]);
 

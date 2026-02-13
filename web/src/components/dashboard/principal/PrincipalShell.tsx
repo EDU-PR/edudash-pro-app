@@ -87,6 +87,7 @@ export function PrincipalShell({
   const baseNav = [
     { href: '/dashboard/principal', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/dashboard/principal/students', label: 'Students', icon: Users },
+    { href: '/dashboard/principal/learner-activity-control', label: 'Learner Activity', icon: Activity },
     { href: '/dashboard/principal/teachers', label: 'Teachers', icon: School },
     { href: '/dashboard/principal/registrations', label: 'Registrations', icon: UserPlus },
     { href: '/dashboard/principal/join-requests', label: 'Join Requests', icon: ShieldCheck },

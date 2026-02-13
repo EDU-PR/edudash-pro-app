@@ -35,6 +35,10 @@ interface UniformEntry {
   tshirtSize: string;
   tshirtQuantity: string;
   shortsQuantity: string;
+  isReturning: boolean;
+  pastNumberChoice: '' | 'yes' | 'no';
+  tshirtNumber: string;
+  sampleSupplied: boolean;
   status: EntryStatus;
   message?: string | null;
   updatedAt?: string | null;
@@ -59,6 +63,9 @@ interface UniformRequestRow {
   tshirt_size?: string | null;
   tshirt_quantity?: number | null;
   shorts_quantity?: number | null;
+  is_returning?: boolean | null;
+  tshirt_number?: string | null;
+  sample_supplied?: boolean | null;
   updated_at?: string | null;
 }
 
@@ -126,6 +133,10 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
         tshirtSize: '',
         tshirtQuantity: '1',
         shortsQuantity: '1',
+        isReturning: false,
+        pastNumberChoice: '',
+        tshirtNumber: '',
+        sampleSupplied: false,
         status: 'idle',
         message: null,
         updatedAt: null,
@@ -150,7 +161,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
 
       const { data, error } = await supabase
         .from('uniform_requests')
-        .select('student_id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, updated_at')
+        .select('student_id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, is_returning, tshirt_number, sample_supplied, updated_at')
         .in('student_id', childIds);
 
       if (error) {
@@ -164,6 +175,7 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
         setEntries((prev) => {
           const next = { ...prev };
           uniformRows.forEach((row) => {
+            const isReturning = Boolean(row.is_returning);
             next[row.student_id] = {
               ...(next[row.student_id] || {}),
               childName: row.child_name || next[row.student_id]?.childName || '',
@@ -171,6 +183,10 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
               tshirtSize: row.tshirt_size || next[row.student_id]?.tshirtSize || '',
               tshirtQuantity: row.tshirt_quantity ? String(row.tshirt_quantity) : next[row.student_id]?.tshirtQuantity || '1',
               shortsQuantity: row.shorts_quantity ? String(row.shorts_quantity) : next[row.student_id]?.shortsQuantity || '1',
+              isReturning,
+              pastNumberChoice: isReturning ? 'yes' : 'no',
+              tshirtNumber: isReturning ? row.tshirt_number || '' : '',
+              sampleSupplied: row.sample_supplied ?? false,
               status: 'saved',
               message: t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' }),
               updatedAt: row.updated_at || null,
@@ -304,6 +320,8 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     const ageValue = parseInt(entry.ageYears, 10);
     const tshirtQty = parseInt(entry.tshirtQuantity, 10);
     const shortsQty = parseInt(entry.shortsQuantity, 10);
+    const backNumber = entry.tshirtNumber.trim();
+    const hasPastNumber = entry.pastNumberChoice === 'yes';
 
     if (!childName) {
       updateEntry(childId, { status: 'error', message: t('dashboard.parent.uniform.validation.child_name', { defaultValue: 'Please enter the child name.' }) });
@@ -315,6 +333,33 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
     }
     if (!Number.isFinite(ageValue) || ageValue < 1 || ageValue > 18) {
       updateEntry(childId, { status: 'error', message: t('dashboard.parent.uniform.validation.age', { defaultValue: 'Enter a valid age (1-18).' }) });
+      return;
+    }
+    if (!['yes', 'no'].includes(entry.pastNumberChoice)) {
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.past_number_choice', {
+          defaultValue: 'Select whether your child has a previous back number.',
+        }),
+      });
+      return;
+    }
+    if (hasPastNumber && !backNumber) {
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_number', {
+          defaultValue: 'Enter the returning T-shirt number.',
+        }),
+      });
+      return;
+    }
+    if (hasPastNumber && !/^\d{1,6}$/.test(backNumber)) {
+      updateEntry(childId, {
+        status: 'error',
+        message: t('dashboard.parent.uniform.validation.tshirt_number_format', {
+          defaultValue: 'T-shirt number must be 1-6 digits.',
+        }),
+      });
       return;
     }
     if (!Number.isFinite(tshirtQty) || tshirtQty < 1 || tshirtQty > 20) {
@@ -341,6 +386,9 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
           tshirt_size: entry.tshirtSize,
           tshirt_quantity: tshirtQty,
           shorts_quantity: shortsQty,
+          is_returning: hasPastNumber,
+          tshirt_number: hasPastNumber ? backNumber : null,
+          sample_supplied: entry.sampleSupplied,
         },
         { onConflict: 'student_id' }
       )
@@ -516,6 +564,13 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
                   {t('dashboard.parent.uniform.summary.details', { defaultValue: 'Size:' })} {entry.tshirtSize || '—'} · {t('dashboard.parent.uniform.labels.tshirts', { defaultValue: 'T-shirts' })} {entry.tshirtQuantity} · {t('dashboard.parent.uniform.labels.shorts', { defaultValue: 'Shorts' })} {entry.shortsQuantity}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>
+                  {t('dashboard.parent.uniform.labels.past_number_choice', { defaultValue: 'Previous back number?' })}{' '}
+                  {entry.pastNumberChoice === 'yes'
+                    ? t('dashboard.parent.uniform.labels.past_number_yes', { defaultValue: 'Yes, has number' })
+                    : t('dashboard.parent.uniform.labels.past_number_no', { defaultValue: 'No number' })}
+                  {entry.pastNumberChoice === 'yes' && entry.tshirtNumber ? ` • #${entry.tshirtNumber}` : ''}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>
@@ -694,6 +749,54 @@ export function UniformSizesWidget({ childrenCards }: UniformSizesWidgetProps) {
                     </span>
                   )}
                 </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label className="text-xs" style={{ color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                  {t('dashboard.parent.uniform.labels.past_number_choice', { defaultValue: 'Previous back number? (Required)' })}
+                </label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btnSecondary"
+                    style={{
+                      borderColor: entry.pastNumberChoice === 'yes' ? 'var(--primary)' : 'var(--border)',
+                      background: entry.pastNumberChoice === 'yes' ? 'rgba(99, 102, 241, 0.16)' : undefined,
+                    }}
+                    onClick={() => updateEntry(child.id, { pastNumberChoice: 'yes', isReturning: true })}
+                  >
+                    {t('dashboard.parent.uniform.labels.past_number_yes', { defaultValue: 'Yes, has number' })}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btnSecondary"
+                    style={{
+                      borderColor: entry.pastNumberChoice === 'no' ? 'var(--primary)' : 'var(--border)',
+                      background: entry.pastNumberChoice === 'no' ? 'rgba(99, 102, 241, 0.16)' : undefined,
+                    }}
+                    onClick={() => updateEntry(child.id, { pastNumberChoice: 'no', isReturning: false, tshirtNumber: '' })}
+                  >
+                    {t('dashboard.parent.uniform.labels.past_number_no', { defaultValue: 'No number' })}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  {t('dashboard.parent.uniform.helper.past_number_choice', { defaultValue: 'Select one option before saving. If no number exists, choose "No number".' })}
+                </div>
+                {entry.pastNumberChoice === 'yes' && (
+                  <div style={{ marginTop: 10, maxWidth: 240 }}>
+                    <label className="text-xs" style={{ color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
+                      {t('dashboard.parent.uniform.labels.tshirt_number', { defaultValue: 'T-shirt Number' })}
+                    </label>
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={entry.tshirtNumber}
+                      onChange={(e) => updateEntry(child.id, { tshirtNumber: e.target.value })}
+                      placeholder={t('dashboard.parent.uniform.placeholders.tshirt_number', { defaultValue: 'e.g. 08' })}
+                    />
+                  </div>
+                )}
               </div>
               <div style={{ marginTop: 10 }}>
                 <label className="text-xs" style={{ color: 'var(--muted)', display: 'block', marginBottom: 6 }}>

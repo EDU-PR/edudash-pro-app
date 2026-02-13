@@ -118,13 +118,28 @@ export const UniformEditCard: React.FC<Props> = React.memo(({
       </View>
       <Text style={styles.helperText}>{t('dashboard.parent.uniform.helper.sample_supplied', { defaultValue: 'Turn this on if you sent a sample T-shirt for sizing.' })}</Text>
 
-      <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>{t('dashboard.parent.uniform.labels.returning_student', { defaultValue: 'Returning student?' })}</Text>
-        <Switch value={entry.isReturning} onValueChange={(v) => onUpdate({ isReturning: v, tshirtNumber: v ? entry.tshirtNumber : '' })} trackColor={{ false: theme.border, true: theme.primary }} thumbColor={entry.isReturning ? '#fff' : theme.textSecondary} />
+      <Text style={styles.label}>{t('dashboard.parent.uniform.labels.past_number_choice', { defaultValue: 'Previous back number? (Required)' })}</Text>
+      <View style={styles.choiceRow}>
+        <TouchableOpacity
+          style={[styles.choiceButton, entry.pastNumberChoice === 'yes' && styles.choiceButtonActive]}
+          onPress={() => onUpdate({ pastNumberChoice: 'yes', isReturning: true })}
+        >
+          <Text style={[styles.choiceButtonText, entry.pastNumberChoice === 'yes' && styles.choiceButtonTextActive]}>
+            {t('dashboard.parent.uniform.labels.past_number_yes', { defaultValue: 'Yes, has number' })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.choiceButton, entry.pastNumberChoice === 'no' && styles.choiceButtonActive]}
+          onPress={() => onUpdate({ pastNumberChoice: 'no', isReturning: false, tshirtNumber: '' })}
+        >
+          <Text style={[styles.choiceButtonText, entry.pastNumberChoice === 'no' && styles.choiceButtonTextActive]}>
+            {t('dashboard.parent.uniform.labels.past_number_no', { defaultValue: 'No number' })}
+          </Text>
+        </TouchableOpacity>
       </View>
-      <Text style={styles.helperText}>{t('dashboard.parent.uniform.helper.returning_student', { defaultValue: 'Turn this on if your child is returning and already has a back number.' })}</Text>
+      <Text style={styles.helperText}>{t('dashboard.parent.uniform.helper.past_number_choice', { defaultValue: 'Select one option before saving. If no number exists, choose "No number".' })}</Text>
 
-      {entry.isReturning && (
+      {entry.pastNumberChoice === 'yes' && (
         <>
           <Text style={styles.label}>{t('dashboard.parent.uniform.labels.tshirt_number', { defaultValue: 'T-shirt Number' })}</Text>
           <TextInput style={styles.input} value={entry.tshirtNumber} onChangeText={(v) => onUpdate({ tshirtNumber: v })} placeholder="e.g. 08" placeholderTextColor={theme.textSecondary} keyboardType="number-pad" maxLength={6} />

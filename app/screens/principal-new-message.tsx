@@ -70,6 +70,7 @@ export default function PrincipalNewMessageScreen() {
         .from('students')
         .select('id, first_name, last_name, parent_id, guardian_id, classes(id, name, teacher_id)')
         .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
+        .eq('status', 'active')
         .eq('is_active', true)
         .order('first_name');
 

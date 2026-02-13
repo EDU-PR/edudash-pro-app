@@ -13,6 +13,9 @@ interface UniformRow {
   child_name: string;
   age_years: number;
   tshirt_size: string;
+  tshirt_quantity?: number | null;
+  shorts_quantity?: number | null;
+  sample_supplied?: boolean | null;
   tshirt_number?: string | null;
   created_at: string;
   updated_at?: string | null;
@@ -32,15 +35,20 @@ interface UniformRow {
 
 interface DisplayRow {
   id: string;
+  studentId: string;
   childName: string;
   ageYears: number;
   tshirtSize: string;
+  tshirtQuantity: number | null;
+  shortsQuantity: number | null;
+  sampleSupplied: boolean;
   tshirtNumber: string;
   studentCode: string;
   parentName: string;
   parentEmail: string;
   parentPhone: string;
   submittedAt: string;
+  paymentStatus: 'paid' | 'pending' | 'unpaid';
 }
 
 const SIZE_OPTIONS = [
@@ -85,6 +93,9 @@ export default function UniformsPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string>();
   const [rows, setRows] = useState<UniformRow[]>([]);
+  const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
+    () => new Map()
+  );
   const [loading, setLoading] = useState(true);
   const [generatingNumbers, setGeneratingNumbers] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,7 +131,7 @@ export default function UniformsPage() {
 
     const { data, error: fetchError } = await supabase
       .from('uniform_requests')
-      .select('id, child_name, age_years, tshirt_size, tshirt_number, created_at, updated_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(first_name,last_name,email,phone)')
+      .select('id, child_name, age_years, tshirt_size, tshirt_quantity, shorts_quantity, sample_supplied, tshirt_number, created_at, updated_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(first_name,last_name,email,phone)')
       .eq('preschool_id', schoolId)
       .order('created_at', { ascending: false });
 
@@ -131,6 +142,59 @@ export default function UniformsPage() {
     }
 
     setRows((data as any) || []);
+
+    const studentIds = ((data as any[]) || []).map((row) => row.student_id).filter(Boolean);
+    if (studentIds.length > 0) {
+      const [{ data: popData }, { data: paymentsData }] = await Promise.all([
+        supabase
+          .from('pop_uploads')
+          .select('student_id, status, description, title')
+          .eq('preschool_id', schoolId)
+          .eq('upload_type', 'proof_of_payment')
+          .in('student_id', studentIds),
+        supabase
+          .from('payments')
+          .select('student_id, status, description, metadata')
+          .eq('preschool_id', schoolId)
+          .in('student_id', studentIds),
+      ]);
+
+      const nextMap = new Map<string, 'paid' | 'pending' | 'unpaid'>();
+      studentIds.forEach((id: string) => nextMap.set(id, 'unpaid'));
+
+      const isUniformPaymentRecord = (payment: any): boolean => {
+        const text = (payment?.description || '').toLowerCase();
+        const purpose = (payment?.metadata?.payment_purpose || '').toLowerCase();
+        const context = (payment?.metadata?.payment_context || '').toLowerCase();
+        const feeType = (payment?.metadata?.fee_type || '').toLowerCase();
+        return text.includes('uniform') || purpose.includes('uniform') || context === 'uniform' || feeType === 'uniform';
+      };
+
+      (popData || [])
+        .filter((pop: any) => String(pop?.description || '').toLowerCase().includes('uniform') || String(pop?.title || '').toLowerCase().includes('uniform'))
+        .forEach((pop: any) => {
+          const current = nextMap.get(pop.student_id) || 'unpaid';
+          if (pop.status === 'approved') {
+            nextMap.set(pop.student_id, 'paid');
+            return;
+          }
+          if (current !== 'paid' && ['pending', 'submitted'].includes(String(pop.status))) {
+            nextMap.set(pop.student_id, 'pending');
+          }
+        });
+
+      (paymentsData || []).filter(isUniformPaymentRecord).forEach((payment: any) => {
+        if (!payment.student_id) return;
+        if (['completed', 'approved'].includes(String(payment.status))) {
+          nextMap.set(payment.student_id, 'paid');
+        }
+      });
+
+      setPaymentStatusByStudent(nextMap);
+    } else {
+      setPaymentStatusByStudent(new Map());
+    }
+
     setLoading(false);
   };
 
@@ -149,18 +213,23 @@ export default function UniformsPage() {
       const parentName = `${row.parent?.first_name || ''} ${row.parent?.last_name || ''}`.trim();
       return {
         id: row.id,
+        studentId: row.student_id,
         childName: childName || 'Unnamed Child',
         ageYears: row.age_years,
         tshirtSize: row.tshirt_size,
+        tshirtQuantity: row.tshirt_quantity ?? null,
+        shortsQuantity: row.shorts_quantity ?? null,
+        sampleSupplied: Boolean(row.sample_supplied),
         tshirtNumber: row.tshirt_number || '',
         studentCode: row.student?.student_id || '',
         parentName: parentName || row.parent?.email || '',
         parentEmail: row.parent?.email || '',
         parentPhone: row.parent?.phone || '',
         submittedAt: row.created_at,
+        paymentStatus: paymentStatusByStudent.get(row.student_id) || 'unpaid',
       };
     });
-  }, [rows]);
+  }, [rows, paymentStatusByStudent]);
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -294,19 +363,16 @@ export default function UniformsPage() {
     const schoolName = preschoolName || 'School';
     const generatedAt = new Date().toLocaleString('en-ZA');
     const rowsHtml = data
-      .map((row, index) => {
-        const submitted = new Date(row.submittedAt).toLocaleDateString('en-ZA');
+      .map((row) => {
         return `<tr>
-          <td>${index + 1}</td>
           <td>${htmlEscape(row.childName)}</td>
           <td>${htmlEscape(row.ageYears ?? '-')}</td>
           <td>${htmlEscape(row.tshirtSize || '-')}</td>
+          <td>${htmlEscape(row.tshirtQuantity ?? '-')}</td>
+          <td>${htmlEscape(row.shortsQuantity ?? '-')}</td>
           <td>${htmlEscape(row.tshirtNumber || '-')}</td>
-          <td>${htmlEscape(row.studentCode || '-')}</td>
-          <td>${htmlEscape(row.parentName || '-')}</td>
-          <td>${htmlEscape(row.parentEmail || '-')}</td>
-          <td>${htmlEscape(row.parentPhone || '-')}</td>
-          <td>${htmlEscape(submitted)}</td>
+          <td>${row.sampleSupplied ? 'YES' : 'NO'}</td>
+          <td><span class="payment-chip ${row.paymentStatus === 'paid' ? 'payment-paid' : 'payment-unpaid'}">${row.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}</span></td>
         </tr>`;
       })
       .join('');
@@ -330,6 +396,9 @@ export default function UniformsPage() {
           table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 11px; }
           th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; vertical-align: top; }
           th { background: #f3f4f6; font-weight: 700; }
+          .payment-chip { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.2px; }
+          .payment-paid { color: #166534; background: #dcfce7; border: 1px solid #86efac; }
+          .payment-unpaid { color: #991b1b; background: #fee2e2; border: 1px solid #fca5a5; }
           .footer { margin-top: 12px; font-size: 11px; color: #6b7280; }
         </style>
       </head>
@@ -340,16 +409,14 @@ export default function UniformsPage() {
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Child</th>
-              <th>Age</th>
-              <th>Size</th>
-              <th>Number</th>
-              <th>Student Code</th>
-              <th>Parent</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Submitted</th>
+              <th>CHILD</th>
+              <th>AGE</th>
+              <th>SIZE</th>
+              <th># T-SHIRT(S)</th>
+              <th># SHORT(S)</th>
+              <th>BACK #</th>
+              <th>SAMPLE-SUPPLIED</th>
+              <th>PAYMENT</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>

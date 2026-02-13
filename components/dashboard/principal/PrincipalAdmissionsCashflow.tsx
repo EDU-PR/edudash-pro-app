@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,9 +28,18 @@ export interface PrincipalAdmissionsCashflowProps {
     totalPaid?: number;
     totalOutstanding?: number;
     pendingUploadAmount?: number;
+    totalStudents?: number;
+    submittedOrders?: number;
+    noOrderCount?: number;
+    paidStudentCount?: number;
+    pendingStudentCount?: number;
+    unpaidStudentCount?: number;
   } | null;
   showUniformSection: boolean;
   isYoungEagles: boolean;
+  onOpenUniforms?: () => void;
+  onMessageUnpaid?: () => void;
+  onMessageNoOrder?: () => void;
 }
 
 export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowProps> = ({
@@ -46,6 +55,9 @@ export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowPr
   uniformSummary,
   showUniformSection,
   isYoungEagles,
+  onOpenUniforms,
+  onMessageUnpaid,
+  onMessageNoOrder,
 }) => {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -153,12 +165,17 @@ export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowPr
           </Text>
           <MetricInline
             label={t('dashboard.uniform_paid', { defaultValue: 'Paid (Uniforms)' })}
-            value={formatCurrency(uniformSummary?.totalPaid || 0)}
+            value={`${formatCurrency(uniformSummary?.totalPaid || 0)} • ${uniformSummary?.paidStudentCount || 0} students`}
             theme={theme}
           />
           <MetricInline
             label={t('dashboard.uniform_outstanding', { defaultValue: 'Outstanding' })}
-            value={formatCurrency(uniformSummary?.totalOutstanding || 0)}
+            value={`${formatCurrency(uniformSummary?.totalOutstanding || 0)} • ${((uniformSummary?.unpaidStudentCount || 0) + (uniformSummary?.pendingStudentCount || 0))} students`}
+            theme={theme}
+          />
+          <MetricInline
+            label={t('dashboard.uniform_no_order', { defaultValue: 'No Order Submitted' })}
+            value={`${uniformSummary?.noOrderCount || 0} students`}
             theme={theme}
           />
           <MetricInline
@@ -170,6 +187,50 @@ export const PrincipalAdmissionsCashflow: React.FC<PrincipalAdmissionsCashflowPr
             }
             theme={theme}
           />
+
+          <View style={styles.uniformBreakdownRow}>
+            <View style={[styles.uniformStatusPill, styles.uniformPaidPill]}>
+              <Text style={styles.uniformStatusPillText}>
+                {t('dashboard.uniform_status_paid', { defaultValue: 'Paid' })}: {uniformSummary?.paidStudentCount || 0}
+              </Text>
+            </View>
+            <View style={[styles.uniformStatusPill, styles.uniformPendingPill]}>
+              <Text style={styles.uniformStatusPillText}>
+                {t('dashboard.uniform_status_pending', { defaultValue: 'Pending' })}: {uniformSummary?.pendingStudentCount || 0}
+              </Text>
+            </View>
+            <View style={[styles.uniformStatusPill, styles.uniformUnpaidPill]}>
+              <Text style={styles.uniformStatusPillText}>
+                {t('dashboard.uniform_status_unpaid', { defaultValue: 'Unpaid' })}: {uniformSummary?.unpaidStudentCount || 0}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.uniformActionsRow}>
+            <TouchableOpacity style={[styles.uniformActionButton, styles.uniformActionPrimary]} onPress={onOpenUniforms}>
+              <Text style={styles.uniformActionPrimaryText}>
+                {t('dashboard.uniform_open_hub', { defaultValue: 'Open Uniform Hub' })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.uniformActionButton}
+              onPress={onMessageUnpaid}
+              disabled={!onMessageUnpaid || (uniformSummary?.unpaidStudentCount || 0) === 0}
+            >
+              <Text style={styles.uniformActionText}>
+                {t('dashboard.uniform_message_unpaid', { defaultValue: 'Message Unpaid' })} ({uniformSummary?.unpaidStudentCount || 0})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.uniformActionButton}
+              onPress={onMessageNoOrder}
+              disabled={!onMessageNoOrder || (uniformSummary?.noOrderCount || 0) === 0}
+            >
+              <Text style={styles.uniformActionText}>
+                {t('dashboard.uniform_message_no_order', { defaultValue: 'Message No Order' })} ({uniformSummary?.noOrderCount || 0})
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>

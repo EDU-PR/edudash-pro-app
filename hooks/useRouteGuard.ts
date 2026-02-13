@@ -1,45 +1,45 @@
 /**
  * Route Guard Hooks
  *
- * Handles auth-based navigation and mobile-web restrictions.
- * The auth guard automatically redirects:
- * - Unauthenticated users to sign-in (from protected routes)
- * - Authenticated users to their dashboard (from auth routes)
+ * Auth guard that redirects unauthenticated users to sign-in
+ * and authenticated users from auth routes to their dashboard.
+ * Respects account-switch, recovery, and navigation-lock flows.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useLocalSearchParams, usePathname, router } from 'expo-router';
+import { useGlobalSearchParams, usePathname, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { isSignOutInProgress } from '@/lib/authActions';
+import { isSignOutInProgress, isAccountSwitchPending } from '@/lib/authActions';
 import { isNavigationLocked } from '@/lib/routeAfterLogin';
 import { authDebug } from '@/lib/authDebug';
-import { isPasswordRecoveryInProgress } from '@/lib/sessionManager';
-import { resolveIsRecoveryFlow } from '@/lib/auth/recoveryFlow';
 import {
-  resolveExplicitSchoolTypeFromProfile,
-  resolveOrganizationId,
-  resolveSchoolTypeFromProfile,
-} from '@/lib/schoolTypeResolver';
-import { getDashboardRouteForRole, isDashboardRouteMismatch } from '@/lib/dashboard/routeMatrix';
+  isAuthRoute as classifyAuthRoute,
+  isAuthCallbackRoute as classifyAuthCallback,
+  isProfilesGateRoute,
+  isOnboardingRoute as classifyOnboarding,
+  isOrgAdminFamilyRoute as classifyOrgAdmin,
+  isAccountSwitchIntent,
+  checkRecoveryFlow,
+} from '@/hooks/auth/routeClassification';
 import {
-  trackDashboardRouteMismatch,
-  trackDashboardRouteResolution,
-} from '@/lib/dashboard/dashboardRoutingTelemetry';
+  resolveDashboard,
+  trackResolution,
+  checkDashboardMismatch,
+  resolveSchoolGuardDashboard,
+} from '@/hooks/auth/dashboardResolution';
 
-/**
- * Mobile web guard - currently no-op
- */
-export const useMobileWebGuard = () => {
-  // no-op (no mobile web restrictions)
-  useEffect(() => {}, []);
-};
+/** Grace window (ms) before treating auth-route + no-profile as stuck. */
+const AUTH_ROUTE_PROFILE_GRACE_MS = 3500;
+/** De-duplication window (ms) for identical redirects. */
+const REDIRECT_DEDUP_WINDOW_MS = 1200;
 
-/**
- * Auth guard - handles redirect based on authentication state
- */
+/** Mobile web guard - currently no-op */
+export const useMobileWebGuard = () => { useEffect(() => {}, []); };
+
+/** Auth guard - handles redirect based on authentication state */
 export const useAuthGuard = () => {
   const pathname = usePathname();
-  const searchParams = useLocalSearchParams<Record<string, string | string[]>>();
+  const searchParams = useGlobalSearchParams<Record<string, string | string[]>>();
   const { user, loading, profile, profileLoading } = useAuth();
   const hasNavigated = useRef(false);
   const lastAttemptAt = useRef(0);
@@ -49,8 +49,6 @@ export const useAuthGuard = () => {
   const lastMismatchKey = useRef<string | null>(null);
   const authRouteSeenAt = useRef<number | null>(null);
   const signingOut = isSignOutInProgress();
-  const AUTH_ROUTE_PROFILE_GRACE_MS = 3500;
-  const REDIRECT_DEDUP_WINDOW_MS = 1200;
 
   const safeReplace = useCallback((to: string, reason: string) => {
     const from = typeof pathname === 'string' ? pathname : '';
@@ -82,59 +80,22 @@ export const useAuthGuard = () => {
       authRouteSeenAt.current = currentUserId ? Date.now() : null;
     }
 
-    if (signingOut) {
-      hasNavigated.current = false;
-      return;
-    }
-    // Don't redirect while auth is still loading
-    if (loading) {
-      // NOTE: Do NOT reset hasNavigated here — loading can flip true→false
-      // during the auth flow, and resetting the guard allows duplicate navigation.
-      return;
-    }
+    if (signingOut) { hasNavigated.current = false; return; }
+    // Don't redirect while auth is loading
+    if (loading) { return; }
     
     // Determine if current route is an auth route
-    const isAuthRoute =
-      typeof pathname === 'string' &&
-      (pathname === '/' ||
-        pathname === '/landing' ||
-        pathname.startsWith('/(auth)') ||
-        pathname.includes('sign-in') ||
-        pathname.includes('sign-up') ||
-        pathname.includes('signup') ||
-        pathname.includes('register') ||
-        pathname.includes('forgot-password') ||
-        pathname.includes('reset-password') ||
-        pathname.includes('auth-callback') ||
-        pathname.includes('verify'));
-
-    const isAuthCallbackRoute =
-      typeof pathname === 'string' && pathname.includes('auth-callback');
-
-    const typeParam = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type;
-    const flowParam = Array.isArray(searchParams.flow) ? searchParams.flow[0] : searchParams.flow;
-    const isRecoveryFlow = resolveIsRecoveryFlow({
-      type: typeParam,
-      flow: flowParam,
-      hasRecoveryFlag: isPasswordRecoveryInProgress(),
-    });
-    
-    const isProfilesGate =
-      typeof pathname === 'string' && pathname.includes('profiles-gate');
-    const isOnboardingRoute =
-      typeof pathname === 'string' &&
-      (pathname === '/onboarding' || pathname.startsWith('/onboarding/'));
-
-    const isOrgAdminFamilyRoute =
-      typeof pathname === 'string' &&
-      (pathname === '/screens/org-admin-dashboard' ||
-        pathname.startsWith('/screens/org-admin/') ||
-        pathname.startsWith('/screens/admin-tertiary'));
+    const isAuthRoute = classifyAuthRoute(pathname);
+    const isAuthCallback = classifyAuthCallback(pathname);
+    const isRecoveryFlow = checkRecoveryFlow(searchParams);
+    const isProfilesGate = isProfilesGateRoute(pathname);
+    const isOnboarding = classifyOnboarding(pathname);
+    const isOrgAdminFamily = classifyOrgAdmin(pathname);
 
     // Not authenticated: redirect to sign-in (unless on auth route)
     if (!user) {
       authRouteSeenAt.current = null;
-      if (!isAuthRoute && !isOnboardingRoute && !hasNavigated.current) {
+      if (!isAuthRoute && !isOnboarding && !hasNavigated.current) {
         console.log('[AuthGuard] No user, redirecting to sign-in from:', pathname);
         hasNavigated.current = true;
         safeReplace('/(auth)/sign-in', 'no_user');
@@ -143,7 +104,7 @@ export const useAuthGuard = () => {
     }
 
     // Authenticated but missing profile: avoid dashboards getting stuck loading
-    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate && !isOnboardingRoute) {
+    if (user && !profileLoading && !profile && !isAuthRoute && !isProfilesGate && !isOnboarding) {
       console.log('[AuthGuard] Missing profile, redirecting to profiles-gate from:', pathname);
       hasNavigated.current = true;
       safeReplace('/profiles-gate', 'missing_profile_protected_route');
@@ -152,164 +113,73 @@ export const useAuthGuard = () => {
     
     // Authenticated: redirect from auth routes to dashboard
     if (user && isAuthRoute) {
-      if (!authRouteSeenAt.current) {
-        authRouteSeenAt.current = Date.now();
+      // Account-switch bypass — let user reach sign-in for new credentials
+      const isSwitching = isAccountSwitchIntent(searchParams) || isAccountSwitchPending();
+      if (__DEV__) {
+        console.log('[AuthGuard] Auth route check', {
+          pathname,
+          addAccount: searchParams.addAccount,
+          switch: searchParams.switch,
+          fresh: searchParams.fresh,
+          isSwitching,
+        });
       }
-      // If profile is still loading, let AuthContext handle routing first
-      if (profileLoading) {
+      if (isSwitching) {
+        authDebug('guard.account_switch_bypass', { pathname, params: searchParams });
         return;
       }
-      // If AuthContext's routeAfterLogin already has an active navigation lock,
-      // don't compete — it's already handling the routing.
-      if (isNavigationLocked(user.id)) {
-        return;
-      }
-      // If profile is missing after loading, route to profile gate to avoid auth-route dead ends
+      if (!authRouteSeenAt.current) authRouteSeenAt.current = Date.now();
+      if (profileLoading) return; // let AuthContext handle routing
+      if (isNavigationLocked(user.id)) return; // navigation lock active
+      // Missing profile after loading — route to profile gate after grace window
       if (!profile) {
         const elapsed = Date.now() - (authRouteSeenAt.current || Date.now());
-        // Give AuthContext a short grace window to resolve profile after SIGNED_IN.
-        // Without this, native can jump to profiles-gate prematurely and appear frozen.
-        if (elapsed < AUTH_ROUTE_PROFILE_GRACE_MS) {
-          return;
-        }
+        if (elapsed < AUTH_ROUTE_PROFILE_GRACE_MS) return;
         if (!isProfilesGate && !hasNavigated.current) {
-          console.log('[AuthGuard] Authenticated without profile on auth route, redirecting to profiles-gate');
           hasNavigated.current = true;
           safeReplace('/profiles-gate', 'missing_profile_after_auth_grace');
         }
         return;
       }
       authRouteSeenAt.current = null;
-      // Avoid redirecting with a stale profile from a different user
-      if (profile?.id && user?.id && profile.id !== user.id) {
-        console.log('[AuthGuard] Stale profile detected, waiting for refresh');
-        return;
-      }
-      // Don't redirect if on reset-password (user might be changing password)
-      if (pathname.includes('reset-password')) {
-        return;
-      }
+      if (profile?.id && user?.id && profile.id !== user.id) return; // stale profile
+      if (pathname.includes('reset-password')) return;
+      if (isAuthCallback || isRecoveryFlow) return;
 
-      // Auth callbacks and recovery flows must remain callback-controlled.
-      if (isAuthCallbackRoute || isRecoveryFlow) {
-        return;
-      }
-
-      // Allow a retry if we're still on the auth route after a previous attempt
       const now = Date.now();
-      if (hasNavigated.current && now - lastAttemptAt.current < 1500) {
-        return;
-      }
-      
-      console.log('[AuthGuard] User authenticated, redirecting from auth route:', pathname);
+      if (hasNavigated.current && now - lastAttemptAt.current < 1500) return;
+
       hasNavigated.current = true;
       lastAttemptAt.current = now;
-      
-      // Route based on role + school type from shared route matrix
-      const role = profile?.role || (user.user_metadata as any)?.role || null;
-      const resolvedSchoolType = resolveSchoolTypeFromProfile(
-        profile || (user.user_metadata as any) || {}
-      );
-      const hasOrganization = Boolean(
-        resolveOrganizationId(profile || (user.user_metadata as any) || {})
-      );
-      const normalizedRole = String(role || '').toLowerCase();
-
-      let targetDashboard = getDashboardRouteForRole({
-        role,
-        resolvedSchoolType,
-        hasOrganization,
-      });
-      if (!targetDashboard) {
-        if (normalizedRole === 'super_admin' || normalizedRole === 'superadmin') {
-          targetDashboard = '/screens/super-admin-dashboard';
-        } else if (normalizedRole === 'admin') {
-          const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(
-            profile || (user.user_metadata as any) || {}
-          );
-          targetDashboard = explicitSchoolType
-            ? '/screens/admin-dashboard'
-            : '/screens/org-admin-dashboard';
-        } else {
-          targetDashboard = '/screens/parent-dashboard';
-        }
-      }
-
-      trackDashboardRouteResolution({
-        userId: user.id,
-        role,
-        resolvedSchoolType,
-        targetDashboard,
-        source: 'useAuthGuard.auth-route',
-        organizationId: resolveOrganizationId(profile || (user.user_metadata as any) || {}),
-      });
-
-      safeReplace(String(targetDashboard), 'authenticated_auth_route');
+      const dashInfo = resolveDashboard(user, profile);
+      trackResolution(user, dashInfo, 'useAuthGuard.auth-route');
+      safeReplace(dashInfo.targetDashboard, 'authenticated_auth_route');
       return;
     }
 
     if (user && profile && !profileLoading && !isAuthRoute && typeof pathname === 'string') {
       // Hard guard: school tenants must never render org-admin/tertiary dashboard family.
-      if (isOrgAdminFamilyRoute) {
-        const explicitSchoolType = resolveExplicitSchoolTypeFromProfile(profile);
-        if (explicitSchoolType) {
-          const role = profile.role || (user.user_metadata as any)?.role || null;
-          const normalizedRole = String(role || '').toLowerCase().trim();
-          const hasOrganization = Boolean(resolveOrganizationId(profile));
-          const schoolDashboard =
-            normalizedRole === 'admin'
-              ? '/screens/admin-dashboard'
-              : getDashboardRouteForRole({
-                  role,
-                  resolvedSchoolType: explicitSchoolType,
-                  hasOrganization,
-                }) || '/screens/principal-dashboard';
-
-          if (pathname !== schoolDashboard && !hasNavigated.current) {
-            hasNavigated.current = true;
-            lastAttemptAt.current = Date.now();
-            safeReplace(String(schoolDashboard), `school_dashboard_guard:${String(explicitSchoolType)}`);
-            return;
-          }
+      if (isOrgAdminFamily) {
+        const schoolDashboard = resolveSchoolGuardDashboard(profile, user);
+        if (schoolDashboard && pathname !== schoolDashboard && !hasNavigated.current) {
+          hasNavigated.current = true;
+          lastAttemptAt.current = Date.now();
+          safeReplace(schoolDashboard, 'school_dashboard_guard');
+          return;
         }
       }
 
-      const role = profile.role || (user.user_metadata as any)?.role || null;
-      const resolvedSchoolType = resolveSchoolTypeFromProfile(profile);
-      const expectedDashboard = getDashboardRouteForRole({
-        role,
-        resolvedSchoolType,
-        hasOrganization: Boolean(resolveOrganizationId(profile)),
-      });
-
-      const isDashboardPath = pathname.includes('dashboard');
-      if (isDashboardPath && expectedDashboard && isDashboardRouteMismatch(pathname, expectedDashboard)) {
-        const mismatchKey = `${user.id}:${pathname}:${expectedDashboard}`;
-        if (lastMismatchKey.current !== mismatchKey) {
-          lastMismatchKey.current = mismatchKey;
-          trackDashboardRouteMismatch({
-            userId: user.id,
-            role,
-            resolvedSchoolType,
-            currentPath: pathname,
-            targetDashboard: expectedDashboard,
-            source: 'useAuthGuard.passive-check',
-            organizationId: resolveOrganizationId(profile),
-            reason: 'dashboard_family_mismatch',
-          });
-        }
-      } else if (!isDashboardRouteMismatch(pathname, expectedDashboard || pathname)) {
-        lastMismatchKey.current = null;
-      }
+      checkDashboardMismatch(user, profile, pathname, lastMismatchKey);
     }
     
-    // NOTE: Do NOT reset hasNavigated in cleanup — it resets on user change (line above).
-    // Resetting on every re-run caused an infinite re-render loop because:
-    // setProfileLoading(false) → effect re-runs → cleanup resets hasNavigated → navigates → pathname changes → loop
+    // NOTE: Do NOT reset hasNavigated in cleanup — it resets on user change above.
   }, [
     pathname,
     searchParams.type,
     searchParams.flow,
+    searchParams.addAccount,
+    searchParams.switch,
+    searchParams.fresh,
     user,
     loading,
     profile?.role,

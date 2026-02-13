@@ -17,6 +17,7 @@ interface Student {
   age_years: number;
   class_id: string | null;
   status: string;
+  is_active?: boolean | null;
   age_group_name?: string;
   class_name?: string;
 }
@@ -64,6 +65,7 @@ export default function StudentsPage() {
             date_of_birth,
             class_id,
             status,
+            is_active,
             classes (name)
           `)
           .eq('preschool_id', preschoolId)
@@ -138,7 +140,7 @@ export default function StudentsPage() {
             <div className="metricLabel">Total Students</div>
           </div>
           <div className="card tile">
-            <div className="metricValue">{students.filter(s => s.status === 'active').length}</div>
+            <div className="metricValue">{students.filter(s => s.status === 'active' && s.is_active === true).length}</div>
             <div className="metricLabel">Active Students</div>
           </div>
           <div className="card tile">

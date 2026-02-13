@@ -223,28 +223,57 @@ const useChildAttendance = (childId: string | null) => {
 const useParentChildren = () => {
   const { user, profile } = useAuth();
   
+  // Resolve the correct parent ID (profile.id may differ from auth user.id)
+  const parentId = (profile as any)?.id || user?.id;
+  
   return useQuery({
-    queryKey: ['parent-children', user?.id],
+    queryKey: ['parent-children', parentId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!parentId) return [];
       
       const client = assertSupabase();
       
-      // Fetch children linked to this parent
-      const { data, error } = await client
-        .from('students')
-        .select('id, first_name, last_name, class_id')
-        .eq('parent_id', user.id)
-        .eq('is_active', true);
-      
-      if (error) {
-        logger.error('useParentChildren', 'Error fetching children', error);
-        return [];
+      // Fetch children linked to this parent via parent_id OR guardian_id
+      const parentFilters = [`parent_id.eq.${parentId}`, `guardian_id.eq.${parentId}`];
+      if (user?.id && user.id !== parentId) {
+        parentFilters.push(`parent_id.eq.${user.id}`, `guardian_id.eq.${user.id}`);
       }
       
-      return data || [];
+      const { data: directData, error: directError } = await client
+        .from('students')
+        .select('id, first_name, last_name, class_id')
+        .or(parentFilters.join(','))
+        .eq('is_active', true);
+      
+      if (directError) {
+        logger.error('useParentChildren', 'Error fetching children', directError);
+      }
+      
+      // Also check junction table for multi-parent support
+      const { data: relationships } = await client
+        .from('student_parent_relationships')
+        .select('student_id')
+        .eq('parent_id', parentId);
+      
+      let junctionData: any[] = [];
+      if (relationships && relationships.length > 0) {
+        const studentIds = relationships.map(r => r.student_id);
+        const { data: junctionStudents } = await client
+          .from('students')
+          .select('id, first_name, last_name, class_id')
+          .in('id', studentIds)
+          .eq('is_active', true);
+        junctionData = junctionStudents || [];
+      }
+      
+      // Combine and deduplicate
+      const allStudents = [...(directData || []), ...junctionData];
+      const uniqueMap = new Map<string, any>();
+      allStudents.forEach((s: any) => { if (s?.id) uniqueMap.set(s.id, s); });
+      
+      return Array.from(uniqueMap.values());
     },
-    enabled: !!user?.id,
+    enabled: !!parentId,
   });
 };
 

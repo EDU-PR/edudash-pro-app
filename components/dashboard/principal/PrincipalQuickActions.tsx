@@ -29,6 +29,7 @@ const ROUTE_MAP: Record<string, string> = {
   registrations: '/screens/principal-registrations',
   payments: '/screens/pop-review',
   'teacher-approval': '/screens/teacher-approval',
+  'learner-activity-control': '/screens/principal-learner-activity-control',
   'uniform-orders': '/screens/principal-uniforms',
   'dash-advisor': '/screens/dash-voice?mode=advisor',
   teachers: '/screens/teacher-management',
@@ -101,6 +102,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
   const styles = createQuickActionsStyles(theme);
   const flags = getFeatureFlagsSync();
   const canLiveLessons = flags.live_lessons_enabled || flags.group_calls_enabled;
+  const lifecycleEnabled = flags.learner_activity_lifecycle_v1 !== false;
   const applyNextGenPolicy = isNextGenDashPolicyEnabled({ organizationId, resolvedSchoolType });
 
   const registrationsBadge = stats?.pendingRegistrations?.total ?? pendingRegistrationsCount;
@@ -139,6 +141,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
     const groups: Record<QuickActionGroup, ActionItem[]> = {
       people: [
         { id: 'students', title: t('dashboard.manage_students', { defaultValue: 'Students' }), icon: 'school', color: '#6366F1' },
+        ...(lifecycleEnabled ? [{ id: 'learner-activity-control', title: t('dashboard.learner_activity_control', { defaultValue: 'Learner Activity' }), icon: 'pulse', color: '#EF4444' }] : []),
         { id: 'teachers', title: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }), icon: 'people', color: '#06B6D4' },
         { id: 'classes', title: t('dashboard.manage_classes', { defaultValue: 'Classes' }), icon: 'library', color: '#14B8A6' },
         { id: 'parent-links', title: t('dashboard.parent_links', { defaultValue: 'Connect Parents' }), icon: 'link', color: '#14B8A6' },
@@ -188,7 +191,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       });
     }
     return groups;
-  }, [applyNextGenPolicy, canLiveLessons, resolvedSchoolType, t, unpaidBadge]);
+  }, [applyNextGenPolicy, canLiveLessons, lifecycleEnabled, resolvedSchoolType, t, unpaidBadge]);
 
   const handleActionPress = (actionId: string) => {
     onAction?.(actionId);
