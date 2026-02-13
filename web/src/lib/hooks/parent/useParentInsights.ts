@@ -88,8 +88,8 @@ export function useParentInsights({
       const [studentRes, reportsRes, homeworkRes, assessmentsRes] = await Promise.all([
         supabase.from('students').select('first_name, last_name, grade').eq('id', studentId).single(),
         supabase.from('progress_reports').select('strengths, areas_for_improvement, attendance_summary').eq('student_id', studentId).order('created_at', { ascending: false }).limit(1),
-        supabase.from('homework').select('status').eq('student_id', studentId),
-        supabase.from('assessments').select('name, due_date, subject').eq('preschool_id', organizationId).gte('due_date', new Date().toISOString()).order('due_date', { ascending: true }).limit(3),
+        supabase.from('homework_submissions').select('status').eq('student_id', studentId),
+        supabase.from('assessments').select('title, due_date, assessment_type').eq('organization_id', organizationId).gte('due_date', new Date().toISOString()).order('due_date', { ascending: true }).limit(3),
       ]);
 
       if (cancelRef.current) return;
@@ -152,10 +152,10 @@ export function useParentInsights({
       assessments.forEach((a: any) => {
         const days = Math.ceil((new Date(a.due_date).getTime() - Date.now()) / 86400000);
         newAlerts.push({
-          id: `assessment-${a.name}`, alert_type: 'assessment_coming',
+          id: `assessment-${a.title}`, alert_type: 'assessment_coming',
           severity: days <= 3 ? 'urgent' : 'info',
-          title: `${a.subject} Assessment in ${days} days`,
-          message: `${a.name} is coming up. Help your child prepare!`,
+          title: `${a.assessment_type || 'Upcoming'} Assessment in ${days} days`,
+          message: `${a.title} is coming up. Help your child prepare!`,
           recommended_actions: ['Review past work together', 'Create a study schedule', 'Practice with similar questions'],
           created_at: new Date().toISOString(),
         });

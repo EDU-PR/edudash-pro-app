@@ -55,12 +55,14 @@ export async function handleSignedOut(
     })
     .catch(() => {});
 
-  // Deregister push device
-  try {
-    const { deregisterPushDevice } = await import('@/lib/notifications');
-    await deregisterPushDevice(assertSupabase(), { id: userId });
-  } catch (e) {
-    logger.debug('Push deregistration failed', e);
+  // Deregister push device (guard: userId may be undefined during anon sign-out)
+  if (userId) {
+    try {
+      const { deregisterPushDevice } = await import('@/lib/notifications');
+      await deregisterPushDevice(assertSupabase(), { id: userId });
+    } catch (e) {
+      logger.debug('Push deregistration failed', e);
+    }
   }
 
   // Deactivate device session

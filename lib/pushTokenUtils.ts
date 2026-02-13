@@ -12,6 +12,7 @@ import { assertSupabase } from './supabase';
  * Call this when user logs out
  */
 export async function deactivateCurrentUserTokens(userId: string): Promise<void> {
+  if (!userId) return;
   try {
     if (__DEV__) console.log('[PushTokenUtils] Deactivating tokens for user:', userId);
     
@@ -49,6 +50,7 @@ export async function deactivateCurrentUserTokens(userId: string): Promise<void>
  * Call this when user logs in
  */
 export async function reactivateUserTokens(userId: string): Promise<void> {
+  if (!userId) return;
   try {
     if (__DEV__) console.log('[PushTokenUtils] Reactivating tokens for user:', userId);
     

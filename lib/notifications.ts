@@ -280,7 +280,7 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
 
 export async function deregisterPushDevice(supabase: any, user: any): Promise<void> {
   try {
-    if (Platform.OS === 'web' || !Device.isDevice) return
+    if (Platform.OS === 'web' || !Device.isDevice || !user?.id) return
     
     // Use the same stable device ID as registration to ensure we deregister the correct device
     const stableDeviceId = await getStableDeviceId()

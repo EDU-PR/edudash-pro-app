@@ -263,8 +263,8 @@ export class ProactiveInsightsService {
       // Check upcoming assessments
       const { data: assessments } = await getSupabase()
         .from('assessments')
-        .select('name, due_date, subject')
-        .eq('preschool_id', preschoolId)
+        .select('title, due_date, assessment_type')
+        .eq('organization_id', preschoolId)
         .gte('due_date', new Date().toISOString())
         .order('due_date', { ascending: true })
         .limit(3);
@@ -276,11 +276,11 @@ export class ProactiveInsightsService {
           );
 
           alerts.push({
-            id: `assessment-${assessment.name}`,
+            id: `assessment-${assessment.title}`,
             alert_type: 'assessment_coming',
             severity: daysUntil <= 3 ? 'urgent' : 'info',
-            title: `${assessment.subject} Assessment in ${daysUntil} days`,
-            message: `${assessment.name} is coming up. Help your child prepare!`,
+            title: `${assessment.assessment_type || 'Upcoming'} Assessment in ${daysUntil} days`,
+            message: `${assessment.title} is coming up. Help your child prepare!`,
             recommended_actions: [
               'Review past work together',
               'Create a study schedule',
@@ -293,9 +293,8 @@ export class ProactiveInsightsService {
 
       // Check pending homework
       const { data: homework } = await getSupabase()
-        .from('homework')
+        .from('homework_assignments')
         .select('title, due_date, subject')
-        .eq('student_id', studentId)
         .eq('status', 'pending')
         .gte('due_date', new Date().toISOString())
         .order('due_date', { ascending: true })
@@ -365,7 +364,7 @@ export class ProactiveInsightsService {
 
       // Fetch homework completion
       const { data: homeworkStats } = await getSupabase()
-        .from('homework')
+        .from('homework_submissions')
         .select('status')
         .eq('student_id', studentId);
 
