@@ -36,11 +36,14 @@ export interface UseVoiceTTSReturn {
   error: string | null;
 }
 
-const DEFAULT_AZURE_RATE = 5;
-/** Slower rate for phonics — children need time to hear each sound clearly */
-const DEFAULT_PHONICS_AZURE_RATE = -22;
-const DEFAULT_DEVICE_RATE = 1.05;
-const DEFAULT_PHONICS_DEVICE_RATE = 0.82;
+/** Normal speech rate — keep at 0% for consistent pacing */
+const DEFAULT_AZURE_RATE = 0;
+/** Phonics rate: -35% gives children time to hear and absorb each sound */
+const DEFAULT_PHONICS_AZURE_RATE = -35;
+/** Device TTS: 1.0 = natural pace (matches Azure 0%) */
+const DEFAULT_DEVICE_RATE = 1.0;
+/** Device TTS phonics: 0.65 = noticeably slower for letter sounds */
+const DEFAULT_PHONICS_DEVICE_RATE = 0.65;
 const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
   process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
 

@@ -17,11 +17,6 @@ import { getFileIconName, formatFileSize } from '@/services/AttachmentService';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
-interface LearnerContext {
-  ageBand?: string | null;
-  schoolType?: string | null;
-  role?: string | null;
-}
 
 interface DashInputBarProps {
   inputRef: React.RefObject<TextInput>;
@@ -30,7 +25,6 @@ interface DashInputBarProps {
   enterToSend?: boolean;
   selectedAttachments: DashAttachment[];
   attachmentProgress?: Map<string, AttachmentProgress>;
-  learnerContext?: LearnerContext | null;
   isLoading: boolean;
   isUploading: boolean;
   isRecording?: boolean;
@@ -38,18 +32,14 @@ interface DashInputBarProps {
   partialTranscript?: string;
   bottomInset?: number;
   placeholder?: string;
-  messages?: any[]; // Track conversation history
+  messages?: any[];
   onSend: () => void;
   onMicPress: () => void;
   onTakePhoto: () => void;
   onAttachFile: () => void;
-  onOpenTools?: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onQuickAction?: (text: string) => void;
-  /** Cancel an in-progress AI generation */
   onCancel?: () => void;
-  /** Hide quick chips when an empty state component already shows actions */
-  hideQuickChips?: boolean;
 }
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
@@ -59,7 +49,6 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   enterToSend = true,
   selectedAttachments,
   attachmentProgress,
-  learnerContext,
   isLoading,
   isUploading,
   isRecording = false,
@@ -72,11 +61,9 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onMicPress,
   onTakePhoto,
   onAttachFile,
-  onOpenTools,
   onRemoveAttachment,
   onQuickAction,
   onCancel,
-  hideQuickChips = false,
 }) => {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
@@ -227,24 +214,15 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
 
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const hasMessages = messages && messages.length > 0;
-  // Quick chips only show once (no messages) and never alongside the empty-state component
-  const canShowTutorChips = !hideQuickChips && !hasContent && !isRecording && !isLoading && !hasMessages;
-  const normalizedSchool = (learnerContext?.schoolType || '').toLowerCase();
-  const isPreschool = normalizedSchool.includes('preschool') || normalizedSchool.includes('ecd') || normalizedSchool.includes('early') || ['3-5', '6-8'].includes(learnerContext?.ageBand || '');
+  // Show conversation starters when chat is empty
+  const canShowQuickChips = !hasContent && !isRecording && !isLoading && !hasMessages;
 
-  const quickChips = isPreschool
-    ? [
-        { id: 'explain', label: 'Story Time', icon: 'book-outline', prompt: 'Use a short story and ask one simple question. Keep it playful and age-appropriate for preschool.' },
-        { id: 'practice', label: 'Play & Learn', icon: 'color-palette-outline', prompt: 'Give one playful practice question using colors, shapes, or counting. Wait for the answer before continuing.' },
-        { id: 'quiz', label: 'Quick Quiz', icon: 'happy-outline', prompt: 'Quiz with 3 very easy questions using colors, shapes, or counting. Keep it fun.' },
-        { id: 'summary', label: 'Recap', icon: 'sparkles-outline', prompt: 'Summarize in 3 simple bullet points with friendly tone, then ask one short check question.' },
-      ]
-    : [
-        { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this step-by-step in simple language. Ask one diagnostic question first.' },
-        { id: 'practice', label: 'Practice', icon: 'pencil-outline', prompt: 'Give me one practice question and wait for my answer before continuing.' },
-        { id: 'quiz', label: 'Quiz me', icon: 'school-outline', prompt: 'Quiz me with 5 questions, starting easy and getting harder.' },
-        { id: 'summary', label: 'Summarize', icon: 'sparkles-outline', prompt: 'Summarize the key ideas in 5 bullet points and ask one quick check question.' },
-      ];
+  const quickChips = [
+    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this to me in simple terms.' },
+    { id: 'write', label: 'Write', icon: 'create-outline', prompt: 'Help me write something.' },
+    { id: 'brainstorm', label: 'Brainstorm', icon: 'sparkles-outline', prompt: 'Help me brainstorm ideas.' },
+    { id: 'analyze', label: 'Analyze', icon: 'analytics-outline', prompt: 'Analyze this for me.' },
+  ];
 
   return (
     <View
@@ -283,8 +261,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         </View>
       )}
 
-      {/* Tutor quick chips */}
-      {canShowTutorChips && (
+      {/* Conversation starters */}
+      {canShowQuickChips && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -308,27 +286,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         {/* Input wrapper */}
         <View style={[styles.inputWrapper, { backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]}>
           <View style={styles.inputAccessoryLeft}>
-            {onOpenTools && (
-              <TouchableOpacity
-                style={styles.inputIconButton}
-                onPress={async () => {
-                  try {
-                    await Haptics.selectionAsync();
-                  } catch {}
-                  onOpenTools();
-                }}
-                disabled={isLoading || isUploading}
-                accessibilityLabel="Open tools"
-                accessibilityRole="button"
-              >
-                <Ionicons
-                  name="construct-outline"
-                  size={20}
-                  color={isLoading || isUploading ? theme.textTertiary : theme.textSecondary}
-                />
-              </TouchableOpacity>
-            )}
-            {/* Attach files button (inside input like WhatsApp) */}
+            {/* Attach files button */}
             <TouchableOpacity
               style={styles.inputIconButton}
               onPress={async () => {
@@ -388,10 +346,8 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             ]}
             placeholder={
               isRecording
-                ? "🎤 Listening... tap stop when done"
-                : selectedAttachments.length > 0
-                  ? "Add a message (optional)..."
-                  : (placeholder || "Ask Dash anything...")
+                ? "Listening..."
+                : (placeholder || "Message Dash...")
             }
             placeholderTextColor={isRecording ? theme.primary : theme.inputPlaceholder}
             value={inputText}

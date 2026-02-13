@@ -28,13 +28,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { track } from '@/lib/analytics';
 import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTelemetry';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
@@ -44,15 +43,13 @@ import { LanguageDropdown, getLanguageLabel } from '@/components/dash-orb/Langua
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
-import { detectInteractiveChoices, type InteractiveChoice } from '@/lib/dash-interactive-choices';
 import {
-  getQuickActions,
   buildSystemPrompt,
   cleanForTTS,
   cleanRawJSON,
   createStreamingRequest,
-  detectTextLanguage,
 } from '@/lib/dash-voice-utils';
+
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { detectOCRTask, isOCRIntent, getOCRPromptForTask } from '@/lib/dash-ai/ocrPrompts';
 
@@ -72,40 +69,12 @@ type VoiceOrbRef = {
   isSpeaking: boolean;
 };
 
-type DashUnifiedMode = 'advisor' | 'tutor' | 'orb';
-
-const resolveDefaultMode = (role: string): DashUnifiedMode => {
-  if (['parent', 'student', 'learner'].includes(role)) return 'tutor';
-  if (['teacher', 'principal', 'principal_admin', 'admin'].includes(role)) return 'advisor';
-  return 'orb';
-};
-
-const resolveModeLabel = (mode: DashUnifiedMode): string => {
-  if (mode === 'advisor') return 'Advisor';
-  if (mode === 'tutor') return 'Tutor';
-  return 'Orb';
-};
-
 export default function DashVoiceScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
-  const params = useLocalSearchParams<{ mode?: string }>();
   const insets = useSafeAreaInsets();
   const role = String(profile?.role || 'parent').toLowerCase();
   const orgType = getOrganizationType(profile);
-  const flags = getFeatureFlagsSync();
-  const unifiedShellEnabled = flags.dash_unified_shell_v1;
-  const defaultMode = resolveDefaultMode(role);
-  const requestedMode = (() => {
-    const raw = String(params?.mode || '').toLowerCase();
-    if (raw === 'advisor' || raw === 'tutor' || raw === 'orb') return raw as DashUnifiedMode;
-    return null;
-  })();
-  const [dashMode, setDashMode] = useState<DashUnifiedMode>(requestedMode || defaultMode);
-
-  useEffect(() => {
-    setDashMode(requestedMode || defaultMode);
-  }, [requestedMode, defaultMode]);
 
   // ── State ──────────────────────────────────────────────────────────
   const [lastResponse, setLastResponse] = useState('');
@@ -119,6 +88,7 @@ export default function DashVoiceScreen() {
   const [attachedImage, setAttachedImage] = useState<{ uri: string; base64: string } | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [isGreetingLoading, setIsGreetingLoading] = useState(true);
 
   // Conversation history for context (prevents redundant greetings)
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
@@ -149,23 +119,32 @@ export default function DashVoiceScreen() {
   const hasGreetedRef = useRef(false);
   useEffect(() => {
     if (hasGreetedRef.current) return;
-    if (conversationHistory.length > 0) return; // Resumed conversation — skip
+    if (conversationHistoryRef.current.length > 0) return;
     if (isProcessing) return;
-    // Delay to let saved messages load first + orb animate in
+    hasGreetedRef.current = true;
+
+    // Build a local greeting instantly — no API call needed for the visual
+    const hour = new Date().getHours();
+    const tg = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
+    const localGreeting = name ? `${tg}, ${name}! How can I help you today?` : `${tg}! How can I help you today?`;
+
+    // Show instant local greeting — no flash, no layout shift
+    const initialHistory = [{ role: 'assistant' as const, content: localGreeting }];
+    conversationHistoryRef.current = initialHistory;
+    setConversationHistory(initialHistory);
+    setLastResponse(localGreeting);
+    setIsGreetingLoading(false);
+
+    // Fire-and-forget: fetch a richer AI greeting in the background
     const timer = setTimeout(async () => {
-      if (conversationHistoryRef.current.length > 0 || hasGreetedRef.current) return;
-      hasGreetedRef.current = true;
-      const hour = new Date().getHours();
-      const tg = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-      const name = profile?.first_name || profile?.full_name?.split(' ')[0] || '';
-      const greetDirective = name
-        ? `Greet the user briefly — their name is ${name}. Say "${tg}" and ask how you can help. Keep it to one sentence.`
-        : `Greet the user briefly. Say "${tg}" and ask how you can help. Keep it to one sentence.`;
-      // Send as system-level context without adding to visible user history
       try {
         const supabase = assertSupabase();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
+        const greetDirective = name
+          ? `Greet the user briefly — their name is ${name}. Say "${tg}" and ask how you can help. Keep it to one warm sentence.`
+          : `Greet the user briefly. Say "${tg}" and ask how you can help. Keep it to one warm sentence.`;
         const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
         const res = await fetch(url, {
           method: 'POST',
@@ -181,60 +160,37 @@ export default function DashVoiceScreen() {
               context: buildSystemPrompt(orgType, role, preferredLanguage) + '\n\n' + greetDirective,
             },
             stream: false,
-            metadata: { role, source: 'dash_voice_greeting', dash_mode: dashMode },
+            metadata: { role, source: 'dash_voice_greeting' },
           }),
         });
         const data = await res.json().catch(() => ({} as Record<string, any>));
-        const greeting = typeof data?.content === 'string' ? data.content : (tg + '! How can I help you today?');
-        // Add only the assistant response to conversation history
-        const updatedHistory = [{ role: 'assistant' as const, content: greeting }];
-        conversationHistoryRef.current = updatedHistory;
-        setConversationHistory(updatedHistory);
-        setLastResponse(greeting);
-        // Speak the greeting
-        if (voiceOrbRef.current && typeof voiceOrbRef.current.speakText === 'function') {
-          voiceOrbRef.current.speakText(greeting);
+        const aiGreeting = typeof data?.content === 'string' ? data.content : null;
+        if (aiGreeting && conversationHistoryRef.current.length === 1) {
+          const updatedHistory = [{ role: 'assistant' as const, content: aiGreeting }];
+          conversationHistoryRef.current = updatedHistory;
+          setConversationHistory(updatedHistory);
+          setLastResponse(aiGreeting);
+          if (voiceOrbRef.current && typeof voiceOrbRef.current.speakText === 'function') {
+            voiceOrbRef.current.speakText(aiGreeting);
+          }
         }
       } catch (err) {
-        console.warn('[dash-voice] Auto-greeting failed:', err);
+        console.warn('[dash-voice] AI greeting upgrade failed:', err);
       }
-    }, 1500);
+    }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const quickActions = useMemo(() => {
-    const base = getQuickActions(orgType, role);
-    if (!unifiedShellEnabled) return base;
-
-    if (dashMode === 'advisor') {
-      return [
-        { id: 'advisor-routine', label: 'Daily Routine', icon: 'calendar-outline', prompt: 'Build a practical ECD daily routine aligned to this week\'s theme with timings and transitions.' },
-        { id: 'advisor-briefing', label: 'Brief Teachers', icon: 'megaphone-outline', prompt: 'Draft a concise teacher briefing for today with priorities, resources, and parent communication points.' },
-        { id: 'advisor-hotfix', label: 'Quick Lesson Hotfix', icon: 'flash-outline', prompt: 'Generate a 20-minute emergency lesson aligned with current monthly and weekly themes, including setup and assessment.' },
-        { id: 'advisor-parent', label: 'Parent Digest', icon: 'people-outline', prompt: 'Create a parent-friendly daily digest from today\'s class goals, meals, and homework reminders.' },
-      ];
-    }
-
-    if (dashMode === 'tutor') {
-      return [
-        { id: 'tutor-explain', label: 'Explain Simply', icon: 'bulb-outline', prompt: 'Explain this concept in child-friendly language with one example and one check question.' },
-        { id: 'tutor-practice', label: 'Practice Drill', icon: 'pencil-outline', prompt: 'Give one short practice question, wait for the answer, then coach the learner.' },
-        { id: 'tutor-phonics', label: 'Phonics Coach', icon: 'musical-notes-outline', prompt: 'Run a phonics coaching turn with one target sound and corrective feedback.' },
-        { id: 'tutor-recap', label: 'Recap', icon: 'sparkles-outline', prompt: 'Summarize what we learned in 3 short bullet points and ask one follow-up question.' },
-      ];
-    }
-
-    return base;
-  }, [orgType, role, unifiedShellEnabled, dashMode]);
-  // Final safety net: strip any SSE artifacts that leaked into streaming/response text
+  const quickActions = useMemo(() => [
+    { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this to me in simple terms.' },
+    { id: 'write', label: 'Write', icon: 'create-outline', prompt: 'Help me write something.' },
+    { id: 'brainstorm', label: 'Brainstorm', icon: 'sparkles-outline', prompt: 'Help me brainstorm ideas.' },
+    { id: 'summarize', label: 'Summarize', icon: 'document-text-outline', prompt: 'Summarize this for me.' },
+  ], []);
   const rawDisplayed = streamingText || lastResponse;
   const displayedText = rawDisplayed && /^\s*data:\s*(\[DONE\])?\s*$/i.test(rawDisplayed)
     ? '' : rawDisplayed;
-  const interactiveChoices = useMemo(
-    () => (displayedText && !streamingText) ? detectInteractiveChoices(displayedText, orgType) : [],
-    [displayedText, streamingText, orgType],
-  );
   const langLabel = useMemo(() => getLanguageLabel(preferredLanguage), [preferredLanguage]);
 
   // ── TTS Queue ─────────────────────────────────────────────────────
@@ -247,7 +203,9 @@ export default function DashVoiceScreen() {
     try {
       isSpeakingRef.current = true;
       setIsSpeaking(true);
-      const chunkLang = preferredLanguage || `${detectTextLanguage(clean)}-ZA` as SupportedLanguage;
+      // FIXED: Always use the user's selected language — never auto-detect from text.
+      // Text detection caused voice-switching mid-response when AI used SA loanwords.
+      const chunkLang = preferredLanguage || 'en-ZA';
       await voiceOrbRef.current.speakText(clean, chunkLang, { phonicsMode });
     } catch { /* ignore */ } finally {
       isSpeakingRef.current = false;
@@ -336,7 +294,7 @@ export default function DashVoiceScreen() {
     const turnTelemetryBase = buildDashTurnTelemetry({
       conversationId: conversationIdRef.current,
       turnId,
-      mode: dashMode,
+      mode: 'orb',
       tier: String((profile as any)?.subscription_tier || '').trim() || null,
       voiceProvider: 'voice_orb',
       fallbackReason: 'none',
@@ -358,20 +316,7 @@ export default function DashVoiceScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Please log in');
 
-      const modeContext = (() => {
-        if (!unifiedShellEnabled) return null;
-        if (dashMode === 'advisor') {
-          return 'MODE: Dash AI Advisor. Focus on school operations, lesson planning support, staff coordination, and parent-ready communication.';
-        }
-        if (dashMode === 'tutor') {
-          return 'MODE: Dash Tutor. Teach step-by-step, ask one question at a time, and keep responses learner-friendly.';
-        }
-        return 'MODE: Dash Orb. Keep responses conversational, quick, and voice-first.';
-      })();
-      const systemPrompt = [
-        buildSystemPrompt(orgType, role, preferredLanguage),
-        modeContext,
-      ].filter(Boolean).join('\n\n');
+      const systemPrompt = buildSystemPrompt(orgType, role, preferredLanguage);
       const hasImage = !!attachedImage?.base64;
       const ocrTask = hasImage ? detectOCRTask(text) : null;
       const ocrMode = hasImage && (isOCRIntent(text) || ocrTask !== null);
@@ -406,7 +351,6 @@ export default function DashVoiceScreen() {
           role,
           source: 'dash_voice_orb',
           org_type: orgType,
-          dash_mode: dashMode,
           language: preferredLanguage || undefined,
           has_image: hasImage,
           ocr_mode: ocrMode,
@@ -521,7 +465,7 @@ export default function DashVoiceScreen() {
         error: msg,
       });
     }
-  }, [isProcessing, orgType, role, preferredLanguage, attachedImage, enqueueSpeech, persistOrbMessages, dashMode, unifiedShellEnabled, profile]);
+  }, [isProcessing, orgType, role, preferredLanguage, attachedImage, enqueueSpeech, persistOrbMessages, profile]);
 
   useEffect(() => () => { activeRequestRef.current?.abort(); }, []);
 
@@ -541,10 +485,6 @@ export default function DashVoiceScreen() {
     if (inputText.trim()) { sendMessage(inputText); setInputText(''); }
   }, [inputText, sendMessage]);
 
-  const handleInteractiveAnswer = useCallback((choice: InteractiveChoice) => {
-    sendMessage(choice.value);
-  }, [sendMessage]);
-
   // ── Derived ───────────────────────────────────────────────────────
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -553,30 +493,11 @@ export default function DashVoiceScreen() {
     return name ? `${tg}, ${name}` : tg;
   }, [profile]);
 
-  const orbSubtitle = useMemo(() => {
-    if (unifiedShellEnabled && dashMode === 'advisor') {
-      return 'School operations co-pilot';
-    }
-    if (unifiedShellEnabled && dashMode === 'tutor') {
-      return 'Interactive learning coach';
-    }
-    if (orgType === 'preschool') return 'Your play-based learning helper';
-    if (['teacher', 'principal', 'staff'].includes(role)) return 'Your teaching assistant';
-    return 'Your personal tutor';
-  }, [orgType, role, dashMode, unifiedShellEnabled]);
-
   const statusLabel = isProcessing
     ? (streamingText ? 'Streaming...' : 'Thinking...')
     : isSpeaking ? 'Speaking...'
     : isListening ? 'Always listening'
     : 'Tap the orb or speak';
-
-  const headerTitle = useMemo(() => {
-    if (!unifiedShellEnabled) return 'Dash';
-    if (dashMode === 'advisor') return 'Dash AI Advisor';
-    if (dashMode === 'tutor') return 'Dash Tutor';
-    return 'Dash Orb';
-  }, [dashMode, unifiedShellEnabled]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -592,7 +513,7 @@ export default function DashVoiceScreen() {
           await persistOrbMessages(history);
           router.push({
             pathname: '/screens/dash-assistant',
-            params: { source: 'orb', mode: dashMode },
+            params: { source: 'orb' },
           });
         }}
         theme={theme}
@@ -604,52 +525,19 @@ export default function DashVoiceScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={[s.headerTitle, { color: theme.text }]}>{headerTitle}</Text>
+          <Text style={[s.headerTitle, { color: theme.text }]}>Dash</Text>
           <Text style={[s.headerSub, { color: theme.textSecondary }]}>{statusLabel}</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/screens/dash-ai-settings')} style={s.headerBtn}>
-          <Ionicons name="settings-outline" size={20} color={theme.textSecondary} />
-        </TouchableOpacity>
         <TouchableOpacity onPress={() => setShowLangMenu(true)} style={[s.langBtn, { borderColor: theme.border }]}>
           <Ionicons name="language-outline" size={16} color={theme.primary} />
           <Text style={[s.langBtnText, { color: theme.primary }]}>{langLabel}</Text>
         </TouchableOpacity>
       </View>
-      {unifiedShellEnabled && (
-        <View style={[s.modeRow, { borderBottomColor: theme.border }]}>
-          {(['advisor', 'tutor', 'orb'] as DashUnifiedMode[]).map((mode) => {
-            const active = dashMode === mode;
-            return (
-              <TouchableOpacity
-                key={mode}
-                style={[
-                  s.modeChip,
-                  {
-                    borderColor: active ? theme.primary : theme.border,
-                    backgroundColor: active ? `${theme.primary}22` : theme.surface,
-                  },
-                ]}
-                onPress={() => setDashMode(mode)}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[
-                    s.modeChipText,
-                    { color: active ? theme.primary : theme.textSecondary },
-                  ]}
-                >
-                  {resolveModeLabel(mode)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
 
       <KeyboardAvoidingView style={s.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 50}>
         <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <Text style={[s.greeting, { color: theme.text }]}>{greeting}</Text>
-          <Text style={[s.subtitle, { color: theme.textSecondary }]}>{orbSubtitle}</Text>
+          <Text style={[s.subtitle, { color: theme.textSecondary }]}>Your AI assistant</Text>
 
           {/* ORB */}
           <View style={s.orbContainer}>
@@ -726,30 +614,8 @@ export default function DashVoiceScreen() {
             </View>
           ) : null}
 
-          {/* Interactive answer buttons for preschoolers */}
-          {interactiveChoices.length > 0 && (
-            <View style={s.interactiveRow}>
-              {interactiveChoices.map((choice) => (
-                <TouchableOpacity
-                  key={choice.value}
-                  style={[s.interactiveBtn, {
-                    backgroundColor: choice.type === 'number' ? '#6366F115' : choice.type === 'color' ? '#EC489915' : '#8B5CF615',
-                    borderColor: choice.type === 'number' ? '#6366F140' : choice.type === 'color' ? '#EC489940' : '#8B5CF640',
-                  }]}
-                  onPress={() => handleInteractiveAnswer(choice)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.interactiveBtnText, {
-                    color: choice.type === 'number' ? '#6366F1' : choice.type === 'color' ? '#EC4899' : '#8B5CF6',
-                    fontSize: choice.type === 'number' ? 28 : 16,
-                  }]}>{choice.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Quick actions — only show once before first interaction */}
-          {!displayedText && !isProcessing && conversationHistory.length === 0 && (
+          {/* Quick actions — only show once before first user interaction */}
+          {!displayedText && !isProcessing && !isGreetingLoading && conversationHistory.length <= 1 && !conversationHistory.some(m => m.role === 'user') && (
             <View style={s.quickActions}>
               {quickActions.map((action) => (
                 <TouchableOpacity
@@ -771,7 +637,7 @@ export default function DashVoiceScreen() {
             await persistOrbMessages(history);
             router.push({
               pathname: '/screens/dash-assistant',
-              params: { source: 'orb', mode: dashMode },
+              params: { source: 'orb' },
             });
           }}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.primary} />
@@ -837,25 +703,6 @@ const s = StyleSheet.create({
   headerSub: { fontSize: 12, marginTop: 1 },
   langBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
   langBtnText: { fontSize: 12, fontWeight: '700' },
-  modeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  modeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  modeChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
   content: { flex: 1 },
   scrollContent: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 8, flexGrow: 1 },
   greeting: { fontSize: 22, fontWeight: '700', marginTop: 12, textAlign: 'center' },
@@ -867,9 +714,6 @@ const s = StyleSheet.create({
   responseScroll: { maxHeight: 168 },
   responseText: { fontSize: 15, lineHeight: 22 },
   streamingDot: { position: 'absolute', bottom: 8, right: 12 },
-  interactiveRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 16, paddingHorizontal: 8 },
-  interactiveBtn: { minWidth: 64, minHeight: 54, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  interactiveBtnText: { fontWeight: '800', textAlign: 'center' },
   quickActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginBottom: 12 },
   quickChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24, borderWidth: 1 },
   quickChipText: { fontSize: 14, fontWeight: '600' },
