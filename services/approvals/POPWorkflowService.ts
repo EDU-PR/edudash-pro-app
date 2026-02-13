@@ -13,6 +13,43 @@ import { ApprovalNotificationService } from './ApprovalNotificationService';
 import { writeApprovalAuditLog } from './auditLogger';
 
 export class POPWorkflowService {
+  // NOTE: pop_uploads.uploaded_by has an FK to auth.users (not exposed via PostgREST),
+  // so we cannot embed uploader data via a `profiles!pop_uploads_uploaded_by_fkey` join.
+  // Instead, we fetch profiles separately (same approach as PettyCashWorkflowService).
+  private static async loadProfilesForUploaders(uploaderIds: string[]): Promise<Map<string, { id: string; auth_user_id?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null }>> {
+    const ids = Array.from(new Set(uploaderIds.filter(Boolean)));
+    const map = new Map<string, { id: string; auth_user_id?: string | null; first_name?: string | null; last_name?: string | null; email?: string | null }>();
+    if (!ids.length) return map;
+
+    const byId = await supabase
+      .from('profiles')
+      .select('id, auth_user_id, first_name, last_name, email')
+      .in('id', ids);
+
+    if (Array.isArray(byId.data)) {
+      byId.data.forEach((p: any) => {
+        if (p?.id) map.set(String(p.id), p);
+        if (p?.auth_user_id) map.set(String(p.auth_user_id), p);
+      });
+    }
+
+    const unresolved = ids.filter((id) => !map.has(id));
+    if (!unresolved.length) return map;
+
+    const byAuth = await supabase
+      .from('profiles')
+      .select('id, auth_user_id, first_name, last_name, email')
+      .in('auth_user_id', unresolved as any);
+
+    if (Array.isArray(byAuth.data)) {
+      byAuth.data.forEach((p: any) => {
+        if (p?.id) map.set(String(p.id), p);
+        if (p?.auth_user_id) map.set(String(p.auth_user_id), p);
+      });
+    }
+
+    return map;
+  }
   
   /**
    * Submit a new proof of payment
@@ -131,11 +168,6 @@ export class POPWorkflowService {
             first_name,
             last_name,
             grade_level
-          ),
-          uploader:profiles!pop_uploads_uploaded_by_fkey (
-            first_name,
-            last_name,
-            email
           )
         `)
         .eq('preschool_id', preschoolId)
@@ -149,13 +181,22 @@ export class POPWorkflowService {
         return [];
       }
 
-      return (data || []).map(pop => ({
+      const rows = Array.isArray(data) ? data : [];
+      const profiles = await this.loadProfilesForUploaders(rows.map((row: any) => String(row?.uploaded_by || '')));
+
+      return rows.map((pop: any) => {
+        const uploader = profiles.get(String(pop?.uploaded_by || ''));
+        const parentName = uploader
+          ? `${uploader.first_name || ''} ${uploader.last_name || ''}`.trim() || 'Unknown Parent'
+          : 'Unknown Parent';
+
+        return ({
         id: pop.id,
         preschool_id: pop.preschool_id,
         student_id: pop.student_id,
         submitted_by: pop.uploaded_by,
-        parent_name: pop.uploader ? `${pop.uploader.first_name || ''} ${pop.uploader.last_name || ''}`.trim() || 'Unknown Parent' : 'Unknown Parent',
-        parent_email: pop.uploader?.email,
+        parent_name: parentName,
+        parent_email: uploader?.email || undefined,
         payment_amount: pop.payment_amount || 0,
         payment_date: pop.payment_date || pop.created_at,
         payment_method: (pop.payment_method || 'bank_transfer') as any,
@@ -169,7 +210,8 @@ export class POPWorkflowService {
         auto_matched: false,
         student_name: pop.student ? `${pop.student.first_name} ${pop.student.last_name}` : 'Unknown Student',
         student_grade: pop.student?.grade_level,
-      }));
+      });
+      });
     } catch (error) {
       console.error('Error in getPendingPOPs:', error);
       return [];
@@ -193,8 +235,7 @@ export class POPWorkflowService {
         .from('pop_uploads')
         .select(`
           *,
-          student:students (first_name, last_name, grade_level),
-          uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
+          student:students (first_name, last_name, grade_level)
         `)
         .eq('preschool_id', preschoolId)
         .eq('upload_type', 'proof_of_payment')
@@ -227,13 +268,22 @@ export class POPWorkflowService {
         return [];
       }
 
-      return (data || []).map(pop => ({
+      const rows = Array.isArray(data) ? data : [];
+      const profiles = await this.loadProfilesForUploaders(rows.map((row: any) => String(row?.uploaded_by || '')));
+
+      return rows.map((pop: any) => {
+        const uploader = profiles.get(String(pop?.uploaded_by || ''));
+        const parentName = uploader
+          ? `${uploader.first_name || ''} ${uploader.last_name || ''}`.trim() || 'Unknown Parent'
+          : 'Unknown Parent';
+
+        return ({
         id: pop.id,
         preschool_id: pop.preschool_id,
         student_id: pop.student_id,
         submitted_by: pop.uploaded_by,
-        parent_name: pop.uploader ? `${pop.uploader.first_name || ''} ${pop.uploader.last_name || ''}`.trim() || 'Unknown Parent' : 'Unknown Parent',
-        parent_email: pop.uploader?.email,
+        parent_name: parentName,
+        parent_email: uploader?.email || undefined,
         payment_amount: pop.payment_amount || 0,
         payment_date: pop.payment_date || pop.created_at,
         payment_method: (pop.payment_method || 'bank_transfer') as any,
@@ -247,7 +297,8 @@ export class POPWorkflowService {
         auto_matched: false,
         student_name: pop.student ? `${pop.student.first_name} ${pop.student.last_name}` : 'Unknown Student',
         student_grade: pop.student?.grade_level,
-      }));
+      });
+      });
     } catch (error) {
       console.error('Error in getAllPOPs:', error);
       return [];
@@ -269,8 +320,7 @@ export class POPWorkflowService {
         .from('pop_uploads')
         .select(`
           *,
-          student:students (first_name, last_name),
-          uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
+          student:students (first_name, last_name)
         `)
         .eq('id', popId)
         .single();
@@ -279,6 +329,9 @@ export class POPWorkflowService {
         console.error('Error loading POP before approval:', existingError);
         return false;
       }
+
+      const uploaderProfiles = await this.loadProfilesForUploaders([String(existingPop.uploaded_by || '')]);
+      const uploaderProfile = uploaderProfiles.get(String(existingPop.uploaded_by || ''));
 
       const previousStatus = String(existingPop.status || 'pending');
       const categoryHint = existingPop.category_code ||
@@ -301,8 +354,7 @@ export class POPWorkflowService {
         .from('pop_uploads')
         .select(`
           *,
-          student:students (first_name, last_name),
-          uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
+          student:students (first_name, last_name)
         `)
         .eq('id', popId)
         .single();
@@ -329,8 +381,8 @@ export class POPWorkflowService {
       });
 
       // Get parent name for notification
-      const parentName = data.uploader 
-        ? `${data.uploader.first_name || ''} ${data.uploader.last_name || ''}`.trim() || 'Parent'
+      const parentName = uploaderProfile
+        ? `${uploaderProfile.first_name || ''} ${uploaderProfile.last_name || ''}`.trim() || 'Parent'
         : 'Parent';
 
       // Send notification to parent
@@ -381,16 +433,16 @@ export class POPWorkflowService {
           review_notes: reviewNotes ? `${rejectionReason}\n\n${reviewNotes}` : rejectionReason,
         })
         .eq('id', popId)
-        .select(`
-          *,
-          uploader:profiles!pop_uploads_uploaded_by_fkey (first_name, last_name, email)
-        `)
+        .select(`*`)
         .single();
 
       if (error) {
         console.error('Error rejecting POP:', error);
         return false;
       }
+
+      const uploaderProfiles = await this.loadProfilesForUploaders([String(data.uploaded_by || '')]);
+      const uploaderProfile = uploaderProfiles.get(String(data.uploaded_by || ''));
 
       // Log the action
       await this.logAction({
@@ -408,8 +460,8 @@ export class POPWorkflowService {
       });
 
       // Get parent name for notification
-      const parentName = data.uploader 
-        ? `${data.uploader.first_name || ''} ${data.uploader.last_name || ''}`.trim() || 'Parent'
+      const parentName = uploaderProfile
+        ? `${uploaderProfile.first_name || ''} ${uploaderProfile.last_name || ''}`.trim() || 'Parent'
         : 'Parent';
 
       // Send notification to parent

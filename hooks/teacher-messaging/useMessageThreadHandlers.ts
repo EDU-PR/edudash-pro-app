@@ -24,7 +24,7 @@ type ThreadState = ReturnType<typeof useMessageThreadState>;
 export function useMessageThreadHandlers(state: ThreadState) {
   const {
     threadId, user, selectedMsg, setSelectedMsg,
-    setReplyTo, setShowActions, setSending,
+    replyTo, setReplyTo, setShowActions, setSending,
     sendMessage, refetch, clearTyping, listRef, isAtBottomRef,
     composerHeight, setComposerHeight,
     callContext, parentId, displayName,
@@ -32,10 +32,11 @@ export function useMessageThreadHandlers(state: ThreadState) {
 
   const handleSend = useCallback(async (content: string) => {
     if (!content.trim() || !threadId || !user?.id) return;
+    const replyToId = replyTo?.id;
     setSending(true);
     setReplyTo(null);
     try {
-      await sendMessage({ threadId, content, senderId: user.id });
+      await sendMessage({ threadId, content, replyToId });
       refetch();
       clearTyping();
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 60);
@@ -44,7 +45,7 @@ export function useMessageThreadHandlers(state: ThreadState) {
     } finally {
       setSending(false);
     }
-  }, [threadId, user?.id, sendMessage, refetch, clearTyping, listRef, setSending, setReplyTo]);
+  }, [threadId, user?.id, sendMessage, refetch, clearTyping, listRef, setSending, setReplyTo, replyTo]);
 
   const handleVoiceRecording = useCallback(async (uri: string, dur: number) => {
     if (!threadId || !user?.id) return;

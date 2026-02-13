@@ -51,6 +51,9 @@ export function useWeeklyPlans(preschoolId: string | undefined) {
           status: 'approved',
           approved_by: session.user.id,
           approved_at: new Date().toISOString(),
+          rejection_reason: null,
+          rejected_at: null,
+          rejected_by: null,
         })
         .eq('id', id);
 
@@ -63,10 +66,25 @@ export function useWeeklyPlans(preschoolId: string | undefined) {
 
   const rejectPlan = async (id: string, reason?: string) => {
     try {
+      const trimmedReason = String(reason || '').trim();
+      if (!trimmedReason) {
+        throw new Error('Rejection reason is required.');
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
       const { error: updateError } = await supabase
         .from('weekly_plans')
         .update({
           status: 'draft',
+          rejection_reason: trimmedReason,
+          rejected_at: new Date().toISOString(),
+          rejected_by: session.user.id,
+          // Clear approval/submission metadata on revision requests
+          submitted_at: null,
+          approved_by: null,
+          approved_at: null,
         })
         .eq('id', id);
 

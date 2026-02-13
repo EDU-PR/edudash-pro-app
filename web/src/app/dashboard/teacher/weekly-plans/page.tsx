@@ -210,7 +210,14 @@ export default function TeacherWeeklyPlansPage() {
     try {
       const { error } = await supabase
         .from('weekly_plans')
-        .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+        .update({
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+          // Clear previous revision request metadata on resubmission
+          rejection_reason: null,
+          rejected_at: null,
+          rejected_by: null,
+        })
         .eq('id', plan.id);
       if (error) throw error;
       await loadRows();
@@ -296,6 +303,24 @@ export default function TeacherWeeklyPlansPage() {
                       <p style={{ margin: '8px 0 0 0', color: 'var(--muted)' }}>
                         Focus: {row.weekly_focus}
                       </p>
+                    ) : null}
+                    {row.status === 'draft' && row.rejection_reason ? (
+                      <div
+                        className="card"
+                        style={{
+                          marginTop: 10,
+                          padding: 10,
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          background: 'rgba(245, 158, 11, 0.08)',
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#fbbf24' }}>
+                          Revisions requested
+                        </p>
+                        <p style={{ margin: '6px 0 0 0', fontSize: 13, color: '#fde68a' }}>
+                          {row.rejection_reason}
+                        </p>
+                      </div>
                     ) : null}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

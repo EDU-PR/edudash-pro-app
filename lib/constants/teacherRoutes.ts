@@ -195,6 +195,15 @@ export const TEACHER_ROUTES: Record<string, TeacherRoute> = {
   },
   
   // === REPORTS ===
+  request_petty_cash: {
+    path: '/screens/petty-cash-request' as Href,
+    title: 'Request Petty Cash',
+    titleKey: 'teacher.request_petty_cash',
+    icon: 'wallet',
+    color: '#14B8A6',
+    category: 'reports',
+    roles: ['teacher', 'principal_admin'],
+  },
   student_reports: {
     path: '/screens/teacher-reports' as Href,
     title: 'Student Reports',
@@ -262,7 +271,7 @@ export const getTeacherRouteForSchoolType = (
   }
   if (action === 'quick_lesson') {
     return (schoolType === 'k12_school'
-      ? '/screens/ai-lesson-generator?mode=quick'
+      ? '/screens/ai-lesson-generator'
       : '/screens/preschool-lesson-generator?mode=quick') as Href;
   }
   return getTeacherRoute(action);
@@ -292,6 +301,7 @@ export const TEACHER_QUICK_ACTIONS: (keyof typeof TEACHER_ROUTES)[] = [
   'birthday_chart',
   'messages',
   'manage_groups',
+  'request_petty_cash',
   'student_reports',
   'family_activity_review',
   'reputation',

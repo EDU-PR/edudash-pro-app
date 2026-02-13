@@ -8,6 +8,10 @@ interface TokenRequest {
   roomName: string;
   userName?: string;
   isOwner?: boolean;
+  /** Only mute when explicitly requested by the client */
+  startAudioOff?: boolean;
+  /** Back-compat for older clients */
+  start_audio_off?: boolean;
 }
 
 // Generate a meeting token for a participant
@@ -59,6 +63,7 @@ export async function POST(request: NextRequest) {
 
     const body: TokenRequest = await request.json();
     const { roomName, userName, isOwner } = body;
+    const startAudioOff = body.startAudioOff ?? body.start_audio_off ?? false;
 
     if (!roomName) {
       return NextResponse.json({ error: 'Room name is required' }, { status: 400 });
@@ -86,7 +91,7 @@ export async function POST(request: NextRequest) {
           enable_screenshare: true,
           enable_recording: shouldBeOwner ? 'cloud' : undefined,
           start_video_off: false,
-          start_audio_off: !shouldBeOwner, // Non-owners (students/parents) join muted
+          start_audio_off: startAudioOff === true, // Only mute when explicitly requested
           exp: Math.floor(Date.now() / 1000) + 3600 * 3, // 3 hour token
         },
       }),

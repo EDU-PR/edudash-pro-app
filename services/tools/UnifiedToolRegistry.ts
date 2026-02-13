@@ -1,5 +1,5 @@
 import { normalizeRole } from '@/lib/rbac';
-import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
+import { getCapabilityTier, normalizeTierName } from '@/lib/tiers';
 import {
   ToolRegistry as ModuleToolRegistry,
   type AgentTool as ModuleAgentTool,
@@ -136,8 +136,12 @@ function parseToolTier(value?: string | null): { tier: ToolTier; known: boolean 
   }
   if (raw === 'group_10') return { tier: 'premium', known: true };
 
-  // Canonical capability-tier fallback for product-specific aliases.
-  const capabilityTier = resolveCapabilityTier(raw);
+  // Canonical tier mapping (strict): if we can't normalize it, treat it as unknown.
+  const aligned = normalizeTierName(raw);
+  if (aligned === 'free' && raw !== 'free') {
+    return { tier: 'free', known: false };
+  }
+  const capabilityTier = getCapabilityTier(aligned);
   if (capabilityTier === 'enterprise') return { tier: 'enterprise', known: true };
   if (capabilityTier === 'premium') return { tier: 'premium', known: true };
   if (capabilityTier === 'starter') return { tier: 'starter', known: true };

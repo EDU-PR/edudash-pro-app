@@ -18,11 +18,13 @@ export const useTeacherSendMessage = () => {
       content,
       voiceUrl,
       voiceDuration,
+      replyToId,
     }: { 
       threadId: string; 
       content: string;
       voiceUrl?: string;
       voiceDuration?: number;
+      replyToId?: string;
     }) => {
       if (!user?.id) throw new Error('User not authenticated');
       
@@ -38,6 +40,7 @@ export const useTeacherSendMessage = () => {
           content_type: isVoice ? 'voice' : 'text',
           voice_url: voiceUrl || null,
           voice_duration: voiceDuration || null,
+          reply_to_id: replyToId || null,
         })
         .select()
         .single();

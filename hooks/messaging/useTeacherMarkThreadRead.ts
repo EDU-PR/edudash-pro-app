@@ -6,6 +6,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { track } from '@/lib/analytics';
 
 export const useTeacherMarkThreadRead = () => {
   const { user } = useAuth();
@@ -23,12 +24,13 @@ export const useTeacherMarkThreadRead = () => {
       });
       
       if (rpcError) {
-        // Fallback: update last_read_at directly
-        await client
-          .from('message_participants')
-          .update({ last_read_at: new Date().toISOString() })
-          .eq('thread_id', threadId)
-          .eq('user_id', user.id);
+        track('edudash.messaging.receipt_rpc_failed', {
+          rpc: 'mark_thread_messages_as_read',
+          scope: 'teacher',
+          code: rpcError.code,
+          message: rpcError.message,
+        });
+        throw rpcError;
       }
     },
     onSuccess: () => {

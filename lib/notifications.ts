@@ -168,6 +168,21 @@ export async function registerPushDevice(supabase: any, user: any): Promise<Push
       return { status: 'skipped', reason: 'no_user' }
     }
 
+    // Guard: ensure the Supabase client is currently authenticated as this user.
+    // If a SIGNED_OUT happens while this async flow is in-flight, `auth.uid()` becomes null
+    // and the RLS policy will reject inserts/updates (42501).
+    try {
+      const { data: sData, error: sErr } = await supabase?.auth?.getSession?.();
+      const sessionUserId = sData?.session?.user?.id;
+      if (sErr || !sessionUserId || sessionUserId !== user.id) {
+        console.log('[Push Registration] Skipping - no active session for user');
+        return { status: 'skipped', reason: 'no_active_session' };
+      }
+    } catch {
+      console.log('[Push Registration] Skipping - could not verify active session');
+      return { status: 'skipped', reason: 'no_active_session' };
+    }
+
     // Get a stable device ID that persists across app restarts
     // This ensures consistency between notification registrations and avoids conflicts
     const stableDeviceId = await getStableDeviceId()

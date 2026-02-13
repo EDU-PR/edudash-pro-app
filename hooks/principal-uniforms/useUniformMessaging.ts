@@ -77,6 +77,7 @@ async function sendPush(params: {
 export function useUniformMessaging(opts: UseUniformMessagingOptions) {
   const { userId, schoolId, profile, showAlert } = opts;
   const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid' | 'no_order'>(null);
+  const [singleMessagingTargetId, setSingleMessagingTargetId] = useState<string | null>(null);
 
   const senderName = (profile as any)?.full_name
     || ((profile as any)?.first_name || '') + ' ' + ((profile as any)?.last_name || '').trim()
@@ -187,5 +188,108 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
     });
   }, [sendBulk]);
 
-  return { bulkMessaging, bulkMessageMissing, bulkMessageUnpaid, bulkMessageNoOrder };
+  const messageSingleParent = useCallback(async (row: DisplayRow) => {
+    if (!userId || !schoolId) return;
+    if (!row.parentId) {
+      showAlert({
+        title: 'No Parent Linked',
+        message: 'This learner does not have a linked parent contact yet.',
+        type: 'warning',
+        buttons: [{ text: 'OK' }],
+      });
+      return;
+    }
+    if (singleMessagingTargetId || bulkMessaging) return;
+
+    const isMissingOrder = row.status === 'missing';
+    const isOutstanding = !isMissingOrder && row.paymentStatus !== 'paid';
+    const codeLine = row.studentCode ? ' Student code: ' + row.studentCode + '.' : '';
+    const subject = isMissingOrder
+      ? 'Uniform Order Needed • ' + row.childName
+      : isOutstanding
+        ? 'Uniform Payment • ' + row.childName
+        : 'Uniform Follow-up • ' + row.childName;
+    const content = isMissingOrder
+      ? 'Hi ' + (row.parentName || 'Parent') +
+        ', we assigned a uniform order follow-up for ' + row.childName +
+        ". Please submit size, quantities, and select whether your child has a previous back number (or no number)." +
+        codeLine + ' Thank you.'
+      : isOutstanding
+        ? 'Hi ' + (row.parentName || 'Parent') +
+          ", this is a reminder to complete uniform payment (or upload proof of payment) for " + row.childName +
+          "'s uniform order." + codeLine + ' Thank you.'
+        : 'Hi ' + (row.parentName || 'Parent') +
+          ', this is a quick uniform follow-up for ' + row.childName +
+          '. Please confirm the saved order details and back number in the app.' +
+          codeLine + ' Thank you.';
+
+    showAlert({
+      title: isMissingOrder ? 'Assign Uniform Request' : 'Message Parent',
+      message:
+        (isMissingOrder
+          ? 'Send this parent an individual uniform order assignment message?'
+          : 'Send this parent an individual uniform follow-up message?'),
+      type: 'info',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setSingleMessagingTargetId(row.id);
+            try {
+              const threadId = await getOrCreateThread(userId, schoolId, {
+                studentId: row.studentId,
+                parentId: row.parentId,
+                subject,
+              });
+              if (!threadId) {
+                throw new Error('Unable to find or create a message thread.');
+              }
+              const supabase = assertSupabase();
+              const { data: msg, error } = await supabase
+                .from('messages')
+                .insert({ thread_id: threadId, sender_id: userId, content, content_type: 'text' })
+                .select('id, content')
+                .single();
+              if (error) throw error;
+
+              await sendPush({
+                threadId,
+                messageId: msg.id,
+                senderId: userId,
+                senderName,
+                messageContent: msg.content,
+                recipientIds: [row.parentId],
+              });
+
+              showAlert({
+                title: 'Message Sent',
+                message: 'The parent was notified successfully.',
+                type: 'success',
+                buttons: [{ text: 'OK' }],
+              });
+            } catch (error: any) {
+              showAlert({
+                title: 'Send Failed',
+                message: error?.message || 'Could not send message right now.',
+                type: 'error',
+                buttons: [{ text: 'OK' }],
+              });
+            } finally {
+              setSingleMessagingTargetId(null);
+            }
+          },
+        },
+      ],
+    });
+  }, [userId, schoolId, showAlert, singleMessagingTargetId, bulkMessaging, senderName]);
+
+  return {
+    bulkMessaging,
+    singleMessagingTargetId,
+    bulkMessageMissing,
+    bulkMessageUnpaid,
+    bulkMessageNoOrder,
+    messageSingleParent,
+  };
 }

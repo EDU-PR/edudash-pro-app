@@ -118,6 +118,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
   },

@@ -169,9 +169,11 @@ const DEFAULT_FLAGS: FeatureFlags = {
   dash_context_window_v1: process.env.EXPO_PUBLIC_DASH_CONTEXT_WINDOW_V1 !== 'false',
   dash_tutor_sessions_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_SESSIONS_V1 === 'true',
   dash_phoneme_mastery_v1: process.env.EXPO_PUBLIC_DASH_PHONEME_MASTERY_V1 !== 'false',
+  // Staged rollout defaults:
+  // v1 UI/policy enabled, automation + duplicate queue remain opt-in.
   learner_activity_lifecycle_v1: process.env.EXPO_PUBLIC_LEARNER_ACTIVITY_LIFECYCLE_V1 !== 'false',
-  learner_inactivity_automation_v1: process.env.EXPO_PUBLIC_LEARNER_INACTIVITY_AUTOMATION_V1 !== 'false',
-  learner_duplicate_queue_v1: process.env.EXPO_PUBLIC_LEARNER_DUPLICATE_QUEUE_V1 !== 'false',
+  learner_inactivity_automation_v1: process.env.EXPO_PUBLIC_LEARNER_INACTIVITY_AUTOMATION_V1 === 'true',
+  learner_duplicate_queue_v1: process.env.EXPO_PUBLIC_LEARNER_DUPLICATE_QUEUE_V1 === 'true',
   
   // Language Features
   enableMultilanguageSupport: process.env.EXPO_PUBLIC_ENABLE_MULTILANGUAGE !== 'false',

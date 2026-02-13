@@ -77,18 +77,26 @@ export async function signInWithSession(
 }> {
   try {
     authDebug('signIn.start');
-    if (__DEV__) console.log('[SessionManager] signInWithSession called for:', email);
+    const wantedEmail = (email || '').trim();
+    const wantedPassword = typeof password === 'string' ? password : '';
+    if (__DEV__) console.log('[SessionManager] signInWithSession called for:', wantedEmail);
+
+    // Guard: avoid calling Supabase with empty/whitespace credentials (can present as "Invalid login credentials").
+    if (!wantedEmail || !wantedPassword || wantedPassword.trim().length === 0) {
+      authDebug('signIn.error', { message: 'Missing email/password' });
+      return { session: null, profile: null, error: 'Please enter your email and password.' };
+    }
 
     // Quick check if there's an existing session for a different user
     try {
-      const wantedEmail = email.trim().toLowerCase();
+      const wantedEmailLower = wantedEmail.toLowerCase();
       const { data: existing } = await withTimeout(
         assertSupabase().auth.getSession(),
         2000,
         { data: { session: null }, error: null }
       );
       const existingEmail = existing?.session?.user?.email?.toLowerCase();
-      if (existing?.session && existingEmail && existingEmail !== wantedEmail) {
+      if (existing?.session && existingEmail && existingEmail !== wantedEmailLower) {
         if (__DEV__) console.log('[SessionManager] Existing session detected for different user, signing out first...');
         await withTimeout(
           assertSupabase().auth.signOut({ scope: 'local' } as any),
@@ -105,8 +113,8 @@ export async function signInWithSession(
     await clearAppSessionKeys();
 
     const signInPromise = assertSupabase().auth.signInWithPassword({
-      email,
-      password,
+      email: wantedEmail,
+      password: wantedPassword,
     }).catch((err) => ({
       data: { session: null, user: null },
       error: err,
@@ -123,8 +131,14 @@ export async function signInWithSession(
     const { data, error } = signInResult;
 
     if (error) {
-      console.error('[SessionManager] Supabase auth error:', error.message);
-      authDebug('signIn.error', { message: error.message });
+      const msg = String(error.message || 'Sign-in failed');
+      const lower = msg.toLowerCase();
+      const friendly =
+        lower.includes('invalid login credentials') || lower.includes('invalid_grant')
+          ? 'Invalid email or password.'
+          : msg;
+      console.error('[SessionManager] Supabase auth error:', msg);
+      authDebug('signIn.error', { message: msg });
 
       // Check if this is a timeout — auth might have actually succeeded in background
       if (error.message?.toLowerCase()?.includes('timed out')) {
@@ -197,9 +211,9 @@ export async function signInWithSession(
         method: 'email',
         role: 'unknown',
         success: false,
-        error: error.message,
+        error: msg,
       });
-      return { session: null, profile: null, error: error.message };
+      return { session: null, profile: null, error: friendly };
     }
 
     if (!data.session || !data.user) {

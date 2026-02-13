@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { DisplayRow } from './types';
 import { escapeHtml } from './types';
+import { hasAssignedBackNumber, normalizeBackNumber } from './numbering';
 
 export async function exportUniformPdf(params: {
   filtered: DisplayRow[];
@@ -35,7 +36,7 @@ export async function exportUniformPdf(params: {
       '<td>' + escapeHtml(row.tshirtSize || '-') + '</td>' +
       '<td>' + escapeHtml(row.tshirtQuantity ?? '-') + '</td>' +
       '<td>' + escapeHtml(row.shortsQuantity ?? '-') + '</td>' +
-      '<td>' + escapeHtml(row.tshirtNumber || '-') + '</td>' +
+      '<td>' + escapeHtml(hasAssignedBackNumber(row.tshirtNumber) ? normalizeBackNumber(row.tshirtNumber) : '-') + '</td>' +
       '<td>' + (row.sampleSupplied ? 'YES' : 'NO') + '</td>' +
       '<td><span class="payment-chip ' + statusClass + '">' + statusLabel + '</span></td>' +
       '</tr>';

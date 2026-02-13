@@ -189,6 +189,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             else await syncSessionFromSupabase(qS ?? null);
           } catch { /* noop */ }
 
+          // Keep biometric session restore reliable by persisting rotated refresh tokens.
+          // Supabase refresh tokens rotate; if we don't update biometric storage on TOKEN_REFRESHED,
+          // biometric sign-in will later fail with refresh_token_not_found.
+          if (
+            (qEvent === 'SIGNED_IN' || qEvent === 'TOKEN_REFRESHED') &&
+            qS?.user?.id &&
+            (qS as any)?.refresh_token
+          ) {
+            const userIdForRefresh = qS.user.id;
+            const refreshToken = (qS as any).refresh_token as string;
+            import('@/services/biometricStorage')
+              .then(({ setRefreshTokenForUser, setGlobalRefreshToken }) => {
+                setRefreshTokenForUser(userIdForRefresh, refreshToken).catch(() => {});
+                setGlobalRefreshToken(refreshToken).catch(() => {});
+              })
+              .catch(() => {});
+          }
+
           const nextUserId = qS?.user?.id ?? null;
           if (qEvent === 'SIGNED_OUT') signedInGenerationRef.current += 1;
 

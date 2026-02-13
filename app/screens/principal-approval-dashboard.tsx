@@ -265,7 +265,7 @@ export default function PrincipalApprovalDashboard() {
   if (isStillLoading || !user) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
-        <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+        <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.loading_profile', { defaultValue: 'Loading your profile...' })}</Text>
         </View>
@@ -276,7 +276,7 @@ export default function PrincipalApprovalDashboard() {
   if (!orgId) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
-        <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+        <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: theme.text }]}>{t('dashboard.no_school_found_redirect', { defaultValue: 'No school found. Redirecting to setup...' })}</Text>
           <TouchableOpacity onPress={() => { try { router.replace('/screens/principal-onboarding'); } catch { /* non-fatal */ } }}>
@@ -289,11 +289,36 @@ export default function PrincipalApprovalDashboard() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top', 'left', 'right', 'bottom']}>
-      <Stack.Screen options={{ title: t('approvals.title', { defaultValue: 'Principal Approvals' }), headerShown: true }} />
+      <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>{t('approvals.header', { defaultValue: 'Approvals' })}</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t('approvals.subtitle', { defaultValue: 'Review and manage pending requests' })}</Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => {
+              try { router.back(); }
+              catch { try { router.replace('/screens/principal-dashboard'); } catch { /* non-fatal */ } }
+            }}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.text} />
+          </TouchableOpacity>
+
+          <View style={styles.headerTitleWrap}>
+            <Text style={[styles.title, { color: theme.text }]}>{t('approvals.header', { defaultValue: 'Approvals' })}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t('approvals.subtitle', { defaultValue: 'Review and manage pending requests' })}</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={onRefresh}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh"
+          >
+            <Ionicons name="refresh" size={20} color={theme.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabs}>
@@ -473,6 +498,9 @@ function SummaryItem({ label, value, theme, icon }: { label: string; value: stri
 const createStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerTitleWrap: { flex: 1 },
+  headerIconBtn: { padding: 10, borderRadius: 999, backgroundColor: theme.surface },
   title: { fontSize: 22, fontWeight: '800' },
   subtitle: { marginTop: 4 },
   tabs: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },

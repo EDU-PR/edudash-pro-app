@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { track } from '@/lib/analytics';
 import type { Message } from '@/lib/messaging/types';
 
 export const useTeacherThreadMessages = (threadId: string | null) => {
@@ -28,20 +29,12 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
         
         if (result.error) {
           logger.warn('useTeacherThreadMessages', 'RPC mark_messages_delivered failed:', result.error.message);
-          
-          const { error: directError, data: updatedCount } = await client
-            .from('messages')
-            .update({ delivered_at: new Date().toISOString() })
-            .eq('thread_id', threadId)
-            .neq('sender_id', user.id)
-            .is('delivered_at', null)
-            .select('id');
-          
-          if (directError) {
-            logger.warn('useTeacherThreadMessages', 'Direct update also failed:', directError.message);
-          } else {
-            logger.debug('useTeacherThreadMessages', `✅ Marked ${updatedCount?.length || 0} messages as delivered via direct update`);
-          }
+          track('edudash.messaging.receipt_rpc_failed', {
+            rpc: 'mark_messages_delivered',
+            scope: 'teacher',
+            code: result.error.code,
+            message: result.error.message,
+          });
         } else if (result.data && result.data > 0) {
           logger.debug('useTeacherThreadMessages', `✅ Marked ${result.data} messages as delivered via RPC`);
         }
@@ -73,7 +66,8 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
           read_by,
           deleted_at,
           voice_url,
-          voice_duration
+          voice_duration,
+          reply_to_id
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -93,6 +87,30 @@ export const useTeacherThreadMessages = (threadId: string | null) => {
       let messagesWithDetails = (data || []).map((msg: any) => ({
         ...msg,
         sender: profileMap.get(msg.sender_id) || null,
+      }));
+
+      // Batch-fetch reply_to content for messages that have reply_to_id
+      const replyToIds = [...new Set(
+        (data || []).filter((m: any) => m.reply_to_id).map((m: any) => m.reply_to_id)
+      )] as string[];
+      let replyMap = new Map<string, any>();
+      if (replyToIds.length > 0) {
+        const { data: replyMsgs } = await client
+          .from('messages')
+          .select('id, content, content_type, sender_id')
+          .in('id', replyToIds);
+        if (replyMsgs) {
+          replyMsgs.forEach((r: any) => {
+            replyMap.set(r.id, {
+              ...r,
+              sender: profileMap.get(r.sender_id) || null,
+            });
+          });
+        }
+      }
+      messagesWithDetails = messagesWithDetails.map((msg: any) => ({
+        ...msg,
+        reply_to: msg.reply_to_id ? replyMap.get(msg.reply_to_id) || null : null,
       }));
       
       // Fetch reactions for all messages

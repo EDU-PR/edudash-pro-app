@@ -107,7 +107,7 @@ function SpotlightTourBridge({ children }: { children: React.ReactNode }) {
 function LayoutContent() {
   const pathname = usePathname();
   const { loading: authLoading, profileLoading, user, profile } = useAuth();
-  const { isDark } = useTheme();
+  const { isDark, theme } = useTheme();
   const loadingOverlay = useLoadingOverlay();
   const pushRegistrationRef = useRef<{ userId: string; attempted: boolean } | null>(null);
   
@@ -189,7 +189,7 @@ function LayoutContent() {
   const shouldRenderFAB = shouldShowFAB && (!hasCenterDashTab || isPrincipalRole);
   
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} animated />
       
       {/* App Tutorial - shows on first launch */}
@@ -503,7 +503,6 @@ function RootLayoutContent() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   contentContainer: {
     flex: 1,

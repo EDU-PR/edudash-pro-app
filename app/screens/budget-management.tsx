@@ -136,7 +136,7 @@ export default function BudgetManagementScreen() {
         {pettyCash && (
           <TouchableOpacity
             style={styles.pettyCashCard}
-            onPress={() => router.push('/screens/petty-cash-dashboard')}
+            onPress={() => router.push('/screens/petty-cash')}
             activeOpacity={0.8}
           >
             <View style={styles.pettyCashHeader}>

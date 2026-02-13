@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { assertSupabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { track } from '@/lib/analytics';
 import type { Message, MessageThread } from '@/lib/messaging/types';
 
 const aggregateReactions = (
@@ -51,20 +52,12 @@ export const useThreadMessages = (threadId: string | null) => {
 
         if (result.error) {
           logger.warn('useThreadMessages', 'RPC mark_messages_delivered failed:', result.error.message);
-
-          const { error: directError, data: updatedCount } = await client
-            .from('messages')
-            .update({ delivered_at: new Date().toISOString() })
-            .eq('thread_id', threadId)
-            .neq('sender_id', user.id)
-            .is('delivered_at', null)
-            .select('id');
-
-          if (directError) {
-            logger.warn('useThreadMessages', 'Direct update also failed:', directError.message);
-          } else {
-            logger.debug('useThreadMessages', `✅ Marked ${updatedCount?.length || 0} messages as delivered via direct update`);
-          }
+          track('edudash.messaging.receipt_rpc_failed', {
+            rpc: 'mark_messages_delivered',
+            scope: 'parent',
+            code: result.error.code,
+            message: result.error.message,
+          });
         } else if (result.data && result.data > 0) {
           logger.debug('useThreadMessages', `✅ Marked ${result.data} messages as delivered via RPC`);
         }
@@ -86,7 +79,8 @@ export const useThreadMessages = (threadId: string | null) => {
         .from('messages')
         .select(`
           *,
-          sender:profiles(first_name, last_name, role)
+          sender:profiles(first_name, last_name, role),
+          reply_to:messages!reply_to_id(id, content, content_type, sender_id, sender:profiles(first_name, last_name))
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -170,20 +164,30 @@ export const useMarkAllDelivered = (threads: MessageThread[] | undefined) => {
       try {
         const client = assertSupabase();
         const threadIds = threads.map((thread) => thread.id);
+        let updatedTotal = 0;
+        for (const threadId of threadIds) {
+          const res = await client.rpc('mark_messages_delivered', {
+            p_thread_id: threadId,
+            p_user_id: user.id,
+          });
+          if (res.error) {
+            logger.warn('useMarkAllDelivered', 'RPC mark_messages_delivered failed:', res.error.message);
+            track('edudash.messaging.receipt_rpc_failed', {
+              rpc: 'mark_messages_delivered',
+              scope: 'parent',
+              code: res.error.code,
+              message: res.error.message,
+            });
+            continue;
+          }
+          updatedTotal += Number(res.data || 0);
+        }
 
-        const { data, error } = await client
-          .from('messages')
-          .update({ delivered_at: new Date().toISOString() })
-          .in('thread_id', threadIds)
-          .neq('sender_id', user.id)
-          .is('delivered_at', null)
-          .is('deleted_at', null)
-          .select('id');
-
-        if (error) {
-          logger.warn('useMarkAllDelivered', 'Bulk delivery update failed:', error.message);
-        } else if (data && data.length > 0) {
-          logger.debug('useMarkAllDelivered', `✅ Marked ${data.length} messages as delivered across ${threadIds.length} threads`);
+        if (updatedTotal > 0) {
+          logger.debug(
+            'useMarkAllDelivered',
+            `✅ Marked ${updatedTotal} messages as delivered across ${threadIds.length} threads via RPC`
+          );
         }
       } catch (err) {
         logger.warn('useMarkAllDelivered', 'Failed to mark messages as delivered:', err);

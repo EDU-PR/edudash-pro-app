@@ -157,7 +157,8 @@ export default function SignIn() {
       setBiometricLoading(true);
       try {
         const result = await EnhancedBiometricAuth.authenticateWithBiometric();
-        if (result.success && !result.sessionRestored) {
+        // Biometric auth can succeed while session restoration fails (expired/rotated refresh token).
+        if (result.sessionRestored === false) {
           showAlert({
             title: t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
             message: result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password.' }),

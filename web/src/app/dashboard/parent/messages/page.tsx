@@ -350,41 +350,42 @@ function ParentMessagesContent() {
         message_participants: allParticipants?.filter((p: { thread_id: string }) => p.thread_id === thread.id) || []
       }));
 
-      const parentThreads = threadsWithParticipants;
+      const parentThreads = threadsWithParticipants as MessageThread[];
 
-      const threadsWithDetails = await Promise.all(
-        parentThreads.map(async (thread: any) => {
-          const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('content, created_at, sender_id')
-            .eq('thread_id', thread.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          const parentParticipant = thread.message_participants?.find(
-            (p: any) => p.user_id === userId && p.role === 'parent'
-          );
-
-          let unreadCount = 0;
-          if (parentParticipant) {
-            const lastReadAt = parentParticipant.last_read_at || '2000-01-01';
-            const { count } = await supabase
-              .from('messages')
-              .select('id', { count: 'exact', head: true })
-              .eq('thread_id', thread.id)
-              .neq('sender_id', userId)
-              .gt('created_at', lastReadAt);
-            unreadCount = count || 0;
-          }
-
-          return {
-            ...thread,
-            last_message: lastMessage || thread.last_message,
-            unread_count: unreadCount,
-          } as MessageThread;
-        })
+      const { data: threadSummaries, error: summaryError } = await supabase.rpc(
+        'get_my_message_threads_summary'
       );
+      if (summaryError) {
+        console.warn('Failed to load thread summaries via RPC:', summaryError);
+      }
+
+      const summaryMap = new Map<string, any>();
+      (threadSummaries || []).forEach((summary: any) => {
+        if (summary?.thread_id) {
+          summaryMap.set(summary.thread_id, summary);
+        }
+      });
+
+      const threadsWithDetails: MessageThread[] = parentThreads.map((thread) => {
+        const summary = summaryMap.get(thread.id);
+        const lastMessage =
+          summary?.last_message_id
+            ? {
+                id: summary.last_message_id,
+                content: summary.last_message_content,
+                created_at: summary.last_message_created_at,
+                sender_id: summary.last_message_sender_id,
+                delivered_at: summary.last_message_delivered_at,
+                read_by: summary.last_message_read_by,
+              }
+            : thread.last_message;
+
+        return {
+          ...thread,
+          last_message: lastMessage,
+          unread_count: Number(summary?.unread_count || 0),
+        } as MessageThread;
+      });
 
       // Collapse duplicates so each teacher/student pair only shows once
       const uniqueContactThreadMap = new Map<string, MessageThread>();
@@ -489,27 +490,26 @@ function ParentMessagesContent() {
     setDashAILoading(true);
     
     try {
-      // Call AI proxy endpoint
+      // Call canonical web AI endpoint (proxies to supabase/functions/ai-proxy)
       const response = await fetch('/api/ai-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: `You are Dash, a friendly and helpful AI assistant for parents using the EduDash Pro educational platform. You help parents with:
-- Questions about their child's education and homework
-- Understanding school announcements and policies  
-- Tips for supporting their child's learning at home
-- General educational guidance and encouragement
-
-Be warm, supportive, and conversational. Use emojis occasionally to be friendly. Keep responses concise but helpful.`
-            },
-            ...updatedMessages.slice(-10).map(m => ({
+          scope: 'parent',
+          service_type: 'chat_message',
+          enable_tools: true,
+          prefer_openai: true,
+          stream: false,
+          payload: {
+            prompt: userMessage.trim(),
+            context:
+              "You are Dash, a friendly and helpful AI assistant for parents using the EduDash Pro educational platform. Keep replies warm, supportive, and concise. When helpful, ask one short clarifying question and offer 1-2 actionable next steps.",
+            conversationHistory: dashAIMessages.slice(-10).map((m) => ({
               role: m.sender_id === DASH_AI_USER_ID ? 'assistant' : 'user',
-              content: m.content
-            }))
-          ],
+              content: m.content,
+            })),
+          },
+          metadata: { role: 'parent', source: 'parent_messages_dash_ai' },
         }),
       });
       
@@ -570,6 +570,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
           sender_id,
           content,
           created_at,
+          delivered_at,
           read_by,
           deleted_at,
           reply_to_id,
@@ -653,6 +654,17 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
       }
       
       setMessages(messagesWithDetails);
+      // Web must explicitly mark delivery for incoming messages (sender sees delivered tick).
+      if (userId) {
+        try {
+          await supabase.rpc('mark_messages_delivered', {
+            p_thread_id: threadId,
+            p_user_id: userId,
+          });
+        } catch {
+          // Non-critical.
+        }
+      }
       await markThreadAsRead(threadId);
       // Instant scroll to bottom when opening chat (no animation)
       setTimeout(() => scrollToBottom(true), 10);
@@ -703,6 +715,7 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
               sender_id,
               content,
               created_at,
+              delivered_at,
               read_by,
               sender:profiles(first_name, last_name, role)
             `)
@@ -737,19 +750,64 @@ Be warm, supportive, and conversational. Use emojis occasionally to be friendly.
                 ? { 
                     ...t, 
                     last_message: {
+                      id: newMessage.id,
                       content: newMessage.content,
                       created_at: newMessage.created_at,
-                      sender_id: newMessage.sender_id
+                      sender_id: newMessage.sender_id,
+                      delivered_at: (newMessage as any).delivered_at,
+                      read_by: newMessage.read_by,
                     },
                     last_message_at: newMessage.created_at,
-                    unread_count: newMessage.sender_id !== userId ? (t.unread_count || 0) + 1 : t.unread_count
+                    // User is viewing this thread, so unread stays at 0.
+                    unread_count: 0,
                   } 
                 : t
             ));
 
+            // If we're actively viewing the thread, consider incoming messages delivered + read immediately.
+            if (newMessage.sender_id !== userId && userId) {
+              supabase
+                .rpc('mark_messages_delivered', { p_thread_id: selectedThreadId, p_user_id: userId })
+                .catch(() => {});
+              supabase
+                .rpc('mark_thread_messages_as_read', { thread_id: selectedThreadId, reader_id: userId })
+                .catch(() => {});
+            }
+
             // Scroll to bottom
             setTimeout(() => scrollToBottom(), 100);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `thread_id=eq.${selectedThreadId}`,
+        },
+        (payload: any) => {
+          const updated = payload.new as any;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === updated.id ? { ...m, delivered_at: updated.delivered_at, read_by: updated.read_by } : m
+            )
+          );
+          setThreads((prev) =>
+            prev.map((t) => {
+              if (t.id !== selectedThreadId) return t;
+              if (!t.last_message || t.last_message.id !== updated.id) return t;
+              return {
+                ...t,
+                last_message: {
+                  ...t.last_message,
+                  delivered_at: updated.delivered_at,
+                  read_by: updated.read_by,
+                },
+              };
+            })
+          );
         }
       )
       .subscribe();

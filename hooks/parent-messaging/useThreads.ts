@@ -66,54 +66,35 @@ export const useParentThreads = () => {
           return [];
         }
 
-        const threadsWithDetails = await Promise.all(
-          threads.map(async (thread: any) => {
-            const { data: lastMessage } = await client
-              .from('messages')
-              .select(`
-                content,
-                created_at,
-                sender:profiles(first_name, last_name)
-              `)
-              .eq('thread_id', thread.id)
-              .is('deleted_at', null)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
+        // Aggregated per-thread summary (unread_count + last_message) in one RPC to avoid N+1.
+        const { data: summaries, error: summaryError } = await client.rpc('get_my_message_threads_summary');
+        if (summaryError) {
+          logger.warn('useParentThreads', 'get_my_message_threads_summary failed:', summaryError.message);
+          return threads as MessageThread[];
+        }
 
-            const userParticipant = thread.participants?.find((participant: any) => participant.user_id === user.id);
-            let unreadCount = 0;
+        const summaryMap = new Map<string, any>();
+        (summaries || []).forEach((row: any) => {
+          if (row?.thread_id) summaryMap.set(row.thread_id, row);
+        });
 
-            if (userParticipant) {
-              const { count } = await client
-                .from('messages')
-                .select('id', { count: 'exact', head: true })
-                .eq('thread_id', thread.id)
-                .gt('created_at', userParticipant.last_read_at)
-                .neq('sender_id', user.id)
-                .is('deleted_at', null);
+        return (threads || []).map((thread: any) => {
+          const summary = summaryMap.get(thread.id);
+          const lastMessage =
+            summary?.last_message_id && summary?.last_message_content
+              ? {
+                  content: summary.last_message_content,
+                  sender_id: summary.last_message_sender_id || undefined,
+                  created_at: summary.last_message_created_at,
+                }
+              : undefined;
 
-              unreadCount = count || 0;
-            }
-
-            const senderData: any = lastMessage?.sender;
-            const sender = Array.isArray(senderData) ? senderData[0] : senderData;
-
-            return {
-              ...thread,
-              last_message: lastMessage
-                ? {
-                    content: lastMessage.content,
-                    sender_name: sender ? `${sender.first_name} ${sender.last_name}`.trim() : 'Unknown',
-                    created_at: lastMessage.created_at,
-                  }
-                : undefined,
-              unread_count: unreadCount,
-            };
-          })
-        );
-
-        return threadsWithDetails;
+          return {
+            ...thread,
+            last_message: lastMessage,
+            unread_count: typeof summary?.unread_count === 'number' ? summary.unread_count : 0,
+          };
+        });
       } catch (err: any) {
         logger.error('useParentThreads', `Error fetching threads: ${err?.message || err}`, {
           userId: user?.id,
@@ -141,27 +122,12 @@ export const useUnreadMessageCount = () => {
       if (!user?.id) return 0;
 
       const client = assertSupabase();
-      const { data: participantData } = await client
-        .from('message_participants')
-        .select('thread_id, last_read_at')
-        .eq('user_id', user.id);
-
-      if (!participantData || participantData.length === 0) return 0;
-
-      let totalUnread = 0;
-      for (const participant of participantData) {
-        const { count } = await client
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('thread_id', participant.thread_id)
-          .gt('created_at', participant.last_read_at)
-          .neq('sender_id', user.id)
-          .is('deleted_at', null);
-
-        totalUnread += count || 0;
+      const { data: summaries, error } = await client.rpc('get_my_message_threads_summary');
+      if (error) {
+        logger.warn('useUnreadMessageCount', 'get_my_message_threads_summary failed:', error.message);
+        return 0;
       }
-
-      return totalUnread;
+      return (summaries || []).reduce((sum: number, row: any) => sum + (row?.unread_count || 0), 0);
     },
     enabled: !!user?.id,
     staleTime: 1000 * 60,

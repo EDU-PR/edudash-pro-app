@@ -7,8 +7,9 @@
  * ≤60 lines — WARP-compliant hook.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { assertSupabase } from '@/lib/supabase';
+import { useFocusEffect } from 'expo-router';
 
 interface UniformResult {
   uniformEnabled: boolean;
@@ -18,6 +19,14 @@ interface UniformResult {
 export function useUniformEnabled(children: any[]): UniformResult {
   const [uniformEnabled, setUniformEnabled] = useState(false);
   const [uniformSchoolIds, setUniformSchoolIds] = useState<string[]>([]);
+  const [focusTick, setFocusTick] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFocusTick((prev) => prev + 1);
+      return () => {};
+    }, [])
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +62,7 @@ export function useUniformEnabled(children: any[]): UniformResult {
     };
     load();
     return () => { cancelled = true; };
-  }, [children]);
+  }, [children, focusTick]);
 
   return { uniformEnabled, uniformSchoolIds };
 }

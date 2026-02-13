@@ -214,6 +214,41 @@ const WebSearchArgsSchema = z.object({
   domains: z.array(z.string()).optional(),
 });
 
+const CAPSCurriculumArgsSchema = z
+  .object({
+    query: z.string().min(2).optional(),
+    // Compatibility with legacy caps_curriculum_query tool shape
+    search_query: z.string().min(2).optional(),
+    grade: z.string().optional(),
+    subject: z.string().optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+    document_type: z.string().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (!val.query && !val.search_query) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'query is required', path: ['query'] });
+    }
+  });
+
+const GetCapsDocumentsArgsSchema = z.object({
+  grade: z.string().min(1),
+  subject: z.string().min(1),
+  limit: z.number().int().min(1).max(50).optional(),
+  document_type: z.string().optional(),
+});
+
+const GetCapsSubjectsArgsSchema = z.object({
+  grade: z.string().min(1),
+});
+
+const SERVER_TOOL_NAMES = new Set([
+  'web_search',
+  'search_caps_curriculum',
+  'get_caps_documents',
+  'get_caps_subjects',
+  'caps_curriculum_query',
+]);
+
 const DEFAULT_SYSTEM_PROMPT = `You are Dash, an AI tutor for parents and students.\n\nCORE BEHAVIOR:\n- Always teach step-by-step, ask one short question at a time, and wait for the learner’s response.\n- Never assume age, grade, language, or background knowledge. Ask for them if missing.\n- Never refuse to help or say you can’t help. If info is missing, ask. If tools are needed, use them.\n- Keep responses short and interactive.\n\nTUTOR FLOW:\nDiagnose → Teach → Practice → Check.\n\nWEB SEARCH TOOL:\nIf the user asks about information not in the curriculum/context, call the web_search tool to retrieve trustworthy sources.\n\nLANGUAGE:\nIf the user’s preferred language is unknown, ask which language they prefer (English, Afrikaans, isiZulu).`;
 
 const SHARED_PHONICS_PROMPT_BLOCK = [
@@ -1086,6 +1121,223 @@ async function duckDuckGoSearch(args: z.infer<typeof WebSearchArgsSchema>): Prom
   };
 }
 
+function mapGradeToRange(grade: string): string {
+  const raw = String(grade || '').trim();
+  const upper = raw.toUpperCase();
+  const normalized = upper.replace(/[\u2010-\u2015]/g, '-').replace(/\s+/g, '');
+  if (/^(R-3|4-6|7-9|10-12)$/.test(normalized)) return normalized;
+  if (normalized === 'R' || /^(0|1|2|3)$/.test(normalized)) return 'R-3';
+  if (/^[4-6]$/.test(normalized)) return '4-6';
+  if (/^[7-9]$/.test(normalized)) return '7-9';
+  if (/^(10|11|12)$/.test(normalized)) return '10-12';
+
+  const cleaned = normalized.replace(/[^0-9R-]/g, '');
+  if (/^(R-3|4-6|7-9|10-12)$/.test(cleaned)) return cleaned;
+  if (cleaned === 'R' || /^(0|1|2|3)$/.test(cleaned)) return 'R-3';
+  if (/^[4-6]$/.test(cleaned)) return '4-6';
+  if (/^[7-9]$/.test(cleaned)) return '7-9';
+  if (/^(10|11|12)$/.test(cleaned)) return '10-12';
+  return normalized || raw;
+}
+
+function normalizeSubjectForIlike(subject: string): string {
+  const lower = String(subject || '').toLowerCase();
+  if (!lower) return '';
+  if (lower.includes('math')) return 'math';
+  if (lower.includes('english')) return 'english';
+  if (lower.includes('afrikaans')) return 'afrikaans';
+  if (lower.includes('physical')) return 'physical';
+  if (lower.includes('life science')) return 'life';
+  if (lower.includes('life skills')) return 'life skills';
+  if (lower.includes('social') || /\bss\b/.test(lower)) return 'social';
+  if (lower.includes('geograph') || lower === 'geo') return 'geograph';
+  if (lower.includes('history')) return 'history';
+  if (lower.includes('technology') || lower.includes('tech')) return 'tech';
+  return lower;
+}
+
+function augmentCapsSearchQuery(query: string, subject?: string): string {
+  const base = String(query || '').trim();
+  const s = String(subject || '').toLowerCase();
+  if (!base || !s) return base;
+
+  const synonyms: string[] = [];
+  if (/(social|\bss\b)/i.test(s)) synonyms.push('"social sciences"', '"social science"', 'geography', 'history');
+  if (/geograph/i.test(s)) synonyms.push('geography', '"social sciences"');
+  if (/math/i.test(s)) synonyms.push('mathematics', 'math');
+  if (/english/i.test(s)) synonyms.push('english');
+  return [base, ...synonyms].filter(Boolean).join(' ');
+}
+
+async function searchCapsCurriculumTool(
+  supabase: any,
+  args: z.infer<typeof CAPSCurriculumArgsSchema>,
+): Promise<JsonRecord> {
+  const rawQuery = String(args.query || args.search_query || '').trim();
+  const limit = Math.min(Number(args.limit || 10) || 10, 50);
+  const gradeRange = args.grade ? mapGradeToRange(args.grade) : null;
+  const normalizedSubject = args.subject ? normalizeSubjectForIlike(args.subject) : null;
+  const augmentedQuery = augmentCapsSearchQuery(rawQuery, args.subject);
+
+  try {
+    const { data, error } = await supabase.rpc('search_caps_curriculum', {
+      search_query: augmentedQuery,
+      search_grade: gradeRange,
+      // Equality filter in SQL is strict; use query augmentation + post-filtering instead.
+      search_subject: null,
+      result_limit: limit,
+    });
+
+    if (!error && Array.isArray(data)) {
+      let docs = (data as any[]).map((row) => ({
+        id: row.id,
+        title: row.title,
+        grade: row.grade,
+        subject: row.subject,
+        document_type: row.document_type,
+        content_preview: row.content_preview,
+        file_url: row.file_url,
+        relevance_rank: row.relevance_rank,
+      }));
+
+      if (args.document_type) {
+        docs = docs.filter((d) => String(d.document_type || '').toLowerCase() === String(args.document_type).toLowerCase());
+      }
+      if (normalizedSubject) {
+        docs = docs.filter((d) => String(d.subject || '').toLowerCase().includes(normalizedSubject));
+      }
+
+      return {
+        success: true,
+        found: docs.length > 0,
+        query: rawQuery,
+        count: docs.length,
+        documents: docs,
+        grade: gradeRange,
+        subject: args.subject || null,
+        source: 'rpc.search_caps_curriculum',
+      };
+    }
+  } catch {
+    // Fall through to basic query
+  }
+
+  // Fallback: basic filter on caps_documents (no full-text ranking)
+  try {
+    let qb = supabase
+      .from('caps_documents')
+      .select('id, title, grade, subject, document_type, file_url, source_url, year, term, description, metadata')
+      .limit(limit);
+
+    if (gradeRange) qb = qb.eq('grade', gradeRange);
+    if (args.document_type) qb = qb.eq('document_type', args.document_type);
+    if (normalizedSubject) qb = qb.ilike('subject', `%${normalizedSubject}%`);
+    if (rawQuery) {
+      // PostgREST `.or()` uses commas as separators; sanitize user query to avoid parse errors.
+      const safe = rawQuery.replace(/[%_,]/g, ' ').trim();
+      if (safe) qb = qb.or(`title.ilike.%${safe}%,subject.ilike.%${safe}%,description.ilike.%${safe}%`);
+    }
+
+    const { data, error } = await qb;
+    if (error) {
+      return { success: false, error: 'caps_search_failed', details: error.message || error };
+    }
+
+    const docs = (data || []).map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      grade: row.grade,
+      subject: row.subject,
+      document_type: row.document_type,
+      file_url: row.file_url,
+      source_url: row.source_url,
+      year: row.year,
+      term: row.term,
+      description: row.description,
+      metadata: row.metadata,
+    }));
+
+    return {
+      success: true,
+      found: docs.length > 0,
+      query: rawQuery,
+      count: docs.length,
+      documents: docs,
+      grade: gradeRange,
+      subject: args.subject || null,
+      source: 'table.caps_documents',
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: 'caps_search_failed', details: message };
+  }
+}
+
+async function getCapsDocumentsTool(
+  supabase: any,
+  args: z.infer<typeof GetCapsDocumentsArgsSchema>,
+): Promise<JsonRecord> {
+  const gradeRange = mapGradeToRange(args.grade);
+  const normalizedSubject = normalizeSubjectForIlike(args.subject);
+  const limit = Math.min(Number(args.limit || 20) || 20, 50);
+
+  try {
+    let qb = supabase
+      .from('caps_documents')
+      .select('id, title, grade, subject, document_type, file_url, source_url, year, term, description, metadata')
+      .eq('grade', gradeRange)
+      .ilike('subject', `%${normalizedSubject}%`)
+      .limit(limit);
+
+    if (args.document_type) qb = qb.eq('document_type', args.document_type);
+
+    const { data, error } = await qb;
+    if (error) {
+      return { success: false, error: 'caps_documents_failed', details: error.message || error };
+    }
+
+    return {
+      success: true,
+      grade: gradeRange,
+      subject: args.subject,
+      count: (data || []).length,
+      documents: data || [],
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: 'caps_documents_failed', details: message };
+  }
+}
+
+async function getCapsSubjectsTool(
+  supabase: any,
+  args: z.infer<typeof GetCapsSubjectsArgsSchema>,
+): Promise<JsonRecord> {
+  const gradeRange = mapGradeToRange(args.grade);
+
+  try {
+    const { data, error } = await supabase
+      .from('caps_documents')
+      .select('subject')
+      .eq('grade', gradeRange);
+
+    if (error) {
+      return { success: false, error: 'caps_subjects_failed', details: error.message || error };
+    }
+
+    const subjects = Array.from(new Set((data || []).map((d: any) => d.subject).filter(Boolean)));
+    return {
+      success: true,
+      grade: gradeRange,
+      count: subjects.length,
+      subjects,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: 'caps_subjects_failed', details: message };
+  }
+}
+
 function buildOpenAITools(enableTools: boolean, clientTools?: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>) {
   if (!enableTools) return undefined;
   const serverTools = [
@@ -1102,6 +1354,73 @@ function buildOpenAITools(enableTools: boolean, clientTools?: Array<{ name: stri
             domains: { type: 'array', items: { type: 'string' } },
           },
           required: ['query'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'search_caps_curriculum',
+        description: 'Search South African CAPS curriculum documents by topic/keyword, optionally filtering by grade and subject.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query (topic, concept, or keyword)' },
+            grade: { type: 'string', description: 'Optional grade (e.g., "R", "1", "4-6", "10-12")' },
+            subject: { type: 'string', description: 'Optional subject (e.g., "Mathematics", "Life Skills")' },
+            limit: { type: 'number', description: 'Max results (default: 10)' },
+            document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+          },
+          required: ['query'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_caps_documents',
+        description: 'Retrieve CAPS documents for a specific grade and subject.',
+        parameters: {
+          type: 'object',
+          properties: {
+            grade: { type: 'string', description: 'Grade (e.g., "R-3", "4-6", "7-9", "10-12")' },
+            subject: { type: 'string', description: 'Subject (e.g., "Mathematics")' },
+            limit: { type: 'number', description: 'Max results (default: 20)' },
+            document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+          },
+          required: ['grade', 'subject'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'get_caps_subjects',
+        description: 'List CAPS subjects available for a given grade range.',
+        parameters: {
+          type: 'object',
+          properties: {
+            grade: { type: 'string', description: 'Grade (e.g., "R-3", "4-6", "7-9", "10-12")' },
+          },
+          required: ['grade'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'caps_curriculum_query',
+        description: '(Alias) Search CAPS curriculum. Prefer search_caps_curriculum.',
+        parameters: {
+          type: 'object',
+          properties: {
+            search_query: { type: 'string', description: 'Search query (topic, concept, or keyword)' },
+            grade: { type: 'string', description: 'Optional grade (e.g., "R", "1", "4-6", "10-12")' },
+            subject: { type: 'string', description: 'Optional subject (e.g., "Mathematics", "Life Skills")' },
+            limit: { type: 'number', description: 'Max results (default: 10)' },
+            document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+          },
+          required: [],
         },
       },
     },
@@ -1136,6 +1455,61 @@ function buildAnthropicTools(enableTools: boolean, clientTools?: Array<{ name: s
           domains: { type: 'array', items: { type: 'string' } },
         },
         required: ['query'],
+      },
+    },
+    {
+      name: 'search_caps_curriculum',
+      description: 'Search South African CAPS curriculum documents by topic/keyword, optionally filtering by grade and subject.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query (topic, concept, or keyword)' },
+          grade: { type: 'string', description: 'Optional grade (e.g., "R", "1", "4-6", "10-12")' },
+          subject: { type: 'string', description: 'Optional subject (e.g., "Mathematics", "Life Skills")' },
+          limit: { type: 'number', description: 'Max results (default: 10)' },
+          document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'get_caps_documents',
+      description: 'Retrieve CAPS documents for a specific grade and subject.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          grade: { type: 'string', description: 'Grade (e.g., "R-3", "4-6", "7-9", "10-12")' },
+          subject: { type: 'string', description: 'Subject (e.g., "Mathematics")' },
+          limit: { type: 'number', description: 'Max results (default: 20)' },
+          document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+        },
+        required: ['grade', 'subject'],
+      },
+    },
+    {
+      name: 'get_caps_subjects',
+      description: 'List CAPS subjects available for a given grade range.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          grade: { type: 'string', description: 'Grade (e.g., "R-3", "4-6", "7-9", "10-12")' },
+        },
+        required: ['grade'],
+      },
+    },
+    {
+      name: 'caps_curriculum_query',
+      description: '(Alias) Search CAPS curriculum. Prefer search_caps_curriculum.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          search_query: { type: 'string', description: 'Search query (topic, concept, or keyword)' },
+          grade: { type: 'string', description: 'Optional grade (e.g., "R", "1", "4-6", "10-12")' },
+          subject: { type: 'string', description: 'Optional subject (e.g., "Mathematics", "Life Skills")' },
+          limit: { type: 'number', description: 'Max results (default: 10)' },
+          document_type: { type: 'string', description: 'Optional type filter (curriculum, exam, exemplar, guideline)' },
+        },
+        required: [],
       },
     },
   ];
@@ -1281,6 +1655,7 @@ function buildSseStream(content: string): ReadableStream<Uint8Array> {
  * in a normalised format, and also collects usage/content for post-call logging.
  */
 function callAnthropicStreaming(
+  supabase: any,
   messages: Array<JsonRecord>,
   requestedModel: string | null | undefined,
   allowedOverride: string[] | undefined,
@@ -1441,21 +1816,50 @@ function callAnthropicStreaming(
 
         // If Claude responded with tool_use blocks, send them as pending_tool_calls for client execution
         if (pendingToolCalls.length > 0) {
-          // Separate server-side tools (web_search) from client-side tools
-          const serverTools = pendingToolCalls.filter((t) => t.name === 'web_search');
-          const clientPendingTools = pendingToolCalls.filter((t) => t.name !== 'web_search');
+          // Separate server-side tools from client-side tools
+          const serverTools = pendingToolCalls.filter((t) => SERVER_TOOL_NAMES.has(String(t.name || '')));
+          const clientPendingTools = pendingToolCalls.filter((t) => !SERVER_TOOL_NAMES.has(String(t.name || '')));
 
-          // Execute web_search server-side if requested
+          // Execute server-side tools post-hoc (streaming mode)
           for (const toolCall of serverTools) {
             try {
-              const query = (toolCall.input as Record<string, unknown>).query as string || '';
-              const webResult = await performWebSearch(query);
-              const toolResultText = typeof webResult === 'string' ? webResult : JSON.stringify(webResult);
-              fullContent += `\n\n[Web Search: ${query}]\n${toolResultText}`;
+              const toolName = String(toolCall.name || '');
+              const rawInput = (toolCall.input || {}) as JsonRecord;
+              let output: JsonRecord;
+
+              if (toolName === 'web_search') {
+                const parsed = WebSearchArgsSchema.safeParse(rawInput);
+                output = parsed.success
+                  ? await webSearchTool(parsed.data)
+                  : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+              } else if (toolName === 'search_caps_curriculum' || toolName === 'caps_curriculum_query') {
+                const parsed = CAPSCurriculumArgsSchema.safeParse(rawInput);
+                output = parsed.success
+                  ? await searchCapsCurriculumTool(supabase, parsed.data)
+                  : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+              } else if (toolName === 'get_caps_documents') {
+                const parsed = GetCapsDocumentsArgsSchema.safeParse(rawInput);
+                output = parsed.success
+                  ? await getCapsDocumentsTool(supabase, parsed.data)
+                  : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+              } else if (toolName === 'get_caps_subjects') {
+                const parsed = GetCapsSubjectsArgsSchema.safeParse(rawInput);
+                output = parsed.success
+                  ? await getCapsSubjectsTool(supabase, parsed.data)
+                  : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+              } else {
+                output = { success: false, error: 'tool_not_supported', tool: toolName };
+              }
+
+              const label = toolName === 'web_search'
+                ? `Web Search: ${String((rawInput as any)?.query || '')}`
+                : `Tool: ${toolName}`;
+              const toolResultText = JSON.stringify(output);
+              fullContent += `\n\n[${label}]\n${toolResultText}`;
               const searchEvent = { type: 'content_block_delta', delta: { text: `\n\n${toolResultText}` } };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(searchEvent)}\n\n`));
             } catch {
-              // Web search failed, continue
+              // Tool execution failed, continue
             }
           }
 
@@ -1491,6 +1895,7 @@ function callAnthropicStreaming(
 }
 
 async function callOpenAI(
+  supabase: any,
   messages: Array<JsonRecord>,
   enableTools: boolean,
   requestedModel?: string | null,
@@ -1561,10 +1966,14 @@ async function callOpenAI(
   const toolResults: ToolResult[] = [];
 
   if (enableTools && toolCalls.length > 0) {
+    let executedServerTool = false;
+    const pendingToolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+
     for (const call of toolCalls) {
       const toolCall = call as JsonRecord;
       const functionCall = toolCall.function as JsonRecord | undefined;
-      if (!functionCall || functionCall.name !== 'web_search') continue;
+      const toolName = typeof functionCall?.name === 'string' ? functionCall.name : '';
+      if (!toolName) continue;
 
       let parsedArgs: JsonRecord = {};
       if (typeof functionCall.arguments === 'string') {
@@ -1578,24 +1987,66 @@ async function callOpenAI(
       }
 
       const args = parsedArgs;
-      const parsed = WebSearchArgsSchema.safeParse(args);
-      if (!parsed.success) continue;
+      const toolCallId = String(toolCall.id || '');
 
-      const output = await webSearchTool(parsed.data);
-      toolResults.push({ name: 'web_search', input: parsed.data, output, success: true });
+      if (!SERVER_TOOL_NAMES.has(toolName)) {
+        pendingToolCalls.push({
+          id: toolCallId,
+          name: toolName,
+          input: args as Record<string, unknown>,
+        });
+        continue;
+      }
 
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(output),
-      });
+      executedServerTool = true;
+
+      if (toolName === 'web_search') {
+        const parsed = WebSearchArgsSchema.safeParse(args);
+        const output = parsed.success
+          ? await webSearchTool(parsed.data)
+          : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        toolResults.push({ name: 'web_search', input: parsed.success ? parsed.data : args, output, success: parsed.success });
+        messages.push({ role: 'tool', tool_call_id: toolCallId, content: JSON.stringify(output) });
+        continue;
+      }
+
+      if (toolName === 'search_caps_curriculum' || toolName === 'caps_curriculum_query') {
+        const parsed = CAPSCurriculumArgsSchema.safeParse(args);
+        const output = parsed.success
+          ? await searchCapsCurriculumTool(supabase, parsed.data)
+          : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        toolResults.push({ name: toolName, input: parsed.success ? parsed.data : args, output, success: parsed.success });
+        messages.push({ role: 'tool', tool_call_id: toolCallId, content: JSON.stringify(output) });
+        continue;
+      }
+
+      if (toolName === 'get_caps_documents') {
+        const parsed = GetCapsDocumentsArgsSchema.safeParse(args);
+        const output = parsed.success
+          ? await getCapsDocumentsTool(supabase, parsed.data)
+          : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        toolResults.push({ name: toolName, input: parsed.success ? parsed.data : args, output, success: parsed.success });
+        messages.push({ role: 'tool', tool_call_id: toolCallId, content: JSON.stringify(output) });
+        continue;
+      }
+
+      if (toolName === 'get_caps_subjects') {
+        const parsed = GetCapsSubjectsArgsSchema.safeParse(args);
+        const output = parsed.success
+          ? await getCapsSubjectsTool(supabase, parsed.data)
+          : { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        toolResults.push({ name: toolName, input: parsed.success ? parsed.data : args, output, success: parsed.success });
+        messages.push({ role: 'tool', tool_call_id: toolCallId, content: JSON.stringify(output) });
+        continue;
+      }
     }
 
-    if (toolResults.length > 0) {
+    if (executedServerTool) {
       const followUpBody: JsonRecord = {
         model,
         messages: normalizeOpenAIMessages(messages),
         temperature: 0.4,
+        max_tokens: maxTokens,
       };
 
       response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1629,6 +2080,24 @@ async function callOpenAI(
         },
         model,
         tool_results: toolResults,
+        pending_tool_calls: pendingToolCalls.length > 0 ? pendingToolCalls : undefined,
+      };
+    }
+
+    if (pendingToolCalls.length > 0) {
+      return {
+        content,
+        usage: {
+          tokens_in: typeof result.usage === 'object' && result.usage
+            ? (result.usage as JsonRecord).prompt_tokens as number | undefined
+            : undefined,
+          tokens_out: typeof result.usage === 'object' && result.usage
+            ? (result.usage as JsonRecord).completion_tokens as number | undefined
+            : undefined,
+        },
+        model,
+        tool_results: toolResults,
+        pending_tool_calls: pendingToolCalls,
       };
     }
   }
@@ -1649,6 +2118,7 @@ async function callOpenAI(
 }
 
 async function callAnthropic(
+  supabase: any,
   messages: Array<JsonRecord>,
   enableTools: boolean,
   requestedModel?: string | null,
@@ -1764,21 +2234,66 @@ async function callAnthropic(
   }
 
   if (enableTools && toolUses.length > 0) {
-    // Separate server-side tools (web_search) from client-side tools
-    const serverToolUses = toolUses.filter(tu => tu.name === 'web_search');
-    const clientToolUses = toolUses.filter(tu => tu.name !== 'web_search');
+    // Separate server-side tools from client-side tools.
+    // Server tools are executed here; everything else becomes pending_tool_calls.
+    const serverToolUses = toolUses.filter((tu) => SERVER_TOOL_NAMES.has(String(tu.name || '')));
+    const clientToolUses = toolUses.filter((tu) => !SERVER_TOOL_NAMES.has(String(tu.name || '')));
 
     for (const toolUse of serverToolUses) {
-      const parsed = WebSearchArgsSchema.safeParse(toolUse.input || {});
-      if (!parsed.success) continue;
+      const toolName = String(toolUse.name || '');
+      const rawInput = (toolUse.input || {}) as JsonRecord;
 
-      const output = await webSearchTool(parsed.data);
-      toolResults.push({ name: 'web_search', input: parsed.data, output, success: true });
+      let success = true;
+      let inputForLog: JsonRecord = rawInput;
+      let output: JsonRecord;
+
+      if (toolName === 'web_search') {
+        const parsed = WebSearchArgsSchema.safeParse(rawInput);
+        if (parsed.success) {
+          inputForLog = parsed.data;
+          output = await webSearchTool(parsed.data);
+        } else {
+          success = false;
+          output = { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        }
+      } else if (toolName === 'search_caps_curriculum' || toolName === 'caps_curriculum_query') {
+        const parsed = CAPSCurriculumArgsSchema.safeParse(rawInput);
+        if (parsed.success) {
+          inputForLog = parsed.data as any;
+          output = await searchCapsCurriculumTool(supabase, parsed.data);
+        } else {
+          success = false;
+          output = { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        }
+      } else if (toolName === 'get_caps_documents') {
+        const parsed = GetCapsDocumentsArgsSchema.safeParse(rawInput);
+        if (parsed.success) {
+          inputForLog = parsed.data as any;
+          output = await getCapsDocumentsTool(supabase, parsed.data);
+        } else {
+          success = false;
+          output = { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        }
+      } else if (toolName === 'get_caps_subjects') {
+        const parsed = GetCapsSubjectsArgsSchema.safeParse(rawInput);
+        if (parsed.success) {
+          inputForLog = parsed.data as any;
+          output = await getCapsSubjectsTool(supabase, parsed.data);
+        } else {
+          success = false;
+          output = { success: false, error: 'invalid_tool_args', details: parsed.error?.message || 'Invalid args' };
+        }
+      } else {
+        success = false;
+        output = { success: false, error: 'tool_not_supported', tool: toolName };
+      }
+
+      toolResults.push({ name: toolName, input: inputForLog, output, success });
 
       messages.push({
         role: 'assistant',
         content: [
-          { type: 'tool_use', id: toolUse.id, name: 'web_search', input: parsed.data },
+          { type: 'tool_use', id: toolUse.id, name: toolName, input: inputForLog },
         ],
       });
 
@@ -1810,6 +2325,14 @@ async function callAnthropic(
         }
       }
 
+      const pendingCalls = clientToolUses.length > 0
+        ? clientToolUses.map((tu) => ({
+            id: tu.id as string,
+            name: tu.name as string,
+            input: (tu.input || {}) as Record<string, unknown>,
+          }))
+        : undefined;
+
       return {
         content: followUpText,
         usage: {
@@ -1822,6 +2345,7 @@ async function callAnthropic(
         },
         model: followUpModel,
         tool_results: toolResults,
+        pending_tool_calls: pendingCalls,
       };
     }
 
@@ -2235,6 +2759,7 @@ serve(async (req) => {
           ? payload.client_tools as Array<{ name: string; description: string; input_schema: Record<string, unknown> }>
           : undefined;
         const { stream, meta } = callAnthropicStreaming(
+          supabase,
           messages,
           requestedModel,
           allowedOverride,
@@ -2300,10 +2825,10 @@ serve(async (req) => {
           ? pickAllowedModel(requestedModel, superAdminAllowed, superAdminAllowed[0]).model
           : requestedModel;
         const allowedOverride = isSuperAdmin ? superAdminAllowed : undefined;
-        return await callAnthropic(messages, enableTools, model, allowedOverride, maxTokens, clientTools);
+        return await callAnthropic(supabase, messages, enableTools, model, allowedOverride, maxTokens, clientTools);
       }
       if (!hasOpenAI) throw new Error('OPENAI_API_KEY missing and OpenAI not configured.');
-      return await callOpenAI(messages, enableTools, requestedModel, maxTokens, clientTools);
+      return await callOpenAI(supabase, messages, enableTools, requestedModel, maxTokens, clientTools);
     };
 
     try {

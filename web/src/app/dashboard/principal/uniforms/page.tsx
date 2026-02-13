@@ -7,6 +7,7 @@ import { useUserProfile } from '@/lib/hooks/useUserProfile';
 import { useTenantSlug } from '@/lib/tenant/useTenantSlug';
 import { PrincipalShell } from '@/components/dashboard/principal/PrincipalShell';
 import { Download, RefreshCw, Search, Shirt } from 'lucide-react';
+import { hasAssignedBackNumber, needsGeneratedBackNumber } from '@/hooks/principal-uniforms/numbering';
 
 interface UniformRow {
   id: string;
@@ -246,14 +247,14 @@ export default function UniformsPage() {
   }, [displayRows, searchTerm, sizeFilter]);
 
   const missingNumberCount = useMemo(
-    () => rows.filter((row) => !String(row.tshirt_number || '').trim()).length,
+    () => rows.filter((row) => needsGeneratedBackNumber(row.tshirt_number)).length,
     [rows]
   );
 
   const generateMissingNumbers = async () => {
     if (!schoolId || generatingNumbers) return;
 
-    const missingRows = rows.filter((row) => !String(row.tshirt_number || '').trim());
+    const missingRows = rows.filter((row) => needsGeneratedBackNumber(row.tshirt_number));
     if (missingRows.length === 0) {
       window.alert('All uniform orders already have T-shirt numbers.');
       return;
@@ -266,12 +267,9 @@ export default function UniformsPage() {
 
     const usedNumbers = new Set<number>();
     rows.forEach((row) => {
-      const raw = String(row.tshirt_number || '').trim();
-      if (!/^\d{1,2}$/.test(raw)) return;
-      const parsed = Number(raw);
-      if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 99) {
-        usedNumbers.add(parsed);
-      }
+      const parsed = Number.parseInt(String(row.tshirt_number || '').trim(), 10);
+      if (!hasAssignedBackNumber(row.tshirt_number) || !Number.isFinite(parsed)) return;
+      usedNumbers.add(parsed);
     });
 
     const availableNumbers: number[] = [];
@@ -299,31 +297,54 @@ export default function UniformsPage() {
     setGeneratingNumbers(true);
     setError(null);
     try {
+      const assignmentMap = new Map(assignments.map((assignment) => [assignment.id, assignment.number]));
+      const nowIso = new Date().toISOString();
       const results = await Promise.allSettled(
         assignments.map(async (assignment) => {
-          const { error: updateError } = await supabase
+          const { data: updateData, error: updateError } = await supabase
             .from('uniform_requests')
             .update({
               tshirt_number: assignment.number,
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
             })
             .eq('id', assignment.id)
-            .eq('preschool_id', schoolId);
+            .eq('preschool_id', schoolId)
+            .select('id')
+            .maybeSingle();
           if (updateError) throw updateError;
+          if (!updateData?.id) {
+            throw new Error('Update was rejected by access policy or no matching order was found.');
+          }
         })
       );
 
       const failedCount = results.filter((result) => result.status === 'rejected').length;
       const successCount = assignments.length - failedCount;
+      const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      const firstFailureMessage = firstFailure?.reason instanceof Error
+        ? firstFailure.reason.message
+        : firstFailure?.reason
+          ? String(firstFailure.reason)
+          : null;
       if (successCount <= 0) {
-        throw new Error('No numbers were assigned. Please retry.');
+        throw new Error(firstFailureMessage || 'No numbers were assigned. Please retry.');
       }
+
+      setRows((prev) => prev.map((row) => (
+        assignmentMap.has(row.id)
+          ? {
+            ...row,
+            tshirt_number: assignmentMap.get(row.id) || row.tshirt_number,
+            updated_at: nowIso,
+          }
+          : row
+      )));
 
       await loadUniforms();
 
       const notes: string[] = [`Assigned ${successCount} number(s).`];
       if (skippedCount > 0) notes.push(`${skippedCount} order(s) skipped: no unique 1–2 digit numbers left.`);
-      if (failedCount > 0) notes.push(`${failedCount} update(s) failed.`);
+      if (failedCount > 0) notes.push(`${failedCount} update(s) failed.${firstFailureMessage ? ' Example: ' + firstFailureMessage : ''}`);
       window.alert(notes.join(' '));
     } catch (e: any) {
       setError(e?.message || 'Failed to generate numbers.');
@@ -370,7 +391,7 @@ export default function UniformsPage() {
           <td>${htmlEscape(row.tshirtSize || '-')}</td>
           <td>${htmlEscape(row.tshirtQuantity ?? '-')}</td>
           <td>${htmlEscape(row.shortsQuantity ?? '-')}</td>
-          <td>${htmlEscape(row.tshirtNumber || '-')}</td>
+          <td>${htmlEscape(hasAssignedBackNumber(row.tshirtNumber) ? String(row.tshirtNumber).trim() : '-')}</td>
           <td>${row.sampleSupplied ? 'YES' : 'NO'}</td>
           <td><span class="payment-chip ${row.paymentStatus === 'paid' ? 'payment-paid' : 'payment-unpaid'}">${row.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}</span></td>
         </tr>`;
@@ -542,7 +563,7 @@ export default function UniformsPage() {
                       </td>
                       <td style={{ padding: 12 }}>{row.ageYears}</td>
                       <td style={{ padding: 12 }}>{row.tshirtSize}</td>
-                      <td style={{ padding: 12 }}>{row.tshirtNumber || '-'}</td>
+                      <td style={{ padding: 12 }}>{hasAssignedBackNumber(row.tshirtNumber) ? String(row.tshirtNumber).trim() : '-'}</td>
                       <td style={{ padding: 12 }}>{row.studentCode || '-'}</td>
                       <td style={{ padding: 12 }}>
                         <div style={{ fontWeight: 500 }}>{row.parentName || '-'}</div>

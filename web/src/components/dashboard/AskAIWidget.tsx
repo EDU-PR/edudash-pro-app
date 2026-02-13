@@ -38,6 +38,7 @@ const isDashAIEnabled = () => {
 };
 
 interface AskAIWidgetProps {
+  scope: 'parent' | 'teacher' | 'principal' | 'student' | 'guest';
   inline?: boolean;
   initialPrompt?: string;
   displayMessage?: string;
@@ -50,6 +51,7 @@ interface AskAIWidgetProps {
 }
 
 export function AskAIWidget({ 
+  scope,
   inline = true, 
   initialPrompt, 
   displayMessage, 
@@ -145,7 +147,7 @@ export function AskAIWidget({
       const { data, error } = await supabase.functions.invoke('ai-proxy', {
         options: enableInteractive ? { signal: abortControllerRef.current?.signal } : undefined,
         body: {
-          scope: 'parent',
+          scope,
           service_type: 'homework_help',
           enable_tools: true,
           // Prefer OpenAI for all generations (temporary global switch)
@@ -154,14 +156,12 @@ export function AskAIWidget({
             prompt: fullPrompt,  // Use reconstructed prompt with system instructions
             context: enableInteractive ? 'caps_exam_preparation' : 'general_question',
             conversationHistory: conversationHistory.length > 0 ? conversationHistory : undefined,
-            metadata: {
-              source: enableInteractive ? 'exam_generator' : 'dashboard',
-              language: language || 'en-ZA',
-              enableInteractive: enableInteractive
-            }
           },
           metadata: {
-            role: 'parent'
+            role: scope,
+            source: enableInteractive ? 'exam_generator' : 'dashboard',
+            language: language || 'en-ZA',
+            enableInteractive: enableInteractive,
           }
         },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
