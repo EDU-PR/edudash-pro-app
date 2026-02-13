@@ -27,6 +27,7 @@ import {
 } from '@/lib/rbac';
 import { signOut, clearStoredAuthData, syncSessionFromSupabase } from '@/lib/sessionManager';
 import { destroyVisibilityHandler } from '@/lib/visibilityHandler';
+import { mark, measure } from '@/lib/perf';
 import type { User } from '@supabase/supabase-js';
 import * as Sentry from 'sentry-expo';
 import { getPostHog } from '@/lib/posthogClient';
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Boot
     (async () => {
+      mark('auth_bootstrap_start');
       await bootSession({
         mounted: { get current() { return mounted; } },
         setUser,
@@ -174,6 +176,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLastRefreshAttempt,
         sessionRef,
         existingProfile: profileRef.current,
+      });
+
+      const authBootstrapPerf = measure('auth_bootstrap_start');
+      track('edudash.app.auth_bootstrap', {
+        duration_ms: authBootstrapPerf.duration,
+        platform: typeof navigator !== 'undefined' ? 'web' : 'native',
       });
 
       // Auth state listener (serialised via authEventQueue)
@@ -279,6 +287,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try { destroyVisibilityHandler(); } catch { /* noop */ }
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading && !profileLoading) {
+      mark('auth_bootstrap_done');
+      const profileFetchPerf = measure('auth_bootstrap_done', 'auth_bootstrap_start');
+      track('edudash.app.profile_ready', {
+        duration_ms: profileFetchPerf.duration,
+        has_profile: !!profile,
+        role: profile?.role || null,
+      });
+    }
+  }, [loading, profileLoading, profile]);
 
   return (
     <AuthContext.Provider

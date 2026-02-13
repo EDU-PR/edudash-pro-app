@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useAuth } from '@/contexts/AuthContext';
 import { WIDGET_COMPONENTS, type WidgetKey } from './cards';
 import type { OrganizationType } from '@/lib/types/organization';
+import { mark, measure } from '@/lib/perf';
+import { track } from '@/lib/analytics';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -38,6 +40,19 @@ export function DashboardRouter({
   debug = false,
 }: DashboardRouterProps) {
   const { profile } = useAuth();
+  const firstRenderTrackedRef = useRef(false);
+
+  useEffect(() => {
+    if (firstRenderTrackedRef.current || !profile) return;
+    firstRenderTrackedRef.current = true;
+    mark('first_dashboard_render');
+    const perf = measure('first_dashboard_render', 'app_start');
+    track('edudash.app.first_dashboard_render', {
+      duration_ms: perf.duration,
+      hub_type: hubType,
+      role: profile.role || null,
+    });
+  }, [profile, hubType]);
 
   // Determine effective organization type
   const effectiveOrgType = organizationType || (profile as any)?.preschool?.organization_type || 'preschool';

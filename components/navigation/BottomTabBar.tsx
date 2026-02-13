@@ -13,6 +13,11 @@ import {
   resolveSchoolTypeFromProfile,
 } from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
+import { uiTokens } from '@/lib/ui/tokens';
+import {
+  ROLES_WITH_CENTER_TAB,
+  SCHOOL_ADMIN_DASH_TAB,
+} from '@/lib/navigation/navManifest';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 360;
@@ -31,16 +36,7 @@ interface TabItem {
 }
 
 /** Roles that have the Dash center tab in the bottom nav (FAB hidden for these) */
-export const ROLES_WITH_CENTER_TAB = ['parent', 'student', 'learner', 'principal', 'principal_admin', 'teacher'];
-
-const SCHOOL_ADMIN_DASH_TAB: TabItem = {
-  id: 'school-admin-dash',
-  label: 'Dash',
-  icon: 'sparkles-outline',
-  activeIcon: 'sparkles',
-  route: '/screens/dash-voice',
-  isCenterTab: true,
-};
+export { ROLES_WITH_CENTER_TAB };
 
 const TAB_ITEMS: TabItem[] = [
   // Parent tabs
@@ -630,8 +626,8 @@ export function BottomTabBar() {
       backgroundColor: theme.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
-      paddingBottom: Math.max(insets.bottom, 4),
-      paddingTop: isCompact ? 4 : 6,
+      paddingBottom: Math.max(insets.bottom, uiTokens.spacing.xs),
+      paddingTop: isCompact ? uiTokens.spacing.xs : 6,
       shadowColor: theme.shadow,
       shadowOffset: { width: 0, height: -1 },
       shadowOpacity: 0.08,
@@ -642,7 +638,7 @@ export function BottomTabBar() {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: isCompact ? 2 : 4,
+      paddingVertical: isCompact ? 2 : uiTokens.spacing.xs,
       minHeight: isCompact ? 44 : 50,
     },
     iconContainer: {
