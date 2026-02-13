@@ -1,0 +1,51 @@
+
+> soil-of-africa-web@1.0.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/24) ...
+   Generating static pages (6/24) 
+   Generating static pages (12/24) 
+   Generating static pages (18/24) 
+ ✓ Generating static pages (24/24)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    8.49 kB         165 kB
+├ ○ /_not-found                          873 B          88.2 kB
+├ ○ /about                               4.57 kB         161 kB
+├ ƒ /api/social-media                    0 B                0 B
+├ ƒ /api/youtube                         0 B                0 B
+├ ○ /auth/callback                       1.94 kB         139 kB
+├ ○ /contact                             4.14 kB         160 kB
+├ ○ /donate                              3.96 kB         160 kB
+├ ○ /download                            3.39 kB         160 kB
+├ ○ /gallery                             4.22 kB         161 kB
+├ ○ /id-card                             4.27 kB         161 kB
+├ ○ /invite                              698 B            88 kB
+├ ○ /invite/admin                        2.39 kB         148 kB
+├ ○ /invite/executive                    2.8 kB          140 kB
+├ ○ /invite/member                       2.72 kB         149 kB
+├ ○ /join                                9.33 kB         215 kB
+├ ○ /media                               6.5 kB          163 kB
+├ ○ /order                               4.34 kB         161 kB
+├ ○ /president                           3.37 kB         160 kB
+├ ○ /register                            9.67 kB         216 kB
+├ ○ /set-password                        3.27 kB         209 kB
+└ ○ /youth-president                     4.73 kB         211 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/117-0736f1133d786118.js       31.7 kB
+  ├ chunks/fd9d1056-411c0e320fe15393.js  53.6 kB
+  └ other shared chunks (total)          1.95 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
