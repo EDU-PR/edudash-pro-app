@@ -828,10 +828,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </ScrollView>
         )}
 
-        {/* Attachments display */}
-        {message.attachments && message.attachments.length > 0 && (
+        {/* Attachments display (non-image only — images already shown as visual previews above) */}
+        {message.attachments && message.attachments.some((a) => a.kind !== 'image') && (
           <View style={styles.messageAttachmentsContainer}>
-            {message.attachments.map((attachment, idx) => (
+            {message.attachments
+              .filter((attachment) => attachment.kind !== 'image')
+              .map((attachment, idx) => (
               <View 
                 key={idx}
                 style={[

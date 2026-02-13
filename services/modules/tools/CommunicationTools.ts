@@ -220,4 +220,403 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
       }
     }
   });
+
+  // ── Generate Image tool ──────────────────────────────────────────────
+  register({
+    name: 'generate_image',
+    description: 'Generate an educational image or illustration from a text prompt. Returns a signed URL and storage path.',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Detailed description of the image to generate (e.g. "A colorful poster of the solar system for preschoolers")'
+        },
+        size: {
+          type: 'string',
+          enum: ['1024x1024', '1536x1024', '1024x1536'],
+          description: 'Image dimensions (default: 1024x1024)'
+        },
+        style: {
+          type: 'string',
+          enum: ['natural', 'vivid'],
+          description: 'Image style: natural (realistic) or vivid (artistic). Default: vivid'
+        }
+      },
+      required: ['prompt']
+    },
+    risk: 'low',
+    execute: async (args) => {
+      try {
+        const { generateDashImage } = await import('@/lib/services/dashImageService');
+
+        const result = await generateDashImage({
+          prompt: String(args.prompt),
+          size: args.size || '1024x1024',
+          style: args.style || 'vivid',
+          costMode: 'balanced',
+          providerPreference: 'auto',
+        });
+
+        const firstImage = result.generatedImages?.[0];
+        if (!firstImage) {
+          return { success: false, error: 'No image was generated' };
+        }
+
+        // Post image link into Dash chat
+        try {
+          const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
+          const dash = DashAIAssistant.getInstance();
+          const convId = dash.getCurrentConversationId?.();
+          if (convId && firstImage.signed_url) {
+            await dash.addMessageToConversation(convId, {
+              id: `img_${Date.now()}`,
+              type: 'assistant',
+              content: `Here's your generated image:\n\n![${args.prompt}](${firstImage.signed_url})`,
+              timestamp: Date.now(),
+              metadata: {
+                tool_results: { tool: 'generate_image', ...firstImage },
+              },
+            } as any);
+          }
+        } catch (postErr) {
+          logger.warn('[generate_image] Failed to post chat message:', postErr);
+        }
+
+        return {
+          success: true,
+          imageUrl: firstImage.signed_url,
+          storagePath: firstImage.path,
+          bucket: firstImage.bucket,
+          provider: firstImage.provider,
+          model: firstImage.model,
+          width: firstImage.width,
+          height: firstImage.height,
+          message: 'Image generated successfully',
+        };
+      } catch (e: any) {
+        logger.error('[generate_image] Error:', e);
+        return { success: false, error: e?.message || 'Image generation failed' };
+      }
+    }
+  });
+
+  // ── Generate Worksheet tool ──────────────────────────────────────────
+  register({
+    name: 'generate_worksheet',
+    description: 'Generate a printable educational worksheet PDF (math, reading, or activity) suitable for a specific age group.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Worksheet title (e.g. "Addition Practice — Grade R")'
+        },
+        type: {
+          type: 'string',
+          enum: ['math', 'reading', 'activity', 'general'],
+          description: 'Type of worksheet'
+        },
+        age_group: {
+          type: 'string',
+          enum: ['3-5', '6-8', '9-12', '13-15', '16-18'],
+          description: 'Target age group'
+        },
+        difficulty: {
+          type: 'string',
+          enum: ['easy', 'medium', 'hard'],
+          description: 'Problem difficulty level (default: medium)'
+        },
+        content: {
+          type: 'string',
+          description: 'Detailed worksheet content (problems, passages, activities) in markdown'
+        },
+        include_answer_key: {
+          type: 'boolean',
+          description: 'Whether to include an answer key page (default: true)'
+        }
+      },
+      required: ['title', 'type', 'content']
+    },
+    risk: 'low',
+    execute: async (args) => {
+      try {
+        const { getDashPDFGenerator } = await import('@/services/DashPDFGenerator');
+        const supabase = (await import('@/lib/supabase')).assertSupabase();
+
+        const generator = getDashPDFGenerator();
+        const sections = [
+          { id: 'main', title: String(args.title || 'Worksheet'), markdown: String(args.content || '') },
+        ];
+        if (args.include_answer_key !== false) {
+          sections.push({ id: 'answers', title: 'Answer Key', markdown: '_Answer key is provided on this page._' });
+        }
+
+        const result = await generator.generateFromStructuredData({
+          type: 'worksheet',
+          title: String(args.title || 'Worksheet'),
+          sections,
+          data: {
+            ageGroup: args.age_group || '6-8',
+            difficulty: args.difficulty || 'medium',
+            worksheetType: args.type || 'general',
+          },
+        });
+
+        if (!result.success) {
+          return { success: false, error: result.error || 'Worksheet generation failed' };
+        }
+
+        let publicUrl: string | undefined;
+        if (result.storagePath) {
+          try {
+            const { data } = supabase.storage
+              .from('generated-pdfs')
+              .getPublicUrl(result.storagePath);
+            publicUrl = data?.publicUrl || undefined;
+          } catch {}
+        }
+
+        // Post link into Dash chat
+        try {
+          const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
+          const dash = DashAIAssistant.getInstance();
+          const convId = dash.getCurrentConversationId?.();
+          const link = publicUrl || result.uri;
+          if (convId && link) {
+            await dash.addMessageToConversation(convId, {
+              id: `ws_${Date.now()}`,
+              type: 'assistant',
+              content: `📝 Your worksheet is ready: [Open PDF](${link})`,
+              timestamp: Date.now(),
+              metadata: {
+                tool_results: { tool: 'generate_worksheet', filename: result.filename, storagePath: result.storagePath, publicUrl },
+              },
+            } as any);
+          }
+        } catch (postErr) {
+          logger.warn('[generate_worksheet] Failed to post chat message:', postErr);
+        }
+
+        return {
+          success: true,
+          uri: result.uri,
+          filename: result.filename,
+          storagePath: result.storagePath,
+          publicUrl,
+          message: 'Worksheet generated successfully',
+        };
+      } catch (e: any) {
+        logger.error('[generate_worksheet] Error:', e);
+        return { success: false, error: e?.message || 'Worksheet generation failed' };
+      }
+    }
+  });
+
+  // ── Generate Chart tool ──────────────────────────────────────────────
+  register({
+    name: 'generate_chart',
+    description: 'Generate a chart (bar, line, or pie) as a PDF with optional table data. Useful for attendance summaries, fee reports, and progress tracking.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Chart/report title'
+        },
+        chart_type: {
+          type: 'string',
+          enum: ['bar', 'line', 'pie'],
+          description: 'Type of chart to generate'
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'X-axis / category labels (e.g. ["Jan","Feb","Mar"])'
+        },
+        values: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Data values corresponding to each label'
+        },
+        colors: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional hex color per data point'
+        },
+        summary: {
+          type: 'string',
+          description: 'An optional narrative summary to include below the chart'
+        }
+      },
+      required: ['title', 'chart_type', 'labels', 'values']
+    },
+    risk: 'low',
+    execute: async (args) => {
+      try {
+        const { getDashPDFGenerator } = await import('@/services/DashPDFGenerator');
+        const supabase = (await import('@/lib/supabase')).assertSupabase();
+
+        const generator = getDashPDFGenerator();
+
+        // Build a section with chart data and optional summary
+        const chartData = {
+          type: args.chart_type as 'bar' | 'line' | 'pie',
+          data: {
+            labels: args.labels || [],
+            values: args.values || [],
+            colors: args.colors,
+          },
+          title: String(args.title),
+        };
+
+        const markdown = args.summary ? String(args.summary) : `Chart: ${args.title}`;
+        const result = await generator.generateFromStructuredData({
+          type: 'report',
+          title: String(args.title),
+          sections: [
+            {
+              id: 'chart',
+              title: String(args.title),
+              markdown,
+              charts: [chartData],
+              tables: [{
+                headers: ['Category', 'Value'],
+                rows: (args.labels || []).map((label: string, i: number) => [label, String((args.values || [])[i] ?? '')]),
+                caption: 'Data table',
+              }],
+            },
+          ],
+          includeCharts: true,
+          includeTables: true,
+        });
+
+        if (!result.success) {
+          return { success: false, error: result.error || 'Chart generation failed' };
+        }
+
+        let publicUrl: string | undefined;
+        if (result.storagePath) {
+          try {
+            const { data } = supabase.storage
+              .from('generated-pdfs')
+              .getPublicUrl(result.storagePath);
+            publicUrl = data?.publicUrl || undefined;
+          } catch {}
+        }
+
+        // Post link into Dash chat
+        try {
+          const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
+          const dash = DashAIAssistant.getInstance();
+          const convId = dash.getCurrentConversationId?.();
+          const link = publicUrl || result.uri;
+          if (convId && link) {
+            await dash.addMessageToConversation(convId, {
+              id: `chart_${Date.now()}`,
+              type: 'assistant',
+              content: `📊 Your chart is ready: [Open PDF](${link})`,
+              timestamp: Date.now(),
+              metadata: {
+                tool_results: { tool: 'generate_chart', filename: result.filename, storagePath: result.storagePath, publicUrl },
+              },
+            } as any);
+          }
+        } catch (postErr) {
+          logger.warn('[generate_chart] Failed to post chat message:', postErr);
+        }
+
+        return {
+          success: true,
+          uri: result.uri,
+          filename: result.filename,
+          storagePath: result.storagePath,
+          publicUrl,
+          message: 'Chart generated successfully',
+        };
+      } catch (e: any) {
+        logger.error('[generate_chart] Error:', e);
+        return { success: false, error: e?.message || 'Chart generation failed' };
+      }
+    }
+  });
+
+  // ── Generate PDF from prompt (AI-powered) ────────────────────────────
+  register({
+    name: 'generate_pdf_from_prompt',
+    description: 'Generate a full PDF document from a natural language prompt. The AI interprets your request and produces a formatted PDF (reports, letters, study guides, newsletters, etc.).',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'Natural language description of the PDF to create (e.g. "Monthly attendance report for January 2026 showing each class")'
+        },
+        document_type: {
+          type: 'string',
+          enum: ['report', 'letter', 'invoice', 'study_guide', 'lesson_plan', 'progress_report', 'assessment', 'certificate', 'newsletter', 'worksheet', 'general'],
+          description: 'Optional document type hint (default: auto-detect from prompt)'
+        }
+      },
+      required: ['prompt']
+    },
+    risk: 'low',
+    execute: async (args) => {
+      try {
+        const { getDashPDFGenerator } = await import('@/services/DashPDFGenerator');
+        const supabase = (await import('@/lib/supabase')).assertSupabase();
+
+        const generator = getDashPDFGenerator();
+        const result = await generator.generateFromPrompt(String(args.prompt));
+
+        if (!result.success) {
+          return { success: false, error: result.error || 'PDF generation from prompt failed' };
+        }
+
+        let publicUrl: string | undefined;
+        if (result.storagePath) {
+          try {
+            const { data } = supabase.storage
+              .from('generated-pdfs')
+              .getPublicUrl(result.storagePath);
+            publicUrl = data?.publicUrl || undefined;
+          } catch {}
+        }
+
+        // Post link into Dash chat
+        try {
+          const { DashAIAssistant } = await import('@/services/dash-ai/DashAICompat');
+          const dash = DashAIAssistant.getInstance();
+          const convId = dash.getCurrentConversationId?.();
+          const link = publicUrl || result.uri;
+          if (convId && link) {
+            await dash.addMessageToConversation(convId, {
+              id: `pdfprompt_${Date.now()}`,
+              type: 'assistant',
+              content: `📄 Your document is ready: [Open PDF](${link})`,
+              timestamp: Date.now(),
+              metadata: {
+                tool_results: { tool: 'generate_pdf_from_prompt', filename: result.filename, storagePath: result.storagePath, publicUrl },
+              },
+            } as any);
+          }
+        } catch (postErr) {
+          logger.warn('[generate_pdf_from_prompt] Failed to post chat message:', postErr);
+        }
+
+        return {
+          success: true,
+          uri: result.uri,
+          filename: result.filename,
+          storagePath: result.storagePath,
+          publicUrl,
+          pageCount: result.pageCount,
+          message: 'PDF generated from prompt successfully',
+        };
+      } catch (e: any) {
+        logger.error('[generate_pdf_from_prompt] Error:', e);
+        return { success: false, error: e?.message || 'PDF generation from prompt failed' };
+      }
+    }
+  });
 }

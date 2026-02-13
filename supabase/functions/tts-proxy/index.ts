@@ -192,6 +192,8 @@ const PRONUNCIATION_DICT: PronEntry[] = [
   { pattern: /\bAI\b/g, alias: 'A.I.' },
   { pattern: /\bSTT\b/g, alias: 'speech to text' },
   { pattern: /\bTTS\b/g, alias: 'text to speech' },
+  // Afrikaans names
+  { pattern: /\bAnna?tjie\b/gi, alias: 'Anakie', lang: 'af-ZA' },
 ];
 
 function jsonResponse(status: number, body: Record<string, unknown>) {

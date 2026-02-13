@@ -11,6 +11,7 @@
  * - Supports South African languages (device-dependent)
  */
 
+import { STT_CONTEXTUAL_STRINGS } from '@/lib/voice/sttDictionary';
 import {
   ExpoSpeechRecognitionModule,
 } from 'expo-speech-recognition';
@@ -76,7 +77,7 @@ class ExpoSpeechSession implements VoiceSession {
           continuous: true, // Keep listening
           requiresOnDeviceRecognition: false, // Allow cloud if needed
           addsPunctuation: true,
-          contextualStrings: [], // Could add domain-specific words
+          contextualStrings: STT_CONTEXTUAL_STRINGS,
         });
       } catch (startErr) {
         // If locale unsupported, fallback to en-ZA then en-US
@@ -89,7 +90,7 @@ class ExpoSpeechSession implements VoiceSession {
             continuous: true,
             requiresOnDeviceRecognition: false,
             addsPunctuation: true,
-            contextualStrings: [],
+            contextualStrings: STT_CONTEXTUAL_STRINGS,
           });
         } catch (fallbackErr) {
           console.warn('[ExpoProvider] Fallback start failed for en-ZA, trying en-US', fallbackErr);
@@ -100,7 +101,7 @@ class ExpoSpeechSession implements VoiceSession {
             continuous: true,
             requiresOnDeviceRecognition: false,
             addsPunctuation: true,
-            contextualStrings: [],
+            contextualStrings: STT_CONTEXTUAL_STRINGS,
           });
         }
       }

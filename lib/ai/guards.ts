@@ -63,8 +63,10 @@ export async function checkAIQuota(
       quotaInfo,
     };
   } catch {
+    // Fail-open: server-side ai-proxy enforces the real limit.
+    // Blocking here on network/service errors locks ALL users out.
     return {
-      allowed: false,
+      allowed: true,
       reason: 'error',
       quotaInfo: undefined,
     };

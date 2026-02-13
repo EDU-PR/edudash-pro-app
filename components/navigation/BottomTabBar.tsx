@@ -485,6 +485,8 @@ export function BottomTabBar() {
     typeof pathname === 'string' &&
     (pathname.includes('/screens/dash-assistant') ||
       pathname.includes('dash-assistant') ||
+      pathname.includes('/screens/dash-voice') ||
+      pathname.includes('dash-voice') ||
       pathname.includes('/screens/dash-orb') ||
       pathname.includes('dash-orb') ||
       pathname.startsWith('/screens/ai-') ||

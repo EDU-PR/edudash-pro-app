@@ -20,6 +20,20 @@ const getPaidAmount = (fee: any): number => {
   return String(fee?.status) === 'paid' ? total : 0;
 };
 
+/** Derive fee total even when only legacy columns are populated. */
+const getFeeTotal = (fee: any): number => {
+  return Number(fee?.final_amount || fee?.amount || 0);
+};
+
+/** Derive outstanding amount with a safe fallback when `amount_outstanding` is stale/missing. */
+const getOutstandingAmount = (fee: any): number => {
+  const explicitOutstanding = Number(fee?.amount_outstanding);
+  if (Number.isFinite(explicitOutstanding) && explicitOutstanding > 0) {
+    return explicitOutstanding;
+  }
+  return Math.max(getFeeTotal(fee) - getPaidAmount(fee), 0);
+};
+
 export interface UniformResult {
   summary: UniformPaymentSummary;
   structureIds: string[];
@@ -63,7 +77,9 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
       .map((row: any) => row.id)
       .filter(Boolean);
 
-    // 2. Fetch uniform student_fees
+    const paidFeeIds = new Set<string>();
+
+    // 2. Fetch uniform student_fees (when configured)
     if (structureIds.length > 0) {
       const { data: uniformFees } = await supabase
         .from('student_fees')
@@ -77,12 +93,11 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
 
       const fees = (uniformFees || []) as any[];
       const paidFees = fees.filter((f) => getPaidAmount(f) > 0 || String(f?.status) === 'paid');
-      const paidFeeIds = new Set<string>(paidFees.map((f) => f.id).filter(Boolean));
+      paidFees.map((f) => f.id).filter(Boolean).forEach((id: string) => paidFeeIds.add(id));
 
       summary.totalPaid = paidFees.reduce((s, f) => s + getPaidAmount(f), 0);
       summary.totalOutstanding = fees.reduce((s, f) => {
-        const outstanding = Number(f?.amount_outstanding || 0);
-        return s + (String(f?.status) === 'paid' ? 0 : Math.max(outstanding, 0));
+        return s + (String(f?.status) === 'paid' ? 0 : getOutstandingAmount(f));
       }, 0);
       summary.paidCount = paidFees.length;
       summary.pendingCount = Math.max(fees.length - paidFees.length, 0);
@@ -103,44 +118,45 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
           status: f.status || null,
         }));
 
-      // 3. Cross-reference payments table for extra uniform payments
-      try {
-        const { data: paymentRows } = await supabase
-          .from('payments')
-          .select('id, amount, status, description, metadata, created_at, fee_ids')
-          .eq('preschool_id', preschoolId)
-          .in('status', ['completed', 'approved']);
+    }
 
-        const extras = (paymentRows || []).filter((p: any) => {
-          const md = p?.metadata || {};
-          const labels = [p?.description, md?.payment_purpose, md?.payment_context, md?.fee_type];
-          if (!labels.some((v) => isUniformLabel(v))) return false;
-          const feeIds: string[] = Array.isArray(p?.fee_ids) ? p.fee_ids : [];
-          return !feeIds.some((id: string) => paidFeeIds.has(id));
-        });
+    // 3. Cross-reference payments table for uniform payments even if fee structures are not configured.
+    try {
+      const { data: paymentRows } = await supabase
+        .from('payments')
+        .select('id, amount, status, description, metadata, created_at, fee_ids')
+        .eq('preschool_id', preschoolId)
+        .in('status', ['completed', 'approved']);
 
-        if (extras.length > 0) {
-          summary.totalPaid += extras.reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0);
-          summary.paidCount += extras.length;
+      const extras = (paymentRows || []).filter((p: any) => {
+        const md = p?.metadata || {};
+        const labels = [p?.description, md?.payment_purpose, md?.payment_context, md?.fee_type];
+        if (!labels.some((v) => isUniformLabel(v))) return false;
+        const feeIds: string[] = Array.isArray(p?.fee_ids) ? p.fee_ids : [];
+        return !feeIds.some((id: string) => paidFeeIds.has(id));
+      });
 
-          const extraRecent = extras
-            .map((p: any) => ({
-              id: p.id,
-              studentName: 'Student',
-              amount: Number(p?.amount) || 0,
-              paidDate: p?.metadata?.payment_date || p?.created_at || null,
-              status: p?.status || null,
-            }))
-            .sort((a, b) => new Date(b.paidDate || 0).getTime() - new Date(a.paidDate || 0).getTime())
-            .slice(0, 5);
+      if (extras.length > 0) {
+        summary.totalPaid += extras.reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0);
+        summary.paidCount += extras.length;
 
-          summary.recentPayments = [...summary.recentPayments, ...extraRecent]
-            .sort((a, b) => new Date(b.paidDate || 0).getTime() - new Date(a.paidDate || 0).getTime())
-            .slice(0, 5);
-        }
-      } catch (e) {
-        logger.warn('[PrincipalHub] Uniform payments cross-ref failed:', e);
+        const extraRecent = extras
+          .map((p: any) => ({
+            id: p.id,
+            studentName: 'Student',
+            amount: Number(p?.amount) || 0,
+            paidDate: p?.metadata?.payment_date || p?.created_at || null,
+            status: p?.status || null,
+          }))
+          .sort((a, b) => new Date(b.paidDate || 0).getTime() - new Date(a.paidDate || 0).getTime())
+          .slice(0, 5);
+
+        summary.recentPayments = [...summary.recentPayments, ...extraRecent]
+          .sort((a, b) => new Date(b.paidDate || 0).getTime() - new Date(a.paidDate || 0).getTime())
+          .slice(0, 5);
       }
+    } catch (e) {
+      logger.warn('[PrincipalHub] Uniform payments cross-ref failed:', e);
     }
 
     // 4. Pending POP uploads for uniforms
@@ -157,12 +173,20 @@ export async function fetchUniformPayments(preschoolId: string): Promise<Uniform
         isUniformLabel(u?.payment_reference),
     );
 
-    const pending = uniformUploads.filter((u: any) => String(u?.status) !== 'approved');
+    const pending = uniformUploads.filter((u: any) => {
+      const status = String(u?.status || 'pending').toLowerCase();
+      return !['approved', 'rejected'].includes(status);
+    });
     summary.pendingUploads = pending.length;
     summary.pendingUploadAmount = pending.reduce(
       (s: number, u: any) => s + (Number(u?.payment_amount) || 0),
       0,
     );
+
+    // If no fee rows are configured yet, use pending POP value as fallback visibility for collections.
+    if (summary.totalOutstanding <= 0 && summary.pendingUploadAmount > 0) {
+      summary.totalOutstanding = summary.pendingUploadAmount;
+    }
   } catch (e) {
     logger.warn('[PrincipalHub] Uniform payment summary failed:', e);
   }

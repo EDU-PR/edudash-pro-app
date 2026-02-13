@@ -107,6 +107,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         badge: popBadge,
       },
       {
+        id: 'uniform-orders',
+        title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }),
+        icon: 'shirt',
+        color: '#0EA5E9',
+      },
+      {
         id: 'teachers',
         title: t('dashboard.manage_teachers', { defaultValue: 'Teachers' }),
         icon: 'people',
@@ -123,6 +129,12 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         title: t('dashboard.send_announcement', { defaultValue: 'Announcement' }),
         icon: 'megaphone',
         color: '#F59E0B',
+      },
+      {
+        id: 'weekly-menu',
+        title: t('dashboard.weekly_menu', { defaultValue: 'Weekly Menu' }),
+        icon: 'restaurant',
+        color: '#F97316',
       },
     ];
   }, [popBadge, registrationsBadge, t]);
@@ -141,6 +153,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       ],
       money: [
         { id: 'payments', title: t('dashboard.payment_proofs', { defaultValue: 'Proof of Payment' }), icon: 'document-text', color: '#F59E0B', badge: popBadge },
+        { id: 'uniform-orders', title: t('dashboard.uniform_orders', { defaultValue: 'Uniform Orders' }), icon: 'shirt', color: '#0EA5E9' },
         { id: 'unpaid-fees', title: t('dashboard.unpaid_fees', { defaultValue: 'Unpaid Fees' }), icon: 'alert-circle', color: '#EF4444', badge: unpaidBadge },
         { id: 'fee-management', title: t('dashboard.fee_management', { defaultValue: 'Fee Management' }), icon: 'wallet', color: '#10B981' },
         { id: 'log-expense', title: t('dashboard.log_expense', { defaultValue: 'Log Expense' }), icon: 'add-circle', color: '#6366F1' },
@@ -154,6 +167,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         { id: 'family-activity-review', title: t('dashboard.family_activity_review', { defaultValue: 'Family Activity Review' }), icon: 'home', color: '#14B8A6' },
         { id: 'activities', title: t('dashboard.learning_activities', { defaultValue: 'Activities' }), icon: 'game-controller', color: '#EC4899' },
         { id: 'calendar', title: t('dashboard.manage_calendar', { defaultValue: 'Calendar' }), icon: 'calendar', color: '#EC4899' },
+        { id: 'weekly-menu', title: t('dashboard.weekly_menu', { defaultValue: 'Weekly Menu' }), icon: 'restaurant', color: '#F97316' },
         { id: 'year-planner', title: t('dashboard.year_planner', { defaultValue: 'Year Planner' }), icon: 'calendar', color: '#3B82F6' },
         { id: 'ai-year-planner', title: t('dashboard.ai_year_planner', { defaultValue: 'AI Year Planner' }), icon: 'sparkles', color: '#8B5CF6' },
         ...(canLiveLessons
@@ -218,6 +232,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
       case 'unpaid-fees':
         router.push('/screens/finance-control-center?tab=receivables');
         break;
+      case 'uniform-orders':
+        router.push('/screens/principal-uniforms');
+        break;
       case 'teacher-approval':
         router.push('/screens/teacher-approval');
         break;
@@ -245,6 +262,9 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         break;
       case 'announcements':
         router.push('/screens/principal-announcement');
+        break;
+      case 'weekly-menu':
+        router.push('/screens/principal-menu');
         break;
       case 'calendar':
         router.push('/screens/calendar-management');
@@ -307,12 +327,7 @@ export const PrincipalQuickActions: React.FC<PrincipalQuickActionsProps> = ({
         router.push('/screens/dash-studio');
         break;
       case 'dash-advisor':
-        router.push({
-          pathname: '/screens/dash-assistant',
-          params: {
-            initialMessage: 'Help me prioritize this week\'s school operations and finance actions.',
-          },
-        } as any);
+        router.push('/screens/dash-orb');
         break;
       default:
         alert.show(

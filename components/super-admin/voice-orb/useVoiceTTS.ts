@@ -83,6 +83,39 @@ const mapToDeviceLocale = (language: string): string => {
   return 'en-ZA';
 };
 
+const clampDeviceRate = (rate: number): number => Math.max(0.5, Math.min(rate, 2.0));
+
+/**
+ * Convert incoming rate to device TTS semantics.
+ * - Device expects ~0.5..2.0
+ * - Azure-style percentages use -100..100 where 0 is normal
+ */
+const resolveDeviceRate = (rate: unknown, defaultRate: number): number => {
+  const parsed = Number(rate);
+  if (!Number.isFinite(parsed)) return defaultRate;
+
+  if (parsed >= 0.5 && parsed <= 2.0) {
+    return clampDeviceRate(parsed);
+  }
+
+  if (parsed >= -100 && parsed <= 100) {
+    return clampDeviceRate(1 + (parsed / 100));
+  }
+
+  return defaultRate;
+};
+
+const shouldRetryAzureChunk = (error: unknown): boolean => {
+  const normalized = String(error instanceof Error ? error.message : error || '').toLowerCase();
+  return (
+    normalized.includes('service_unconfigured_502') ||
+    normalized.includes('service_unconfigured_503') ||
+    normalized.includes('service_unconfigured_504') ||
+    normalized.includes('network_error') ||
+    normalized.includes('timeout')
+  );
+};
+
 const prepareDevicePhonicsText = (text: string): string => {
   let next = String(text || '');
   // /s/ -> sss, /m/ -> mmm, etc.
@@ -390,10 +423,8 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   ): Promise<void> => {
     const locale = mapToDeviceLocale(language);
     const phonicsMode = options.phonicsMode === true;
-    const safeRate = Number(options.rate);
-    const effectiveRate = Number.isFinite(safeRate)
-      ? Math.max(0.5, Math.min(safeRate, 2.0))
-      : (phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE);
+    const fallbackRate = phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE;
+    const effectiveRate = resolveDeviceRate(options.rate, fallbackRate);
     const safePitch = Number(options.pitch);
     const effectivePitch = Number.isFinite(safePitch)
       ? Math.max(0.5, Math.min(safePitch, 2.0))
@@ -614,11 +645,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
         console.warn(`[VoiceTTS] Language ${language} not supported by Azure path. Falling back to device TTS.`);
-        const fallbackRate = phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE;
         await speakWithDeviceTTS(text, language, {
           ...options,
           phonicsMode,
-          rate: Number.isFinite(options.rate as number) ? Number(options.rate) : fallbackRate,
         });
         return;
       }
@@ -651,24 +680,37 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           });
           anyChunkSucceeded = true;
         } catch (azureErr) {
+          let effectiveAzureErr: unknown = azureErr;
+          if (shouldRetryAzureChunk(azureErr) && !stopRequestedRef.current) {
+            try {
+              await new Promise((resolve) => setTimeout(resolve, 280));
+              await speakWithAzure(chunk, effectiveLanguage, {
+                ...options,
+                phonicsMode,
+              });
+              anyChunkSucceeded = true;
+              continue;
+            } catch (retryErr) {
+              effectiveAzureErr = retryErr;
+            }
+          }
+
           if (phonicsMode && !ALLOW_DEVICE_FALLBACK_IN_PHONICS) {
-            const phonicsErr = azureErr instanceof Error
-              ? new Error(`PHONICS_REQUIRES_AZURE:${azureErr.message}`)
+            const phonicsErr = effectiveAzureErr instanceof Error
+              ? new Error(`PHONICS_REQUIRES_AZURE:${effectiveAzureErr.message}`)
               : new Error('PHONICS_REQUIRES_AZURE');
-            console.warn('[VoiceTTS] Azure chunk failed in phonics mode; device fallback disabled:', azureErr);
+            console.warn('[VoiceTTS] Azure chunk failed in phonics mode; device fallback disabled:', effectiveAzureErr);
             reportTTSError(phonicsErr);
             lastErr = phonicsErr;
             break;
           }
 
-          console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', azureErr);
-          reportTTSError(azureErr);
+          console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', effectiveAzureErr);
+          reportTTSError(effectiveAzureErr);
           try {
-            const fallbackRate = phonicsMode ? DEFAULT_PHONICS_DEVICE_RATE : DEFAULT_DEVICE_RATE;
             await speakWithDeviceTTS(chunk, effectiveLanguage, {
               ...options,
               phonicsMode,
-              rate: Number.isFinite(options.rate as number) ? Number(options.rate) : fallbackRate,
             });
             anyChunkSucceeded = true;
           } catch (deviceErr) {

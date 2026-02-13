@@ -21,6 +21,18 @@ const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
 const DEFAULT_AZURE_RATE = 0;
 const DEFAULT_PHONICS_AZURE_RATE = -6;
 
+/** Dash's primary voice — must match DASH_VOICE in tts-proxy */
+const DASH_VOICE_ID = 'en-ZA-LukeNeural';
+
+/** Voice IDs per language so Dash stays consistent when switching languages */
+const DASH_VOICES_BY_LANG: Record<string, string> = {
+  en: 'en-ZA-LukeNeural',
+  af: 'af-ZA-AdriNeural',
+  zu: 'zu-ZA-ThandoNeural',
+  xh: 'xh-ZA-NomalungaNeural',
+  nso: 'nso-ZA-DidiNeural',
+};
+
 export interface VoiceSettings {
   rate: number;
   pitch: number;
@@ -92,9 +104,13 @@ export class DashVoiceController {
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
       let shortCode = this.mapLanguageCode(language);
-      const detected = this.detectLanguageFromText(normalizedText);
-      if (shortCode === 'en' && detected !== 'en') {
-        shortCode = detected;
+      // Only override to detected language if no explicit user preference was set
+      // (prevents random voice switching when English text contains loanwords)
+      if (!prefs?.language) {
+        const detected = this.detectLanguageFromText(normalizedText);
+        if (shortCode === 'en' && detected !== 'en') {
+          shortCode = detected;
+        }
       }
       
       if (!AZURE_TTS_LANGUAGES.includes(shortCode)) {
@@ -110,6 +126,7 @@ export class DashVoiceController {
           phonicsMode,
           rate: phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE,
           pitch: 0,
+          voice_id: DASH_VOICES_BY_LANG[shortCode] || DASH_VOICE_ID,
         });
         if (this.isSpeechAborted) callbacks?.onStopped?.();
         return;
@@ -154,6 +171,7 @@ export class DashVoiceController {
       phonicsMode?: boolean;
       rate?: number;
       pitch?: number;
+      voice_id?: string;
     }
   ): Promise<void> {
     const { assertSupabase } = await import('@/lib/supabase');
@@ -168,6 +186,7 @@ export class DashVoiceController {
         body: {
           text,
           language: shortCode,
+          voice_id: options?.voice_id || undefined,
           rate: Number.isFinite(options?.rate as number) ? Number(options?.rate) : 0,
           pitch: Number.isFinite(options?.pitch as number) ? Number(options?.pitch) : 0,
           phonics_mode: options?.phonicsMode === true,
@@ -403,7 +422,7 @@ export class DashVoiceController {
     // Unique markers
     if (/\b(molo|ndiyabulela|uxolo|ewe|hayi|yintoni|ndiza|umntwana)\b/i.test(t)) return 'xh';
     if (/\b(sawubona|ngiyabonga|ngiyaphila|umfundi|siyakusiza|ufunde|yebo|cha)\b/i.test(t)) return 'zu';
-    if (/\b(hallo|asseblief|baie|goed|graag|ek|jy|nie|met|van|is|dit)\b/i.test(t)) return 'af';
+    if (/\b(hallo|asseblief|baie|goed|graag|ek|jy|nie)\b/i.test(t)) return 'af';
     if (/\b(thobela|le\s+kae|ke\s+a\s+leboga|hle|ka\s+kgopelo)\b/i.test(t)) return 'nso';
     
     // Shared Nguni words default to Zulu

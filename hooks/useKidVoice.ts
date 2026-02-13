@@ -1,20 +1,23 @@
 /**
  * useKidVoice — Vibrant Child Voice Hook for Preschool Activities
  *
- * Wraps TTS with energetic kid-appropriate speech:
- * - Natural vibrant rate (0.95) for engagement
- * - Playful warm pitch (1.15) for friendliness
- * - Timeout protection — speech NEVER freezes
- * - Queued speech with auto-recovery
- * - Encouragement phrases between rounds
+ * Playground voice strategy:
+ * - Cloud Dash TTS for natural voice when allowed
+ * - Freemium preview: first 3 activities/month use cloud, then device fallback
+ * - Paid tiers: cloud voice for all activities
+ * - Timeout protection + queued speech to avoid freezes
  *
- * ≤200 lines (WARP.md)
+ * Maintains kid-friendly delivery rate/pitch and encouragement phrases.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import * as Speech from 'expo-speech';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '@/lib/logger';
 import { hasVoiceBudget, trackVoiceUsage } from '@/lib/dash-ai/voiceBudget';
+import { getCapabilityTier } from '@/lib/tiers';
+import { DashVoiceController } from '@/services/modules/DashVoiceController';
+import type { DashMessage } from '@/services/dash-ai/types';
 
 /** Random encouragement Dash says between rounds */
 const ENCOURAGEMENTS = [
@@ -31,11 +34,20 @@ interface UseKidVoiceOptions {
   pitch?: number;
 }
 
+interface VoiceSessionResult {
+  useCloudVoice: boolean;
+  remainingCloudActivities: number;
+  didSwitchToDevice: boolean;
+}
+
 interface UseKidVoiceReturn {
   speak: (text: string) => Promise<void>;
   stop: () => void;
   isSpeaking: boolean;
   hasBudget: boolean;
+  isUsingCloudVoice: boolean;
+  remainingCloudActivities: number;
+  beginActivitySession: (activitySessionId: string) => Promise<VoiceSessionResult>;
   speakIntro: (intro: string) => Promise<void>;
   speakCelebration: (text: string) => Promise<void>;
   /** Speak a random encouragement phrase */
@@ -56,6 +68,38 @@ const cleanForSpeech = (text: string): string =>
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T | void> =>
   Promise.race([promise, new Promise<void>((r) => setTimeout(r, ms))]);
 
+const FREEMIUM_CLOUD_ACTIVITY_LIMIT = 3;
+const FREEMIUM_ACTIVITY_USAGE_KEY_PREFIX = '@dash_playground_cloud_voice_usage_';
+
+const getMonthKey = (): string => {
+  const date = new Date();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}`;
+};
+
+const getFreemiumUsageStorageKey = (): string =>
+  `${FREEMIUM_ACTIVITY_USAGE_KEY_PREFIX}${getMonthKey()}`;
+
+const loadFreemiumCloudUsage = async (): Promise<string[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(getFreemiumUsageStorageKey());
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is string => typeof value === 'string' && value.length > 0);
+  } catch {
+    return [];
+  }
+};
+
+const saveFreemiumCloudUsage = async (activityIds: string[]): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(getFreemiumUsageStorageKey(), JSON.stringify(activityIds.slice(0, 50)));
+  } catch {
+    // Non-fatal. Voice should still work.
+  }
+};
+
 export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn {
   const {
     tier,
@@ -66,13 +110,25 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [hasBudget, setHasBudget] = useState(true);
+  const [remainingCloudActivities, setRemainingCloudActivities] = useState(FREEMIUM_CLOUD_ACTIVITY_LIMIT);
+  const [isUsingCloudVoice, setIsUsingCloudVoice] = useState(true);
   const speechQueue = useRef<string[]>([]);
   const isProcessing = useRef(false);
   const mounted = useRef(true);
+  const cloudEnabledForCurrentSessionRef = useRef(true);
+  const voiceControllerRef = useRef<DashVoiceController | null>(null);
+
+  const capabilityTier = useMemo(() => getCapabilityTier(String(tier || 'free')), [tier]);
+  const isFreemiumTier = capabilityTier === 'free';
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      if (voiceControllerRef.current) {
+        void voiceControllerRef.current.stopSpeaking().catch(() => {});
+      }
+    };
   }, []);
 
   const checkBudget = useCallback(async () => {
@@ -86,6 +142,106 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
   }, []);
 
   useEffect(() => { checkBudget(); }, [checkBudget]);
+
+  const speakWithDevice = useCallback(async (cleaned: string) => {
+    await withTimeout(
+      new Promise<void>((resolve) => {
+        Speech.speak(cleaned, {
+          language, rate, pitch,
+          onDone: resolve,
+          onError: () => resolve(),
+          onStopped: resolve,
+        });
+      }),
+      12000,
+    );
+  }, [language, rate, pitch]);
+
+  const speakWithCloud = useCallback(async (cleaned: string) => {
+    if (!voiceControllerRef.current) {
+      voiceControllerRef.current = new DashVoiceController();
+    }
+
+    const message: DashMessage = {
+      id: `playground-tts-${Date.now()}`,
+      type: 'assistant',
+      content: cleaned,
+      timestamp: Date.now(),
+    };
+
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        voiceControllerRef.current!.speakResponse(
+          message,
+          {
+            rate,
+            pitch,
+            language,
+          },
+          {
+            onDone: resolve,
+            onStopped: resolve,
+            onError: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+          },
+        ).catch(reject);
+      }),
+      12000,
+    );
+  }, [language, rate, pitch]);
+
+  const refreshFreemiumRemaining = useCallback(async () => {
+    if (!isFreemiumTier) {
+      if (mounted.current) {
+        setRemainingCloudActivities(FREEMIUM_CLOUD_ACTIVITY_LIMIT);
+        setIsUsingCloudVoice(true);
+      }
+      return;
+    }
+
+    const usage = await loadFreemiumCloudUsage();
+    if (mounted.current) {
+      setRemainingCloudActivities(Math.max(FREEMIUM_CLOUD_ACTIVITY_LIMIT - usage.length, 0));
+    }
+  }, [isFreemiumTier]);
+
+  const beginActivitySession = useCallback(async (activitySessionId: string): Promise<VoiceSessionResult> => {
+    const previousMode = cloudEnabledForCurrentSessionRef.current;
+
+    if (!isFreemiumTier) {
+      cloudEnabledForCurrentSessionRef.current = true;
+      if (mounted.current) {
+        setIsUsingCloudVoice(true);
+        setRemainingCloudActivities(FREEMIUM_CLOUD_ACTIVITY_LIMIT);
+      }
+      return {
+        useCloudVoice: true,
+        remainingCloudActivities: FREEMIUM_CLOUD_ACTIVITY_LIMIT,
+        didSwitchToDevice: false,
+      };
+    }
+
+    const usage = await loadFreemiumCloudUsage();
+    let updatedUsage = usage;
+    const useCloudVoice = usage.length < FREEMIUM_CLOUD_ACTIVITY_LIMIT;
+
+    if (useCloudVoice) {
+      updatedUsage = [...usage, activitySessionId || `session-${Date.now()}`];
+      await saveFreemiumCloudUsage(updatedUsage);
+    }
+
+    const remaining = Math.max(FREEMIUM_CLOUD_ACTIVITY_LIMIT - updatedUsage.length, 0);
+    cloudEnabledForCurrentSessionRef.current = useCloudVoice;
+    if (mounted.current) {
+      setIsUsingCloudVoice(useCloudVoice);
+      setRemainingCloudActivities(remaining);
+    }
+
+    return {
+      useCloudVoice,
+      remainingCloudActivities: remaining,
+      didSwitchToDevice: previousMode && !useCloudVoice,
+    };
+  }, [isFreemiumTier]);
 
   const processQueue = useCallback(async () => {
     if (isProcessing.current || speechQueue.current.length === 0) return;
@@ -101,17 +257,16 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
       if (mounted.current) setIsSpeaking(true);
 
       try {
-        await withTimeout(
-          new Promise<void>((resolve) => {
-            Speech.speak(cleaned, {
-              language, rate, pitch,
-              onDone: resolve,
-              onError: () => resolve(),   // Never hang on error
-              onStopped: resolve,
-            });
-          }),
-          12000, // 12s max per utterance — never freeze
-        );
+        if (cloudEnabledForCurrentSessionRef.current) {
+          try {
+            await speakWithCloud(cleaned);
+          } catch (cloudError) {
+            logger.warn('[KidVoice] Cloud TTS failed in Playground; falling back to device voice.', cloudError);
+            await speakWithDevice(cleaned);
+          }
+        } else {
+          await speakWithDevice(cleaned);
+        }
       } catch {
         logger.warn('[KidVoice] Speech timed out, continuing');
       }
@@ -124,19 +279,20 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
       isProcessing.current = false;
     }
     checkBudget();
-  }, [language, rate, pitch, checkBudget]);
+  }, [checkBudget, speakWithCloud, speakWithDevice]);
 
   const speak = useCallback(async (text: string) => {
-    try {
-      const budgetOk = await checkBudget();
-      if (!budgetOk) return;
-    } catch { /* proceed anyway — never block */ }
+    // Keep budget stats updated, but never block child playback in Playground.
+    try { await checkBudget(); } catch { /* proceed anyway — never block */ }
     speechQueue.current.push(text);
     processQueue();
   }, [checkBudget, processQueue]);
 
   const stop = useCallback(() => {
     try { Speech.stop(); } catch { /* safe */ }
+    if (voiceControllerRef.current) {
+      void voiceControllerRef.current.stopSpeaking().catch(() => {});
+    }
     speechQueue.current = [];
     isProcessing.current = false;
     if (mounted.current) setIsSpeaking(false);
@@ -155,5 +311,20 @@ export function useKidVoice(options: UseKidVoiceOptions = {}): UseKidVoiceReturn
     await speak(phrase);
   }, [speak]);
 
-  return { speak, stop, isSpeaking, hasBudget, speakIntro, speakCelebration, speakEncouragement };
+  useEffect(() => {
+    void refreshFreemiumRemaining();
+  }, [refreshFreemiumRemaining]);
+
+  return {
+    speak,
+    stop,
+    isSpeaking,
+    hasBudget,
+    isUsingCloudVoice,
+    remainingCloudActivities,
+    beginActivitySession,
+    speakIntro,
+    speakCelebration,
+    speakEncouragement,
+  };
 }

@@ -324,12 +324,21 @@ export const createDashOrbStyles = (theme: ThemeColors) =>
       paddingHorizontal: 12,
       paddingBottom: 8,
       gap: 8,
+      alignItems: 'center',
+    },
+    quickIntentScroller: {
+      flexGrow: 0,
+      flexShrink: 0,
+      maxHeight: 52,
     },
     quickIntentChip: {
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: 999,
       borderWidth: 1,
+      minHeight: 34,
+      justifyContent: 'center',
+      alignSelf: 'center',
     },
     quickIntentText: {
       fontSize: 12,
