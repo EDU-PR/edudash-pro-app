@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import { assertSupabase } from '@/lib/supabase';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFCMToken } from './CallHeadlessTask';
 
 // Get project ID from EAS config (matches extra.eas.projectId in app.json)
 const EXPO_PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId || 'ab7c9230-2f47-4bfa-b4f4-4ae516a334bc';
@@ -115,10 +116,19 @@ export async function savePushTokenToProfile(userId: string): Promise<boolean> {
     
     // Get a stable device ID that persists across app restarts
     const deviceId = await getStableDeviceId();
+
+    // Get FCM token for data-only push (enables background ringing)
+    let fcmToken: string | null = null;
+    try {
+      fcmToken = await getFCMToken();
+    } catch (e) {
+      console.warn('[PushNotifications] FCM token retrieval failed:', e);
+    }
     
     const deviceData = {
       user_id: userId,
       expo_push_token: token,
+      fcm_token: fcmToken,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
       is_active: true,
       device_id: deviceId,

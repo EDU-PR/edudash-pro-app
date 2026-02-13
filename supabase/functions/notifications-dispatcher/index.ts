@@ -194,6 +194,7 @@ interface NotificationRequest {
 interface PushDevice {
   user_id: string;
   expo_push_token: string;
+  fcm_token?: string | null;
   language?: string;
 }
 
@@ -1163,7 +1164,7 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
 async function getPushTokensForUsers(userIds: string[]): Promise<PushDevice[]> {
   const { data, error } = await supabase
     .from('push_devices')
-    .select('user_id, expo_push_token, language')
+    .select('user_id, expo_push_token, fcm_token, language')
     .in('user_id', userIds)
     .eq('is_active', true)
     .order('updated_at', { ascending: false });

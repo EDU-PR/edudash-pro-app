@@ -24,6 +24,7 @@ import {
   Message, DateSeparator, MessageBubble, ChatHeader, MessageComposer,
   ForwardMessagePicker, ChatSearchOverlay, MediaGalleryView, StarredMessagesView,
 } from '@/components/messaging';
+import { SwipeableMessageRow } from '@/components/messaging/SwipeableMessageRow';
 import { MessageScheduler } from '@/components/messaging/MessageScheduler';
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 import { useParentMessageThread, type ChatRow } from '@/hooks/useParentMessageThread';
@@ -98,6 +99,14 @@ export default function ParentMessageThreadScreen() {
     callContext.startVideoCall(recipientId, recipientName);
   }, [callContext, recipientId, recipientName]);
 
+  // Scroll to a quoted message when tapped
+  const handleScrollToMessage = useCallback((messageId: string) => {
+    const idx = h.rowsAsc.findIndex((r: ChatRow) => r.type === 'message' && r.msg?.id === messageId);
+    if (idx >= 0 && h.listRef?.current) {
+      h.listRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    }
+  }, [h.rowsAsc, h.listRef]);
+
   // Render row
   const renderRow = useCallback(({ item }: { item: ChatRow }) => {
     if (item.type === 'date') return <DateSeparator label={item.label} />;
@@ -106,18 +115,23 @@ export default function ParentMessageThreadScreen() {
     const hasNextVoice = voiceIndex >= 0 && voiceIndex < h.voiceMessageIdsAsc.length - 1;
     const hasPreviousVoice = voiceIndex > 0;
     return (
-      <MessageBubble
-        msg={msg} isOwn={msg.sender_id === user?.id}
-        onLongPress={() => h.handleMessageLongPress(msg)}
-        onPlaybackFinished={msg.voice_url ? () => { if (hasNextVoice) h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]); else h.setCurrentlyPlayingVoiceId(null); } : undefined}
-        onPlayNext={hasNextVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
-        onPlayPrevious={hasPreviousVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex - 1]) : undefined}
-        hasNextVoice={hasNextVoice} hasPreviousVoice={hasPreviousVoice}
-        autoPlayVoice={!!msg.voice_url && h.currentlyPlayingVoiceId === msg.id}
-        onReactionPress={actions.handleReactionPress}
-      />
+      <SwipeableMessageRow onSwipeReply={() => h.setReplyingTo(msg)}>
+        <MessageBubble
+          msg={msg} isOwn={msg.sender_id === user?.id}
+          onLongPress={() => h.handleMessageLongPress(msg)}
+          onPlaybackFinished={msg.voice_url ? () => { if (hasNextVoice) h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]); else h.setCurrentlyPlayingVoiceId(null); } : undefined}
+          onPlayNext={hasNextVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex + 1]) : undefined}
+          onPlayPrevious={hasPreviousVoice ? () => h.setCurrentlyPlayingVoiceId(h.voiceMessageIdsAsc[voiceIndex - 1]) : undefined}
+          hasNextVoice={hasNextVoice} hasPreviousVoice={hasPreviousVoice}
+          autoPlayVoice={!!msg.voice_url && h.currentlyPlayingVoiceId === msg.id}
+          onReactionPress={actions.handleReactionPress}
+          onReplyPress={handleScrollToMessage}
+          isFirstInGroup={item.isFirstInGroup}
+          isLastInGroup={item.isLastInGroup}
+        />
+      </SwipeableMessageRow>
     );
-  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, actions.handleReactionPress, user?.id]);
+  }, [h.currentlyPlayingVoiceId, h.handleMessageLongPress, h.voiceMessageIdsAsc, h.setReplyingTo, actions.handleReactionPress, handleScrollToMessage, user?.id]);
 
   // Layout calculations
   const composerBottomInset = Platform.OS === 'ios' ? insets.bottom : Math.max(insets.bottom, 2);

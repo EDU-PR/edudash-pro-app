@@ -45,7 +45,7 @@ try {
 
 export type ChatRow =
   | { type: 'date'; key: string; label: string }
-  | { type: 'message'; key: string; msg: Message };
+  | { type: 'message'; key: string; msg: Message; isFirstInGroup: boolean; isLastInGroup: boolean };
 
 export function useMessageThreadState() {
   const { t } = useTranslation();
@@ -153,13 +153,19 @@ export function useMessageThreadState() {
   const rowsAsc = useMemo<ChatRow[]>(() => {
     const rows: ChatRow[] = [];
     let lastDateKey = '';
-    for (const msg of messagesAsc) {
+    const GROUP_GAP_MS = 2 * 60 * 1000; // 2 minutes
+    for (let i = 0; i < messagesAsc.length; i++) {
+      const msg = messagesAsc[i];
       const dateKey = getDateKey(msg.created_at);
       if (dateKey !== lastDateKey) {
         rows.push({ type: 'date', key: `date-${dateKey}`, label: getDateSeparatorLabel(msg.created_at) });
         lastDateKey = dateKey;
       }
-      rows.push({ type: 'message', key: `msg-${msg.id}`, msg });
+      const prev = messagesAsc[i - 1];
+      const next = messagesAsc[i + 1];
+      const prevSame = prev && prev.sender_id === msg.sender_id && getDateKey(prev.created_at) === dateKey && (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < GROUP_GAP_MS;
+      const nextSame = next && next.sender_id === msg.sender_id && getDateKey(next?.created_at) === dateKey && (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < GROUP_GAP_MS;
+      rows.push({ type: 'message', key: `msg-${msg.id}`, msg, isFirstInGroup: !prevSame, isLastInGroup: !nextSame });
     }
     return rows;
   }, [messagesAsc]);

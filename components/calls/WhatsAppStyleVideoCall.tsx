@@ -32,6 +32,8 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-aud
 import { assertSupabase } from '@/lib/supabase';
 import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import AudioModeCoordinator, { type AudioModeSession } from '@/lib/AudioModeCoordinator';
+import { getPrewarmedCallObject } from '@/lib/calls/CallPrewarming';
+import { track } from '@/lib/analytics';
 import { usePictureInPicture } from '@/hooks/usePictureInPicture';
 import { useCallBackgroundHandler } from './hooks';
 import { AddParticipantModal } from './AddParticipantModal';
@@ -159,6 +161,21 @@ export function WhatsAppStyleVideoCall({
   // Custom ringback via expo-audio (fallback when InCallManager ringback fails)
   const ringbackPlayerRef = useRef<AudioPlayer | null>(null);
   const ringbackStartedRef = useRef(false);
+  const callTelemetryRef = useRef<{
+    initStartedAt: number | null;
+    tokenReceivedAt: number | null;
+    joinStartedAt: number | null;
+    joinedAt: number | null;
+    ringbackStartedAt: number | null;
+    firstRemoteAudioAt: number | null;
+  }>({
+    initStartedAt: null,
+    tokenReceivedAt: null,
+    joinStartedAt: null,
+    joinedAt: null,
+    ringbackStartedAt: null,
+    firstRemoteAudioAt: null,
+  });
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const controlsAnim = useRef(new Animated.Value(1)).current;
   
@@ -572,29 +589,13 @@ export function WhatsAppStyleVideoCall({
     const shouldEnforceEarpiece = (callState === 'connecting' || callState === 'ringing') && !isSpeakerOn;
     
     if (shouldEnforceEarpiece) {
-      console.log('[VideoCall] Starting continuous earpiece enforcement');
-      
-      // Immediately enforce earpiece
+      // Single enforcement on state transition — no interval loop
+      // to avoid disrupting expo-audio ringback pipeline
       try {
         InCallManager.setForceSpeakerphoneOn(false);
+        console.log('[VideoCall] Earpiece enforced on state transition');
       } catch (e) {
-        console.warn('[VideoCall] Initial earpiece enforcement failed:', e);
-      }
-      
-      // Set up periodic enforcement every 500ms during ringing
-      earpieceEnforcerRef.current = setInterval(() => {
-        try {
-          InCallManager.setForceSpeakerphoneOn(false);
-        } catch (e) {
-          // Ignore errors during enforcement
-        }
-      }, 500);
-    } else {
-      // Clear the enforcer when not needed
-      if (earpieceEnforcerRef.current) {
-        clearInterval(earpieceEnforcerRef.current);
-        earpieceEnforcerRef.current = null;
-        console.log('[VideoCall] Stopped continuous earpiece enforcement');
+        console.warn('[VideoCall] Earpiece enforcement failed:', e);
       }
     }
     
@@ -611,7 +612,7 @@ export function WhatsAppStyleVideoCall({
    * CRITICAL: This plays the ringback tone for the CALLER while waiting for callee to answer
    */
   const playCustomRingback = useCallback(async (retryAttempt = 0) => {
-    if (ringbackStartedRef.current) {
+    if (ringbackStartedRef.current && ringbackPlayerRef.current?.playing) {
       console.log('[VideoCall] Ringback already playing, skipping');
       return;
     }
@@ -636,6 +637,10 @@ export function WhatsAppStyleVideoCall({
           console.log('[VideoCall] 🔄 Falling back to InCallManager system ringback');
           InCallManager.startRingback('_DEFAULT_');
           ringbackStartedRef.current = true;
+          if (!callTelemetryRef.current.ringbackStartedAt) {
+            callTelemetryRef.current.ringbackStartedAt = Date.now();
+            track('edudash.calls.ringback_started', { call_type: 'video', source: 'incallmanager' });
+          }
           console.log('[VideoCall] ✅ InCallManager system ringback started');
         } catch (e) {
           console.error('[VideoCall] ❌ System ringback fallback also failed:', e);
@@ -650,7 +655,7 @@ export function WhatsAppStyleVideoCall({
       // Set audio mode to allow playback through earpiece
       await setAudioModeAsync({
         playsInSilentMode: true,
-        interruptionMode: 'doNotMix',
+        interruptionMode: 'duckOthers',
         allowsRecording: true,
         shouldPlayInBackground: true,
         shouldRouteThroughEarpiece: true, // Route to earpiece like a phone call
@@ -673,6 +678,10 @@ export function WhatsAppStyleVideoCall({
       await new Promise(resolve => setTimeout(resolve, 200));
       
       ringbackStartedRef.current = true;
+      if (!callTelemetryRef.current.ringbackStartedAt) {
+        callTelemetryRef.current.ringbackStartedAt = Date.now();
+        track('edudash.calls.ringback_started', { call_type: 'video', source: 'expo-audio' });
+      }
       console.log('[VideoCall] ✅ Custom ringback playing!');
       
       // Haptic feedback
@@ -695,6 +704,10 @@ export function WhatsAppStyleVideoCall({
             console.log('[VideoCall] 🔄 Final fallback to InCallManager system ringback');
             InCallManager.startRingback('_DEFAULT_');
             ringbackStartedRef.current = true;
+            if (!callTelemetryRef.current.ringbackStartedAt) {
+              callTelemetryRef.current.ringbackStartedAt = Date.now();
+              track('edudash.calls.ringback_started', { call_type: 'video', source: 'incallmanager_fallback' });
+            }
             console.log('[VideoCall] ✅ InCallManager fallback ringback started');
           } catch (e) {
             console.error('[VideoCall] ❌ All ringback methods failed:', e);
@@ -708,6 +721,14 @@ export function WhatsAppStyleVideoCall({
    * Stop custom ringback
    */
   const stopCustomRingback = useCallback(() => {
+    if (ringbackStartedRef.current) {
+      const startedAt = callTelemetryRef.current.ringbackStartedAt;
+      track('edudash.calls.ringback_stopped', {
+        call_type: 'video',
+        duration_ms: typeof startedAt === 'number' ? Date.now() - startedAt : undefined,
+      });
+      callTelemetryRef.current.ringbackStartedAt = null;
+    }
     if (ringbackPlayerRef.current) {
       try {
         ringbackPlayerRef.current.pause();
@@ -727,53 +748,47 @@ export function WhatsAppStyleVideoCall({
   // 2. InCallManager system ringback ignores earpiece setting on some Android devices
   useEffect(() => {
     if (callState === 'connecting' || callState === 'ringing') {
-      // Start audio with ringback for caller
-      if (isOwner) {
-        // Initialize InCallManager for audio routing only (no system ringback)
+      const initAudio = async () => {
+        // STEP 1: Start InCallManager first to acquire audio session
         if (InCallManager) {
           try {
-            // CRITICAL: Set earpiece BEFORE starting to prevent any speaker routing
-            InCallManager.setForceSpeakerphoneOn(false);
-            
-            // Use 'audio' media type to default to earpiece
-            // NO system ringback - we use custom expo-audio ringback instead
             InCallManager.start({ 
-              media: 'audio', // NOT 'video' - this defaults to earpiece
-              auto: false,
-              ringback: '' // Empty - no system ringback (prevents speaker routing & double audio)
-            });
-            
-            // Immediately re-enforce earpiece after start
-            InCallManager.setForceSpeakerphoneOn(false);
-            setIsSpeakerOn(false);
-            InCallManager.setKeepScreenOn(true);
-            console.log('[VideoCall] Started InCallManager for caller (earpiece, no system ringback)');
-          } catch (err) {
-            console.warn('[VideoCall] Failed to start InCallManager:', err);
-          }
-        }
-        
-        // Play custom ringback via expo-audio (respects earpiece routing)
-        playCustomRingback();
-      } else {
-        // Callee: no ringback needed
-        if (InCallManager) {
-          try {
-            InCallManager.setForceSpeakerphoneOn(false);
-            InCallManager.start({ 
-              media: 'audio', // NOT 'video' - this defaults to earpiece
+              media: 'audio',
               auto: false,
               ringback: ''
             });
             InCallManager.setForceSpeakerphoneOn(false);
             setIsSpeakerOn(false);
             InCallManager.setKeepScreenOn(true);
-            console.log('[VideoCall] Started InCallManager for callee (no ringback, earpiece)');
+            console.log('[VideoCall] InCallManager started');
           } catch (err) {
             console.warn('[VideoCall] Failed to start InCallManager:', err);
           }
         }
-      }
+
+        // STEP 2: Small delay to let audio session stabilize
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // STEP 3: Set expo-audio mode AFTER InCallManager owns the session
+        try {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            interruptionMode: 'duckOthers',
+            allowsRecording: true,
+            shouldPlayInBackground: true,
+            shouldRouteThroughEarpiece: true,
+          });
+        } catch (err) {
+          console.warn('[VideoCall] setAudioModeAsync failed:', err);
+        }
+
+        // STEP 4: Play ringback only for caller
+        if (isOwner) {
+          playCustomRingback();
+        }
+      };
+
+      initAudio();
     } else if (callState === 'connected') {
       // Stop custom ringback when connected
       stopCustomRingback();
@@ -818,6 +833,14 @@ export function WhatsAppStyleVideoCall({
 
     const initializeCall = async () => {
       try {
+        callTelemetryRef.current.initStartedAt = Date.now();
+        callTelemetryRef.current.tokenReceivedAt = null;
+        callTelemetryRef.current.joinStartedAt = null;
+        callTelemetryRef.current.joinedAt = null;
+        callTelemetryRef.current.ringbackStartedAt = null;
+        callTelemetryRef.current.firstRemoteAudioAt = null;
+        track('edudash.calls.init_started', { call_type: 'video', is_owner: isOwner });
+
         setCallState('connecting');
         setError(null);
         setCallDuration(0);
@@ -901,7 +924,33 @@ export function WhatsAppStyleVideoCall({
               meeting_url: roomUrl,
             });
 
-            // CRITICAL: Send push notification to wake callee's app when backgrounded
+            // CRITICAL: Send FCM data-only message to wake callee's app when killed (Android)
+            // FCM data-only messages with high priority can wake killed apps
+            fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/send-fcm-call`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                callee_user_id: calleeId,
+                call_id: newCallId,
+                caller_id: user.id,
+                caller_name: callerName,
+                call_type: 'video',
+                meeting_url: roomUrl,
+              }),
+            }).then(res => res.json()).then(result => {
+              if (result.success) {
+                console.log('[VideoCall] ✅ FCM wake-on-call message sent');
+              } else {
+                console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
+              }
+            }).catch(err => {
+              console.warn('[VideoCall] FCM call failed:', err);
+            });
+
+            // Send Expo push notification (visible banner + sound for backgrounded apps)
             fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/notifications-dispatcher`, {
               method: 'POST',
               headers: {
@@ -981,6 +1030,15 @@ export function WhatsAppStyleVideoCall({
         const tokenData = tokenResponse.ok ? await tokenResponse.json() : null;
         const meetingToken = tokenData?.token;
 
+        callTelemetryRef.current.tokenReceivedAt = Date.now();
+        track('edudash.calls.token_received', {
+          call_type: 'video',
+          ok: tokenResponse.ok,
+          duration_ms: callTelemetryRef.current.initStartedAt
+            ? callTelemetryRef.current.tokenReceivedAt - callTelemetryRef.current.initStartedAt
+            : undefined,
+        });
+
         if (meetingToken) {
           console.log('[VideoCall] ✅ Got meeting token');
         } else {
@@ -989,17 +1047,31 @@ export function WhatsAppStyleVideoCall({
 
         if (isCleanedUp) return;
 
-        // Create Daily call object
-        const daily = Daily.createCallObject({
-          audioSource: true,
-          videoSource: true,
-        });
+        // Create Daily call object (prefer prewarmed object to reduce startup latency)
+        const daily =
+          getPrewarmedCallObject(true) ||
+          Daily.createCallObject({
+            audioSource: true,
+            videoSource: true,
+          });
 
         dailyRef.current = daily;
 
         // Event listeners
         daily.on('joined-meeting', async () => {
           console.log('[VideoCall] Joined meeting');
+          if (!callTelemetryRef.current.joinedAt) {
+            callTelemetryRef.current.joinedAt = Date.now();
+            track('edudash.calls.joined', {
+              call_type: 'video',
+              duration_ms: callTelemetryRef.current.initStartedAt
+                ? callTelemetryRef.current.joinedAt - callTelemetryRef.current.initStartedAt
+                : undefined,
+              join_duration_ms: callTelemetryRef.current.joinStartedAt
+                ? callTelemetryRef.current.joinedAt - callTelemetryRef.current.joinStartedAt
+                : undefined,
+            });
+          }
           
           // CRITICAL: Subscribe to all tracks automatically (required for receiving remote video/audio)
           try {
@@ -1114,6 +1186,25 @@ export function WhatsAppStyleVideoCall({
             screenVideoState: participant?.tracks?.screenVideo?.state,
           });
           updateParticipants();
+
+          // First remote audio telemetry (best-effort)
+          if (
+            participant &&
+            participant.local === false &&
+            participant?.tracks?.audio?.state === 'playable' &&
+            !callTelemetryRef.current.firstRemoteAudioAt
+          ) {
+            callTelemetryRef.current.firstRemoteAudioAt = Date.now();
+            track('edudash.calls.first_remote_audio', {
+              call_type: 'video',
+              duration_ms: callTelemetryRef.current.initStartedAt
+                ? callTelemetryRef.current.firstRemoteAudioAt - callTelemetryRef.current.initStartedAt
+                : undefined,
+              join_to_audio_ms: callTelemetryRef.current.joinStartedAt
+                ? callTelemetryRef.current.firstRemoteAudioAt - callTelemetryRef.current.joinStartedAt
+                : undefined,
+            });
+          }
           
           // Screen share conflict detection
           // If remote participant started screen sharing while we're sharing, show alert
@@ -1247,6 +1338,14 @@ export function WhatsAppStyleVideoCall({
         } catch (audioModeError) {
           console.warn('[VideoCall] ⚠️ Failed to acquire audio mode (non-fatal):', audioModeError);
         }
+
+        callTelemetryRef.current.joinStartedAt = Date.now();
+        track('edudash.calls.join_started', {
+          call_type: 'video',
+          duration_ms: callTelemetryRef.current.initStartedAt
+            ? callTelemetryRef.current.joinStartedAt - callTelemetryRef.current.initStartedAt
+            : undefined,
+        });
 
         await daily.join({ 
           url: roomUrl,
