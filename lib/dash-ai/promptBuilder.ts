@@ -15,6 +15,8 @@ export interface PromptBuildOptions {
   tutorMode?: boolean;
   sessionStart?: boolean;
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
+  /** Phase-specific prompt override from useTutorPipeline (D→T→P→C state machine) */
+  tutorPipelineOverride?: string;
 }
 
 /**
@@ -57,7 +59,7 @@ export function buildGreeting(options: PromptBuildOptions): string {
  * Builds intelligent system prompt with learning adaptations
  */
 export function buildIntelligentSystemPrompt(options: PromptBuildOptions): string {
-  const { learner, messageHistory = [], tutorMode = true } = options;
+  const { learner, messageHistory = [], tutorMode = true, tutorPipelineOverride } = options;
   
   const isPreschool = isPreschoolContext(learner);
   const learningStyle = detectLearningStyle(messageHistory);
@@ -143,6 +145,15 @@ TEACHING STRATEGY:
 4. **Guide without quizzing**: Explain what to do WITHOUT turning it into a test
 5. **Only add practice if asked**: Don't automatically add follow-up questions
 
+BLOOM'S TAXONOMY PROGRESSION (match level to learner):
+- REMEMBER: "Can you recall..." — facts, definitions, lists
+- UNDERSTAND: "Explain in your own words..." — summarize, interpret, compare
+- APPLY: "Use this concept to solve..." — execute, implement, demonstrate
+- ANALYZE: "What patterns do you see..." — differentiate, organize, attribute
+- EVALUATE: "Which approach is better..." — justify, critique, assess
+- CREATE: "Design your own..." — generate, plan, produce
+Target: Start at the learner's current level, scaffold up one level per session.
+
 CONVERSATIONAL STYLE - CRITICAL:
 - Answer like a helpful friend, NOT a quiz bot or textbook
 - Explain in flowing paragraphs, not rigid numbered steps (unless steps truly needed)
@@ -201,11 +212,29 @@ CRITICAL RULES - NON-NEGOTIABLE:
 - Skip the "check understanding" questions unless they're stuck
 - No follow-up quiz questions unless they ask for practice`;
 
+  // When tutor pipeline is active, inject D→T→P→C phase instructions
+  // This overrides the default conversational teaching strategy
+  const pipelineBlock = tutorPipelineOverride ? `
+═══════════════════════════════════════════════════════
+🎓 ACTIVE TUTOR SESSION — FOLLOW PHASE INSTRUCTIONS
+═══════════════════════════════════════════════════════
+${tutorPipelineOverride}
+
+STRUCTURED QUIZ OUTPUT FORMAT:
+When presenting quiz/practice questions, format them as structured JSON blocks
+wrapped in triple backticks with the "quiz" language tag so the UI can render
+interactive quiz cards:
+\`\`\`quiz
+{"type":"quiz_question","question":"What is 2+2?","options":["3","4","5","6"],"correct":"4","explanation":"2+2=4","difficulty":"easy","subject":"Mathematics","topic":"Addition","grade":"Grade 1"}
+\`\`\`
+This enables inline interactive quiz cards with immediate feedback.
+═══════════════════════════════════════════════════════` : '';
+
   return [
     basePersonality,
     learningStyleGuidance[learningStyle],
     ageBandGuidance,
-    teachingGuidance,
+    pipelineBlock || teachingGuidance,
     prohibitions,
   ].join('\n');
 }

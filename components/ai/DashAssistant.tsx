@@ -48,6 +48,9 @@ import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
 import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
 import { ToolRegistry } from '@/services/AgentTools';
+import { useTutorPipeline } from '@/hooks/dash-assistant/useTutorPipeline';
+import { TutorSessionBanner } from './dash-assistant/TutorSessionBanner';
+import { SessionSummaryCard } from './dash-assistant/SessionSummaryCard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -109,6 +112,15 @@ interface DashAssistantProps {
   onClose?: () => void;
   initialMessage?: string;
   handoffSource?: string;
+  /** Pre-configured tutor mode (quiz/practice/diagnostic/play) — bypasses intent detection */
+  tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | null;
+  /** Tutor session config for programmatic tutor start */
+  tutorConfig?: {
+    subject?: string;
+    grade?: string;
+    topic?: string;
+    difficulty?: 1 | 2 | 3 | 4 | 5;
+  };
 }
 
 export const DashAssistant: React.FC<DashAssistantProps> = ({
@@ -116,6 +128,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   onClose,
   initialMessage,
   handoffSource,
+  tutorMode: externalTutorMode,
+  tutorConfig,
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -250,9 +264,31 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     runTool,
     tier,
     subReady,
-  } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource });
+    cancelGeneration,
+  } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource, externalTutorMode, tutorConfig });
   const { can, ready: capsReady } = useCapability();
   const isTypingActive = isLoading || !!loadingStatus;
+
+  // D→T→P→C pedagogical pipeline
+  const pipeline = useTutorPipeline();
+  const isPipelineActive = pipeline.currentPhase !== 'IDLE' && pipeline.currentPhase !== 'COMPLETE';
+
+  // Auto-start pipeline when entering from dash-tutor with tutorConfig
+  useEffect(() => {
+    if (
+      tutorConfig?.subject &&
+      tutorConfig?.grade &&
+      pipeline.currentPhase === 'IDLE' &&
+      !modeInitializedRef.current
+    ) {
+      pipeline.startPipeline({
+        subject: tutorConfig.subject,
+        grade: tutorConfig.grade,
+        topic: tutorConfig.topic || tutorConfig.subject,
+        difficulty: tutorConfig.difficulty || 3,
+      });
+    }
+  }, [tutorConfig, pipeline.currentPhase]);
 
   useEffect(() => {
     if (wasLoadingRef.current && !isLoading) {
@@ -1040,6 +1076,33 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           </View>
         )}
 
+        {/* Tutor Pipeline Banner — D→T→P→C phase stepper */}
+        {isPipelineActive && pipeline.config && (
+          <TutorSessionBanner
+            currentPhase={pipeline.currentPhase}
+            criteria={pipeline.criteria}
+            subject={pipeline.config.subject}
+            topic={pipeline.config.topic}
+            grade={pipeline.config.grade}
+            onClose={pipeline.resetPipeline}
+          />
+        )}
+
+        {/* Session Summary Card — shown when pipeline completes */}
+        {pipeline.currentPhase === 'COMPLETE' && pipeline.sessionSummary && (
+          <SessionSummaryCard
+            summary={pipeline.sessionSummary}
+            onReviewAgain={() => {
+              if (pipeline.config) {
+                pipeline.startPipeline(pipeline.config);
+              }
+            }}
+            onNewTopic={() => {
+              pipeline.resetPipeline();
+            }}
+          />
+        )}
+
         {/* Messages */}
         <DashAssistantMessages
           flashListRef={flashListRef}
@@ -1204,6 +1267,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           onOpenTools={showAdvancedControls && toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
           onRemoveAttachment={handleRemoveAttachment}
           onQuickAction={(text) => sendMessage(text)}
+          onCancel={cancelGeneration}
           bottomInset={insets.bottom}
           hideQuickChips={messages.length === 0}
         />

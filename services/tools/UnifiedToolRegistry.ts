@@ -73,6 +73,11 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   superadmin_get_system_health: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_get_error_logs: { roles: ['super_admin'], minTier: 'enterprise' },
   superadmin_get_platform_stats: { roles: ['super_admin'], minTier: 'enterprise' },
+
+  // Teacher AI tools
+  generate_teaching_strategy: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_homework: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  batch_grade_submissions: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
 };
 
 const MODULE_CATEGORY_MAP: Record<string, string> = {
@@ -96,6 +101,9 @@ const MODULE_CATEGORY_MAP: Record<string, string> = {
   get_active_tasks: 'navigation',
   support_check_user_context: 'support',
   support_create_ticket: 'support',
+  generate_teaching_strategy: 'teacher',
+  generate_homework: 'teacher',
+  batch_grade_submissions: 'teacher',
 };
 
 function parseToolRole(role?: string | null): { role: ToolRole; known: boolean } {

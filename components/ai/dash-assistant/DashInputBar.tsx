@@ -46,6 +46,8 @@ interface DashInputBarProps {
   onOpenTools?: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onQuickAction?: (text: string) => void;
+  /** Cancel an in-progress AI generation */
+  onCancel?: () => void;
   /** Hide quick chips when an empty state component already shows actions */
   hideQuickChips?: boolean;
 }
@@ -73,6 +75,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onOpenTools,
   onRemoveAttachment,
   onQuickAction,
+  onCancel,
   hideQuickChips = false,
 }) => {
   const { theme } = useTheme();
@@ -436,6 +439,24 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
             }
           ]} />
         </TouchableOpacity>
+
+        {/* Stop generation button — shown when AI is generating a response */}
+        {isLoading && onCancel && !hasContent && (
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: theme.error }]}
+            onPress={async () => {
+              try {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              } catch {}
+              onCancel();
+            }}
+            accessibilityLabel="Stop generating"
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            <Ionicons name="stop" size={20} color={theme.onPrimary || '#fff'} />
+          </TouchableOpacity>
+        )}
 
         {/* Send button */}
         {hasContent && (

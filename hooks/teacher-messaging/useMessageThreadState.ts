@@ -175,7 +175,7 @@ export function useMessageThreadState() {
     ? keyboardHeight - (Platform.OS === 'ios' ? insets.bottom : 0) + 8 : 0;
   const safeComposerHeight = Math.max(composerHeight, COMPOSER_OVERLAY_HEIGHT);
   const messageViewportInset = composerKeyboardOffset + composerBottomInset + safeComposerHeight + COMPOSER_FLOAT_GAP;
-  const messageBottomReserve = 24;
+  const messageBottomReserve = 8;
   const wallpaperAccent = wallpaper?.type === 'preset'
     ? (WALLPAPER_ACCENTS[wallpaper.value] || '#93c5fd') : '#93c5fd';
   const composerSurfaceColor = bgSource

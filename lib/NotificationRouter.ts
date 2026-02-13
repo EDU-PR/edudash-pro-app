@@ -421,7 +421,7 @@ function handleNotificationInteraction(data: NotificationPayload): void {
       break;
       
     case 'announcement':
-      router.push('/screens/parent-dashboard' as any);
+      router.push('/screens/parent-announcements' as any);
       break;
       
     case 'homework':

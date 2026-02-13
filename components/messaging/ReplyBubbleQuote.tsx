@@ -28,8 +28,8 @@ export const ReplyBubbleQuote: React.FC<ReplyBubbleQuoteProps> = React.memo(({
   onPress,
 }) => {
   const senderName = replyTo.sender
-    ? `${replyTo.sender.first_name || ''} ${replyTo.sender.last_name || ''}`.trim() || 'Unknown'
-    : 'Unknown';
+    ? `${replyTo.sender.first_name || ''} ${replyTo.sender.last_name || ''}`.trim() || 'User'
+    : 'User';
 
   const preview = getReplyPreview(replyTo.content, replyTo.content_type);
 

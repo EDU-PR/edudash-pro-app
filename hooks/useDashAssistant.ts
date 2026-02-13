@@ -116,6 +116,15 @@ interface UseDashAssistantOptions {
   initialMessage?: string;
   handoffSource?: string;
   onClose?: () => void;
+  /** Pre-configured tutor mode — bypasses intent detection */
+  externalTutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | null;
+  /** Tutor session config for programmatic start */
+  tutorConfig?: {
+    subject?: string;
+    grade?: string;
+    topic?: string;
+    difficulty?: 1 | 2 | 3 | 4 | 5;
+  };
 }
 
 interface AlertState {
@@ -216,7 +225,7 @@ const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
-  const { conversationId, initialMessage, handoffSource, onClose } = options;
+  const { conversationId, initialMessage, handoffSource, onClose, externalTutorMode, tutorConfig } = options;
   const { setLayout } = useDashboardPreferences();
   const { tier, ready: subReady, refresh: refreshTier } = useSubscription();
   const { user, profile } = useAuth();
@@ -258,6 +267,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<'uploading' | 'analyzing' | 'thinking' | 'responding' | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [statusStartTime, setStatusStartTime] = useState<number>(0);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>('');
@@ -2292,6 +2302,16 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     // Actions
     sendMessage,
     sendTutorAnswer,
+    cancelGeneration: useCallback(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+      setLoadingStatus(null);
+      setStreamingMessageId(null);
+      setStreamingContent('');
+    }, []),
     speakResponse,
     stopSpeaking,
     scrollToBottom,
