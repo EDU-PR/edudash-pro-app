@@ -18,8 +18,10 @@ import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 // Azure TTS languages (short codes accepted by tts-proxy)
 const AZURE_TTS_LANGUAGES = ['en', 'af', 'zu', 'xh', 'nso'];
+/** Normal speech rate — matches useVoiceTTS constant */
 const DEFAULT_AZURE_RATE = 0;
-const DEFAULT_PHONICS_AZURE_RATE = -6;
+/** Phonics rate — must match useVoiceTTS for consistency (-35%) */
+const DEFAULT_PHONICS_AZURE_RATE = -35;
 
 /** Dash's primary voice — must match DASH_VOICE in tts-proxy */
 const DASH_VOICE_ID = 'en-ZA-LukeNeural';

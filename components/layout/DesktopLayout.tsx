@@ -252,9 +252,9 @@ export function DesktopLayout({ children, role, title, showBackButton }: Desktop
         </View>
 
         {/* Main Content */}
-        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+        <View style={{ flex: 1 }}>
           {children}
-        </SafeAreaView>
+        </View>
 
         {/* Mobile Navigation Drawer */}
         <MobileNavDrawer

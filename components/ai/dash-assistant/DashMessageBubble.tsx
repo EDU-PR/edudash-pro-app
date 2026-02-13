@@ -6,17 +6,15 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform, Linking, Alert, TextInput, ScrollView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, Linking, Alert, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { messageStyles as styles } from './styles/message.styles';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage } from '@/services/dash-ai/types';
 import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/AttachmentService';
-import { renderCAPSResults } from '@/services/caps/parseCAPSResults';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MathRenderer } from './MathRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
-import { InlineQuizCard, parseQuizPayload, extractPreQuizText } from './InlineQuizCard';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -195,7 +193,6 @@ interface DashMessageBubbleProps {
   onSpeak: (message: DashMessage) => void;
   onRetry: (content: string) => void;
   onSendFollowUp: (text: string) => void;
-  onSendTutorAnswer?: (text: string, sourceMessageId?: string) => void;
   extractFollowUps: (text: string) => string[];
   assistantLabel?: string;
 }
@@ -211,13 +208,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   onSpeak,
   onRetry,
   onSendFollowUp,
-  onSendTutorAnswer,
   extractFollowUps,
   assistantLabel,
 }) => {
   const { theme, isDark } = useTheme();
   const isUser = message.type === 'user';
-  const [inlineAnswer, setInlineAnswer] = React.useState('');
   const [showRawToolPayload, setShowRawToolPayload] = React.useState(false);
   
   // Enhanced gradients for better visual appeal
@@ -226,47 +221,11 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     : ['#0ea5e9', '#3b82f6', '#6366f1']; // Sky blue → Blue → Indigo
 
   React.useEffect(() => {
-    setInlineAnswer('');
     setShowRawToolPayload(false);
   }, [message.id]);
 
-  const getTutorPhase = () => {
-    const explicitPhase = (message.metadata as any)?.tutor_phase || (message.metadata as any)?.phase;
-    if (explicitPhase) {
-      return String(explicitPhase);
-    }
-    const content = (message.content || '').toLowerCase();
-    if (!content) return null;
-    if (/(quiz|practice|exercise|try it|solve|work through)/.test(content)) {
-      return 'Practice';
-    }
-    if (/(diagnose|check in|quick check|question|assess)/.test(content) || (content.endsWith('?') && content.length < 180)) {
-      return 'Diagnose';
-    }
-    if (/(explain|example|step|here's how|why this works)/.test(content)) {
-      return 'Teach';
-    }
-    return null;
-  };
-
-  const phase = !isUser ? getTutorPhase() : null;
-  const phaseColors = phase
-    ? {
-        Diagnose: { bg: theme.warning + '22', text: theme.warning || '#f59e0b' },
-        Teach: { bg: theme.primary + '22', text: theme.primary },
-        Practice: { bg: theme.success + '22', text: theme.success || '#16a34a' },
-      }[phase as 'Diagnose' | 'Teach' | 'Practice'] || { bg: theme.surfaceVariant, text: theme.textSecondary }
-    : null;
-  
   // Check if this is the last user message (for retry button)
-  const isLastUserMessage = isUser && (() => {
-    for (let i = totalMessages - 1; i >= 0; i--) {
-      // We'd need access to all messages array to check this properly
-      // For now, approximate by checking if near the end
-      return index >= totalMessages - 2;
-    }
-    return false;
-  })();
+  const isLastUserMessage = isUser && index >= totalMessages - 2;
 
   // Extract URLs from content
   const extractUrl = (content: string): string | undefined => {
@@ -282,124 +241,20 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
   const isPdf = url ? /\.pdf(\?|$)/i.test(url) : false;
 
   const isLatestMessage = index === totalMessages - 1;
-  const hasTutorQuestion = !!message.metadata?.tutor_question || !!message.metadata?.tutor_question_text;
-  const showInlineAnswer = !isUser && isLatestMessage && !isLoading && hasTutorQuestion;
-
-  const handleInlineSend = () => {
-    const trimmed = inlineAnswer.trim();
-    if (!trimmed) return;
-    if (onSendTutorAnswer) {
-      onSendTutorAnswer(trimmed, message.id);
-    } else {
-      onSendFollowUp(trimmed);
-    }
-    setInlineAnswer('');
-  };
 
   // Get suggestions from metadata or extract from content
-  const suggestions = !isUser && showFollowUps && !message.metadata?.tutor_question && (
+  const suggestions = !isUser && showFollowUps && (
     (message.metadata?.suggested_actions && message.metadata.suggested_actions.length > 0)
       ? message.metadata.suggested_actions
       : extractFollowUps(message.content)
   );
 
-  const isTutorPromptLeak = (content: string) =>
-    /tutor_payload|return only json|you are dash, an interactive tutor|tutor mode override/i.test(content || '');
-
-  const parseTutorPayload = (content: string) => {
-    if (!content) return null;
-    const tagMatch = content.match(/<TUTOR_PAYLOAD>([\s\S]*?)<\/TUTOR_PAYLOAD>/i);
-    const jsonCandidate = tagMatch ? tagMatch[1] : null;
-    const fallbackMatch = !jsonCandidate ? content.match(/\{[\s\S]*\}/) : null;
-    const raw = (jsonCandidate || fallbackMatch?.[0] || '').trim();
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  };
-
-  const buildTutorDisplay = (payload: Record<string, unknown>) => {
-    const question = typeof payload.question === 'string' ? payload.question.trim() : '';
-    if (question) return question;
-
-    const lines: string[] = [];
-    if (typeof payload.is_correct === 'boolean') {
-      lines.push(payload.is_correct ? '✅ Correct!' : '❌ Not quite.');
-    }
-    if (typeof payload.feedback === 'string' && payload.feedback.trim()) {
-      lines.push(payload.feedback.trim());
-    }
-    if (typeof payload.hint === 'string' && payload.hint.trim()) {
-      lines.push(payload.hint.trim());
-    }
-    if (typeof payload.correct_answer === 'string' && payload.correct_answer.trim()) {
-      lines.push(`Correct answer: ${payload.correct_answer.trim()}`);
-    }
-    if (typeof payload.steps === 'string' && payload.steps.trim()) {
-      lines.push(payload.steps.trim());
-    }
-    if (typeof payload.explanation === 'string' && payload.explanation.trim()) {
-      lines.push(payload.explanation.trim());
-    }
-    if (typeof payload.follow_up_question === 'string' && payload.follow_up_question.trim()) {
-      lines.push(`Next question:\n${payload.follow_up_question.trim()}`);
-    }
-    return lines.filter(Boolean).join('\n\n') || null;
-  };
-
   const sanitizeAssistantContent = (content: string) => {
-    return (content || '')
-      .split(/\n+/)
-      .filter(line => !/^\s*User:\s*/i.test(line))
-      .filter(line => !/^\s*\[.*(wait|response).*?\]\s*$/i.test(line))
-      .filter(line => !/^\s*(TUTOR MODE OVERRIDE:|Mode:|Age band:|School type:)/i.test(line))
-      .filter(line => !/^\s*You are Dash,.*tutor/i.test(line))
-      .filter(line => !/^\s*Return ONLY JSON/i.test(line))
-      .filter(line => !/TUTOR_PAYLOAD/i.test(line))
-      .join('\n')
-      .trim();
+    return (content || '').trim();
   };
 
-  const getAssistantDisplayContent = () => {
-    const raw = message.content || '';
-    const payload = parseTutorPayload(raw);
-    if (payload) {
-      const display = buildTutorDisplay(payload);
-      if (display) return display;
-    }
-    const metaQuestion = message.metadata?.tutor_question_text;
-    if (metaQuestion) {
-      const cleaned = sanitizeAssistantContent(raw);
-      if (cleaned && cleaned.length > metaQuestion.trim().length + 20) {
-        return cleaned;
-      }
-      return metaQuestion;
-    }
-    if (isTutorPromptLeak(raw)) {
-      return 'Dash is preparing your tutor response. Tap retry if this keeps happening.';
-    }
-    const cleaned = sanitizeAssistantContent(raw);
-    return cleaned || raw.trim();
-  };
-
-  const sanitizeUserDisplayContent = (content: string) => {
-    if (!content) return content;
-    const lower = content.toLowerCase();
-    const isTutorPrompt = /you are dash, an interactive tutor|tutor_payload|return only json|tutor mode override/i.test(lower);
-    if (!isTutorPrompt) return content;
-    const requestMatch = content.match(/Learner request:\s*([^\n]+)/i);
-    if (requestMatch?.[1]) return requestMatch[1].trim();
-    const answerMatch = content.match(/Learner answer:\s*([^\n]+)/i);
-    if (answerMatch?.[1]) return answerMatch[1].trim();
-    const questionMatch = content.match(/Question:\s*([^\n]+)/i);
-    if (questionMatch?.[1]) return questionMatch[1].trim();
-    return 'Tutor request';
-  };
-
-  const assistantContent = getAssistantDisplayContent();
-  const userContent = sanitizeUserDisplayContent(message.content || '');
+  const assistantContent = sanitizeAssistantContent(message.content || '');
+  const userContent = message.content || '';
   const hasAssistantContent = assistantContent.trim().length > 0;
   const assistantFallbackText = isLoading && isLatestMessage
     ? 'Working on your request...'
@@ -596,14 +451,9 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 <Ionicons name="sparkles" size={12} color={theme.onPrimary} />
               </View>
               <Text style={[styles.messageRoleLabel, { color: theme.text }]}>
-                {assistantLabel || 'Dash AI'}
+                {assistantLabel || 'Dash'}
               </Text>
             </View>
-            {phase && (
-              <View style={[styles.phasePill, { backgroundColor: phaseColors?.bg, borderColor: phaseColors?.text || theme.border }]}>
-                <Text style={[styles.phaseText, { color: phaseColors?.text }]}>{phase}</Text>
-              </View>
-            )}
           </View>
         )}
         <View style={styles.messageContentRow}>
@@ -763,25 +613,6 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           ) : (
             <View style={{ flex: 1 }}>
               {parseRichSegments(assistantDisplayText).map((segment, segmentIndex) => {
-                if (segment.type === 'quiz') {
-                  try {
-                    const quizData = JSON.parse(segment.content.trim());
-                    if (quizData?.type === 'quiz_question' && quizData.question) {
-                      return (
-                        <InlineQuizCard
-                          key={`quiz-${message.id}-${segmentIndex}`}
-                          payload={quizData}
-                          onAnswer={(answer, correct) => {
-                            onSendTutorAnswer?.(answer, message.id);
-                          }}
-                        />
-                      );
-                    }
-                  } catch {
-                    // Invalid quiz JSON — fall through to markdown
-                  }
-                  return null;
-                }
                 if (segment.type === 'math') {
                   return (
                     <MathRenderer
@@ -924,43 +755,6 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                 </Text>
               </View>
             ))}
-          </View>
-        )}
-
-        {showInlineAnswer && (
-          <View style={[styles.inlineAnswerContainer, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
-            <Text style={[styles.inlineAnswerLabel, { color: theme.textSecondary }]}>Your answer</Text>
-            <View style={styles.inlineAnswerRow}>
-              <TextInput
-                style={[styles.inlineAnswerInput, { color: theme.text }]}
-                placeholder="Type your answer…"
-                placeholderTextColor={theme.textTertiary}
-                value={inlineAnswer}
-                onChangeText={setInlineAnswer}
-                editable={!isLoading}
-                onSubmitEditing={handleInlineSend}
-                returnKeyType="send"
-              />
-              <TouchableOpacity
-                style={[
-                  styles.inlineAnswerSend,
-                  { backgroundColor: inlineAnswer.trim() ? theme.primary : theme.border }
-                ]}
-                onPress={handleInlineSend}
-                disabled={!inlineAnswer.trim()}
-                accessibilityLabel="Send answer"
-                accessibilityRole="button"
-              >
-                <Ionicons name="send" size={14} color={inlineAnswer.trim() ? theme.onPrimary : theme.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        
-        {/* CAPS results (tool outputs) */}
-        {!isUser && message.metadata?.tool_results && (
-          <View style={{ marginTop: 8 }}>
-            {renderCAPSResults(message.metadata)}
           </View>
         )}
 

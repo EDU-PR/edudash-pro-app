@@ -212,7 +212,7 @@ export const NewEnhancedTeacherDashboard: React.FC<NewEnhancedTeacherDashboardPr
                 <Text style={styles.greetingEmoji}>👋</Text>
                 <View style={styles.greetingTextContainer}>
                   <Text style={styles.greeting}>{state.getGreeting()}</Text>
-                  <Text style={styles.subtitle}>{t('teacher.dashboard_subtitle')}</Text>
+                  <Text style={styles.subtitle}>{state.getContextualSubtitle(dashboardData)}</Text>
                 </View>
               </View>
               

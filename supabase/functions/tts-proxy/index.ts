@@ -216,7 +216,10 @@ function phonemeTag(letter: string): string {
   const key = String(letter || '').toLowerCase();
   const entry = LETTER_IPA[key];
   if (!entry) return escapeXml(letter);
-  return `<phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme>`;
+  // Wrap in <prosody rate="-50%"> so Azure stretches the sound long enough
+  // for a child to hear and learn it. Without this, <phoneme> produces a
+  // sub-200ms burst that's barely audible.
+  return `<prosody rate="-50%"><phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme></prosody>`;
 }
 
 function buildBlendSSML(blend: string): string {
@@ -231,10 +234,10 @@ function buildBlendSSML(blend: string): string {
   }
 
   const segmented = letters
-    .map((letter) => `${phonemeTag(letter)}<break time="520ms"/>`)
+    .map((letter) => `${phonemeTag(letter)}<break time="800ms"/>`)
     .join(' ');
 
-  return `${segmented}<break time="650ms"/>${escapeXml(letters.join(''))}`;
+  return `${segmented}<break time="1000ms"/>${escapeXml(letters.join(''))}`;
 }
 
 /** Bare sustained-sound text → letter key for phonemeTag fallback */
@@ -278,16 +281,16 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
 
     // Unknown marker token: spell each letter as a safe fallback.
     if (token.length <= 8) {
-      return token.split('').map((letter) => phonemeTag(letter)).join('<break time="220ms"/>');
+      return token.split('').map((letter) => phonemeTag(letter)).join('<break time="600ms"/>');
     }
 
     return escapeXml(token);
   };
 
-  // /b/ markers → <phoneme> tags + pause for children to absorb each sound
-  text = text.replace(/\/\s*([a-z]{1,8})\s*\//gi, (_, token: string) => markerTokenToSSML(token) + '<break time="400ms"/>');
+  // /b/ markers → <phoneme> tags + generous pause for children to absorb each sound
+  text = text.replace(/\/\s*([a-z]{1,8})\s*\//gi, (_, token: string) => markerTokenToSSML(token) + '<break time="800ms"/>');
   // [b] markers → <phoneme> tags + pause
-  text = text.replace(/\[\s*([a-z]{1,8})\s*\]/gi, (_, token: string) => markerTokenToSSML(token) + '<break time="400ms"/>');
+  text = text.replace(/\[\s*([a-z]{1,8})\s*\]/gi, (_, token: string) => markerTokenToSSML(token) + '<break time="800ms"/>');
   // c-a-t markers → blending SSML
   text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
 
@@ -1125,7 +1128,7 @@ Deno.serve(async (req) => {
     const phonicsMode = body.phonics_mode === true;
 
     const hasExplicitRate = typeof body.speaking_rate === 'number' || typeof body.rate === 'number';
-    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? -15 : 0));
+    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? -35 : 0));
     const pitchRaw = Number(body.pitch ?? 0);
     const speakingRate = clampNumber(speakingRateRaw, -50, 50);
     const pitch = clampNumber(pitchRaw, -50, 50);

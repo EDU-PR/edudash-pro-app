@@ -1,8 +1,9 @@
 /**
  * Dash AI Assistant Chat Component
  * 
- * Modern chat interface for the Dash AI Assistant with voice recording,
- * message display, and interactive features.
+ * Clean, modern conversational AI interface — general-purpose like ChatGPT.
+ * No tool-heavy UI, no mode selectors, no command decks.
+ * Just a beautiful chat with Dash.
  * 
  * Refactored to use:
  * - useDashAssistant hook for business logic
@@ -12,9 +13,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView, Keyboard, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { layoutStyles, headerStyles, messageStyles, inputStyles } from './dash-assistant/styles';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,34 +23,16 @@ import {
   DashMessageBubble,
   DashInputBar,
   DashTypingIndicator,
-  DashHeader,
-  DashUsageBanner,
-  DashModelSelector,
-  DashContextChips,
 } from './dash-assistant';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { DashMessage, DashAttachment } from '@/services/dash-ai/types';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
-import { DashCommandPalette } from '@/components/ai/DashCommandPalette';
-import { DashToolsModal } from '@/components/ai/DashToolsModal';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
 import { AlertModal } from '@/components/ui/AlertModal';
 import { useDashAssistant } from '@/hooks/useDashAssistant';
-import { useRealtimeTier } from '@/hooks/useRealtimeTier';
-import { useCapability } from '@/hooks/useCapability';
-import { DeviceEventEmitter } from '@/lib/utils/eventEmitter';
 import { useAuth } from '@/contexts/AuthContext';
-import { LessonGeneratorService } from '@/lib/ai/lessonGenerator';
-import { assertSupabase } from '@/lib/supabase';
-import { getOrganizationType } from '@/lib/tenant/compat';
 import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
-import { checkAIQuota, showQuotaExceededAlert } from '@/lib/ai/guards';
-import { getDashToolShortcutsForRole } from '@/lib/ai/toolCatalog';
-import { ToolRegistry } from '@/services/AgentTools';
-import { useTutorPipeline } from '@/hooks/dash-assistant/useTutorPipeline';
-import { TutorSessionBanner } from './dash-assistant/TutorSessionBanner';
-import { SessionSummaryCard } from './dash-assistant/SessionSummaryCard';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -62,59 +44,13 @@ const styles = {
   ...inputStyles,
 };
 
-const formatGradeLabel = (grade?: string | null) => {
-  if (!grade) return null;
-  const raw = String(grade).trim();
-  if (!raw) return null;
-  const lower = raw.toLowerCase();
-  if (lower.startsWith('grade')) return raw.replace(/\s+/g, ' ');
-  if (lower === 'r' || lower.includes('grade r')) return 'Grade R';
-  const match = raw.match(/\d+/);
-  if (match) return `Grade ${match[0]}`;
-  return raw;
-};
-
-const formatSchoolTypeLabel = (schoolType?: string | null) => {
-  if (!schoolType) return null;
-  const raw = String(schoolType).trim();
-  if (!raw) return null;
-  const lower = raw.toLowerCase();
-  const compact = lower.replace(/[^a-z0-9]/g, '');
-
-  if (
-    lower === 'k12_school' ||
-    lower === 'k12' ||
-    lower === 'combined' ||
-    lower === 'primary' ||
-    lower === 'secondary' ||
-    lower === 'community_school' ||
-    lower.includes('k-12') ||
-    compact.includes('k12')
-  ) {
-    return 'K-12 School';
-  }
-
-  if (
-    lower.includes('preschool') ||
-    lower.includes('ecd') ||
-    lower.includes('early') ||
-    lower.includes('daycare') ||
-    lower.includes('creche')
-  ) {
-    return 'Preschool';
-  }
-
-  return raw;
-};
-
 interface DashAssistantProps {
   conversationId?: string;
   onClose?: () => void;
   initialMessage?: string;
   handoffSource?: string;
-  /** Pre-configured tutor mode (quiz/practice/diagnostic/play/explain) — bypasses intent detection */
+  /** Pre-configured tutor mode — kept for routing compat but UI stays general */
   tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
-  /** Tutor session config for programmatic tutor start */
   tutorConfig?: {
     subject?: string;
     grade?: string;
@@ -133,85 +69,19 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
 }: DashAssistantProps) => {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { tierStatus, refresh: refreshTier } = useRealtimeTier();
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showToolsModal, setShowToolsModal] = useState(false);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
-  const [wakeWordLoaded, setWakeWordLoaded] = useState(false);
-  const [headerVisible, setHeaderVisible] = useState(true);
-  const [commandDeckExpanded, setCommandDeckExpanded] = useState(false);
-  const lastScrollYRef = useRef(0);
-  const headerVisibleRef = useRef(true);
-  const modeInitializedRef = useRef(false);
-  const wakeWordAvailable = Platform.OS !== 'web' && !!process.env.EXPO_PUBLIC_PICOVOICE_ACCESS_KEY;
-  const remaining = tierStatus && tierStatus.quotaLimit > 0
-    ? Math.max(tierStatus.quotaLimit - tierStatus.quotaUsed, 0)
-    : null;
-  const wasLoadingRef = useRef(false);
-  // Keyboard listeners for reliable show/hide detection
+
+  // Keyboard listeners
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    
-    const showSub = Keyboard.addListener(showEvent, () => {
-      setKeyboardVisible(true);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardVisible(false);
-    });
-    
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  useEffect(() => {
-    headerVisibleRef.current = headerVisible;
-  }, [headerVisible]);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadWakeWord = async () => {
-      try {
-        const value = await AsyncStorage.getItem('@dash_ai_in_app_wake_word');
-        if (mounted) {
-          setWakeWordEnabled(value === 'true');
-          setWakeWordLoaded(true);
-        }
-      } catch {
-        if (mounted) setWakeWordLoaded(true);
-      }
-    };
-    loadWakeWord();
-    const sub = DeviceEventEmitter.addListener('dash:wake_word_toggle', (value: boolean) => {
-      if (mounted) setWakeWordEnabled(!!value);
-    });
-    return () => {
-      mounted = false;
-      sub?.remove?.();
-    };
-  }, []);
-
-  const toggleWakeWord = useCallback(async () => {
-    if (!wakeWordEnabled && !wakeWordAvailable) {
-      Alert.alert(
-        'Wake Word Unavailable',
-        'Wake word requires a Picovoice access key. Add EXPO_PUBLIC_PICOVOICE_ACCESS_KEY to enable "Hey Dash".'
-      );
-      return;
-    }
-    const next = !wakeWordEnabled;
-    setWakeWordEnabled(next);
-    try {
-      await AsyncStorage.setItem('@dash_ai_in_app_wake_word', next ? 'true' : 'false');
-    } catch {}
-    DeviceEventEmitter.emit('dash:wake_word_toggle', next);
-  }, [wakeWordEnabled]);
-
-  // Use custom hook for all business logic
+  // All business logic via hook
   const {
     messages,
     inputText,
@@ -224,9 +94,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     isInitialized,
     enterToSend,
     voiceEnabled,
-    showTypingIndicator,
     autoSuggestQuestions,
-    contextualHelp,
     selectedAttachments,
     isUploading,
     attachmentProgress,
@@ -234,22 +102,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setIsNearBottom,
     unreadCount,
     setUnreadCount,
-    availableModels,
-    selectedModel,
-    setSelectedModel,
     isRecording,
     partialTranscript,
     alertState,
     hideAlert,
-    learnerContext,
-    tutorSession,
-    parentChildren,
-    activeChildId,
-    setActiveChildId,
     flashListRef,
     inputRef,
     sendMessage,
-    sendTutorAnswer,
     speakResponse,
     stopSpeaking,
     startNewConversation,
@@ -257,57 +116,22 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     handleAttachFile,
     handleTakePhoto,
     handleInputMicPress,
-    stopVoiceRecording,
     handleRemoveAttachment,
     addAttachments,
     extractFollowUps,
-    runTool,
     tier,
     subReady,
     cancelGeneration,
   } = useDashAssistant({ conversationId, initialMessage, onClose, handoffSource, externalTutorMode, tutorConfig });
-  const { can, ready: capsReady } = useCapability();
+
   const isTypingActive = isLoading || !!loadingStatus;
-
-  // D→T→P→C pedagogical pipeline
-  const pipeline = useTutorPipeline();
-  const isPipelineActive = pipeline.currentPhase !== 'IDLE' && pipeline.currentPhase !== 'COMPLETE';
-
-  // Auto-start pipeline when entering from dash-tutor with tutorConfig
-  useEffect(() => {
-    if (
-      tutorConfig?.subject &&
-      tutorConfig?.grade &&
-      pipeline.currentPhase === 'IDLE' &&
-      !modeInitializedRef.current
-    ) {
-      pipeline.startPipeline({
-        subject: tutorConfig.subject,
-        grade: tutorConfig.grade,
-        topic: tutorConfig.topic || tutorConfig.subject,
-        difficulty: tutorConfig.difficulty || 3,
-      });
-    }
-  }, [tutorConfig, pipeline.currentPhase]);
-
-  useEffect(() => {
-    if (wasLoadingRef.current && !isLoading) {
-      refreshTier?.();
-    }
-    wasLoadingRef.current = isLoading;
-  }, [isLoading, refreshTier]);
+  const { profile } = useAuth();
+  const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
 
   const handleNewChat = useCallback(async () => {
     await stopSpeaking();
     await startNewConversation();
   }, [startNewConversation, stopSpeaking]);
-
-  const handleRunTool = useCallback(
-    async (toolName: string, params: Record<string, any>) => {
-      await runTool(toolName, params);
-    },
-    [runTool]
-  );
 
   const openScanner = useCallback(() => {
     if (Platform.OS === 'web') {
@@ -321,7 +145,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     if (!result?.base64) return;
     const attachment: DashAttachment = {
       id: `attach_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      name: `homework_scan_${Date.now()}.jpg`,
+      name: `scan_${Date.now()}.jpg`,
       mimeType: 'image/jpeg',
       size: Math.max(0, Math.floor(result.base64.length * 0.75)),
       bucket: 'attachments',
@@ -336,477 +160,16 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
         image_media_type: 'image/jpeg',
         width: result.width,
         height: result.height,
-        source: 'homework_scanner',
+        source: 'scanner',
       },
     };
     addAttachments([attachment]);
     setScannerVisible(false);
   }, [addAttachments]);
 
-  const safeModels = Array.isArray(availableModels) ? availableModels : [];
-  const selectedModelInfo = useMemo(
-    () => safeModels.find(model => model.id === selectedModel) || safeModels[0],
-    [safeModels, selectedModel]
-  );
-  const estimatedRemaining = selectedModelInfo && remaining !== null
-    ? Math.max(Math.floor(remaining / Math.max(selectedModelInfo.relativeCost || 1, 1)), 0)
-    : null;
-
-  const { profile, user } = useAuth();
-  const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
-  const normalizedRole = String(profile?.role || '').toLowerCase();
-  const isParentOrStudent = ['parent', 'student', 'learner'].includes(normalizedRole);
-  const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
-  const [dashMode, setDashMode] = useState<'advisor' | 'tutor' | 'orb'>(() => (isStaff ? 'advisor' : 'tutor'));
-  const modeOptions = useMemo(() => {
-    const options: Array<{ id: 'advisor' | 'tutor' | 'orb'; label: string; icon: string; hint: string }> = [];
-    if (isStaff) {
-      options.push({
-        id: 'advisor',
-        label: 'Advisor',
-        icon: 'sparkles-outline',
-        hint: 'Operations and planning',
-      });
-    }
-    options.push(
-      {
-        id: 'tutor',
-        label: 'Tutor',
-        icon: 'school-outline',
-        hint: 'Teaching and practice',
-      },
-    );
-    if (!['parent'].includes(normalizedRole)) {
-      options.push({
-        id: 'orb',
-        label: 'Orb',
-        icon: 'planet-outline',
-        hint: 'Live voice mode',
-      });
-    }
-    return options;
-  }, [isStaff, normalizedRole]);
-
-  // Derive activeChild for parent UI
-  const activeChild = useMemo(() => {
-    if (!parentChildren.length) return null;
-    return parentChildren.find((c: any) => c.id === activeChildId) || parentChildren[0] || null;
-  }, [parentChildren, activeChildId]);
-
-  const orgType = getOrganizationType(profile);
-  const isPreschool = orgType === 'preschool';
-  const canInteractiveLessons = capsReady ? can('lessons.interactive') : false;
-  const toolShortcuts = useMemo(() => {
-    const shortcuts = getDashToolShortcutsForRole(profile?.role || null);
-    return shortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
-  }, [profile?.role]);
-
-  const contextChips = useMemo(() => {
-    if (!learnerContext) return [];
-    const chips: string[] = [];
-    const schoolLabel = formatSchoolTypeLabel(
-      learnerContext.schoolType || (isPreschool ? 'preschool' : orgType ? String(orgType) : null)
-    );
-    if (schoolLabel) chips.push(schoolLabel);
-    const gradeLabel = formatGradeLabel(learnerContext.grade);
-    if (gradeLabel) chips.push(gradeLabel);
-    if (typeof learnerContext.ageYears === 'number') {
-      chips.push(`Age ${learnerContext.ageYears}`);
-    }
-    if (learnerContext.ageBand && !chips.find((chip) => chip.includes(learnerContext.ageBand!))) {
-      chips.push(`Band ${learnerContext.ageBand}`);
-    }
-    if (isPreschool) {
-      chips.push('Play-based');
-    }
-    return chips;
-  }, [learnerContext, isPreschool, orgType]);
-
-  const contextHint = useMemo(() => {
-    if (!learnerContext) return null;
-    if (isPreschool) {
-      return 'Play-based focus: games, letters, numbers, colors, and movement.';
-    }
-    return 'Step-by-step focus with quick checks for understanding.';
-  }, [learnerContext, isPreschool]);
-  const shouldShowPreschoolContext = useMemo(() => {
-    if (contextChips.length === 0) return false;
-    const st = String(learnerContext?.schoolType || '').toLowerCase();
-    return st.includes('preschool') || st.includes('ecd') || st.includes('early');
-  }, [contextChips.length, learnerContext?.schoolType]);
-  const showAdvancedControls = !isParentOrStudent;
-  const showOrbLink = !['parent'].includes(normalizedRole); // Students can reach DashOrb voice
-  const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
-
-  useEffect(() => {
-    if (!modeInitializedRef.current) {
-      setDashMode(isStaff ? 'advisor' : 'tutor');
-      modeInitializedRef.current = true;
-      return;
-    }
-    if (!showOrbLink && dashMode === 'orb') {
-      setDashMode(isStaff ? 'advisor' : 'tutor');
-    }
-    if (!isStaff && dashMode === 'advisor') {
-      setDashMode('tutor');
-    }
-  }, [dashMode, isStaff, showOrbLink]);
-
-  const activeMode = useMemo(() => {
-    if (dashMode === 'advisor') {
-      return {
-        label: 'Advisor Mode',
-        hint: 'Dash prioritizes operations, planning, and communication.',
-        inputPlaceholder: 'Ask Dash to plan workflows, reports, or communications...',
-      };
-    }
-    if (dashMode === 'orb') {
-      return {
-        label: 'Orb Voice',
-        hint: 'Hands-free voice mode for realtime interactions.',
-        inputPlaceholder: 'Voice mode is active. You can still type here...',
-      };
-    }
-    return {
-      label: 'Tutor Mode',
-      hint: isPreschool
-        ? 'Play-based teaching prompts and age-aware guidance.'
-        : 'Stepwise teaching with checks for understanding.',
-      inputPlaceholder: roleCopy.inputPlaceholder,
-    };
-  }, [dashMode, isPreschool, roleCopy.inputPlaceholder]);
-
-  const handleModeChange = useCallback((mode: 'advisor' | 'tutor' | 'orb') => {
-    if (mode === 'orb') {
-      router.push('/screens/dash-voice?mode=orb');
-      return;
-    }
-    setDashMode(mode);
-  }, []);
-
-  const usageLabel = tierStatus
-    ? (remaining === null ? 'Unlimited requests available' : `${remaining} left this month`)
-    : '';
-  const [lastSavedLessonId, setLastSavedLessonId] = useState<string | null>(null);
-  const latestAssistantMessage = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.type === 'assistant' && messages[i]?.content) {
-        return messages[i];
-      }
-    }
-    return null;
-  }, [messages]);
-
-  useEffect(() => {
-    setCommandDeckExpanded(false);
-  }, [latestAssistantMessage?.id]);
-
-  const ensureLessonAccess = useCallback(async () => {
-    if (!capsReady) {
-      Alert.alert('Please wait', 'Loading your subscription details. Try again in a moment.');
-      return false;
-    }
-    if (!canInteractiveLessons) {
-      Alert.alert(
-        'Upgrade Required',
-        'Interactive lessons and activities are available on Premium or Pro Plus plans.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'View Plans', onPress: () => router.push('/pricing') },
-        ]
-      );
-      return false;
-    }
-    if (user?.id) {
-      const lessonQuota = await checkAIQuota('lesson_generation', user.id, 1);
-      if (!lessonQuota.allowed) {
-        showQuotaExceededAlert('lesson_generation', lessonQuota.quotaInfo, {
-          customMessages: {
-            title: 'Lesson Generation Limit Reached',
-            message: 'You have used all lesson generation credits for this month.',
-          },
-        });
-        return false;
-      }
-    }
-    return true;
-  }, [capsReady, canInteractiveLessons, user?.id]);
-
-  const saveLessonFromMessage = useCallback(async () => {
-    if (!latestAssistantMessage || !profile) return;
-    const allowed = await ensureLessonAccess();
-    if (!allowed) return;
-    const schoolId = profile.preschool_id || profile.organization_id;
-    if (!schoolId || !profile.id) {
-      Alert.alert('Missing school', 'Please connect your school profile first.');
-      return;
-    }
-
-    const text = String(latestAssistantMessage.content || '').trim();
-    if (!text) return;
-    const titleLine = text.split('\n').find((line) => line.trim()) || 'Dash Lesson Draft';
-    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Dash Lesson Draft';
-    const description = text.slice(0, 180);
-
-    try {
-      const { data: category } = await assertSupabase()
-        .from('lesson_categories')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-      if (!category?.id) {
-        Alert.alert('Missing category', 'Please create a lesson category first.');
-        return;
-      }
-      const result = await LessonGeneratorService.saveGeneratedLesson({
-        lesson: {
-          title,
-          description,
-          content: JSON.stringify({
-            overview: text,
-            linked_interactive_activity_ids: [],
-          }),
-          activities: [],
-        },
-        teacherId: profile.id,
-        preschoolId: schoolId,
-        ageGroupId: isPreschool ? '3-5' : '7-9',
-        categoryId: category.id,
-        template: { duration: 30, complexity: 'moderate' },
-        isPublished: false,
-        subject: 'general',
-      });
-      if (!result?.success || !result.lessonId) {
-        Alert.alert('Save failed', result?.error || 'Failed to save lesson');
-        return;
-      }
-      setLastSavedLessonId(result.lessonId);
-      Alert.alert('Saved', 'Lesson draft saved. Assign it to a class now?', [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Assign now', onPress: () => router.push(`/screens/assign-lesson?lessonId=${result.lessonId}` as any) },
-      ]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save lesson';
-      Alert.alert('Save failed', message);
-    }
-  }, [latestAssistantMessage, profile, isPreschool, ensureLessonAccess]);
-
-  const saveActivityFromMessage = useCallback(async () => {
-    if (!latestAssistantMessage || !user || !profile) return;
-    const allowed = await ensureLessonAccess();
-    if (!allowed) return;
-    const schoolId = profile.preschool_id || profile.organization_id;
-    if (!schoolId) {
-      Alert.alert('Missing school', 'Please connect your school profile first.');
-      return;
-    }
-    const text = String(latestAssistantMessage.content || '').trim();
-    if (!text) return;
-
-    const titleLine = text.split('\n').find((line) => line.trim()) || 'Dash Activity Draft';
-    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Dash Activity Draft';
-    try {
-      const { data, error } = await assertSupabase()
-        .from('interactive_activities')
-        .insert({
-          preschool_id: schoolId,
-          teacher_id: user.id,
-          activity_type: 'quiz',
-          title,
-          instructions: text.slice(0, 1000),
-          content: {},
-          difficulty_level: 1,
-          age_group_min: 3,
-          age_group_max: 6,
-          stars_reward: 2,
-          subject: isPreschool ? 'life_skills' : 'general',
-          skills: JSON.stringify(['discussion', 'reflection']),
-          is_active: false,
-          is_published: false,
-          approval_status: 'pending',
-          approved_by: null,
-          approved_at: null,
-          is_template: false,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-      if (lastSavedLessonId && data?.id) {
-        try {
-          const { data: lessonRow } = await assertSupabase()
-            .from('lessons')
-            .select('content')
-            .eq('id', lastSavedLessonId)
-            .maybeSingle();
-          const content = lessonRow?.content;
-          let updatedContent: unknown = content;
-          if (content && typeof content === 'string') {
-            try {
-              const parsed = JSON.parse(content);
-              const linked = Array.isArray(parsed?.linked_interactive_activity_ids)
-                ? parsed.linked_interactive_activity_ids
-                : [];
-              if (!linked.includes(data.id)) linked.push(data.id);
-              updatedContent = JSON.stringify({ ...parsed, linked_interactive_activity_ids: linked });
-            } catch {
-              updatedContent = JSON.stringify({
-                overview: content,
-                linked_interactive_activity_ids: [data.id],
-              });
-            }
-          } else if (content && typeof content === 'object') {
-            const linked = Array.isArray((content as any).linked_interactive_activity_ids)
-              ? (content as any).linked_interactive_activity_ids
-              : [];
-            if (!linked.includes(data.id)) linked.push(data.id);
-            updatedContent = { ...(content as any), linked_interactive_activity_ids: linked };
-          } else {
-            updatedContent = JSON.stringify({
-              overview: text,
-              linked_interactive_activity_ids: [data.id],
-            });
-          }
-          await assertSupabase()
-            .from('lessons')
-            .update({ content: updatedContent })
-            .eq('id', lastSavedLessonId);
-        } catch {}
-      }
-      Alert.alert('Saved', 'Interactive activity created. Edit details now?', [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Edit now', onPress: () => router.push('/screens/teacher-activity-builder') },
-      ]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save activity';
-      Alert.alert('Save failed', message);
-    }
-  }, [latestAssistantMessage, profile?.preschool_id, user, isPreschool, ensureLessonAccess]);
-
-  const saveRoutineFromMessage = useCallback(async () => {
-    if (!latestAssistantMessage || !user || !profile) return;
-    const organizationId = profile.preschool_id || profile.organization_id;
-    if (!organizationId) {
-      Alert.alert('Missing school', 'Please connect your school profile first.');
-      return;
-    }
-    const text = String(latestAssistantMessage.content || '').trim();
-    if (!text) return;
-    const titleLine = text.split('\n').find((line) => line.trim()) || 'Daily Routine';
-    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Daily Routine';
-    try {
-      const { data: classes, error: classError } = await assertSupabase()
-        .from('classes')
-        .select('id')
-        .or(`preschool_id.eq.${organizationId},organization_id.eq.${organizationId}`)
-        .order('name')
-        .limit(1);
-      if (classError) throw classError;
-      const classId = classes?.[0]?.id;
-      if (!classId) {
-        Alert.alert('Missing class', 'Please create a class before saving routines.');
-        return;
-      }
-
-      const { error } = await assertSupabase()
-        .from('daily_activities')
-        .insert({
-          activity_name: title,
-          description: text.slice(0, 240),
-          notes: text.slice(0, 1200),
-          activity_date: new Date().toISOString().split('T')[0],
-          class_id: classId,
-          created_by: user.id,
-        });
-      if (error) throw error;
-      Alert.alert('Saved', 'Routine added to daily activities.');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save routine';
-      Alert.alert('Save failed', message);
-    }
-  }, [latestAssistantMessage, profile, user]);
-
-  const saveThemeFromMessage = useCallback(async () => {
-    if (!latestAssistantMessage || !profile) return;
-    const organizationId = profile.preschool_id || profile.organization_id;
-    if (!organizationId) {
-      Alert.alert('Missing school', 'Please connect your school profile first.');
-      return;
-    }
-    const text = String(latestAssistantMessage.content || '').trim();
-    if (!text) return;
-    const titleLine = text.split('\n').find((line) => line.trim()) || 'Weekly Theme';
-    const title = titleLine.replace(/^#+\s*/, '').slice(0, 80).trim() || 'Weekly Theme';
-
-    try {
-      const { error } = await assertSupabase()
-        .from('curriculum_themes')
-        .insert({
-          preschool_id: organizationId,
-          created_by: profile.id,
-          title,
-          description: text.slice(0, 400),
-          suggested_activities: { raw: text.slice(0, 2000) },
-          age_groups: isPreschool ? ['3-5'] : null,
-          is_published: false,
-          is_template: false,
-        });
-      if (error) throw error;
-      Alert.alert('Saved', 'Theme added to curriculum themes.');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save theme';
-      Alert.alert('Save failed', message);
-    }
-  }, [latestAssistantMessage, profile, isPreschool]);
-
-  const handleAgeBandChange = useCallback((band: string) => {
-    if (!dashInstance?.updateUserContext) return;
-    let ageGroup: 'child' | 'teen' | 'adult' | null = null;
-    let gradeBand: string | null = null;
-    if (band === 'adult') {
-      ageGroup = 'adult';
-      gradeBand = null;
-    } else if (band === '13-15' || band === '16-18') {
-      ageGroup = 'teen';
-      gradeBand = band === '13-15' ? '8-9' : '10-12';
-    } else if (band === 'auto') {
-      ageGroup = null;
-      gradeBand = null;
-    } else {
-      ageGroup = 'child';
-      gradeBand = band === '3-5' ? 'R-1' : band === '6-8' ? '2-3' : '4-7';
-    }
-    dashInstance.updateUserContext({
-      age_group: ageGroup === null ? null : ageGroup,
-      grade_levels: gradeBand ? [gradeBand] : null,
-    }).catch(() => {});
-  }, [dashInstance]);
-
-  const handleMessagesScroll = useCallback((scrollY: number) => {
-    const lastScroll = lastScrollYRef.current;
-    const delta = scrollY - lastScroll;
-    lastScrollYRef.current = scrollY;
-
-    if (scrollY <= 24) {
-      if (!headerVisibleRef.current) {
-        setHeaderVisible(true);
-      }
-      return;
-    }
-
-    if (delta > 16 && headerVisibleRef.current) {
-      setHeaderVisible(false);
-      return;
-    }
-
-    if (delta < -14 && !headerVisibleRef.current) {
-      setHeaderVisible(true);
-    }
-  }, []);
-
-  // Scroll to bottom when keyboard shows to keep messages visible
+  // Scroll to bottom on keyboard show
   useEffect(() => {
     if (keyboardVisible && messages.length > 0) {
-      // Small delay to let keyboard animation complete on Android
       const timer = setTimeout(() => {
         scrollToBottom({ animated: true, delay: 50 });
       }, Platform.OS === 'android' ? 150 : 50);
@@ -814,119 +177,29 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     }
   }, [keyboardVisible, scrollToBottom, messages.length]);
 
-  // Render individual message
-  const renderMessage = useCallback((message: DashMessage, index: number) => {
-    return (
-      <DashMessageBubble
-        key={message.id}
-        message={message}
-        index={index}
-        totalMessages={messages.length}
-        speakingMessageId={speakingMessageId}
-        isLoading={isLoading}
-        voiceEnabled={voiceEnabled}
-        showFollowUps={autoSuggestQuestions}
-        onSpeak={speakResponse}
-        onRetry={(content) => sendMessage(content)}
-        onSendFollowUp={(text) => sendMessage(text)}
-        onSendTutorAnswer={(text, sourceMessageId) => sendTutorAnswer(text, sourceMessageId)}
-        extractFollowUps={extractFollowUps}
-        assistantLabel={roleCopy.assistantLabel}
-      />
-    );
-  }, [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
+  // Render message
+  const renderMessage = useCallback((message: DashMessage, index: number) => (
+    <DashMessageBubble
+      key={message.id}
+      message={message}
+      index={index}
+      totalMessages={messages.length}
+      speakingMessageId={speakingMessageId}
+      isLoading={isLoading}
+      voiceEnabled={voiceEnabled}
+      showFollowUps={autoSuggestQuestions}
+      onSpeak={speakResponse}
+      onRetry={(content) => sendMessage(content)}
+      onSendFollowUp={(text) => sendMessage(text)}
+      extractFollowUps={extractFollowUps}
+      assistantLabel={roleCopy.assistantLabel}
+    />
+  ), [messages.length, speakingMessageId, isLoading, speakResponse, sendMessage, extractFollowUps, roleCopy.assistantLabel]);
 
-  // Render typing indicator
   const renderTypingIndicator = useCallback(() => {
     if (!isTypingActive) return null;
-    return (
-      <DashTypingIndicator 
-        isLoading={isTypingActive} 
-        loadingStatus={loadingStatus} 
-      />
-    );
+    return <DashTypingIndicator isLoading={isTypingActive} loadingStatus={loadingStatus} />;
   }, [isTypingActive, loadingStatus]);
-
-  // Render suggested actions
-  const renderSuggestedActions = useCallback(() => {
-    if (!contextualHelp) {
-      return null;
-    }
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.type === 'user' || !lastMessage.metadata?.suggested_actions) {
-      return null;
-    }
-
-    const handleSuggestedAction = (action: string) => {
-      const actionMap: Record<string, string> = {
-        'switch_to_enhanced': 'switch to enhanced dashboard',
-        'switch_to_classic': 'switch to classic dashboard', 
-        'dashboard_help': 'help me with dashboard settings',
-        'dashboard_settings': 'show dashboard settings',
-        'view_enhanced_features': 'what are enhanced dashboard features',
-        'view_classic_features': 'what are classic dashboard features',
-        'switch_dashboard_layout': 'help me switch dashboard layout',
-        'view_options': 'show me dashboard options',
-        'export_pdf': 'export pdf',
-        'send_message': 'message parents',
-        'view_financial_dashboard': 'open financial dashboard',
-        'create_announcement': 'create announcement'
-      };
-      
-      const command = actionMap[action] || action.replace('_', ' ');
-      sendMessage(command);
-    };
-
-    const getActionDisplayText = (action: string): string => {
-      const displayMap: Record<string, string> = {
-        'switch_to_enhanced': '✨ Enhanced Dashboard',
-        'switch_to_classic': '📊 Classic Dashboard',
-        'dashboard_help': 'Dashboard Help',
-        'dashboard_settings': '⚙️ Settings',
-        'view_enhanced_features': '🌟 Enhanced Features',
-        'view_classic_features': '📋 Classic Features',
-        'switch_dashboard_layout': '🔄 Switch Layout',
-        'view_options': '👀 View Options',
-        'explore_features': '🔍 Explore Features',
-        'lesson_planning': '📚 Lesson Planning',
-        'student_management': '👥 Student Management',
-      };
-      
-      return displayMap[action] || action.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-    };
-
-    return (
-      <View style={messageStyles.suggestedActionsContainer}>
-        <Text style={[messageStyles.suggestedActionsTitle, { color: theme.textSecondary }]}>
-          Quick actions
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={messageStyles.suggestedActionsScrollContent}
-        >
-          {lastMessage.metadata.suggested_actions.map((action: string, index: number) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                messageStyles.suggestedAction, 
-                { 
-                  backgroundColor: action.includes('dashboard') ? theme.primaryLight : theme.surfaceVariant,
-                  borderColor: action.includes('dashboard') ? theme.primary : theme.border,
-                  borderWidth: 1
-                }
-              ]}
-              onPress={() => handleSuggestedAction(action)}
-            >
-              <Text style={[messageStyles.suggestedActionText, { color: theme.text }]}>
-                {getActionDisplayText(action)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }, [messages, theme, sendMessage, contextualHelp]);
 
   // Loading state
   if (!isInitialized) {
@@ -941,363 +214,181 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     );
   }
 
-    const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
-    const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
-    const backgroundBase: [string, string, string] = isDark
-      ? ['#0B1020', '#0F172A', theme.background]
-      : ['#F7FAFF', '#EEF2FF', '#F8FAFC'];
-    const glowA: [string, string, string] = isDark
-      ? ['rgba(14,165,233,0.32)', 'rgba(59,130,246,0.05)', 'transparent']
-      : ['rgba(14,165,233,0.35)', 'rgba(34,211,238,0.12)', 'transparent'];
-    const glowB: [string, string, string] = isDark
-      ? ['rgba(16,185,129,0.25)', 'rgba(99,102,241,0.06)', 'transparent']
-      : ['rgba(16,185,129,0.3)', 'rgba(59,130,246,0.08)', 'transparent'];
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
-      <KeyboardAvoidingView 
+  const keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height';
+  const keyboardOffset = Platform.OS === 'ios' ? 90 : 0;
+  const backgroundBase: [string, string, string] = isDark
+    ? ['#0B1020', '#0F172A', theme.background]
+    : ['#F7FAFF', '#EEF2FF', '#F8FAFC'];
+  const glowA: [string, string, string] = isDark
+    ? ['rgba(14,165,233,0.32)', 'rgba(59,130,246,0.05)', 'transparent']
+    : ['rgba(14,165,233,0.35)', 'rgba(34,211,238,0.12)', 'transparent'];
+  const glowB: [string, string, string] = isDark
+    ? ['rgba(16,185,129,0.25)', 'rgba(99,102,241,0.06)', 'transparent']
+    : ['rgba(16,185,129,0.3)', 'rgba(59,130,246,0.08)', 'transparent'];
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
+      <KeyboardAvoidingView
         style={[layoutStyles.container, { backgroundColor: theme.background }]}
         behavior={keyboardBehavior}
         keyboardVerticalOffset={keyboardOffset}
       >
+        {/* Background gradients */}
         <View pointerEvents="none" style={layoutStyles.backgroundLayer}>
           <LinearGradient colors={backgroundBase} style={layoutStyles.backgroundGradient} />
           <LinearGradient colors={glowA} style={layoutStyles.backgroundGlowA} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
           <LinearGradient colors={glowB} style={layoutStyles.backgroundGlowB} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} />
         </View>
-        <View style={layoutStyles.contentLayer}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        
-        {/* Header - auto-hide on scroll down */}
-        {headerVisible && (
-        <DashHeader
-          roleCopy={roleCopy}
-          activeModeLabel={activeMode.label}
-          activeModeHint={activeMode.hint}
-          tier={tier}
-          subReady={subReady}
-          isSpeaking={isSpeaking}
-          showAdvancedControls={showAdvancedControls}
-          showOrbLink={showOrbLink}
-          showWakeWordToggle={showWakeWordToggle}
-          wakeWordEnabled={wakeWordEnabled}
-          wakeWordLoaded={wakeWordLoaded}
-          tutorSession={tutorSession}
-          onClose={onClose}
-          stopSpeaking={stopSpeaking}
-          handleNewChat={handleNewChat}
-          toggleWakeWord={toggleWakeWord}
-          cleanup={dashInstance ? () => dashInstance.cleanup() : undefined}
-          styles={styles}
-          theme={theme}
-        />
-        )}
 
-        {headerVisible && (
-          <View style={layoutStyles.topDeck}>
-            <View style={[layoutStyles.controlHub, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-              <View style={layoutStyles.controlHubHeader}>
-                <View style={layoutStyles.controlHubTitleWrap}>
-                  <View style={[layoutStyles.controlHubIcon, { backgroundColor: theme.primary + '1F' }]}>
-                    <Ionicons name="sparkles-outline" size={13} color={theme.primary} />
+        <View style={layoutStyles.contentLayer}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+
+          {/* Clean header — ChatGPT style */}
+          <View style={[headerStyles.header, { backgroundColor: 'transparent' }]}>
+            <View style={[headerStyles.headerShell, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={headerStyles.headerTopRow}>
+                <View style={headerStyles.headerLeft}>
+                  <View style={headerStyles.headerTitleRow}>
+                    <View style={[headerStyles.headerAccentDot, { backgroundColor: theme.primary }]} />
+                    <Text style={[headerStyles.headerTitle, { color: theme.text }]}>Dash</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[layoutStyles.controlHubTitle, { color: theme.text }]}>Dash Workspace</Text>
-                    <Text style={[layoutStyles.controlHubHint, { color: theme.textSecondary }]}>
-                      {activeMode.hint}
-                    </Text>
+                  <Text style={[headerStyles.headerSubtitle, { color: theme.textSecondary }]}>
+                    Your AI assistant
+                  </Text>
+                </View>
+                <View style={headerStyles.headerRight}>
+                  <View style={[headerStyles.actionRail, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                    {isSpeaking && (
+                      <TouchableOpacity
+                        style={[headerStyles.iconButton, { backgroundColor: theme.error, borderColor: theme.error }]}
+                        accessibilityLabel="Stop speaking"
+                        onPress={stopSpeaking}
+                      >
+                        <Ionicons name="stop" size={18} color={theme.onError || theme.background} />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                      accessibilityLabel="New chat"
+                      onPress={handleNewChat}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color={theme.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                      accessibilityLabel="History"
+                      onPress={() => router.push('/screens/dash-conversations-history')}
+                    >
+                      <Ionicons name="time-outline" size={18} color={theme.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                      accessibilityLabel="Open Dash Orb"
+                      onPress={() => router.push('/screens/dash-voice?mode=orb')}
+                    >
+                      <Ionicons name="planet-outline" size={18} color={theme.text} />
+                    </TouchableOpacity>
+                    {onClose && (
+                      <TouchableOpacity
+                        style={[headerStyles.closeButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                        onPress={async () => {
+                          await stopSpeaking();
+                          dashInstance?.cleanup?.();
+                          onClose();
+                        }}
+                        accessibilityLabel="Close"
+                      >
+                        <Ionicons name="close" size={20} color={theme.text} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               </View>
-
-              <View style={layoutStyles.modeStrip}>
-                {modeOptions.map((mode) => {
-                  const active = dashMode === mode.id;
-                  return (
-                    <TouchableOpacity
-                      key={mode.id}
-                      style={[
-                        layoutStyles.modeChip,
-                        {
-                          borderColor: active ? theme.primary : theme.border,
-                          backgroundColor: active ? theme.primary + '20' : theme.surfaceVariant,
-                        },
-                      ]}
-                      activeOpacity={0.85}
-                      onPress={() => handleModeChange(mode.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Switch to ${mode.label}`}
-                    >
-                      <Ionicons name={mode.icon as any} size={14} color={active ? theme.primary : theme.textSecondary} />
-                      <View>
-                        <Text style={[layoutStyles.modeChipText, { color: active ? theme.primary : theme.text }]}>
-                          {mode.label}
-                        </Text>
-                        <Text style={[layoutStyles.modeChipSub, { color: theme.textTertiary }]}>
-                          {mode.hint}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Context chips, usage banner, model selector - staff only */}
-              {showAdvancedControls && shouldShowPreschoolContext && (
-                <DashContextChips
-                  chips={contextChips}
-                  contextHint={contextHint}
-                  styles={styles}
-                  theme={theme}
-                />
-              )}
-
-              {/* Usage banner - staff only (parents see quota on settings page) */}
-              {showAdvancedControls && (
-                <DashUsageBanner
-                  tierStatus={tierStatus}
-                  usageLabel={usageLabel}
-                  styles={styles}
-                  theme={theme}
-                />
-              )}
-
-              {/* Model selector - staff only (parents auto-get best model for tier) */}
-              {showAdvancedControls && (
-              <DashModelSelector
-                models={safeModels}
-                selectedModel={selectedModel}
-                setSelectedModel={setSelectedModel}
-                estimatedRemaining={estimatedRemaining}
-                styles={styles}
-                theme={theme}
-              />
-              )}
             </View>
           </View>
-        )}
 
-        {/* Tutor Pipeline Banner — D→T→P→C phase stepper */}
-        {isPipelineActive && pipeline.config && (
-          <TutorSessionBanner
-            currentPhase={pipeline.currentPhase}
-            criteria={pipeline.criteria}
-            subject={pipeline.config.subject}
-            topic={pipeline.config.topic}
-            grade={pipeline.config.grade}
-            onClose={pipeline.resetPipeline}
+          {/* Messages */}
+          <DashAssistantMessages
+            flashListRef={flashListRef}
+            messages={messages}
+            renderMessage={renderMessage}
+            styles={styles}
+            theme={theme}
+            isLoading={isTypingActive}
+            isNearBottom={isNearBottom}
+            setIsNearBottom={setIsNearBottom}
+            unreadCount={unreadCount}
+            setUnreadCount={setUnreadCount}
+            scrollToBottom={scrollToBottom}
+            renderTypingIndicator={renderTypingIndicator}
+            renderSuggestedActions={() => null}
+            onSendMessage={(text) => sendMessage(text)}
+            bottomInset={insets.bottom}
+            keyboardVisible={keyboardVisible}
+            userRole={String(profile?.role || '').toLowerCase()}
           />
-        )}
 
-        {/* Session Summary Card — shown when pipeline completes */}
-        {pipeline.currentPhase === 'COMPLETE' && pipeline.sessionSummary && (
-          <SessionSummaryCard
-            summary={pipeline.sessionSummary}
-            onReviewAgain={() => {
-              if (pipeline.config) {
-                pipeline.startPipeline(pipeline.config);
-              }
-            }}
-            onNewTopic={() => {
-              pipeline.resetPipeline();
-            }}
-          />
-        )}
-
-        {/* Messages */}
-        <DashAssistantMessages
-          flashListRef={flashListRef}
-          messages={messages}
-          renderMessage={renderMessage}
-          styles={styles}
-          theme={theme}
-          isLoading={isTypingActive}
-          isNearBottom={isNearBottom}
-          setIsNearBottom={setIsNearBottom}
-          unreadCount={unreadCount}
-          setUnreadCount={setUnreadCount}
-          scrollToBottom={scrollToBottom}
-          renderTypingIndicator={renderTypingIndicator}
-          renderSuggestedActions={renderSuggestedActions}
-          onSendMessage={(text) => sendMessage(text)}
-          onAgeBandChange={handleAgeBandChange}
-          learnerContext={learnerContext}
-          bottomInset={insets.bottom}
-          keyboardVisible={keyboardVisible}
-          parentChildren={parentChildren}
-          activeChild={activeChild}
-          onSelectChild={(childId) => setActiveChildId(childId)}
-          onOpenScanner={openScanner}
-          userRole={normalizedRole}
-          onScroll={handleMessagesScroll}
-        />
-
-        {isStaff && latestAssistantMessage && (
-          <View style={[inputStyles.staffActionsShell, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+          {/* Jump to bottom FAB */}
+          {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
             <TouchableOpacity
-              style={inputStyles.staffActionsHeader}
-              activeOpacity={0.85}
-              onPress={() => setCommandDeckExpanded((prev) => !prev)}
+              style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: (messageStyles.scrollToBottomFab?.bottom || 24) + 8 }]}
+              onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0 }); }}
+              accessibilityLabel="Jump to bottom"
+              activeOpacity={0.8}
             >
-              <View style={inputStyles.staffActionsTitleWrap}>
-                <Ionicons name="flash-outline" size={14} color={theme.primary} />
-                <Text style={[inputStyles.staffActionsTitle, { color: theme.text }]}>Command deck</Text>
-              </View>
-              <View
-                style={[
-                  inputStyles.staffActionsToggle,
-                  { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
-                ]}
-              >
-                <Text style={[inputStyles.staffActionsToggleText, { color: theme.textSecondary }]}>
-                  {commandDeckExpanded ? 'Hide' : 'Show'}
-                </Text>
-                <Ionicons
-                  name={commandDeckExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color={theme.textSecondary}
-                />
-              </View>
+              <Ionicons name="chevron-down" size={20} color={theme.onPrimary || '#fff'} />
+              {unreadCount > 0 && (
+                <View style={[messageStyles.scrollToBottomBadge, { backgroundColor: theme.error }]}>
+                  <Text style={[messageStyles.scrollToBottomBadgeText, { color: theme.onError || '#fff' }]}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
+          )}
 
-            {!commandDeckExpanded ? (
-              <View style={inputStyles.staffActionsCompactRow}>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
-                  onPress={saveLessonFromMessage}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveActivityFromMessage}
-                >
-                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View
-                style={[
-                  inputStyles.staffActionScroll,
-                  { flexDirection: 'row', flexWrap: 'wrap', paddingRight: 0, paddingBottom: 2 },
-                ]}
-              >
-                <TouchableOpacity
-                  style={[inputStyles.staffActionPrimary, { backgroundColor: theme.primary }]}
-                  onPress={saveLessonFromMessage}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="book-outline" size={16} color={theme.onPrimary || '#fff'} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.onPrimary || '#fff' }]}>Save lesson</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveRoutineFromMessage}
-                >
-                  <Ionicons name="time-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save routine</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveThemeFromMessage}
-                >
-                  <Ionicons name="color-palette-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Save theme</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={saveActivityFromMessage}
-                >
-                  <Ionicons name="extension-puzzle-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Create activity</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[inputStyles.staffActionButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
-                  onPress={() => router.push('/screens/teacher-activity-builder')}
-                >
-                  <Ionicons name="hammer-outline" size={16} color={theme.text} />
-                  <Text style={[inputStyles.staffActionText, { color: theme.text }]}>Edit activity</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
+          {/* Input */}
+          <DashInputBar
+            inputRef={inputRef}
+            inputText={inputText}
+            setInputText={setInputText}
+            enterToSend={enterToSend}
+            selectedAttachments={selectedAttachments}
+            attachmentProgress={attachmentProgress}
+            isLoading={isLoading}
+            isUploading={isUploading}
+            isRecording={isRecording}
+            isSpeaking={isSpeaking}
+            partialTranscript={partialTranscript}
+            placeholder="Message Dash..."
+            messages={messages}
+            onSend={() => sendMessage()}
+            onMicPress={handleInputMicPress}
+            onTakePhoto={openScanner}
+            onAttachFile={handleAttachFile}
+            onRemoveAttachment={handleRemoveAttachment}
+            onQuickAction={(text) => sendMessage(text)}
+            onCancel={cancelGeneration}
+            bottomInset={insets.bottom}
+            hideQuickChips={false}
+          />
 
-        {/* Jump to end FAB */}
-        {Platform.OS === 'android' && !isNearBottom && messages.length > 0 && (
-          <TouchableOpacity
-            style={[messageStyles.scrollToBottomFab, { backgroundColor: theme.primary, bottom: (messageStyles.scrollToBottomFab?.bottom || 24) + 8 }]}
-            onPress={() => { setUnreadCount(0); scrollToBottom({ animated: true, delay: 0 }); }}
-            accessibilityLabel="Jump to bottom"
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chevron-down" size={20} color={theme.onPrimary || '#fff'} />
-            {unreadCount > 0 && (
-              <View style={[messageStyles.scrollToBottomBadge, { backgroundColor: theme.error }]}>
-                <Text style={[messageStyles.scrollToBottomBadgeText, { color: theme.onError || '#fff' }]}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {/* Input Area */}
-        <DashInputBar
-          inputRef={inputRef}
-          inputText={inputText}
-          setInputText={setInputText}
-          enterToSend={enterToSend}
-          selectedAttachments={selectedAttachments}
-          attachmentProgress={attachmentProgress}
-          learnerContext={learnerContext}
-          isLoading={isLoading}
-          isUploading={isUploading}
-          isRecording={isRecording}
-          isSpeaking={isSpeaking}
-          partialTranscript={partialTranscript}
-          placeholder={activeMode.inputPlaceholder}
-          messages={messages}
-          onSend={() => sendMessage()}
-          onMicPress={handleInputMicPress}
-          onTakePhoto={openScanner}
-          onAttachFile={handleAttachFile}
-          onOpenTools={showAdvancedControls && toolShortcuts.length > 0 ? () => setShowToolsModal(true) : undefined}
-          onRemoveAttachment={handleRemoveAttachment}
-          onQuickAction={(text) => sendMessage(text)}
-          onCancel={cancelGeneration}
-          bottomInset={insets.bottom}
-          hideQuickChips={messages.length === 0}
-        />
-
-        {/* Command Palette Modal */}
-        <DashCommandPalette visible={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
-        
-        {/* Premium/Alert Modal */}
-        <AlertModal
-          visible={alertState.visible}
-          title={alertState.title}
-          message={alertState.message}
-          type={alertState.type}
-          icon={alertState.icon as any}
-          buttons={alertState.buttons}
-          onClose={hideAlert}
-        />
-        <DashToolsModal
-          visible={showToolsModal}
-          onClose={() => setShowToolsModal(false)}
-          tools={toolShortcuts}
-          getToolSchema={(toolName) => ToolRegistry.getTool(toolName)?.parameters}
-          onRunTool={handleRunTool}
-        />
-        <HomeworkScanner
-          visible={scannerVisible}
-          onClose={() => setScannerVisible(false)}
-          onScanned={handleScannerScanned}
-          title="Scan Homework"
-        />
+          {/* Modals */}
+          <AlertModal
+            visible={alertState.visible}
+            title={alertState.title}
+            message={alertState.message}
+            type={alertState.type}
+            icon={alertState.icon as any}
+            buttons={alertState.buttons}
+            onClose={hideAlert}
+          />
+          <HomeworkScanner
+            visible={scannerVisible}
+            onClose={() => setScannerVisible(false)}
+            onScanned={handleScannerScanned}
+            title="Scan Image"
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
