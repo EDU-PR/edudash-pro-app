@@ -70,7 +70,7 @@ export function useTeacherDashboard(userId?: string) {
       const classIds = (classesData || []).map((c: { id: string }) => c.id);
 
       // Single aggregate query for student counts per class (fixes N+1)
-      let studentCountsByClass: Record<string, number> = {};
+      const studentCountsByClass: Record<string, number> = {};
       if (classIds.length > 0) {
         const { data: studentRows } = await supabase
           .from('students')

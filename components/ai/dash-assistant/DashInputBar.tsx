@@ -40,6 +40,7 @@ interface DashInputBarProps {
   onRemoveAttachment: (attachmentId: string) => void;
   onQuickAction?: (text: string) => void;
   onCancel?: () => void;
+  hideQuickChips?: boolean;
 }
 
 export const DashInputBar: React.FC<DashInputBarProps> = ({
@@ -64,6 +65,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   onRemoveAttachment,
   onQuickAction,
   onCancel,
+  hideQuickChips = false,
 }) => {
   const { theme } = useTheme();
   const { width: screenWidth } = Dimensions.get('window');
@@ -215,7 +217,7 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
   const hasContent = inputText.trim() || selectedAttachments.length > 0;
   const hasMessages = messages && messages.length > 0;
   // Show conversation starters when chat is empty
-  const canShowQuickChips = !hasContent && !isRecording && !isLoading && !hasMessages;
+  const canShowQuickChips = !hideQuickChips && !hasContent && !isRecording && !isLoading && !hasMessages;
 
   const quickChips = [
     { id: 'explain', label: 'Explain', icon: 'bulb-outline', prompt: 'Explain this to me in simple terms.' },
