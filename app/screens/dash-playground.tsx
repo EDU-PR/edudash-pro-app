@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Modal,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
@@ -96,7 +97,12 @@ export default function DashPlaygroundScreen() {
   const insets = useSafeAreaInsets();
   const { tier } = useSubscription();
   const { data, loading } = useParentDashboard();
-  const { speak, speakIntro, stop: stopSpeech } = useKidVoice({ tier });
+  const {
+    speak,
+    speakIntro,
+    stop: stopSpeech,
+    beginActivitySession,
+  } = useKidVoice({ tier });
 
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [activeAssignment, setActiveAssignment] = useState<AssignedPlaygroundActivity | null>(null);
@@ -221,19 +227,33 @@ export default function DashPlaygroundScreen() {
     return availableDomains;
   }, [filter, grouped, availableDomains]);
 
-  const handleStartActivity = useCallback((item: AssignedPlaygroundActivity) => {
+  const handleStartActivity = useCallback(async (item: AssignedPlaygroundActivity) => {
+    const voiceSession = await beginActivitySession(item.assignmentId);
+
+    if (voiceSession.didSwitchToDevice) {
+      Alert.alert(
+        'Cloud Voice Preview Used',
+        'You have used 3 free high-quality Dash voice activities. Playground will now use device voice. Upgrade for premium natural voices.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/screens/subscription-setup') },
+        ],
+      );
+    }
+
     track('playground.activity_started', {
       assignmentId: item.assignmentId,
       activityId: item.activity.id,
       domain: item.activity.domain,
       difficulty: item.content.difficulty,
+      voiceMode: voiceSession.useCloudVoice ? 'cloud' : 'device',
     });
     setActiveAssignment(item);
     setActivityResult(null);
     if (item.activity.dashIntro) {
       speakIntro(item.activity.dashIntro);
     }
-  }, [speakIntro]);
+  }, [beginActivitySession, speakIntro]);
 
   const handleComplete = useCallback((result: ActivityResult) => {
     const assignment = activeAssignment;

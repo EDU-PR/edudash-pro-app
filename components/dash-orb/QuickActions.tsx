@@ -61,6 +61,19 @@ export const QUICK_ACTIONS: QuickAction[] = [
   { id: 'gen-curriculum', label: 'Curriculum Module', icon: 'albums', color: '#06b6d4', command: 'Create a 4-week curriculum module', defaultTopic: 'digital skills foundations', category: 'education', superAdminOnly: false, minTier: 'premium', allowedRoles: ['principal_admin', 'super_admin'] },
   { id: 'gen-worksheet', label: 'Worksheet', icon: 'document-text', color: '#f59e0b', command: 'Generate a practice worksheet with worked examples', defaultTopic: 'Mathematics: addition', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['teacher', 'principal_admin', 'parent', 'student', 'super_admin'] },
   { id: 'gen-digital', label: 'Digital Skills', icon: 'laptop', color: '#10b981', command: 'Create a digital skills lesson', defaultTopic: 'typing basics', category: 'education', superAdminOnly: false, minTier: 'premium', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+
+  // Visual Generation — all roles with tier gating
+  { id: 'gen-image', label: 'Generate Image', icon: 'image', color: '#e879f9', command: 'Generate an educational image or illustration', defaultTopic: 'Solar system poster for preschoolers', category: 'education', superAdminOnly: false, minTier: 'starter', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-chart', label: 'Create Chart', icon: 'bar-chart', color: '#38bdf8', command: 'Generate a data chart (bar, line, or pie) as a PDF', defaultTopic: 'Monthly attendance summary', category: 'education', superAdminOnly: false, minTier: 'starter', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+  { id: 'gen-pdf-prompt', label: 'Smart Document', icon: 'document', color: '#f472b6', command: 'Generate a PDF document from a description', defaultTopic: 'Parent newsletter for Term 1', category: 'education', superAdminOnly: false, minTier: 'starter', allowedRoles: ['teacher', 'principal_admin', 'super_admin'] },
+
+  // Principal Command Center — principal_admin only
+  { id: 'principal-attendance', label: 'Attendance', icon: 'checkmark-circle', color: '#22c55e', command: 'Show today\'s attendance summary across all classes', category: 'analytics', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin'] },
+  { id: 'principal-fees', label: 'Fee Overview', icon: 'cash', color: '#f59e0b', command: 'Show outstanding fees summary and payment status for this month', category: 'analytics', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin'] },
+  { id: 'principal-staff', label: 'Staff Summary', icon: 'people-circle', color: '#8b5cf6', command: 'Show staff roster with teaching assignments and leave status', category: 'analytics', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin'] },
+  { id: 'principal-enrolment', label: 'Enrolment', icon: 'person-add', color: '#06b6d4', command: 'Show current enrolment numbers and capacity per class', category: 'analytics', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin'] },
+  { id: 'principal-report', label: 'School Report', icon: 'analytics', color: '#ef4444', command: 'Generate a comprehensive school performance report for this term', category: 'analytics', superAdminOnly: false, minTier: 'starter', allowedRoles: ['principal_admin'] },
+  { id: 'principal-circular', label: 'Draft Circular', icon: 'mail', color: '#14b8a6', command: 'Draft a parent circular or school communication letter', category: 'education', superAdminOnly: false, minTier: 'free', allowedRoles: ['principal_admin'] },
 ];
 
 interface QuickActionsProps {

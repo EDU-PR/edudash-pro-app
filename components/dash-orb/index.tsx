@@ -42,7 +42,9 @@ import { useVoiceSTT } from '../super-admin/voice-orb/useVoiceSTT';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { useOnDeviceVoice } from '@/hooks/useOnDeviceVoice';
 import { useWakeWord } from '../../hooks/useWakeWord';
-import { CosmicOrb } from './CosmicOrb';
+import NextGenDashOrb from './DashOrb';
+import { useOrbStreaming } from '@/hooks/dash-orb/useOrbStreaming';
+import type { VisemeEvent } from '@/lib/voice/visemeEstimator';
 import { sanitizeInput, validateCommand, RateLimiter } from '../../lib/security/validators';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -145,6 +147,7 @@ export default function DashOrb({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [showUpgradeBubble, setShowUpgradeBubble] = useState(false);
   const [showToolsModal, setShowToolsModal] = useState(false);
+  const [simulatedVisemeId, setSimulatedVisemeId] = useState(0);
   const upgradeAnim = useRef(new Animated.Value(0)).current;
   const upgradeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -230,6 +233,11 @@ export default function DashOrb({
   // Rate limiter for commands (10 requests per minute)
   const rateLimiter = useRef(new RateLimiter(10, 60000)).current;
   
+  // SSE streaming + sentence-level TTS pipelining
+  const { streamResponse, cancelStream } = useOrbStreaming();
+  const ttsSentenceQueueRef = useRef<string[]>([]);
+  const isSpeakingSentenceRef = useRef(false);
+
   // Voice TTS integration - always call the hook, conditionally use the result
   const voiceTTS = useVoiceTTS();
   const { speak, stop: stopSpeaking, isSpeaking } = Platform.OS !== 'web' 
@@ -244,6 +252,38 @@ export default function DashOrb({
   const voiceRecorderActions = voiceRecorderResult ? voiceRecorderResult[1] : null;
   const voiceSTTHookResult = useVoiceSTT({ preschoolId: profile?.organization_id || profile?.preschool_id || null });
   const voiceSTT = Platform.OS !== 'web' ? voiceSTTHookResult : null;
+  const orbState = useMemo<'idle' | 'listening' | 'thinking' | 'speaking'>(() => {
+    if (isSpeaking) return 'speaking';
+    if (isProcessing) return 'thinking';
+    if (isListeningForCommand || Boolean(voiceRecorderState?.isRecording)) return 'listening';
+    return 'idle';
+  }, [isSpeaking, isProcessing, isListeningForCommand, voiceRecorderState?.isRecording]);
+  const orbAudioLevel = useMemo(() => {
+    const value = Number(voiceRecorderState?.audioLevel || 0);
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(1, value));
+  }, [voiceRecorderState?.audioLevel]);
+
+  useEffect(() => {
+    if (!isSpeaking) {
+      setSimulatedVisemeId(0);
+      return;
+    }
+
+    // When real viseme events arrive via useOrbStreaming's onVisemeEvent
+    // callback, they set simulatedVisemeId directly. This fallback only
+    // fires when no viseme events have been scheduled (e.g. device TTS
+    // fallback path). Check if any scheduled viseme is active by using
+    // a low-frequency idle mouth movement instead of random cycling.
+    const idleCycle = [0, 1, 3, 1, 0, 4, 6, 4, 0];
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx = (idx + 1) % idleCycle.length;
+      setSimulatedVisemeId(idleCycle[idx]);
+    }, 200);
+
+    return () => clearInterval(timer);
+  }, [isSpeaking]);
   const onDeviceVoice = useOnDeviceVoice({
     language: normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA',
     onPartialResult: (text) => {
@@ -1027,11 +1067,33 @@ export default function DashOrb({
     handleSendRef.current = handleSend;
   }, [handleSend]);
 
-  const quickIntents = useMemo(() => ([
-    { id: 'ask_homework', label: 'Ask homework', prompt: 'Help us with today\'s homework task.' },
-    { id: 'translate', label: 'Translate', prompt: 'Translate this clearly for a young learner.' },
-    { id: 'summarize', label: 'Summarize', prompt: 'Summarize this in simple points.' },
-  ]), []);
+  const quickIntents = useMemo(() => {
+    if (normalizedRole === 'principal' || normalizedRole === 'principal_admin') {
+      return [
+        {
+          id: 'weekly_program',
+          label: 'Weekly program',
+          prompt: 'Draft a Monday-to-Friday preschool weekly program aligned to this month theme.',
+        },
+        {
+          id: 'staff_message',
+          label: 'Staff message',
+          prompt: 'Write a concise staff briefing for teachers with today priorities and class-ready reminders.',
+        },
+        {
+          id: 'family_digest',
+          label: 'Parent digest',
+          prompt: 'Create a parent-facing daily digest with activities, meals, and homework notes.',
+        },
+      ];
+    }
+
+    return [
+      { id: 'ask_homework', label: 'Ask homework', prompt: 'Help us with today\'s homework task.' },
+      { id: 'translate', label: 'Translate', prompt: 'Translate this clearly for a young learner.' },
+      { id: 'summarize', label: 'Summarize', prompt: 'Summarize this in simple points.' },
+    ];
+  }, [normalizedRole]);
 
   const handleQuickIntent = useCallback((intent: { id: string; label: string; prompt: string }) => {
     if (isProcessing) return;
@@ -1145,48 +1207,145 @@ export default function DashOrb({
         .map(m => ({ role: m.role, content: m.content }));
       const history = toolContextEntry ? [...baseHistory, toolContextEntry] : baseHistory;
 
-      // Process the command
-      const result = await executeCommand(command, history, options?.attachments || []);
-      
-      // Replace thinking message with result
-      await streamResponseToMessage(thinkingId, result);
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === thinkingId ? { ...msg, toolCalls: undefined } : msg
-        )
-      );
-      
-      // Speak the response if voice is enabled (isolated try/catch so TTS
-      // failures never replace the successfully-rendered AI response)
-      if (voiceEnabled && Platform.OS !== 'web') {
-        const ttsLanguage = lastDetectedLanguage || 'en-ZA';
-        // Reset error dedup so toast fires on every new TTS attempt
-        lastTTSErrorRef.current = '';
-        try {
-          const phonicsMode = shouldUsePhonicsMode(result, {
-            ageYears: learnerAgeYears,
-            gradeLevel: learnerGrade || null,
-            schoolType: learnerContext?.schoolType || null,
-            organizationType: learnerContext?.schoolType || null,
-          });
-          await speak(result, ttsLanguage, {
-            phonicsMode,
-            // Keep parent/student ORB responses at normal-or-faster speed.
-            rate: phonicsMode ? 12 : 0,
-          });
-        } catch (ttsErr) {
-          console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
-          // Surface TTS failure as a system message so user knows
-          setMessages(prev => [...prev, {
-            id: `tts-fail-${Date.now()}`,
-            role: 'system',
-            content: '🔇 Voice playback failed. Tap the speaker icon to toggle voice on/off, or check volume settings.',
-            timestamp: new Date(),
-          }]);
+      // Process the command — try SSE streaming first, fall back to non-streaming
+      const forceNonStreaming = (options?.attachments?.length ?? 0) > 0;
+
+      if (forceNonStreaming || isUserSuperAdmin) {
+        // Non-streaming path: OCR / image / super-admin calls
+        const result = await executeCommand(command, history, options?.attachments || []);
+        await streamResponseToMessage(thinkingId, result);
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.id === thinkingId ? { ...msg, toolCalls: undefined } : msg
+          )
+        );
+
+        if (voiceEnabled && Platform.OS !== 'web') {
+          const ttsLanguage = lastDetectedLanguage || 'en-ZA';
+          lastTTSErrorRef.current = '';
+          try {
+            const phonicsMode = shouldUsePhonicsMode(result, {
+              ageYears: learnerAgeYears,
+              gradeLevel: learnerGrade || null,
+              schoolType: learnerContext?.schoolType || null,
+              organizationType: learnerContext?.schoolType || null,
+            });
+            await speak(result, ttsLanguage, { phonicsMode, rate: phonicsMode ? 12 : 0 });
+          } catch (ttsErr) {
+            console.warn('[DashOrb] TTS error (non-fatal):', ttsErr);
+          }
         }
+        onCommandExecuted?.(command, result);
+      } else {
+        // ── SSE Streaming + Sentence-Level TTS Pipelining ──
+        const supabase = assertSupabase();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('Not authenticated.');
+
+        const endpoint = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`;
+
+        // Build the same body as executeCommand but with stream: true
+        const isLearnerRole = ['student', 'learner'].includes(normalizedRole);
+        const ageYears = isLearnerRole
+          ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
+          : (normalizedRole === 'parent' ? learnerAgeYears : null);
+        const traceId = `dash_orb_stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        const streamBody: Record<string, unknown> = {
+          scope: normalizedRole || 'parent',
+          service_type: 'dash_conversation',
+          payload: {
+            prompt: command,
+            context: [
+              history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
+              memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
+              learnerName ? `Learner name: ${learnerName}.` : null,
+              learnerGrade ? `Learner grade: ${learnerGrade}.` : null,
+              ageYears ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.` : null,
+              normalizedRole ? `Role: ${normalizedRole}.` : null,
+            ].filter(Boolean).join('\n\n') || undefined,
+          },
+          stream: true,
+          enable_tools: true,
+          metadata: {
+            role: normalizedRole,
+            source: 'dash_orb_stream',
+            trace_id: traceId,
+          },
+        };
+
+        // Sentence TTS queue processor
+        const processTTSQueue = async () => {
+          if (isSpeakingSentenceRef.current) return;
+          const nextSentence = ttsSentenceQueueRef.current.shift();
+          if (!nextSentence) return;
+          isSpeakingSentenceRef.current = true;
+          try {
+            const ttsLang = lastDetectedLanguage || 'en-ZA';
+            const pm = shouldUsePhonicsMode(nextSentence, {
+              ageYears: learnerAgeYears,
+              gradeLevel: learnerGrade || null,
+              schoolType: learnerContext?.schoolType || null,
+              organizationType: learnerContext?.schoolType || null,
+            });
+            await speak(nextSentence, ttsLang, { phonicsMode: pm, rate: pm ? 12 : 0 });
+          } catch (e) {
+            console.warn('[DashOrb] Sentence TTS error:', e);
+          } finally {
+            isSpeakingSentenceRef.current = false;
+            // Process next sentence in queue
+            if (ttsSentenceQueueRef.current.length > 0) {
+              processTTSQueue();
+            }
+          }
+        };
+
+        ttsSentenceQueueRef.current = [];
+        isSpeakingSentenceRef.current = false;
+
+        await new Promise<void>((resolve, reject) => {
+          streamResponse(
+            { endpoint, body: streamBody, accessToken: session.access_token },
+            {
+              onTextChunk: (_chunk, accumulated) => {
+                // Update message content in real-time as chunks arrive
+                setMessages(prev =>
+                  prev.map(msg =>
+                    msg.id === thinkingId
+                      ? { ...msg, content: accumulated, isLoading: false, isStreaming: true }
+                      : msg
+                  )
+                );
+              },
+              onSentenceReady: (sentence, _idx) => {
+                // Queue sentence for TTS (starts speaking while AI continues)
+                if (voiceEnabled && Platform.OS !== 'web') {
+                  ttsSentenceQueueRef.current.push(sentence);
+                  processTTSQueue();
+                }
+              },
+              onVisemeEvent: (evt) => {
+                // Drive real viseme animation on the orb
+                setSimulatedVisemeId(evt.visemeId);
+              },
+              onComplete: (fullText) => {
+                setMessages(prev =>
+                  prev.map(msg =>
+                    msg.id === thinkingId
+                      ? { ...msg, content: fullText, isStreaming: false, toolCalls: undefined }
+                      : msg
+                  )
+                );
+                onCommandExecuted?.(command, fullText);
+                resolve();
+              },
+              onError: (err) => {
+                reject(err);
+              },
+            },
+          );
+        });
       }
-      
-      onCommandExecuted?.(command, result);
     } catch (error) {
       setMessages(prev => prev.map(msg => 
         msg.id === thinkingId 
@@ -1245,6 +1404,20 @@ export default function DashOrb({
     // Announcements
     if (lowerCommand.includes('announce') || lowerCommand.includes('broadcast')) {
       tools.push({ name: 'send_announcement', status: 'pending' });
+    }
+
+    // Visual generation tools
+    if (/\b(image|picture|poster|illustration|draw|visual)\b/.test(lowerCommand)) {
+      tools.push({ name: 'generate_image', status: 'pending' });
+    }
+    if (/\b(worksheet|practice sheet|exercise|homework sheet)\b/.test(lowerCommand)) {
+      tools.push({ name: 'generate_worksheet', status: 'pending' });
+    }
+    if (/\b(chart|graph|pie|bar chart|line chart|data visual)\b/.test(lowerCommand)) {
+      tools.push({ name: 'generate_chart', status: 'pending' });
+    }
+    if (/\b(pdf|document|export|certificate|newsletter|letter|invoice)\b/.test(lowerCommand)) {
+      tools.push({ name: 'export_pdf', status: 'pending' });
     }
     
     return tools.length > 0 ? tools : [{ name: 'ai_analysis', status: 'pending' }];
@@ -1806,7 +1979,12 @@ export default function DashOrb({
             activeOpacity={0.9}
             style={{ width: size, height: size }}
           >
-            <CosmicOrb size={size} isProcessing={isProcessing} isSpeaking={isSpeaking} />
+            <NextGenDashOrb
+              size={size}
+              state={orbState}
+              audioLevel={orbAudioLevel}
+              visemeId={simulatedVisemeId}
+            />
             
             {/* Center icon */}
             <View
@@ -2004,6 +2182,18 @@ export default function DashOrb({
           }
         }}
         onOpenHistory={() => router.push('/screens/dash-conversations-history' as any)}
+        onContinueFullChat={() => {
+          // Close the orb modal and navigate to full Dash Assistant
+          setIsExpanded(false);
+          const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+          router.push({
+            pathname: '/screens/dash-assistant',
+            params: {
+              source: 'orb',
+              resumePrompt: lastUserMsg?.content || '',
+            },
+          } as any);
+        }}
         isEditing={isEditing}
         onCancelEdit={() => {
           setIsEditing(false);

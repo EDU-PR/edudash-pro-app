@@ -38,14 +38,10 @@ const FILLER_PATTERNS: Array<[RegExp, string]> = [
   [/\b(i mean)\b/gi, ''],
 ];
 
-const COMMON_STT_CORRECTIONS: Array<[RegExp, string]> = [
-  [/\bit socks\b/gi, "it's socks"],
-  [/\bsummeriz(e|ing|ed|er)\b/gi, 'summarize$1'],
-  [/\bsend comma\b/gi, 'send,'],
-  [/\bnew line\b/gi, '. '],
-  [/\bfull stop\b/gi, '.'],
-  [/\bquestion mark\b/gi, '?'],
-];
+import { STT_CORRECTIONS } from '@/lib/voice/sttDictionary';
+
+// Domain-specific + generic corrections (shared via sttDictionary)
+const COMMON_STT_CORRECTIONS: Array<[RegExp, string]> = STT_CORRECTIONS;
 
 const looksLikeQuestion = (text: string, lang: SupportedLang): boolean => {
   const lower = text.toLowerCase();

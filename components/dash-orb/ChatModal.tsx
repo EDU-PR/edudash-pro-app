@@ -83,6 +83,7 @@ interface ChatModalProps {
   onNewChat?: () => void;
   onExportChat?: () => void;
   onOpenHistory?: () => void;
+  onContinueFullChat?: () => void;
   isEditing?: boolean;
   onCancelEdit?: () => void;
 }
@@ -129,6 +130,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   onNewChat,
   onExportChat,
   onOpenHistory,
+  onContinueFullChat,
   isEditing = false,
   onCancelEdit,
 }) => {
@@ -336,6 +338,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
                   style={[styles.closeButton, { marginRight: 6 }]}
                 >
                   <Ionicons name="share-social-outline" size={22} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
+              {onContinueFullChat && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    onContinueFullChat();
+                  }}
+                  style={[styles.closeButton, { marginRight: 6 }]}
+                >
+                  <Ionicons name="expand-outline" size={22} color={theme.primary} />
                 </TouchableOpacity>
               )}
               {onBackToQuickActions && (
@@ -715,6 +728,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           {!!quickIntents.length && onQuickIntent && !showQuickActions && (
             <ScrollView
               horizontal
+              style={styles.quickIntentScroller}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.quickIntentRow}
             >

@@ -291,6 +291,13 @@ const SA_SLANG: PronunciationEntry[] = [
     note: 'Afrikaans: thank you very much',
   },
   {
+    pattern: /\bAnna?tjie\b/gi,
+    alias: 'Anakie',
+    ipa: 'ɑˈnɑːki',
+    lang: 'af-ZA',
+    note: 'Afrikaans name pronunciation: sounds like "Ah-nah-key"',
+  },
+  {
     pattern: /\bSiyabonga\b/gi,
     ipa: 'sijɑˈboŋɡɑ',
     lang: 'zu-ZA',

@@ -999,7 +999,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
       let tutorIntent = isLearnerRole ? detectTutorIntent(userText) : null;
       if (!tutorIntent && isLearnerRole && hasLearningAttachment) {
-        tutorIntent = 'diagnostic';
+        // If user text implies checking/reviewing their work, use explain mode
+        // (structured homework help). Otherwise leave null → normal chat handles
+        // the image without the rigid <TUTOR_PAYLOAD> JSON constraint.
+        const homeworkCheckPattern = /\b(check|mark|correct|grade|right|wrong|mistake|help|explain|review|look at|did I|show me|what is)\b/i;
+        if (homeworkCheckPattern.test(userText)) {
+          tutorIntent = 'explain';
+        }
+        // bare image with no homework-check words → normal chat path
       }
       if (activeSession?.awaitingAnswer && !stopTutor) {
         tutorAction = 'evaluate';
@@ -1330,11 +1337,14 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
       } else if (!tutorPayload && tutorAction && sessionForTutorAction) {
         const fallbackFromResponse = extractTutorQuestionFromText(response?.content || '');
         const fallbackQuestion = fallbackFromResponse || (() => {
+          // If the learner sent an image, use whatever Claude said (it likely
+          // analysed the image). Only fall back to grade/subject questions
+          // when there is genuinely no attachment to look at.
+          if (hasLearningAttachment) {
+            return response?.content || 'I can see your work! Let me take a closer look — which question would you like me to check?';
+          }
           if (!sessionForTutorAction.grade) return 'What grade are you in?';
           if (!sessionForTutorAction.subject) return 'Which subject is this?';
-          if (hasLearningAttachment) {
-            return 'Please type the exact question from the attachment.';
-          }
           return 'What exact question do you need help with?';
         })();
 

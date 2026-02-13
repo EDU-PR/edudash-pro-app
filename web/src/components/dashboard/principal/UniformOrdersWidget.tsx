@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Download, RefreshCw, Shirt, AlertCircle } from 'lucide-react';
 
@@ -20,11 +21,12 @@ interface UniformRow {
     first_name?: string | null;
     last_name?: string | null;
     email?: string | null;
+    phone?: string | null;
   } | null;
 }
 
 interface UniformOrdersWidgetProps {
-  preschoolId?: string;
+  schoolId?: string;
 }
 
 const csvEscape = (value: string | number | null | undefined) => {
@@ -35,21 +37,21 @@ const csvEscape = (value: string | number | null | undefined) => {
   return stringValue;
 };
 
-export function UniformOrdersWidget({ preschoolId }: UniformOrdersWidgetProps) {
+export function UniformOrdersWidget({ schoolId }: UniformOrdersWidgetProps) {
   const supabase = createClient();
   const [rows, setRows] = useState<UniformRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadRows = async () => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
     setLoading(true);
     setError(null);
 
     const { data, error: fetchError } = await supabase
       .from('uniform_requests')
-      .select('id, child_name, age_years, tshirt_size, created_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(first_name,last_name,email)')
-      .eq('preschool_id', preschoolId)
+      .select('id, child_name, age_years, tshirt_size, created_at, student_id, student:students!uniform_requests_student_id_fkey(first_name,last_name,student_id), parent:profiles!uniform_requests_parent_id_fkey(first_name,last_name,email,phone)')
+      .eq('preschool_id', schoolId)
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -63,10 +65,10 @@ export function UniformOrdersWidget({ preschoolId }: UniformOrdersWidgetProps) {
   };
 
   useEffect(() => {
-    if (!preschoolId) return;
+    if (!schoolId) return;
     loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preschoolId]);
+  }, [schoolId]);
 
   const exportCsv = () => {
     if (!rows.length) return;
@@ -110,6 +112,9 @@ export function UniformOrdersWidget({ preschoolId }: UniformOrdersWidgetProps) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/dashboard/principal/uniforms" className="btn btnSecondary">
+            View all
+          </Link>
           <button className="btn btnSecondary" onClick={loadRows} disabled={loading}>
             <RefreshCw size={14} /> Refresh
           </button>

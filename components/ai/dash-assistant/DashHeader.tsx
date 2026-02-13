@@ -37,6 +37,7 @@ interface DashHeaderProps {
   subReady: boolean;
   isSpeaking: boolean;
   showAdvancedControls: boolean;
+  showOrbLink?: boolean;
   showWakeWordToggle: boolean;
   wakeWordEnabled: boolean;
   wakeWordLoaded: boolean;
@@ -55,6 +56,7 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
   subReady,
   isSpeaking,
   showAdvancedControls,
+  showOrbLink,
   showWakeWordToggle,
   wakeWordEnabled,
   wakeWordLoaded,
@@ -144,7 +146,7 @@ export const DashHeader: React.FC<DashHeaderProps> = ({
           <Ionicons name="time-outline" size={iconSize} color={actionFg} />
         </TouchableOpacity>
         )}
-        {showAdvancedControls && (
+        {(showAdvancedControls || showOrbLink) && (
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: actionBg, borderColor: actionBorder }]}
             accessibilityLabel="Open Dash Orb"

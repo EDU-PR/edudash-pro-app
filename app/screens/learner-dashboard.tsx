@@ -16,6 +16,7 @@ import { TierBadge } from '@/components/ui/TierBadge';
 import { SubscriptionStatusCard } from '@/components/ui/SubscriptionStatusCard';
 import { AIQuotaDisplay } from '@/components/ui/AIQuotaDisplay';
 import { useLearnerDashboard } from '@/hooks/useLearnerDashboard';
+import DashOrb from '@/components/dash-orb';
 import { MobileNavDrawer } from '@/components/navigation/MobileNavDrawer';
 import { useOrganization } from '@/hooks/useOrganization';
 import { extractOrganizationId } from '@/lib/tenant/compat';
@@ -478,6 +479,11 @@ export default function LearnerDashboard() {
           { id: 'account', label: t('common.account', { defaultValue: 'Account' }), icon: 'person-circle', route: '/screens/account' },
           { id: 'settings', label: t('common.settings', { defaultValue: 'Settings' }), icon: 'settings', route: '/screens/settings' },
         ]}
+      />
+
+      <DashOrb
+        position="bottom-right"
+        size={54}
       />
     </SafeAreaView>
   );

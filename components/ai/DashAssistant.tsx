@@ -312,7 +312,8 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const { profile, user } = useAuth();
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
   const normalizedRole = String(profile?.role || '').toLowerCase();
-  const isParentOrStudent = ['parent', 'student'].includes(normalizedRole);
+  const isParentOrStudent = ['parent', 'student', 'learner'].includes(normalizedRole);
+  const isStudentOnly = ['student', 'learner'].includes(normalizedRole);
   const isStaff = ['teacher', 'principal', 'principal_admin', 'admin', 'staff'].includes(normalizedRole);
 
   // Derive activeChild for parent UI
@@ -363,6 +364,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     return st.includes('preschool') || st.includes('ecd') || st.includes('early');
   }, [contextChips.length, learnerContext?.schoolType]);
   const showAdvancedControls = !isParentOrStudent;
+  const showOrbLink = !['parent'].includes(normalizedRole); // Students can reach DashOrb voice
   const showWakeWordToggle = wakeWordAvailable && showAdvancedControls;
   const usageLabel = tierStatus
     ? (remaining === null ? 'Unlimited requests available' : `${remaining} left this month`)
@@ -829,6 +831,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
           subReady={subReady}
           isSpeaking={isSpeaking}
           showAdvancedControls={showAdvancedControls}
+          showOrbLink={showOrbLink}
           showWakeWordToggle={showWakeWordToggle}
           wakeWordEnabled={wakeWordEnabled}
           wakeWordLoaded={wakeWordLoaded}

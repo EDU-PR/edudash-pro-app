@@ -14,11 +14,16 @@ export default function DashOrbScreen() {
   const normalizedRole = String(profile?.role || '').toLowerCase();
   const isTutorRole = ['parent', 'student', 'learner'].includes(normalizedRole);
   const tierLower = String(tier || 'free').toLowerCase();
-  const isDashOrbUnlocked = [
+  const isStudent = ['student', 'learner'].includes(normalizedRole);
+  const isDashOrbUnlocked = isStudent || [
     'parent_plus',
     'premium',
     'pro',
     'enterprise',
+    'starter',
+    'basic',
+    'school_starter',
+    'school_basic',
     'school_premium',
     'school_pro',
     'school_enterprise',
@@ -48,7 +53,7 @@ export default function DashOrbScreen() {
           size={64}
           locked={locked}
           lockedTitle="Dash Orb Locked"
-          lockedMessage="Upgrade to Parent Plus to unlock the Dash Orb."
+          lockedMessage={isStudent ? 'Ask your school to upgrade for full Dash Orb access.' : 'Upgrade to Parent Plus to unlock the Dash Orb.'}
           lockedCtaLabel="Upgrade"
           onUpgradePress={() => router.push('/screens/subscription-setup')}
         />

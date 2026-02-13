@@ -535,9 +535,11 @@ export const PrincipalDashboardV2: React.FC<PrincipalDashboardV2Props> = () => {
                   />
                   <MetricInline
                     label={t('dashboard.uniform_pending_pops', { defaultValue: 'Pending POPs' })}
-                    value={`${uniformSummary?.pendingUploads || 0}${
-                      uniformSummary?.pendingUploadAmount ? ` • ${formatCurrency(uniformSummary.pendingUploadAmount)}` : ''
-                    }`}
+                    value={
+                      uniformSummary?.pendingUploadAmount
+                        ? `${uniformSummary?.pendingUploads || 0} pending (${formatCurrency(uniformSummary.pendingUploadAmount)})`
+                        : `${uniformSummary?.pendingUploads || 0} pending`
+                    }
                     theme={theme}
                   />
                 </View>

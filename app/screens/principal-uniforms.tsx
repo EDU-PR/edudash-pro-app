@@ -31,6 +31,7 @@ export default function PrincipalUniformsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [generatingNumbers, setGeneratingNumbers] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [paymentStatusByStudent, setPaymentStatusByStudent] = useState<Map<string, 'paid' | 'pending' | 'unpaid'>>(
@@ -123,6 +124,10 @@ export default function PrincipalUniformsScreen() {
 
   const { submittedRows, missingRows, submittedCount, missingCount,
     missingContactableCount, unpaidContactableCount, sizeSummary, missingByClass } = derived;
+  const missingNumberCount = useMemo(
+    () => submittedRows.filter((row) => !String(row.tshirtNumber || '').trim()).length,
+    [submittedRows]
+  );
 
   const displayRows: DisplayRow[] = useMemo(() => (
     statusFilter === 'submitted' ? submittedRows
@@ -151,6 +156,126 @@ export default function PrincipalUniformsScreen() {
     }
   }, [filtered, sizeSummary, missingByClass, showAlert]);
 
+  const handleGenerateNumbers = useCallback(async () => {
+    if (!schoolId) return;
+
+    const submittedWithoutNumber = rows.filter((row) => !String(row?.tshirt_number || '').trim());
+    if (submittedWithoutNumber.length === 0) {
+      showAlert({
+        title: 'No Missing Numbers',
+        message: 'All submitted uniform orders already have T-shirt numbers.',
+        type: 'info',
+        buttons: [{ text: 'OK' }],
+      });
+      return;
+    }
+
+    const usedNumbers = new Set<number>();
+    rows.forEach((row) => {
+      const raw = String(row?.tshirt_number || '').trim();
+      if (!/^\d{1,2}$/.test(raw)) return;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 99) return;
+      usedNumbers.add(parsed);
+    });
+
+    const availableNumbers: number[] = [];
+    for (let i = 1; i <= 99; i += 1) {
+      if (!usedNumbers.has(i)) availableNumbers.push(i);
+    }
+
+    if (availableNumbers.length === 0) {
+      showAlert({
+        title: 'Number Pool Full',
+        message: 'All 1–2 digit numbers (1-99) are already used.',
+        type: 'warning',
+        buttons: [{ text: 'OK' }],
+      });
+      return;
+    }
+
+    const orderedMissing = [...submittedWithoutNumber].sort((a, b) => {
+      const aTs = new Date(a?.created_at || 0).getTime();
+      const bTs = new Date(b?.created_at || 0).getTime();
+      return aTs - bTs;
+    });
+
+    const assignments = orderedMissing.slice(0, availableNumbers.length).map((row, index) => ({
+      id: row.id,
+      number: String(availableNumbers[index]),
+    }));
+    const skippedCount = Math.max(orderedMissing.length - assignments.length, 0);
+
+    setGeneratingNumbers(true);
+    try {
+      const supabase = assertSupabase();
+      const results = await Promise.allSettled(
+        assignments.map(async (assignment) => {
+          const { error } = await supabase
+            .from('uniform_requests')
+            .update({
+              tshirt_number: assignment.number,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', assignment.id)
+            .eq('preschool_id', schoolId);
+          if (error) throw error;
+        })
+      );
+
+      const failedCount = results.filter((result) => result.status === 'rejected').length;
+      const successCount = assignments.length - failedCount;
+
+      await load();
+
+      if (successCount <= 0) {
+        throw new Error('No numbers were assigned. Please try again.');
+      }
+
+      const notes: string[] = [`Assigned ${successCount} unique numbers.`];
+      if (skippedCount > 0) {
+        notes.push(`${skippedCount} order(s) were skipped because only 99 unique 1–2 digit numbers are available.`);
+      }
+      if (failedCount > 0) {
+        notes.push(`${failedCount} update(s) failed. Please retry.`);
+      }
+
+      showAlert({
+        title: 'Numbers Generated',
+        message: notes.join(' '),
+        type: failedCount > 0 ? 'warning' : 'success',
+        buttons: [{ text: 'OK' }],
+      });
+    } catch (e: any) {
+      showAlert({
+        title: 'Generation Failed',
+        message: e?.message || 'Unable to generate numbers right now.',
+        type: 'error',
+        buttons: [{ text: 'OK' }],
+      });
+    } finally {
+      setGeneratingNumbers(false);
+    }
+  }, [schoolId, rows, load, showAlert]);
+
+  const handleGenerateNumbersPress = useCallback(() => {
+    if (!schoolId) return;
+    if (missingNumberCount === 0 || generatingNumbers) {
+      handleGenerateNumbers();
+      return;
+    }
+
+    showAlert({
+      title: 'Generate T-shirt Numbers',
+      message: `Assign unique 1–2 digit numbers (1-99) to ${missingNumberCount} submitted order(s) that are missing numbers?`,
+      type: 'info',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Generate', onPress: handleGenerateNumbers },
+      ],
+    });
+  }, [schoolId, missingNumberCount, generatingNumbers, handleGenerateNumbers, showAlert]);
+
   const paymentStatusMeta = useCallback((status: DisplayRow['paymentStatus']) => {
     if (status === 'paid') return { label: 'Paid', bg: theme.success + '22', border: theme.success + '55', text: theme.success };
     if (status === 'pending') return { label: 'Pending', bg: theme.warning + '22', border: theme.warning + '55', text: theme.warning };
@@ -169,6 +294,20 @@ export default function PrincipalUniformsScreen() {
               <Text style={styles.title}>Uniform Sizes</Text>
               <Text style={styles.subtitle}>T-shirt size will be used for shorts. Returning numbers included.</Text>
             </View>
+            <TouchableOpacity
+              style={[styles.exportButton, { backgroundColor: theme.info || '#0EA5E9' }]}
+              onPress={handleGenerateNumbersPress}
+              disabled={generatingNumbers}
+            >
+              <Ionicons name="keypad-outline" size={18} color="#fff" />
+              <Text style={styles.exportButtonText}>
+                {generatingNumbers
+                  ? 'Generating...'
+                  : missingNumberCount > 0
+                    ? `Generate Numbers (${missingNumberCount})`
+                    : 'Generate Numbers'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.exportButton, { backgroundColor: theme.primary }]}
               onPress={handleExportPdf}
@@ -345,7 +484,9 @@ export default function PrincipalUniformsScreen() {
                     <Text style={styles.text}>T-shirts: {item.tshirtQuantity ?? '-'}</Text>
                     <Text style={styles.text}>Shorts: {item.shortsQuantity ?? '-'}</Text>
                     <Text style={styles.text}>Returning: {item.isReturning ? 'Yes' : 'No'}</Text>
-                    {item.tshirtNumber ? <Text style={styles.text}>T-shirt Number: {item.tshirtNumber}</Text> : null}
+                    {item.tshirtNumber
+                      ? <Text style={styles.text}>T-shirt Number: {item.tshirtNumber}</Text>
+                      : <Text style={styles.muted}>T-shirt Number: not assigned</Text>}
                     <Text style={styles.text}>Sample supplied: {item.sampleSupplied ? 'Yes' : 'No'}</Text>
                     {item.studentCode ? <Text style={styles.text}>Student Code: {item.studentCode}</Text> : null}
                     <Text style={styles.text}>Submitted by: {item.parentName || 'Parent'}</Text>

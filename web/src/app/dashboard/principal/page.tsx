@@ -76,8 +76,8 @@ export default function PrincipalDashboard() {
 
   const userEmail = profile?.email;
   const userName = profile?.firstName || userEmail?.split('@')[0] || 'Principal';
-  const preschoolName = profile?.preschoolName;
-  const preschoolId = profile?.preschoolId;
+  const preschoolName = profile?.preschoolName || profile?.organizationName;
+  const preschoolId = profile?.preschoolId || profile?.organizationId;
   const userRole = profile?.role;
   const roleDisplay = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Principal';
 
@@ -273,7 +273,7 @@ export default function PrincipalDashboard() {
       <ParentApprovalWidget preschoolId={preschoolId} userId={userId} />
 
       {/* Uniform Sizes */}
-      <UniformOrdersWidget preschoolId={preschoolId} />
+      <UniformOrdersWidget schoolId={preschoolId} />
 
       {/* Recent Activity */}
       <div className="card">

@@ -50,9 +50,13 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   get_organization_stats: { roles: ['principal_admin', 'super_admin'], minTier: 'starter' },
   query_database: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
 
-  // Communication + PDF + navigation
+  // Communication + PDF + navigation + visual generation
   compose_message: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   export_pdf: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
+  generate_image: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_worksheet: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
+  generate_chart: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_pdf_from_prompt: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   send_email: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'premium' },
   open_document: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
   get_screen_context: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
@@ -78,6 +82,10 @@ const MODULE_CATEGORY_MAP: Record<string, string> = {
   get_organization_stats: 'data',
   compose_message: 'communication',
   export_pdf: 'communication',
+  generate_image: 'communication',
+  generate_worksheet: 'communication',
+  generate_chart: 'communication',
+  generate_pdf_from_prompt: 'communication',
   send_email: 'communication',
   search_caps_curriculum: 'caps',
   get_caps_documents: 'caps',

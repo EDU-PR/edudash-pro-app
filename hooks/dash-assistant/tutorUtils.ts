@@ -285,8 +285,8 @@ export const buildTutorSystemContext = (
     '',
     'Ask ONE question only and stop. Do not add extra questions or commentary.',
     'Keep responses very short (2-4 short lines max) unless explaining a concept.',
-    'If grade or topic is missing, ask a single clarifying question instead.',
-    'If the learner shared an attachment, assume it contains the question and ask about it directly.',
+    'If the learner shared an attachment, assume it contains the question — analyse it and respond directly.',
+    'If grade or topic is missing AND no attachment was shared, ask a single clarifying question instead.',
     'Return ONLY JSON wrapped in <TUTOR_PAYLOAD> tags.',
   ];
 

@@ -356,6 +356,9 @@ export class DashAIClient {
             ocrMode: params.ocrMode,
             ocrTask: params.ocrTask,
             ocrResponseFormat: params.ocrResponseFormat,
+            // Forward image data so streaming path can include vision payloads
+            attachments: params.attachments,
+            images: params.images,
           },
           params.onChunk
         );
@@ -801,6 +804,9 @@ export class DashAIClient {
       const toolPlan = this.buildToolPlanMetadata(userRole, userTier);
       const orchestration = this.getOrchestrationConfig();
 
+      // Build image payloads for streaming (vision support)
+      const streamImages = this.buildImagePayloads(params.attachments, params.images);
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -813,6 +819,7 @@ export class DashAIClient {
           payload: {
             prompt: params.promptText,
             context: params.context || undefined,
+            images: streamImages.length > 0 ? streamImages : undefined,
             ocr_mode: params.ocrMode || undefined,
             ocr_task: params.ocrTask || undefined,
             ocr_response_format: params.ocrResponseFormat || undefined,
