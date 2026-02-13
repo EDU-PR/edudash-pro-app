@@ -182,7 +182,7 @@ export default function TeacherMessageThreadScreen() {
       />
 
       {/* Messages Container */}
-      <View style={[styles.messagesWrapper, { marginBottom: messageViewportInset }]}>
+      <View style={styles.messagesWrapper}>
         <MessageListWrapper
           bgSource={bgSource}
           wallpaperType={wallpaper?.type}
@@ -198,7 +198,7 @@ export default function TeacherMessageThreadScreen() {
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: messageBottomReserve }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: messageViewportInset + messageBottomReserve }]}
             ListEmptyComponent={emptyComponent}
           />
         </MessageListWrapper>

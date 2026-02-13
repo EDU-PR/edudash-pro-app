@@ -437,9 +437,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 10,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingHorizontal: 6,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   composerRow: {
     flexDirection: 'row',
