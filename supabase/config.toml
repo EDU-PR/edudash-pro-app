@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.notifications-dispatcher]
 verify_jwt = false
+
+[functions.daily-token]
+verify_jwt = true
+
+[functions.daily-rooms]
+verify_jwt = true

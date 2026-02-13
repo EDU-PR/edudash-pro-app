@@ -60,6 +60,12 @@ edudashpro-dev/
 !CODEBASE_REVIEW_SUMMARY.md
 !supabase/README.md
 !PAYMENT_INTEGRATIONS_CHECKLIST.md
+!reports/prod-ready/PROD_READINESS_REPORT.md
+!docs/
+docs/*
+!docs/SECURITY_ROTATION_CHECKLIST.md
+!docs/UX_SCOPE_NEXTGEN.md
+!docs/DASH_POLICY_BY_ORGTYPE.md
 
 # Build artifacts
 *.apk

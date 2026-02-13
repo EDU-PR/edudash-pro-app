@@ -1,0 +1,23 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow documentation/example placeholders and generated reports"
+paths = [
+  '''^reports/prod-ready/''',
+  '''^docs/SECURITY_ROTATION_CHECKLIST\.md$''',
+  '''^\.env\.example$'''
+]
+
+[[rules]]
+id = "edudash-hardcoded-service-role"
+description = "Potential hardcoded Supabase service-role style token"
+regex = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{20,}'''
+secretGroup = 0
+entropy = 3.5
+keywords = [
+  "service_role",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "DAILY_API_KEY",
+  "PRIVATE_KEY"
+]

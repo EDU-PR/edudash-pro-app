@@ -22,6 +22,8 @@ interface TokenRequest {
   start_audio_off?: boolean;
 }
 
+const STAFF_ROLES = new Set(['teacher', 'principal', 'principal_admin', 'admin', 'superadmin', 'super_admin']);
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,7 +93,7 @@ Deno.serve(async (req: Request) => {
     // Get user profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('first_name, last_name, role, preschool_id')
+      .select('first_name, last_name, role, preschool_id, organization_id')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
@@ -122,8 +124,42 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const roleLower = String(profile.role || '').toLowerCase();
+    const isStaffRole = STAFF_ROLES.has(roleLower);
+
+    // Non-staff users must never mint owner tokens.
+    if (isOwner && !isStaffRole) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: owner token not allowed for this role' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Ensure non-staff users can only join rooms linked to their own active call.
+    if (!isStaffRole) {
+      const { data: activeCall, error: activeCallError } = await supabase
+        .from('active_calls')
+        .select('call_id')
+        .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
+        .ilike('meeting_url', `%/${roomName}`)
+        .in('status', ['ringing', 'connected', 'initiated'])
+        .limit(1)
+        .maybeSingle();
+
+      if (activeCallError) {
+        console.error('[Daily Token] Active call verification failed:', activeCallError.message);
+      }
+
+      if (!activeCall) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: room access not permitted for this user' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Determine if user should be owner
-    const shouldBeOwner = isOwner || ['teacher', 'principal', 'superadmin'].includes(profile.role);
+    const shouldBeOwner = Boolean(isOwner) || isStaffRole;
     const displayName = userName || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Participant';
 
     console.log('[Daily Token] Creating token for room:', roomName, 'user:', displayName, 'isOwner:', shouldBeOwner);
@@ -171,6 +207,8 @@ Deno.serve(async (req: Request) => {
         token: tokenData.token,
         isOwner: shouldBeOwner,
         userName: displayName,
+        room_name: roomName,
+        expires_at: new Date((Math.floor(Date.now() / 1000) + 3600 * 3) * 1000).toISOString(),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
