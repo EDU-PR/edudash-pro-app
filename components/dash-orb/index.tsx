@@ -62,6 +62,7 @@ import { pickImages } from '@/services/AttachmentService';
 import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
+import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
 
 let AsyncStorage: any = null;
 try {
@@ -120,6 +121,32 @@ export default function DashOrb({
   const normalizedRole = userRole || 'parent';
   const isUserSuperAdmin = isSuperAdmin(normalizedRole);
   const orgType = getOrganizationType(profile);
+  const dashPolicy = useMemo(
+    () =>
+      resolveDashPolicy({
+        profile: profile || null,
+        role: normalizedRole,
+        orgType,
+        learnerContext: {
+          ageBand:
+            typeof learnerContext?.ageYears === 'number'
+              ? learnerContext.ageYears <= 5
+                ? '3-5'
+                : learnerContext.ageYears <= 8
+                  ? '6-8'
+                  : learnerContext.ageYears <= 12
+                    ? '9-12'
+                    : learnerContext.ageYears <= 15
+                      ? '13-15'
+                      : learnerContext.ageYears <= 18
+                        ? '16-18'
+                        : 'adult'
+              : null,
+          grade: learnerContext?.grade || null,
+        },
+      }),
+    [learnerContext?.ageYears, learnerContext?.grade, normalizedRole, orgType, profile]
+  );
   const learnerAgeYears = typeof learnerContext?.ageYears === 'number' ? learnerContext.ageYears : null;
   const learnerGrade = learnerContext?.grade || null;
   const learnerName = learnerContext?.name || null;
@@ -204,9 +231,14 @@ export default function DashOrb({
   }, [whisperModeEnabled]);
 
   const toolShortcuts = useMemo(() => {
+    const policyToolNames = new Set(dashPolicy.toolShortcuts);
     const shortcuts = getDashToolShortcutsForRole(normalizedRole);
-    return shortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
-  }, [normalizedRole]);
+    const orderedShortcuts = [
+      ...shortcuts.filter((tool) => policyToolNames.has(tool.name)),
+      ...shortcuts.filter((tool) => !policyToolNames.has(tool.name)),
+    ];
+    return orderedShortcuts.filter((tool) => ToolRegistry.hasTool(tool.name));
+  }, [dashPolicy.toolShortcuts, normalizedRole]);
 
   const autoToolShortcuts = useMemo(() => {
     // Include all tool categories that should be auto-invoked when relevant
@@ -1258,20 +1290,22 @@ export default function DashOrb({
           service_type: 'dash_conversation',
           payload: {
             prompt: command,
-            context: [
-              history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
-              memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
-              learnerName ? `Learner name: ${learnerName}.` : null,
-              learnerGrade ? `Learner grade: ${learnerGrade}.` : null,
-              ageYears ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.` : null,
-              normalizedRole ? `Role: ${normalizedRole}.` : null,
-            ].filter(Boolean).join('\n\n') || undefined,
+              context: [
+                history.length > 0 ? history.map(h => `${h.role}: ${h.content}`).join('\n') : null,
+                memorySnapshot ? `Conversation memory snapshot: ${memorySnapshot}` : null,
+                learnerName ? `Learner name: ${learnerName}.` : null,
+                learnerGrade ? `Learner grade: ${learnerGrade}.` : null,
+                ageYears ? `Learner age: ${ageYears}. Provide age-appropriate, child-safe guidance.` : null,
+                normalizedRole ? `Role: ${normalizedRole}.` : null,
+                dashPolicy.systemPromptAddendum,
+              ].filter(Boolean).join('\n\n') || undefined,
           },
           stream: true,
           enable_tools: true,
           metadata: {
             role: normalizedRole,
             source: 'dash_orb_stream',
+            dash_mode: dashPolicy.defaultMode,
             trace_id: traceId,
           },
         };
@@ -1606,6 +1640,7 @@ export default function DashOrb({
             ageContext,
             roleContext,
             lessonContext,
+            dashPolicy.systemPromptAddendum,
           ].filter(Boolean).join('\n\n') || undefined,
         },
         stream: false,
@@ -1613,6 +1648,7 @@ export default function DashOrb({
         metadata: {
           role: normalizedRole,
           source: 'dash_orb',
+          dash_mode: dashPolicy.defaultMode,
           age_years: ageYears ?? undefined,
           has_image: images.length > 0,
           attachment_count: attachments.length,
