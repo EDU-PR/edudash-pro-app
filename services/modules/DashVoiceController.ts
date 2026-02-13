@@ -104,14 +104,13 @@ export class DashVoiceController {
       if (!language) language = (voiceSettings.language?.toLowerCase()?.slice(0, 2) as any) || 'en';
       
       let shortCode = this.mapLanguageCode(language);
-      // Only override to detected language if no explicit user preference was set
-      // (prevents random voice switching when English text contains loanwords)
-      if (!prefs?.language) {
-        const detected = this.detectLanguageFromText(normalizedText);
-        if (shortCode === 'en' && detected !== 'en') {
-          shortCode = detected;
-        }
-      }
+      // FIXED: Never auto-switch voice based on text content detection.
+      // This caused the Dash ORB to change voices mid-conversation when
+      // English text contained loanwords or non-English names. The voice
+      // should always stay consistent — only change via explicit user
+      // preference in voice_preferences table.
+      // Previously: if (!prefs?.language) { auto-detect and switch }
+      // Now: always use the derived language from prefs/settings/default
       
       if (!AZURE_TTS_LANGUAGES.includes(shortCode)) {
         console.warn(`[DashVoiceController] Unsupported TTS language, defaulting to English: ${shortCode}`);

@@ -58,6 +58,13 @@ interface FCMCallRequest {
   meeting_url?: string;
 }
 
+interface FCMDeliveryResult {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+  messageId?: string;
+}
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -167,15 +174,10 @@ function pemToDer(pem: string): ArrayBuffer {
  * Send FCM data message to wake the app
  */
 async function sendFCMDataMessage(
+  accessToken: string,
   fcmToken: string,
   callData: FCMCallRequest
-): Promise<{ success: boolean; error?: string; messageId?: string }> {
-  const accessToken = await getAccessToken();
-  
-  if (!accessToken) {
-    return { success: false, error: 'Failed to get FCM access token - check GOOGLE_SERVICE_ACCOUNT_KEY' };
-  }
-
+): Promise<FCMDeliveryResult> {
   // FCM HTTP v1 API endpoint
   const url = `https://fcm.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/messages:send`;
 
@@ -239,17 +241,26 @@ async function sendFCMDataMessage(
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[SendFCMCall] FCM API error:', response.status, errorText);
-      
-      // Parse FCM error for better diagnostics
+
       try {
         const errorJson = JSON.parse(errorText);
-        if (errorJson.error?.details) {
-          const fcmError = errorJson.error.details.find((d: any) => d['@type']?.includes('FcmError'));
-          if (fcmError?.errorCode === 'UNREGISTERED') {
-            return { success: false, error: 'FCM token is invalid/unregistered - user may have reinstalled app' };
+        let errorCode: string | undefined;
+        if (Array.isArray(errorJson.error?.details)) {
+          const fcmError = errorJson.error.details.find((d: any) => d?.['@type']?.includes('FcmError'));
+          if (typeof fcmError?.errorCode === 'string') {
+            errorCode = String(fcmError.errorCode).toUpperCase();
           }
         }
-        return { success: false, error: errorJson.error?.message || errorText };
+
+        if (!errorCode && typeof errorJson.error?.status === 'string') {
+          errorCode = String(errorJson.error.status).toUpperCase();
+        }
+
+        return {
+          success: false,
+          error: errorJson.error?.message || errorText,
+          errorCode,
+        };
       } catch {
         return { success: false, error: errorText };
       }
@@ -257,7 +268,7 @@ async function sendFCMDataMessage(
 
     const result = await response.json();
     console.log('[SendFCMCall] ✅ FCM message sent successfully:', result.name);
-    
+
     return { success: true, messageId: result.name };
   } catch (error) {
     console.error('[SendFCMCall] Failed to send FCM message:', error);
@@ -324,37 +335,41 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get the callee's FCM token from push_devices
-    const { data: device, error: deviceError } = await supabase
+    // Get all active Android FCM tokens for the callee (best effort fan-out).
+    const { data: devices, error: deviceError } = await supabase
       .from('push_devices')
-      .select('fcm_token, expo_push_token, platform')
+      .select('fcm_token, platform')
       .eq('user_id', body.callee_user_id)
       .eq('is_active', true)
-      .eq('platform', 'android') // FCM is primarily for Android
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
+      .eq('platform', 'android')
+      .not('fcm_token', 'is', null)
+      .neq('fcm_token', '');
 
-    if (deviceError || !device) {
-      console.warn('[SendFCMCall] No device found for user:', body.callee_user_id);
+    const allTokens = Array.from(
+      new Set(
+        (devices || [])
+          .map((row: { fcm_token?: string | null }) => row.fcm_token || '')
+          .filter((token: string) => token.length > 0),
+      ),
+    );
+
+    if (deviceError || allTokens.length === 0) {
+      console.warn('[SendFCMCall] No active Android FCM tokens for user:', body.callee_user_id);
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: 'No registered device for callee',
+          success: false,
           fallback_to_expo: true,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!device.fcm_token) {
-      console.warn('[SendFCMCall] User has no FCM token:', body.callee_user_id);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'No FCM token for callee (app may not have Firebase)',
-          fallback_to_expo: true,
-          expo_token: device.expo_push_token,
+          attempted_tokens: 0,
+          successful_tokens: 0,
+          failed_tokens: 0,
+          error_codes: ['NO_ACTIVE_FCM_TOKENS'],
+          message_ids: [],
+          call_id: body.call_id,
+          callee_user_id: body.callee_user_id,
+          fcm_attempted: 0,
+          fcm_success_count: 0,
+          fallback_reason: 'NO_ACTIVE_FCM_TOKENS',
+          error: 'No active Android FCM tokens for callee',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -365,32 +380,102 @@ Deno.serve(async (req: Request) => {
       console.error('[SendFCMCall] GOOGLE_SERVICE_ACCOUNT_KEY not configured');
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: 'FCM not configured on server - add GOOGLE_SERVICE_ACCOUNT_KEY',
+          success: false,
           fallback_to_expo: true,
+          attempted_tokens: allTokens.length,
+          successful_tokens: 0,
+          failed_tokens: allTokens.length,
+          error_codes: ['SERVICE_ACCOUNT_NOT_CONFIGURED'],
+          message_ids: [],
+          call_id: body.call_id,
+          callee_user_id: body.callee_user_id,
+          fcm_attempted: allTokens.length,
+          fcm_success_count: 0,
+          fallback_reason: 'SERVICE_ACCOUNT_NOT_CONFIGURED',
+          error: 'FCM not configured on server - add GOOGLE_SERVICE_ACCOUNT_KEY',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Send FCM data message
-    const result = await sendFCMDataMessage(device.fcm_token, body);
-
-    // If FCM fails due to invalid token, mark device as inactive
-    if (!result.success && result.error?.includes('UNREGISTERED')) {
-      await supabase
-        .from('push_devices')
-        .update({ is_active: false })
-        .eq('user_id', body.callee_user_id)
-        .eq('fcm_token', device.fcm_token);
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      console.error('[SendFCMCall] Failed to get FCM access token');
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          fallback_to_expo: true,
+          attempted_tokens: allTokens.length,
+          successful_tokens: 0,
+          failed_tokens: allTokens.length,
+          error_codes: ['ACCESS_TOKEN_UNAVAILABLE'],
+          message_ids: [],
+          call_id: body.call_id,
+          callee_user_id: body.callee_user_id,
+          fcm_attempted: allTokens.length,
+          fcm_success_count: 0,
+          fallback_reason: 'ACCESS_TOKEN_UNAVAILABLE',
+          error: 'Failed to get FCM access token',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
+    // Send FCM data message to all known tokens in parallel.
+    const results = await Promise.all(
+      allTokens.map((token) => sendFCMDataMessage(accessToken, token, body)),
+    );
+
+    const successful = results.filter((result) => result.success);
+    const failed = results.filter((result) => !result.success);
+    const errorCodes = Array.from(
+      new Set(
+        failed
+          .map((result) => result.errorCode || '')
+          .filter((code) => code.length > 0),
+      ),
+    );
+    const messageIds = successful
+      .map((result) => result.messageId || '')
+      .filter((id) => id.length > 0);
+
+    // Auto-clean invalid tokens.
+    const invalidTokenCodes = new Set(['UNREGISTERED', 'INVALID_ARGUMENT', 'NOT_FOUND']);
+    const invalidTokens = allTokens.filter((_token, index) => {
+      const result = results[index];
+      return !result.success && !!result.errorCode && invalidTokenCodes.has(result.errorCode);
+    });
+
+    if (invalidTokens.length > 0) {
+      await supabase
+        .from('push_devices')
+        .update({ is_active: false, revoked_at: new Date().toISOString() })
+        .eq('user_id', body.callee_user_id)
+        .in('fcm_token', invalidTokens);
+    }
+
+    const structuredResult = {
+      success: successful.length > 0,
+      fallback_to_expo: successful.length === 0,
+      attempted_tokens: allTokens.length,
+      successful_tokens: successful.length,
+      failed_tokens: failed.length,
+      error_codes: errorCodes,
+      message_ids: messageIds,
+      call_id: body.call_id,
+      callee_user_id: body.callee_user_id,
+      fcm_attempted: allTokens.length,
+      fcm_success_count: successful.length,
+      fallback_reason: successful.length > 0 ? null : 'FCM_DELIVERY_FAILED',
+      error: successful.length > 0 ? undefined : (failed[0]?.error || 'FCM_DELIVERY_FAILED'),
+    };
+
     return new Response(
-      JSON.stringify(result),
-      { 
-        status: result.success ? 200 : 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify(structuredResult),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
     );
 
   } catch (error) {

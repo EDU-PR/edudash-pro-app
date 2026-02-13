@@ -2272,8 +2272,8 @@ function PrincipalMessagesPage() {
                     {displayMessages.map((message, index) => {
                       const isOwn = message.sender_id === userId;
                       const senderName = message.sender
-                        ? `${message.sender.first_name} ${message.sender.last_name}`
-                        : 'Unknown';
+                        ? `${message.sender.first_name || ''} ${message.sender.last_name || ''}`.trim()
+                        : '';
                       const otherParticipantIds = selectedParticipants
                         .filter((p: any) => p.user_id !== userId)
                         .map((p: any) => p.user_id);
@@ -2295,7 +2295,8 @@ function PrincipalMessagesPage() {
                               isOwn={isOwn}
                               isDesktop={isDesktop}
                               formattedTime={formatMessageTime(message.created_at)}
-                              senderName={!isOwn ? senderName : undefined}
+                              senderName={!isOwn && senderName ? senderName : undefined}
+                              showSenderName={isGroupSelected}
                               otherParticipantIds={otherParticipantIds}
                               hideAvatars={!isDesktop}
                               onContextMenu={isDashAISelected ? undefined : handleMessageContextMenu}

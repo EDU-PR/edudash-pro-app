@@ -1,10 +1,9 @@
 /**
- * Dash Tutor Screen
+ * Dash Tutor Screen — #NEXT-GEN Cosmic Learning Environment
  *
- * Dedicated interactive tutoring screen with age-adaptive theming.
- * Provides a focused learning experience separate from the general
- * Dash AI chat. Adapts visuals, text size, mascot, and interaction
- * patterns to the learner's age band.
+ * Dedicated interactive tutoring screen with age-adaptive theming
+ * and ZA-inspired cosmic gradient backgrounds. Provides a focused
+ * learning experience separate from the general Dash AI chat.
  *
  * Route: /screens/dash-tutor
  * Params:
@@ -15,9 +14,10 @@
  *   - conversationId?: string
  */
 
-import React, { useCallback, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,10 +27,18 @@ import { resolveAgeBand } from '@/lib/dash-ai/learnerContext';
 import { normalizeRole } from '@/lib/rbac';
 import type { TutorMode } from '@/hooks/dash-assistant/tutorTypes';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// ─── ZA Cosmic Palette ───────────────────────────────────────────────────────
+
+const ZA_COSMIC = {
+  gold: '#FFD700',
+  goldSoft: '#FFC83D',
+  emerald: '#00C853',
+  teal: '#00BCD4',
+  deepBlue: '#002395',
+} as const;
 
 export default function DashTutorScreen() {
-  const { theme: appTheme } = useTheme();
+  const { theme: appTheme, isDark } = useTheme();
   const { profile, user } = useAuth();
   const params = useLocalSearchParams<{
     mode?: string;
@@ -139,17 +147,56 @@ export default function DashTutorScreen() {
     }
   }, [ageBand]);
 
+  // Cosmic background gradients
+  const bgBase: [string, string, string] = isDark
+    ? ['#0B1020', '#0F172A', '#131B2E']
+    : ['#F0F4FF', '#E8EEFF', '#F8FAFC'];
+  const glowA: [string, string, string] = isDark
+    ? ['rgba(139,92,246,0.20)', 'rgba(99,102,241,0.06)', 'transparent']
+    : ['rgba(139,92,246,0.15)', 'rgba(99,102,241,0.04)', 'transparent'];
+  const glowB: [string, string, string] = isDark
+    ? ['rgba(0,200,83,0.15)', 'rgba(0,188,212,0.04)', 'transparent']
+    : ['rgba(0,200,83,0.10)', 'rgba(0,188,212,0.03)', 'transparent'];
+  
+  // Header gradient
+  const headerGradient: [string, string] = isDark
+    ? ['#0B1020', tutorTheme.colors.surface + 'CC']
+    : [tutorTheme.colors.surface, tutorTheme.colors.surface + 'E0'];
+
   return (
-    <View style={[styles.container, { backgroundColor: tutorTheme.colors.background }]}>
+    <View style={styles.container}>
+      {/* Cosmic background layer */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient colors={bgBase} style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          colors={glowA}
+          style={styles.glowA}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        <LinearGradient
+          colors={glowB}
+          style={styles.glowB}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
+      </View>
+
       <Stack.Screen
         options={{
           title: headerTitle,
           headerShown: true,
           headerStyle: {
-            backgroundColor: tutorTheme.colors.surface,
+            backgroundColor: 'transparent',
           },
+          headerBackground: () => (
+            <LinearGradient
+              colors={headerGradient}
+              style={StyleSheet.absoluteFill}
+            />
+          ),
           headerTitleStyle: {
-            color: tutorTheme.colors.bubbleText,
+            color: isDark ? '#E2E8F0' : '#1E293B',
             fontSize: tutorTheme.typography.headingSize - 4,
             fontWeight: '700',
           },
@@ -157,11 +204,16 @@ export default function DashTutorScreen() {
           headerRight: () => (
             <View style={styles.headerRight}>
               {ageBadge ? (
-                <View style={[styles.ageBadge, { backgroundColor: tutorTheme.colors.primary + '18' }]}>
+                <LinearGradient
+                  colors={isDark
+                    ? [tutorTheme.colors.primary + '25', tutorTheme.colors.primary + '10']
+                    : [tutorTheme.colors.primary + '18', tutorTheme.colors.primary + '08']}
+                  style={styles.ageBadge}
+                >
                   <Text style={[styles.ageBadgeText, { color: tutorTheme.colors.primary }]}>
                     {ageBadge}
                   </Text>
-                </View>
+                </LinearGradient>
               ) : null}
             </View>
           ),
@@ -170,23 +222,32 @@ export default function DashTutorScreen() {
 
       {/* Mascot greeting for preschool */}
       {tutorTheme.layout.showMascot && !conversationId && (
-        <View style={[styles.mascotBanner, { backgroundColor: tutorTheme.colors.mascotGlow + '15' }]}>
+        <View style={styles.mascotBanner}>
+          <LinearGradient
+            colors={isDark
+              ? [tutorTheme.colors.mascotGlow + '15', tutorTheme.colors.mascotGlow + '05']
+              : [tutorTheme.colors.mascotGlow + '12', tutorTheme.colors.mascotGlow + '04']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
           <Text style={styles.mascotEmoji}>{tutorTheme.mascot.emoji}</Text>
           <View style={styles.mascotTextWrap}>
             <Text
               style={[
                 styles.mascotGreeting,
                 {
-                  color: tutorTheme.colors.bubbleText,
+                  color: isDark ? '#E2E8F0' : '#1E293B',
                   fontSize: tutorTheme.typography.bodySize,
                 },
               ]}
             >
               {isPreschool
-                ? "Hi there! I'm Dash! Let's play and learn together! 🌟"
+                ? "Hi there! I'm Dash! Let's play and learn together!"
                 : `Hey! I'm ${tutorTheme.mascot.name}. Ready to learn?`}
             </Text>
           </View>
+          <Ionicons name="sparkles" size={16} color={ZA_COSMIC.gold} />
         </View>
       )}
 
@@ -212,6 +273,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  glowA: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '70%',
+    height: '50%',
+    borderBottomRightRadius: 300,
+  },
+  glowB: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: '60%',
+    height: '40%',
+    borderTopLeftRadius: 300,
+  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,13 +296,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   ageBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   ageBadgeText: {
     fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
   mascotBanner: {
     flexDirection: 'row',
@@ -233,9 +311,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
+    overflow: 'hidden',
   },
   mascotEmoji: {
-    fontSize: 40,
+    fontSize: 36,
   },
   mascotTextWrap: {
     flex: 1,
@@ -243,6 +322,7 @@ const styles = StyleSheet.create({
   mascotGreeting: {
     fontWeight: '600',
     lineHeight: 24,
+    letterSpacing: 0.2,
   },
   chatArea: {
     flex: 1,

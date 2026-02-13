@@ -943,6 +943,12 @@ export function WhatsAppStyleVideoCall({
             }).then(res => res.json()).then(result => {
               if (result.success) {
                 console.log('[VideoCall] ✅ FCM wake-on-call message sent');
+              } else if (result?.fallback_to_expo) {
+                console.log('[VideoCall] ℹ️ FCM fallback active', {
+                  attempted: result?.attempted_tokens,
+                  successful: result?.successful_tokens,
+                  errorCodes: result?.error_codes,
+                });
               } else {
                 console.warn('[VideoCall] FCM failed, falling back to Expo push:', result.error);
               }

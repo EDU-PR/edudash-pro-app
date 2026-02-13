@@ -78,9 +78,20 @@ export const useThreadMessages = (threadId: string | null) => {
       const { data, error } = await client
         .from('messages')
         .select(`
-          *,
-          sender:profiles(first_name, last_name, role),
-          reply_to:messages!reply_to_id(id, content, content_type, sender_id, sender:profiles(first_name, last_name))
+          id,
+          thread_id,
+          sender_id,
+          content,
+          content_type,
+          created_at,
+          delivered_at,
+          read_by,
+          deleted_at,
+          edited_at,
+          forwarded_from_id,
+          reply_to_id,
+          voice_url,
+          voice_duration
         `)
         .eq('thread_id', threadId)
         .is('deleted_at', null)
@@ -88,9 +99,65 @@ export const useThreadMessages = (threadId: string | null) => {
 
       if (error) throw error;
 
-      const messages = (data || []) as Message[];
+      const baseMessages = (data || []) as Message[];
+      if (baseMessages.length === 0) return baseMessages;
+
+      const senderIds = [...new Set(baseMessages.map((message) => message.sender_id))];
+      const { data: senderProfiles } = await client
+        .from('profiles')
+        .select('id, first_name, last_name, role')
+        .in('id', senderIds);
+
+      const profileMap = new Map((senderProfiles || []).map((profile: any) => [profile.id, profile]));
+      let messages = baseMessages.map((message) => ({
+        ...message,
+        sender: profileMap.get(message.sender_id) || null,
+      })) as Message[];
+
+      const replyToIds = [...new Set(
+        baseMessages
+          .filter((message) => message.reply_to_id)
+          .map((message) => message.reply_to_id)
+      )] as string[];
+
+      if (replyToIds.length > 0) {
+        const { data: replyMessages } = await client
+          .from('messages')
+          .select('id, content, content_type, sender_id')
+          .in('id', replyToIds);
+
+        if (replyMessages) {
+          const missingReplySenderIds = replyMessages
+            .map((message: any) => message.sender_id)
+            .filter((id: string) => !!id && !profileMap.has(id));
+
+          if (missingReplySenderIds.length > 0) {
+            const { data: extraProfiles } = await client
+              .from('profiles')
+              .select('id, first_name, last_name, role')
+              .in('id', [...new Set(missingReplySenderIds)]);
+
+            (extraProfiles || []).forEach((profile: any) => profileMap.set(profile.id, profile));
+          }
+
+          const replyMap = new Map(
+            replyMessages.map((replyMessage: any) => [
+              replyMessage.id,
+              {
+                ...replyMessage,
+                sender: profileMap.get(replyMessage.sender_id) || null,
+              },
+            ])
+          );
+
+          messages = messages.map((message) => ({
+            ...message,
+            reply_to: message.reply_to_id ? replyMap.get(message.reply_to_id) || null : null,
+          })) as Message[];
+        }
+      }
+
       const messageIds = messages.map((message) => message.id);
-      if (messageIds.length === 0) return messages;
 
       const { data: reactions } = await client
         .from('message_reactions')
@@ -118,6 +185,7 @@ export const useMarkThreadRead = () => {
   const { user } = useAuth();
 
   return useMutation({
+    retry: false,
     mutationFn: async ({ threadId }: { threadId: string }) => {
       if (!user?.id) {
         logger.warn('useMarkThreadRead', 'No user ID');

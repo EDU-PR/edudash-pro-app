@@ -71,6 +71,7 @@ interface ChatMessageBubbleProps {
   isDesktop: boolean;
   formattedTime: string;
   senderName?: string;
+  showSenderName?: boolean;
   otherParticipantIds?: string[];
   hideAvatars?: boolean;
   onContextMenu?: (e: React.MouseEvent | React.TouchEvent, messageId: string) => void;
@@ -138,6 +139,7 @@ export const ChatMessageBubble = ({
   isDesktop,
   formattedTime,
   senderName,
+  showSenderName = true,
   otherParticipantIds = [],
   hideAvatars = false,
   onContextMenu,
@@ -341,6 +343,7 @@ export const ChatMessageBubble = ({
       <div
         style={{
           maxWidth: isDesktop ? '65%' : '80%',
+          minWidth: 96,
           width: 'fit-content',
           padding: content.kind === 'media' 
             ? (isDesktop ? '6px 6px' : '4px 4px') 
@@ -398,7 +401,7 @@ export const ChatMessageBubble = ({
         )}
         
         {/* Sender name for received messages */}
-        {!isOwn && senderName && (
+        {!isOwn && showSenderName && senderName && (
           <div style={{ 
             marginBottom: 6, 
             fontSize: 12, 
@@ -431,7 +434,9 @@ export const ChatMessageBubble = ({
             }}
           >
             <div style={{ fontSize: 11, color: 'rgba(148, 163, 184, 0.8)', marginBottom: 2, fontWeight: 600 }}>
-              {message.reply_to.sender?.first_name || 'Message'}
+              {message.reply_to.sender
+                ? `${message.reply_to.sender.first_name || ''} ${message.reply_to.sender.last_name || ''}`.trim() || 'Original message'
+                : 'Original message'}
             </div>
             <p style={{ 
               margin: 0, 
@@ -441,7 +446,9 @@ export const ChatMessageBubble = ({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}>
-              {message.reply_to.content?.startsWith('__media__') ? '📎 Media' : message.reply_to.content}
+              {message.reply_to.content?.startsWith('__media__')
+                ? '📎 Media'
+                : (message.reply_to.content || 'Message unavailable')}
             </p>
           </div>
         )}

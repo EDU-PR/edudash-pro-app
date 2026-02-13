@@ -1,4 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const MAJOR_RELEASE_TYPES = new Set(['major', 'native', 'build', 'store']);
+
+const normalizeBoolean = (value: unknown): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+  return false;
+};
+
+async function dispatchBuildUpdateNotification(input: {
+  version: string;
+  buildNumber?: string;
+  platform: string;
+  storeUrl: string;
+  mandatory: boolean;
+  releaseType: string;
+}): Promise<{ sent: boolean; details?: unknown; reason?: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { sent: false, reason: 'supabase_env_missing' };
+  }
+
+  // Build a lightweight service client for optional targeting diagnostics.
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  let estimatedRecipients = 0;
+  try {
+    const { count } = await supabase
+      .from('push_devices')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('is_active', true)
+      .eq('platform', input.platform)
+      .not('expo_push_token', 'is', null);
+    estimatedRecipients = count || 0;
+  } catch {
+    // Non-blocking diagnostics only.
+  }
+
+  const dispatcherPayload = {
+    event_type: 'build_update_available',
+    platform: input.platform,
+    version: input.version,
+    build_number: input.buildNumber,
+    store_url: input.storeUrl,
+    mandatory: input.mandatory,
+    send_immediately: true,
+    include_email: false,
+    custom_payload: {
+      release_type: input.releaseType,
+      version: input.version,
+      build_number: input.buildNumber,
+      store_url: input.storeUrl,
+      platform: input.platform,
+      mandatory: input.mandatory,
+      estimated_recipients: estimatedRecipients,
+    },
+  };
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/notifications-dispatcher`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(dispatcherPayload),
+  });
+
+  const responseBody = await response.text().catch(() => '');
+  if (!response.ok) {
+    return {
+      sent: false,
+      reason: `dispatcher_http_${response.status}`,
+      details: responseBody,
+    };
+  }
+
+  let parsedBody: unknown = responseBody;
+  try {
+    parsedBody = responseBody ? JSON.parse(responseBody) : {};
+  } catch {
+    // leave as raw string
+  }
+
+  return { sent: true, details: parsedBody };
+}
 
 /**
  * POST /api/notifications/deployment
@@ -39,12 +127,39 @@ export async function POST(request: NextRequest) {
     const environment = body.environment || process.env.NEXT_PUBLIC_ENVIRONMENT || 'production';
     const buildId = body.buildId || 'unknown';
     const branch = body.branch || 'main';
+    const releaseType = String(body.release_type || body.releaseType || 'ota').toLowerCase();
+    const platform = String(body.platform || 'android').toLowerCase();
+    const mandatory = normalizeBoolean(body.mandatory);
+    const notifyUsers = normalizeBoolean(body.notify_users) || normalizeBoolean(body.notifyUsers);
+    const buildNumber = String(body.build_number || body.buildNumber || body.versionCode || '').trim() || undefined;
+    const packageId =
+      String(
+        body.package_id ||
+          body.packageId ||
+          process.env.EXPO_PUBLIC_ANDROID_PACKAGE ||
+          process.env.NEXT_PUBLIC_ANDROID_PACKAGE ||
+          'com.edudashpro.app',
+      ).trim();
+    const playStoreMarketUrl = `market://details?id=${packageId}`;
+    const playStoreHttpsUrl = `https://play.google.com/store/apps/details?id=${packageId}`;
+    const storeUrl = String(body.store_url || body.storeUrl || playStoreMarketUrl).trim() || playStoreMarketUrl;
+    const buildUpdatePushEnabled = process.env.BUILD_UPDATE_PUSH_ENABLED !== 'false';
+    const shouldBroadcastBuildUpdate =
+      buildUpdatePushEnabled &&
+      environment === 'production' &&
+      (notifyUsers || MAJOR_RELEASE_TYPES.has(releaseType));
 
     console.log('� Deployment notification received:', {
       version,
       environment,
       buildId: buildId.substring(0, 7),
       branch,
+      releaseType,
+      platform,
+      notifyUsers,
+      mandatory,
+      shouldBroadcastBuildUpdate,
+      buildUpdatePushEnabled,
       timestamp: new Date().toISOString(),
     });
 
@@ -56,23 +171,25 @@ export async function POST(request: NextRequest) {
     // - Clear caches
     // - Send team notifications
 
-    // Optional: Send Firebase push notification if configured
-    if (process.env.FIREBASE_PROJECT_ID && environment === 'production') {
+    let buildUpdateNotification: { sent: boolean; details?: unknown; reason?: string } | null = null;
+    if (shouldBroadcastBuildUpdate) {
       try {
-        // Dynamic import to avoid errors if firebase-admin is not configured
-    //     const { sendDeploymentNotification } = await import('@/lib/firebase-admin').catch(() => ({
-    //       sendDeploymentNotification: null
-    //     }));
-        
-    //     if (sendDeploymentNotification) {
-    //       await sendDeploymentNotification(version);
-    //       console.log('✅ Push notification sent to users');
-    //     }
+        buildUpdateNotification = await dispatchBuildUpdateNotification({
+          version,
+          buildNumber,
+          platform,
+          storeUrl,
+          mandatory,
+          releaseType,
+        });
       } catch (notificationError) {
-        console.warn('⚠️  Could not send push notifications:', 
-          notificationError instanceof Error ? notificationError.message : 'Unknown error'
-        );
-        // Don't fail the whole request if push fails
+        buildUpdateNotification = {
+          sent: false,
+          reason:
+            notificationError instanceof Error
+              ? notificationError.message
+              : 'build_update_dispatch_failed',
+        };
       }
     }
 
@@ -124,6 +241,13 @@ export async function POST(request: NextRequest) {
       message: 'Deployment notification received and processed',
       version,
       environment,
+      releaseType,
+      platform,
+      notifyUsers,
+      buildUpdatePushEnabled,
+      storeUrl,
+      playStoreHttpsUrl,
+      buildUpdateNotification,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

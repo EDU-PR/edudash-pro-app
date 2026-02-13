@@ -8,6 +8,7 @@
 
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform, Linking } from 'react-native';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { assertSupabase } from './supabase';
 import { signOutAndRedirect } from './authActions';
@@ -353,6 +354,54 @@ const openReceipt = async (receiptUrl: string): Promise<void> => {
   }
 };
 
+const resolveBuildStoreUrl = (data: NotificationPayload): string | null => {
+  const directStoreUrl =
+    getString((data as any)?.store_url) ||
+    getString((data as any)?.storeUrl) ||
+    getString((data as any)?.url);
+
+  if (directStoreUrl) return directStoreUrl;
+
+  const packageId =
+    getString((data as any)?.package_id) ||
+    getString((data as any)?.packageId) ||
+    Constants?.expoConfig?.android?.package;
+
+  if (!packageId) return null;
+
+  if (Platform.OS === 'android') {
+    return `market://details?id=${packageId}`;
+  }
+
+  return `https://play.google.com/store/apps/details?id=${packageId}`;
+};
+
+const openBuildUpdateStore = async (data: NotificationPayload): Promise<void> => {
+  const primaryUrl = resolveBuildStoreUrl(data);
+  if (!primaryUrl) {
+    return;
+  }
+
+  try {
+    await Linking.openURL(primaryUrl);
+  } catch {
+    const packageId =
+      getString((data as any)?.package_id) ||
+      getString((data as any)?.packageId) ||
+      Constants?.expoConfig?.android?.package;
+    if (!packageId) return;
+
+    if (Platform.OS === 'android') {
+      const webFallback = `https://play.google.com/store/apps/details?id=${packageId}`;
+      try {
+        await Linking.openURL(webFallback);
+      } catch {
+        // Best effort fallback only.
+      }
+    }
+  }
+};
+
 /**
  * Handle notification interaction (user tapped notification)
  */
@@ -434,6 +483,10 @@ function handleNotificationInteraction(data: NotificationPayload): void {
     case 'payment_status':
       // Navigate to fees & payments screen when payment is approved
       router.push('/screens/parent-payments' as any);
+      break;
+
+    case 'build_update_available':
+      void openBuildUpdateStore(data);
       break;
       
     default:

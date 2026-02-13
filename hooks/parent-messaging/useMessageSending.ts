@@ -45,8 +45,16 @@ export const useSendMessage = () => {
       return data;
     },
     onSuccess: async (data, { threadId }) => {
+      // Update thread ordering timestamp (matches teacher behavior)
+      const supabase = assertSupabase();
+      supabase.from('message_threads')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', threadId)
+        .then(() => {}, () => {});
+
       queryClient.invalidateQueries({ queryKey: ['messages', threadId] });
       queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
 
       const client = assertSupabase();
       const { data: participants } = await client
