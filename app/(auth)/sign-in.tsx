@@ -1,6 +1,9 @@
-// needs refactor to use AuthContext for sign-in state management
+// Sign-in screen — slimmed to comply with WARP.md (≤500 lines excl. StyleSheet)
+// Heavy logic extracted to:
+//   hooks/auth/useSignInHandlers.ts
+//   app/(auth)/sign-in.styles.ts
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView, KeyboardAvoidingView, RefreshControl, Keyboard } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -9,30 +12,27 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { storage } from '@/lib/storage';
 import { secureStore } from '@/lib/secure-store';
-import { signInWithSession } from '@/lib/sessionManager';
-import { resetSignOutState } from '@/lib/authActions';
-// routeAfterLogin is handled by AuthContext on SIGNED_IN events
 import { LinearGradient } from 'expo-linear-gradient';
 import { marketingTokens } from '@/components/marketing/tokens';
 import { GlassCard } from '@/components/marketing/GlassCard';
 import { GradientButton } from '@/components/marketing/GradientButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link } from 'expo-router';
-import { assertSupabase } from '@/lib/supabase';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
-
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
+import { createSignInStyles } from './sign-in.styles';
+import { useSignInHandlers } from '@/hooks/auth/useSignInHandlers';
+
 export default function SignIn() {
   const { t } = useTranslation();
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, user, loading: authLoading, profileLoading } = useAuth();
+  const { user, loading: authLoading, profileLoading } = useAuth();
   const searchParams = useLocalSearchParams();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,960 +43,162 @@ export default function SignIn() {
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricAttempted, setBiometricAttempted] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
   const { showAlert, alertProps } = useAlertModal();
-  const isMountedRef = useRef(true);
-  const signInWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearSignInWatchdog = useCallback(() => {
-    if (signInWatchdogRef.current) {
-      clearTimeout(signInWatchdogRef.current);
-      signInWatchdogRef.current = null;
-    }
-  }, []);
-
-  const stopLoadingState = useCallback(() => {
-    clearSignInWatchdog();
-    setLoading(false);
-  }, [clearSignInWatchdog]);
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-      clearSignInWatchdog();
-    };
-  }, [clearSignInWatchdog]);
-
-  // Safety net: clear local loading once auth resolves AND profile is loaded.
-  // Normally the component unmounts when routeAfterLogin navigates away,
-  // so loading stays true (spinner visible) until the route change.
-  // Add a minimum 3s delay to avoid clearing spinner during the brief
-  // profileLoading=false gap between session setup and SIGNED_IN handler.
   const mountTimeRef = useRef(Date.now());
+
+  const styles = useMemo(() => createSignInStyles(theme, insets), [theme, insets]);
+
+  // ── Handlers hook ─────────────────────────
+  const { handleSignIn, handleGoogleSignIn, stopLoadingState, isMountedRef } = useSignInHandlers({
+    state: { email, password, rememberMe, loading },
+    setLoading,
+    setGoogleLoading,
+    emailInputRef,
+    passwordInputRef,
+    showAlert,
+    t,
+  });
+
+  // ── Safety net: clear loading once auth resolves ──
   useEffect(() => {
     if (loading && user && !profileLoading) {
       const elapsed = Date.now() - mountTimeRef.current;
       if (elapsed > 3000) {
-        logger.debug('SignIn', 'Auth user + profile resolved, clearing loading state');
+        logger.debug('SignIn', 'Auth resolved, clearing loading');
         stopLoadingState();
       }
     }
   }, [loading, user, profileLoading, stopLoadingState]);
 
-  // Pull-to-refresh handler - clears any stale state
+  // ── Pull-to-refresh ───────────────────────
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    logger.debug('SignIn', 'Pull-to-refresh triggered');
-    
     try {
-      // Clear any stale navigation locks
       const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
       clearAllNavigationLocks();
-      
-      // Reset sign-out state
       const { resetSignOutState } = await import('@/lib/authActions');
       resetSignOutState();
-      
-      // Clear error/success messages
       setSuccessMessage(null);
-      
-      // Small delay to show the refresh indicator
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      logger.debug('SignIn', 'Refresh complete');
-    } catch (err) {
-      logger.warn('SignIn', 'Error during refresh:', err);
-    } finally {
-      setRefreshing(false);
-    }
+      await new Promise((r) => setTimeout(r, 500));
+    } catch { /* noop */ }
+    setRefreshing(false);
   }, []);
 
-logger.debug('SignIn', 'Component rendering, theme:', theme);
-
-  // Removed auth guard to allow users to explicitly access sign-in page
-  // even if they have a stale session. This fixes the issue where
-  // clicking "Sign In" from landing page redirects to onboarding instead.
-
-  // Web-only: Prevent back navigation to this page after sign-out
+  // ── Mount / unmount ───────────────────────
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    
-    const w = globalThis as any;
-    const onPopState = () => {
-      logger.debug('SignIn', 'Browser back detected, re-enforcing sign-in page');
-      router.replace('/(auth)/sign-in');
-    };
-    
-    w?.addEventListener?.('popstate', onPopState);
-    return () => w?.removeEventListener?.('popstate', onPopState);
-  }, []);
-
-  useEffect(() => {
-    logger.debug('SignIn', 'Mounted');
-    
-    // CRITICAL: Clear any stale navigation locks on mount to prevent sign-in freeze
-    // This handles cases where locks weren't cleared during sign-out
-    const clearStaleLocks = async () => {
+    (async () => {
       try {
         const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
         clearAllNavigationLocks();
-        logger.debug('SignIn', 'Cleared any stale navigation locks on mount');
-      } catch (err) {
-        logger.warn('SignIn', 'Failed to clear navigation locks (non-fatal):', err);
-      }
-      
-      // Also reset any stale sign-out state that could block new sign-ins
-      try {
-        const { resetSignOutState } = await import('@/lib/authActions');
+        const { resetSignOutState, clearAccountSwitchPending } = await import('@/lib/authActions');
         resetSignOutState();
-        logger.debug('SignIn', 'Reset any stale sign-out state');
-      } catch (err) {
-        logger.warn('SignIn', 'Failed to reset sign-out state (non-fatal):', err);
-      }
-    };
-    clearStaleLocks();
-    
-    return () => logger.debug('SignIn', 'Unmounted');
+        clearAccountSwitchPending();
+      } catch { /* noop */ }
+    })();
   }, []);
 
-  const onContainerLayout = (e: any) => {
-    const { x, y, width, height } = e.nativeEvent.layout;
-    logger.debug('SignIn', 'Container layout:', { x, y, width, height });
-  };
-  const onCardLayout = (e: any) => {
-    const { x, y, width, height } = e.nativeEvent.layout;
-    logger.debug('SignIn', 'Card layout:', { x, y, width, height });
-  };
+  // ── Web back-nav guard ────────────────────
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const w = globalThis as any;
+    const onPop = () => router.replace('/(auth)/sign-in');
+    w?.addEventListener?.('popstate', onPop);
+    return () => w?.removeEventListener?.('popstate', onPop);
+  }, []);
 
-  // Prefill email when provided via deep link flows (email change, invites, etc.)
+  // ── Prefill email from deep link ──────────
   useEffect(() => {
     const emailParam = typeof searchParams.email === 'string' ? searchParams.email : '';
-    if (emailParam && email !== emailParam) {
-      setEmail(emailParam);
-    }
-  }, [searchParams.email, email]);
+    if (emailParam && email !== emailParam) setEmail(emailParam);
+  }, [searchParams.email]);
 
-  // Check for verification success message
+  // ── Verification / success messages ───────
   useEffect(() => {
     if (searchParams.verified === 'true' || searchParams.emailVerified === 'true') {
       setSuccessMessage(t('auth.email_verified', { defaultValue: 'Email verified successfully! You can now sign in.' }));
-      // Auto-dismiss after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
     }
     if (searchParams.password_reset === 'success') {
       setSuccessMessage(t('auth.password_reset_success', { defaultValue: 'Password reset successfully! You can now sign in with your new password.' }));
-      // Auto-dismiss after 5 seconds
       setTimeout(() => setSuccessMessage(null), 5000);
     }
     if (searchParams.emailChanged === 'true' || searchParams.emailChanged === '1') {
-      setSuccessMessage(
-        t('auth.email_changed_success', {
-          defaultValue: 'Email updated successfully. Please sign in with your new email.',
-        })
-      );
+      setSuccessMessage(t('auth.email_changed_success', { defaultValue: 'Email updated successfully. Please sign in with your new email.' }));
       setTimeout(() => setSuccessMessage(null), 6000);
     }
     if (searchParams.emailVerificationFailed === 'true') {
-      showAlert({
-        title: t('auth.verification_failed_title', { defaultValue: 'Verification Failed' }),
-        message: t('auth.verification_failed_message', { defaultValue: 'Email verification failed. Please try signing in to request a new verification email.' }),
-        type: 'error',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
+      showAlert({ title: 'Verification Failed', message: 'Email verification failed. Please try signing in again.', type: 'error', buttons: [{ text: 'OK', style: 'default' }] });
     }
     if (searchParams.emailChangeFailed === 'true') {
-      showAlert({
-        title: t('common.error', { defaultValue: 'Error' }),
-        message: t('auth.email_change_failed', {
-          defaultValue: 'We could not confirm your email change. Please try again from Account Settings.',
-        }),
-        type: 'error',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
+      showAlert({ title: 'Error', message: 'We could not confirm your email change. Please try again from Account Settings.', type: 'error', buttons: [{ text: 'OK', style: 'default' }] });
     }
   }, [searchParams, t]);
 
-  // Biometric-first sign-in: attempt biometric auth automatically for returning users
+  // ── Biometric auto sign-in ────────────────
   useEffect(() => {
-    const attemptBiometricSignIn = async () => {
-      // Skip on web or if already attempted
-      if (Platform.OS === 'web' || biometricAttempted) {
-        return;
-      }
+    const attempt = async () => {
+      if (Platform.OS === 'web' || biometricAttempted) return;
+      setBiometricAttempted(true);
+      if (searchParams?.fresh === '1' || searchParams?.signedOut === '1' || searchParams?.skipBiometric === '1' || searchParams?.switch === '1' || searchParams?.addAccount === '1') return;
 
       try {
-        setBiometricAttempted(true);
+        const skipUntilRaw = await storage.getItem('auth_skip_biometrics_until');
+        if (skipUntilRaw && Date.now() < Number(skipUntilRaw)) return;
+      } catch { /* noop */ }
 
-        const skipParam =
-          searchParams?.fresh === '1' ||
-          searchParams?.signedOut === '1' ||
-          searchParams?.skipBiometric === '1' ||
-          searchParams?.switch === '1';
-        if (skipParam) {
-          logger.debug('SignIn', 'Skipping biometric auto prompt (fresh sign-out or account switch)');
-          return;
-        }
+      const isEnabled = await BiometricAuthService.isBiometricEnabled();
+      if (!isEnabled) return;
+      const caps = await BiometricAuthService.checkCapabilities();
+      if (!caps.isAvailable || !caps.isEnrolled) return;
 
-        // Skip biometrics briefly after sign-out to avoid auto re-auth
-        try {
-          const skipUntilRaw = await storage.getItem('auth_skip_biometrics_until');
-          const skipUntil = skipUntilRaw ? Number(skipUntilRaw) : 0;
-          if (skipUntil && Date.now() < skipUntil) {
-            logger.debug('SignIn', 'Skipping biometric auto prompt (cooldown)');
-            return;
-          }
-        } catch {
-          // non-fatal
-        }
-        
-        // Check if biometrics are enabled and available
-        const isEnabled = await BiometricAuthService.isBiometricEnabled();
-        if (!isEnabled) {
-          logger.debug('SignIn', 'Biometrics not enabled, skipping auto-prompt');
-          return;
-        }
-        
-        const capabilities = await BiometricAuthService.checkCapabilities();
-        if (!capabilities.isAvailable || !capabilities.isEnrolled) {
-          logger.debug('SignIn', 'Biometrics not available or enrolled, skipping');
-          return;
-        }
-        
-        logger.debug('SignIn', 'Attempting biometric sign-in...');
-        setBiometricLoading(true);
-        
-        // Use EnhancedBiometricAuth which properly handles session restoration
+      setBiometricLoading(true);
+      try {
         const result = await EnhancedBiometricAuth.authenticateWithBiometric();
-        
-        if (result.success && result.sessionRestored) {
-          logger.debug('SignIn', 'Biometric auth and session restore successful');
-          // AuthContext will detect the session and handle navigation
-        } else if (result.success && !result.sessionRestored) {
-          // Biometric succeeded but session couldn't be restored (expired tokens)
-          logger.debug('SignIn', 'Biometric succeeded but session not restored:', result.error);
+        if (result.success && !result.sessionRestored) {
           showAlert({
             title: t('auth.session_expired_title', { defaultValue: 'Session Expired' }),
-            message: result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password to re-enable biometric login.' }),
+            message: result.error || t('auth.biometric_restore_failed', { defaultValue: 'Please sign in with your email and password.' }),
             type: 'warning',
             buttons: [{ text: 'OK', style: 'default' }],
           });
-        } else {
-          // Biometric auth failed or was cancelled
-          logger.debug('SignIn', 'Biometric auth failed:', result.error);
-          // Don't show alert for user cancellation
-          if (result.error && !result.error.includes('cancelled') && !result.error.includes('No biometric session')) {
-            // Only show alert for unexpected errors, not for expected conditions
-            // (user cancelled, biometrics not set up yet, etc.)
-          }
         }
-      } catch (error) {
-        logger.error('SignIn', 'Biometric sign-in error:', error);
-        // Silently fail - user can still use email/password
-      } finally {
-        setBiometricLoading(false);
-      }
+      } catch { /* silent */ }
+      setBiometricLoading(false);
     };
-    
-    // Small delay to ensure UI is ready
-    const timer = setTimeout(() => {
-      attemptBiometricSignIn();
-    }, 500);
-    
+    const timer = setTimeout(attempt, 500);
     return () => clearTimeout(timer);
-  }, [searchParams]); // Re-run if sign-in is mounted with fresh params
-  
-  // Load saved credentials (web platform - no biometrics)
+  }, [searchParams]);
+
+  // ── Load saved credentials ────────────────
   useEffect(() => {
-    const loadSavedCredentials = async () => {
+    (async () => {
       try {
-        // Load saved email from remember me
-        const savedRememberMe = await storage.getItem('rememberMe');
+        const saved = await storage.getItem('rememberMe');
         const savedEmail = await storage.getItem('savedEmail');
-        if (savedRememberMe === 'true' && savedEmail) {
+        if (saved === 'true' && savedEmail) {
           setEmail(savedEmail);
           setRememberMe(true);
-          
-          // Try to load saved password from secure store (sanitize email for secure store key)
-          const sanitizedKey = `password_${savedEmail.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          const savedPassword = await secureStore.getItem(sanitizedKey);
-          if (savedPassword) {
-            setPassword(savedPassword);
-          }
+          const key = `password_${savedEmail.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const pw = await secureStore.getItem(key);
+          if (pw) setPassword(pw);
         }
-      } catch (error) {
-        logger.error('SignIn', 'Failed to load saved credentials:', error);
-      }
-    };
-    loadSavedCredentials();
+      } catch { /* noop */ }
+    })();
   }, []);
 
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      showAlert({
-        title: t('common.error', { defaultValue: 'Error' }),
-        message: t('auth.sign_in.enter_email_password', { defaultValue: 'Please enter email and password' }),
-        type: 'error',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
-      return;
-    }
+  // ── Render ────────────────────────────────
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
+      <LinearGradient colors={marketingTokens.gradients.background} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Stack.Screen options={{ headerShown: false }} />
 
-    Keyboard.dismiss();
-    emailInputRef.current?.blur();
-    passwordInputRef.current?.blur();
-
-    // Clear any stale sign-out flag before attempting sign-in
-    resetSignOutState();
-
-    setLoading(true);
-    // Give the UI a tick to render the spinner before heavy auth work begins.
-    await new Promise(resolve => setTimeout(resolve, 50));
-    // #region agent log
-    logger.debug('SignIn', '[DEBUG_AGENT] SignIn-START', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
-    // #endregion
-    
-    try {
-      // Use centralized session manager to avoid throwing on network/storage quirks
-      const res = await signInWithSession(email.trim(), password);
-      if (res.error) {
-        // Check if this is a timeout error first (auth might have succeeded)
-        const errorLower = res.error.toLowerCase();
-        if (errorLower.includes('timed out')) {
-          // If auth already succeeded in the background, skip error modal/log
-          try {
-            const supabase = assertSupabase();
-            for (let attempt = 0; attempt < 2; attempt += 1) {
-              const { data: sessionData } = await supabase.auth.getSession();
-              if (sessionData?.session?.user) {
-                stopLoadingState();
-                return;
-              }
-              await new Promise(resolve => setTimeout(resolve, 1200));
-            }
-          } catch {
-            // fall through to error modal
-          }
-        }
-
-        // #region agent log
-        logger.debug('SignIn', '[DEBUG_AGENT] SignIn-FAILED', JSON.stringify({email:email.trim(),error:res.error,timestamp:Date.now()}));
-        // #endregion
-        
-        // Check if this is an "email not confirmed" error
-        if (errorLower.includes('email not confirmed') || errorLower.includes('email_not_confirmed')) {
-          showAlert({
-            title: t('auth.sign_in.email_not_verified', { defaultValue: 'Email Not Verified' }),
-            message: t('auth.sign_in.email_not_verified_message', { 
-              defaultValue: 'Your email address has not been verified. Please check your inbox for the verification email, or request a new one.' 
-            }),
-            type: 'warning',
-            buttons: [
-              { text: t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
-              { 
-                text: t('auth.sign_in.resend_verification', { defaultValue: 'Resend Email' }), 
-                style: 'default',
-                onPress: async () => {
-                  try {
-                    const supabase = assertSupabase();
-                    const { error: resendError } = await supabase.auth.resend({
-                      type: 'signup',
-                      email: email.trim(),
-                      options: {
-                        emailRedirectTo: 'https://www.edudashpro.org.za/landing?flow=email-confirm',
-                      }
-                    });
-                    
-                    if (resendError) {
-                      showAlert({
-                        title: t('common.error', { defaultValue: 'Error' }),
-                        message: resendError.message || t('auth.sign_in.resend_failed', { defaultValue: 'Failed to resend verification email. Please try again.' }),
-                        type: 'error',
-                        buttons: [{ text: 'OK', style: 'default' }],
-                      });
-                    } else {
-                      showAlert({
-                        title: t('auth.sign_in.email_sent', { defaultValue: 'Email Sent' }),
-                        message: t('auth.sign_in.verification_email_sent', { 
-                          defaultValue: 'A new verification email has been sent to your inbox. Please check your email and click the verification link.' 
-                        }),
-                        type: 'success',
-                        buttons: [{ text: 'OK', style: 'default' }],
-                      });
-                    }
-                  } catch (e: any) {
-                    logger.error('SignIn', 'Resend verification error:', e);
-                    showAlert({
-                      title: t('common.error', { defaultValue: 'Error' }),
-                      message: e?.message || t('auth.sign_in.resend_failed', { defaultValue: 'Failed to resend verification email. Please try again.' }),
-                      type: 'error',
-                      buttons: [{ text: 'OK', style: 'default' }],
-                    });
-                  }
-                }
-              }
-            ],
-          });
-          stopLoadingState();
-          return;
-        }
-        
-        showAlert({
-          title: t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
-          message: res.error,
-          type: 'error',
-          buttons: [{ text: 'OK', style: 'default' }],
-        });
-        stopLoadingState();
-        return;
-      }
-
-      logger.debug('SignIn', 'Sign in successful:', email.trim());
-      // #region agent log
-      logger.debug('SignIn', '[DEBUG_AGENT] SignIn-SUCCESS', JSON.stringify({email:email.trim(),timestamp:Date.now()}));
-      // #endregion
-
-      // Save remember me preference and credentials (best-effort; do not block sign-in)
-      try {
-        if (rememberMe) {
-          await storage.setItem('rememberMe', 'true');
-          await storage.setItem('savedEmail', email.trim());
-          const sanitizedKey = `password_${email.trim().replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          await secureStore.setItem(sanitizedKey, password);
-        } else {
-          await storage.removeItem('rememberMe');
-          await storage.removeItem('savedEmail');
-          const sanitizedKey = `password_${email.trim().replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          try { await secureStore.deleteItem(sanitizedKey); } catch { /* Intentional: non-fatal */ }
-        }
-      } catch (credErr) {
-        logger.warn('SignIn', 'Remember me save failed:', credErr);
-      }
-
-      // Persist this account for quick biometric switching (multi-account).
-      // This is the missing link for "Add Account" flows on the native sign-in screen.
-      try {
-        const signedInUserId = res.session?.user_id;
-        const signedInEmail = res.session?.email || email.trim();
-        if (signedInUserId && signedInEmail) {
-          await EnhancedBiometricAuth.storeBiometricSession(
-            signedInUserId,
-            signedInEmail,
-            res.profile || undefined,
-            res.session?.refresh_token
-          );
-          logger.debug('SignIn', 'Stored biometric quick-switch account:', signedInEmail);
-        }
-      } catch (biometricStoreErr) {
-        logger.warn('SignIn', 'Failed to store quick-switch biometric account (non-fatal):', biometricStoreErr);
-      }
-
-      // NOTE: Do NOT call routeAfterLogin here!
-      // AuthContext's onAuthStateChange handler already calls routeAfterLogin
-      // on SIGNED_IN events. Calling it twice creates a race condition that
-      // can cause navigation to hang.
-      
-      // CRITICAL FIX: Clear any stale navigation locks BEFORE sign-in
-      // This must happen synchronously to prevent freeze from previous session locks
-      try {
-        // Import synchronously if possible, otherwise await
-        const { clearAllNavigationLocks } = await import('@/lib/routeAfterLogin');
-        clearAllNavigationLocks();
-        logger.debug('SignIn', 'Cleared all navigation locks before sign-in');
-      } catch (lockErr) {
-        logger.warn('SignIn', 'Failed to clear navigation locks (non-fatal):', lockErr);
-        // Even if import fails, try to clear locks via direct access if possible
-        try {
-          // Force clear any module-level locks
-          const routeModule = require('@/lib/routeAfterLogin');
-          if (routeModule.clearAllNavigationLocks) {
-            routeModule.clearAllNavigationLocks();
-          }
-        } catch {
-          // Ignore - non-critical
-        }
-      }
-      
-      // Let AuthContext handle navigation via onAuthStateChange SIGNED_IN event.
-      // Avoid local fallback routing to prevent wrong-org navigation.
-      // NOTE: Do NOT setLoading(false) here — keep spinner active until
-      // AuthContext finishes profile resolution and routes away (unmounts this component).
-      // Native-specific safety net: if routing never happens, stop spinner and recover.
-      clearSignInWatchdog();
-      signInWatchdogRef.current = setTimeout(async () => {
-        if (!isMountedRef.current) return;
-        try {
-          const { data: sessionData } = await assertSupabase().auth.getSession();
-          if (!sessionData?.session?.user) {
-            stopLoadingState();
-            return;
-          }
-          // Check if profile is already resolved — route directly instead of
-          // bouncing through profiles-gate which can get stuck.
-          try {
-            const { fetchEnhancedUserProfile } = await import('@/lib/rbac');
-            const { routeAfterLogin } = await import('@/lib/routeAfterLogin');
-            const quickProfile = await Promise.race([
-              fetchEnhancedUserProfile(sessionData.session.user.id, { user: sessionData.session.user as any }),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-            ]);
-            if (quickProfile) {
-              logger.info('SignIn', 'Watchdog resolved profile — routing directly');
-              stopLoadingState();
-              await routeAfterLogin(sessionData.session.user, quickProfile);
-              return;
-            }
-          } catch { /* fall through to profiles-gate */ }
-          logger.warn('SignIn', 'Post sign-in route watchdog fired - forcing profiles-gate fallback');
-          stopLoadingState();
-          router.replace('/profiles-gate');
-        } catch (watchdogError) {
-          logger.warn('SignIn', 'Route watchdog failed (non-fatal):', watchdogError);
-          stopLoadingState();
-        }
-      }, 10000);
-    } catch (_error: any) {
-      // Enhanced debug logging to trace error source
-      logger.error('SignIn', '=== SIGN IN ERROR DEBUG ===');
-      logger.error('SignIn', 'Error object:', _error);
-      logger.error('SignIn', 'Error name:', _error?.name);
-      logger.error('SignIn', 'Error message:', _error?.message);
-      logger.error('SignIn', 'Error stack:', _error?.stack);
-      logger.error('SignIn', 'Error cause:', _error?.cause);
-      logger.error('SignIn', 'Error keys:', Object.keys(_error || {}));
-      logger.error('SignIn', '========================');
-      
-      const msg = _error?.message || t('common.unexpected_error', { defaultValue: 'An unexpected error occurred' });
-      showAlert({
-        title: t('common.error', { defaultValue: 'Error' }),
-        message: msg,
-        type: 'error',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
-      stopLoadingState();
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      const supabase = await assertSupabase();
-      
-      // Get redirect URL
-      const redirectTo = Platform.select({
-        web: typeof window !== 'undefined' ? `${window.location.origin}/auth-callback` : 'http://localhost:8081/auth-callback',
-        default: makeRedirectUri({
-          scheme: 'edudashpro',
-          path: 'auth-callback'
-        })
-      });
-
-      logger.debug('SignIn', 'Google OAuth redirect URL:', redirectTo);
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      // On web, the page will redirect automatically
-      // On mobile, open the OAuth URL in browser
-      if (Platform.OS !== 'web' && data?.url) {
-        logger.debug('SignIn', 'Opening OAuth URL in browser');
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectTo
-        );
-        
-        logger.debug('SignIn', 'Browser result:', result.type);
-        
-        if (result.type === 'success') {
-          // The callback will be handled by the auth-callback page
-          router.push('/auth-callback' as any);
-        } else if (result.type === 'cancel') {
-          setGoogleLoading(false);
-        }
-      }
-    } catch (error: any) {
-      logger.error('SignIn', 'Google Sign-In Error:', error);
-      showAlert({
-        title: t('auth.sign_in.failed', { defaultValue: 'Sign In Failed' }),
-        message: error.message || t('auth.oauth.config_error', { defaultValue: 'Failed to sign in with Google. Please try again.' }),
-        type: 'error',
-        buttons: [{ text: 'OK', style: 'default' }],
-      });
-      setGoogleLoading(false);
-    }
-  };
-
-
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-      ...(Platform.OS === 'web' && {
-        // RN dimension values support percentages but not viewport units like `vh`
-        minHeight: '100%',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }),
-    },
-    keyboardView: {
-      flex: 1,
-      ...(Platform.OS === 'web' && {
-        width: '100%',
-        maxWidth: '100%',
-        alignSelf: 'center',
-      }),
-    },
-    logoContainer: {
-      alignItems: 'center',
-      marginBottom: 24,
-      paddingTop: 20,
-      ...(Platform.OS === 'web' && {
-        paddingTop: 0,
-      }),
-    },
-    logoCircle: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: theme.surfaceVariant,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-      borderWidth: 2,
-      borderColor: theme.border,
-    },
-    logoText: {
-      fontSize: 24,
-      fontWeight: '800',
-      color: theme.text,
-      marginBottom: 4,
-    },
-    logoSubtext: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      fontWeight: '500',
-    },
-    scrollView: {
-      flex: 1,
-      ...(Platform.OS === 'web' && {
-        width: '100%',
-      }),
-    },
-    scrollContent: {
-      flexGrow: 1,
-      paddingBottom: Platform.OS === 'ios' ? 20 : 40,
-      ...(Platform.OS === 'web' && {
-        minHeight: '100%',
-        justifyContent: 'center',
-        paddingVertical: 40,
-      }),
-    },
-    content: {
-      flex: 1,
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 20,
-      justifyContent: 'center',
-      width: '100%',
-      ...(Platform.OS === 'web' && {
-        flex: 0,
-        paddingVertical: 0,
-        paddingHorizontal: 40,
-      }),
-    },
-    card: {
-      width: '100%',
-      alignSelf: 'center',
-      ...(Platform.OS === 'web' && { 
-        marginVertical: 20,
-        maxWidth: '100%',
-      }),
-    },
-    header: {
-      marginBottom: 20,
-      alignItems: 'center',
-      gap: 4,
-    },
-    title: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: marketingTokens.colors.fg.primary,
-      textAlign: 'center',
-    },
-    subtitle: {
-      fontSize: 13,
-      color: marketingTokens.colors.fg.secondary,
-      textAlign: 'center',
-    },
-    biometricLoadingContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 16,
-      padding: 12,
-      backgroundColor: theme.surfaceVariant,
-      borderRadius: 8,
-      gap: 12,
-    },
-    biometricLoadingText: {
-      fontSize: 14,
-      color: theme.textSecondary,
-    },
-    form: {
-      marginTop: 16,
-      gap: 12,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: theme.inputBorder,
-      borderRadius: 10,
-      padding: 14,
-      color: theme.inputText,
-      backgroundColor: theme.inputBackground,
-    },
-    button: {
-      flex: 1,
-      backgroundColor: theme.primary,
-      paddingVertical: 14,
-      borderRadius: 10,
-      alignItems: 'center',
-    },
-    buttonText: {
-      color: theme.onPrimary,
-      fontSize: 16,
-      fontWeight: '700',
-    },
-    buttonDisabled: {
-      backgroundColor: theme.textSecondary,
-    },
-    passwordContainer: {
-      position: 'relative',
-    },
-    passwordInput: {
-      paddingRight: 48,
-    },
-    eyeButton: {
-      position: 'absolute',
-      right: 12,
-      top: 14,
-      padding: 4,
-    },
-    rememberForgotContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: 8,
-      marginBottom: 4,
-    },
-    rememberMeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    checkbox: {
-      width: 20,
-      height: 20,
-      borderRadius: 4,
-      borderWidth: 2,
-      borderColor: theme.border,
-      marginRight: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.inputBackground,
-    },
-    checkboxChecked: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    rememberMeText: {
-      fontSize: 14,
-      color: theme.text,
-    },
-    forgotPasswordText: {
-      fontSize: 14,
-      color: marketingTokens.colors.accent.cyan400,
-      fontWeight: '600',
-    },
-    magicLinkButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      backgroundColor: 'rgba(14, 165, 233, 0.08)',
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: 'rgba(14, 165, 233, 0.2)',
-      marginTop: 4,
-    },
-    magicLinkText: {
-      fontSize: 14,
-      color: marketingTokens.colors.accent.cyan400,
-      fontWeight: '500',
-    },
-    dividerContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      width: '100%',
-      marginVertical: 8,
-    },
-    dividerLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: theme.border,
-    },
-    dividerText: {
-      fontSize: 12,
-      color: theme.textSecondary,
-      marginHorizontal: 12,
-    },
-    signupPrompt: {
-      marginTop: 20,
-      paddingTop: 16,
-      borderTopWidth: 1,
-      borderTopColor: theme.border,
-    },
-    divider: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    signupButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      marginTop: 12,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      backgroundColor: 'rgba(99, 102, 241, 0.1)',
-      borderRadius: 12,
-      borderWidth: 2,
-      borderColor: 'rgba(99, 102, 241, 0.3)',
-      minHeight: 56,
-    },
-    signupButtonText: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: marketingTokens.colors.fg.primary,
-    },
-    schoolSignupLink: {
-      alignItems: 'center',
-      padding: 14,
-      marginTop: 4,
-    },
-    schoolSignupText: {
-      fontSize: 14,
-      color: marketingTokens.colors.fg.secondary,
-      textAlign: 'center',
-      lineHeight: 20,
-    },
-    schoolSignupLinkText: {
-      color: marketingTokens.colors.accent.cyan400,
-      fontWeight: '700',
-      textDecorationLine: 'underline',
-    },
-    googleButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      backgroundColor: '#4285F4', // Google Blue
-      borderRadius: 10,
-      minHeight: 48,
-      marginTop: 8,
-    },
-    googleButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    homeButtonContainer: {
-      position: 'absolute',
-      top: Platform.OS === 'web' ? 16 : Math.max(insets.top + 8, 16),
-      right: 16,
-      zIndex: 10,
-    },
-    homeButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      backgroundColor: 'rgba(14, 165, 233, 0.1)',
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: 'rgba(14, 165, 233, 0.3)',
-      minHeight: 44,
-      minWidth: 44,
-    },
-    homeButtonText: {
-      color: marketingTokens.colors.accent.cyan400,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    signInLoadingBanner: {
-      position: 'absolute',
-      left: 16,
-      right: 16,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      borderRadius: 12,
-      backgroundColor: theme.surfaceVariant,
-      borderWidth: 1,
-      borderColor: theme.border,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      shadowColor: '#000',
-      shadowOpacity: 0.2,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 6,
-    },
-    signInLoadingText: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      fontWeight: '600',
-      flex: 1,
-    },
-  });
-
-return (
-<SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']} onLayout={onContainerLayout}>
-      {/* Background gradient */}
-      <LinearGradient
-        colors={marketingTokens.gradients.background}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-
-      {/* Native app doesn't show 'Go to Home' button since there's no landing page */}
       {Platform.OS === 'web' && (
         <View style={styles.homeButtonContainer}>
           <Link href="/" asChild>
-            <TouchableOpacity 
-              style={styles.homeButton}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.homeButton} activeOpacity={0.7}>
               <Ionicons name="home-outline" size={20} color={marketingTokens.colors.accent.cyan400} />
               <Text style={styles.homeButtonText}>{t('auth.go_to_home', { defaultValue: 'Go to Home' })}</Text>
             </TouchableOpacity>
@@ -1004,11 +206,7 @@ return (
         </View>
       )}
 
-      <KeyboardAvoidingView
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 12) : 0}
-      >
+      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 12) : 0}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -1016,18 +214,9 @@ return (
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.primary}
-              colors={[theme.primary]}
-              progressBackgroundColor={theme.surface}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} colors={[theme.primary]} progressBackgroundColor={theme.surface} />}
         >
           <View style={styles.content}>
-            {/* Logo Section */}
             <View style={styles.logoContainer}>
               <View style={styles.logoCircle}>
                 <Ionicons name="school" size={32} color={theme.primary} />
@@ -1040,172 +229,73 @@ return (
               <View style={styles.header}>
                 <Text style={styles.title}>{t('auth.sign_in.welcome_back', { defaultValue: 'Welcome Back' })}</Text>
                 <Text style={styles.subtitle}>{t('auth.sign_in.sign_in_to_account', { defaultValue: 'Sign in to your account' })}</Text>
-                
                 {biometricLoading && (
                   <View style={styles.biometricLoadingContainer}>
                     <EduDashSpinner size="small" color={theme.primary} />
-                    <Text style={styles.biometricLoadingText}>
-                      {t('auth.sign_in.authenticating_biometric', { defaultValue: 'Authenticating with biometrics...' })}
-                    </Text>
+                    <Text style={styles.biometricLoadingText}>{t('auth.sign_in.authenticating_biometric', { defaultValue: 'Authenticating with biometrics...' })}</Text>
                   </View>
                 )}
               </View>
 
               {successMessage && (
-                <View style={{
-                  backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(16, 185, 129, 0.4)',
-                  borderRadius: 10,
-                  padding: 12,
-                  marginBottom: 16,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                }}>
-                  <Text style={{ fontSize: 16 }}>?</Text>
-                  <Text style={{ 
-                    color: '#6ee7b7', 
-                    fontSize: 14, 
-                    flex: 1,
-                    fontWeight: '500'
-                  }}>
-                    {successMessage}
-                  </Text>
+                <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.4)', borderRadius: 10, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 16 }}>✓</Text>
+                  <Text style={{ color: '#6ee7b7', fontSize: 14, flex: 1, fontWeight: '500' }}>{successMessage}</Text>
                 </View>
               )}
 
               <View style={styles.form}>
-            <TextInput
-              ref={emailInputRef}
-              style={styles.input}
-              placeholder={t('auth.email', { defaultValue: 'Email' })}
-              placeholderTextColor={theme.inputPlaceholder}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-              blurOnSubmit={false}
-            />
+                <TextInput ref={emailInputRef} style={styles.input} placeholder={t('auth.email', { defaultValue: 'Email' })} placeholderTextColor={theme.inputPlaceholder} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} returnKeyType="next" onSubmitEditing={() => passwordInputRef.current?.focus()} blurOnSubmit={false} />
 
-            <View style={styles.passwordContainer}>
-              <TextInput
-                ref={passwordInputRef}
-                style={[styles.input, styles.passwordInput]}
-                placeholder={t('auth.password', { defaultValue: 'Password' })}
-                placeholderTextColor={theme.inputPlaceholder}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="go"
-                onSubmitEditing={handleSignIn}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={22}
-                  color={theme.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.rememberForgotContainer}>
-              <TouchableOpacity
-                style={styles.rememberMeContainer}
-                onPress={() => setRememberMe(!rememberMe)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe && (
-                    <Ionicons name="checkmark" size={14} color={theme.onPrimary} />
-                  )}
+                <View style={styles.passwordContainer}>
+                  <TextInput ref={passwordInputRef} style={[styles.input, styles.passwordInput]} placeholder={t('auth.password', { defaultValue: 'Password' })} placeholderTextColor={theme.inputPlaceholder} value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} returnKeyType="go" onSubmitEditing={handleSignIn} />
+                  <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword(!showPassword)} activeOpacity={0.7}>
+                    <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={22} color={theme.textSecondary} />
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.rememberMeText}>{t('auth.remember_me', { defaultValue: 'Remember me' })}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                onPress={() => router.push('/(auth)/forgot-password')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.forgotPasswordText}>{t('auth.forgot_password.title', { defaultValue: 'Forgot Password?' })}</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Magic Link Option - Temporarily disabled
-            <TouchableOpacity
-              style={styles.magicLinkButton}
-              onPress={() => router.push('/(auth)/magic-link')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="mail-outline" size={18} color={marketingTokens.colors.accent.cyan400} />
-              <Text style={styles.magicLinkText}>
-                {t('auth.sign_in_with_email_link', { defaultValue: 'Sign in with Email Link (No Password)' })}
-              </Text>
-            </TouchableOpacity>
-            */}
+                <View style={styles.rememberForgotContainer}>
+                  <TouchableOpacity style={styles.rememberMeContainer} onPress={() => setRememberMe(!rememberMe)} activeOpacity={0.7}>
+                    <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                      {rememberMe && <Ionicons name="checkmark" size={14} color={theme.onPrimary} />}
+                    </View>
+                    <Text style={styles.rememberMeText}>{t('auth.remember_me', { defaultValue: 'Remember me' })}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} activeOpacity={0.7}>
+                    <Text style={styles.forgotPasswordText}>{t('auth.forgot_password.title', { defaultValue: 'Forgot Password?' })}</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <GradientButton
-              label={loading ? t('auth.sign_in.signing_in', { defaultValue: 'Signing In...' }) : t('auth.sign_in.cta', { defaultValue: 'Sign In' })}
-              onPress={handleSignIn}
-              variant="indigo"
-              size="lg"
-              loading={loading}
-              disabled={loading}
-            />
+                <GradientButton label={loading ? t('auth.sign_in.signing_in', { defaultValue: 'Signing In...' }) : t('auth.sign_in.cta', { defaultValue: 'Sign In' })} onPress={handleSignIn} variant="indigo" size="lg" loading={loading} disabled={loading} />
 
-            {/* Google Sign-In */}
-            <View style={styles.dividerContainer}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('auth.or', { defaultValue: 'or' })}</Text>
-              <View style={styles.dividerLine} />
-            </View>
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>{t('auth.or', { defaultValue: 'or' })}</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading || loading}
-              activeOpacity={0.7}
-            >
-              {googleLoading ? (
-                <EduDashSpinner color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="logo-google" size={20} color="#fff" />
-                  <Text style={styles.googleButtonText}>
-                    {t('auth.continue_with_google', { defaultValue: 'Continue with Google' })}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={googleLoading || loading} activeOpacity={0.7}>
+                  {googleLoading ? <EduDashSpinner color="#fff" size="small" /> : (
+                    <>
+                      <Ionicons name="logo-google" size={20} color="#fff" />
+                      <Text style={styles.googleButtonText}>{t('auth.continue_with_google', { defaultValue: 'Continue with Google' })}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-          {/* Sign-up prompt */}
-          <View style={styles.signupPrompt}>
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('auth.dont_have_account', { defaultValue: "Don't have an account?" })}</Text>
-              <View style={styles.dividerLine} />
-            </View>
-            
-            <TouchableOpacity
-              style={styles.signupButton}
-              onPress={() => router.push('/(auth)/role-selection' as any)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="person-add-outline" size={20} color={theme.primary} />
-              <Text style={styles.signupButtonText}>{t('auth.sign_up', { defaultValue: 'Sign Up' })}</Text>
-            </TouchableOpacity>
-          </View>
-          </GlassCard>
+              <View style={styles.signupPrompt}>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>{t('auth.dont_have_account', { defaultValue: "Don't have an account?" })}</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/(auth)/role-selection' as any)} activeOpacity={0.8}>
+                  <Ionicons name="person-add-outline" size={20} color={theme.primary} />
+                  <Text style={styles.signupButtonText}>{t('auth.sign_up', { defaultValue: 'Sign Up' })}</Text>
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1213,13 +303,10 @@ return (
       {loading && (
         <View style={[styles.signInLoadingBanner, { bottom: Math.max(insets.bottom, 16) }]}>
           <EduDashSpinner size="small" color={theme.primary} />
-          <Text style={styles.signInLoadingText}>
-            {t('auth.sign_in.loading_banner', { defaultValue: 'Signing you in... Please wait' })}
-          </Text>
+          <Text style={styles.signInLoadingText}>{t('auth.sign_in.loading_banner', { defaultValue: 'Signing you in... Please wait' })}</Text>
         </View>
       )}
-      
-      {/* Custom Alert Modal */}
+
       <AlertModal {...alertProps} />
     </SafeAreaView>
   );

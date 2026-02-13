@@ -39,11 +39,11 @@ export function ActivityFeed({ userId, activeChildId, limit = 10 }: ActivityFeed
     const activities: Activity[] = [];
 
     try {
-      // Get children for the user
+      // Get children for the user (check parent_id AND guardian_id)
       let childQuery = supabase
         .from('students')
         .select('id, first_name, last_name, class_id, preschool_id')
-        .eq('parent_id', userId);
+        .or(`parent_id.eq.${userId},guardian_id.eq.${userId}`);
       
       if (activeChildId) {
         childQuery = childQuery.eq('id', activeChildId);

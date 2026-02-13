@@ -54,7 +54,7 @@ export const UniformSizesSection: React.FC<UniformSizesSectionProps> = ({ childr
           <View style={styles.headerRow}>
             <View style={styles.headerText}>
               <Text style={styles.title}>{t('dashboard.parent.uniform.title', { defaultValue: 'Uniform Sizes' })}</Text>
-              <Text style={styles.subtitle}>{t('dashboard.parent.uniform.subtitle', { defaultValue: 'Select sizes, quantities, and add a returning number if needed.' })}</Text>
+              <Text style={styles.subtitle}>{t('dashboard.parent.uniform.subtitle', { defaultValue: 'Select sizes, quantities, and choose whether your child has a previous back number.' })}</Text>
             </View>
             <TouchableOpacity style={styles.paymentsButton} onPress={() => router.push('/screens/parent-uniform-payments')}>
               <Ionicons name="receipt-outline" size={14} color={theme.primary} />

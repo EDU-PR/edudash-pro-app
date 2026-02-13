@@ -302,22 +302,10 @@ export async function signOut(options: { preserveOtherSessions?: boolean } = {})
       }
     }
 
-    // Supabase sign-out: local first, then global
-    try {
-      console.log('[SessionManager] Signing out from Supabase (local scope first)...');
-      await withTimeout(
-        assertSupabase().auth.signOut({ scope: 'local' } as any),
-        1000,
-        { error: null }
-      );
-      console.log('[SessionManager] Local sign-out completed');
-    } catch (localError) {
-      console.warn('[SessionManager] Local sign-out error (continuing):', localError);
-    }
-
+    // Supabase sign-out: global first (needs valid token), then local
     if (!preserveOtherSessions) {
       try {
-        console.log('[SessionManager] Signing out from Supabase (global scope)...');
+        console.log('[SessionManager] Signing out from Supabase (global scope first — needs valid token)...');
         await withTimeout(
           assertSupabase().auth.signOut({ scope: 'global' } as any),
           2000,
@@ -331,8 +319,27 @@ export async function signOut(options: { preserveOtherSessions?: boolean } = {})
       console.log('[SessionManager] Preserving other account sessions (skipping global sign-out)');
     }
 
+    try {
+      console.log('[SessionManager] Signing out from Supabase (local scope)...');
+      await withTimeout(
+        assertSupabase().auth.signOut({ scope: 'local' } as any),
+        1000,
+        { error: null }
+      );
+      console.log('[SessionManager] Local sign-out completed');
+    } catch (localError) {
+      console.warn('[SessionManager] Local sign-out error (continuing):', localError);
+    }
+
     console.log('[SessionManager] Clearing stored session data...');
     await clearStoredData();
+
+    // Also clear auth storage keys (including Supabase's own storageKey)
+    try {
+      const { clearAuthStorage } = await import('@/lib/auth/authStorageKeys');
+      const { storage } = await import('@/lib/storage');
+      await clearAuthStorage(storage);
+    } catch { /* non-fatal */ }
 
     track('edudash.auth.sign_out', {
       session_duration_minutes: sessionDuration,

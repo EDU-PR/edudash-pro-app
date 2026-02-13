@@ -155,6 +155,64 @@ export const createSectionStyles = (theme: any) =>
       marginBottom: 10,
       lineHeight: 18,
     },
+    uniformBreakdownRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 10,
+    },
+    uniformStatusPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    uniformPaidPill: {
+      backgroundColor: theme.success + '1c',
+      borderColor: theme.success + '44',
+    },
+    uniformPendingPill: {
+      backgroundColor: theme.warning + '1c',
+      borderColor: theme.warning + '44',
+    },
+    uniformUnpaidPill: {
+      backgroundColor: theme.error + '1c',
+      borderColor: theme.error + '44',
+    },
+    uniformStatusPillText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    uniformActionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 12,
+    },
+    uniformActionButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary + '55',
+      backgroundColor: theme.primary + '12',
+      opacity: 1,
+    },
+    uniformActionPrimary: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    uniformActionText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.primary,
+    },
+    uniformActionPrimaryText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#fff',
+    },
     loadingText: { textAlign: 'center', color: theme.textSecondary, marginTop: 8 },
     emptyText: { textAlign: 'center', color: theme.textSecondary, marginVertical: 8 },
   });

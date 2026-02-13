@@ -171,10 +171,11 @@ export default function RoboticsLessonsPage() {
     }
 
     // Load registered children
+    // Check both parent_id and guardian_id
     const { data: childrenData } = await supabase
       .from('students')
       .select('id, first_name, last_name, date_of_birth, grade_level')
-      .eq('parent_id', user.id)
+      .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`)
       .order('first_name');
 
     if (childrenData && childrenData.length > 0) {

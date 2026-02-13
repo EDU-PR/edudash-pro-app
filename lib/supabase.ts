@@ -58,8 +58,9 @@ if (url && anon) {
   client = createClient(url, anon, {
     auth: {
       storage: storageAdapter as any,
-      // Disable Supabase's internal autoRefresh on web to avoid lock contention with our session manager
-      autoRefreshToken: !isWeb,
+      // Enable auto-refresh on all platforms — web sessions were silently
+      // expiring after 1 hour when this was disabled.
+      autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: isWeb, // Allow URL detection on web for OAuth callbacks
       storageKey: 'edudash-auth-session',
@@ -92,27 +93,10 @@ if (url && anon) {
     logger.info('Supabase client initialized successfully');
   }
 
-  // Add global error handler for auth errors
-  client.auth.onAuthStateChange((event) => {
-    if (event === 'TOKEN_REFRESHED') {
-      logger.info('Token refreshed successfully');
-    } else if (event === 'SIGNED_OUT') {
-      logger.info('User signed out');
-      // Clear any stale session data across legacy and current keys
-      const keysToClear = [
-        'edudash-auth-session',
-        'edudash_session',
-        'edudash_profile',
-        'edudash_user_session',
-        'edudash_user_profile',
-        '@edudash_active_child_id',
-        'edudash_active_child_id',
-      ];
-      keysToClear.forEach((key) => {
-        storage.removeItem(key).catch(() => { /* Intentional: error handled */ });
-      });
-    }
-  });
+  // NOTE: Module-level onAuthStateChange listener was removed.
+  // Storage cleanup on SIGNED_OUT is handled by AuthContext's SIGNED_OUT handler
+  // and the unified performSignOut function. Having a separate listener here
+  // caused race conditions where storage was cleared before AuthContext saw the event.
 }
 
 // Helper function to assert supabase client exists

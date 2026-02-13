@@ -18,11 +18,16 @@ import {
   getAgeGroupColor,
   getSchoolTypeDisplay,
 } from '@/hooks/student-management';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 
 export default function StudentManagementScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const lifecycleEnabled = useMemo(
+    () => getFeatureFlagsSync().learner_activity_lifecycle_v1 !== false,
+    []
+  );
   const { showAlert, alertProps } = useAlertModal();
   const showAlertLegacy = React.useCallback((
     title: string,
@@ -179,6 +184,15 @@ export default function StudentManagementScreen() {
           <Ionicons name="print-outline" size={16} color={theme.text} style={styles.autoAssignIcon} />
           <Text style={styles.printCardsButtonText}>Print ID Cards</Text>
         </TouchableOpacity>
+        {lifecycleEnabled ? (
+          <TouchableOpacity
+            style={styles.lifecycleButton}
+            onPress={() => router.push('/screens/principal-learner-activity-control')}
+          >
+            <Ionicons name="pulse-outline" size={16} color={theme.primary} style={styles.autoAssignIcon} />
+            <Text style={styles.lifecycleButtonText}>Lifecycle</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Age Group Overview for Preschools */}
@@ -501,6 +515,23 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.text,
     fontSize: 12,
     fontWeight: '600',
+  },
+  lifecycleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.primary + '55',
+    backgroundColor: theme.primary + '12',
+    minHeight: 40,
+  },
+  lifecycleButtonText: {
+    color: theme.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   ageGroupOverview: {
     paddingHorizontal: 20,

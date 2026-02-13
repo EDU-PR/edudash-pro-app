@@ -38,7 +38,7 @@ export function useUniformSizes(children: ChildRow[]) {
         childName: `${child.firstName} ${child.lastName}`.trim(),
         ageYears: getAgeYears(child.dateOfBirth),
         tshirtSize: '', tshirtQuantity: '1', shortsQuantity: '1',
-        isReturning: false, tshirtNumber: '', sampleSupplied: false,
+        isReturning: false, pastNumberChoice: '', tshirtNumber: '', sampleSupplied: false,
         status: 'idle', message: null, updatedAt: null, isEditing: true,
       };
     });
@@ -71,6 +71,7 @@ export function useUniformSizes(children: ChildRow[]) {
                 ageYears: row.age_years ? String(row.age_years) : next[row.student_id]?.ageYears || '',
                 tshirtSize: row.tshirt_size || '', tshirtQuantity: row.tshirt_quantity ? String(row.tshirt_quantity) : '1',
                 shortsQuantity: row.shorts_quantity ? String(row.shorts_quantity) : '1',
+                pastNumberChoice: isRet ? 'yes' : 'no',
                 isReturning: isRet, tshirtNumber: isRet ? row.tshirt_number || '' : '',
                 sampleSupplied: row.sample_supplied ?? false, status: 'saved',
                 message: t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' }),
@@ -140,12 +141,14 @@ export function useUniformSizes(children: ChildRow[]) {
     const e = entries[id]; if (!e) return;
     const name = e.childName.trim(), age = parseInt(e.ageYears, 10), num = e.tshirtNumber.trim();
     const tq = parseInt(e.tshirtQuantity, 10), sq = parseInt(e.shortsQuantity, 10);
+    const hasPastNumber = e.pastNumberChoice === 'yes';
     const val = (msg: string) => updateEntry(id, { status: 'error' as any, message: msg });
     if (!name) return val(t('dashboard.parent.uniform.validation.child_name', { defaultValue: 'Please enter the child name.' }));
     if (!e.tshirtSize) return val(t('dashboard.parent.uniform.validation.tshirt_size', { defaultValue: 'Select a T-shirt size.' }));
     if (!Number.isFinite(age) || age < 1 || age > 18) return val(t('dashboard.parent.uniform.validation.age', { defaultValue: 'Enter a valid age (1-18).' }));
-    if (e.isReturning && !num) return val(t('dashboard.parent.uniform.validation.tshirt_number', { defaultValue: 'Enter the returning T-shirt number.' }));
-    if (e.isReturning && num && !/^\d{1,6}$/.test(num)) return val(t('dashboard.parent.uniform.validation.tshirt_number_format', { defaultValue: 'T-shirt number must be 1-6 digits.' }));
+    if (!['yes', 'no'].includes(e.pastNumberChoice)) return val(t('dashboard.parent.uniform.validation.past_number_choice', { defaultValue: 'Select whether your child has a previous back number.' }));
+    if (hasPastNumber && !num) return val(t('dashboard.parent.uniform.validation.tshirt_number', { defaultValue: 'Enter the returning T-shirt number.' }));
+    if (hasPastNumber && num && !/^\d{1,6}$/.test(num)) return val(t('dashboard.parent.uniform.validation.tshirt_number_format', { defaultValue: 'T-shirt number must be 1-6 digits.' }));
     if (!Number.isFinite(tq) || tq < 1 || tq > 20) return val(t('dashboard.parent.uniform.validation.tshirt_qty', { defaultValue: 'Enter a valid number of T-shirts (1-20).' }));
     if (!Number.isFinite(sq) || sq < 0 || sq > 20) return val(t('dashboard.parent.uniform.validation.shorts_qty', { defaultValue: 'Enter a valid number of shorts (0-20).' }));
     setEntries((p) => ({ ...p, [id]: { ...p[id], status: 'saving', message: null } }));
@@ -153,8 +156,8 @@ export function useUniformSizes(children: ChildRow[]) {
       const supabase = assertSupabase();
       const { data, error } = await supabase.from('uniform_requests').upsert({
         student_id: id, child_name: name, age_years: age, tshirt_size: e.tshirtSize,
-        tshirt_quantity: tq, shorts_quantity: sq, is_returning: e.isReturning,
-        tshirt_number: e.isReturning ? num || null : null, sample_supplied: e.sampleSupplied,
+        tshirt_quantity: tq, shorts_quantity: sq, is_returning: hasPastNumber,
+        tshirt_number: hasPastNumber ? num || null : null, sample_supplied: e.sampleSupplied,
       }, { onConflict: 'student_id' }).select('updated_at').single();
       if (error) throw error;
       setEntries((p) => ({ ...p, [id]: { ...p[id], status: 'saved', message: t('dashboard.parent.uniform.status.saved', { defaultValue: 'Saved' }), updatedAt: data?.updated_at || new Date().toISOString(), isEditing: false } }));

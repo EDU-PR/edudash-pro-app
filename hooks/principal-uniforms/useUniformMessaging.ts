@@ -76,30 +76,42 @@ async function sendPush(params: {
 
 export function useUniformMessaging(opts: UseUniformMessagingOptions) {
   const { userId, schoolId, profile, showAlert } = opts;
-  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid'>(null);
+  const [bulkMessaging, setBulkMessaging] = useState<null | 'missing' | 'unpaid' | 'no_order'>(null);
 
   const senderName = (profile as any)?.full_name
     || ((profile as any)?.first_name || '') + ' ' + ((profile as any)?.last_name || '').trim()
     || 'School';
 
   const sendBulk = useCallback(async (
-    targets: DisplayRow[], type: 'missing' | 'unpaid', buildContent: (row: DisplayRow) => { content: string; subject: string },
+    targets: DisplayRow[], type: 'missing' | 'unpaid' | 'no_order', buildContent: (row: DisplayRow) => { content: string; subject: string },
   ) => {
     if (!userId || !schoolId || bulkMessaging) return;
     if (!targets.length) {
       showAlert({
-        title: type === 'missing' ? 'No Parents Found' : 'No Unpaid Orders',
-        message: type === 'missing'
-          ? 'No missing uniform submissions have a linked parent contact.'
-          : 'There are no unpaid uniform orders with a linked parent contact.',
-        type: type === 'missing' ? 'warning' : 'info',
+        title:
+          type === 'missing' || type === 'no_order'
+            ? 'No Parents Found'
+            : 'No Unpaid Orders',
+        message:
+          type === 'missing' || type === 'no_order'
+            ? 'No parents with missing uniform orders have a linked contact.'
+            : 'There are no unpaid uniform orders with a linked parent contact.',
+        type: type === 'missing' || type === 'no_order' ? 'warning' : 'info',
         buttons: [{ text: 'OK' }],
       });
       return;
     }
-    const label = type === 'missing' ? 'missing uniform sizes' : 'unpaid uniform orders';
+    const label =
+      type === 'missing' ? 'missing uniform sizes'
+      : type === 'no_order' ? 'no uniform orders'
+      : 'unpaid uniform orders';
     showAlert({
-      title: type === 'missing' ? 'Message Missing Sizes' : 'Message Unpaid Uniform Orders',
+      title:
+        type === 'missing'
+          ? 'Message Missing Sizes'
+          : type === 'no_order'
+            ? 'Message No-Order Parents'
+            : 'Message Unpaid Uniform Orders',
       message: 'Send an in-app message to ' + targets.length + ' parent(s) with ' + label + '?',
       type: 'warning',
       buttons: [
@@ -160,5 +172,20 @@ export function useUniformMessaging(opts: UseUniformMessagingOptions) {
     });
   }, [sendBulk]);
 
-  return { bulkMessaging, bulkMessageMissing, bulkMessageUnpaid };
+  const bulkMessageNoOrder = useCallback(async (missingRows: DisplayRow[]) => {
+    const targets = missingRows.filter((r) => r.parentId);
+    await sendBulk(targets, 'no_order', (row) => {
+      const codeLine = row.studentCode ? ' Student code: ' + row.studentCode + '.' : '';
+      return {
+        content:
+          'Hi ' + (row.parentName || 'Parent') +
+          ', we still need ' + row.childName +
+          "'s uniform order. Please submit size, quantities, and select whether your child has a previous back number (or no number)." +
+          codeLine + ' Thank you.',
+        subject: 'Uniform Order Needed • ' + row.childName,
+      };
+    });
+  }, [sendBulk]);
+
+  return { bulkMessaging, bulkMessageMissing, bulkMessageUnpaid, bulkMessageNoOrder };
 }

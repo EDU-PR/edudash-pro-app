@@ -41,12 +41,12 @@ export function useParentContacts(
       const teacherClassIds = teacherClasses?.map((c: any) => c.id) || [];
       if (teacherClassIds.length === 0) { setParents([]); setLoading(false); return; }
 
-      // Build students query
+      // Build students query — find students with ANY parent link (parent_id or guardian_id)
       let studentsQuery = supabase.from('students')
-        .select('id, first_name, last_name, date_of_birth, class_id, parent_id')
+        .select('id, first_name, last_name, date_of_birth, class_id, parent_id, guardian_id')
         .eq('preschool_id', preschoolId)
         .in('class_id', teacherClassIds)
-        .not('parent_id', 'is', null);
+        .or('parent_id.not.is.null,guardian_id.not.is.null');
 
       if (classIds && classIds.length > 0) {
         const filteredClassIds = teacherClassIds.filter((id: any) => classIds.includes(id));
@@ -57,7 +57,10 @@ export function useParentContacts(
       if (studentsError) throw studentsError;
       if (!students || students.length === 0) { setParents([]); setLoading(false); return; }
 
-      const parentIds = [...new Set(students.map((s: any) => s.parent_id).filter(Boolean))] as string[];
+      // Collect both parent_id and guardian_id
+      const parentIds = [...new Set(
+        students.flatMap((s: any) => [s.parent_id, s.guardian_id].filter(Boolean))
+      )] as string[];
 
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles').select('id, email, first_name, last_name, phone').in('id', parentIds);

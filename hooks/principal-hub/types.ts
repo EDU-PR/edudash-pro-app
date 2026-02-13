@@ -55,6 +55,12 @@ export interface UniformPaymentSummary {
   pendingCount: number;
   pendingUploads: number;
   pendingUploadAmount: number;
+  totalStudents: number;
+  submittedOrders: number;
+  noOrderCount: number;
+  paidStudentCount: number;
+  pendingStudentCount: number;
+  unpaidStudentCount: number;
   recentPayments: Array<{
     id: string;
     studentName: string;

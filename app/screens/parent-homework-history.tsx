@@ -43,24 +43,34 @@ type FilterStatus = 'all' | 'graded' | 'pending' | 'late';
 
 export default function ParentHomeworkHistoryScreen() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [selectedChild, setSelectedChild] = useState<string>('all');
 
+  // Resolve the correct parent ID (profile.id may differ from auth user.id)
+  const parentId = (profile as any)?.id || user?.id;
+
   const { data: childrenData = [], isLoading: childrenLoading } = useQuery({
-    queryKey: ['parent-children', user?.id],
+    queryKey: ['parent-children', parentId],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!parentId) return [];
       const supabase = assertSupabase();
+      
+      // Check both parent_id and guardian_id columns
+      const parentFilters = [`parent_id.eq.${parentId}`, `guardian_id.eq.${parentId}`];
+      if (user?.id && user.id !== parentId) {
+        parentFilters.push(`parent_id.eq.${user.id}`, `guardian_id.eq.${user.id}`);
+      }
+      
       const { data } = await supabase
         .from('students')
         .select('id, first_name, last_name')
-        .eq('parent_id', user.id);
+        .or(parentFilters.join(','));
       return data || [];
     },
-    enabled: !!user?.id,
+    enabled: !!parentId,
   });
 
   const childIds = useMemo(() => childrenData.map((c: any) => c.id), [childrenData]);

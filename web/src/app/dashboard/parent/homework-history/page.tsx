@@ -53,11 +53,11 @@ export default function HomeworkHistoryPage() {
   const loadData = async (uid: string) => {
     setLoading(true);
 
-    // Get user's children
+    // Get user's children (check parent_id AND guardian_id)
     const { data: childrenData } = await supabase
       .from('students')
       .select('id, first_name, last_name')
-      .eq('parent_id', uid);
+      .or(`parent_id.eq.${uid},guardian_id.eq.${uid}`);
 
     if (childrenData) {
       setChildren(childrenData);

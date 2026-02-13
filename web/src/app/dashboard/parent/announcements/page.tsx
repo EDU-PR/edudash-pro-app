@@ -54,11 +54,11 @@ export default function AnnouncementsPage() {
   const loadAnnouncements = async (userId: string) => {
     setLoading(true);
 
-    // Get user's children to find their preschools
+    // Get user's children to find their preschools (check parent_id AND guardian_id)
     const { data: children } = await supabase
       .from('students')
       .select('preschool_id')
-      .eq('parent_id', userId);
+      .or(`parent_id.eq.${userId},guardian_id.eq.${userId}`);
 
     if (!children || children.length === 0) {
       setLoading(false);

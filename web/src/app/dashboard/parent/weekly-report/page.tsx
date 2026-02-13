@@ -65,10 +65,11 @@ export default function WeeklyReportPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/sign-in'); return; }
 
+      // Check both parent_id and guardian_id
       const { data: childrenData } = await supabase
         .from('students')
         .select('id, first_name, last_name')
-        .eq('parent_id', user.id);
+        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`);
 
       if (childrenData && childrenData.length > 0) {
         setChildren(childrenData);

@@ -19,6 +19,7 @@ import { assertSupabase } from '@/lib/supabase';
 import { fetchEnhancedUserProfile } from '@/lib/rbac';
 import { routeAfterLogin, clearAllNavigationLocks } from '@/lib/routeAfterLogin';
 import { signOutAndRedirect } from '@/lib/authActions';
+import { setAccountSwitchPending } from '@/lib/authActions';
 import { reactivateUserTokens } from '@/lib/pushTokenUtils';
 import { registerPushDevice } from '@/lib/notifications';
 import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
@@ -311,6 +312,10 @@ export function ProfileSwitcher({
       }
     }
     onClose();
+    // Set synchronous flag BEFORE navigation so the route guard
+    // won't redirect us back to the dashboard before the URL
+    // search params propagate.
+    setAccountSwitchPending();
     // Navigate directly — DO NOT sign out. This keeps the current user's
     // refresh token valid so biometric switching back works.
     router.push('/(auth)/sign-in?switch=1&addAccount=1');

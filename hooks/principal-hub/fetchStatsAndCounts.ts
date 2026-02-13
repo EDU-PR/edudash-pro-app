@@ -71,8 +71,14 @@ export async function fetchStatsAndCounts(
     pendingActivityApprovalsResult,
     pendingHomeworkApprovalsResult,
   ] = await Promise.all([
-    safe(supabase.from('students').select('id', { count: 'exact', head: true })
-      .eq('preschool_id', preschoolId).or('is_active.eq.true,is_active.is.null')),
+    safe(
+      supabase
+        .from('students')
+        .select('id', { count: 'exact', head: true })
+        .eq('preschool_id', preschoolId)
+        .eq('status', 'active')
+        .eq('is_active', true)
+    ),
 
     safe(supabase.from('teachers').select(`
       id, user_id, email, first_name, last_name, phone,

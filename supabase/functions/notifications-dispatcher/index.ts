@@ -99,6 +99,14 @@ interface NotificationContext {
   form_id?: string;
   form_title?: string;
   form_audience?: string[];
+  // Learner inactivity lifecycle
+  absence_streak?: number;
+  trigger_absence_days?: number;
+  grace_days?: number;
+  warning_deadline_at?: string;
+  warning_deadline_date?: string;
+  resolution_reason?: string;
+  inactive_on?: string;
 }
 
 // Notification template type
@@ -174,6 +182,7 @@ interface NotificationRequest {
   test?: boolean;
   target_user_id?: string;
   channel?: string;
+  case_id?: string;
   email_template_override?: {
     subject?: string;
     text?: string;
@@ -767,6 +776,56 @@ function getNotificationTemplate(eventType: string, context: NotificationContext
       badge: 1,
       priority: 'normal',
       channelId: 'general'
+    },
+    student_inactivity_warning: {
+      title: '⚠️ Learner Attendance Alert',
+      body: context.student_name
+        ? `${context.student_name} has reached ${context.absence_streak || context.trigger_absence_days || 5} consecutive absences. Please contact the school.`
+        : 'A learner has reached the inactivity threshold and needs follow-up.',
+      data: {
+        type: 'learner_lifecycle',
+        student_id: context.student_id,
+        warning_deadline_at: context.warning_deadline_at,
+        warning_deadline_date: context.warning_deadline_date,
+        screen: 'student-management',
+        action: 'contact_school',
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'attendance'
+    },
+    student_inactivity_resolved: {
+      title: '✅ Learner Attendance Recovered',
+      body: context.student_name
+        ? `${context.student_name}'s inactivity warning has been resolved.`
+        : 'A learner inactivity warning has been resolved.',
+      data: {
+        type: 'learner_lifecycle',
+        student_id: context.student_id,
+        resolution_reason: context.resolution_reason,
+        screen: 'student-management',
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'normal',
+      channelId: 'attendance'
+    },
+    student_inactivity_marked_inactive: {
+      title: '🚫 Learner Marked Inactive',
+      body: context.student_name
+        ? `${context.student_name} has been marked inactive due to unresolved attendance.`
+        : 'A learner has been marked inactive due to unresolved attendance.',
+      data: {
+        type: 'learner_lifecycle',
+        student_id: context.student_id,
+        inactive_on: context.inactive_on,
+        screen: 'student-management',
+      },
+      sound: 'default',
+      badge: 1,
+      priority: 'high',
+      channelId: 'attendance'
     },
     pop_uploaded: {
       title: '💳 POP Uploaded',
@@ -1418,6 +1477,54 @@ async function getUsersToNotify(request: NotificationRequest): Promise<string[]>
         }
       }
       break;
+
+    case 'student_inactivity_warning':
+    case 'student_inactivity_resolved':
+    case 'student_inactivity_marked_inactive': {
+      let resolvedSchoolId = request.preschool_id || null;
+      let resolvedClassId: string | null = null;
+
+      if (request.student_id) {
+        const { data: student } = await supabase
+          .from('students')
+          .select('parent_id, guardian_id, preschool_id, organization_id, class_id')
+          .eq('id', request.student_id)
+          .maybeSingle();
+
+        if (student) {
+          if (student.parent_id) userIds.push(student.parent_id);
+          if (student.guardian_id) userIds.push(student.guardian_id);
+          resolvedSchoolId = resolvedSchoolId || student.organization_id || student.preschool_id || null;
+          resolvedClassId = student.class_id || null;
+        }
+      }
+
+      if (resolvedSchoolId) {
+        const { data: principals } = await supabase
+          .from('profiles')
+          .select('id')
+          .or(`preschool_id.eq.${resolvedSchoolId},organization_id.eq.${resolvedSchoolId}`)
+          .in('role', ['principal', 'principal_admin', 'admin', 'super_admin'])
+          .eq('is_active', true);
+
+        if (principals) {
+          userIds.push(...principals.map((p: { id: string }) => p.id));
+        }
+      }
+
+      if (request.context?.notify_teacher === true && resolvedClassId) {
+        const { data: classRow } = await supabase
+          .from('classes')
+          .select('teacher_id')
+          .eq('id', resolvedClassId)
+          .maybeSingle();
+
+        if (classRow?.teacher_id) {
+          userIds.push(classRow.teacher_id);
+        }
+      }
+      break;
+    }
 
     // School calendar events - notify based on target_audience
     case 'school_event_created':
@@ -2103,6 +2210,37 @@ async function getNotificationContext(request: NotificationRequest): Promise<Not
         }
         break;
 
+      case 'student_inactivity_warning':
+      case 'student_inactivity_resolved':
+      case 'student_inactivity_marked_inactive':
+        context.absence_streak = Number(request.context?.absence_streak || 0) || undefined;
+        context.trigger_absence_days = Number(request.context?.trigger_absence_days || 0) || undefined;
+        context.grace_days = Number(request.context?.grace_days || 0) || undefined;
+        context.warning_deadline_at = (request.context?.warning_deadline_at as string | undefined) || undefined;
+        context.warning_deadline_date = (request.context?.warning_deadline_date as string | undefined) || undefined;
+        context.resolution_reason = (request.context?.resolution_reason as string | undefined) || undefined;
+        context.inactive_on = (request.context?.inactive_on as string | undefined) || undefined;
+        if (request.student_id) {
+          const { data: student } = await supabase
+            .from('students')
+            .select('id, first_name, last_name, class_id')
+            .eq('id', request.student_id)
+            .maybeSingle();
+          if (student) {
+            context.student_id = student.id;
+            context.student_name = `${student.first_name || ''} ${student.last_name || ''}`.trim();
+            if (student.class_id) {
+              const { data: classData } = await supabase
+                .from('classes')
+                .select('name')
+                .eq('id', student.class_id)
+                .maybeSingle();
+              if (classData?.name) context.class_name = classData.name;
+            }
+          }
+        }
+        break;
+
       case 'pop_uploaded':
         if (request.pop_upload_id) {
           const { data: upload } = await supabase
@@ -2500,6 +2638,7 @@ function mapEventTypeToNotificationType(
   const normalized = eventType.toLowerCase();
 
   if (normalized.includes('message')) return 'message';
+  if (normalized.includes('inactivity')) return 'reminder';
   if (
     normalized.includes('announcement') ||
     normalized === 'form_published' ||
@@ -2567,6 +2706,9 @@ function getNotificationCategory(eventType: string): string {
     'teacher_invite_accepted_pending_principal',
     'teacher_account_approved',
     'teacher_account_rejected',
+    'student_inactivity_warning',
+    'student_inactivity_resolved',
+    'student_inactivity_marked_inactive',
   ];
   
   if (schoolEvents.includes(eventType)) return 'school';

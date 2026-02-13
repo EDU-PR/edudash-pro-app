@@ -120,6 +120,25 @@ export const PrincipalLearnersSection: React.FC<PrincipalLearnersSectionProps> =
         </Text>
         <PendingParentLinkRequests />
       </View>
+
+      {/* Learner Activity Control */}
+      <View style={styles.card}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.inlineSectionTitle}>
+            {t('dashboard.learner_activity_control', { defaultValue: 'Learner Activity Control' })}
+          </Text>
+          <TouchableOpacity onPress={() => router.push('/screens/principal-learner-activity-control' as any)}>
+            <Text style={styles.linkText}>
+              {t('common.open', { defaultValue: 'Open' })}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionDescriptor}>
+          {t('dashboard.section.learners_families.lifecycle_hint', {
+            defaultValue: 'Review at-risk learners, due-today inactivity cases, and duplicate/mismatch queues.',
+          })}
+        </Text>
+      </View>
     </View>
   );
 };

@@ -81,7 +81,8 @@ export function usePrincipalHub(preschoolId?: string | null): PrincipalHubResult
           .from('students')
           .select('*', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
-          .eq('status', 'active'),
+          .eq('status', 'active')
+          .eq('is_active', true),
         supabase
           .from('profiles')
           .select('*', { count: 'exact', head: true })

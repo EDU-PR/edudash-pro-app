@@ -26,6 +26,7 @@ export class PrincipalHubService {
           .from('students')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
+          .eq('status', 'active')
           .eq('is_active', true),
 
         // Total teachers
@@ -172,7 +173,9 @@ export class PrincipalHubService {
           const { count: studentsCount } = await supabase
             .from('students')
             .select('id', { count: 'exact', head: true })
-            .in('class_id', classIds.length > 0 ? classIds : ['no-classes']);
+            .in('class_id', classIds.length > 0 ? classIds : ['no-classes'])
+            .eq('status', 'active')
+            .eq('is_active', true);
 
           // Handle users relation which could be array or object
           const userInfo = Array.isArray(teacher.users) ? teacher.users[0] : teacher.users;
@@ -303,6 +306,7 @@ export class PrincipalHubService {
           .from('students')
           .select('id', { count: 'exact', head: true })
           .eq('preschool_id', preschoolId)
+          .eq('status', 'active')
           .eq('is_active', true),
       ]);
 
@@ -446,6 +450,7 @@ export class PrincipalHubService {
         .from('students')
         .select('id', { count: 'exact', head: true })
         .eq('preschool_id', preschoolId)
+        .eq('status', 'active')
         .eq('is_active', true);
 
       const capacity = school?.capacity || 100;

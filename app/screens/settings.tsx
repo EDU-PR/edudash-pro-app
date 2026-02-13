@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, Alert, TouchableOpacity } from "react-native";
+import { View, Text, ScrollView, RefreshControl, TouchableOpacity } from "react-native";
 import { Stack, router } from 'expo-router';
 import { BiometricAuthService } from "@/services/BiometricAuthService";
 import { BiometricBackupManager } from "@/lib/BiometricBackupManager";
@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { parseDeepLinkUrl } from '@/lib/utils/deepLink';
 import { logger } from '@/lib/logger';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 const TAG = 'Settings';
 import {
@@ -84,6 +85,7 @@ export default function SettingsScreen() {
   const [hasBackupMethods, setHasBackupMethods] = useState(false);
   const [loading, setLoading] = useState(true);
   const { isDownloading, isUpdateDownloaded, updateError, checkForUpdates, applyUpdate } = useSafeUpdates();
+  const { showAlert, alertProps } = useAlertModal();
   const schoolId = profile?.organization_id || undefined;
   const schoolSettingsQuery = useSchoolSettings(schoolId);
   
@@ -273,10 +275,11 @@ export default function SettingsScreen() {
       }
 
       if (!url) {
-        Alert.alert(
-          'Forgot Password Test',
-          'No URL found. Copy a reset link to your clipboard or open a recovery link first.',
-        );
+        showAlert({
+          title: 'Forgot Password Test',
+          message: 'No URL found. Copy a reset link to your clipboard or open a recovery link first.',
+          type: 'info',
+        });
         return;
       }
 
@@ -284,10 +287,10 @@ export default function SettingsScreen() {
       logger.debug(TAG, 'ForgotPasswordTest URL:', url);
       logger.debug(TAG, 'ForgotPasswordTest Parsed:', parsed);
 
-      Alert.alert(
-        'Forgot Password Test',
-        `Path: ${parsed.path}\nParams: ${JSON.stringify(parsed.params, null, 2)}`,
-        [
+      showAlert({
+        title: 'Forgot Password Test',
+        message: `Path: ${parsed.path}\nParams: ${JSON.stringify(parsed.params, null, 2)}`,
+        buttons: [
           {
             text: 'Open Callback',
             onPress: () => {
@@ -301,11 +304,15 @@ export default function SettingsScreen() {
             },
           },
           { text: 'OK', style: 'default' },
-        ]
-      );
+        ],
+      });
     } catch (err) {
       console.error('[Dev][ForgotPasswordTest] Error:', err);
-      Alert.alert('Forgot Password Test', 'Failed to run test. Check logs for details.');
+      showAlert({
+        title: 'Forgot Password Test',
+        message: 'Failed to run test. Check logs for details.',
+        type: 'error',
+      });
     }
   }, []);
 
@@ -319,26 +326,29 @@ export default function SettingsScreen() {
       }
 
       if (!granted) {
-        Alert.alert(
-          'Notifications Disabled',
-          'Enable notifications to run the dev test.',
-          [
-            { text: 'OK', style: 'default' },
-          ],
-        );
+        showAlert({
+          title: 'Notifications Disabled',
+          message: 'Enable notifications to run the dev test.',
+          type: 'warning',
+        });
         return;
       }
 
       await NotificationPresets.newMessage();
       await setBadgeCount(3);
 
-      Alert.alert(
-        'Dev Test Sent',
-        'A test notification was scheduled and the badge was set to 3.',
-      );
+      showAlert({
+        title: 'Dev Test Sent',
+        message: 'A test notification was scheduled and the badge was set to 3.',
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('[Dev][NotificationTest] Error:', err);
-      Alert.alert('Dev Test Failed', err?.message || 'Unknown error');
+      showAlert({
+        title: 'Dev Test Failed',
+        message: err?.message || 'Unknown error',
+        type: 'error',
+      });
     }
   }, []);
 
@@ -348,7 +358,7 @@ export default function SettingsScreen() {
       const supabase = assertSupabase();
       const userId = user?.id;
       if (!userId) {
-        Alert.alert('Error', 'No user ID found');
+        showAlert({ title: 'Error', message: 'No user ID found', type: 'error' });
         return;
       }
 
@@ -366,13 +376,14 @@ export default function SettingsScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'AI Quota Reset',
-        'All AI usage counters have been reset to 0. You can now test quota limits fresh.',
-      );
+      showAlert({
+        title: 'AI Quota Reset',
+        message: 'All AI usage counters have been reset to 0. You can now test quota limits fresh.',
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('[Dev][ResetQuota] Error:', err);
-      Alert.alert('Reset Failed', err?.message || 'Unknown error');
+      showAlert({ title: 'Reset Failed', message: err?.message || 'Unknown error', type: 'error' });
     }
   }, [user?.id]);
 
@@ -382,7 +393,7 @@ export default function SettingsScreen() {
       const supabase = assertSupabase();
       const userId = user?.id;
       if (!userId) {
-        Alert.alert('Error', 'No user ID found');
+        showAlert({ title: 'Error', message: 'No user ID found', type: 'error' });
         return;
       }
 
@@ -399,13 +410,14 @@ export default function SettingsScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Quota Exhausted (Simulated)',
-        'AI usage set to maximum. Any AI request should now return a 429 quota_exceeded error. Use "Reset AI Quota" to restore.',
-      );
+      showAlert({
+        title: 'Quota Exhausted (Simulated)',
+        message: 'AI usage set to maximum. Any AI request should now return a 429 quota_exceeded error. Use "Reset AI Quota" to restore.',
+        type: 'warning',
+      });
     } catch (err: any) {
       console.error('[Dev][SimulateQuota] Error:', err);
-      Alert.alert('Simulation Failed', err?.message || 'Unknown error');
+      showAlert({ title: 'Simulation Failed', message: err?.message || 'Unknown error', type: 'error' });
     }
   }, [user?.id]);
 
@@ -415,7 +427,7 @@ export default function SettingsScreen() {
       const supabase = assertSupabase();
       const userId = user?.id;
       if (!userId) {
-        Alert.alert('Error', 'No user ID found');
+        showAlert({ title: 'Error', message: 'No user ID found', type: 'error' });
         return;
       }
 
@@ -426,10 +438,14 @@ export default function SettingsScreen() {
 
       if (error) throw error;
 
-      Alert.alert('Tier Changed', `AI tier set to: ${tier}. Quota limits now reflect the ${tier} tier.`);
+      showAlert({
+        title: 'Tier Changed',
+        message: `AI tier set to: ${tier}. Quota limits now reflect the ${tier} tier.`,
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('[Dev][SwitchTier] Error:', err);
-      Alert.alert('Tier Change Failed', err?.message || 'Unknown error');
+      showAlert({ title: 'Tier Change Failed', message: err?.message || 'Unknown error', type: 'error' });
     }
   }, [user?.id]);
 
@@ -437,13 +453,21 @@ export default function SettingsScreen() {
     const role = profile?.role || '';
     const allowed = ['principal', 'principal_admin', 'super_admin', 'superadmin', 'teacher'];
     if (!allowed.includes(role)) {
-      Alert.alert('Dev Email Test', 'Only principals, teachers, or super admins can send test emails.');
+      showAlert({
+        title: 'Dev Email Test',
+        message: 'Only principals, teachers, or super admins can send test emails.',
+        type: 'warning',
+      });
       return;
     }
 
     const recipient = profile?.email || user?.email;
     if (!recipient) {
-      Alert.alert('Dev Email Test', 'No email found for the current user.');
+      showAlert({
+        title: 'Dev Email Test',
+        message: 'No email found for the current user.',
+        type: 'error',
+      });
       return;
     }
 
@@ -465,20 +489,41 @@ export default function SettingsScreen() {
         throw error;
       }
 
-      Alert.alert('Dev Email Test', `Sent to ${recipient}${data?.message_id ? ` (id: ${data.message_id})` : ''}`);
+      showAlert({
+        title: 'Dev Email Test',
+        message: `Sent to ${recipient}${data?.message_id ? ` (id: ${data.message_id})` : ''}`,
+        type: 'success',
+      });
     } catch (err: any) {
       console.error('[Dev][EmailTest] Error:', err);
-      Alert.alert('Dev Email Test Failed', err?.message || 'Failed to send test email.');
+      showAlert({
+        title: 'Dev Email Test Failed',
+        message: err?.message || 'Failed to send test email.',
+        type: 'error',
+      });
     }
   }, [profile, user]);
 
   const toggleBiometric = async () => {
+    if (!biometricSupported) {
+      showAlert({
+        title: t('settings.biometric.title'),
+        message: t('settings.biometric.notAvailable'),
+        type: 'info',
+        icon: 'information-circle',
+        buttons: [{ text: t('common.ok') }],
+      });
+      return;
+    }
+
     if (!biometricEnrolled) {
-      Alert.alert(
-        t('settings.biometric_alerts.setup_required_title'),
-        t('settings.biometric_alerts.setup_required_message'),
-        [{ text: t('common.ok') }],
-      );
+      showAlert({
+        title: t('settings.biometric_alerts.setup_required_title'),
+        message: t('settings.biometric_alerts.setup_required_message'),
+        type: 'warning',
+        icon: 'settings-outline',
+        buttons: [{ text: t('common.ok') }],
+      });
       return;
     }
 
@@ -487,17 +532,23 @@ export default function SettingsScreen() {
       const user = data.user;
 
       if (!user) {
-        Alert.alert(t('common.error'), t('settings.biometric_alerts.user_not_found'));
+        showAlert({
+          title: t('common.error'),
+          message: t('settings.biometric_alerts.user_not_found'),
+          type: 'error',
+        });
         return;
       }
 
       if (biometricEnabled) {
         await BiometricAuthService.disableBiometric();
         setBiometricEnabled(false);
-        Alert.alert(
-          t('settings.biometric_alerts.disabled_title'),
-          t('settings.biometric_alerts.disabled_message'),
-        );
+        showAlert({
+          title: t('settings.biometric_alerts.disabled_title'),
+          message: t('settings.biometric_alerts.disabled_message'),
+          type: 'info',
+          icon: 'finger-print-outline',
+        });
       } else {
         const success = await BiometricAuthService.enableBiometric(
           user.id,
@@ -505,15 +556,21 @@ export default function SettingsScreen() {
         );
         if (success) {
           setBiometricEnabled(true);
-          Alert.alert(
-            t('settings.biometric_alerts.enabled_title'),
-            t('settings.biometric_alerts.enabled_message'),
-          );
+          showAlert({
+            title: t('settings.biometric_alerts.enabled_title'),
+            message: t('settings.biometric_alerts.enabled_message'),
+            type: 'success',
+            icon: 'finger-print',
+          });
         }
       }
     } catch (error) {
       console.error("Error toggling biometric:", error);
-      Alert.alert(t('common.error'), t('settings.biometric_alerts.update_failed'));
+      showAlert({
+        title: t('common.error'),
+        message: t('settings.biometric_alerts.update_failed'),
+        type: 'error',
+      });
     }
   };
 
@@ -765,6 +822,8 @@ export default function SettingsScreen() {
           {/* About & Support */}
           <AboutSupportSection styles={styles} />
         </ScrollView>
+
+        <AlertModal {...alertProps} />
       </View>
     </DesktopLayout>
   );

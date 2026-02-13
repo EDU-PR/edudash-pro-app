@@ -5,13 +5,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { BiometricAuthService } from '@/services/BiometricAuthService';
 import { EnhancedBiometricAuth } from '@/services/EnhancedBiometricAuth';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 interface BiometricSetupProps {
@@ -24,6 +25,7 @@ export function BiometricSetup({ visible, onClose, onSetupComplete }: BiometricS
   const { theme } = useTheme();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { showAlert, alertProps } = useAlertModal();
   const [loading, setLoading] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = useState(false);
@@ -55,11 +57,12 @@ export function BiometricSetup({ visible, onClose, onSetupComplete }: BiometricS
 
   const enableBiometric = async () => {
     if (!user?.id || !user?.email) {
-      Alert.alert(
-        t('common.error'),
-        'User information not available. Please try again.',
-        [{ text: t('common.ok') }]
-      );
+      showAlert({
+        title: t('common.error'),
+        message: 'User information not available. Please try again.',
+        type: 'error',
+        buttons: [{ text: t('common.ok') }],
+      });
       return;
     }
 
@@ -76,22 +79,35 @@ export function BiometricSetup({ visible, onClose, onSetupComplete }: BiometricS
       }
       
       // Use enhanced biometric service for setup
-      const success = await EnhancedBiometricAuth.setupBiometricForUser(user, profile);
+      const result = await EnhancedBiometricAuth.setupBiometricForUser(user, profile);
       
-      if (success) {
-        // Enhanced service shows its own success alert
+      if (result.success) {
+        showAlert({
+          title: 'Biometric Sign-In Enabled',
+          message: result.message,
+          type: 'success',
+          icon: 'finger-print',
+        });
         // Set lastUnlockedAt to now to avoid immediate re-prompt after enabling
         try { await BiometricAuthService.setLastUnlockedAt(Date.now()); } catch { /* Intentional: non-fatal */ }
         onSetupComplete?.(true);
         onClose();
+      } else {
+        showAlert({
+          title: 'Biometric Setup',
+          message: result.message || 'Could not set up biometric authentication.',
+          type: result.reason === 'not_available' ? 'info' : 'error',
+          icon: result.reason === 'not_available' ? 'information-circle' : 'close-circle',
+        });
       }
     } catch (error) {
       console.error('Error enabling biometric:', error);
-      Alert.alert(
-        t('common.error'),
-        'Failed to enable biometric authentication. Please try again.',
-        [{ text: t('common.ok') }]
-      );
+      showAlert({
+        title: t('common.error'),
+        message: 'Failed to enable biometric authentication. Please try again.',
+        type: 'error',
+        buttons: [{ text: t('common.ok') }],
+      });
     } finally {
       setLoading(false);
     }
@@ -319,6 +335,7 @@ export function BiometricSetup({ visible, onClose, onSetupComplete }: BiometricS
           </View>
         </View>
       </View>
+      <AlertModal {...alertProps} />
     </Modal>
   );
 }

@@ -29,23 +29,31 @@ interface Child {
 export default function ParentNewMessageScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { showAlert, alertProps } = useAlertModal();
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   
   const createThread = useCreateThread();
   
+  // Resolve the correct parent ID (profile.id may differ from auth user.id)
+  const parentId = (profile as any)?.id || user?.id;
+  
   // Fetch children linked to this parent
   const { data: children, isLoading, error, refetch } = useQuery({
-    queryKey: ['parent', 'children-for-messages', user?.id],
+    queryKey: ['parent', 'children-for-messages', parentId],
     queryFn: async (): Promise<Child[]> => {
-      if (!user?.id) return [];
+      if (!parentId) return [];
       
       const client = assertSupabase();
       
-      // Get students linked to this parent via parent_id column on students table
-      // Note: parent_student_links table doesn't exist - students.parent_id is the relationship
-      const { data, error } = await client
+      // Get students linked to this parent via parent_id OR guardian_id
+      // Use .or() to check both columns, and also check auth user id in case it differs
+      const parentFilters = [`parent_id.eq.${parentId}`, `guardian_id.eq.${parentId}`];
+      if (user?.id && user.id !== parentId) {
+        parentFilters.push(`parent_id.eq.${user.id}`, `guardian_id.eq.${user.id}`);
+      }
+      
+      const { data: directData, error: directError } = await client
         .from('students')
         .select(`
           id,
@@ -57,16 +65,47 @@ export default function ParentNewMessageScreen() {
             teacher_id
           )
         `)
-        .eq('parent_id', user.id)
+        .or(parentFilters.join(','))
         .eq('is_active', true);
       
-      if (error) {
-        logger.error('[ParentNewMessage] Query error:', error);
-        throw new Error(error.message || 'Failed to load children');
+      if (directError) {
+        logger.error('[ParentNewMessage] Direct query error:', directError);
       }
       
+      // Also check junction table for multi-parent support
+      const { data: relationships } = await client
+        .from('student_parent_relationships')
+        .select('student_id')
+        .eq('parent_id', parentId);
+      
+      let junctionData: any[] = [];
+      if (relationships && relationships.length > 0) {
+        const studentIds = relationships.map(r => r.student_id);
+        const { data: junctionStudents } = await client
+          .from('students')
+          .select(`
+            id,
+            first_name,
+            last_name,
+            class:classes(
+              id,
+              name,
+              teacher_id
+            )
+          `)
+          .in('id', studentIds)
+          .eq('is_active', true);
+        junctionData = junctionStudents || [];
+      }
+      
+      // Combine and deduplicate
+      const allStudents = [...(directData || []), ...junctionData];
+      const uniqueMap = new Map<string, any>();
+      allStudents.forEach((s: any) => { if (s?.id) uniqueMap.set(s.id, s); });
+      const data = Array.from(uniqueMap.values());
+      
       // Fetch teacher profiles separately to avoid nested relationship issues
-      const teacherIds = [...new Set((data || [])
+      const teacherIds = [...new Set(data
         .map((s: any) => s.class?.teacher_id)
         .filter(Boolean))];
       
@@ -83,7 +122,7 @@ export default function ParentNewMessageScreen() {
       }
       
       // Transform data
-      return (data || []).map((student: any) => {
+      return data.map((student: any) => {
         const classInfo = student?.class;
         const teacher = classInfo?.teacher_id ? teacherMap[classInfo.teacher_id] : null;
         
@@ -97,7 +136,7 @@ export default function ParentNewMessageScreen() {
         };
       }).filter((c: any) => c.id);
     },
-    enabled: !!user?.id,
+    enabled: !!parentId,
     retry: 2,
   });
   

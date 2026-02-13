@@ -119,10 +119,11 @@ export default function LearningHubPage() {
       if (!user) return;
 
       // Get child name
+      // Check both parent_id and guardian_id
       const { data: child } = await supabase
         .from('students')
         .select('first_name')
-        .eq('parent_id', user.id)
+        .or(`parent_id.eq.${user.id},guardian_id.eq.${user.id}`)
         .limit(1)
         .maybeSingle();
       if (child) setChildName(child.first_name);

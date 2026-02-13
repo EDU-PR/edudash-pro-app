@@ -7,6 +7,22 @@ export type DashboardLayout = 'grid' | 'list';
 export type BackupFrequency = 'daily' | 'weekly' | 'monthly';
 export type DateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
 export type TimeFormat = '12h' | '24h';
+export type AttendanceLifecycleBillingBehavior = 'stop_new_fees_keep_debt' | string;
+
+export interface AttendanceLifecyclePolicy {
+  enabled: boolean;
+  trigger_absent_days: number;
+  grace_days: number;
+  require_principal_approval: boolean;
+  billing_behavior: AttendanceLifecycleBillingBehavior;
+  auto_unassign_class_on_inactive: boolean;
+  notify_channels: {
+    push: boolean;
+    email: boolean;
+    sms: boolean;
+    whatsapp: boolean;
+  };
+}
 
 export interface SchoolSettings {
   // Basic School Info
@@ -91,6 +107,9 @@ export interface SchoolSettings {
     backupFrequency: BackupFrequency;
     dataRetentionMonths: number;
   };
+
+  // Learner lifecycle automation policy
+  attendanceLifecycle: AttendanceLifecyclePolicy;
 
   // Integrations
   whatsapp_number?: string; // Stored in preschools.settings for WA integration
@@ -181,6 +200,20 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
     autoBackupEnabled: true,
     backupFrequency: 'daily',
     dataRetentionMonths: 12,
+  },
+  attendanceLifecycle: {
+    enabled: true,
+    trigger_absent_days: 5,
+    grace_days: 7,
+    require_principal_approval: false,
+    billing_behavior: 'stop_new_fees_keep_debt',
+    auto_unassign_class_on_inactive: true,
+    notify_channels: {
+      push: true,
+      email: false,
+      sms: false,
+      whatsapp: false,
+    },
   },
 };
 
