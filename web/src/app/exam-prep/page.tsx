@@ -411,6 +411,7 @@ export default function ExamPrepPage() {
               padding: 0
             }}>
               <AskAIWidget
+                scope="student"
                 inline={true}
                 initialPrompt={aiPrompt}
                 displayMessage={aiDisplay}

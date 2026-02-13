@@ -88,7 +88,24 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
             .eq('id', payload.new.sender_id)
             .single();
           
-          const newMessage = { ...payload.new, sender: senderProfile };
+          const newMessage: any = { ...payload.new, sender: senderProfile };
+
+          // Fetch reply_to content if message is a reply
+          if (payload.new.reply_to_id) {
+            const { data: replyMsg } = await supabase
+              .from('messages')
+              .select('id, content, content_type, sender_id')
+              .eq('id', payload.new.reply_to_id)
+              .single();
+            if (replyMsg) {
+              const { data: replySender } = await supabase
+                .from('profiles')
+                .select('first_name, last_name')
+                .eq('id', replyMsg.sender_id)
+                .single();
+              newMessage.reply_to = { ...replyMsg, sender: replySender || null };
+            }
+          }
           
           // Banner notification for messages from others while app is foregrounded
           if (payload.new.sender_id !== user?.id) {
@@ -135,8 +152,8 @@ export const useTeacherMessagesRealtime = (threadId: string | null) => {
             if (AppState.currentState === 'active') {
               try {
                 await supabase.rpc('mark_messages_delivered', {
-                  thread_id: threadId,
-                  user_id: user?.id,
+                  p_thread_id: threadId,
+                  p_user_id: user?.id,
                 });
               } catch (deliverError) {
                 logger.warn('MessagesRealtime', 'Failed to mark messages as delivered:', deliverError);

@@ -46,7 +46,9 @@ export default function SchoolSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [savingBank, setSavingBank] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const [savingUniformFeature, setSavingUniformFeature] = useState(false);
   const [number, setNumber] = useState('');
+  const [uniformOrdersEnabled, setUniformOrdersEnabled] = useState(false);
   const [attendanceLifecycle, setAttendanceLifecycle] = useState<AttendanceLifecyclePolicy>(
     DEFAULT_SCHOOL_SETTINGS.attendanceLifecycle
   );
@@ -96,6 +98,9 @@ export default function SchoolSettingsScreen() {
         const mergedSettings = await SchoolSettingsService.get(profile.organization_id);
         if (active && mergedSettings?.attendanceLifecycle) {
           setAttendanceLifecycle(mergedSettings.attendanceLifecycle);
+        }
+        if (active) {
+          setUniformOrdersEnabled(Boolean(mergedSettings?.features?.uniforms?.enabled));
         }
 
         // Load bank details
@@ -221,6 +226,31 @@ export default function SchoolSettingsScreen() {
       showError('Error', e?.message || 'Failed to save learner lifecycle policy');
     } finally {
       setSavingLifecycle(false);
+    }
+  };
+
+  const saveUniformFeaturePolicy = async () => {
+    try {
+      if (!profile?.organization_id) return;
+      setSavingUniformFeature(true);
+      await SchoolSettingsService.update(profile.organization_id, {
+        features: {
+          uniforms: {
+            enabled: uniformOrdersEnabled,
+          },
+        },
+      } as any);
+      setSuccessModal({
+        visible: true,
+        title: '✓ Saved',
+        message: uniformOrdersEnabled
+          ? 'Uniform orders are now enabled for parents.'
+          : 'Uniform orders are now hidden from parents.',
+      });
+    } catch (e: any) {
+      showError('Error', e?.message || 'Failed to save uniform order setting');
+    } finally {
+      setSavingUniformFeature(false);
     }
   };
 
@@ -464,6 +494,39 @@ export default function SchoolSettingsScreen() {
                 </TouchableOpacity>
               </View>
               ) : null}
+
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="shirt-outline" size={24} color={theme.primary} />
+                  <Text style={styles.sectionTitle}>Uniform Orders</Text>
+                </View>
+                <Text style={styles.sectionHint}>
+                  Toggle whether parents can view and submit uniform orders from their dashboard.
+                </Text>
+
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Enable parent uniform ordering</Text>
+                  <TouchableOpacity
+                    style={[styles.switchPill, uniformOrdersEnabled && styles.switchPillActive]}
+                    onPress={() => setUniformOrdersEnabled((prev) => !prev)}
+                  >
+                    <Text style={[styles.switchPillText, uniformOrdersEnabled && styles.switchPillTextActive]}>
+                      {uniformOrdersEnabled ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.btn} onPress={saveUniformFeaturePolicy} disabled={savingUniformFeature}>
+                  {savingUniformFeature ? (
+                    <EduDashSpinner color={theme.onPrimary} />
+                  ) : (
+                    <>
+                      <Ionicons name="save-outline" size={18} color={theme.onPrimary} style={{ marginRight: 8 }} />
+                      <Text style={styles.btnText}>Save Uniform Order Setting</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
 
               {/* WhatsApp Section */}
               <View style={styles.section}>

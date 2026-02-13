@@ -26,6 +26,8 @@ import {
   removeBiometricSession,
   clearBiometricSession,
   updateCachedProfile,
+  clearRefreshTokenForUser,
+  clearGlobalRefreshToken,
 } from './biometricStorage';
 
 // Re-export for consumers that import from this module
@@ -210,8 +212,17 @@ export class EnhancedBiometricAuth {
       const { data } = await assertSupabase().auth.getSession();
 
       if (data.session?.user) {
-        if (__DEV__) console.log('Valid Supabase session already exists');
-        return true;
+        const existingUserId = data.session.user.id;
+        if (existingUserId === sessionData.userId) {
+          if (__DEV__) console.log('Valid Supabase session already exists');
+          return true;
+        }
+        // Different user session present (multi-account). Ensure we restore the selected biometric user.
+        try {
+          await assertSupabase().auth.signOut({ scope: 'local' } as any);
+        } catch {
+          /* best-effort */
+        }
       }
 
       if (__DEV__) console.log('No active Supabase session, attempting to restore');
@@ -223,25 +234,62 @@ export class EnhancedBiometricAuth {
           await assertSupabase().auth.refreshSession({
             refresh_token: perUserRefresh,
           });
-        if (!error && refreshed?.session?.user) {
+        if (!error && refreshed?.session?.user?.id === sessionData.userId) {
           if (__DEV__)
             console.log('Restored via per-user biometric refresh token');
+          // Persist rotated refresh token so the next biometric restore does not fail.
+          try {
+            const rotated = refreshed.session.refresh_token;
+            if (rotated && rotated !== perUserRefresh) {
+              await setRefreshTokenForUser(sessionData.userId, rotated);
+              await setGlobalRefreshToken(rotated);
+            }
+          } catch (e) {
+            console.warn('Could not persist rotated biometric refresh token:', e);
+          }
           return true;
+        } else if (!error && refreshed?.session?.user?.id) {
+          // Wrong-user session established; do not proceed.
+          try { await assertSupabase().auth.signOut({ scope: 'local' } as any); } catch { /* best-effort */ }
+        } else if (error) {
+          const msg = String((error as any)?.message || '');
+          const lower = msg.toLowerCase();
+          const looksInvalid =
+            lower.includes('invalid login credentials') ||
+            lower.includes('invalid refresh token') ||
+            lower.includes('refresh token not found') ||
+            lower.includes('refresh_token_not_found') ||
+            lower.includes('invalid_grant');
+          if (looksInvalid) {
+            // Clear only the invalid refresh token, keep the biometric account entry.
+            try { await clearRefreshTokenForUser(sessionData.userId); } catch { /* best-effort */ }
+          }
         }
       }
 
       // 2) sessionManager stored session
       const { getCurrentSession } = await import('@/lib/sessionManager');
       const storedSession = await getCurrentSession();
-      if (storedSession) {
+      if (storedSession?.refresh_token) {
         const { data: refreshed, error } =
           await assertSupabase().auth.refreshSession({
             refresh_token: storedSession.refresh_token,
           });
-        if (!error && refreshed?.session?.user) {
+        if (!error && refreshed?.session?.user?.id === sessionData.userId) {
           if (__DEV__)
             console.log('Restored via stored session refresh token');
+          try {
+            const rotated = refreshed.session.refresh_token;
+            if (rotated && rotated !== storedSession.refresh_token) {
+              await setRefreshTokenForUser(sessionData.userId, rotated);
+              await setGlobalRefreshToken(rotated);
+            }
+          } catch (e) {
+            console.warn('Could not persist rotated refresh token from stored session:', e);
+          }
           return true;
+        } else if (!error && refreshed?.session?.user?.id) {
+          try { await assertSupabase().auth.signOut({ scope: 'local' } as any); } catch { /* best-effort */ }
         }
       }
 
@@ -252,10 +300,33 @@ export class EnhancedBiometricAuth {
           await assertSupabase().auth.refreshSession({
             refresh_token: globalRefresh,
           });
-        if (!error && refreshed?.session?.user) {
+        if (!error && refreshed?.session?.user?.id === sessionData.userId) {
           if (__DEV__)
             console.log('Restored via global biometric refresh token');
+          try {
+            const rotated = refreshed.session.refresh_token;
+            if (rotated && rotated !== globalRefresh) {
+              await setRefreshTokenForUser(sessionData.userId, rotated);
+              await setGlobalRefreshToken(rotated);
+            }
+          } catch (e) {
+            console.warn('Could not persist rotated global refresh token:', e);
+          }
           return true;
+        } else if (!error && refreshed?.session?.user?.id) {
+          try { await assertSupabase().auth.signOut({ scope: 'local' } as any); } catch { /* best-effort */ }
+        } else if (error) {
+          const msg = String((error as any)?.message || '');
+          const lower = msg.toLowerCase();
+          const looksInvalid =
+            lower.includes('invalid login credentials') ||
+            lower.includes('invalid refresh token') ||
+            lower.includes('refresh token not found') ||
+            lower.includes('refresh_token_not_found') ||
+            lower.includes('invalid_grant');
+          if (looksInvalid) {
+            try { await clearGlobalRefreshToken(); } catch { /* best-effort */ }
+          }
         }
       }
 

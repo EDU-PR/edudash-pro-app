@@ -199,6 +199,7 @@ export default function PrincipalDashChatPage() {
           }}>
             {hydrated && activeConversationId && (
               <ChatInterface
+                scope="principal"
                 conversationId={activeConversationId}
                 userId={userId}
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}

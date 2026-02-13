@@ -39,7 +39,7 @@ export function DashAIFullscreenModal({ userId, onClose }: DashAIFullscreenModal
         </button>
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <AskAIWidget fullscreen userId={userId} />
+        <AskAIWidget scope="principal" fullscreen userId={userId} />
       </div>
     </div>
   );

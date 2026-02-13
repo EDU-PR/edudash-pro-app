@@ -92,6 +92,9 @@ const FOCUS_AREAS = [
   { value: 'life_skills', label: 'Life Skills' },
 ];
 
+const MOCK_FALLBACK_ENABLED =
+  process.env.NEXT_PUBLIC_AI_YEAR_PLANNER_MOCK_FALLBACK === 'true' && process.env.NODE_ENV !== 'production';
+
 export default function AIYearPlannerPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -173,49 +176,43 @@ export default function AIYearPlannerPage() {
       // Build the prompt for the AI
       const prompt = buildAIPrompt(config, preschoolName);
 
-      // Call the AI proxy edge function
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`, {
+      // Call canonical web AI endpoint (proxies to supabase/functions/ai-proxy)
+      const response = await fetch('/api/ai-proxy', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'generate_year_plan',
-          model: 'claude-3-5-sonnet-20241022',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert Early Childhood Development (ECD) curriculum specialist in South Africa. 
+          scope: 'principal',
+          service_type: 'lesson_generation',
+          enable_tools: false,
+          prefer_openai: false,
+          stream: false,
+          payload: {
+            prompt,
+            // Keep these constraints in system context (ai-proxy schema)
+            context: `You are an expert Early Childhood Development (ECD) curriculum specialist in South Africa.
 You help principals plan their academic year according to CAPS (Curriculum and Assessment Policy Statement) guidelines.
 You create comprehensive, practical year plans that consider the South African school calendar, public holidays, and developmentally appropriate practices.
-Always respond with valid JSON that matches the requested structure.`
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 8000,
-          temperature: 0.7,
+Always respond with valid JSON that matches the requested structure. Output only JSON, no markdown.`,
+            model: 'claude-3-5-sonnet-20241022',
+          },
+          metadata: {
+            role: 'principal',
+            source: 'ai_year_planner',
+            planner_version: 'v2',
+          },
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate year plan');
-      }
-
       const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || result?.error || 'Failed to generate year plan');
+      }
       
       // Parse the AI response
       let planData: GeneratedYearPlan;
       try {
         // Extract JSON from the response (handle markdown code blocks)
-        let jsonStr = result.content || result.text || '';
+        let jsonStr = result.content || '';
         if (jsonStr.includes('```json')) {
           jsonStr = jsonStr.split('```json')[1].split('```')[0];
         } else if (jsonStr.includes('```')) {
@@ -224,8 +221,11 @@ Always respond with valid JSON that matches the requested structure.`
         planData = JSON.parse(jsonStr.trim());
       } catch (parseError) {
         console.error('Parse error:', parseError);
-        // If parsing fails, create a mock plan for demo purposes
-        planData = generateMockPlan(config, preschoolName);
+        if (MOCK_FALLBACK_ENABLED) {
+          planData = generateMockPlan(config, preschoolName);
+        } else {
+          throw new Error('AI response was not valid JSON. Please try again.');
+        }
       }
 
       setGeneratedPlan(planData);
@@ -233,110 +233,46 @@ Always respond with valid JSON that matches the requested structure.`
     } catch (err: any) {
       console.error('Error generating year plan:', err);
       setError(err.message || 'Failed to generate year plan. Please try again.');
-      
-      // Generate mock plan for demo
-      setGeneratedPlan(generateMockPlan(config, preschoolName));
+      if (MOCK_FALLBACK_ENABLED) {
+        setGeneratedPlan(generateMockPlan(config, preschoolName));
+      } else {
+        setGeneratedPlan(null);
+      }
     } finally {
       setGenerating(false);
     }
   }, [preschoolId, preschoolName, config, supabase]);
 
   const saveYearPlan = async () => {
-    if (!generatedPlan || !preschoolId) return;
+    if (!generatedPlan || !preschoolId || !userId) return;
 
     setSaving(true);
     setError(null);
 
     try {
-      // Save terms to academic_terms table
-      for (const term of generatedPlan.terms) {
-        const { error: termError } = await supabase
-          .from('academic_terms')
-          .insert({
-            preschool_id: preschoolId,
-            name: term.name,
-            academic_year: generatedPlan.academic_year,
-            term_number: term.term_number,
-            start_date: term.start_date,
-            end_date: term.end_date,
-            description: term.description,
-            is_published: false,
-          });
+      const planPayload = {
+        ...generatedPlan,
+        config: {
+          age_groups: config.age_groups,
+        },
+      };
 
-        if (termError) {
-          console.error('Error saving term:', termError);
-        }
-      }
+      const { data, error: rpcError } = await supabase.rpc('save_ai_year_plan', {
+        p_preschool_id: preschoolId,
+        p_created_by: userId,
+        p_plan: planPayload,
+      });
 
-      // Save curriculum themes
-      for (const term of generatedPlan.terms) {
-        for (const weekTheme of term.weekly_themes) {
-          const { error: themeError } = await supabase
-            .from('curriculum_themes')
-            .insert({
-              preschool_id: preschoolId,
-              name: weekTheme.theme,
-              description: `Week ${weekTheme.week}: ${weekTheme.focus_area}`,
-              age_groups: config.age_groups,
-              developmental_domains: weekTheme.developmental_goals,
-              suggested_activities: weekTheme.key_activities,
-            });
-
-          if (themeError) {
-            console.error('Error saving theme:', themeError);
-          }
-        }
-      }
-
-      // Save excursions if table exists
-      for (const term of generatedPlan.terms) {
-        for (const excursion of term.excursions) {
-          try {
-            await supabase
-              .from('school_excursions')
-              .insert({
-                preschool_id: preschoolId,
-                created_by: userId,
-                title: excursion.title,
-                destination: excursion.destination,
-                excursion_date: calculateWeekDate(term.start_date, excursion.week),
-                learning_objectives: excursion.learning_objectives,
-                estimated_cost_per_child: excursion.estimated_cost,
-                status: 'draft',
-              });
-          } catch (err) {
-            console.log('Excursions table may not exist yet');
-          }
-        }
-      }
-
-      // Save meetings if table exists
-      for (const term of generatedPlan.terms) {
-        for (const meeting of term.meetings) {
-          try {
-            await supabase
-              .from('school_meetings')
-              .insert({
-                preschool_id: preschoolId,
-                created_by: userId,
-                title: meeting.title,
-                meeting_type: meeting.type,
-                meeting_date: calculateWeekDate(term.start_date, meeting.week),
-                description: meeting.purpose,
-                start_time: '09:00',
-                status: 'scheduled',
-              });
-          } catch (err) {
-            console.log('Meetings table may not exist yet');
-          }
-        }
+      if (rpcError) throw rpcError;
+      if (data && data.success === false) {
+        throw new Error('Save failed.');
       }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       console.error('Error saving year plan:', err);
-      setError('Failed to save some items. Please check and try again.');
+      setError(err.message || 'Failed to save year plan. Please try again.');
     } finally {
       setSaving(false);
     }

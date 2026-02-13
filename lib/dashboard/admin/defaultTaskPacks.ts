@@ -54,6 +54,15 @@ export const DEFAULT_ADMIN_TASK_PACKS: Record<AdminOrgTypeV1, AdminTaskPack> = {
         badgeKey: 'pending_finance',
       },
       {
+        id: 'petty_cash_request',
+        title: 'Petty Cash Request',
+        description: 'Submit operational spending requests to principal for approval.',
+        icon: 'wallet-outline',
+        route: '/screens/petty-cash-request',
+        category: 'finance',
+        priority: 'normal',
+      },
+      {
         id: 'daily_ops',
         title: 'Daily Ops',
         description: 'Address attendance and classroom operations issues.',
@@ -119,6 +128,15 @@ export const DEFAULT_ADMIN_TASK_PACKS: Record<AdminOrgTypeV1, AdminTaskPack> = {
         category: 'finance',
         priority: 'normal',
         badgeKey: 'pending_finance',
+      },
+      {
+        id: 'petty_cash_request',
+        title: 'Petty Cash Request',
+        description: 'Submit operational spending requests to principal for approval.',
+        icon: 'wallet-outline',
+        route: '/screens/petty-cash-request',
+        category: 'finance',
+        priority: 'normal',
       },
       {
         id: 'attendance_timetable_exceptions',

@@ -31,6 +31,7 @@ import { setupIncomingCallNotifications } from '@/lib/calls/setupPushNotificatio
 import { callKeepManager } from '@/lib/calls/callkeep-manager';
 import { prewarmCallSystem } from '@/lib/calls/CallPrewarming';
 import { toast } from '@/components/ui/ToastProvider';
+import { track } from '@/lib/analytics';
 
 // Lazy getter to avoid accessing supabase at module load time
 const getSupabase = () => assertSupabase();
@@ -722,9 +723,13 @@ export function CallProvider({ children }: CallProviderProps) {
         return;
       }
       
-      // Refresh presence data to get latest status
-      console.log('[CallProvider] Refreshing presence before call check...');
-      await refreshPresence();
+      track('edudash.calls.start_click', { call_type: 'voice' });
+
+      // Refresh presence in the background (do not block call start UX).
+      console.log('[CallProvider] Refreshing presence before call check (non-blocking)...');
+      void refreshPresence().catch((err) => {
+        console.warn('[CallProvider] Presence refresh failed (non-blocking):', err);
+      });
       
       // Check if user is online
       const userOnline = isUserOnline(userId);
@@ -761,9 +766,13 @@ export function CallProvider({ children }: CallProviderProps) {
         return;
       }
       
-      // Refresh presence data to get latest status
-      console.log('[CallProvider] Refreshing presence before video call check...');
-      await refreshPresence();
+      track('edudash.calls.start_click', { call_type: 'video' });
+
+      // Refresh presence in the background (do not block call start UX).
+      console.log('[CallProvider] Refreshing presence before video call check (non-blocking)...');
+      void refreshPresence().catch((err) => {
+        console.warn('[CallProvider] Presence refresh failed (non-blocking):', err);
+      });
       
       // Check if user is online
       const userOnline = isUserOnline(userId);

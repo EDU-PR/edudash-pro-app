@@ -13,6 +13,7 @@ describe('dashboardPolicy', () => {
   it('blocks quick lesson for k12 teachers and allows create lesson', () => {
     expect(isDashboardActionAllowed('teacher', 'k12_school', 'quick_lesson')).toBe(false);
     expect(isDashboardActionAllowed('teacher', 'k12_school', 'create_lesson')).toBe(true);
+    expect(isDashboardActionAllowed('teacher', 'k12_school', 'request_petty_cash')).toBe(true);
   });
 
   it('filters principal actions using the school-type policy map', () => {

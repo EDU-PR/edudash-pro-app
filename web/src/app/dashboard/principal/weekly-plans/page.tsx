@@ -51,9 +51,11 @@ export default function WeeklyPlansPage() {
   };
 
   const handleReject = async (id: string) => {
-    if (!confirm('Request revisions? The plan will be returned to draft status.')) return;
+    const reason = prompt('Request revisions (reason required):');
+    const trimmed = (reason || '').trim();
+    if (!trimmed) return;
     try {
-      await rejectPlan(id);
+      await rejectPlan(id, trimmed);
       setSelectedPlan(null);
     } catch (err: any) {
       alert(`Error: ${err.message}`);

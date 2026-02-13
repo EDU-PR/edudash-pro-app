@@ -77,50 +77,43 @@ export const useTeacherThreads = () => {
           .in('id', Array.from(allUserIds));
         
         const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+        // Aggregated per-thread summary (unread_count + last_message) in one RPC to avoid N+1.
+        const { data: summaries, error: summaryError } = await client.rpc('get_my_message_threads_summary');
+        if (summaryError) {
+          logger.warn('useTeacherThreads', 'get_my_message_threads_summary failed:', summaryError.message);
+        }
+        const summaryMap = new Map<string, any>();
+        (summaries || []).forEach((row: any) => {
+          if (row?.thread_id) summaryMap.set(row.thread_id, row);
+        });
         
-        // Enrich threads with profile data and fetch last message
-        const enrichedThreads = await Promise.all(
-          teacherThreads.map(async (thread: any) => {
-            const { data: lastMessage } = await client
-              .from('messages')
-              .select('content, created_at, sender_id')
-              .eq('thread_id', thread.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            
-            // Calculate unread count
-            const teacherParticipant = thread.message_participants?.find(
-              (p: any) => p.user_id === user.id && p.role === 'teacher'
-            );
-            
-            let unreadCount = 0;
-            if (teacherParticipant) {
-              const lastReadAt = teacherParticipant.last_read_at || '2000-01-01';
-              const { count } = await client
-                .from('messages')
-                .select('id', { count: 'exact', head: true })
-                .eq('thread_id', thread.id)
-                .neq('sender_id', user.id)
-                .gt('created_at', lastReadAt);
-              
-              unreadCount = count || 0;
-            }
-            
-            // Enrich participants with profiles
-            const participants = (thread.message_participants || []).map((p: any) => ({
-              ...p,
-              user_profile: profilesMap.get(p.user_id) || null,
-            }));
-            
-            return {
-              ...thread,
-              participants,
-              last_message: lastMessage,
-              unread_count: unreadCount,
-            };
-          })
-        );
+        // Enrich threads with profile data + summary fields
+        const enrichedThreads = teacherThreads.map((thread: any) => {
+          const summary = summaryMap.get(thread.id);
+
+          const lastMessage =
+            summary?.last_message_id && summary?.last_message_content
+              ? {
+                  content: summary.last_message_content,
+                  sender_id: summary.last_message_sender_id || undefined,
+                  created_at: summary.last_message_created_at,
+                }
+              : undefined;
+
+          // Enrich participants with profiles
+          const participants = (thread.message_participants || []).map((p: any) => ({
+            ...p,
+            user_profile: profilesMap.get(p.user_id) || null,
+          }));
+          
+          return {
+            ...thread,
+            participants,
+            last_message: lastMessage,
+            unread_count: typeof summary?.unread_count === 'number' ? summary.unread_count : 0,
+          };
+        });
         
         // Deduplicate by contact (keep most recent thread per parent)
         const uniqueThreadMap = new Map<string, MessageThread>();

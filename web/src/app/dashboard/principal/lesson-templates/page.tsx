@@ -21,7 +21,7 @@ export default function LessonTemplatesPage() {
 
   const { profile } = useUserProfile(userId);
   const preschoolId = profile?.preschoolId;
-  const { templates, loading: templatesLoading, createTemplate, updateTemplate, deleteTemplate } =
+  const { templates, loading: templatesLoading, createTemplate, updateTemplate, deleteTemplate, refetch } =
     useLessonTemplates(preschoolId);
 
   useEffect(() => {
@@ -62,13 +62,9 @@ export default function LessonTemplatesPage() {
 
   const handleSetDefault = async (id: string) => {
     try {
-      // First unset all defaults
-      const currentDefaults = templates.filter((t) => t.is_default);
-      for (const t of currentDefaults) {
-        await updateTemplate(t.id, { is_default: false });
-      }
-      // Then set this one as default
-      await updateTemplate(id, { is_default: true });
+      const { error } = await supabase.rpc('set_default_lesson_template', { p_template_id: id });
+      if (error) throw error;
+      await refetch();
     } catch (err: any) {
       alert(`Error: ${err.message}`);
     }

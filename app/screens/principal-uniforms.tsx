@@ -11,7 +11,7 @@ import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
 import { logger } from '@/lib/logger';
 import {
   SIZE_OPTIONS, isUniformPaymentRecord,
-  deriveUniformData, exportUniformPdf, useUniformMessaging,
+  deriveUniformData, exportUniformPdf, useUniformMessaging, hasAssignedBackNumber, needsGeneratedBackNumber,
 } from '@/hooks/principal-uniforms';
 import type { UniformRow, StudentRow, DisplayRow } from '@/hooks/principal-uniforms';
 
@@ -41,8 +41,17 @@ export default function PrincipalUniformsScreen() {
     () => new Map()
   );
 
-  const { bulkMessaging, bulkMessageUnpaid, bulkMessageNoOrder } = useUniformMessaging({
-    userId: user?.id, schoolId, profile, showAlert,
+  const {
+    bulkMessaging,
+    singleMessagingTargetId,
+    bulkMessageUnpaid,
+    bulkMessageNoOrder,
+    messageSingleParent,
+  } = useUniformMessaging({
+    userId: user?.id,
+    schoolId,
+    profile,
+    showAlert,
   });
 
   const load = useCallback(async () => {
@@ -127,10 +136,11 @@ export default function PrincipalUniformsScreen() {
 
   const { submittedRows, missingRows, submittedCount, missingCount,
     missingContactableCount, unpaidContactableCount, sizeSummary, missingByClass } = derived;
-  const missingNumberCount = useMemo(
-    () => submittedRows.filter((row) => !String(row.tshirtNumber || '').trim()).length,
+  const submittedMissingNumberCount = useMemo(
+    () => submittedRows.filter((row) => needsGeneratedBackNumber(row.tshirtNumber)).length,
     [submittedRows]
   );
+  const learnersWithoutNumberCount = submittedMissingNumberCount + missingCount;
 
   const displayRows: DisplayRow[] = useMemo(() => (
     statusFilter === 'submitted' ? submittedRows
@@ -162,11 +172,13 @@ export default function PrincipalUniformsScreen() {
   const handleGenerateNumbers = useCallback(async () => {
     if (!schoolId) return;
 
-    const submittedWithoutNumber = rows.filter((row) => !String(row?.tshirt_number || '').trim());
+    const submittedWithoutNumber = rows.filter((row) => needsGeneratedBackNumber(row?.tshirt_number));
     if (submittedWithoutNumber.length === 0) {
       showAlert({
         title: 'No Missing Numbers',
-        message: 'All submitted uniform orders already have T-shirt numbers.',
+        message: missingCount > 0
+          ? `All submitted uniform orders already have valid numbers. ${missingCount} learner(s) still need to submit uniform orders before numbers can be generated.`
+          : 'All submitted uniform orders already have valid T-shirt numbers.',
         type: 'info',
         buttons: [{ text: 'OK' }],
       });
@@ -175,10 +187,8 @@ export default function PrincipalUniformsScreen() {
 
     const usedNumbers = new Set<number>();
     rows.forEach((row) => {
-      const raw = String(row?.tshirt_number || '').trim();
-      if (!/^\d{1,2}$/.test(raw)) return;
-      const parsed = Number(raw);
-      if (!Number.isFinite(parsed) || parsed < 1 || parsed > 99) return;
+      const parsed = Number.parseInt(String(row?.tshirt_number || '').trim(), 10);
+      if (!hasAssignedBackNumber(row?.tshirt_number) || !Number.isFinite(parsed)) return;
       usedNumbers.add(parsed);
     });
 
@@ -212,22 +222,48 @@ export default function PrincipalUniformsScreen() {
     setGeneratingNumbers(true);
     try {
       const supabase = assertSupabase();
+      const assignmentMap = new Map(assignments.map((assignment) => [assignment.id, assignment.number]));
+      const nowIso = new Date().toISOString();
       const results = await Promise.allSettled(
         assignments.map(async (assignment) => {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from('uniform_requests')
             .update({
               tshirt_number: assignment.number,
-              updated_at: new Date().toISOString(),
+              updated_at: nowIso,
             })
             .eq('id', assignment.id)
-            .eq('preschool_id', schoolId);
+            .eq('preschool_id', schoolId)
+            .select('id')
+            .maybeSingle();
           if (error) throw error;
+          if (!data?.id) {
+            throw new Error('Update was rejected by access policy or no matching order was found.');
+          }
         })
       );
 
       const failedCount = results.filter((result) => result.status === 'rejected').length;
       const successCount = assignments.length - failedCount;
+      const firstFailure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      const firstFailureMessage = firstFailure?.reason instanceof Error
+        ? firstFailure.reason.message
+        : firstFailure?.reason
+          ? String(firstFailure.reason)
+          : null;
+
+      if (successCount > 0) {
+        // Keep UI/export in sync immediately, then rehydrate from DB.
+        setRows((prev) => prev.map((row) => (
+          assignmentMap.has(row.id)
+            ? {
+              ...row,
+              tshirt_number: assignmentMap.get(row.id) || row.tshirt_number,
+              updated_at: nowIso,
+            }
+            : row
+        )));
+      }
 
       await load();
 
@@ -235,12 +271,15 @@ export default function PrincipalUniformsScreen() {
         throw new Error('No numbers were assigned. Please try again.');
       }
 
-      const notes: string[] = [`Assigned ${successCount} unique numbers.`];
+      const notes: string[] = [`Assigned ${successCount} unique number(s).`];
       if (skippedCount > 0) {
         notes.push(`${skippedCount} order(s) were skipped because only 99 unique 1–2 digit numbers are available.`);
       }
       if (failedCount > 0) {
-        notes.push(`${failedCount} update(s) failed. Please retry.`);
+        notes.push(`${failedCount} update(s) failed. ${firstFailureMessage ? 'Example: ' + firstFailureMessage : 'Please retry.'}`);
+      }
+      if (missingCount > 0) {
+        notes.push(`${missingCount} learner(s) still need to submit uniform orders before numbers can be generated.`);
       }
 
       showAlert({
@@ -259,25 +298,25 @@ export default function PrincipalUniformsScreen() {
     } finally {
       setGeneratingNumbers(false);
     }
-  }, [schoolId, rows, load, showAlert]);
+  }, [schoolId, rows, load, missingCount, showAlert]);
 
   const handleGenerateNumbersPress = useCallback(() => {
     if (!schoolId) return;
-    if (missingNumberCount === 0 || generatingNumbers) {
+    if (submittedMissingNumberCount === 0 || generatingNumbers) {
       handleGenerateNumbers();
       return;
     }
 
     showAlert({
       title: 'Generate T-shirt Numbers',
-      message: `Assign unique 1–2 digit numbers (1-99) to ${missingNumberCount} submitted order(s) that are missing numbers?`,
+      message: `Assign unique 1–2 digit numbers (1-99) to ${submittedMissingNumberCount} submitted order(s) missing valid numbers?${missingCount > 0 ? ` ${missingCount} learner(s) still have no order submitted.` : ''}`,
       type: 'info',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Generate', onPress: handleGenerateNumbers },
       ],
     });
-  }, [schoolId, missingNumberCount, generatingNumbers, handleGenerateNumbers, showAlert]);
+  }, [schoolId, submittedMissingNumberCount, generatingNumbers, handleGenerateNumbers, missingCount, showAlert]);
 
   const paymentStatusMeta = useCallback((status: DisplayRow['paymentStatus']) => {
     if (status === 'paid') return { label: 'Paid', bg: theme.success + '22', border: theme.success + '55', text: theme.success };
@@ -319,8 +358,10 @@ export default function PrincipalUniformsScreen() {
               <Text style={styles.exportButtonText}>
                 {generatingNumbers
                   ? 'Generating...'
-                  : missingNumberCount > 0
-                    ? `Generate Numbers (${missingNumberCount})`
+                  : submittedMissingNumberCount > 0
+                    ? learnersWithoutNumberCount > submittedMissingNumberCount
+                      ? `Generate Numbers (${submittedMissingNumberCount}/${learnersWithoutNumberCount})`
+                      : `Generate Numbers (${submittedMissingNumberCount})`
                     : 'Generate Numbers'}
               </Text>
             </TouchableOpacity>
@@ -350,6 +391,10 @@ export default function PrincipalUniformsScreen() {
             <View style={styles.countChip}>
               <Ionicons name="alert-circle" size={14} color={theme.warning || '#f59e0b'} />
               <Text style={styles.countChipText}>{missingCount} missing</Text>
+            </View>
+            <View style={styles.countChip}>
+              <Ionicons name="keypad-outline" size={14} color={theme.info || '#60a5fa'} />
+              <Text style={styles.countChipText}>{learnersWithoutNumberCount} without number</Text>
             </View>
             <TouchableOpacity
               style={[styles.bulkButton, { backgroundColor: theme.warning || '#f59e0b' }]}
@@ -492,6 +537,18 @@ export default function PrincipalUniformsScreen() {
                     ) : (
                       <Text style={styles.muted}>Parent not linked.</Text>
                     )}
+                    {item.parentId ? (
+                      <TouchableOpacity
+                        style={[styles.inlineActionButton, { borderColor: theme.primary + '66', backgroundColor: theme.primary + '18' }]}
+                        onPress={() => messageSingleParent(item)}
+                        disabled={bulkMessaging !== null || singleMessagingTargetId === item.id}
+                      >
+                        <Ionicons name="person-add-outline" size={14} color={theme.primary} />
+                        <Text style={[styles.inlineActionButtonText, { color: theme.primary }]}>
+                          {singleMessagingTargetId === item.id ? 'Assigning...' : 'Assign to Parent'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -500,8 +557,8 @@ export default function PrincipalUniformsScreen() {
                     <Text style={styles.text}>T-shirts: {item.tshirtQuantity ?? '-'}</Text>
                     <Text style={styles.text}>Shorts: {item.shortsQuantity ?? '-'}</Text>
                     <Text style={styles.text}>Returning: {item.isReturning ? 'Yes' : 'No'}</Text>
-                    {item.tshirtNumber
-                      ? <Text style={styles.text}>T-shirt Number: {item.tshirtNumber}</Text>
+                    {hasAssignedBackNumber(item.tshirtNumber)
+                      ? <Text style={styles.text}>T-shirt Number: {String(item.tshirtNumber).trim()}</Text>
                       : <Text style={styles.muted}>T-shirt Number: not assigned</Text>}
                     <Text style={styles.text}>Sample supplied: {item.sampleSupplied ? 'Yes' : 'No'}</Text>
                     {item.studentCode ? <Text style={styles.text}>Student Code: {item.studentCode}</Text> : null}
@@ -510,6 +567,18 @@ export default function PrincipalUniformsScreen() {
                     <Text style={styles.muted}>
                       Last updated: {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString('en-ZA') : item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('en-ZA') : '-'}
                     </Text>
+                    {item.parentId ? (
+                      <TouchableOpacity
+                        style={[styles.inlineActionButton, { borderColor: theme.primary + '66', backgroundColor: theme.primary + '18' }]}
+                        onPress={() => messageSingleParent(item)}
+                        disabled={bulkMessaging !== null || singleMessagingTargetId === item.id}
+                      >
+                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={theme.primary} />
+                        <Text style={[styles.inlineActionButtonText, { color: theme.primary }]}>
+                          {singleMessagingTargetId === item.id ? 'Sending...' : 'Message Parent'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </>
                 )}
               </View>
@@ -562,6 +631,21 @@ const createStyles = (theme: any) => StyleSheet.create({
   name: { color: theme?.text || '#fff', fontWeight: '800', fontSize: 16, marginBottom: 4 },
   paymentChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   paymentChipText: { fontSize: 11, fontWeight: '700' },
+  inlineActionButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inlineActionButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   text: { color: theme?.text || '#fff', fontSize: 13 },
   muted: { color: theme?.textSecondary || '#9CA3AF', paddingVertical: 8, fontSize: 12 },
 });

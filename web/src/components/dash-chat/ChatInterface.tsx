@@ -18,6 +18,7 @@ import { useChatLogic } from '@/hooks/useChatLogic';
 import type { ChatMessage, SelectedImage } from './types';
 
 interface ChatInterfaceProps {
+  scope: 'parent' | 'teacher' | 'principal';
   conversationId: string;
   initialMessages?: ChatMessage[];
   userId?: string;
@@ -35,6 +36,7 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({
+  scope,
   conversationId,
   initialMessages = [],
   userId,
@@ -59,6 +61,7 @@ export function ChatInterface({
     loadConversation,
     sendMessage,
   } = useChatLogic({ 
+    scope,
     conversationId, 
     messages, 
     setMessages,

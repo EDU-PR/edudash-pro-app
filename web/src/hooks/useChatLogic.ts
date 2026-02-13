@@ -12,6 +12,7 @@ import type { ChatMessage, SelectedImage, ExamContext } from '@/components/dash-
 import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/ocrPrompts';
 
 interface UseChatLogicProps {
+  scope: 'parent' | 'teacher' | 'principal';
   conversationId: string;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -20,7 +21,7 @@ interface UseChatLogicProps {
   onMessageSent?: () => void; // Callback when message is sent successfully
 }
 
-export function useChatLogic({ conversationId, messages, setMessages, userId, onQuotaExceeded, onMessageSent }: UseChatLogicProps) {
+export function useChatLogic({ scope, conversationId, messages, setMessages, userId, onQuotaExceeded, onMessageSent }: UseChatLogicProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [examContext, setExamContext] = useState<ExamContext>({});
@@ -116,8 +117,10 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
         });
 
         if (quotaCheck && !quotaCheck.allowed) {
-          const upgradeText = quotaCheck.upgrade_available 
-            ? `💡 [Upgrade your plan](/dashboard/parent/upgrade) for ${quotaCheck.remaining > 0 ? 'more messages' : 'unlimited messages'}!` 
+          const upgradeText = quotaCheck.upgrade_available
+            ? scope === 'parent'
+              ? `💡 [Upgrade your plan](/dashboard/parent/upgrade) for ${quotaCheck.remaining > 0 ? 'more messages' : 'unlimited messages'}!`
+              : 'Ask your school admin about upgrading your plan for higher limits.'
             : 'Your limit resets tomorrow.';
           
           const quotaMessage: ChatMessage = {
@@ -241,7 +244,7 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
       const result: any = await dashAIThrottler.enqueue(() =>
         supabase.functions.invoke('ai-proxy', {
           body: {
-            scope: 'parent',
+            scope,
             service_type: ocrMode ? 'image_analysis' : 'dash_conversation',
             payload: {
               prompt: payload.prompt,
@@ -254,9 +257,10 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
               ocr_response_format: payload.ocr_response_format,
             },
             enable_tools: true,
+            prefer_openai: true,
             stream: false,
             metadata: {
-              role: 'parent',
+              role: scope,
               supports_images: true,
               allow_diagrams: true,
               ocr_mode: ocrMode,
@@ -410,7 +414,16 @@ export function useChatLogic({ conversationId, messages, setMessages, userId, on
     } finally {
       setIsLoading(false);
     }
-  }, [messages, setMessages, supabase, saveConversation]);
+  }, [
+    messages,
+    onMessageSent,
+    onQuotaExceeded,
+    saveConversation,
+    scope,
+    setMessages,
+    supabase,
+    userId,
+  ]);
 
   return {
     isLoading,

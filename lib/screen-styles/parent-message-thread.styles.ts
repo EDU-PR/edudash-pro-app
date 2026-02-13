@@ -48,7 +48,7 @@ export const messageThreadStyles = StyleSheet.create({
   wallpaperOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
   messagesClip: { flex: 1, overflow: 'hidden', zIndex: 1 },
   messages: { flex: 1 },
-  messagesContent: { paddingHorizontal: 12, paddingTop: 16, flexGrow: 1 },
+  messagesContent: { paddingHorizontal: 16, paddingTop: 16, flexGrow: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, minHeight: 300 },
   loadingText: { marginTop: 12, fontSize: 14, color: 'rgba(255,255,255,0.7)' },
   errorText: { marginTop: 12, fontSize: 16, fontWeight: '500', textAlign: 'center', color: '#fff' },

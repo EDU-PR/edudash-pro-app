@@ -50,11 +50,12 @@ export interface MessageThread {
     user_profile?: ParticipantProfile;
   }>;
   last_message?: {
+    id?: string;
     content: string;
     created_at: string;
     sender_id: string;
-    read_at?: string | null;
     delivered_at?: string | null;
+    read_by?: string[] | null;
   };
   unread_count?: number;
 }

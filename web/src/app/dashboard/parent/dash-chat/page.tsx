@@ -243,6 +243,7 @@ function DashChatPageInner() {
           }}>
             {hydrated && activeConversationId && (
               <ChatInterface
+                scope="parent"
                 conversationId={activeConversationId}
                 userId={userId}
                 onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}

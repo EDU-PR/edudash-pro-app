@@ -16,6 +16,10 @@ interface TokenRequest {
   roomName: string;
   userName?: string;
   isOwner?: boolean;
+  /** Only mute when explicitly requested by the client */
+  startAudioOff?: boolean;
+  /** Back-compat for older clients */
+  start_audio_off?: boolean;
 }
 
 // CORS headers
@@ -109,6 +113,7 @@ Deno.serve(async (req: Request) => {
 
     const body: TokenRequest = await req.json();
     const { roomName, userName, isOwner } = body;
+    const startAudioOff = body.startAudioOff ?? body.start_audio_off ?? false;
 
     if (!roomName) {
       return new Response(
@@ -139,7 +144,7 @@ Deno.serve(async (req: Request) => {
           enable_screenshare: true,
           enable_recording: shouldBeOwner ? 'cloud' : undefined,
           start_video_off: false,
-          start_audio_off: !shouldBeOwner, // Non-owners join muted
+          start_audio_off: startAudioOff === true, // Only mute when explicitly requested
           exp: Math.floor(Date.now() / 1000) + 3600 * 3, // 3 hour token
         },
       }),

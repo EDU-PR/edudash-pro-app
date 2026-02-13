@@ -133,7 +133,18 @@ export const useParentMessagesRealtime = (threadId: string | null) => {
             }
           }
 
-          const newMessage = { ...payload.new, sender: senderProfile || null, reactions: [] } as Message;
+          // Fetch reply_to content if message is a reply
+          let replyTo = null;
+          if (payload.new.reply_to_id) {
+            const { data: replyMsg } = await client
+              .from('messages')
+              .select('id, content, content_type, sender_id, sender:profiles(first_name, last_name)')
+              .eq('id', payload.new.reply_to_id)
+              .single();
+            if (replyMsg) replyTo = replyMsg;
+          }
+
+          const newMessage = { ...payload.new, sender: senderProfile || null, reactions: [], reply_to: replyTo } as Message;
           queryClient.setQueryData(['messages', threadId], (old: Message[] | undefined) => updateMessageCache(old, newMessage));
           queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
         }

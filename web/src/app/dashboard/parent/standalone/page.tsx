@@ -750,6 +750,7 @@ export default function StandaloneParentDashboard() {
             flexDirection: 'column',
           }}>
             <AskAIWidget
+              scope="parent"
               initialPrompt={aiPrompt}
               displayMessage={aiDisplay}
               language={aiLanguage}

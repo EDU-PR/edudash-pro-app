@@ -37,6 +37,8 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   read_by?: string[];
+  delivered_at?: string | null;
+  /** Legacy / non-DB-backed: kept for backward compatibility during rollout */
   delivered_to?: string[];
   deleted_at?: string | null;
   reply_to_id?: string | null;
@@ -185,22 +187,25 @@ export const ChatMessageBubble = ({
     if (!isOwn) return 'sent'; // Not applicable for received messages
     
     // Check if read by any other participant
-    const isRead = message.read_by && otherParticipantIds.length > 0
-      ? otherParticipantIds.some(id => message.read_by?.includes(id))
-      : false;
+    const isRead =
+      Array.isArray(message.read_by) && otherParticipantIds.length > 0
+        ? otherParticipantIds.some((id) => message.read_by?.includes(id))
+        : false;
     
     if (isRead) return 'read';
     
-    // Check if delivered to any other participant
-    const isDelivered = message.delivered_to && otherParticipantIds.length > 0
-      ? otherParticipantIds.some(id => message.delivered_to?.includes(id))
-      : false;
+    // Delivered is a single timestamp for this phase (messages.delivered_at).
+    // Keep delivered_to as a soft fallback during rollout.
+    const isDelivered =
+      Boolean(message.delivered_at) ||
+      (Array.isArray(message.delivered_to) && otherParticipantIds.length > 0
+        ? otherParticipantIds.some((id) => message.delivered_to?.includes(id))
+        : false);
     
     if (isDelivered) return 'delivered';
     
-    // If we have an ID, it's been saved to DB (sent)
-    // For now, treat all saved messages as delivered since we don't track delivery separately
-    return message.id ? 'delivered' : 'sending';
+    // Persisted but not yet delivered/read.
+    return message.id ? 'sent' : 'sending';
   };
   
   const messageStatus = getMessageStatus();

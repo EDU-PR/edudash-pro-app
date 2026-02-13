@@ -86,6 +86,9 @@ export interface WeeklyPlan {
   submitted_at?: string;
   approved_by?: string;
   approved_at?: string;
+  rejection_reason?: string | null;
+  rejected_at?: string | null;
+  rejected_by?: string | null;
   created_at: string;
   updated_at: string;
 }

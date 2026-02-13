@@ -55,29 +55,32 @@ export const ThreadMessageTicks = ({
   const isOwnMessage = lastMessage.sender_id === currentUserId;
   if (!isOwnMessage) return null;
 
-  // Find other participant (not us)
-  const otherParticipant = participants?.find((p) => p.user_id !== currentUserId);
-  if (!otherParticipant) return null;
+  const otherParticipantIds = (participants || [])
+    .map((p) => p.user_id)
+    .filter((id): id is string => Boolean(id && id !== currentUserId));
 
-  // Check if they've read it (their last_read_at is after message created_at)
-  const messageTime = new Date(lastMessage.created_at).getTime();
-  const readTime = otherParticipant.last_read_at
-    ? new Date(otherParticipant.last_read_at).getTime()
-    : 0;
-  const isRead = readTime >= messageTime;
+  const isRead =
+    Array.isArray(lastMessage.read_by) && otherParticipantIds.length > 0
+      ? otherParticipantIds.some((id) => lastMessage.read_by?.includes(id))
+      : false;
+
+  const isDelivered = Boolean(lastMessage.delivered_at);
+
+  const ticks = isRead ? '✓✓' : isDelivered ? '✓✓' : '✓';
+  const color = isRead ? '#34d399' : 'rgba(148, 163, 184, 0.6)';
 
   return (
     <span
       style={{
         fontSize: 13,
         fontWeight: 600,
-        color: isRead ? '#34d399' : 'rgba(148, 163, 184, 0.6)',
+        color,
         letterSpacing: '-3px',
         marginRight: 4,
         flexShrink: 0,
       }}
     >
-      ✓✓
+      {ticks}
     </span>
   );
 };

@@ -19,6 +19,7 @@ export default function TeacherDashChatPage() {
   const [activeConversationId, setActiveConversationId] = useState<string>('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [quotaRefreshTrigger, setQuotaRefreshTrigger] = useState(0);
 
   // Keyboard navigation - Escape to close sidebar
   useEffect(() => {
@@ -132,7 +133,7 @@ export default function TeacherDashChatPage() {
 
         {/* Quota Progress Bar */}
         <div className="flex-shrink-0">
-          {userId && <QuotaProgress userId={userId} />}
+          {userId && <QuotaProgress userId={userId} refreshTrigger={quotaRefreshTrigger} />}
         </div>
 
         <div className="flex flex-1 min-h-0" style={{ overflow: 'hidden' }}>
@@ -158,7 +159,10 @@ export default function TeacherDashChatPage() {
 
           <main className="flex-1 flex flex-col" style={{ overflow: 'hidden' }}>
             <ChatInterface
+              scope="teacher"
               conversationId={activeConversationId}
+              userId={userId}
+              onMessageSent={() => setQuotaRefreshTrigger(prev => prev + 1)}
               showTutorPanel={false}
             />
           </main>

@@ -130,7 +130,7 @@ export function PrincipalSidebar({
           }
         }}
       >
-        <AskAIWidget inline userId={userId} />
+        <AskAIWidget scope="principal" inline userId={userId} />
       </div>
     </>
   );
