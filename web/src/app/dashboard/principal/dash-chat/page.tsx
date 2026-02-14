@@ -117,11 +117,11 @@ export default function PrincipalDashChatPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowExamBuilder(true)}
-              aria-label="Create exam with AI"
+              aria-label="Build full exam paper"
               className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
             >
               <FileText size={14} aria-hidden="true" />
-              <span className="hidden md:inline">Create Exam</span>
+              <span className="hidden md:inline">Build Full Exam (Printable)</span>
             </button>
             <button
               onClick={handleNewConversation}
@@ -215,7 +215,7 @@ export default function PrincipalDashChatPage() {
                   </div>
                   <h2 className="text-xl font-bold m-0">Welcome to Dash School AI</h2>
                   <p className="text-sm text-gray-400 m-0 mb-2">
-                    Your intelligent partner for school management, ECD planning, curriculum design, and staff coordination.
+                    Advisor Mode handles operations and planning. Exam Builder generates full CAPS-aligned formal test papers.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
                     <button
@@ -230,7 +230,7 @@ export default function PrincipalDashChatPage() {
                       className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
                     >
                       <FileText size={16} aria-hidden="true" />
-                      Create Exam
+                      Build Full Exam (Printable)
                     </button>
                   </div>
                 </div>

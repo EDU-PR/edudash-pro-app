@@ -225,6 +225,24 @@ const DASH_AI_SERVICE_TYPE: AIQuotaFeature = 'homework_help';
 const LOCAL_SNAPSHOT_LIMIT = 200;
 const LOCAL_SNAPSHOT_MAX = 200;
 
+const buildTutorKickoffPrompt = (
+  mode: NonNullable<UseDashAssistantOptions['externalTutorMode']>,
+  config?: UseDashAssistantOptions['tutorConfig']
+) => {
+  const modeLabel = String(mode || 'diagnostic').toLowerCase();
+  const contextParts = [
+    config?.grade ? `Grade: ${config.grade}` : null,
+    config?.subject ? `Subject: ${config.subject}` : null,
+    config?.topic ? `Topic: ${config.topic}` : null,
+  ].filter(Boolean);
+  const contextBlock = contextParts.length > 0 ? `\n${contextParts.join('\n')}` : '';
+  return [
+    `Start a ${modeLabel} tutor session for me.${contextBlock}`,
+    'Use Diagnose → Teach → Practice flow.',
+    'Ask one question at a time and adapt based on my answer.',
+  ].join('\n');
+};
+
 export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssistantReturn {
   const { conversationId, initialMessage, handoffSource, onClose, externalTutorMode, tutorConfig } = options;
   const { setLayout } = useDashboardPreferences();
@@ -333,6 +351,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const [learnerContext, setLearnerContext] = useState<LearnerContext | null>(null);
   const [parentChildren, setParentChildren] = useState<any[]>([]);
   const [voiceBudgetRemainingMs, setVoiceBudgetRemainingMs] = useState<number | null>(null);
+  const externalTutorKickoffSentRef = useRef(false);
   
   // Alert state for premium modals (replaces native Alert.alert)
   const [alertState, setAlertState] = useState<AlertState>({
@@ -855,17 +874,23 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     }
   }, [profile?.role]);
 
-  // hasFreeVoiceBudget check - used by voice gating and quota checks
+  // hasFreeVoiceBudget check - used by TTS gating and quota checks
   const hasFreeVoiceBudget = voiceBudgetRemainingMs === null
     ? true
     : voiceBudgetRemainingMs > 0;
 
-  // Check if user has TTS/voice features
-  // Note: Free tier gets a limited daily voice budget
+  // Check if user has TTS (text-to-speech) features
+  // Note: Free tier gets a limited daily voice budget for TTS only
   const hasTTSAccess = useCallback(() => {
     if (!isFreeTier) return true;
     return hasFreeVoiceBudget;
   }, [isFreeTier, hasFreeVoiceBudget]);
+
+  // STT (speech-to-text / voice input) is always allowed if permissions are granted.
+  // Voice INPUT should never be blocked by TTS budget — they are separate features.
+  const hasSTTAccess = useCallback(() => {
+    return true; // STT gating is handled by provider availability + permissions, not budget
+  }, []);
 
   const stopSpeaking = useCallback(async () => {
     if (!dashInstance) return;
@@ -1123,6 +1148,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
                 metadata: {
                   tool_name: plan.tool,
                   tool_result: execution,
+                  tool_args: plan.parameters || {},
                 },
               };
 
@@ -1744,6 +1770,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
   const handleInputMicPress = useCallback(async () => {
     await handleDashVoiceInputPress({
       hasTTSAccess,
+      hasSTTAccess,
       isRecording,
       stopVoiceRecording,
       tier,
@@ -1773,6 +1800,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     });
   }, [
     hasTTSAccess,
+    hasSTTAccess,
     isRecording,
     stopVoiceRecording,
     tier,
@@ -1884,6 +1912,7 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
         metadata: {
           tool_name: toolName,
           tool_result: execution,
+          tool_args: params || {},
         },
       };
 
@@ -2113,7 +2142,10 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
 
         // Send initial message or add greeting
         if (initialMessage && initialMessage.trim()) {
-          sendMessage(initialMessage);
+          sendMessage(initialMessage.trim());
+        } else if (!hasExistingMessages && !orbMessagesLoaded && externalTutorMode && !externalTutorKickoffSentRef.current) {
+          externalTutorKickoffSentRef.current = true;
+          sendMessage(buildTutorKickoffPrompt(externalTutorMode, tutorConfig));
         } else if (!hasExistingMessages && !orbMessagesLoaded) {
           const greeting: DashMessage = {
             id: `greeting_${Date.now()}`,
@@ -2137,6 +2169,8 @@ export function useDashAssistant(options: UseDashAssistantOptions): UseDashAssis
     conversationId,
     initialMessage,
     handoffSource,
+    externalTutorMode,
+    tutorConfig,
     loadChatPrefs,
     normalizeConversationMessages,
     hydrateFromSnapshot,

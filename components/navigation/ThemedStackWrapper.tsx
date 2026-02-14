@@ -68,6 +68,7 @@ export function ThemedStackWrapper() {
           's': '/screens/lessons-search',
           'c': '/screens/lessons-categories',
           'a': '/screens/dash-assistant',
+          'x': '/screens/app-search',
           'd': '/screens/teacher-dashboard',
           'p': '/screens/principal-dashboard',
           'f': '/screens/finance-control-center?tab=overview',

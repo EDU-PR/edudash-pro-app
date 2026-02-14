@@ -36,6 +36,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { assertSupabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 import { buildDashTurnTelemetry, createDashTurnId } from '@/lib/dash-ai/turnTelemetry';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
+import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
 import { CosmicOrb } from '@/components/dash-orb/CosmicOrb';
 import { DashOrb } from '@/components/dash-orb/DashOrb';
 import HomeworkScanner, { type HomeworkScanResult } from '@/components/ai/HomeworkScanner';
@@ -307,7 +310,33 @@ export default function DashVoiceScreen() {
 
   // ── Send Message (streaming SSE) ──────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isProcessing) return;
+    const trimmed = text.trim();
+    if (!trimmed || isProcessing) return;
+
+    const flags = getFeatureFlagsSync();
+    const handoffIntent = flags.dash_tutor_auto_handoff_v1 ? classifyFullChatIntent(trimmed) : null;
+    if (handoffIntent) {
+      const history = conversationHistoryRef.current;
+      await persistOrbMessages(history);
+      trackTutorFullChatHandoff({
+        intent: handoffIntent,
+        source: 'dash_voice',
+        role,
+      });
+      router.push({
+        pathname: '/screens/dash-assistant',
+        params: {
+          source: 'orb',
+          initialMessage: trimmed,
+          resumePrompt: trimmed,
+          mode: handoffIntent === 'quiz' ? 'tutor' : 'advisor',
+          tutorMode: handoffIntent === 'quiz' ? 'quiz' : undefined,
+          handoffIntent,
+        },
+      });
+      return;
+    }
+
     const turnId = createDashTurnId('dash_voice_turn');
     const turnStartedAt = Date.now();
     const turnTelemetryBase = buildDashTurnTelemetry({
@@ -326,7 +355,7 @@ export default function DashVoiceScreen() {
     setStreamingText('');
 
     // Add user message to history (use ref to avoid dependency on state)
-    const updatedHistory = [...conversationHistoryRef.current, { role: 'user' as const, content: text.trim() }];
+    const updatedHistory = [...conversationHistoryRef.current, { role: 'user' as const, content: trimmed }];
     conversationHistoryRef.current = updatedHistory;
     setConversationHistory(updatedHistory);
 
@@ -340,8 +369,8 @@ export default function DashVoiceScreen() {
         '\n\n' +
         dashPolicy.systemPromptAddendum;
       const hasImage = !!attachedImage?.base64;
-      const ocrTask = hasImage ? detectOCRTask(text) : null;
-      const ocrMode = hasImage && (isOCRIntent(text) || ocrTask !== null);
+      const ocrTask = hasImage ? detectOCRTask(trimmed) : null;
+      const ocrMode = hasImage && (isOCRIntent(trimmed) || ocrTask !== null);
       const imageContext = hasImage
         ? '\n\nIMAGE PROCESSING: The user attached an image. Describe what you see and provide educational insights.'
         : '';
@@ -551,10 +580,19 @@ export default function DashVoiceScreen() {
           <Text style={[s.headerTitle, { color: theme.text }]}>Dash</Text>
           <Text style={[s.headerSub, { color: theme.textSecondary }]}>{statusLabel}</Text>
         </View>
-        <TouchableOpacity onPress={() => setShowLangMenu(true)} style={[s.langBtn, { borderColor: theme.border }]}>
-          <Ionicons name="language-outline" size={16} color={theme.primary} />
-          <Text style={[s.langBtnText, { color: theme.primary }]}>{langLabel}</Text>
-        </TouchableOpacity>
+        <View style={s.headerRight}>
+          <TouchableOpacity
+            onPress={() => router.push('/screens/app-search?scope=dash&q=dash')}
+            style={[s.headerIconBtn, { borderColor: theme.border }]}
+            accessibilityLabel="Find Dash features"
+          >
+            <Ionicons name="search-outline" size={16} color={theme.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowLangMenu(true)} style={[s.langBtn, { borderColor: theme.border }]}>
+            <Ionicons name="language-outline" size={16} color={theme.primary} />
+            <Text style={[s.langBtnText, { color: theme.primary }]}>{langLabel}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView style={s.content} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 50}>
@@ -722,6 +760,15 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 6, gap: 8 },
   headerBtn: { padding: 8 },
   headerCenter: { flex: 1, alignItems: 'center' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { fontSize: 18, fontWeight: '700' },
   headerSub: { fontSize: 12, marginTop: 1 },
   langBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },

@@ -63,6 +63,9 @@ import { detectOCRTask, getOCRPromptForTask, isOCRIntent } from '@/lib/dash-ai/o
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { compressImageForAI } from '@/lib/dash-ai/imageCompression';
 import { resolveDashPolicy } from '@/lib/dash-ai/DashPolicyResolver';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
+import { trackTutorFullChatHandoff } from '@/lib/ai/trackingEvents';
 
 let AsyncStorage: any = null;
 try {
@@ -165,7 +168,7 @@ export default function DashOrb({
   const [isDragging, setIsDragging] = useState(false);
   const [isListeningForCommand, setIsListeningForCommand] = useState(false);
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
-  const [lastDetectedLanguage, setLastDetectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA' | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<'en-ZA' | 'af-ZA' | 'zu-ZA'>('en-ZA');
   const [memorySnapshot, setMemorySnapshot] = useState('');
   const [quickActionAge, setQuickActionAge] = useState('auto');
   const [quickActionPrompt, setQuickActionPrompt] = useState('');
@@ -319,7 +322,7 @@ export default function DashOrb({
     return () => clearInterval(timer);
   }, [isSpeaking]);
   const onDeviceVoice = useOnDeviceVoice({
-    language: normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA',
+    language: selectedLanguage,
     onPartialResult: (text) => {
       if (!isListeningForCommandRef.current) return;
       setLiveTranscript(text);
@@ -335,7 +338,7 @@ export default function DashOrb({
       setInputText('');
       setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
       setIsListeningForCommand(false);
-      const language = normalizeSupportedLanguage(lastDetectedLanguage) || 'en-ZA';
+      const language = selectedLanguage;
       const formatted = formatTranscript(text, language, {
         whisperFlow: true,
         summarize: true,
@@ -905,7 +908,7 @@ export default function DashOrb({
               
               if (transcriptResult && transcriptResult.text && transcriptResult.text.trim()) {
                 const normalized = normalizeSupportedLanguage(transcriptResult.language);
-                if (normalized) setLastDetectedLanguage(normalized);
+                if (normalized) setSelectedLanguage(normalized);
                 // Remove listening message
                 setMessages(prev => prev.filter(m => !m.id.startsWith('listening-')));
                 
@@ -1070,6 +1073,30 @@ export default function DashOrb({
   const handleSend = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed && pendingAttachments.length === 0) return;
+    const flags = getFeatureFlagsSync();
+    const handoffIntent = flags.dash_tutor_auto_handoff_v1 ? classifyFullChatIntent(trimmed) : null;
+
+    if (handoffIntent && !isEditing && !pendingTutorIntent) {
+      trackTutorFullChatHandoff({
+        intent: handoffIntent,
+        source: 'dash_orb',
+        role: normalizedRole,
+      });
+      setIsExpanded(false);
+      router.push({
+        pathname: '/screens/dash-assistant',
+        params: {
+          source: 'dash_orb',
+          initialMessage: trimmed,
+          resumePrompt: trimmed,
+          mode: handoffIntent === 'quiz' ? 'tutor' : 'advisor',
+          tutorMode: handoffIntent === 'quiz' ? 'quiz' : undefined,
+          handoffIntent,
+        },
+      } as any);
+      return;
+    }
+
     if (isEditing && editingMessageId) {
       const index = messages.findIndex((m) => m.id === editingMessageId);
       const baseMessages = index >= 0 ? messages.slice(0, index) : messages;
@@ -1255,7 +1282,7 @@ export default function DashOrb({
         );
 
         if (voiceEnabled && Platform.OS !== 'web') {
-          const ttsLanguage = lastDetectedLanguage || 'en-ZA';
+          const ttsLanguage = selectedLanguage;
           lastTTSErrorRef.current = '';
           try {
             const phonicsMode = shouldUsePhonicsMode(result, {
@@ -1317,7 +1344,7 @@ export default function DashOrb({
           if (!nextSentence) return;
           isSpeakingSentenceRef.current = true;
           try {
-            const ttsLang = lastDetectedLanguage || 'en-ZA';
+            const ttsLang = selectedLanguage;
             const pm = shouldUsePhonicsMode(nextSentence, {
               ageYears: learnerAgeYears,
               gradeLevel: learnerGrade || null,

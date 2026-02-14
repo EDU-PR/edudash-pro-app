@@ -35,6 +35,19 @@ const TTS_LIMITS: Record<string, number> = {
   school: 1000,
 };
 
+const AZURE_VOICES_BY_LANG: Record<string, { male: string; female: string }> = {
+  en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
+  af: { male: 'af-ZA-AdriNeural', female: 'af-ZA-AdriNeural' },
+  zu: { male: 'zu-ZA-ThandoNeural', female: 'zu-ZA-ThandoNeural' },
+  xh: { male: 'xh-ZA-NomalungaNeural', female: 'xh-ZA-NomalungaNeural' },
+  nso: { male: 'nso-ZA-DidiNeural', female: 'nso-ZA-DidiNeural' },
+};
+
+const resolveVoiceId = (language: string, voice: 'male' | 'female') => {
+  const byLang = AZURE_VOICES_BY_LANG[language] || AZURE_VOICES_BY_LANG.en;
+  return byLang[voice];
+};
+
 export function useTTS(userId?: string) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -232,13 +245,14 @@ export function useTTS(userId?: string) {
 
       // Use user's voice preference if not specified in options
       const voiceGender = options.voice || voicePreference;
+      const voiceId = resolveVoiceId(language, voiceGender);
 
       // Call Azure TTS via edge function
       const { data, error: ttsError } = await supabase.functions.invoke('tts-proxy', {
         body: {
           text: cleanText,
           language: language,
-          voiceId: voiceGender === 'male' ? `${language}-ZA-male` : undefined,
+          voice_id: voiceId,
           style: options.style || 'friendly',
           rate: options.rate ?? 0,
           pitch: options.pitch ?? 0,

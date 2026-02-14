@@ -14,6 +14,7 @@ import {
 } from '@/lib/schoolTypeResolver';
 import { getDashboardRouteForRole } from '@/lib/dashboard/routeMatrix';
 import { uiTokens } from '@/lib/ui/tokens';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import {
   ROLES_WITH_CENTER_TAB,
   SCHOOL_ADMIN_DASH_TAB,
@@ -471,6 +472,7 @@ export function BottomTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const flags = getFeatureFlagsSync();
 
   // Hide navigation bar if user is not authenticated
   if (!user || !profile) {
@@ -620,19 +622,43 @@ export function BottomTabBar() {
     return null;
   }
 
+  const isK12ParentDashboard =
+    flags.k12_parent_quickwins_v1 &&
+    userRole === 'parent' &&
+    typeof pathname === 'string' &&
+    pathname.startsWith('/(k12)/parent/dashboard');
+
+  const isTeacherDashboardNav = userRole === 'teacher';
+  const navActiveColor = isTeacherDashboardNav
+    ? '#5A409D'
+    : isK12ParentDashboard
+      ? '#3C8E62'
+      : theme.primary;
+  const navBackgroundColor = isTeacherDashboardNav
+    ? 'rgba(15,18,30,0.85)'
+    : isK12ParentDashboard
+      ? 'rgba(15,18,30,0.85)'
+      : theme.surface;
+  const navBorderColor = isTeacherDashboardNav
+    ? 'rgba(255,255,255,0.08)'
+    : isK12ParentDashboard
+      ? 'rgba(255,255,255,0.08)'
+      : theme.border;
+  const navInactiveColor = isTeacherDashboardNav ? 'rgba(234,240,255,0.72)' : theme.textSecondary;
+
   const styles = StyleSheet.create({
     container: {
       flexDirection: 'row',
-      backgroundColor: theme.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border,
+      backgroundColor: navBackgroundColor,
+      borderTopWidth: 1,
+      borderTopColor: navBorderColor,
       paddingBottom: Math.max(insets.bottom, uiTokens.spacing.xs),
       paddingTop: isCompact ? uiTokens.spacing.xs : 6,
-      shadowColor: theme.shadow,
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: -1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
-      elevation: 4,
+      shadowOpacity: isTeacherDashboardNav ? 0.18 : 0.08,
+      shadowRadius: isTeacherDashboardNav ? 12 : 4,
+      elevation: isTeacherDashboardNav ? 10 : 4,
     },
     tab: {
       flex: 1,
@@ -647,11 +673,11 @@ export function BottomTabBar() {
     label: {
       fontSize: isCompact ? 9 : 10,
       fontWeight: '600',
-      color: theme.textSecondary,
+      color: navInactiveColor,
       marginTop: 1,
     },
     labelActive: {
-      color: theme.primary,
+      color: navActiveColor,
     },
     // --- Center Dash tab (raised orb) ---
     centerTab: {
@@ -668,27 +694,27 @@ export function BottomTabBar() {
       marginTop: isCompact ? -20 : -24,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      backgroundColor: theme.surface,
+      backgroundColor: isTeacherDashboardNav ? 'rgba(15,18,30,0.95)' : theme.surface,
       borderWidth: 3,
-      borderColor: theme.border,
-      shadowColor: '#8B5CF6',
+      borderColor: navBorderColor,
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.35,
+      shadowOpacity: isTeacherDashboardNav ? 0.2 : 0.22,
       shadowRadius: 8,
-      elevation: 8,
+      elevation: isTeacherDashboardNav ? 6 : 8,
     },
     centerOrbWrapperActive: {
-      borderColor: theme.primary,
-      shadowOpacity: 0.6,
+      borderColor: navActiveColor,
+      shadowOpacity: isTeacherDashboardNav ? 0.3 : 0.32,
     },
     centerLabel: {
       fontSize: isCompact ? 9 : 10,
       fontWeight: '700' as const,
-      color: theme.textSecondary,
+      color: navInactiveColor,
       marginTop: 2,
     },
     centerLabelActive: {
-      color: theme.primary,
+      color: navActiveColor,
     },
   });
 
@@ -716,6 +742,8 @@ export function BottomTabBar() {
               key={tab.id}
               style={styles.centerTab}
               onPress={() => router.push(tab.route as any)}
+              onLongPress={() => router.push('/screens/app-search?scope=dash&q=dash' as any)}
+              delayLongPress={260}
               activeOpacity={0.8}
             >
               <View style={[styles.centerOrbWrapper, active && styles.centerOrbWrapperActive]}>
@@ -739,7 +767,7 @@ export function BottomTabBar() {
               <Ionicons
                 name={(active ? tab.activeIcon : tab.icon) as any}
                 size={isCompact ? 20 : 22}
-                color={active ? theme.primary : theme.textSecondary}
+                color={active ? navActiveColor : navInactiveColor}
               />
             </View>
             <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>

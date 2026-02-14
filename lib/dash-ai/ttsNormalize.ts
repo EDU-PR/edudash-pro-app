@@ -110,6 +110,31 @@ function collapseRepeatedLetterSounds(text: string, phonicsMode: boolean): strin
   return result;
 }
 
+function normalizeChoiceLabels(text: string): string {
+  let next = String(text || '');
+
+  // Preserve multiple-choice labels so TTS reads them as alphabet options
+  // instead of blending into the answer value (e.g., "A)42" -> "Option A. 42").
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\(([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\[([A-H])\]\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /\bOption ([A-H])\.(?=\S)/g,
+    (_m, label: string) => `Option ${label}. `
+  );
+
+  return next;
+}
+
 function normalizeSouthAfricanLanguageNames(text: string): string {
   return text
     .replace(/\bi\s*s\s*i\s+zulu\b/gi, 'isiZulu')
@@ -177,6 +202,7 @@ export function normalizeForTTS(input: string, options: TTSNormalizeOptions = {}
 
   text = stripMarkdownAndMeta(text, preservePhonicsMarkers);
   text = stripEmojiAndSymbols(text);
+  text = normalizeChoiceLabels(text);
 
   // Apply pronunciation dictionary (brand names, SA languages, acronyms)
   text = applyPronunciationPlainText(text);

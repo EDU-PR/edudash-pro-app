@@ -244,6 +244,7 @@ export const InlineQuizCard: React.FC<InlineQuizCardProps> = ({
                 onPress={() => handleSelectOption(option)}
                 disabled={answered || disabled}
                 activeOpacity={0.7}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
               >
                 <View style={[styles.optionLabel, { borderColor: optionBorder }]}>
                   <Text style={[styles.optionLabelText, { color: optionTextColor }]}>{label}</Text>
@@ -327,36 +328,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   question: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    lineHeight: 22,
+    lineHeight: 26,
     marginBottom: 16,
   },
   optionsArea: {
-    gap: 8,
+    gap: 10,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
+    borderRadius: 14,
+    padding: 16,
+    minHeight: 56,
+    gap: 12,
   },
   optionLabel: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
   optionLabelText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
   },
   optionText: {
-    fontSize: 15,
+    fontSize: 17,
     flex: 1,
   },
   checkMark: {
@@ -374,20 +376,22 @@ const styles = StyleSheet.create({
   },
   fillInput: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 17,
+    minHeight: 52,
   },
   submitBtn: {
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 16,
+    minHeight: 52,
     alignItems: 'center',
   },
   submitText: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
+    fontWeight: '700',
+    fontSize: 17,
   },
   feedback: {
     marginTop: 12,

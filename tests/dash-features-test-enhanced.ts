@@ -29,7 +29,7 @@ interface TestResult {
 }
 
 const results: TestResult[] = [];
-// let authToken: string | null = null;
+let authToken: string | null = null;
 
 // Test user credentials (you may need to update these)
 const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL || 'test@example.com';

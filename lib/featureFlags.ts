@@ -49,6 +49,11 @@ export interface FeatureFlags {
   dash_context_window_v1: boolean;
   dash_tutor_sessions_v1: boolean;
   dash_phoneme_mastery_v1: boolean;
+  dash_tutor_voice_sticky_v1: boolean;
+  dash_tutor_auto_handoff_v1: boolean;
+  dash_tutor_phonics_strict_v1: boolean;
+  dash_chart_safe_mode_v1: boolean;
+  k12_parent_quickwins_v1: boolean;
   learner_activity_lifecycle_v1: boolean;
   learner_inactivity_automation_v1: boolean;
   learner_duplicate_queue_v1: boolean;
@@ -172,6 +177,11 @@ const DEFAULT_FLAGS: FeatureFlags = {
   dash_context_window_v1: process.env.EXPO_PUBLIC_DASH_CONTEXT_WINDOW_V1 !== 'false',
   dash_tutor_sessions_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_SESSIONS_V1 === 'true',
   dash_phoneme_mastery_v1: process.env.EXPO_PUBLIC_DASH_PHONEME_MASTERY_V1 !== 'false',
+  dash_tutor_voice_sticky_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_VOICE_STICKY_V1 === 'true',
+  dash_tutor_auto_handoff_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_AUTO_HANDOFF_V1 === 'true',
+  dash_tutor_phonics_strict_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_PHONICS_STRICT_V1 === 'true',
+  dash_chart_safe_mode_v1: process.env.EXPO_PUBLIC_DASH_CHART_SAFE_MODE_V1 === 'true',
+  k12_parent_quickwins_v1: process.env.EXPO_PUBLIC_K12_PARENT_QUICKWINS_V1 === 'true',
   // Staged rollout defaults:
   // v1 UI/policy enabled, automation + duplicate queue remain opt-in.
   learner_activity_lifecycle_v1: process.env.EXPO_PUBLIC_LEARNER_ACTIVITY_LIFECYCLE_V1 !== 'false',
@@ -235,8 +245,9 @@ const DEFAULT_FLAGS: FeatureFlags = {
   parent_claim_child_enabled: process.env.EXPO_PUBLIC_ENABLE_CLAIM_CHILD === 'true',
   
   // Exam Prep - CAPS-aligned AI question generation
-  exam_prep_enabled: process.env.EXPO_PUBLIC_ENABLE_EXAM_PREP === 'true',
-  exam_prep_ai_questions: process.env.EXPO_PUBLIC_ENABLE_EXAM_AI === 'true',
+  // Default ON for parity; explicitly disable with env === 'false'
+  exam_prep_enabled: process.env.EXPO_PUBLIC_ENABLE_EXAM_PREP !== 'false',
+  exam_prep_ai_questions: process.env.EXPO_PUBLIC_ENABLE_EXAM_AI !== 'false',
   
   // Campaigns - Principal marketing campaigns (default: true for principals)
   campaigns_enabled: process.env.EXPO_PUBLIC_ENABLE_CAMPAIGNS !== 'false',
@@ -335,6 +346,16 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
         flags.dash_tutor_sessions_v1 ?? DEFAULT_FLAGS.dash_tutor_sessions_v1,
       dash_phoneme_mastery_v1:
         flags.dash_phoneme_mastery_v1 ?? DEFAULT_FLAGS.dash_phoneme_mastery_v1,
+      dash_tutor_voice_sticky_v1:
+        flags.dash_tutor_voice_sticky_v1 ?? DEFAULT_FLAGS.dash_tutor_voice_sticky_v1,
+      dash_tutor_auto_handoff_v1:
+        flags.dash_tutor_auto_handoff_v1 ?? DEFAULT_FLAGS.dash_tutor_auto_handoff_v1,
+      dash_tutor_phonics_strict_v1:
+        flags.dash_tutor_phonics_strict_v1 ?? DEFAULT_FLAGS.dash_tutor_phonics_strict_v1,
+      dash_chart_safe_mode_v1:
+        flags.dash_chart_safe_mode_v1 ?? DEFAULT_FLAGS.dash_chart_safe_mode_v1,
+      k12_parent_quickwins_v1:
+        flags.k12_parent_quickwins_v1 ?? DEFAULT_FLAGS.k12_parent_quickwins_v1,
       send_fcm_call_v2_enabled:
         flags.send_fcm_call_v2_enabled ?? DEFAULT_FLAGS.send_fcm_call_v2_enabled,
       push_device_rpc_enabled:

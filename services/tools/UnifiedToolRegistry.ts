@@ -56,7 +56,7 @@ const TOOL_ACCESS_RULES: Record<string, { roles?: ToolRole[]; minTier?: ToolTier
   export_pdf: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
   generate_image: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   generate_worksheet: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },
-  generate_chart: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
+  generate_chart: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   generate_pdf_from_prompt: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'starter' },
   send_email: { roles: ['teacher', 'principal_admin', 'super_admin'], minTier: 'premium' },
   open_document: { roles: ['parent', 'student', 'teacher', 'principal_admin', 'super_admin'], minTier: 'free' },

@@ -165,3 +165,68 @@ export function trackDeepAnalysis(
     patterns_found: patternsFound,
   });
 }
+
+export function trackTutorVoicePreferenceApplied(payload: {
+  voiceId: string;
+  source: string;
+  language: string;
+  role?: string | null;
+}) {
+  track('edudash.tutor.voice.preference_applied' as any, {
+    voice_id: payload.voiceId,
+    source: payload.source,
+    language: payload.language,
+    role: payload.role || 'unknown',
+    timestamp: Date.now(),
+  });
+}
+
+export function trackTutorFullChatHandoff(payload: {
+  intent: 'quiz' | 'chart';
+  source: string;
+  role?: string | null;
+}) {
+  track('edudash.tutor.fullchat_handoff' as any, {
+    intent: payload.intent,
+    source: payload.source,
+    role: payload.role || 'unknown',
+    timestamp: Date.now(),
+  });
+}
+
+export function trackTutorPhonicsContractApplied(payload: {
+  source: string;
+  role?: string | null;
+}) {
+  track('edudash.tutor.phonics_contract_applied' as any, {
+    source: payload.source,
+    role: payload.role || 'unknown',
+    timestamp: Date.now(),
+  });
+}
+
+export function trackChartParentStudentExecuted(payload: {
+  role: string;
+  points: number;
+  chartType: string;
+  success: boolean;
+}) {
+  track('edudash.chart.parent_student.executed' as any, {
+    role: payload.role,
+    points: payload.points,
+    chart_type: payload.chartType,
+    success: payload.success,
+    timestamp: Date.now(),
+  });
+}
+
+export function trackK12ParentQuickwinsRendered(payload: {
+  route: string;
+  userId?: string | null;
+}) {
+  track('edudash.k12_parent.quickwins_rendered' as any, {
+    route: payload.route,
+    user_id: payload.userId || null,
+    timestamp: Date.now(),
+  });
+}

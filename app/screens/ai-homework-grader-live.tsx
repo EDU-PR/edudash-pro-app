@@ -1,13 +1,17 @@
-import React, { useRef, useState } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useRef, useState, useMemo } from 'react'
+import {
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  ScrollView, StatusBar, Animated,
+} from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { IconSymbol } from '@/components/ui/IconSymbol'
+import { LinearGradient } from 'expo-linear-gradient'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { getFeatureFlagsSync } from '@/lib/featureFlags'
 import { track } from '@/lib/analytics'
 import { getCombinedUsage } from '@/lib/ai/usage'
 import { useGrader } from '@/hooks/useGrader'
-import { canUseFeature, getQuotaStatus, getEffectiveLimits } from '@/lib/ai/limits'
-import { getPreferredModel, setPreferredModel } from '@/lib/ai/preferences'
+import { canUseFeature, getQuotaStatus } from '@/lib/ai/limits'
+import { setPreferredModel } from '@/lib/ai/preferences'
 import { assertSupabase } from '@/lib/supabase'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useGradingModels } from '@/hooks/useAIModelSelection'
@@ -15,60 +19,40 @@ import { toast } from '@/components/ui/ToastProvider'
 import { useTheme } from '@/contexts/ThemeContext'
 import EduDashSpinner from '@/components/ui/EduDashSpinner'
 
-/** AI model option with optional notes for display */
-interface ModelOption {
-  id: string
-  name: string
-  provider: 'claude' | 'openai' | 'custom'
-  relativeCost: number
-  notes?: string
-}
-
 /** Parsed grading result from AI */
 interface ParsedResult {
-  score: number
-  feedback: string
-  suggestions: string[]
-  strengths: string[]
-  areasForImprovement: string[]
+  score: number; feedback: string; suggestions: string[]
+  strengths: string[]; areasForImprovement: string[]
 }
 
-/** Usage counts for AI features */
-interface UsageCounts {
-  lesson_generation: number
-  grading_assistance: number
-  homework_help: number
-}
+const COST_DOTS = (cost: number) => cost <= 1 ? '●' : cost <= 5 ? '●●' : '●●●'
+const SCORE_COLOR = (s: number) => s >= 90 ? '#34D399' : s >= 80 ? '#60A5FA' : s >= 70 ? '#FCD34D' : '#F87171'
+
 export default function AIHomeworkGraderLive() {
-  const { theme } = useTheme()
+  const { theme, isDark } = useTheme()
   const params = useLocalSearchParams<{
-    assignmentTitle?: string | string[]
-    gradeLevel?: string | string[]
-    submissionContent?: string | string[]
-    studentId?: string | string[]
-    progressUploadId?: string | string[]
-    contextTag?: string | string[]
-    sourceFlow?: string | string[]
-    activityId?: string | string[]
+    assignmentTitle?: string | string[]; gradeLevel?: string | string[]
+    submissionContent?: string | string[]; studentId?: string | string[]
+    progressUploadId?: string | string[]; contextTag?: string | string[]
+    sourceFlow?: string | string[]; activityId?: string | string[]
     activityTitle?: string | string[]
   }>()
-  const readParam = (value: string | string[] | undefined) => {
-    const raw = Array.isArray(value) ? value[0] : value
+  const readParam = (v: string | string[] | undefined) => {
+    const raw = Array.isArray(v) ? v[0] : v
     if (!raw) return ''
     try { return decodeURIComponent(raw) } catch { return raw }
   }
   const [assignmentTitle, setAssignmentTitle] = useState(readParam(params.assignmentTitle) || 'Counting to 10')
   const [gradeLevel, setGradeLevel] = useState(readParam(params.gradeLevel) || 'Age 5')
-  const [submissionContent, setSubmissionContent] = useState(readParam(params.submissionContent) || 'I counted 1 2 3 4 6 7 8 10')
+  const [submissionContent, setSubmissionContent] = useState(readParam(params.submissionContent) || '')
   const [isStreaming, setIsStreaming] = useState(false)
   const [pending, setPending] = useState(false)
   const [jsonBuffer, setJsonBuffer] = useState('')
   const [parsed, setParsed] = useState<ParsedResult | null>(null)
-  const [usage, setUsage] = useState<UsageCounts>({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
-  const [models, setModels] = useState<ModelOption[]>([])
-  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [usage, setUsage] = useState({ lesson_generation: 0, grading_assistance: 0, homework_help: 0 })
   const [recordStatus, setRecordStatus] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; id?: string; message?: string }>({ state: 'idle' })
   const bufferRef = useRef('')
+  const pulseAnim = useRef(new Animated.Value(1)).current
   const progressUploadId = readParam(params.progressUploadId)
   const contextTag = readParam(params.contextTag)
   const sourceFlow = readParam(params.sourceFlow)
@@ -80,387 +64,365 @@ export default function AIHomeworkGraderLive() {
   const aiGradingEnabled = AI_ENABLED && flags.ai_grading_assistance !== false
 
   const { grade, result } = useGrader()
-  const { quotas } = useGradingModels()
+  const { availableModels, selectedModel, setSelectedModel, quotas, tier } = useGradingModels()
   const hasHydratedParams = useRef(false)
+
+  // Pulse animation for streaming state
+  React.useEffect(() => {
+    if (isStreaming) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      ).start()
+    } else {
+      pulseAnim.setValue(1)
+    }
+  }, [isStreaming, pulseAnim])
 
   React.useEffect(() => {
     if (hasHydratedParams.current) return
-    const titleParam = readParam(params.assignmentTitle)
-    const gradeParam = readParam(params.gradeLevel)
-    const submissionParam = readParam(params.submissionContent)
-    if (titleParam) setAssignmentTitle(titleParam)
-    if (gradeParam) setGradeLevel(gradeParam)
-    if (submissionParam) setSubmissionContent(submissionParam)
+    const t = readParam(params.assignmentTitle); const g = readParam(params.gradeLevel); const s = readParam(params.submissionContent)
+    if (t) setAssignmentTitle(t); if (g) setGradeLevel(g); if (s) setSubmissionContent(s)
     hasHydratedParams.current = true
   }, [params.assignmentTitle, params.gradeLevel, params.submissionContent])
 
-  React.useEffect(() => {
-    (async () => {
-      setUsage(await getCombinedUsage())
-      try {
-        const limits = await getEffectiveLimits()
-        setModels((limits.modelOptions || []) as ModelOption[])
-        const stored = await getPreferredModel('grading_assistance')
-        setSelectedModel(stored || (limits.modelOptions && limits.modelOptions[0]?.id) || 'claude-3-haiku-20240307')
-      } catch {
-        // Silent failure - models will use default
-      }
-    })()
-  }, [])
+  React.useEffect(() => { getCombinedUsage().then(setUsage).catch(() => {}) }, [])
 
   const parseResult = React.useCallback((text: string, summary?: Partial<ParsedResult> | null): ParsedResult => {
-    if (summary && summary.feedback) {
-      return {
-        score: Number(summary.score || 0),
-        feedback: String(summary.feedback || ''),
-        suggestions: Array.isArray(summary.suggestions) ? summary.suggestions : [],
-        strengths: Array.isArray(summary.strengths) ? summary.strengths : [],
-        areasForImprovement: Array.isArray(summary.areasForImprovement) ? summary.areasForImprovement : [],
-      }
-    }
-
-    try {
-      const parsedObj = JSON.parse(text || '{}')
-      if (parsedObj && typeof parsedObj === 'object' && (parsedObj.score || parsedObj.feedback)) {
-        return {
-          score: Number(parsedObj.score || 0),
-          feedback: String(parsedObj.feedback || ''),
-          suggestions: Array.isArray(parsedObj.suggestions) ? parsedObj.suggestions : [],
-          strengths: Array.isArray(parsedObj.strengths) ? parsedObj.strengths : [],
-          areasForImprovement: Array.isArray(parsedObj.areasForImprovement) ? parsedObj.areasForImprovement : [],
-        }
-      }
-    } catch {
-      // Fallback to plain text
-    }
-
-    return {
-      score: 0,
-      feedback: text || '',
-      suggestions: [],
-      strengths: [],
-      areasForImprovement: [],
-    }
+    const make = (o: any): ParsedResult => ({
+      score: Number(o?.score || 0), feedback: String(o?.feedback || ''),
+      suggestions: Array.isArray(o?.suggestions) ? o.suggestions : [],
+      strengths: Array.isArray(o?.strengths) ? o.strengths : [],
+      areasForImprovement: Array.isArray(o?.areasForImprovement) ? o.areasForImprovement : [],
+    })
+    if (summary?.feedback) return make(summary)
+    try { const p = JSON.parse(text || '{}'); if (p?.score || p?.feedback) return make(p) } catch { /* fallback */ }
+    return { score: 0, feedback: text || '', suggestions: [], strengths: [], areasForImprovement: [] }
   }, [])
 
   const persistGradingRecord = React.useCallback(async (gradeResult: ParsedResult, rawResponse: string) => {
     const supabase = assertSupabase() as any
     const { data: authData } = await supabase.auth.getUser()
     const userId = authData?.user?.id
-    if (!userId) {
-      throw new Error('You must be signed in to save grading records.')
-    }
-
-    const studentId = readParam(params.studentId) || null
-    const payload = {
-      user_id: userId,
-      student_id: studentId,
-      mode: 'practice',
-      subject: 'homework_grading',
-      grade: gradeLevel || null,
-      topic: assignmentTitle || null,
-      question: assignmentTitle || null,
+    if (!userId) throw new Error('You must be signed in to save grading records.')
+    const { data, error } = await supabase.from('dash_ai_tutor_attempts').insert({
+      user_id: userId, student_id: readParam(params.studentId) || null,
+      mode: 'practice', subject: 'homework_grading', grade: gradeLevel || null,
+      topic: assignmentTitle || null, question: assignmentTitle || null,
       learner_answer: submissionContent || null,
       score: Number.isFinite(gradeResult.score) ? gradeResult.score : null,
-      feedback: gradeResult.feedback || null,
-      is_correct: null,
-      metadata: {
-        source: 'ai_homework_grader_live',
-        context_tag: contextTag || null,
-        source_flow: sourceFlow || null,
-        progress_upload_id: progressUploadId || null,
-        activity_id: activityId || null,
-        activity_title: activityTitle || null,
-        model: selectedModel || null,
-        assignment_title: assignmentTitle || null,
-        grade_level: gradeLevel || null,
-        suggestions: gradeResult.suggestions || [],
+      feedback: gradeResult.feedback || null, is_correct: null,
+      metadata: { source: 'ai_homework_grader_live', context_tag: contextTag || null,
+        source_flow: sourceFlow || null, progress_upload_id: progressUploadId || null,
+        activity_id: activityId || null, activity_title: activityTitle || null,
+        model: selectedModel || null, assignment_title: assignmentTitle || null,
+        grade_level: gradeLevel || null, suggestions: gradeResult.suggestions || [],
         strengths: gradeResult.strengths || [],
         areas_for_improvement: gradeResult.areasForImprovement || [],
         raw_response_preview: (rawResponse || '').slice(0, 2000),
       },
-    }
-
-    const { data, error } = await supabase
-      .from('dash_ai_tutor_attempts')
-      .insert(payload)
-      .select('id, created_at')
-      .single()
-
-    if (error) {
-      throw new Error(error.message || 'Failed to save grading record')
-    }
+    }).select('id, created_at').single()
+    if (error) throw new Error(error.message || 'Failed to save grading record')
     return data as { id: string; created_at: string }
-  }, [
-    activityId,
-    activityTitle,
-    assignmentTitle,
-    contextTag,
-    gradeLevel,
-    params.studentId,
-    progressUploadId,
-    readParam,
-    selectedModel,
-    sourceFlow,
-    submissionContent,
-  ])
+  }, [activityId, activityTitle, assignmentTitle, contextTag, gradeLevel, params.studentId, progressUploadId, selectedModel, sourceFlow, submissionContent])
 
   const startStreaming = async () => {
-    setPending(true)
-    setRecordStatus({ state: 'idle' })
-    if (!submissionContent.trim()) {
-      toast.warn('Please provide the student submission text.')
-      setPending(false)
-      return
-    }
-    if (!aiGradingEnabled) {
-      toast.warn('Homework grader is not enabled in this build.')
-      setPending(false)
-      return
-    }
-    // Enforce quota before starting
+    setPending(true); setRecordStatus({ state: 'idle' })
+    if (!submissionContent.trim()) { toast.warn('Please provide the student submission text.'); setPending(false); return }
+    if (!aiGradingEnabled) { toast.warn('Homework grader is not enabled in this build.'); setPending(false); return }
     const gate = await canUseFeature('grading_assistance', 1)
     if (!gate.allowed) {
       const status = await getQuotaStatus('grading_assistance')
-      Alert.alert(
-        'Monthly limit reached',
-        `You have used ${status.used} of ${status.limit} grading sessions this month. ${gate.requiresPrepay ? 'Please upgrade or purchase more to continue.' : ''}`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'See plans', onPress: () => router.push('/pricing') },
-        ]
-      )
-      setPending(false)
-      return
+      toast.warn(`Monthly limit reached: ${status.used}/${status.limit} used.`)
+      setPending(false); return
     }
     try {
-      setIsStreaming(true)
-      setJsonBuffer('')
-      bufferRef.current = ''
-      setParsed(null)
+      setIsStreaming(true); setJsonBuffer(''); bufferRef.current = ''; setParsed(null)
       let finalSummary: Partial<ParsedResult> | null = null
       track('edudash.ai.grader.ui_started', {})
-
-      // Use hook for grading (non-streaming for now). We still keep UI notion of streaming.
       const text = await grade(
         { submissionText: submissionContent, rubric: ['accuracy', 'completeness'], gradeLevel: 5, language: 'en' },
-        {
-          model: selectedModel,
-          streaming: true,
-          onDelta: (chunk) => {
-            bufferRef.current += chunk;
-            setJsonBuffer(bufferRef.current);
-          },
-          onFinal: (summary) => {
-            if (summary && summary.feedback) {
-              finalSummary = summary
-              setParsed({
-                score: Number(summary.score || 0),
-                feedback: String(summary.feedback || ''),
-                suggestions: Array.isArray(summary.suggestions) ? summary.suggestions : [],
-                strengths: Array.isArray(summary.strengths) ? summary.strengths : [],
-                areasForImprovement: Array.isArray(summary.areasForImprovement) ? summary.areasForImprovement : [],
-              });
-            }
-          }
+        { model: selectedModel, streaming: true,
+          onDelta: (chunk) => { bufferRef.current += chunk; setJsonBuffer(bufferRef.current) },
+          onFinal: (summary) => { if (summary?.feedback) { finalSummary = summary; setParsed(parseResult('', summary)) } },
         }
       )
-
-      const finalParsed = parseResult(text, finalSummary)
-      setParsed(finalParsed)
-
-      // Persist grading run so parents have a durable record.
+      const finalParsed = parseResult(text, finalSummary); setParsed(finalParsed)
       setRecordStatus({ state: 'saving' })
       try {
         const saved = await persistGradingRecord(finalParsed, text)
         setRecordStatus({ state: 'saved', id: saved.id })
       } catch (persistErr: unknown) {
-        const persistMessage = persistErr instanceof Error ? persistErr.message : 'Failed to save grading record'
-        setRecordStatus({ state: 'error', message: persistMessage })
-        toast.warn(`Grading completed, but record save failed: ${persistMessage}`)
+        const msg = persistErr instanceof Error ? persistErr.message : 'Failed to save'
+        setRecordStatus({ state: 'error', message: msg })
+        toast.warn(`Grading done, but save failed: ${msg}`)
       }
-
-      setIsStreaming(false)
-      setPending(false)
+      setIsStreaming(false); setPending(false)
       setUsage(await getCombinedUsage())
       track('edudash.ai.grader.ui_completed', { score: finalParsed.score })
     } catch (e: unknown) {
-      setIsStreaming(false)
-      setPending(false)
+      setIsStreaming(false); setPending(false)
       const errorMessage = e instanceof Error ? e.message : 'Failed to start grading'
       track('edudash.ai.grader.ui_failed', { error: errorMessage })
       toast.error(`Error: ${errorMessage}`)
     }
   }
 
-  const scoreColor = parsed ? (parsed.score >= 90 ? '#10B981' : parsed.score >= 80 ? '#3B82F6' : parsed.score >= 70 ? '#F59E0B' : '#EF4444') : '#111827'
+  const tierLabel = useMemo(() => {
+    const map: Record<string, string> = { free: 'Free', starter: 'Starter', premium: 'Pro', enterprise: 'Enterprise' }
+    return map[tier] || 'Free'
+  }, [tier])
 
+  // ── RENDER ──────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: '#fff' }]}>
-      <View style={[styles.header, { borderBottomColor: '#E5E7EB' }]}>
-        <View style={styles.headerLeft}>
-          <IconSymbol name="doc.text.below.ecg" size={22} color="#8B5CF6" />
-          <Text style={[styles.headerTitle, { color: '#111827' }]}>AI Homework Grader (Live)</Text>
+    <View style={[s.root, { backgroundColor: theme.background }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      {/* ── HEADER ──────────────────────────────────────────────────────────── */}
+      <LinearGradient colors={isDark ? ['#4338CA', '#6D28D9'] : ['#6366F1', '#8B5CF6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <SafeAreaView edges={['top']} style={s.headerSafe}>
+          <View style={s.headerRow}>
+            <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={s.backBtn}>
+              <Ionicons name="chevron-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View style={s.headerCenter}>
+              <View style={s.headerBadge}>
+                <Ionicons name="sparkles" size={14} color="#C4B5FD" />
+                <Text style={s.headerBadgeText}>AI ENGINE</Text>
+              </View>
+              <Text style={s.headerTitle}>Homework Grader</Text>
+            </View>
+            <View style={s.tierPill}>
+              <Text style={s.tierText}>{tierLabel}</Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+        {/* ── INPUT CARD ───────────────────────────────────────────────────── */}
+        <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+          <InputField label="Assignment Title" value={assignmentTitle} onChangeText={setAssignmentTitle} placeholder="e.g., Counting to 10" theme={theme} />
+          <InputField label="Grade Level / Age" value={gradeLevel} onChangeText={setGradeLevel} placeholder="e.g., Age 5 or Grade R" theme={theme} />
+          <Text style={[s.fieldLabel, { color: theme.textSecondary }]}>Student Submission</Text>
+          <TextInput value={submissionContent} onChangeText={setSubmissionContent} placeholder="Paste or type the student's answer…"
+            placeholderTextColor={theme.inputPlaceholder} multiline
+            style={[s.textArea, { color: theme.text, backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]} />
         </View>
-      </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }]}>
-          <Text style={[styles.label, { color: '#6B7280' }]}>Assignment Title</Text>
-          <TextInput
-            value={assignmentTitle}
-            onChangeText={setAssignmentTitle}
-            placeholder="e.g., Counting to 10"
-            placeholderTextColor={'#9CA3AF'}
-            style={[styles.input, { color: '#111827', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }]}
-          />
-
-          <Text style={[styles.label, { color: '#6B7280' }]}>Grade Level / Age</Text>
-          <TextInput
-            value={gradeLevel}
-            onChangeText={setGradeLevel}
-            placeholder="e.g., Age 5 or Grade R"
-            placeholderTextColor={'#9CA3AF'}
-            style={[styles.input, { color: '#111827', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }]}
-          />
-
-          <Text style={[styles.label, { color: '#6B7280' }]}>Student Submission</Text>
-          <TextInput
-            value={submissionContent}
-            onChangeText={setSubmissionContent}
-            placeholder="Paste or type the student's answer"
-            placeholderTextColor={'#9CA3AF'}
-            style={[styles.textArea, { color: '#111827', borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }]}
-            multiline
-          />
-
-          {/* Model selector */}
-          {models.length > 0 && (
-            <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }]}>
-              <Text style={[styles.sectionTitle, { color: '#111827' }]}>Model</Text>
-              <View style={[styles.inlineRow, { gap: 8, flexWrap: 'wrap' }]}>
-                {models.map((m, idx) => (
-                  <TouchableOpacity key={`${m.id}-${idx}`} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selectedModel === m.id ? '#8B5CF6' : '#E5E7EB', backgroundColor: selectedModel === m.id ? '#8B5CF6' : 'transparent' }}>
-                    <Text style={{ color: selectedModel === m.id ? '#fff' : '#111827' }}>
-                      {`${m.name} · x${m.relativeCost} · ${m.relativeCost <= 1 ? '$' : m.relativeCost <= 5 ? '$$' : '$$$'}${m.notes ? ` · ${m.notes}` : ''}`}
+        {/* ── MODEL SELECTOR ───────────────────────────────────────────────── */}
+        {availableModels.length > 0 && (
+          <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="hardware-chip-outline" size={16} color={theme.accent} />
+              <Text style={[s.sectionTitle, { color: theme.text }]}>AI Model</Text>
+            </View>
+            <View style={s.chipRow}>
+              {availableModels.map((m) => {
+                const active = selectedModel === m.id
+                return (
+                  <TouchableOpacity key={m.id} onPress={async () => { setSelectedModel(m.id); try { await setPreferredModel(m.id, 'grading_assistance') } catch { /* Silent */ } }}
+                    style={[s.chip, active ? { backgroundColor: theme.accent, borderColor: theme.accent } : { backgroundColor: 'transparent', borderColor: theme.border }]}>
+                    <Text style={[s.chipText, { color: active ? '#FFF' : theme.text }]} numberOfLines={1}>
+                      {m.displayName || m.name}
+                    </Text>
+                    <Text style={[s.chipMeta, { color: active ? 'rgba(255,255,255,0.7)' : theme.textTertiary }]}>
+                      {COST_DOTS(m.relativeCost)}
                     </Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                )
+              })}
             </View>
-          )}
+          </View>
+        )}
 
-          <TouchableOpacity
-            onPress={startStreaming}
-            disabled={pending || isStreaming || !aiGradingEnabled}
-            style={[styles.primaryButton, { opacity: (pending || isStreaming || !aiGradingEnabled) ? 0.6 : 1, backgroundColor: '#8B5CF6' }]}
-          >
+        {/* ── GRADE BUTTON ─────────────────────────────────────────────────── */}
+        <TouchableOpacity onPress={startStreaming} disabled={pending || isStreaming || !aiGradingEnabled} activeOpacity={0.85}>
+          <LinearGradient colors={['#6366F1', '#8B5CF6', '#A78BFA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={[s.gradeBtn, { opacity: (pending || isStreaming || !aiGradingEnabled) ? 0.5 : 1 }]}>
             {(isStreaming || pending) ? (
-              <View style={styles.inlineRow}>
-                <EduDashSpinner color="#FFF" />
-                <Text style={styles.primaryButtonText}> Streaming…</Text>
-              </View>
+              <View style={s.row}><EduDashSpinner color="#FFF" /><Text style={s.gradeBtnText}>  Analyzing…</Text></View>
             ) : (
-              <View style={styles.inlineRow}>
-                <IconSymbol name="waveform" size={18} color="#FFF" />
-                <Text style={styles.primaryButtonText}> Start Live Grading</Text>
-              </View>
+              <View style={s.row}><Ionicons name="flash" size={20} color="#FFF" /><Text style={s.gradeBtnText}>  Grade Submission</Text></View>
             )}
-          </TouchableOpacity>
-        </View>
+          </LinearGradient>
+        </TouchableOpacity>
 
-        <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }]}>
-          <Text style={[styles.sectionTitle, { color: '#111827' }]}>Live JSON Stream</Text>
-          <Text style={{ color: '#6B7280', marginBottom: 6 }}>Monthly usage (local/server): Grading {usage.grading_assistance}</Text>
-          <QuotaBar feature="grading_assistance" planLimit={quotas.ai_requests} />
+        {/* ── LIVE STREAM ──────────────────────────────────────────────────── */}
+        <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+          <View style={s.sectionHeader}>
+            <Animated.View style={{ opacity: isStreaming ? pulseAnim : 1 }}>
+              <Ionicons name="radio-outline" size={16} color={isStreaming ? '#34D399' : theme.textTertiary} />
+            </Animated.View>
+            <Text style={[s.sectionTitle, { color: theme.text }]}>Live Stream</Text>
+            {isStreaming && <View style={s.liveChip}><Text style={s.liveText}>LIVE</Text></View>}
+          </View>
+          <QuotaBar feature="grading_assistance" planLimit={quotas.ai_requests} theme={theme} isDark={isDark} />
           {result?.__fallbackUsed && (
-            <View style={[styles.fallbackChip, { borderColor: '#E5E7EB', backgroundColor: theme.accent + '20' }]}>
-              <Ionicons name="information-circle" size={16} color={theme.accent} />
-              <Text style={{ color: '#6B7280', fontSize: 12, marginLeft: 6 }}>Fallback used</Text>
+            <View style={[s.fallbackChip, { backgroundColor: theme.accent + '18', borderColor: theme.accent + '40' }]}>
+              <Ionicons name="information-circle" size={14} color={theme.accent} />
+              <Text style={[s.fallbackText, { color: theme.textSecondary }]}>Fallback model used</Text>
             </View>
           )}
-          <View style={[styles.jsonBox, { borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }]}>
-            <Text style={[styles.jsonText, { color: '#111827' }]} selectable>
-              {jsonBuffer || (isStreaming ? 'Waiting for tokens…' : 'No data yet. Press "Start Live Grading".')}
+          <View style={[s.terminal, { backgroundColor: isDark ? '#0C1222' : '#F1F5F9', borderColor: theme.border }]}>
+            <Text style={[s.terminalText, { color: isDark ? '#A5F3FC' : '#334155' }]} selectable>
+              {jsonBuffer || (isStreaming ? '▋ Waiting for tokens…' : 'Ready. Press "Grade Submission" to begin.')}
             </Text>
           </View>
         </View>
 
+        {/* ── RESULTS ──────────────────────────────────────────────────────── */}
         {parsed && (
-          <View style={[styles.parsedCard, { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' }]}>
-            <Text style={[styles.parsedTitle, { color: '#111827' }]}>Parsed Summary</Text>
-            <Text style={[styles.parsedLabel, { color: '#6B7280' }]}>Score</Text>
-            <Text style={[styles.parsedScore, { color: scoreColor }]}>{parsed.score}</Text>
-            <Text style={[styles.parsedLabel, { color: '#6B7280' }]}>Feedback</Text>
-            <Text style={[styles.parsedText, { color: '#111827' }]}>{parsed.feedback}</Text>
-            <Text style={[styles.parsedLabel, { color: '#6B7280' }]}>Record</Text>
-            {recordStatus.state === 'saving' && (
-              <Text style={[styles.parsedText, { color: '#6B7280' }]}>Saving grading record...</Text>
+          <View style={[s.glass, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="analytics-outline" size={16} color={theme.accent} />
+              <Text style={[s.sectionTitle, { color: theme.text }]}>Results</Text>
+            </View>
+
+            {/* Score ring */}
+            <View style={s.scoreRow}>
+              <View style={[s.scoreRing, { borderColor: SCORE_COLOR(parsed.score) }]}>
+                <Text style={[s.scoreValue, { color: SCORE_COLOR(parsed.score) }]}>{parsed.score}</Text>
+                <Text style={[s.scoreUnit, { color: theme.textTertiary }]}>/ 100</Text>
+              </View>
+              <View style={s.scoreMeta}>
+                <ScoreBadge score={parsed.score} isDark={isDark} />
+                {recordStatus.state === 'saving' && <Text style={[s.recordText, { color: theme.textTertiary }]}>Saving record…</Text>}
+                {recordStatus.state === 'saved' && (
+                  <View style={s.row}><Ionicons name="checkmark-circle" size={14} color="#34D399" /><Text style={[s.recordText, { color: '#34D399' }]}> Record saved</Text></View>
+                )}
+                {recordStatus.state === 'error' && (
+                  <View style={s.row}><Ionicons name="alert-circle" size={14} color="#F87171" /><Text style={[s.recordText, { color: '#F87171' }]}> {recordStatus.message}</Text></View>
+                )}
+              </View>
+            </View>
+
+            {/* Feedback */}
+            <Text style={[s.feedbackLabel, { color: theme.textSecondary }]}>Feedback</Text>
+            <Text style={[s.feedbackText, { color: theme.text }]}>{parsed.feedback}</Text>
+
+            {/* Strengths */}
+            {parsed.strengths.length > 0 && (
+              <DetailList icon="checkmark-circle" color="#34D399" title="Strengths" items={parsed.strengths} theme={theme} />
             )}
-            {recordStatus.state === 'saved' && (
-              <Text style={[styles.parsedText, { color: '#10B981' }]}>Saved to record: {recordStatus.id}</Text>
+            {/* Improvements */}
+            {parsed.areasForImprovement.length > 0 && (
+              <DetailList icon="arrow-up-circle" color="#60A5FA" title="Areas to Improve" items={parsed.areasForImprovement} theme={theme} />
             )}
-            {recordStatus.state === 'error' && (
-              <Text style={[styles.parsedText, { color: '#EF4444' }]}>{recordStatus.message || 'Failed to save grading record'}</Text>
+            {/* Suggestions */}
+            {parsed.suggestions.length > 0 && (
+              <DetailList icon="bulb" color="#FCD34D" title="Suggestions" items={parsed.suggestions} theme={theme} />
             )}
           </View>
         )}
-
-        <View style={styles.bottomSpacing} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   )
 }
 
-function QuotaBar({ feature, planLimit }: { feature: 'lesson_generation' | 'grading_assistance' | 'homework_help'; planLimit?: number }) {
-  const [status, setStatus] = React.useState<{ used: number; limit: number; remaining: number } | null>(null)
-  React.useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const s = await getQuotaStatus(feature)
-        const limit = planLimit && planLimit > 0 ? planLimit : s.limit
-        if (mounted) setStatus({ used: s.used, limit, remaining: Math.max(0, (limit === -1 ? 0 : limit) - s.used) })
-      } catch {
-        if (mounted) setStatus(null)
-      }
-    })()
-    return () => { mounted = false }
-  }, [feature, planLimit])
-  if (!status) return null
-  if (status.limit === -1) return <Text style={{ color: '#6B7280', marginTop: 4 }}>Quota: Unlimited</Text>
-  const pct = Math.max(0, Math.min(100, Math.round((status.used / Math.max(1, status.limit)) * 100)))
+// ── Sub-components (inlined, no separate file needed) ─────────────────────────
+
+function InputField({ label, value, onChangeText, placeholder, theme }: { label: string; value: string; onChangeText: (t: string) => void; placeholder: string; theme: any }) {
+  return (<>
+    <Text style={[s.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
+    <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder}
+      placeholderTextColor={theme.inputPlaceholder}
+      style={[s.input, { color: theme.text, backgroundColor: theme.inputBackground, borderColor: theme.inputBorder }]} />
+  </>)
+}
+
+function ScoreBadge({ score, isDark }: { score: number; isDark: boolean }) {
+  const label = score >= 90 ? 'Excellent' : score >= 80 ? 'Good' : score >= 70 ? 'Fair' : 'Needs Work'
   return (
-    <View style={{ marginTop: 4 }}>
-      <View style={{ height: 8, borderRadius: 4, backgroundColor: '#E5E7EB' }}>
-        <View style={{ width: `${pct}%`, height: 8, borderRadius: 4, backgroundColor: '#8B5CF6' }} />
-      </View>
-      <Text style={{ color: '#6B7280', marginTop: 4, fontSize: 12 }}>Quota: {status.used}/{status.limit} used · {Math.max(0, status.limit - status.used)} remaining</Text>
+    <View style={[s.badge, { backgroundColor: SCORE_COLOR(score) + (isDark ? '25' : '15') }]}>
+      <Text style={[s.badgeText, { color: SCORE_COLOR(score) }]}>{label}</Text>
     </View>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { fontSize: 16, fontWeight: '700' },
-  content: { padding: 12 },
-  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12, marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 },
-  textArea: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, minHeight: 120 },
-  primaryButton: { borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonText: { color: '#fff', fontWeight: '700' },
-  inlineRow: { flexDirection: 'row', alignItems: 'center' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
-  jsonBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, padding: 10, minHeight: 80 },
-  jsonText: { fontFamily: 'monospace' },
-  parsedCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 12 },
-  parsedTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
-  parsedLabel: { fontSize: 12, fontWeight: '600', marginTop: 8 },
-  parsedScore: { fontSize: 28, fontWeight: '900' },
-  parsedText: { fontSize: 13 },
-  bottomSpacing: { height: 40 },
-  fallbackChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+function DetailList({ icon, color, title, items, theme }: { icon: string; color: string; title: string; items: string[]; theme: any }) {
+  return (
+    <View style={{ marginTop: 14 }}>
+      <View style={s.row}><Ionicons name={icon as any} size={15} color={color} /><Text style={[s.detailTitle, { color: theme.text }]}> {title}</Text></View>
+      {items.map((item, i) => <Text key={i} style={[s.detailItem, { color: theme.textSecondary }]}>  •  {item}</Text>)}
+    </View>
+  )
+}
+
+function QuotaBar({ feature, planLimit, theme, isDark }: { feature: 'lesson_generation' | 'grading_assistance' | 'homework_help'; planLimit?: number; theme: any; isDark: boolean }) {
+  const [status, setStatus] = React.useState<{ used: number; limit: number } | null>(null)
+  React.useEffect(() => {
+    let mounted = true
+    getQuotaStatus(feature).then(s => {
+      const limit = planLimit && planLimit > 0 ? planLimit : s.limit
+      if (mounted) setStatus({ used: s.used, limit })
+    }).catch(() => {})
+    return () => { mounted = false }
+  }, [feature, planLimit])
+  if (!status) return null
+  if (status.limit === -1) return <Text style={{ color: theme.textTertiary, marginBottom: 8, fontSize: 12 }}>Quota: Unlimited</Text>
+  const pct = Math.min(100, Math.round((status.used / Math.max(1, status.limit)) * 100))
+  const remaining = Math.max(0, status.limit - status.used)
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <View style={[s.quotaTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+        <LinearGradient colors={['#6366F1', '#A78BFA']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={[s.quotaFill, { width: `${pct}%` }]} />
+      </View>
+      <Text style={{ color: theme.textTertiary, fontSize: 11, marginTop: 3 }}>{status.used}/{status.limit} used · {remaining} remaining</Text>
+    </View>
+  )
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  root: { flex: 1 },
+  headerSafe: { paddingBottom: 12 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8 },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  headerCenter: { flex: 1, marginLeft: 12 },
+  headerBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  headerBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: 'rgba(255,255,255,0.7)' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#FFF', letterSpacing: -0.3 },
+  tierPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
+  tierText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingTop: 20 },
+  glass: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6, letterSpacing: 0.3, textTransform: 'uppercase' },
+  input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 14, fontSize: 15 },
+  textArea: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, minHeight: 100, fontSize: 15, textAlignVertical: 'top' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: '700' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5 },
+  chipText: { fontSize: 13, fontWeight: '600' },
+  chipMeta: { fontSize: 10 },
+  gradeBtn: { borderRadius: 16, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  gradeBtnText: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  liveChip: { marginLeft: 'auto', backgroundColor: '#059669', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  liveText: { fontSize: 9, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
+  terminal: { borderWidth: 1, borderRadius: 12, padding: 14, minHeight: 80, marginTop: 4 },
+  terminalText: { fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
+  fallbackChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginBottom: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, gap: 6 },
+  fallbackText: { fontSize: 11 },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 16 },
+  scoreRing: { width: 88, height: 88, borderRadius: 44, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
+  scoreValue: { fontSize: 30, fontWeight: '900' },
+  scoreUnit: { fontSize: 11, marginTop: -2 },
+  scoreMeta: { flex: 1, gap: 8 },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10 },
+  badgeText: { fontSize: 13, fontWeight: '700' },
+  recordText: { fontSize: 12 },
+  feedbackLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 4 },
+  feedbackText: { fontSize: 14, lineHeight: 21 },
+  detailTitle: { fontSize: 13, fontWeight: '700' },
+  detailItem: { fontSize: 13, lineHeight: 20, marginLeft: 4 },
+  quotaTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  quotaFill: { height: 6, borderRadius: 3 },
 })

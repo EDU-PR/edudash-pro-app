@@ -11,7 +11,6 @@ import { Dimensions, FlatList, Platform, ScrollView, StyleSheet, Text, Touchable
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
-import { getFeatureFlagsSync } from '@/lib/featureFlags';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { hasCapability, getRequiredTier, type Tier } from '@/lib/ai/capabilities';
@@ -41,7 +40,6 @@ function getPhaseFromGrade(grade: string): 'foundation' | 'intermediate' | 'seni
 
 export default function ExamPrepScreen() {
   const { theme, isDark } = useTheme();
-  const flags = getFeatureFlagsSync();
   const { tier } = useSubscription();
  
   // State
@@ -371,30 +369,6 @@ export default function ExamPrepScreen() {
     </View>
   );
  
-  // Feature flag check (after hooks are initialized to satisfy rules-of-hooks)
-  if (!flags.exam_prep_enabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <Stack.Screen options={{ title: 'Exam Prep' }} />
-        <View style={styles.disabledContainer}>
-          <Ionicons name="school-outline" size={64} color={theme.muted} />
-          <Text style={[styles.disabledText, { color: theme.text }]}>
-            Exam Prep is not available
-          </Text>
-          <Text style={[styles.disabledSubtext, { color: theme.muted }]}>
-            Please upgrade your subscription to access this feature.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   if (!canUseExamPrep) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>

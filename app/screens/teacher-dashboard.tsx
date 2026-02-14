@@ -1,14 +1,23 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { NewEnhancedTeacherDashboard } from '@/components/dashboard/NewEnhancedTeacherDashboard';
 import { DesktopLayout } from '@/components/layout/DesktopLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
+import { ThemeOverrideProvider, useTheme } from '@/contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { resolveTeacherApproval } from '@/lib/utils/resolveTeacherApproval';
+import { nextGenTeacher } from '@/theme/nextgenTeacher';
 
 export default function TeacherDashboardScreen() {
+  return (
+    <ThemeOverrideProvider override={nextGenTeacher}>
+      <TeacherDashboardInner />
+    </ThemeOverrideProvider>
+  );
+}
+
+function TeacherDashboardInner() {
   const { user, profile, profileLoading, loading } = useAuth();
   const { theme } = useTheme();
   const { t } = useTranslation();

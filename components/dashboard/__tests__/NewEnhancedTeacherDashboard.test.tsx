@@ -157,6 +157,7 @@ describe('NewEnhancedTeacherDashboard', () => {
       refreshing: false,
       handleRefresh: async (fn: () => Promise<void>) => fn(),
       getGreeting: () => 'Good morning',
+      getContextualSubtitle: () => 'All set for today',
     });
   });
 
@@ -221,9 +222,9 @@ describe('NewEnhancedTeacherDashboard', () => {
       isLoadingFromCache: false,
     });
 
-    const { getByText } = render(<NewEnhancedTeacherDashboard />);
+    const { getByText, getAllByText } = render(<NewEnhancedTeacherDashboard />);
 
-    expect(getByText('Class A')).toBeTruthy();
+    expect(getAllByText('Class A').length).toBeGreaterThan(0);
     expect(getByText('67%')).toBeTruthy();
     expect(getByText('Create Lesson')).toBeTruthy();
     expect(getByText('Send Update')).toBeTruthy();

@@ -56,4 +56,15 @@ describe('ttsNormalize', () => {
     const out = normalizeForTTS('It socks.');
     expect(out).toContain("It's socks");
   });
+
+  it('keeps multiple-choice labels explicit in phonics mode', () => {
+    const out = normalizeForTTS('A)42 B) 17 C) apple', {
+      phonicsMode: true,
+      preservePhonicsMarkers: true,
+    });
+    expect(out).toContain('Option A. 42');
+    expect(out).toContain('Option B. 17');
+    expect(out).toContain('Option C. apple');
+    expect(out).not.toContain('/a/');
+  });
 });

@@ -214,7 +214,7 @@ export const buildTutorSystemContext = (
         '- CRITICAL: Wrap ALL letter sounds in slash markers: /s/, /m/, /f/, /b/, /a/, etc.',
         '- Example: "This letter makes the sound /s/. Can you hiss like a snake? /s/!"',
         '- NEVER write bare sustained text like "sss", "mmm", "fff" — always /s/, /m/, /f/.',
-        '- Use blending format: "c-a-t becomes cat".',
+        '- Model sound-first blending: "/k/ - /a/ - /t/ ... cat".',
         '- Ask ONE phonics prompt at a time and wait for the learner answer.',
         '- Keep examples playful and concrete with 3-5 year old vocabulary.',
       ].join('\n')
@@ -299,7 +299,7 @@ export const buildTutorSystemContext = (
     '- South African language names are single words: "isiZulu" (not "isi Zulu"), "isiXhosa" (not "isi Xhosa"), "Sesotho" (not "Se sotho"), "Sepedi" (not "Se pedi").',
     '- When greeting in another language, write the word as-is: "Sawubona!" or "Molo!" or "Dumela!"',
     '- For phonics, ALWAYS use slash markers for sounds: write "/s/" not "sss" or "the letter S".',
-    '- For blending, use hyphen format: "c-a-t becomes cat".',
+    '- For blending, model sounds first: "/k/ - /a/ - /t/ ... cat".',
     '- When switching languages mid-sentence, keep the foreign word intact — do not transliterate or add pronunciation guides in parentheses.',
     '- Common abbreviations: say "caps" (not C-A-P-S), "stem" (not S-T-E-M), "A.I." (spell out).',
     '',

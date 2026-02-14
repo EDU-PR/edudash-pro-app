@@ -1,3 +1,13 @@
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: null, profile: null }),
+}));
+jest.mock('@/contexts/SubscriptionContext', () => ({
+  useSubscription: () => ({ tier: 'free' }),
+}));
+
 import { categorizeTTSError, getTTSErrorMessage } from '@/components/super-admin/voice-orb/useVoiceTTS';
 
 describe('TTS error mapping', () => {

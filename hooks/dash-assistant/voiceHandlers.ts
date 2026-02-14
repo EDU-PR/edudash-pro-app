@@ -8,7 +8,7 @@ import type { VoiceProvider, VoiceSession } from '@/lib/voice/unifiedProvider';
 import { getSingleUseVoiceProvider } from '@/lib/voice/unifiedProvider';
 import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { track } from '@/lib/analytics';
-import { cleanForTTS, splitForTTS, detectTextLanguage } from '@/lib/dash-voice-utils';
+import { cleanForTTS, splitForTTS } from '@/lib/dash-voice-utils';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 
 type VoiceRefs = {
@@ -157,6 +157,15 @@ export async function speakDashResponse(params: {
       setSpeakingMessageId(null);
       return;
     }
+    const preferredVoiceLocale = String(
+      message.metadata?.detected_language ||
+      (message.metadata as any)?.language ||
+      dashInstance?.getPersonality?.()?.voice_settings?.language ||
+      'en-ZA'
+    );
+    const stableLocale = preferredVoiceLocale.includes('-')
+      ? preferredVoiceLocale
+      : `${preferredVoiceLocale}-ZA`;
 
     const sessionId = `${message.id}:${now}`;
     if (voiceRefs.ttsSessionIdRef) {
@@ -225,14 +234,12 @@ export async function speakDashResponse(params: {
       }
 
       const chunk = chunks[idx];
-      const detected = detectTextLanguage(chunk);
-      const localized = `${detected}-ZA`;
       const chunkMessage: DashMessage = {
         ...message,
         content: chunk,
         metadata: {
           ...(message.metadata || {}),
-          detected_language: localized,
+          detected_language: stableLocale,
         },
       };
 
@@ -291,6 +298,7 @@ export async function speakDashResponse(params: {
 
 export async function handleDashVoiceInputPress(params: {
   hasTTSAccess: () => boolean;
+  hasSTTAccess?: () => boolean;
   isRecording: boolean;
   stopVoiceRecording: () => Promise<void>;
   tier: string | undefined;
@@ -314,6 +322,7 @@ export async function handleDashVoiceInputPress(params: {
 }) {
   const {
     hasTTSAccess,
+    hasSTTAccess,
     isRecording,
     stopVoiceRecording,
     tier,
@@ -336,7 +345,10 @@ export async function handleDashVoiceInputPress(params: {
     voiceRefs,
   } = params;
 
-  if (!hasTTSAccess()) {
+  // STT (voice input) uses its own access check, NOT the TTS budget check.
+  // If hasSTTAccess is provided and returns true, skip the TTS budget gate.
+  const sttAllowed = hasSTTAccess ? hasSTTAccess() : hasTTSAccess();
+  if (!sttAllowed) {
     showAlert({
       title: isFreeTier ? 'Daily Voice Limit Reached' : 'Voice Features - Premium',
       message: isFreeTier
@@ -415,13 +427,14 @@ export async function handleDashVoiceInputPress(params: {
       }
     }
 
-    if (!voiceRefs.voiceProviderRef.current) {
-      const voiceLocale = resolveVoiceLocale(preferredLanguage || dashInstance?.getPersonality?.()?.voice_settings?.language || null);
-      voiceRefs.voiceProviderRef.current = await getSingleUseVoiceProvider(voiceLocale);
-    }
+    // Always get a fresh provider — never cache a noop provider that permanently blocks voice
+    const voiceLocale = resolveVoiceLocale(preferredLanguage || dashInstance?.getPersonality?.()?.voice_settings?.language || null);
+    const freshProvider = await getSingleUseVoiceProvider(voiceLocale);
+    voiceRefs.voiceProviderRef.current = freshProvider;
 
     const provider = voiceRefs.voiceProviderRef.current;
     const available = await provider.isAvailable();
+    console.log('[VoiceHandlers] Provider availability:', { id: provider.id, available, locale: voiceLocale });
 
     if (!available) {
       const androidMessage = `Speech recognition is not available on this device.\n\nTo enable voice input:\n1. Install or update the Google app from Play Store\n2. Go to Settings → Apps → Google → Permissions → Microphone\n3. Enable \"Offline speech recognition\" in Google Settings\n4. Restart EduDash Pro\n\nAlternatively, you can use text input to chat with Dash.`;
@@ -446,7 +459,6 @@ export async function handleDashVoiceInputPress(params: {
     const session = provider.createSession();
     voiceRefs.voiceSessionRef.current = session;
 
-    const voiceLocale = resolveVoiceLocale(preferredLanguage || dashInstance?.getPersonality?.()?.voice_settings?.language || null);
     const started = await session.start({
       language: voiceLocale,
       onPartial: (text: string) => {
