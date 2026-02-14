@@ -23,14 +23,28 @@ export default function InlineTutorPreview({
   onSendMessage,
 }: InlineTutorPreviewProps) {
   const [inputText, setInputText] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isListening, setIsListening] = useState(false);
 
   const handleSend = useCallback(() => {
     if (!inputText.trim()) return;
     onSendMessage?.(inputText.trim());
     setInputText('');
-    // Open full session when user sends from preview
     onOpenFullSession();
   }, [inputText, onSendMessage, onOpenFullSession]);
+
+  const handleStop = useCallback(() => {
+    setIsActive(false);
+    setIsListening(false);
+  }, []);
+
+  const handleResume = useCallback(() => {
+    setIsActive(true);
+  }, []);
+
+  const handleMicToggle = useCallback(() => {
+    setIsListening((prev) => !prev);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -44,7 +58,7 @@ export default function InlineTutorPreview({
 
       {/* Chat area */}
       <TouchableOpacity
-        style={styles.chatArea}
+        style={[styles.chatArea, !isActive && styles.chatAreaCollapsed]}
         activeOpacity={0.9}
         onPress={onOpenFullSession}
       >
@@ -95,16 +109,34 @@ export default function InlineTutorPreview({
 
       {/* Bottom controls */}
       <View style={styles.controls}>
-        <TouchableOpacity style={styles.controlBtn} onPress={onOpenFullSession}>
-          <View style={styles.stopDot} />
-          <Text style={styles.controlLabel}>Stop</Text>
-        </TouchableOpacity>
+        {isActive ? (
+          <TouchableOpacity style={styles.controlBtn} onPress={handleStop}>
+            <View style={styles.stopDot} />
+            <Text style={styles.controlLabel}>Stop</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.resumeBtn} onPress={handleResume}>
+            <Ionicons name="play" size={12} color="#3C8E62" />
+            <Text style={styles.resumeLabel}>Resume</Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.langPills}>
           <Text style={styles.langPill}>EN</Text>
           <Text style={styles.langPillInactive}>AF</Text>
         </View>
-        <TouchableOpacity style={styles.micBtn} onPress={onOpenFullSession}>
-          <Ionicons name="mic" size={18} color="#FFFFFF" />
+        <TouchableOpacity
+          style={[
+            styles.micBtn,
+            isListening && styles.micBtnActive,
+          ]}
+          onPress={handleMicToggle}
+          disabled={!isActive}
+        >
+          <Ionicons
+            name={isListening ? 'mic' : 'mic-outline'}
+            size={18}
+            color={isActive ? '#FFFFFF' : 'rgba(255,255,255,0.35)'}
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -272,6 +304,26 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 12,
     fontWeight: '600',
+  },
+  resumeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(60,142,98,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  resumeLabel: {
+    color: '#3C8E62',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chatAreaCollapsed: {
+    opacity: 0.4,
+  },
+  micBtnActive: {
+    backgroundColor: '#EF4444',
   },
   langPills: {
     flexDirection: 'row',
