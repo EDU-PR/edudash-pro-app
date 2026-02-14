@@ -289,8 +289,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
     }
 
     track('k12.parent.exam_builder_open', { user_id: user?.id });
-    router.push('/screens/exam-prep' as any);
-  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id]);
+    // Pass child's grade so exam-prep can skip the grade-selection step
+    const leadChild = children[0];
+    const gradeNum = leadChild ? getGradeNumber(leadChild.grade) : 0;
+    const gradeParam = gradeNum >= 4 ? `grade_${gradeNum}` : '';
+    router.push({
+      pathname: '/screens/exam-prep',
+      params: gradeParam ? { grade: gradeParam, childName: leadChild?.name || '' } : {},
+    } as any);
+  }, [canShowExamPrep, canUseExamPrep, requiredExamTier, showAlert, t, user?.id, children]);
 
   const navItems = useMemo(() => ([
     { id: 'home', label: t('dashboard.parent.nav.dashboard', { defaultValue: 'Dashboard' }), icon: 'home', route: '/(k12)/parent/dashboard' },
@@ -447,7 +454,8 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           tabs={SUB_NAV_TABS}
           activeTab={activeSubTab}
           onTabPress={(tabId) => {
-            setActiveSubTab(tabId);
+            // Don't setActiveSubTab — dashboard tab stays active;
+            // other tabs navigate to separate screens.
             if (tabId === 'messages') router.push('/screens/parent-messages' as any);
             else if (tabId === 'grades') router.push('/screens/parent-progress' as any);
             else if (tabId === 'account') router.push('/screens/account' as any);

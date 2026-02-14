@@ -659,13 +659,7 @@ export function BottomTabBar() {
   const navBackgroundColor = isNextGenNav ? 'rgba(15,18,30,0.88)' : theme.surface;
   const navBorderColor = isNextGenNav ? 'rgba(255,255,255,0.08)' : theme.border;
   const navInactiveColor = isNextGenNav ? 'rgba(234,240,255,0.72)' : theme.textSecondary;
-  const navBottomPadding = (() => {
-    if (!isK12ParentNextGenNav) {
-      return Math.max(insets.bottom, uiTokens.spacing.xs);
-    }
-    const cappedInset = Platform.OS === 'android' ? Math.min(insets.bottom, 8) : insets.bottom;
-    return Math.max(cappedInset, 2);
-  })();
+  const navBottomPadding = Math.max(insets.bottom, uiTokens.spacing.xs);
   const containerPaddingTop = isK12ParentNextGenNav
     ? (isCompact ? 0 : 1)
     : (isCompact ? uiTokens.spacing.xs : 6);
