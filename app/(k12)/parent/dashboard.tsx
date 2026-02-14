@@ -385,6 +385,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           </View>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => {
+              track('k12.parent.search_tap', { user_id: user?.id });
+              router.push('/screens/search' as any);
+            }}
+          >
+            <Ionicons name="search-outline" size={22} color={theme.text} />
+          </TouchableOpacity>
           <TouchableOpacity 
             style={styles.notificationButton}
             onPress={() => {
