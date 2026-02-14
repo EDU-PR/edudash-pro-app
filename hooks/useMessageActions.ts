@@ -6,12 +6,20 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { toast } from '@/components/ui/ToastProvider';
 import { assertSupabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import type { Message } from '@/components/messaging';
+import type { AlertButton } from '@/components/ui/AlertModal';
+
+type ShowAlertFn = (config: {
+  title: string;
+  message: string;
+  type?: 'success' | 'error' | 'warning' | 'info';
+  buttons?: AlertButton[];
+}) => void;
 
 interface UseMessageActionsProps {
   selectedMessage: Message | null;
@@ -21,6 +29,7 @@ interface UseMessageActionsProps {
   setShowMessageActions: (show: boolean) => void;
   setReplyingTo: (msg: Message | null) => void;
   setOptimisticMsgs: React.Dispatch<React.SetStateAction<Message[]>>;
+  showAlert?: ShowAlertFn;
 }
 
 export function useMessageActions({
@@ -31,6 +40,7 @@ export function useMessageActions({
   setShowMessageActions,
   setReplyingTo,
   setOptimisticMsgs,
+  showAlert,
 }: UseMessageActionsProps) {
   /** When non-null the edit composer is open for this message */
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -239,37 +249,57 @@ export function useMessageActions({
 
   const handleDelete = useCallback(
     async () => {
-      if (!selectedMessage) return;
+      if (!selectedMessage || !user?.id) return;
 
-      Alert.alert('Delete Message', 'Are you sure you want to delete this message?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const client = assertSupabase();
-              const { error } = await client
-                .from('messages')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', selectedMessage.id);
+      const runDelete = async () => {
+        try {
+          const client = assertSupabase();
+          const { error } = await client
+            .from('messages')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', selectedMessage.id)
+            .eq('sender_id', user.id);
 
-              if (error) throw error;
+          // Fallback for environments still running restrictive update RLS.
+          if (error && error.code === '42501') {
+            const hardDelete = await client
+              .from('messages')
+              .delete()
+              .eq('id', selectedMessage.id)
+              .eq('sender_id', user.id);
+            if (hardDelete.error) throw hardDelete.error;
+          } else if (error) {
+            throw error;
+          }
 
-              // Remove from local state immediately
-              setOptimisticMsgs((prev) => prev.filter((m) => m.id !== selectedMessage.id));
-              refetch();
-            } catch (err) {
-              logger.error('MessageActions', 'Delete failed:', err);
-              toast.error('Failed to delete message');
-            }
-          },
-        },
-      ]);
+          // Remove from local state immediately
+          setOptimisticMsgs((prev) => prev.filter((m) => m.id !== selectedMessage.id));
+          refetch();
+          toast.success('Message deleted');
+        } catch (err) {
+          logger.error('MessageActions', 'Delete failed:', err);
+          toast.error('Failed to delete message');
+        }
+      };
+
+      if (showAlert) {
+        showAlert({
+          title: 'Delete Message',
+          message: 'Are you sure you want to delete this message?',
+          type: 'warning',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: runDelete },
+          ],
+        });
+      } else {
+        await runDelete();
+      }
+
       setShowMessageActions(false);
       setSelectedMessage(null);
     },
-    [selectedMessage, refetch, setOptimisticMsgs, setShowMessageActions, setSelectedMessage]
+    [selectedMessage, user?.id, refetch, setOptimisticMsgs, setShowMessageActions, setSelectedMessage, showAlert]
   );
 
   // ─── Edit (was a stub — now fully implemented) ──────────────────────

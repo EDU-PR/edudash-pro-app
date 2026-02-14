@@ -5,6 +5,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/contexts/ThemeContext';
 import { MessageThread } from '@/hooks/useTeacherMessaging';
@@ -14,9 +15,12 @@ import { formatMessageTime } from '@/app/screens/teacher-message-list.styles';
 interface ThreadItemProps {
   thread: MessageThread;
   onPress: () => void;
+  onLongPress?: () => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
 }
 
-const createThreadItemStyles = (theme: any, hasUnread: boolean) =>
+const createThreadItemStyles = (theme: any, hasUnread: boolean, isSelected: boolean) =>
   StyleSheet.create({
     container: {
       backgroundColor: theme.surface,
@@ -24,6 +28,8 @@ const createThreadItemStyles = (theme: any, hasUnread: boolean) =>
       marginBottom: 8,
       borderRadius: 16,
       overflow: 'hidden',
+      borderWidth: isSelected ? 2 : 0,
+      borderColor: isSelected ? theme.primary : 'transparent',
       ...Platform.select({
         ios: {
           shadowColor: theme.shadow,
@@ -104,9 +110,18 @@ const createThreadItemStyles = (theme: any, hasUnread: boolean) =>
       paddingHorizontal: 8,
     },
     unreadText: { color: theme.onPrimary, fontSize: 12, fontWeight: '700' },
+    selectedIndicator: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      marginLeft: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+    },
   });
 
-const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) => {
+const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress, onLongPress, selectionMode = false, isSelected = false }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -136,13 +151,13 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
     .toUpperCase()
     .slice(0, 2);
 
-  const styles = useMemo(() => createThreadItemStyles(theme, hasUnread), [theme, hasUnread]);
+  const styles = useMemo(() => createThreadItemStyles(theme, hasUnread, isSelected), [theme, hasUnread, isSelected]);
   const roleLabel = isGroupThread
     ? String(thread.group_type || thread.type || 'group').replace(/_/g, ' ')
     : (otherParticipant?.role || t('common.contact', { defaultValue: 'contact' }));
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.container} onPress={onPress} onLongPress={onLongPress} delayLongPress={220} activeOpacity={0.7}>
       <View style={styles.inner}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -181,6 +196,19 @@ const ThreadItem: React.FC<ThreadItemProps> = React.memo(({ thread, onPress }) =
                 <Text style={styles.unreadText}>
                   {thread.unread_count && thread.unread_count > 99 ? '99+' : thread.unread_count}
                 </Text>
+              </View>
+            )}
+            {selectionMode && (
+              <View
+                style={[
+                  styles.selectedIndicator,
+                  {
+                    borderColor: isSelected ? theme.primary : theme.border,
+                    backgroundColor: isSelected ? theme.primary : 'transparent',
+                  },
+                ]}
+              >
+                {isSelected && <Ionicons name="checkmark" size={14} color={theme.onPrimary} />}
               </View>
             )}
           </View>

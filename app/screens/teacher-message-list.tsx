@@ -11,6 +11,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { MessagesListHeader } from '@/components/messaging/MessageHeader';
@@ -20,14 +21,21 @@ import { getDashAIRoleCopy } from '@/lib/ai/dashRoleCopy';
 import ThreadItem from '@/components/teacher-messaging/ThreadItem';
 import DashAIItem from '@/components/teacher-messaging/DashAIItem';
 import { createStyles } from './teacher-message-list.styles';
+import { AlertModal, useAlertModal } from '@/components/ui/AlertModal';
+import { assertSupabase } from '@/lib/supabase';
+import { toast } from '@/components/ui/ToastProvider';
 
 export default function TeacherMessageListScreen() {
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const dashCopy = getDashAIRoleCopy(profile?.role);
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<string[]>([]);
+  const queryClient = useQueryClient();
+  const { showAlert, alertProps } = useAlertModal();
 
   const organizationId = (profile as any)?.organization_id || (profile as any)?.preschool_id;
 
@@ -46,6 +54,12 @@ export default function TeacherMessageListScreen() {
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   const handleThreadPress = useCallback((thread: MessageThread) => {
+    if (selectionMode) {
+      setSelectedThreadIds((prev) =>
+        prev.includes(thread.id) ? prev.filter((id) => id !== thread.id) : [...prev, thread.id]
+      );
+      return;
+    }
     const isGroupThread = Boolean(
       thread.is_group ||
       ['class_group', 'parent_group', 'teacher_group', 'announcement', 'custom'].includes(String(thread.type || thread.group_type || ''))
@@ -68,7 +82,53 @@ export default function TeacherMessageListScreen() {
         parentName: participantName,
       },
     });
+  }, [selectionMode]);
+
+  const handleThreadLongPress = useCallback((thread: MessageThread) => {
+    setSelectionMode(true);
+    setSelectedThreadIds((prev) => (prev.includes(thread.id) ? prev : [...prev, thread.id]));
   }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedThreadIds([]);
+  }, []);
+
+  const handleBulkDeleteThreads = useCallback(() => {
+    if (!user?.id || selectedThreadIds.length === 0) return;
+    showAlert({
+      title: 'Delete selected chats',
+      message: `Remove ${selectedThreadIds.length} selected chat${selectedThreadIds.length > 1 ? 's' : ''} from your list?`,
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const client = assertSupabase();
+              const { error } = await client
+                .from('message_participants')
+                .delete()
+                .eq('user_id', user.id)
+                .in('thread_id', selectedThreadIds);
+              if (error) throw error;
+
+              clearSelection();
+              await refetch();
+              queryClient.invalidateQueries({ queryKey: ['teacher', 'threads'] });
+              queryClient.invalidateQueries({ queryKey: ['parent', 'threads'] });
+              queryClient.invalidateQueries({ queryKey: ['notifications'] });
+              toast.success('Selected chats deleted');
+            } catch (err: any) {
+              toast.error(err?.message || 'Failed to delete selected chats');
+            }
+          },
+        },
+      ],
+    });
+  }, [clearSelection, queryClient, refetch, selectedThreadIds, showAlert, user?.id]);
 
   const handleStartNewMessage = useCallback(() => {
     router.push('/screens/teacher-new-message');
@@ -202,14 +262,65 @@ export default function TeacherMessageListScreen() {
     <View style={styles.container}>
       <MessagesListHeader
         {...headerProps}
-        subtitle={`${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
+        subtitle={selectionMode
+          ? `${selectedThreadIds.length} selected`
+          : `${filteredThreads.length} ${filteredThreads.length === 1 ? 'conversation' : 'conversations'}`}
       />
+      {selectionMode && (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            backgroundColor: theme.surface,
+            borderWidth: 1,
+            borderColor: theme.border,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+            {selectedThreadIds.length} selected
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity onPress={clearSelection} activeOpacity={0.8}>
+              <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBulkDeleteThreads}
+              disabled={selectedThreadIds.length === 0}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: selectedThreadIds.length > 0 ? theme.error : theme.surfaceVariant,
+                paddingHorizontal: 12,
+                paddingVertical: 7,
+                borderRadius: 10,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="trash-outline" size={14} color={theme.onError || '#fff'} />
+              <Text style={{ color: theme.onError || '#fff', fontSize: 12, fontWeight: '700' }}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <FlashList
         data={filteredThreads}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <ThreadItem thread={item} onPress={() => handleThreadPress(item)} />
+          <ThreadItem
+            thread={item}
+            onPress={() => handleThreadPress(item)}
+            onLongPress={() => handleThreadLongPress(item)}
+            selectionMode={selectionMode}
+            isSelected={selectedThreadIds.includes(item.id)}
+          />
         )}
         ListHeaderComponent={<DashAIItem {...dashAIProps} />}
         contentContainerStyle={styles.listContent}
@@ -237,6 +348,7 @@ export default function TeacherMessageListScreen() {
       <TouchableOpacity style={styles.fab} onPress={handleStartNewMessage} activeOpacity={0.8}>
         <Ionicons name="create" size={24} color={theme.onPrimary} />
       </TouchableOpacity>
+      <AlertModal {...alertProps} />
     </View>
   );
 }
