@@ -1,8 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import DashOrb from './DashOrb';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
 
 interface InlineTutorPreviewProps {
   childName: string;
@@ -64,7 +66,7 @@ export default function InlineTutorPreview({
       >
         {/* Tutor identity row */}
         <View style={styles.identityRow}>
-          <DashOrb size={32} />
+          <Image source={ROBOT_MASCOT} style={styles.robotThumb} />
           <View style={styles.identityText}>
             <Text style={styles.identityName}>Interactive Tutor Session</Text>
             <Text style={styles.identityHint}>
@@ -192,6 +194,12 @@ const styles = StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: 'rgba(90,64,157,0.20)',
+  },
+  robotThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    resizeMode: 'contain',
   },
   identityText: {
     marginLeft: 10,

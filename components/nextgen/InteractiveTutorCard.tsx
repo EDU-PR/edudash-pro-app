@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ROBOT_MASCOT = require('@/assets/images/robot-mascot.png');
 
 export default function InteractiveTutorCard({ onPress }: { onPress?: () => void }) {
   return (
@@ -12,18 +14,8 @@ export default function InteractiveTutorCard({ onPress }: { onPress?: () => void
       style={styles.container}
     >
       <View style={styles.content}>
-        {/* Robot mascot with brain icon */}
-        <View style={styles.robotContainer}>
-          <LinearGradient
-            colors={['rgba(90,64,157,0.35)', 'rgba(60,142,98,0.25)']}
-            style={styles.robotBg}
-          >
-            <MaterialCommunityIcons name="robot-happy" size={28} color="#FFFFFF" />
-          </LinearGradient>
-          <View style={styles.brainBadge}>
-            <MaterialCommunityIcons name="brain" size={12} color="#C7BFFF" />
-          </View>
-        </View>
+        {/* Robot mascot */}
+        <Image source={ROBOT_MASCOT} style={styles.robotImage} />
 
         <View style={styles.textBlock}>
           <Text style={styles.title}>Interactive Tutor Session</Text>
@@ -50,30 +42,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  robotContainer: {
-    position: 'relative',
-  },
-  robotBg: {
-    width: 52,
-    height: 52,
+  robotImage: {
+    width: 56,
+    height: 56,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  brainBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(90,64,157,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#22433F',
+    resizeMode: 'contain',
   },
   textBlock: {
     flex: 1,
