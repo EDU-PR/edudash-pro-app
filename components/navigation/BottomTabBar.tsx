@@ -43,18 +43,18 @@ const TAB_ITEMS: TabItem[] = [
   // Parent tabs
   { 
     id: 'parent-dashboard', 
-    label: 'Home', 
-    icon: 'home-outline', 
-    activeIcon: 'home', 
+    label: 'Dashboard', 
+    icon: 'grid-outline', 
+    activeIcon: 'grid', 
     route: '/screens/parent-dashboard', 
     roles: ['parent'] 
   },
   { 
     id: 'parent-children', 
-    label: 'Children', 
-    icon: 'heart-outline', 
-    activeIcon: 'heart', 
-    route: '/screens/parent-children', 
+    label: 'Messages', 
+    icon: 'chatbubble-outline', 
+    activeIcon: 'chatbubble', 
+    route: '/screens/parent-messages', 
     roles: ['parent'] 
   },
   { 
@@ -68,18 +68,18 @@ const TAB_ITEMS: TabItem[] = [
   },
   { 
     id: 'parent-messages', 
-    label: 'Messages', 
-    icon: 'chatbubble-outline', 
-    activeIcon: 'chatbubble', 
-    route: '/screens/parent-messages', 
+    label: 'Grades', 
+    icon: 'stats-chart-outline', 
+    activeIcon: 'stats-chart', 
+    route: '/screens/parent-progress', 
     roles: ['parent'] 
   },
   { 
     id: 'parent-calendar', 
-    label: 'Calendar', 
-    icon: 'calendar-outline', 
-    activeIcon: 'calendar', 
-    route: '/screens/calendar', 
+    label: 'Account', 
+    icon: 'person-outline', 
+    activeIcon: 'person', 
+    route: '/screens/account', 
     roles: ['parent'] 
   },
   

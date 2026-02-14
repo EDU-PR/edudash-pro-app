@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Platform, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +40,10 @@ import { useSpotlightTarget } from '@/hooks/useSpotlightTarget';
 import { GlassCard } from '@/components/nextgen/GlassCard';
 import { GradientActionCard } from '@/components/nextgen/GradientActionCard';
 import { Pill } from '@/components/nextgen/Pill';
+import DashOrb from '@/components/nextgen/DashOrb';
+import SubNavTabs from '@/components/nextgen/SubNavTabs';
+import FocusBanner from '@/components/nextgen/FocusBanner';
+import InlineTutorPreview from '@/components/nextgen/InlineTutorPreview';
 
 import EduDashSpinner from '@/components/ui/EduDashSpinner';
 
@@ -84,7 +88,15 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
   
   const [refreshing, setRefreshing] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState('dashboard');
   const dashboardBottomPadding = quickWinsEnabled ? 100 : 80;
+
+  const SUB_NAV_TABS = useMemo(() => [
+    { id: 'dashboard', label: t('navigation.dashboard', { defaultValue: 'Dashboard' }) },
+    { id: 'messages', label: t('navigation.messages', { defaultValue: 'Messages' }) },
+    { id: 'grades', label: t('dashboard.parent.k12.grades', { defaultValue: 'Grades' }) },
+    { id: 'account', label: t('navigation.account', { defaultValue: 'Account' }) },
+  ], [t]);
 
   // Get school and user info from profile
   const communitySchoolName = t('dashboard.parent.community_school', { defaultValue: 'My School' });
@@ -376,11 +388,11 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             onPress={() => setIsDrawerOpen(true)}
             accessibilityLabel={t('dashboard.parent.nav.menu', { defaultValue: 'Menu' })}
           >
-            <Ionicons name="menu" size={28} color={theme.text} />
+            <DashOrb size={30} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrapper}>
             <Text style={[styles.headerTitle, { color: theme.text }]}>
-              {t('dashboard.parentDashboard', { defaultValue: 'Parent Dashboard' })}
+              EduDashPro
             </Text>
           </View>
         </View>
@@ -429,6 +441,20 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
         </View>
       </View>
 
+      {/* SUB-NAVIGATION TABS */}
+      {quickWinsEnabled && (
+        <SubNavTabs
+          tabs={SUB_NAV_TABS}
+          activeTab={activeSubTab}
+          onTabPress={(tabId) => {
+            setActiveSubTab(tabId);
+            if (tabId === 'messages') router.push('/screens/parent-messages' as any);
+            else if (tabId === 'grades') router.push('/screens/parent-progress' as any);
+            else if (tabId === 'account') router.push('/screens/account' as any);
+          }}
+        />
+      )}
+
       {/* SCROLLABLE CONTENT */}
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: dashboardBottomPadding }]}
@@ -448,17 +474,30 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           end={{ x: 1, y: 1 }}
         >
           <View style={styles.heroSummaryTopRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.heroSummaryTitle, { color: theme.text }]}>
                 {dashboardSummary.leadChildName
                   ? `${dashboardSummary.leadChildName}'s Dashboard`
                   : t('dashboard.parentDashboard', { defaultValue: 'Parent Dashboard' })}
               </Text>
-              <Text style={[styles.heroSummarySubtitle, { color: theme.textSecondary }]}>
-                {dashboardSummary.leadChildGrade
-                  ? `${dashboardSummary.leadChildGrade} • ${schoolName}`
-                  : schoolName}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                {/* Grade badge with child avatar */}
+                <LinearGradient
+                  colors={['#3C8E62', '#2E7D59']}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, gap: 6 }}
+                >
+                  <Ionicons name="school" size={12} color="#FFFFFF" />
+                  <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
+                    {dashboardSummary.leadChildGrade || 'Grade'}
+                  </Text>
+                </LinearGradient>
+                {children[0]?.avatarUrl ? (
+                  <Image
+                    source={{ uri: children[0].avatarUrl }}
+                    style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' }}
+                  />
+                ) : null}
+              </View>
             </View>
             <Pill
               tone="success"
@@ -556,16 +595,21 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
           </LinearGradient>
         </GlassCard>
 
+        {/* Focus Banner */}
+        {dashboardSummary.leadChildName && quickWinsEnabled && (
+          <FocusBanner childName={dashboardSummary.leadChildName} />
+        )}
+
         <TouchableOpacity style={styles.inlineTutorCard} activeOpacity={0.88} onPress={openTutorSession}>
           <LinearGradient
-            colors={['#213243', '#2E6E5D']}
+            colors={['#22433F', '#3C8E62', '#5A409D']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.inlineTutorGradient}
           >
             <View style={styles.inlineTutorHeader}>
               <View style={styles.inlineTutorIcon}>
-                <Ionicons name="logo-android" size={22} color="#9CF6D5" />
+                <DashOrb size={36} />
               </View>
               <View style={styles.inlineTutorTextWrap}>
                 <Text style={styles.inlineTutorTitle}>
@@ -588,6 +632,14 @@ function K12ParentDashboardContent({ quickWinsEnabled }: { quickWinsEnabled: boo
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* Inline Tutor Session Preview */}
+        {quickWinsEnabled && (
+          <InlineTutorPreview
+            childName={dashboardSummary.leadChildName || 'Learner'}
+            onOpenFullSession={openTutorSession}
+          />
+        )}
 
         {/* Upgrade Banner (Free tier parents) */}
         <InlineUpgradeBanner
