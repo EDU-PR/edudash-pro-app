@@ -196,9 +196,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(90,64,157,0.20)',
   },
   robotThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     resizeMode: 'contain',
   },
   identityText: {
