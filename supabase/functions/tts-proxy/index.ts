@@ -460,6 +460,58 @@ function compactAzureDetails(details: string): string {
     .slice(0, 260);
 }
 
+function classifyAzureFailure(params: { upstreamStatus?: number; details?: string }) {
+  const upstreamStatus = Number(params.upstreamStatus || 0) || undefined;
+  const details = String(params.details || '').toLowerCase();
+
+  if (upstreamStatus === 401 || upstreamStatus === 403) {
+    return { status: upstreamStatus, errorCode: 'AZURE_AUTH_ERROR' };
+  }
+
+  const throttled =
+    upstreamStatus === 429 ||
+    details.includes('throttle') ||
+    details.includes('too many requests') ||
+    details.includes('toomanyrequests');
+  if (throttled) {
+    return { status: 429, errorCode: 'AZURE_TTS_THROTTLED' };
+  }
+
+  const transient =
+    upstreamStatus === 408 ||
+    upstreamStatus === 425 ||
+    upstreamStatus === 502 ||
+    upstreamStatus === 503 ||
+    upstreamStatus === 504 ||
+    (typeof upstreamStatus === 'number' && upstreamStatus >= 500);
+
+  if (transient) {
+    return { status: 503, errorCode: 'AZURE_TTS_UPSTREAM_UNAVAILABLE' };
+  }
+
+  return { status: 503, errorCode: 'AZURE_TTS_UPSTREAM_ERROR' };
+}
+
+function azureFailureResponse(params: {
+  message: string;
+  upstreamStatus?: number;
+  details?: string;
+}) {
+  const details = compactAzureDetails(params.details || '');
+  const { status, errorCode } = classifyAzureFailure({
+    upstreamStatus: params.upstreamStatus,
+    details,
+  });
+
+  return jsonResponse(status, {
+    error: params.message,
+    error_code: errorCode,
+    upstream_status: params.upstreamStatus || null,
+    details,
+    provider: 'azure',
+  });
+}
+
 function buildVoiceFallbackList(primaryVoice: string, bcp47: string): string[] {
   const voices = [
     primaryVoice,
@@ -805,6 +857,8 @@ Deno.serve(async (req) => {
     if (!speechKey || !speechRegion) {
       return jsonResponse(503, {
         error: 'Azure Speech not configured',
+        error_code: 'AZURE_NOT_CONFIGURED',
+        provider: 'azure',
         fallback: 'device',
       });
     }
@@ -895,8 +949,9 @@ Deno.serve(async (req) => {
       });
 
       if (!coachTTS.ok || !coachTTS.audio) {
-        return jsonResponse(502, {
-          error: 'Azure TTS coaching synthesis failed',
+        return azureFailureResponse({
+          message: 'Azure TTS coaching synthesis failed',
+          upstreamStatus: coachTTS.status,
           details: coachTTS.details || '',
         });
       }
@@ -1091,7 +1146,11 @@ Deno.serve(async (req) => {
       });
 
       if (!streamTTS.ok || !streamTTS.audio) {
-        return jsonResponse(502, { error: 'Azure TTS stream failed', details: streamTTS.details || '' });
+        return azureFailureResponse({
+          message: 'Azure TTS stream failed',
+          upstreamStatus: streamTTS.status,
+          details: streamTTS.details || '',
+        });
       }
 
       // Return audio response directly.
@@ -1173,9 +1232,9 @@ Deno.serve(async (req) => {
     });
 
     if (!azureResp.ok) {
-      return jsonResponse(502, {
-        error: 'Azure TTS request failed',
-        provider: 'azure',
+      return azureFailureResponse({
+        message: 'Azure TTS request failed',
+        upstreamStatus: azureResp.status,
         details: azureResp.details || '',
       });
     }
@@ -1209,8 +1268,10 @@ Deno.serve(async (req) => {
     const audioBuffer = azureResp.audio || new Uint8Array();
     
     if (!audioBuffer || audioBuffer.length === 0) {
-      return jsonResponse(502, {
+      return jsonResponse(503, {
         error: 'Azure returned empty audio buffer',
+        error_code: 'AZURE_EMPTY_AUDIO',
+        upstream_status: azureResp.status || null,
         provider: 'azure',
       });
     }
@@ -1247,6 +1308,8 @@ Deno.serve(async (req) => {
   } catch (error) {
     return jsonResponse(500, {
       error: 'Unexpected error',
+      error_code: 'TTS_PROXY_INTERNAL_ERROR',
+      provider: 'tts-proxy',
       details: error instanceof Error ? error.message : String(error),
     });
   }

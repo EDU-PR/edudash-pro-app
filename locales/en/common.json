@@ -3925,12 +3925,20 @@
     "excellent": "Excellent",
     "good": "Good",
     "needs_work": "Needs Work",
+    "no_grades_yet": "No Grades Yet",
+    "no_grades_desc": "Grades will appear here once homework has been submitted and graded by AI or a teacher.",
     "overall_average": "Overall Average",
     "recent_score": "Recent: {{score}}%",
     "struggling": "Struggling",
     "subjects": "Subjects",
     "this_month": "This Month",
-    "title": "Grades & Progress"
+    "title": "Grades & Progress",
+    "graded_count": "{{count}} graded",
+    "auto_graded": "AI Graded",
+    "teacher_graded": "Teacher Graded",
+    "needs_review": "Needs Review",
+    "grade_posted": "Grade posted: {{title}}",
+    "confidence": "AI Confidence: {{value}}%"
   },
   "membership": {
     "add_members_prompt": "Add members to this group to get started",

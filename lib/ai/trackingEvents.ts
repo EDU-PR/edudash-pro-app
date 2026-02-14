@@ -124,6 +124,37 @@ export function trackBatchGrading(
   });
 }
 
+/** Track single AI grade with confidence routing */
+export function trackGradeCompleted(
+  submissionId: string | undefined,
+  score: number | null,
+  confidence: number,
+  requiresReview: boolean,
+  letterGrade: string,
+  durationMs: number,
+) {
+  track('edudash.ai.grading.engine_completed' as any, {
+    submission_id: submissionId,
+    score,
+    confidence,
+    requires_review: requiresReview,
+    letter_grade: letterGrade,
+    duration_ms: durationMs,
+    auto_published: !requiresReview && confidence >= 0.85,
+  });
+}
+
+/** Track teacher grade publish (after review) */
+export function trackTeacherPublish(
+  submissionId: string,
+  score: number,
+) {
+  track('edudash.ai.grading.teacher_published' as any, {
+    submission_id: submissionId,
+    score,
+  });
+}
+
 /** Track AI deep analysis */
 export function trackDeepAnalysis(
   studentId: string,

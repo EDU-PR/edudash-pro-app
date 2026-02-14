@@ -28,7 +28,7 @@ import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 const TAG = 'SubscriptionContext';
 
 // Test mode configuration - set to true during Google Play internal testing
-const SUBSCRIPTION_TEST_MODE = process.env.EXPO_PUBLIC_SUBSCRIPTION_TEST_MODE === 'true' || __DEV__;
+const SUBSCRIPTION_TEST_MODE = process.env.EXPO_PUBLIC_SUBSCRIPTION_TEST_MODE === 'true';
 const TRIAL_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 const TRIAL_START_KEY = 'subscription_trial_start';
 

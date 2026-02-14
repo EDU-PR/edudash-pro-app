@@ -2,6 +2,7 @@ import { isAIEnabled } from '@/lib/ai/aiConfig';
 import { assertSupabase } from '../supabase'
 import { track } from '../analytics'
 import { getCurrentLanguage } from '../i18n'
+import { GradingEngine } from './GradingEngine'
 
 const AI_ENABLED = isAIEnabled();
 
@@ -32,82 +33,25 @@ function getAILocale(): string {
 
 export class HomeworkService {
   static async gradeHomework(submissionId: string, submissionContent: string, assignmentTitle: string, gradeLevel: string) {
-    try {
-      if (!AI_ENABLED) {
-        return {
-          score: null,
-          feedback: 'AI grading is not available. Please grade this submission manually.',
-          suggestions: [],
-          strengths: [],
-          areasForImprovement: [],
-          requiresManualReview: true,
-        }
-      }
+  static async gradeHomework(submissionId: string, submissionContent: string, assignmentTitle: string, gradeLevel: string, parentUserId?: string) {
+    // Delegate to unified GradingEngine (handles AI call, DB persist, notification, analytics)
+    const result = await GradingEngine.grade({
+      submissionId,
+      submissionContent,
+      assignmentTitle,
+      gradeLevel,
+      parentUserId,
+    })
 
-      const ageMatch = String(gradeLevel || '').match(/(\d{1,2})/)
-      const studentAge = ageMatch ? Math.max(3, Math.min(12, parseInt(ageMatch[1], 10))) : 5;
-
-      // Call AI grading via ai-proxy edge function
-      track('edudash.ai.grading.started', { submissionId });
-      const { data, error } = await assertSupabase().functions.invoke('ai-proxy', {
-        body: {
-          scope: 'teacher',
-          service_type: 'grading_assistance',
-          payload: {
-            prompt: `Grade this homework submission for a ${studentAge}-year-old student.\n\nAssignment: ${assignmentTitle}\nGrade Level: ${gradeLevel}\n\nSubmission:\n${submissionContent}\n\nRespond with JSON: { "score": number 0-100, "feedback": string, "strengths": string[], "areasForImprovement": string[], "suggestions": string[] }`,
-          },
-          metadata: {
-            assignment_title: assignmentTitle,
-            grade_level: gradeLevel,
-            locale: getAILocale(),
-            language: getCurrentLanguage(),
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      const payload: any = data?.result || data || {};
-      if (typeof payload.score !== 'number') {
-        track('edudash.ai.grading.incomplete_response', { submissionId, payload: JSON.stringify(payload).slice(0, 200) });
-      }
-      const score = typeof payload.score === 'number' ? payload.score : null;
-      const feedback = payload.feedback || 'Submission reviewed. Please verify the grade.';
-      const strengths: string[] = Array.isArray(payload.strengths) ? payload.strengths : [];
-      const areasForImprovement: string[] = Array.isArray(payload.areasForImprovement) ? payload.areasForImprovement : [];
-      const suggestions: string[] = Array.isArray(payload.suggestions) ? payload.suggestions : [];
-      const requiresManualReview = score === null;
-
-      track('edudash.ai.grading.completed', { submissionId, score, requiresManualReview });
-
-      if (score !== null) {
-        try {
-          await assertSupabase()
-            .from('homework_submissions')
-            .update({
-              grade: Number(score),
-              feedback: feedback,
-              graded_at: new Date().toISOString(),
-              graded_by: 'ai',
-              status: requiresManualReview ? 'needs_review' : 'reviewed'
-            })
-            .eq('id', submissionId)
-        } catch (e) {
-          if (__DEV__) console.debug('homework_submissions update failed', e);
-        }
-      }
-
-      return { score, feedback, suggestions, strengths, areasForImprovement, requiresManualReview }
-    } catch (err: unknown) {
-      track('edudash.ai.grading.error', { submissionId, error: String(err) });
-      return {
-        score: null,
-        feedback: 'AI grading encountered an error. Please grade this submission manually.',
-        suggestions: [],
-        strengths: [],
-        areasForImprovement: [],
-        requiresManualReview: true,
-      }
+    return {
+      score: result.score,
+      feedback: result.feedback,
+      suggestions: result.suggestions,
+      strengths: result.strengths,
+      areasForImprovement: result.areasForImprovement,
+      requiresManualReview: result.requiresReview,
+      confidence: result.confidence,
+      letterGrade: result.letterGrade,
     }
   }
 

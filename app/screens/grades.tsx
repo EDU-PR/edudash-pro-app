@@ -4,7 +4,7 @@
  * Shows academic progress and grades for parent's children.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParentDashboard } from '@/hooks/useDashboardData';
+import { useParentGrades } from '@/hooks/useParentGrades';
 import SkeletonLoader from '@/components/ui/SkeletonLoader';
 
 const { width } = Dimensions.get('window');
@@ -221,32 +222,18 @@ export default function GradesScreen() {
   const { profile } = useAuth();
   const insets = useSafeAreaInsets();
   
-  const { data: dashboardData, loading, refresh } = useParentDashboard();
+  const { data: dashboardData, loading: dashLoading, refresh } = useParentDashboard();
+  const { data: gradesData, loading: gradesLoading, refresh: refreshGrades } = useParentGrades();
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Mock grades data (would come from dashboard in real implementation)
-  const gradesData = useMemo(() => {
-    // In real implementation, this would come from dashboardData
-    return {
-      overall: {
-        average: 78,
-        totalSubjects: 6,
-        improvement: 5,
-      },
-      subjects: [
-        { subject: 'Mathematics', grade: 85, trend: 'up' as const, recentScore: 88 },
-        { subject: 'English', grade: 72, trend: 'stable' as const, recentScore: 75 },
-        { subject: 'Science', grade: 80, trend: 'up' as const, recentScore: 82 },
-        { subject: 'Social Studies', grade: 68, trend: 'down' as const, recentScore: 65 },
-        { subject: 'Art', grade: 90, trend: 'stable' as const, recentScore: 92 },
-        { subject: 'Physical Education', grade: 75, trend: 'up' as const, recentScore: 78 },
-      ],
-    };
-  }, [dashboardData]);
+  const loading = dashLoading || gradesLoading;
+
+  const overview = gradesData?.overview ?? { average: 0, totalSubjects: 0, improvement: 0 };
+  const subjects = gradesData?.subjects ?? [];
+  const isEmpty = gradesData?.isEmpty ?? true;
   
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refresh();
+    await Promise.all([refresh(), refreshGrades()]);
     setRefreshing(false);
   };
   
@@ -282,29 +269,46 @@ export default function GradesScreen() {
         ) : (
           <>
             {/* Overall Progress Card */}
-            <OverallProgress 
-              average={gradesData.overall.average}
-              totalSubjects={gradesData.overall.totalSubjects}
-              improvement={gradesData.overall.improvement}
-            />
-            
-            {/* Section Title */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                {t('grades.by_subject', { defaultValue: 'By Subject' })}
-              </Text>
-            </View>
-            
-            {/* Grade Cards */}
-            {gradesData.subjects.map((subject, index) => (
-              <GradeCard 
-                key={index}
-                subject={subject.subject}
-                grade={subject.grade}
-                trend={subject.trend}
-                recentScore={subject.recentScore}
+            {!isEmpty && (
+              <OverallProgress 
+                average={overview.average}
+                totalSubjects={overview.totalSubjects}
+                improvement={overview.improvement}
               />
-            ))}
+            )}
+            
+            {isEmpty ? (
+              <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 }}>
+                <Ionicons name="school-outline" size={56} color={theme.textSecondary} style={{ opacity: 0.4 }} />
+                <Text style={{ fontSize: 18, fontWeight: '600', color: theme.text, marginTop: 16 }}>
+                  {t('grades.no_grades_yet', { defaultValue: 'No Grades Yet' })}
+                </Text>
+                <Text style={{ fontSize: 14, color: theme.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
+                  {t('grades.no_grades_desc', { defaultValue: 'Grades will appear here once homework has been submitted and graded by AI or a teacher.' })}
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Section Title */}
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    {t('grades.by_subject', { defaultValue: 'By Subject' })}
+                  </Text>
+                </View>
+                
+                {/* Grade Cards — real data */}
+                {subjects.map((subject, index) => (
+                  <GradeCard 
+                    key={`${subject.childId}-${subject.subject}-${index}`}
+                    subject={subject.subject}
+                    grade={subject.grade}
+                    trend={subject.trend}
+                    recentScore={subject.recentScore}
+                    childName={subject.childName}
+                  />
+                ))}
+              </>
+            )}
           </>
         )}
       </ScrollView>
