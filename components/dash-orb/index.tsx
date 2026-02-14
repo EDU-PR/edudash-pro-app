@@ -1310,6 +1310,12 @@ export default function DashOrb({
         const ageYears = isLearnerRole
           ? (profile?.date_of_birth ? calculateAge(profile.date_of_birth) : null)
           : (normalizedRole === 'parent' ? learnerAgeYears : null);
+        const streamPhonicsMode = shouldUsePhonicsMode(command, {
+          ageYears: learnerAgeYears,
+          gradeLevel: learnerGrade || null,
+          schoolType: learnerContext?.schoolType || null,
+          organizationType: learnerContext?.schoolType || null,
+        });
         const traceId = `dash_orb_stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
         const streamBody: Record<string, unknown> = {
@@ -1368,7 +1374,12 @@ export default function DashOrb({
 
         await new Promise<void>((resolve, reject) => {
           streamResponse(
-            { endpoint, body: streamBody, accessToken: session.access_token },
+            {
+              endpoint,
+              body: streamBody,
+              accessToken: session.access_token,
+              phonicsMode: streamPhonicsMode,
+            },
             {
               onTextChunk: (_chunk, accumulated) => {
                 // Update message content in real-time as chunks arrive
