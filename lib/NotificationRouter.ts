@@ -448,25 +448,19 @@ function handleNotificationInteraction(data: NotificationPayload): void {
     case 'message':
     case 'chat':
       if (data.thread_id || data.conversation_id) {
-        router.push(`/screens/parent-message-thread?id=${data.thread_id || data.conversation_id}` as any);
+        const threadId = String(data.thread_id || data.conversation_id);
+        router.push({ pathname: '/screens/parent-message-thread', params: { threadId } } as any);
       } else {
         router.push('/screens/parent-messages' as any);
       }
       break;
       
     case 'incoming_call':
-      // IMPORTANT: Let CallProvider handle incoming call notifications
-      // Don't navigate here - the CallProvider will show the incoming call UI
-      logger.debug('NotificationRouter', 'Incoming call tap - CallProvider handles this');
-      break;
-      
+    case 'missed_call':
     case 'call':
     case 'video_call':
     case 'voice_call':
-      // Handle incoming call (legacy types)
-      if (data.call_id) {
-        router.push(`/screens/incoming-call?id=${data.call_id}` as any);
-      }
+      router.push('/screens/calls' as any);
       break;
       
     case 'announcement':

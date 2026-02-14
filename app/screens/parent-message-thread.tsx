@@ -57,6 +57,9 @@ export default function ParentMessageThreadScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { showAlert, alertProps } = useAlertModal();
+  const showThreadAlert = useCallback((title: string, message: string, buttons?: AlertButton[]) => {
+    showAlert({ title, message, buttons, type: 'warning' });
+  }, [showAlert]);
   const h = useParentMessageThread(threadId, user?.id, user?.email);
 
   const displayName = useMemo(() => {
@@ -69,6 +72,7 @@ export default function ParentMessageThreadScreen() {
     selectedMessage: h.selectedMessage, user, refetch: h.refetch,
     setSelectedMessage: h.setSelectedMessage, setShowMessageActions: h.setShowMessageActions,
     setReplyingTo: h.setReplyingTo, setOptimisticMsgs: h.setOptimisticMsgs,
+    showAlert: ({ title, message, buttons }) => showThreadAlert(title, message, buttons),
   });
 
   // Thread options hook
@@ -142,10 +146,6 @@ export default function ParentMessageThreadScreen() {
   // safeComposerHeight (from onLayout) already includes paddingBottom, so don't add composerBottomInset again.
   const composerExtraBottom = keyboardUp ? composerBottomInset : 0;
   const messageViewportInset = h.keyboardHeight + COMPOSER_FLOAT_GAP + composerExtraBottom + safeComposerHeight;
-
-  const showThreadAlert = useCallback((title: string, message: string, buttons?: AlertButton[]) => {
-    showAlert({ title, message, buttons, type: 'warning' });
-  }, [showAlert]);
 
   if (!threadId) {
     return (

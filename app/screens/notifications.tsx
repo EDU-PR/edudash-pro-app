@@ -119,6 +119,17 @@ export default function NotificationsScreen() {
     }
   }, []);
 
+  const messageThreadPath = isTeacher
+    ? '/screens/teacher-message-thread'
+    : isPrincipal
+      ? '/screens/principal-message-thread'
+      : '/screens/parent-message-thread';
+  const messageListPath = isTeacher
+    ? '/screens/teacher-message-list'
+    : isPrincipal
+      ? '/screens/principal-messages'
+      : '/screens/parent-messages';
+
   const getString = (value: unknown): string | undefined =>
     typeof value === 'string' ? value : undefined;
 
@@ -201,6 +212,34 @@ export default function NotificationsScreen() {
 
     const fallbackText = `${notification.title} ${notification.body}`.trim();
     const dataType = getString(notification.data?.type)?.toLowerCase() || '';
+    const threadId =
+      getString(notification.data?.threadId) ||
+      getString(notification.data?.thread_id) ||
+      getString(notification.data?.conversation_id) ||
+      getString(notification.data?.conversationId);
+    const combinedText = `${notification.title} ${notification.body} ${dataType}`.toLowerCase();
+    const isCallLike =
+      notification.type === 'call' ||
+      ['call', 'incoming_call', 'missed_call', 'voice_call', 'video_call'].includes(dataType) ||
+      /\b(call|calling|missed call|voice call|video call)\b/.test(combinedText);
+    const isMessageLike =
+      notification.type === 'message' ||
+      ['message', 'chat', 'new_message'].includes(dataType) ||
+      (threadId ? true : /\bmessage\b/.test(combinedText));
+
+    if (isCallLike) {
+      navigateSafe('/screens/calls');
+      return;
+    }
+
+    if (isMessageLike) {
+      if (threadId) {
+        navigateSafe(messageThreadPath, { threadId });
+      } else {
+        navigateSafe(messageListPath);
+      }
+      return;
+    }
     const isPaymentLike = [
       'payment_approved',
       'payment_rejected',
@@ -240,11 +279,8 @@ export default function NotificationsScreen() {
     
     switch (notification.type) {
       case 'message':
-        if (notification.data?.threadId) {
-          navigateSafe('/screens/parent-message-thread', { threadId: notification.data.threadId as string });
-        } else {
-          navigateSafe('/screens/parent-messages');
-        }
+        if (threadId) navigateSafe(messageThreadPath, { threadId });
+        else navigateSafe(messageListPath);
         break;
       case 'call':
         navigateSafe('/screens/calls');
@@ -300,7 +336,7 @@ export default function NotificationsScreen() {
         // For system notifications, don't navigate
         break;
     }
-  }, [user?.id, queryClient, isParent, isPrincipal, isTeacher, navigateSafe]);
+  }, [user?.id, queryClient, isParent, isPrincipal, isTeacher, messageListPath, messageThreadPath, navigateSafe]);
   
   // Clear call notifications
   const handleClearCallNotifications = useCallback(() => {
