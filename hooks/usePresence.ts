@@ -38,6 +38,8 @@ interface UsePresenceReturn {
   isUserOnline: (userId: string) => boolean;
   getLastSeenText: (userId: string) => string;
   refreshPresence: () => Promise<void>;
+  /** Call on user interactions (typing, scrolling, tapping) to prevent away status */
+  recordActivity: () => void;
   loading: boolean;
 }
 
@@ -373,6 +375,21 @@ export function usePresence(
     lastActivityRef.current = Date.now();
   }, []);
 
+  // Throttled activity recorder — call on typing, scrolling, sending
+  const lastRecordedRef = useRef(0);
+  const recordActivity = useCallback(() => {
+    const now = Date.now();
+    // Throttle: max once per 15 seconds to avoid excessive updates
+    if (now - lastRecordedRef.current < 15_000) return;
+    lastRecordedRef.current = now;
+    lastActivityRef.current = now;
+    // If currently away due to inactivity, flip back to online
+    if (myStatusRef.current === 'away' && AppState.currentState === 'active') {
+      setMyStatus('online');
+      upsertPresence('online');
+    }
+  }, [upsertPresence]);
+
   return {
     myStatus,
     getUserPresence,
@@ -381,6 +398,7 @@ export function usePresence(
     isUserOnline,
     getLastSeenText,
     refreshPresence: loadPresence,
+    recordActivity,
     loading,
   };
 }

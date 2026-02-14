@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { toast } from '@/components/ui/ToastProvider';
 import { ensureImageLibraryPermission } from '@/lib/utils/mediaLibrary';
+import { useCallSafe } from '@/components/calls/CallProvider';
 import { ReplyPreview } from './ReplyPreview';
 import { Message } from './types';
 import { CYAN_GLOW } from './theme';
@@ -117,6 +118,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
   const [pendingImage, setPendingImage] = useState<{ uri: string; mimeType: string } | null>(null);
   const [sendingImage, setSendingImage] = useState(false);
   
+  // Presence activity tracking — keeps user status 'online' while chatting
+  const callCtx = useCallSafe();
+  
   // Mic glow animation
   const micGlowAnim = useRef(new Animated.Value(0.1)).current;
   
@@ -174,12 +178,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
     if (!isEditing) {
       onCancelReply?.();
     }
-
+    callCtx?.recordActivity();
     await onSend(content);
   };
 
   const handleVoiceComplete = async (uri: string, duration: number) => {
     setIsRecording(false);
+    callCtx?.recordActivity();
     if (onVoiceRecording) {
       await onVoiceRecording(uri, duration);
     }
@@ -302,8 +307,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
         />
       )}
       
-      {/* Reply Preview */}
-      {replyingTo && !isEditing && (
+      {/* Reply Preview — hide during voice recording */}
+      {replyingTo && !isEditing && !isRecording && (
         <ReplyPreview message={replyingTo} onClose={() => onCancelReply?.()} />
       )}
       
@@ -352,6 +357,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = React.memo(({
                   if (newText.trim() && onTyping) {
                     onTyping();
                   }
+                  // Keep presence online while typing
+                  callCtx?.recordActivity();
                 }}
                 multiline
                 maxLength={1000}

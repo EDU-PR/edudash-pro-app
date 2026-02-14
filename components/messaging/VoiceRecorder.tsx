@@ -7,7 +7,11 @@
  * - Slide up to lock (keeps recording, shows stop/send buttons)
  * - Real-time waveform + duration
  *
- * Props interface unchanged — drop-in replacement.
+ * CRITICAL: PanResponder wraps the ENTIRE component across all states.
+ * Previous bug: PanResponder was only on the idle mic button, so when
+ * recording started and the component re-rendered to the recording bar,
+ * the PanResponder was lost and gestures froze.
+ *
  * Uses expo-audio (useAudioRecorder + useAudioRecorderState).
  */
 
@@ -20,8 +24,7 @@ import {
   Vibration,
   Platform,
   PanResponder,
-  type GestureResponderEvent,
-  type PanResponderGestureState,
+  TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,11 +97,10 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   const recorderState = useAudioRecorderState(recorder, 100);
 
   const isRecordingRef = useRef(false);
+  const isLockedRef = useRef(false);
   const hasPermissionsRef = useRef(false);
   const recordingStartTime = useRef(0);
   const latestDurationRef = useRef(0);
-  const initialX = useRef(0);
-  const initialY = useRef(0);
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -109,6 +111,11 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
     () => new Array(WAVEFORM_BAR_COUNT).fill(0).map(() => new Animated.Value(0.2)),
     [],
   );
+
+  // Sync isLocked to ref for PanResponder (reads synchronously)
+  useEffect(() => {
+    isLockedRef.current = isLocked;
+  }, [isLocked]);
 
   // Notify parent of recording state
   useEffect(() => {
@@ -195,7 +202,6 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   const stopRecording = useCallback(async (shouldSend: boolean) => {
     if (!isRecordingRef.current) return;
     isRecordingRef.current = false;
-    // Use ref to avoid depending on recorderState (changes every 100ms)
     const duration = latestDurationRef.current || (Date.now() - recordingStartTime.current);
     try {
       await recorder.stop();
@@ -218,6 +224,7 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
   const resetState = () => {
     setIsRecording(false);
     setIsLocked(false);
+    isLockedRef.current = false;
     setInCancelZone(false);
     setInLockZone(false);
     setRecordingDuration(0);
@@ -226,19 +233,20 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
     waveformAnims.forEach((a) => a.setValue(0.2));
   };
 
-  // PanResponder for hold-to-record gesture
+  // PanResponder wraps ENTIRE component — critical for gesture continuity.
+  // When locked, PanResponder yields so TouchableOpacity buttons work.
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled,
-        onMoveShouldSetPanResponder: () => isRecordingRef.current,
-        onPanResponderGrant: (_e: GestureResponderEvent, _gs: PanResponderGestureState) => {
-          initialX.current = 0;
-          initialY.current = 0;
+        onStartShouldSetPanResponder: () => !disabled && !isLockedRef.current,
+        onMoveShouldSetPanResponder: () =>
+          isRecordingRef.current && !isLockedRef.current,
+        onPanResponderGrant: () => {
+          if (isLockedRef.current) return;
           startRecording();
         },
-        onPanResponderMove: (_e: GestureResponderEvent, gs: PanResponderGestureState) => {
-          if (!isRecordingRef.current) return;
+        onPanResponderMove: (_e, gs) => {
+          if (!isRecordingRef.current || isLockedRef.current) return;
           // Slide left → cancel
           const dx = Math.min(0, gs.dx);
           slideX.setValue(dx);
@@ -248,149 +256,135 @@ const VoiceRecorderImpl: React.FC<VoiceRecorderProps> = ({
           lockSlideY.setValue(dy);
           setInLockZone(dy < LOCK_SLIDE_Y);
         },
-        onPanResponderRelease: (_e: GestureResponderEvent, gs: PanResponderGestureState) => {
-          if (!isRecordingRef.current) return;
+        onPanResponderRelease: (_e, gs) => {
+          if (!isRecordingRef.current || isLockedRef.current) return;
           if (gs.dx < CANCEL_SLIDE_X) {
-            // Cancelled
             stopRecording(false);
           } else if (gs.dy < LOCK_SLIDE_Y) {
-            // Locked — keep recording, show stop/send buttons
             setIsLocked(true);
+            isLockedRef.current = true;
             slideX.setValue(0);
             lockSlideY.setValue(0);
           } else {
-            // Release → send
             stopRecording(true);
           }
         },
         onPanResponderTerminate: () => {
-          if (isRecordingRef.current) stopRecording(false);
+          if (isRecordingRef.current && !isLockedRef.current) {
+            stopRecording(false);
+          }
         },
       }),
     [disabled, startRecording, stopRecording, slideX, lockSlideY],
   );
 
-  // ─── IDLE STATE ───
-  if (!isRecording && !isLocked) {
-    return (
-      <View style={styles.container}>
-        <Animated.View {...panResponder.panHandlers}>
-          <LinearGradient
-            colors={GRADIENT_PURPLE_INDIGO as [string, string]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.micButton}
-          >
-            <Ionicons name="mic" size={20} color="#ffffff" />
-          </LinearGradient>
-        </Animated.View>
-      </View>
-    );
-  }
+  // ─── Waveform bars (shared across recording + locked states) ───
+  const waveformBars = waveformAnims.map((anim, i) => (
+    <Animated.View
+      key={i}
+      style={[
+        styles.waveBar,
+        { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
+      ]}
+    />
+  ));
 
-  // ─── LOCKED STATE (recording continues, user sees stop/send) ───
-  if (isLocked) {
-    return (
-      <View style={styles.recordingBar}>
-        {/* Red pulse dot */}
-        <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
-        {/* Waveform */}
-        <View style={styles.waveformContainer}>
-          {waveformAnims.map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.waveBar,
-                { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
-              ]}
-            />
-          ))}
-        </View>
-        {/* Duration */}
-        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-        {/* Cancel */}
-        <Animated.View style={styles.lockAction}>
-          <Ionicons
-            name="trash-outline"
-            size={22}
-            color={ERROR_RED}
-            onPress={() => stopRecording(false)}
-          />
-        </Animated.View>
-        {/* Send */}
-        <Animated.View style={styles.lockAction}>
-          <LinearGradient
-            colors={GRADIENT_PURPLE_INDIGO as [string, string]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.sendCircle}
-          >
-            <Ionicons
-              name="send"
-              size={18}
-              color="#ffffff"
-              onPress={() => stopRecording(true)}
-            />
-          </LinearGradient>
-        </Animated.View>
-      </View>
-    );
-  }
+  // Determine root style: idle = centered mic, recording/locked = full-width bar
+  const isActive = isRecording || isLocked;
 
-  // ─── RECORDING STATE (hold gesture active) ───
   return (
-    <View style={styles.recordingBar}>
-      <Animated.View
-        style={[
-          styles.recordingSlider,
-          { transform: [{ translateX: slideX }] },
-        ]}
-      >
-        {/* Red pulse dot */}
-        <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
-        {/* Waveform */}
-        <View style={styles.waveformContainer}>
-          {waveformAnims.map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.waveBar,
-                { height: Animated.multiply(anim, 24), backgroundColor: CYAN_PRIMARY },
-              ]}
+    <View
+      style={isActive ? styles.recordingBar : styles.container}
+      {...panResponder.panHandlers}
+      collapsable={false}
+    >
+      {/* ─── IDLE: mic button ─── */}
+      {!isActive && (
+        <LinearGradient
+          colors={GRADIENT_PURPLE_INDIGO as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.micButton}
+        >
+          <Ionicons name="mic" size={20} color="#ffffff" />
+        </LinearGradient>
+      )}
+
+      {/* ─── LOCKED: recording bar with Send / Trash buttons ─── */}
+      {isLocked && (
+        <>
+          <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
+          <View style={styles.waveformContainer}>{waveformBars}</View>
+          <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={() => stopRecording(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.trashCircle}>
+              <Ionicons name="trash-outline" size={20} color={ERROR_RED} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.lockAction}
+            onPress={() => stopRecording(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <LinearGradient
+              colors={GRADIENT_PURPLE_INDIGO as [string, string]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.sendCircle}
+            >
+              <Ionicons name="send" size={16} color="#ffffff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </>
+      )}
+
+      {/* ─── RECORDING: hold gesture active ─── */}
+      {isRecording && !isLocked && (
+        <>
+          <Animated.View
+            style={[
+              styles.recordingSlider,
+              { transform: [{ translateX: slideX }] },
+            ]}
+          >
+            <Animated.View style={[styles.recordDot, { transform: [{ scale: pulseAnim }] }]} />
+            <View style={styles.waveformContainer}>{waveformBars}</View>
+            <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
+          </Animated.View>
+
+          {/* Cancel hint */}
+          <View style={styles.cancelHint}>
+            <Ionicons
+              name="chevron-back"
+              size={14}
+              color={inCancelZone ? ERROR_RED : '#64748b'}
             />
-          ))}
-        </View>
-        {/* Duration */}
-        <Text style={styles.durationText}>{formatDuration(recordingDuration)}</Text>
-      </Animated.View>
+            <Text style={[styles.cancelText, inCancelZone && { color: ERROR_RED }]}>
+              {inCancelZone ? 'Release to cancel' : 'Slide to cancel'}
+            </Text>
+          </View>
 
-      {/* Cancel hint */}
-      <View style={styles.cancelHint}>
-        <Ionicons
-          name="chevron-back"
-          size={14}
-          color={inCancelZone ? ERROR_RED : '#64748b'}
-        />
-        <Text style={[styles.cancelText, inCancelZone && { color: ERROR_RED }]}>
-          {inCancelZone ? 'Release to cancel' : 'Slide to cancel'}
-        </Text>
-      </View>
-
-      {/* Lock hint */}
-      <Animated.View
-        style={[
-          styles.lockHintContainer,
-          { transform: [{ translateY: lockSlideY }] },
-        ]}
-      >
-        <View style={[styles.lockHint, inLockZone && styles.lockHintActive]}>
-          <Ionicons
-            name={inLockZone ? 'lock-closed' : 'lock-open-outline'}
-            size={16}
-            color={inLockZone ? '#ffffff' : '#94a3b8'}
-          />
-        </View>
-      </Animated.View>
+          {/* Lock hint */}
+          <Animated.View
+            style={[
+              styles.lockHintContainer,
+              { transform: [{ translateY: lockSlideY }] },
+            ]}
+          >
+            <View style={[styles.lockHint, inLockZone && styles.lockHintActive]}>
+              <Ionicons
+                name={inLockZone ? 'lock-closed' : 'lock-open-outline'}
+                size={16}
+                color={inLockZone ? '#ffffff' : '#94a3b8'}
+              />
+            </View>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 };
@@ -489,10 +483,20 @@ const styles = StyleSheet.create({
     borderColor: PURPLE_PRIMARY,
   },
   lockAction: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  trashCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   sendCircle: {
     width: 36,

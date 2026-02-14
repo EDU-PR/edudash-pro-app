@@ -1,10 +1,12 @@
 /**
  * Reply Preview Component
- * Shows quoted message when replying
+ * Shows quoted message above the input bar when replying.
+ * Media-aware: voice, image, file types show appropriate icons.
+ * Slide-down entrance animation.
  */
 
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Message } from './types';
 
@@ -13,47 +15,168 @@ interface ReplyPreviewProps {
   onClose: () => void;
 }
 
-export const ReplyPreview: React.FC<ReplyPreviewProps> = ({ message, onClose }) => (
-  <View style={styles.container}>
-    <View style={styles.content}>
-      <Text style={styles.label}>
-        Replying to {message.sender?.first_name || 'message'}
-      </Text>
-      <Text numberOfLines={1} style={styles.text}>
-        {message.content}
-      </Text>
-    </View>
-    <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-      <Ionicons name="close" size={20} color="#64748b" />
-    </TouchableOpacity>
-  </View>
-);
+/** Determine content type + preview text */
+function getMediaPreview(message: Message): { icon: string; text: string; color: string } {
+  const ct = message.content_type;
+  if (ct === 'voice' || message.voice_url) {
+    const dur = message.voice_duration
+      ? `${Math.floor(message.voice_duration / 60000)}:${String(Math.floor((message.voice_duration % 60000) / 1000)).padStart(2, '0')}`
+      : '';
+    return { icon: 'mic', text: `Voice message ${dur}`.trim(), color: '#a78bfa' };
+  }
+  if (ct === 'image' || message.content?.match(/\[image\]/i)) {
+    return { icon: 'image', text: 'Photo', color: '#34d399' };
+  }
+  if (ct === 'file') {
+    return { icon: 'document-attach', text: 'File', color: '#f59e0b' };
+  }
+  return { icon: '', text: message.content || '', color: '' };
+}
+
+export const ReplyPreview: React.FC<ReplyPreviewProps> = React.memo(({ message, onClose }) => {
+  const slideAnim = useRef(new Animated.Value(-40)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 200,
+        friction: 20,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [slideAnim, opacityAnim]);
+
+  const senderName = message.sender?.first_name
+    ? `${message.sender.first_name} ${message.sender.last_name || ''}`.trim()
+    : 'message';
+
+  const media = getMediaPreview(message);
+  const isMedia = !!media.icon;
+
+  return (
+    <Animated.View
+      style={[
+        styles.container,
+        { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
+      ]}
+    >
+      {/* Accent bar */}
+      <View style={styles.accentBar} />
+
+      {/* Avatar circle */}
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>
+          {senderName.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+
+      {/* Content */}
+      <View style={styles.content}>
+        <Text style={styles.label} numberOfLines={1}>
+          Replying to {senderName}
+        </Text>
+        <View style={styles.previewRow}>
+          {isMedia && (
+            <Ionicons
+              name={media.icon as any}
+              size={14}
+              color={media.color}
+              style={styles.mediaIcon}
+            />
+          )}
+          <Text numberOfLines={1} style={[styles.text, isMedia && { color: media.color }]}>
+            {media.text}
+          </Text>
+        </View>
+      </View>
+
+      {/* Close button */}
+      <TouchableOpacity
+        onPress={onClose}
+        style={styles.closeBtn}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <View style={styles.closeBg}>
+          <Ionicons name="close" size={16} color="#94a3b8" />
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingLeft: 0,
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    borderRadius: 14,
+    marginBottom: 6,
+    marginHorizontal: 2,
+    overflow: 'hidden',
+  },
+  accentBar: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: '#6366f1',
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    marginRight: 10,
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(99, 102, 241, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#a5b4fc',
+  },
+  content: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 12,
+    color: '#818cf8',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mediaIcon: {
+    marginRight: 5,
+  },
+  text: {
+    fontSize: 13,
+    color: '#94a3b8',
+    flex: 1,
+  },
+  closeBtn: {
+    padding: 4,
+    marginLeft: 6,
+  },
+  closeBg: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
-  },
-  content: { 
-    flex: 1 
-  },
-  label: { 
-    fontSize: 12, 
-    color: '#3b82f6', 
-    fontWeight: '600', 
-    marginBottom: 2 
-  },
-  text: { 
-    fontSize: 13, 
-    color: '#94a3b8' 
-  },
-  closeBtn: { 
-    padding: 4 
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

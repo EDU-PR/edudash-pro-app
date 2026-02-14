@@ -128,6 +128,7 @@ export function CallProvider({ children }: CallProviderProps) {
   const isUserOnline = presence.isUserOnline;
   const getLastSeenText = presence.getLastSeenText;
   const refreshPresence = presence.refreshPresence;
+  const recordActivity = presence.recordActivity;
 
   // Setup push notifications and get current user
   // NOTE: CallKeep removed - broken with Expo SDK 54+ (duplicate method exports)
@@ -958,6 +959,7 @@ export function CallProvider({ children }: CallProviderProps) {
     isUserOnline,
     getLastSeenText,
     refreshPresence,
+    recordActivity,
   };
 
   return (
