@@ -17,6 +17,8 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { SupportedLanguage } from './useVoiceSTT';
 import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
+import { track } from '@/lib/analytics';
+import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
 import {
   consumePremiumVoiceActivity,
   getVoicePolicyDecision,
@@ -84,6 +86,7 @@ const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
 export type TTSErrorCategory =
   | 'quota_exhausted'
   | 'auth_missing'
+  | 'throttled'
   | 'service_unconfigured'
   | 'phonics_requires_azure'
   | 'network_error'
@@ -123,12 +126,29 @@ const resolveDeviceRate = (rate: unknown, defaultRate: number): number => {
 const shouldRetryAzureChunk = (error: unknown): boolean => {
   const normalized = String(error instanceof Error ? error.message : error || '').toLowerCase();
   return (
+    normalized.includes('tts_throttled_429') ||
+    normalized.includes('network_error_status_429') ||
     normalized.includes('service_unconfigured_502') ||
     normalized.includes('service_unconfigured_503') ||
     normalized.includes('service_unconfigured_504') ||
+    normalized.includes('service_unavailable_503') ||
     normalized.includes('network_error') ||
     normalized.includes('timeout')
   );
+};
+
+const parseTTSDiagnostics = (reason: unknown) => {
+  const message = String(reason instanceof Error ? reason.message : reason || '');
+  const statusMatch = message.match(/(?:upstream_status|status)=(\d{3})/i);
+  const requestMatch = message.match(/req=([a-z0-9-]+)/i);
+  const errorCodeMatch = message.match(/error_code=([a-z0-9_:-]+)/i);
+
+  return {
+    statusCode: statusMatch ? Number(statusMatch[1]) : undefined,
+    requestId: requestMatch?.[1],
+    errorCode: errorCodeMatch?.[1],
+    raw: message,
+  };
 };
 
 const prepareDevicePhonicsText = (text: string): string => {
@@ -182,7 +202,16 @@ export const categorizeTTSError = (error: unknown): TTSErrorCategory => {
   }
 
   if (
+    normalized.includes('tts_throttled') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('429')
+  ) {
+    return 'throttled';
+  }
+
+  if (
     normalized.includes('service_unconfigured') ||
+    normalized.includes('service_unavailable') ||
     normalized.includes('tts unavailable') ||
     normalized.includes('supabase_url') ||
     normalized.includes('fallback') ||
@@ -218,6 +247,8 @@ export const getTTSErrorMessage = (category: TTSErrorCategory): string => {
       return 'Premium voice limit reached. Using standard voice until reset.';
     case 'auth_missing':
       return 'Voice needs an active login session.';
+    case 'throttled':
+      return 'Voice is busy right now. Retrying shortly.';
     case 'phonics_requires_azure':
       return 'Phonics voice needs cloud TTS. Please check connection and retry.';
     case 'service_unconfigured':
@@ -548,15 +579,19 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           try {
             const payload = JSON.parse(bodyText) as {
               error?: string;
+              error_code?: string;
               details?: string;
               provider?: string;
               fallback?: string;
+              upstream_status?: number;
             };
             backendDetails = [
               payload.error || '',
+              payload.error_code ? `error_code=${payload.error_code}` : '',
               payload.details || '',
               payload.provider ? `provider=${payload.provider}` : '',
               payload.fallback ? `fallback=${payload.fallback}` : '',
+              Number.isFinite(payload.upstream_status) ? `upstream_status=${payload.upstream_status}` : '',
             ]
               .filter(Boolean)
               .join(' | ');
@@ -573,6 +608,15 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
       if (status === 401 || status === 403) {
         throw new Error(`AUTH_MISSING_${status}${diagnostic ? `:${diagnostic}` : ''}`);
+      }
+      if (status === 429) {
+        throw new Error(`TTS_THROTTLED_429${diagnostic ? `:${diagnostic}` : ''}`);
+      }
+      if (status === 503) {
+        throw new Error(`SERVICE_UNAVAILABLE_503${diagnostic ? `:${diagnostic}` : ''}`);
+      }
+      if (status === 500) {
+        throw new Error(`SERVICE_INTERNAL_500${diagnostic ? `:${diagnostic}` : ''}`);
       }
       if (status >= 500 || status === 404 || status === 422) {
         throw new Error(`SERVICE_UNCONFIGURED_${status}${diagnostic ? `:${diagnostic}` : ''}`);
@@ -670,6 +714,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         },
         user?.id,
       );
+      let cloudAttempted = false;
+      let fallbackUsed: 'none' | 'device' | 'phonics_blocked' = 'none';
+      let telemetryError: unknown = null;
       
       // Azure supports en/af/zu in this client path; device fallback will cover the rest.
       const SUPPORTED_TTS_LANGS = ['en', 'af', 'zu'];
@@ -680,6 +727,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
         console.warn(`[VoiceTTS] Language ${language} not supported by Azure path. Falling back to device TTS.`);
+        fallbackUsed = 'device';
         await speakWithDeviceTTS(text, language, {
           ...options,
           phonicsMode,
@@ -704,6 +752,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
       if (!policy.shouldUseCloudVoice) {
         reportTTSError(new Error('FREE_QUOTA_EXHAUSTED_DEVICE_VOICE'));
+        fallbackUsed = 'device';
         for (const chunk of chunks) {
           if (stopRequestedRef.current) break;
           await speakWithDeviceTTS(chunk, effectiveLanguage, {
@@ -722,6 +771,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       for (const chunk of chunks) {
         if (stopRequestedRef.current) break;
         try {
+          cloudAttempted = true;
           await speakWithAzure(chunk, effectiveLanguage, {
             ...options,
             phonicsMode,
@@ -730,19 +780,34 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           cloudChunkSucceeded = true;
         } catch (azureErr) {
           let effectiveAzureErr: unknown = azureErr;
-          if (shouldRetryAzureChunk(azureErr) && !stopRequestedRef.current) {
+          const throttleRetry = String(effectiveAzureErr instanceof Error ? effectiveAzureErr.message : effectiveAzureErr || '')
+            .toLowerCase()
+            .includes('tts_throttled_429');
+          const maxRetries = shouldRetryAzureChunk(effectiveAzureErr)
+            ? (throttleRetry ? 2 : 1)
+            : 0;
+
+          for (let retry = 0; retry < maxRetries && !stopRequestedRef.current; retry += 1) {
+            const baseDelay = throttleRetry ? 420 : 280;
+            const jitter = Math.floor(Math.random() * (throttleRetry ? 260 : 120));
             try {
-              await new Promise((resolve) => setTimeout(resolve, 280));
+              await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
+              cloudAttempted = true;
               await speakWithAzure(chunk, effectiveLanguage, {
                 ...options,
                 phonicsMode,
               });
               anyChunkSucceeded = true;
               cloudChunkSucceeded = true;
-              continue;
+              effectiveAzureErr = null;
+              break;
             } catch (retryErr) {
               effectiveAzureErr = retryErr;
             }
+          }
+
+          if (!effectiveAzureErr) {
+            continue;
           }
 
           if (phonicsMode && !ALLOW_DEVICE_FALLBACK_IN_PHONICS) {
@@ -752,11 +817,14 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
             console.warn('[VoiceTTS] Azure chunk failed in phonics mode; device fallback disabled:', effectiveAzureErr);
             reportTTSError(phonicsErr);
             lastErr = phonicsErr;
+            telemetryError = phonicsErr;
+            fallbackUsed = 'phonics_blocked';
             break;
           }
 
           console.warn('[VoiceTTS] Azure chunk failed; trying device fallback:', effectiveAzureErr);
           reportTTSError(effectiveAzureErr);
+          fallbackUsed = 'device';
           try {
             await speakWithDeviceTTS(chunk, effectiveLanguage, {
               ...options,
@@ -767,6 +835,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
             console.warn('[VoiceTTS] Device fallback also failed:', deviceErr);
             reportTTSError(deviceErr);
             lastErr = deviceErr instanceof Error ? deviceErr : new Error(String(deviceErr));
+            telemetryError = lastErr;
             // Continue — partial speech is better than none
           }
         }
@@ -774,16 +843,40 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
 
       // If no chunks played, rethrow so the caller can show a user-facing message
       if (!anyChunkSucceeded && lastErr) {
+        telemetryError = lastErr;
         throw lastErr;
       }
 
       if (!policy.isPremiumTier && cloudChunkSucceeded) {
         await consumePremiumVoiceActivity(user?.id);
       }
+
+      const successDiagnostics = parseTTSDiagnostics(telemetryError);
+      track('edudash.voice.tts_turn', {
+        tier: tier || 'free',
+        capability_tier: policy.capabilityTier,
+        cloud_attempted: cloudAttempted,
+        fallback_used: fallbackUsed,
+        error_code: successDiagnostics.errorCode || null,
+        upstream_status: successDiagnostics.statusCode || null,
+        request_id: successDiagnostics.requestId || null,
+        success: true,
+      });
       
     } catch (err) {
       console.error('[VoiceTTS] Error:', err);
       reportTTSError(err);
+      const diagnostics = parseTTSDiagnostics(err);
+      track('edudash.voice.tts_turn', {
+        tier: tier || 'free',
+        capability_tier: resolveCapabilityTier(String(tier || 'free')),
+        cloud_attempted: true,
+        fallback_used: 'none',
+        error_code: diagnostics.errorCode || null,
+        upstream_status: diagnostics.statusCode || null,
+        request_id: diagnostics.requestId || null,
+        success: false,
+      });
     } finally {
       setIsSpeaking(false);
     }

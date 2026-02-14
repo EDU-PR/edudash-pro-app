@@ -15,6 +15,7 @@ import { createSignedUrl, getFileIconName, formatFileSize } from '@/services/Att
 import { LinearGradient } from 'expo-linear-gradient';
 import { MathRenderer } from './MathRenderer';
 import { MermaidRenderer } from './MermaidRenderer';
+import InlineQuizCard, { parseQuizPayload, type QuizQuestionPayload } from './InlineQuizCard';
 
 const isWeb = Platform.OS === 'web';
 let Markdown: React.ComponentType<any> | null = null;
@@ -397,6 +398,33 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     });
   };
 
+  const safeParseQuizJson = (raw: string): QuizQuestionPayload | null => {
+    const cleaned = String(raw || '').trim();
+    if (!cleaned) return null;
+
+    // First try the InlineQuizCard parser contract.
+    const wrapped = `\`\`\`quiz\n${cleaned}\n\`\`\``;
+    const parsed = parseQuizPayload(wrapped);
+    if (parsed) return parsed;
+
+    try {
+      const direct = JSON.parse(cleaned);
+      if (
+        direct &&
+        typeof direct === 'object' &&
+        (direct as any).type === 'quiz_question' &&
+        typeof (direct as any).question === 'string' &&
+        typeof (direct as any).correct === 'string'
+      ) {
+        return direct as QuizQuestionPayload;
+      }
+    } catch {
+      // Keep null fallback to fenced markdown render below.
+    }
+
+    return null;
+  };
+
   const BubbleSurface: React.ElementType = isUser ? LinearGradient : View;
   const bubbleSurfaceProps = isUser
     ? { 
@@ -636,6 +664,23 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                       key={`mermaid-${message.id}-${segmentIndex}`}
                       definition={segment.content}
                     />
+                  );
+                }
+                if (segment.type === 'quiz') {
+                  const payload = safeParseQuizJson(segment.content);
+                  if (payload) {
+                    return (
+                      <InlineQuizCard
+                        key={`quiz-${message.id}-${segmentIndex}`}
+                        payload={payload}
+                        onAnswer={(answer) => onSendFollowUp(answer)}
+                      />
+                    );
+                  }
+                  return (
+                    <Markdown key={`quiz-fallback-${message.id}-${segmentIndex}`} style={markdownStyles}>
+                      {'```quiz\n' + segment.content + '\n```'}
+                    </Markdown>
                   );
                 }
                 return (

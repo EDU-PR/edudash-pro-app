@@ -320,118 +320,20 @@ function buildBatchGradeTool(): AgentTool {
     risk: 'medium',
     execute: async (args) => {
       try {
-        const supabase = (await import('@/lib/supabase')).assertSupabase();
-        const maxSubs = Math.min(args.max_submissions || 10, 30);
-
-        // Fetch submissions for the assignment
-        const { data: submissions, error: fetchErr } = await supabase
-          .from('homework_submissions')
-          .select(
-            'id, student_id, content, submitted_at, score, profiles!student_id(first_name, last_name)',
-          )
-          .eq('homework_id', args.assignment_id)
-          .is('score', null) // Only ungraded
-          .order('submitted_at', { ascending: true })
-          .limit(maxSubs);
-
-        if (fetchErr) throw fetchErr;
-        if (!submissions?.length) {
-          return {
-            success: true,
-            result: { message: 'No ungraded submissions found', graded: 0 },
-          };
-        }
-
-        // Build grading prompt
-        const submissionBlock = submissions
-          .map(
-            (s: any, i: number) =>
-              `--- Student ${i + 1} (${s.profiles?.first_name || 'Unknown'}) ---\n${s.content || '[empty]'}`,
-          )
-          .join('\n\n');
-
-        const prompt = [
-          `You are an experienced South African teacher grading student work.`,
-          `Assignment ID: ${args.assignment_id}`,
-          args.rubric ? `Rubric: ${args.rubric}` : '',
-          '',
-          'Grade these submissions. Return JSON:',
-          '{',
-          '  "grades": [',
-          '    { "student_index": 1, "score": 85, "max_score": 100, "feedback": "...", "strengths": ["..."], "areas_to_improve": ["..."] }',
-          '  ],',
-          '  "class_summary": {',
-          '    "average_score": 75,',
-          '    "common_mistakes": ["..."],',
-          '    "recommendations": ["..."]',
-          '  }',
-          '}',
-          '',
-          'Submissions:',
-          submissionBlock,
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-        const { data: session } = await supabase.auth.getSession();
-        const token = session?.session?.access_token;
-        if (!token) throw new Error('Not authenticated');
-
-        const response = await fetch(
-          `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-proxy`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              messages: [{ role: 'user', content: prompt }],
-              service_type: 'grading',
-              model: 'claude-3-5-haiku-20241022',
-              max_tokens: 2048,
-            }),
-          },
-        );
-
-        if (!response.ok) throw new Error(`AI proxy returned ${response.status}`);
-        const result = await response.json();
-        const content = result?.content || result?.text || '';
-
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        let gradingResult: any = { rawResponse: content };
-        if (jsonMatch) {
-          try {
-            gradingResult = JSON.parse(jsonMatch[0]);
-          } catch {
-            // use raw
-          }
-        }
-
-        // Save grades back to DB
-        if (gradingResult.grades && Array.isArray(gradingResult.grades)) {
-          for (const grade of gradingResult.grades) {
-            const idx = (grade.student_index || 1) - 1;
-            const sub = submissions[idx];
-            if (!sub) continue;
-
-            await supabase
-              .from('homework_submissions')
-              .update({
-                score: grade.score,
-                feedback: grade.feedback,
-                graded_at: new Date().toISOString(),
-              })
-              .eq('id', sub.id);
-          }
-        }
+        const { GradingEngine } = await import('@/lib/services/GradingEngine');
+        const result = await GradingEngine.batchGrade({
+          assignmentId: args.assignment_id,
+          rubric: args.rubric,
+          maxSubmissions: args.max_submissions,
+        });
 
         return {
           success: true,
           result: {
-            graded: gradingResult.grades?.length || 0,
-            total_submissions: submissions.length,
-            ...gradingResult,
+            graded: result.graded,
+            total_submissions: result.totalSubmissions,
+            grades: result.grades,
+            class_summary: result.classSummary,
           },
         };
       } catch (error) {

@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignOutCallback = useCallback(async () => {
     try {
       try { clearAllNavigationLocks(); } catch { /* noop */ }
-      try { await signOut(); } catch { /* noop */ }
+      try { await signOut({ preserveOtherSessions: true }); } catch { /* noop */ }
 
       setUser(null);
       setSession(null);

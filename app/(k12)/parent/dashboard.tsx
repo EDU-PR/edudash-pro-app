@@ -286,7 +286,7 @@ export default function K12ParentDashboardScreen() {
             style={styles.profileButton}
             onPress={() => {
               track('k12.parent.profile_tap', { user_id: user?.id });
-              router.push('/screens/settings' as any);
+              router.push('/screens/account' as any);
             }}
           >
             <LinearGradient
