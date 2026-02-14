@@ -3,7 +3,6 @@
  * 
  * CAPS-aligned exam preparation with AI-powered question generation.
  * Features: Grade selection, subject selection, exam type selection.
- * Feature-flagged: Only active when exam_prep_enabled is true.
  */
 
 import React, { useCallback, useState } from 'react';

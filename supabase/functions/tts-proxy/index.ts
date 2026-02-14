@@ -231,6 +231,38 @@ function phonemeTag(letter: string): string {
   return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme></prosody>`;
 }
 
+const SUSTAIN_CONSONANTS = new Set([
+  'm', 'n', 's', 'f', 'v', 'z', 'l', 'r', 'th', 'sh', 'ch',
+]);
+
+const DIGRAPH_IPA: Record<string, string> = {
+  th: 'θ',
+  sh: 'ʃ',
+  ch: 'tʃ',
+};
+
+function phonemeTagSustained(tokenRaw: string): string {
+  const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!token) return '';
+
+  let ipa = '';
+  let sound = token;
+
+  if (token.length === 1) {
+    const entry = LETTER_IPA[token];
+    if (!entry) return escapeXml(tokenRaw);
+    ipa = `${entry.ipa}ː`;
+    sound = entry.sound || token;
+  } else {
+    const digraphIpa = DIGRAPH_IPA[token];
+    if (!digraphIpa) return phonemeTag(token);
+    ipa = `${digraphIpa}ː`;
+    sound = token;
+  }
+
+  return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(ipa)}">${escapeXml(sound)}</phoneme></prosody>`;
+}
+
 function buildBlendSSML(blend: string): string {
   const letters = String(blend || '')
     .toLowerCase()
@@ -297,13 +329,21 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
   const markerTokenToSSML = (tokenRaw: string): string => {
     const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
     if (!token) return '';
-    if (token.length === 1) return phonemeTag(token);
+    if (token.length === 1) {
+      return SUSTAIN_CONSONANTS.has(token)
+        ? phonemeTagSustained(token)
+        : phonemeTag(token);
+    }
 
     const sustainedLetter = SUSTAINED_SOUND_TO_LETTER[token];
-    if (sustainedLetter) return phonemeTag(sustainedLetter);
+    if (sustainedLetter) return phonemeTagSustained(sustainedLetter);
 
     const digraphLetter = DIGRAPH_FALLBACK_TO_LETTER[token];
-    if (digraphLetter) return phonemeTag(digraphLetter);
+    if (digraphLetter) {
+      return SUSTAIN_CONSONANTS.has(token)
+        ? phonemeTagSustained(token)
+        : phonemeTag(digraphLetter);
+    }
 
     // Unknown marker token: spell each letter as a safe fallback.
     if (token.length <= 8) {
@@ -333,7 +373,7 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
   // e.g. "sss" → <phoneme ipa="s">sss</phoneme>, "buh" → <phoneme ipa="b">buh</phoneme>
   text = text.replace(SUSTAINED_SOUND_PATTERN, (match) => {
     const letter = SUSTAINED_SOUND_TO_LETTER[match.toLowerCase()];
-    return letter ? phonemeTag(letter) : match;
+    return letter ? phonemeTagSustained(letter) : match;
   });
 
   // Ensure no raw slash marker characters leak to Azure speech output.

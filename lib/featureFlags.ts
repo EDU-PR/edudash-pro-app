@@ -181,7 +181,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
   dash_tutor_auto_handoff_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_AUTO_HANDOFF_V1 === 'true',
   dash_tutor_phonics_strict_v1: process.env.EXPO_PUBLIC_DASH_TUTOR_PHONICS_STRICT_V1 === 'true',
   dash_chart_safe_mode_v1: process.env.EXPO_PUBLIC_DASH_CHART_SAFE_MODE_V1 === 'true',
-  k12_parent_quickwins_v1: process.env.EXPO_PUBLIC_K12_PARENT_QUICKWINS_V1 === 'true',
+  k12_parent_quickwins_v1: process.env.EXPO_PUBLIC_K12_PARENT_QUICKWINS_V1 !== 'false',
   // Staged rollout defaults:
   // v1 UI/policy enabled, automation + duplicate queue remain opt-in.
   learner_activity_lifecycle_v1: process.env.EXPO_PUBLIC_LEARNER_ACTIVITY_LIFECYCLE_V1 !== 'false',

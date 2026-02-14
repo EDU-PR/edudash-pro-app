@@ -32,9 +32,17 @@ interface ChildCardProps {
   colors: ThemeColors;
 }
 
+const normalizeGradeLabel = (value?: string | null): string => {
+  if (!value) return '';
+  return value.replace(/^\s*grade\s+grade\s+/i, 'Grade ').replace(/\s+/g, ' ').trim();
+};
+
 export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
-  <TouchableOpacity 
-    style={[styles.childCard, { backgroundColor: colors.surface }]}
+  <TouchableOpacity
+    style={[
+      styles.childCard,
+      String(colors?.background || '').toLowerCase() !== '#0f121e' && { backgroundColor: colors.surface },
+    ]}
     activeOpacity={0.7}
     onPress={() => {
       track('k12.parent.child_card_tap', { childId: child.id });
@@ -55,7 +63,7 @@ export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
       )}
       <View style={styles.childInfo}>
         <Text style={[styles.childName, { color: colors.text }]}>{child.name}</Text>
-        <Text style={[styles.childGrade, { color: colors.textSecondary }]}>{child.grade}</Text>
+        <Text style={[styles.childGrade, { color: colors.textSecondary }]}>{normalizeGradeLabel(child.grade)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
     </View>
@@ -64,12 +72,32 @@ export const ChildCard: React.FC<ChildCardProps> = ({ child, colors }) => (
         <Text style={[styles.childStatValue, { color: '#F59E0B' }]}>{child.avgGrade}</Text>
         <Text style={[styles.childStatLabel, { color: colors.textSecondary }]}>Average</Text>
       </View>
-      <View style={[styles.childStatDivider, { backgroundColor: colors.border }]} />
+      <View
+        style={[
+          styles.childStatDivider,
+          {
+            backgroundColor:
+              String(colors?.background || '').toLowerCase() === '#0f121e'
+                ? 'rgba(255,255,255,0.08)'
+                : colors.border,
+          },
+        ]}
+      />
       <View style={styles.childStat}>
         <Text style={[styles.childStatValue, { color: '#10B981' }]}>{child.attendance}%</Text>
         <Text style={[styles.childStatLabel, { color: colors.textSecondary }]}>Attendance</Text>
       </View>
-      <View style={[styles.childStatDivider, { backgroundColor: colors.border }]} />
+      <View
+        style={[
+          styles.childStatDivider,
+          {
+            backgroundColor:
+              String(colors?.background || '').toLowerCase() === '#0f121e'
+                ? 'rgba(255,255,255,0.08)'
+                : colors.border,
+          },
+        ]}
+      />
       <View style={styles.childStat}>
         <Text style={[styles.childStatValue, { color: '#3B82F6' }]}>{child.pendingAssignments}</Text>
         <Text style={[styles.childStatLabel, { color: colors.textSecondary }]}>Pending</Text>

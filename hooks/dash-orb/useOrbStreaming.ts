@@ -12,7 +12,11 @@
 
 import { useCallback, useRef } from 'react';
 import { assertSupabase } from '@/lib/supabase';
-import { estimateVisemeTimeline, type VisemeEvent } from '@/lib/voice/visemeEstimator';
+import {
+  estimateVisemeTimeline,
+  estimateVisemeTimelinePhonics,
+  type VisemeEvent,
+} from '@/lib/voice/visemeEstimator';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -33,6 +37,7 @@ export interface StreamingRequest {
   endpoint: string;
   body: Record<string, unknown>;
   accessToken: string;
+  phonicsMode?: boolean;
 }
 
 // ── Sentence splitter ───────────────────────────────────────────────────
@@ -124,7 +129,9 @@ export function useOrbStreaming() {
               callbacks.onSentenceReady(sentence, sentenceIndex);
 
               // Estimate viseme timeline for this sentence and fire events
-              const timeline = estimateVisemeTimeline(sentence);
+              const timeline = request.phonicsMode
+                ? estimateVisemeTimelinePhonics(sentence)
+                : estimateVisemeTimeline(sentence);
               for (const evt of timeline) {
                 // Schedule viseme at the estimated offset
                 setTimeout(() => {
@@ -166,7 +173,9 @@ export function useOrbStreaming() {
         // Flush remaining text as final sentence
         if (sentenceBuffer.trim()) {
           callbacks.onSentenceReady(sentenceBuffer.trim(), sentenceIndex);
-          const timeline = estimateVisemeTimeline(sentenceBuffer.trim());
+          const timeline = request.phonicsMode
+            ? estimateVisemeTimelinePhonics(sentenceBuffer.trim())
+            : estimateVisemeTimeline(sentenceBuffer.trim());
           for (const evt of timeline) {
             setTimeout(() => callbacks.onVisemeEvent(evt), evt.offsetMs);
           }
