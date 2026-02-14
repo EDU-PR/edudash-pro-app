@@ -81,6 +81,8 @@ export interface CallContextType {
   isUserOnline: (userId: string) => boolean;
   getLastSeenText: (userId: string) => string;
   refreshPresence: () => Promise<void>;
+  /** Call on user interactions to keep presence 'online' (throttled internally) */
+  recordActivity: () => void;
 }
 
 // ============================================
