@@ -12,14 +12,35 @@ import { useTheme } from '@/contexts/ThemeContext';
 import DashAssistant from '@/components/ai/DashAssistant';
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeRole } from '@/lib/rbac';
+import type { TutorMode } from '@/hooks/dash-assistant/tutorTypes';
 
 export default function DashAssistantScreen() {
   const { theme } = useTheme();
   const { profile } = useAuth();
-  const params = useLocalSearchParams<{ initialMessage?: string; conversationId?: string; source?: string }>();
+  const params = useLocalSearchParams<{
+    initialMessage?: string;
+    conversationId?: string;
+    source?: string;
+    mode?: string;
+    tutorMode?: string;
+    subject?: string;
+    grade?: string;
+    topic?: string;
+  }>();
   const initialMessage = typeof params?.initialMessage === 'string' ? params.initialMessage : undefined;
   const conversationId = typeof params?.conversationId === 'string' ? params.conversationId : undefined;
   const handoffSource = typeof params?.source === 'string' ? params.source : undefined;
+  const mode = typeof params?.mode === 'string' ? params.mode.toLowerCase() : undefined;
+  const tutorMode = (typeof params?.tutorMode === 'string' ? params.tutorMode.toLowerCase() : null) as TutorMode | null;
+  const tutorConfig = {
+    subject: typeof params?.subject === 'string' ? params.subject : undefined,
+    grade: typeof params?.grade === 'string' ? params.grade : undefined,
+    topic: typeof params?.topic === 'string' ? params.topic : undefined,
+  };
+  const hasTutorConfig = Boolean(tutorConfig.subject || tutorConfig.grade || tutorConfig.topic);
+  const shouldForceTutorMode = mode === 'tutor' || !!tutorMode;
+  const uiMode: 'advisor' | 'tutor' | 'orb' | 'exam' | null =
+    mode === 'advisor' || mode === 'orb' || mode === 'tutor' || mode === 'exam' ? mode : null;
 
   const getFallbackPath = () => {
     const role = normalizeRole(String(profile?.role || ''));
@@ -64,6 +85,9 @@ export default function DashAssistantScreen() {
         initialMessage={initialMessage}
         conversationId={conversationId}
         handoffSource={handoffSource}
+        uiMode={uiMode}
+        tutorMode={shouldForceTutorMode ? (tutorMode || 'diagnostic') : null}
+        tutorConfig={hasTutorConfig ? tutorConfig : undefined}
       />
     </View>
   );

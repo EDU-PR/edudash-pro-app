@@ -67,16 +67,27 @@ const DEFAULT_VOICES: Record<string, string> = {
 
 /** Dash's primary voice */
 const DASH_VOICE = 'en-ZA-LukeNeural';
-const DASH_FALLBACK_VOICE = 'en-ZA-LeahNeural';
-const GLOBAL_EN_FALLBACK_VOICE = 'en-US-JennyNeural';
+const DASH_FALLBACK_VOICE = 'en-GB-RyanNeural';
+const GLOBAL_EN_FALLBACK_VOICE = 'en-US-GuyNeural';
+
+const EN_MALE_FALLBACK_VOICES = ['en-GB-RyanNeural', 'en-US-GuyNeural'];
+const EN_FEMALE_FALLBACK_VOICES = ['en-ZA-LeahNeural', 'en-US-JennyNeural'];
 
 const FALLBACK_VOICES_BY_LANG: Record<string, string[]> = {
-  'en-ZA': [DASH_FALLBACK_VOICE, GLOBAL_EN_FALLBACK_VOICE],
+  'en-ZA': EN_MALE_FALLBACK_VOICES,
   'af-ZA': ['af-ZA-AdriNeural', DASH_FALLBACK_VOICE],
   'zu-ZA': ['zu-ZA-ThandoNeural', DASH_FALLBACK_VOICE],
   'xh-ZA': ['xh-ZA-NomalungaNeural', DASH_FALLBACK_VOICE],
   'nso-ZA': ['nso-ZA-DidiNeural', DASH_FALLBACK_VOICE],
 };
+
+/** Keep phonics slightly slower than normal speech without sounding dragged out */
+const DEFAULT_PHONICS_SPEAKING_RATE = -15;
+const PHONICS_PHONEME_RATE = -22;
+const PHONICS_MARKER_BREAK_MS = 320;
+const PHONICS_BLEND_SEGMENT_BREAK_MS = 360;
+const PHONICS_BLEND_FINAL_BREAK_MS = 520;
+const PHONICS_FALLBACK_LETTER_BREAK_MS = 220;
 
 /** Audio format for pronunciation assessment & streaming */
 const STREAMING_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
@@ -124,32 +135,32 @@ const MOUTH_TIPS: Record<string, Record<string, string>> = {
 
 // ---- Shared IPA letter map (canonical source: lib/dash-ai/phonics.ts) ----
 const LETTER_IPA: Record<string, { ipa: string; sound: string }> = {
-  a: { ipa: 'æ', sound: 'ahhh' },
-  b: { ipa: 'b', sound: 'buhh' },
-  c: { ipa: 'k', sound: 'kuhh' },
-  d: { ipa: 'd', sound: 'duhh' },
-  e: { ipa: 'ɛ', sound: 'ehhh' },
-  f: { ipa: 'f', sound: 'fffff' },
-  g: { ipa: 'g', sound: 'guhh' },
-  h: { ipa: 'h', sound: 'hhhhh' },
-  i: { ipa: 'ɪ', sound: 'ihhh' },
-  j: { ipa: 'dʒ', sound: 'juhh' },
-  k: { ipa: 'k', sound: 'kuhh' },
-  l: { ipa: 'l', sound: 'lllll' },
-  m: { ipa: 'm', sound: 'mmmmm' },
-  n: { ipa: 'n', sound: 'nnnnn' },
-  o: { ipa: 'ɒ', sound: 'awww' },
-  p: { ipa: 'p', sound: 'puhh' },
-  q: { ipa: 'k', sound: 'kuhh' },
-  r: { ipa: 'ɹ', sound: 'rrrrr' },
-  s: { ipa: 's', sound: 'sssss' },
-  t: { ipa: 't', sound: 'tuhh' },
-  u: { ipa: 'ʌ', sound: 'uhhh' },
-  v: { ipa: 'v', sound: 'vvvvv' },
-  w: { ipa: 'w', sound: 'wuhh' },
-  x: { ipa: 'ks', sound: 'ksss' },
-  y: { ipa: 'j', sound: 'yuhh' },
-  z: { ipa: 'z', sound: 'zzzzz' },
+  a: { ipa: 'æ', sound: 'ah' },
+  b: { ipa: 'b', sound: 'buh' },
+  c: { ipa: 'k', sound: 'kuh' },
+  d: { ipa: 'd', sound: 'duh' },
+  e: { ipa: 'ɛ', sound: 'eh' },
+  f: { ipa: 'f', sound: 'fff' },
+  g: { ipa: 'g', sound: 'guh' },
+  h: { ipa: 'h', sound: 'hhh' },
+  i: { ipa: 'ɪ', sound: 'ih' },
+  j: { ipa: 'dʒ', sound: 'juh' },
+  k: { ipa: 'k', sound: 'kuh' },
+  l: { ipa: 'l', sound: 'lll' },
+  m: { ipa: 'm', sound: 'mmm' },
+  n: { ipa: 'n', sound: 'nnn' },
+  o: { ipa: 'ɒ', sound: 'aw' },
+  p: { ipa: 'p', sound: 'puh' },
+  q: { ipa: 'k', sound: 'kuh' },
+  r: { ipa: 'ɹ', sound: 'rrr' },
+  s: { ipa: 's', sound: 'sss' },
+  t: { ipa: 't', sound: 'tuh' },
+  u: { ipa: 'ʌ', sound: 'uh' },
+  v: { ipa: 'v', sound: 'vvv' },
+  w: { ipa: 'w', sound: 'wuh' },
+  x: { ipa: 'ks', sound: 'ks' },
+  y: { ipa: 'j', sound: 'yuh' },
+  z: { ipa: 'z', sound: 'zzz' },
 };
 
 // ---- Pronunciation Dictionary (mirrors lib/dash-ai/pronunciationDictionary.ts) ----
@@ -216,10 +227,8 @@ function phonemeTag(letter: string): string {
   const key = String(letter || '').toLowerCase();
   const entry = LETTER_IPA[key];
   if (!entry) return escapeXml(letter);
-  // Wrap in <prosody rate="-50%"> so Azure stretches the sound long enough
-  // for a child to hear and learn it. Without this, <phoneme> produces a
-  // sub-200ms burst that's barely audible.
-  return `<prosody rate="-50%"><phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme></prosody>`;
+  // Slightly stretch each phoneme so it is clear for early readers.
+  return `<prosody rate="${PHONICS_PHONEME_RATE}%"><phoneme alphabet="ipa" ph="${escapeXml(entry.ipa)}">${escapeXml(entry.sound)}</phoneme></prosody>`;
 }
 
 function buildBlendSSML(blend: string): string {
@@ -234,10 +243,10 @@ function buildBlendSSML(blend: string): string {
   }
 
   const segmented = letters
-    .map((letter) => `${phonemeTag(letter)}<break time="800ms"/>`)
+    .map((letter) => `${phonemeTag(letter)}<break time="${PHONICS_BLEND_SEGMENT_BREAK_MS}ms"/>`)
     .join(' ');
 
-  return `${segmented}<break time="1000ms"/>${escapeXml(letters.join(''))}`;
+  return `${segmented}<break time="${PHONICS_BLEND_FINAL_BREAK_MS}ms"/>${escapeXml(letters.join(''))}`;
 }
 
 /** Bare sustained-sound text → letter key for phonemeTag fallback */
@@ -265,8 +274,25 @@ const SUSTAINED_SOUND_PATTERN = new RegExp(
   'gi'
 );
 
+function normalizeChoiceLabelsForSpeech(input: string): string {
+  let next = String(input || '');
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\(([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)([a-hA-H])\)\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  next = next.replace(
+    /(^|[\n\r]\s*|[;:]\s*|,\s*|\s+)\[([A-H])\]\s*(?=\S)/g,
+    (_m, prefix: string, label: string) => `${prefix}Option ${label.toUpperCase()}. `
+  );
+  return next.replace(/\bOption ([A-H])\.(?=\S)/g, (_m, label: string) => `Option ${label}. `);
+}
+
 function convertPhonicsMarkersToSSML(rawText: string): string {
-  let text = escapeXml(rawText || '');
+  let text = escapeXml(normalizeChoiceLabelsForSpeech(rawText || ''));
 
   const markerTokenToSSML = (tokenRaw: string): string => {
     const token = String(tokenRaw || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -281,16 +307,25 @@ function convertPhonicsMarkersToSSML(rawText: string): string {
 
     // Unknown marker token: spell each letter as a safe fallback.
     if (token.length <= 8) {
-      return token.split('').map((letter) => phonemeTag(letter)).join('<break time="600ms"/>');
+      return token
+        .split('')
+        .map((letter) => phonemeTag(letter))
+        .join(`<break time="${PHONICS_FALLBACK_LETTER_BREAK_MS}ms"/>`);
     }
 
     return escapeXml(token);
   };
 
-  // /b/ markers → <phoneme> tags + generous pause for children to absorb each sound
-  text = text.replace(/\/\s*([a-z]{1,8})\s*\//gi, (_, token: string) => markerTokenToSSML(token) + '<break time="800ms"/>');
+  // /b/ markers -> <phoneme> tags + short pause
+  text = text.replace(
+    /\/\s*([a-z]{1,8})\s*\//gi,
+    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+  );
   // [b] markers → <phoneme> tags + pause
-  text = text.replace(/\[\s*([a-z]{1,8})\s*\]/gi, (_, token: string) => markerTokenToSSML(token) + '<break time="800ms"/>');
+  text = text.replace(
+    /\[\s*([a-z]{1,8})\s*\]/gi,
+    (_, token: string) => markerTokenToSSML(token) + `<break time="${PHONICS_MARKER_BREAK_MS}ms"/>`
+  );
   // c-a-t markers → blending SSML
   text = text.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (match) => buildBlendSSML(match));
 
@@ -513,12 +548,21 @@ function azureFailureResponse(params: {
 }
 
 function buildVoiceFallbackList(primaryVoice: string, bcp47: string): string[] {
+  const primaryLower = String(primaryVoice || '').toLowerCase();
+  const isPrimaryLikelyFemale =
+    /(leah|jenny|adri|thando|nomalunga|didi|female)/.test(primaryLower);
+  const languageFallbacks =
+    bcp47 === 'en-ZA'
+      ? (isPrimaryLikelyFemale ? EN_FEMALE_FALLBACK_VOICES : EN_MALE_FALLBACK_VOICES)
+      : (FALLBACK_VOICES_BY_LANG[bcp47] || []);
+
   const voices = [
     primaryVoice,
     DEFAULT_VOICES[bcp47],
-    ...(FALLBACK_VOICES_BY_LANG[bcp47] || []),
+    ...languageFallbacks,
     DASH_VOICE,
     DASH_FALLBACK_VOICE,
+    GLOBAL_EN_FALLBACK_VOICE,
   ];
 
   const seen = new Set<string>();
@@ -623,6 +667,16 @@ async function azureSynthesizeWithStyleFallback(params: {
   if (noStyleCandidate) {
     pushCandidate(`primary_nostyle:${params.primaryVoice}`, noStyleCandidate);
   }
+  if (plainInnerNoStyle) {
+    pushCandidate(
+      `primary_plain:${params.primaryVoice}`,
+      buildSsmlDoc({
+        bcp47: params.bcp47,
+        voiceName: params.primaryVoice,
+        inner: plainInnerNoStyle,
+      })
+    );
+  }
 
   // Broaden retries: voice fallback + plain SSML when rich SSML is rejected.
   for (const voice of fallbackVoices) {
@@ -644,16 +698,6 @@ async function azureSynthesizeWithStyleFallback(params: {
         })
       );
     }
-  }
-  if (plainInnerNoStyle) {
-    pushCandidate(
-      `primary_plain:${params.primaryVoice}`,
-      buildSsmlDoc({
-        bcp47: params.bcp47,
-        voiceName: params.primaryVoice,
-        inner: plainInnerNoStyle,
-      })
-    );
   }
 
   return azureSynthesizeWithCandidates({
@@ -1108,11 +1152,15 @@ Deno.serve(async (req) => {
       const languageRaw = String(body.language || body.lang || 'en');
       const { bcp47: streamBcp47 } = normalizeLanguage(languageRaw);
       const streamVoice = String(body.voice_id || '').trim() || DASH_VOICE;
-      const streamRate = clampNumber(Number(body.rate ?? body.speaking_rate ?? 0), -50, 50);
+      const isPhonics = body.phonics_mode === true;
+      const streamRate = clampNumber(
+        Number(body.rate ?? body.speaking_rate ?? (isPhonics ? DEFAULT_PHONICS_SPEAKING_RATE : 0)),
+        -50,
+        50
+      );
       const streamPitch = clampNumber(Number(body.pitch ?? 0), -50, 50);
       const streamStyle = typeof body.style === 'string' ? body.style.trim() : 'friendly';
 
-      const isPhonics = body.phonics_mode === true;
       const streamSSMLText = isPhonics ? convertPhonicsMarkersToSSML(text) : escapeXml(text);
       const streamPronunciation = applyPronunciationToSSML(streamSSMLText);
       const streamLang = applyInlineLangSwitching(streamPronunciation);
@@ -1187,7 +1235,7 @@ Deno.serve(async (req) => {
     const phonicsMode = body.phonics_mode === true;
 
     const hasExplicitRate = typeof body.speaking_rate === 'number' || typeof body.rate === 'number';
-    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? -35 : 0));
+    const speakingRateRaw = Number(body.speaking_rate ?? body.rate ?? (phonicsMode ? DEFAULT_PHONICS_SPEAKING_RATE : 0));
     const pitchRaw = Number(body.pitch ?? 0);
     const speakingRate = clampNumber(speakingRateRaw, -50, 50);
     const pitch = clampNumber(pitchRaw, -50, 50);

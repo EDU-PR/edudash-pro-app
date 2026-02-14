@@ -8,11 +8,12 @@ const mockReplace = jest.fn();
 const mockUseAuth = jest.fn();
 const mockIsSigningOut = jest.fn(() => false);
 const mockIsRecoveryFlag = jest.fn(() => false);
-const mockGetDashboardRouteForRole = jest.fn(() => '/screens/parent-dashboard');
+const mockGetDashboardRouteForRole = jest.fn((..._args: any[]) => '/screens/parent-dashboard');
 
 jest.mock('expo-router', () => ({
   usePathname: () => mockPathname,
   useLocalSearchParams: () => mockSearchParams,
+  useGlobalSearchParams: () => mockSearchParams,
   router: { replace: (...args: unknown[]) => mockReplace(...args) },
 }));
 
@@ -22,6 +23,7 @@ jest.mock('@/contexts/AuthContext', () => ({
 
 jest.mock('@/lib/authActions', () => ({
   isSignOutInProgress: () => mockIsSigningOut(),
+  isAccountSwitchPending: () => false,
 }));
 
 jest.mock('@/lib/routeAfterLogin', () => ({
@@ -43,7 +45,7 @@ jest.mock('@/lib/schoolTypeResolver', () => ({
 }));
 
 jest.mock('@/lib/dashboard/routeMatrix', () => ({
-  getDashboardRouteForRole: (...args: unknown[]) => mockGetDashboardRouteForRole(...args),
+  getDashboardRouteForRole: (...args: any[]) => mockGetDashboardRouteForRole(...args),
   isDashboardRouteMismatch: () => false,
 }));
 

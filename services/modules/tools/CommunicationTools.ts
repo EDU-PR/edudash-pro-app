@@ -5,7 +5,15 @@
  */
 
 import { logger } from '@/lib/logger';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { trackChartParentStudentExecuted } from '@/lib/ai/trackingEvents';
 import type { AgentTool } from '../DashToolRegistry';
+
+const CHART_MAX_POINTS = 20;
+const CHART_MAX_LABEL_LENGTH = 48;
+const CHART_MAX_TITLE_LENGTH = 96;
+const CHART_MAX_SUMMARY_LENGTH = 800;
+const CHART_ABS_VALUE_LIMIT = 1_000_000;
 
 export function registerCommunicationTools(register: (tool: AgentTool) => void): void {
   
@@ -452,8 +460,77 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
       required: ['title', 'chart_type', 'labels', 'values']
     },
     risk: 'low',
-    execute: async (args) => {
+    execute: async (args, context) => {
       try {
+        const role = String(context?.role || 'unknown').toLowerCase();
+        const chartType = String(args?.chart_type || '').toLowerCase();
+        const safeMode = getFeatureFlagsSync().dash_chart_safe_mode_v1;
+
+        const normalizedChartType = chartType === 'line' || chartType === 'pie' ? chartType : 'bar';
+        if (!['bar', 'line', 'pie'].includes(chartType)) {
+          return { success: false, error: 'chart_type must be one of: bar, line, pie' };
+        }
+
+        const title = String(args?.title || '').trim();
+        if (!title) {
+          return { success: false, error: 'title is required' };
+        }
+        if (safeMode && title.length > CHART_MAX_TITLE_LENGTH) {
+          return { success: false, error: `title is too long (max ${CHART_MAX_TITLE_LENGTH} chars)` };
+        }
+
+        const labelsInput = Array.isArray(args?.labels) ? args.labels : [];
+        const valuesInput = Array.isArray(args?.values) ? args.values : [];
+        if (labelsInput.length === 0 || valuesInput.length === 0) {
+          return { success: false, error: 'labels and values are required' };
+        }
+        if (labelsInput.length !== valuesInput.length) {
+          return { success: false, error: 'labels and values must have the same length' };
+        }
+        if (safeMode && labelsInput.length > CHART_MAX_POINTS) {
+          return { success: false, error: `too many data points (max ${CHART_MAX_POINTS})` };
+        }
+
+        const normalizedLabels: string[] = [];
+        const normalizedValues: number[] = [];
+        for (let index = 0; index < labelsInput.length; index += 1) {
+          const label = String(labelsInput[index] || '').trim();
+          if (!label) {
+            return { success: false, error: `label at index ${index} is empty` };
+          }
+          if (safeMode && label.length > CHART_MAX_LABEL_LENGTH) {
+            return { success: false, error: `label at index ${index} exceeds ${CHART_MAX_LABEL_LENGTH} chars` };
+          }
+
+          const rawValue = Number(valuesInput[index]);
+          if (!Number.isFinite(rawValue)) {
+            return { success: false, error: `value at index ${index} is not a valid number` };
+          }
+
+          let value = rawValue;
+          if (safeMode) {
+            if (normalizedChartType === 'pie') {
+              value = Math.max(0, Math.min(CHART_ABS_VALUE_LIMIT, rawValue));
+            } else {
+              value = Math.max(-CHART_ABS_VALUE_LIMIT, Math.min(CHART_ABS_VALUE_LIMIT, rawValue));
+            }
+          }
+
+          normalizedLabels.push(label);
+          normalizedValues.push(value);
+        }
+
+        const inputColors = Array.isArray(args?.colors) ? args.colors : [];
+        const normalizedColors = inputColors
+          .slice(0, normalizedLabels.length)
+          .map((color: unknown) => String(color || '').trim())
+          .filter(Boolean);
+
+        const summary = String(args?.summary || '').trim();
+        if (safeMode && summary.length > CHART_MAX_SUMMARY_LENGTH) {
+          return { success: false, error: `summary is too long (max ${CHART_MAX_SUMMARY_LENGTH} chars)` };
+        }
+
         const { getDashPDFGenerator } = await import('@/services/DashPDFGenerator');
         const supabase = (await import('@/lib/supabase')).assertSupabase();
 
@@ -461,28 +538,28 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
 
         // Build a section with chart data and optional summary
         const chartData = {
-          type: args.chart_type as 'bar' | 'line' | 'pie',
+          type: normalizedChartType as 'bar' | 'line' | 'pie',
           data: {
-            labels: args.labels || [],
-            values: args.values || [],
-            colors: args.colors,
+            labels: normalizedLabels,
+            values: normalizedValues,
+            colors: normalizedColors.length > 0 ? normalizedColors : undefined,
           },
-          title: String(args.title),
+          title: title.slice(0, CHART_MAX_TITLE_LENGTH),
         };
 
-        const markdown = args.summary ? String(args.summary) : `Chart: ${args.title}`;
+        const markdown = summary || `Chart: ${title}`;
         const result = await generator.generateFromStructuredData({
           type: 'report',
-          title: String(args.title),
+          title: title.slice(0, CHART_MAX_TITLE_LENGTH),
           sections: [
             {
               id: 'chart',
-              title: String(args.title),
+              title: title.slice(0, CHART_MAX_TITLE_LENGTH),
               markdown,
               charts: [chartData],
               tables: [{
                 headers: ['Category', 'Value'],
-                rows: (args.labels || []).map((label: string, i: number) => [label, String((args.values || [])[i] ?? '')]),
+                rows: normalizedLabels.map((label: string, i: number) => [label, String(normalizedValues[i] ?? '')]),
                 caption: 'Data table',
               }],
             },
@@ -492,6 +569,14 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
         });
 
         if (!result.success) {
+          if (role === 'parent' || role === 'student') {
+            trackChartParentStudentExecuted({
+              role,
+              points: normalizedLabels.length,
+              chartType: normalizedChartType,
+              success: false,
+            });
+          }
           return { success: false, error: result.error || 'Chart generation failed' };
         }
 
@@ -526,6 +611,15 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           logger.warn('[generate_chart] Failed to post chat message:', postErr);
         }
 
+        if (role === 'parent' || role === 'student') {
+          trackChartParentStudentExecuted({
+            role,
+            points: normalizedLabels.length,
+            chartType: normalizedChartType,
+            success: true,
+          });
+        }
+
         return {
           success: true,
           uri: result.uri,
@@ -535,6 +629,15 @@ export function registerCommunicationTools(register: (tool: AgentTool) => void):
           message: 'Chart generated successfully',
         };
       } catch (e: any) {
+        const role = String(context?.role || 'unknown').toLowerCase();
+        if (role === 'parent' || role === 'student') {
+          trackChartParentStudentExecuted({
+            role,
+            points: Array.isArray(args?.labels) ? args.labels.length : 0,
+            chartType: String(args?.chart_type || 'unknown'),
+            success: false,
+          });
+        }
         logger.error('[generate_chart] Error:', e);
         return { success: false, error: e?.message || 'Chart generation failed' };
       }

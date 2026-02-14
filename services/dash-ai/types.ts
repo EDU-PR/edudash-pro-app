@@ -110,6 +110,7 @@ export interface DashMessage {
     tool_results?: any;
     tool_name?: string;
     tool_result?: any;
+    tool_args?: any;
     tool_summary?: string;
 
     /** Render helpers for richer chat UIs */

@@ -254,10 +254,12 @@ const DEFAULT_SYSTEM_PROMPT = `You are Dash, an AI tutor for parents and student
 const SHARED_PHONICS_PROMPT_BLOCK = [
   'PHONICS MODE:',
   '- Teach letter sounds, not letter names.',
-  '- Use sustained sound text: "sss", "mmm", "fff".',
+  '- Always use slash markers for sound modeling: /s/, /m/, /f/, /k/, /a/, /t/.',
   '- Never write spaced repetition like "s s s" or "m m m".',
-  '- For blending, format as "c-a-t becomes cat".',
-  '- For segmenting, split words like "dog is d-o-g".',
+  '- For blending, model sounds first: "/k/ - /a/ - /t/ ... cat".',
+  '- If showing letters, map each letter to a sound in the same line: "c says /k/, a says /a/, t says /t/".',
+  '- Use "c-a-t" only as optional visual support after the sound model.',
+  '- For segmenting, split words into sounds with slash markers: "dog is /d/ - /o/ - /g/".',
   '- Keep phonics examples short, playful, and concrete.',
 ].join('\n');
 

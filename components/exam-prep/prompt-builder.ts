@@ -19,6 +19,21 @@ export interface GeneratedPrompt {
   displayTitle: string;
 }
 
+const CAPS_QUALITY_GUARDRAILS = `**NON-NEGOTIABLE QUALITY BAR (CAPS):**
+- Align to official CAPS outcomes and cognitive levels for the selected grade and subject.
+- Use South African context where relevant (ZAR, local examples, local terminology).
+- Structure learning clearly: baseline -> guided example -> independent practice -> mastery check.
+- Never skip answer quality: provide correct answers, mark allocation, and learner-friendly explanations.
+- End with targeted remediation steps for common errors and what to practice next.`;
+
+const CAPS_MASTERED_OUTPUT_REQUIREMENTS = `**MANDATORY OUTPUT BLOCKS (include all):**
+1. Formal assessment content (clear sections, question numbers, mark allocation).
+2. Full memorandum (correct answers + explanation per answer + mark breakdown).
+3. Grading guide with performance bands and improvement actions.
+4. Worked examples (at least 2 fully solved examples with reasoning).
+5. Extra practice (at least 5 additional questions to consolidate understanding).
+6. Quick mastery check with expected answers.`;
+
 /**
  * Build a prompt for AI exam generation based on config
  */
@@ -141,9 +156,14 @@ ${complexity.questionTypes}
 2. Questions must match the cognitive demand level specified in CAPS for this grade
 3. Use South African context (ZAR currency, local geography, culturally relevant situations)
 4. Follow CAPS assessment guidelines for question distribution, mark allocation, and difficulty progression
+5. Include an explicit memo and explanation for every scored item
+6. Include extra consolidation practice and a short mastery check
 
 **Age-Appropriate Instructions:**
 ${complexity.instructions}
+
+${CAPS_QUALITY_GUARDRAILS}
+${CAPS_MASTERED_OUTPUT_REQUIREMENTS}
 
 ${isFoundationPhase ? `
 **FOUNDATION PHASE SPECIFIC:**
@@ -179,6 +199,7 @@ Generate comprehensive revision notes for ${gradeInfo.label} ${subject} aligned 
 - Grade: ${gradeInfo.label} (Ages ${gradeInfo.age})
 - Subject: ${subject}
 - Language: ${languageName}
+${CAPS_QUALITY_GUARDRAILS}
 
 **Output Structure:**
 
@@ -207,6 +228,13 @@ Generate comprehensive revision notes for ${gradeInfo.label} ${subject} aligned 
 - Tip 1
 - Tip 2
 
+**Quick Self-Check (with Answers):**
+- Include 5 short check questions.
+- Provide concise correct answers and one-line explanations.
+
+**Extra Practice:**
+- Include 5 more practice questions (mixed difficulty) with answer key and short explanations.
+
 ---
 
 ### Topic 2: [Continue...]
@@ -231,6 +259,7 @@ Generate a 7-day study guide for ${gradeInfo.label} ${subject} exam preparation 
 - Subject: ${subject}
 - Focus: CAPS curriculum topics
 - ${complexity.calculator ? 'Calculator allowed' : 'No calculator'}
+${CAPS_QUALITY_GUARDRAILS}
 
 **Output Structure:**
 
@@ -265,7 +294,12 @@ Generate a 7-day study guide for ${gradeInfo.label} ${subject} exam preparation 
 - [ ] Calculator (if allowed)
 - [ ] Stationery
 - [ ] ID/Student card
-- [ ] Water bottle`;
+- [ ] Water bottle
+
+## ✅ Marking + Explanations Pack
+- Include answer key for all included practice tasks.
+- Add a short explanation for each answer.
+- Include a grading guide with improvement targets for low/medium/high performance.`;
 }
 
 function buildFlashcardsPrompt(
@@ -286,6 +320,7 @@ Generate 20 flashcards for ${gradeInfo.label} ${subject} covering essential exam
 - Format: Question on front, detailed answer on back
 - Cover: Definitions, formulas, problem-solving strategies, key facts
 - Difficulty: Mix of easy recall and challenging application
+${CAPS_QUALITY_GUARDRAILS}
 
 **Output Structure:**
 

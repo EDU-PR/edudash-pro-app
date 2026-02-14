@@ -9,7 +9,7 @@ import { logger } from '@/lib/logger';
  * - Complete color palette for all UI elements
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -117,6 +117,7 @@ export interface ThemeColors {
   // Material-like alias objects used in some components
   colors: {
     primary: string;
+    secondary?: string;
     onPrimary: string;
     primaryContainer: string;
     onPrimaryContainer: string;
@@ -436,6 +437,15 @@ const darkTheme: ThemeColors = {
 // Theme modes
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+type ThemeTypographyOverride = {
+  [K in keyof ThemeColors['typography']]?: Partial<ThemeColors['typography'][K]>;
+};
+
+export type ThemeOverride = Partial<Omit<ThemeColors, 'colors' | 'typography'>> & {
+  colors?: Partial<ThemeColors['colors']>;
+  typography?: ThemeTypographyOverride;
+};
+
 // Theme context interface
 interface ThemeContextType {
   theme: ThemeColors;
@@ -451,6 +461,7 @@ interface ThemeContextType {
 
 // Create context
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+const ThemeOverrideContext = createContext<ThemeColors | null>(null);
 
 // Storage keys
 const THEME_STORAGE_KEY = '@edudash_theme_mode';
@@ -459,6 +470,57 @@ const LANGUAGE_STORAGE_KEY = '@edudash_language';
 // Theme provider props
 interface ThemeProviderProps {
   children: ReactNode;
+}
+
+interface ThemeOverrideProviderProps {
+  children: ReactNode;
+  override: ThemeOverride;
+}
+
+const mergeThemeOverride = (
+  baseTheme: ThemeColors,
+  override?: ThemeOverride | null
+): ThemeColors => {
+  if (!override) return baseTheme;
+
+  const { colors: colorOverride, typography: typographyOverride, ...rootOverride } = override;
+
+  const mergedTypography = (
+    Object.keys(baseTheme.typography) as Array<keyof ThemeColors['typography']>
+  ).reduce((acc, key) => {
+    acc[key] = {
+      ...baseTheme.typography[key],
+      ...(typographyOverride?.[key] || {}),
+    };
+    return acc;
+  }, {} as ThemeColors['typography']);
+
+  return {
+    ...baseTheme,
+    ...rootOverride,
+    colors: {
+      ...baseTheme.colors,
+      ...(colorOverride || {}),
+    },
+    typography: mergedTypography,
+  };
+};
+
+export function ThemeOverrideProvider({ children, override }: ThemeOverrideProviderProps) {
+  const { theme } = useTheme();
+  const inheritedTheme = useContext(ThemeOverrideContext);
+  const baseTheme = inheritedTheme || theme;
+
+  const resolvedTheme = useMemo(
+    () => mergeThemeOverride(baseTheme, override),
+    [baseTheme, override]
+  );
+
+  return (
+    <ThemeOverrideContext.Provider value={resolvedTheme}>
+      {children}
+    </ThemeOverrideContext.Provider>
+  );
 }
 
 // Theme provider component
@@ -542,10 +604,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 // Hook to use theme
 export function useTheme() {
   const context = useContext(ThemeContext);
+  const overrideTheme = useContext(ThemeOverrideContext);
   if (context === undefined) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
-  return context;
+
+  const activeTheme = overrideTheme || context.theme;
+  return {
+    ...context,
+    theme: activeTheme,
+    colors: activeTheme.colors,
+  };
 }
 
 // Utility function to get theme colors (for use outside of components)

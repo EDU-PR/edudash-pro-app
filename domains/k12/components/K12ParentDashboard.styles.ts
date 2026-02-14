@@ -46,7 +46,7 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scrollContent: {
-    padding: 16,
+    padding: 18,
   },
   header: {
     flexDirection: 'row',
@@ -157,13 +157,12 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionHeaderCard: {
     width: '100%',
     borderRadius: 14,
     padding: 14,
-    borderWidth: 1,
     marginBottom: 12,
   },
   sectionHeaderRow: {
@@ -181,7 +180,7 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sectionHeaderHint: {
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 6,
   },
   sectionHeader: {
@@ -191,8 +190,8 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 19,
+    fontWeight: '700',
     marginBottom: 12,
   },
   seeAllText: {
@@ -262,6 +261,28 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between', // Distribute cards evenly
+    rowGap: 10,
+  },
+  learningHubGrid: {
+    gap: 12,
+    marginBottom: 14,
+  },
+  learningHubHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  learningHubHintText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  secondaryToolsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   quickActionCard: {
     // 3-column layout with consistent spacing
@@ -270,9 +291,10 @@ export const styles = StyleSheet.create({
     // Using 33% minus margin for better cross-device compatibility
     width: '31%', // Slightly less than 33.33% to account for spacing
     borderRadius: 16,
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    marginBottom: 12, // Vertical gap between rows
+    marginBottom: 10, // Vertical gap between rows
   },
   quickActionDisabled: {
     opacity: 0.55,
@@ -296,14 +318,14 @@ export const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quickActionLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
   },
   updateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
   },
@@ -332,7 +354,7 @@ export const styles = StyleSheet.create({
   eventCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
   },
@@ -364,7 +386,7 @@ export const styles = StyleSheet.create({
     fontSize: 13,
   },
   communicationCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   communicationGradient: {

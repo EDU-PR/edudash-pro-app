@@ -376,11 +376,11 @@ export const DashInputBar: React.FC<DashInputBarProps> = ({
         <TouchableOpacity
           style={[
             styles.orbButton,
-            { opacity: isLoading ? 0.6 : 1, width: orbSize + 4, height: orbSize + 4 }
+            { opacity: (isLoading || isSpeaking) ? 0.6 : 1, width: orbSize + 4, height: orbSize + 4 }
           ]}
           onPress={onMicPress}
-          disabled={isLoading}
-          accessibilityLabel={isRecording ? "Stop recording" : "Speak to Dash"}
+          disabled={isLoading || isSpeaking}
+          accessibilityLabel={isSpeaking ? "Dash is speaking" : isRecording ? "Stop recording" : "Speak to Dash"}
           accessibilityRole="button"
           activeOpacity={0.85}
         >

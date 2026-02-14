@@ -252,6 +252,39 @@ export function TutorModePanel({ onStart, learnerContext }: TutorModePanelProps)
           </button>
         </div>
 
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginTop: collapsed ? 0 : -2,
+          }}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              borderRadius: 999,
+              border: '1px solid rgba(16,185,129,0.45)',
+              background: 'rgba(16,185,129,0.16)',
+              color: '#6ee7b7',
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: 0.25,
+            }}
+          >
+            <GraduationCap size={12} />
+            Tutor Session Active
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+            Mode: Diagnose → Teach → Practice
+          </span>
+        </div>
+
         {collapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>

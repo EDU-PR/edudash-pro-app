@@ -53,6 +53,7 @@ interface DashAssistantProps {
   onClose?: () => void;
   initialMessage?: string;
   handoffSource?: string;
+  uiMode?: 'advisor' | 'tutor' | 'orb' | 'exam' | null;
   /** Pre-configured tutor mode — kept for routing compat but UI stays general */
   tutorMode?: 'quiz' | 'practice' | 'diagnostic' | 'play' | 'explain' | null;
   tutorConfig?: {
@@ -68,6 +69,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   onClose,
   initialMessage,
   handoffSource,
+  uiMode,
   tutorMode: externalTutorMode,
   tutorConfig,
 }: DashAssistantProps) => {
@@ -116,6 +118,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
     setUnreadCount,
     isRecording,
     partialTranscript,
+    tutorSession,
     alertState,
     hideAlert,
     flashListRef,
@@ -139,6 +142,20 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
   const isTypingActive = isLoading || !!loadingStatus;
   const { profile } = useAuth();
   const roleCopy = useMemo(() => getDashAIRoleCopy(profile?.role), [profile?.role]);
+  const isTutorUiActive = uiMode === 'tutor' || !!externalTutorMode || !!tutorSession;
+  const activeTutorMode = tutorSession?.mode || externalTutorMode;
+  const tutorModeLabel = activeTutorMode
+    ? `${String(activeTutorMode).charAt(0).toUpperCase()}${String(activeTutorMode).slice(1)}`
+    : 'Diagnose → Teach → Practice';
+  const shellSubtitle = isTutorUiActive
+    ? 'Tutor Session Active'
+    : uiMode === 'advisor'
+      ? 'Advisor Mode'
+      : uiMode === 'exam'
+        ? 'Exam Builder Mode'
+      : uiMode === 'orb'
+        ? 'Orb Companion Mode'
+        : 'Your AI assistant';
 
   const handleNewChat = useCallback(async () => {
     await stopSpeaking();
@@ -272,7 +289,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                     <Text style={[headerStyles.headerTitle, { color: theme.text }]}>Dash</Text>
                   </View>
                   <Text style={[headerStyles.headerSubtitle, { color: theme.textSecondary }]}>
-                    Your AI assistant
+                    {shellSubtitle}
                   </Text>
                 </View>
                 <View style={headerStyles.headerRight}>
@@ -302,6 +319,13 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
+                      accessibilityLabel="Find app feature"
+                      onPress={() => router.push('/screens/app-search?scope=dash&q=dash')}
+                    >
+                      <Ionicons name="search-outline" size={18} color={theme.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[headerStyles.iconButton, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}
                       accessibilityLabel="Open Dash Orb"
                       onPress={() => router.push('/screens/dash-voice?mode=orb')}
                     >
@@ -323,6 +347,32 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
                   </View>
                 </View>
               </View>
+              {isTutorUiActive && (
+                <View style={headerStyles.headerStatusRow}>
+                  <View
+                    style={[
+                      headerStyles.headerStatusPill,
+                      { borderColor: theme.primary + '66', backgroundColor: theme.primary + '18' },
+                    ]}
+                  >
+                    <Ionicons name="school-outline" size={12} color={theme.primary} />
+                    <Text style={[headerStyles.headerStatusText, { color: theme.primary }]}>
+                      Tutor Session Active
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      headerStyles.headerStatusPill,
+                      { borderColor: theme.border, backgroundColor: theme.surfaceVariant },
+                    ]}
+                  >
+                    <Ionicons name="git-network-outline" size={12} color={theme.textSecondary} />
+                    <Text style={[headerStyles.headerStatusSubtle, { color: theme.textSecondary }]}>
+                      Mode: {tutorModeLabel}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
 
@@ -346,6 +396,7 @@ export const DashAssistant: React.FC<DashAssistantProps> = ({
               bottomInset={0}
               keyboardVisible={keyboardVisible}
               compactBottomPadding
+              tutorMode={activeTutorMode || null}
               userRole={String(profile?.role || '').toLowerCase()}
             />
           </View>

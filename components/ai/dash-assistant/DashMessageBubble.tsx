@@ -143,6 +143,60 @@ const firstText = (...values: unknown[]) => {
   return null;
 };
 
+type ToolChartKind = 'bar' | 'line' | 'pie';
+type ToolChartPoint = {
+  label: string;
+  value: number;
+  color: string;
+};
+type ToolChartPreview = {
+  title: string;
+  type: ToolChartKind;
+  points: ToolChartPoint[];
+};
+
+const TOOL_CHART_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#f97316', '#6366f1', '#10b981', '#ef4444', '#8b5cf6'];
+
+const toFiniteNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const buildToolChartPreview = (
+  toolName: string,
+  toolArgs?: Record<string, any> | null
+): ToolChartPreview | null => {
+  if (String(toolName || '').toLowerCase() !== 'generate_chart') return null;
+  if (!toolArgs || typeof toolArgs !== 'object') return null;
+
+  const labels = Array.isArray(toolArgs.labels) ? toolArgs.labels : [];
+  const values = Array.isArray(toolArgs.values) ? toolArgs.values : [];
+  if (labels.length === 0 || values.length === 0) return null;
+
+  const typeRaw = String(toolArgs.chart_type || 'bar').toLowerCase();
+  const type: ToolChartKind = typeRaw === 'pie' ? 'pie' : (typeRaw === 'line' ? 'line' : 'bar');
+  const colors = Array.isArray(toolArgs.colors) ? toolArgs.colors : [];
+  const points: ToolChartPoint[] = labels
+    .map((label: unknown, idx: number) => {
+      const text = String(label || '').trim();
+      if (!text) return null;
+      return {
+        label: text,
+        value: toFiniteNumber(values[idx]),
+        color: String(colors[idx] || TOOL_CHART_COLORS[idx % TOOL_CHART_COLORS.length]),
+      };
+    })
+    .filter((point: ToolChartPoint | null): point is ToolChartPoint => !!point)
+    .slice(0, 8);
+
+  if (points.length === 0) return null;
+  return {
+    title: firstText(toolArgs.title) || 'Chart Preview',
+    type,
+    points,
+  };
+};
+
 const AttachmentImagePreview: React.FC<{
   attachment: DashMessage['attachments'][number];
   isUser: boolean;
@@ -262,8 +316,12 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     : 'I completed that step. Ask a follow-up and I will refine it.';
   const assistantDisplayText = hasAssistantContent ? assistantContent : assistantFallbackText;
   const metadata = (message.metadata || {}) as Record<string, any>;
+  const tutorPhase = String(metadata.tutor_phase || metadata.phase || '').toLowerCase();
+  const showPracticeMicrocopy = !isUser && tutorPhase.includes('practice');
   const rawToolName = firstText(metadata.tool_name);
+  const toolNameKey = String(rawToolName || '').toLowerCase();
   const toolExecution = metadata.tool_result as Record<string, any> | undefined;
+  const toolArgs = metadata.tool_args as Record<string, any> | undefined;
   const isToolOperation = !isUser && !!rawToolName && !!toolExecution;
   const toolPayload = toolExecution ? (toolExecution.result ?? toolExecution.data ?? null) : null;
   const toolSuccess = toolExecution ? toolExecution.success !== false : true;
@@ -285,7 +343,7 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
     const count = typeof toolPayload?.count === 'number' ? toolPayload.count : null;
     const grade = firstText(toolPayload?.grade, toolPayload?.grade_level);
     const subject = firstText(toolPayload?.subject, toolPayload?.topic);
-    const toolKey = String(rawToolName || '').toLowerCase();
+    const toolKey = toolNameKey;
 
     if (toolKey === 'get_caps_documents') {
       const target = [grade ? `Grade ${String(grade).replace(/^grade\s*/i, '')}` : null, subject]
@@ -330,6 +388,18 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
       return null;
     }
   }, [toolExecution, toolPayload]);
+  const toolChartPreview = React.useMemo(
+    () => buildToolChartPreview(toolNameKey, toolArgs || null),
+    [toolArgs, toolNameKey]
+  );
+  const toolDownloadUrl = firstText(
+    toolPayload?.publicUrl,
+    toolPayload?.public_url,
+    toolPayload?.uri,
+    toolPayload?.url,
+    toolPayload?.download_url,
+    extractUrl(assistantContent || ''),
+  );
   const markdownStyles = React.useMemo(() => buildMarkdownStyles(theme, isUser), [theme, isUser]);
 
   type RichSegment =
@@ -485,6 +555,24 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
           </View>
         )}
         <View style={styles.messageContentRow}>
+          {showPracticeMicrocopy && (
+            <View
+              style={{
+                width: '100%',
+                marginBottom: 8,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: theme.primary + '44',
+                backgroundColor: theme.primary + '14',
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+              }}
+            >
+              <Text style={{ color: theme.primary, fontSize: 11, fontWeight: '700' }}>
+                This is a Tutor Practice Question (not a formal exam).
+              </Text>
+            </View>
+          )}
           {isToolOperation ? (
             <View
               style={{
@@ -564,6 +652,153 @@ export const DashMessageBubble: React.FC<DashMessageBubbleProps> = ({
                     </View>
                   ))}
                 </View>
+              )}
+
+              {toolChartPreview && (
+                <View
+                  style={{
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    backgroundColor: theme.surface,
+                    padding: 12,
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flex: 1 }}>
+                      {toolChartPreview.title}
+                    </Text>
+                    <View
+                      style={{
+                        borderRadius: 999,
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        backgroundColor: theme.surfaceVariant,
+                      }}
+                    >
+                      <Text style={{ color: theme.textSecondary, fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
+                        {toolChartPreview.type}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {toolChartPreview.type === 'pie' ? (
+                    <>
+                      <View
+                        style={{
+                          height: 14,
+                          borderRadius: 999,
+                          overflow: 'hidden',
+                          flexDirection: 'row',
+                          backgroundColor: theme.surfaceVariant || '#e2e8f0',
+                        }}
+                      >
+                        {toolChartPreview.points.map((point, pointIndex) => (
+                          <View
+                            key={`pie-segment-${pointIndex}`}
+                            style={{
+                              flex: Math.max(Math.abs(point.value), 0.5),
+                              backgroundColor: point.color,
+                            }}
+                          />
+                        ))}
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        {toolChartPreview.points.map((point, pointIndex) => (
+                          <View
+                            key={`pie-legend-${pointIndex}`}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: point.color }} />
+                              <Text
+                                style={{ color: theme.textSecondary, fontSize: 12, flexShrink: 1 }}
+                                numberOfLines={1}
+                              >
+                                {point.label}
+                              </Text>
+                            </View>
+                            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
+                              {point.value}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 4 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10, minHeight: 120 }}>
+                        {(() => {
+                          const maxValue = Math.max(
+                            1,
+                            ...toolChartPreview.points.map((point) => Math.abs(point.value))
+                          );
+                          return toolChartPreview.points.map((point, pointIndex) => {
+                            const barHeight = Math.max(12, Math.round((Math.abs(point.value) / maxValue) * 84));
+                            return (
+                              <View key={`bar-${pointIndex}`} style={{ width: 46, alignItems: 'center', gap: 4 }}>
+                                <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>
+                                  {point.value}
+                                </Text>
+                                <View
+                                  style={{
+                                    width: 28,
+                                    borderRadius: 7,
+                                    backgroundColor: point.color,
+                                    height: barHeight,
+                                  }}
+                                />
+                                <Text
+                                  style={{ color: theme.textSecondary, fontSize: 10, textAlign: 'center' }}
+                                  numberOfLines={1}
+                                >
+                                  {point.label}
+                                </Text>
+                              </View>
+                            );
+                          });
+                        })()}
+                      </View>
+                    </ScrollView>
+                  )}
+                </View>
+              )}
+
+              {toolDownloadUrl && (
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      const canOpen = await Linking.canOpenURL(toolDownloadUrl);
+                      if (!canOpen) throw new Error('UNSUPPORTED_URL');
+                      await Linking.openURL(toolDownloadUrl);
+                    } catch {
+                      Alert.alert('Unable to open file', 'Please try again from a stable connection.');
+                    }
+                  }}
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 999,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderWidth: 1,
+                    borderColor: theme.primary + '55',
+                    backgroundColor: theme.primary + '16',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open generated file"
+                >
+                  <Ionicons name="open-outline" size={14} color={theme.primary} />
+                  <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '700' }}>
+                    Open Generated File
+                  </Text>
+                </TouchableOpacity>
               )}
 
               {toolRawPayload && (

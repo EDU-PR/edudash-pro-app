@@ -160,11 +160,11 @@ function DashChatPageInner() {
             {canUseExamBuilder && (
               <button
                 onClick={() => setShowExamBuilder(true)}
-                aria-label="Create exam with AI"
+                aria-label="Build full exam paper"
                 className="px-3 md:px-4 py-1.5 md:py-2 text-[13px] md:text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white border-0 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
               >
                 <FileText size={14} aria-hidden="true" />
-                <span className="hidden md:inline">Create Exam</span>
+                <span className="hidden md:inline">Build Full Exam (Printable)</span>
               </button>
             )}
             <button
@@ -270,7 +270,7 @@ function DashChatPageInner() {
                     {isEarlyLearner
                       ? 'Ask Dash for play-based learning ideas, simple explanations, and age-appropriate practice.'
                       : canUseExamBuilder
-                        ? 'Ask Dash anything about curriculum topics, multilingual support, or create an AI-generated exam.'
+                        ? 'Use Tutor Mode for one-question-at-a-time learning, or build a full CAPS-aligned formal exam paper.'
                         : 'Ask Dash anything about curriculum topics, multilingual support, or age-appropriate learning support.'}
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center w-full">
@@ -287,7 +287,7 @@ function DashChatPageInner() {
                         className="px-4 py-2 text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-950"
                       >
                         <FileText size={16} aria-hidden="true" />
-                        Create Exam
+                        Build Full Exam (Printable)
                       </button>
                     )}
                   </div>

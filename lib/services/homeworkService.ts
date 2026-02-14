@@ -32,7 +32,6 @@ function getAILocale(): string {
 }
 
 export class HomeworkService {
-  static async gradeHomework(submissionId: string, submissionContent: string, assignmentTitle: string, gradeLevel: string) {
   static async gradeHomework(submissionId: string, submissionContent: string, assignmentTitle: string, gradeLevel: string, parentUserId?: string) {
     // Delegate to unified GradingEngine (handles AI call, DB persist, notification, analytics)
     const result = await GradingEngine.grade({

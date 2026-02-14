@@ -237,9 +237,9 @@ export function useDashVoice(options: UseDashVoiceOptions): UseDashVoiceReturn {
         metadata: {},
       };
       const voiceSettings: VoiceSettings = {
-        rate: 0,
-        pitch: 0,
-        language: 'en',
+        rate: 1.0,
+        pitch: 1.0,
+        language: 'en-ZA',
       };
       
       await controller.speakResponse(message as any, voiceSettings, {

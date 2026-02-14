@@ -19,6 +19,10 @@ import { normalizeForTTS } from '@/lib/dash-ai/ttsNormalize';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import { track } from '@/lib/analytics';
 import { resolveCapabilityTier } from '@/lib/tiers/resolveEffectiveTier';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { trackTutorVoicePreferenceApplied } from '@/lib/ai/trackingEvents';
+import { getPersonality, getVoicePrefs } from '@/lib/ai/dashSettings';
+import type { VoicePreference } from '@/lib/voice/types';
 import {
   consumePremiumVoiceActivity,
   getVoicePolicyDecision,
@@ -40,12 +44,12 @@ export interface UseVoiceTTSReturn {
 
 /** Normal speech rate — keep at 0% for consistent pacing */
 const DEFAULT_AZURE_RATE = 0;
-/** Phonics rate: -35% gives children time to hear and absorb each sound */
-const DEFAULT_PHONICS_AZURE_RATE = -35;
+/** Phonics rate: slower than normal, but not overly stretched */
+const DEFAULT_PHONICS_AZURE_RATE = -6;
 /** Device TTS: 1.0 = natural pace (matches Azure 0%) */
 const DEFAULT_DEVICE_RATE = 1.0;
-/** Device TTS phonics: 0.65 = noticeably slower for letter sounds */
-const DEFAULT_PHONICS_DEVICE_RATE = 0.65;
+/** Device TTS phonics: slightly slower for clarity */
+const DEFAULT_PHONICS_DEVICE_RATE = 0.96;
 const ALLOW_DEVICE_FALLBACK_IN_PHONICS =
   process.env.EXPO_PUBLIC_ALLOW_DEVICE_FALLBACK_IN_PHONICS === 'true';
 
@@ -81,6 +85,109 @@ const DEVICE_PHONICS_SOUND_MAP: Record<string, string> = {
   th: 'thh',
   ph: 'fff',
   ng: 'nnng',
+};
+
+const AZURE_VOICES_BY_LANG: Record<string, { male: string; female: string }> = {
+  en: { male: 'en-ZA-LukeNeural', female: 'en-ZA-LeahNeural' },
+  af: { male: 'af-ZA-AdriNeural', female: 'af-ZA-AdriNeural' },
+  zu: { male: 'zu-ZA-ThandoNeural', female: 'zu-ZA-ThandoNeural' },
+};
+
+const normalizeVoiceGender = (value: unknown): 'male' | 'female' => {
+  return String(value || '').toLowerCase() === 'male' ? 'male' : 'female';
+};
+
+const VOICE_ID_PATTERN = /^[a-z]{2}-[a-z]{2}-[a-z0-9-]+neural$/i;
+
+const normalizeLanguageBase = (language: string): string =>
+  String(language || 'en')
+    .toLowerCase()
+    .split('-')[0]
+    .trim() || 'en';
+
+const resolveLocaleDefaultVoice = (language: string, fallbackGender: 'male' | 'female'): string => {
+  const base = normalizeLanguageBase(language);
+  const byLang = AZURE_VOICES_BY_LANG[base];
+  if (byLang) return byLang[fallbackGender];
+  return AZURE_VOICES_BY_LANG.en[fallbackGender];
+};
+
+const isVoiceId = (value: unknown): boolean => {
+  return typeof value === 'string' && VOICE_ID_PATTERN.test(String(value || '').trim());
+};
+
+const voiceIdMatchesLanguage = (voiceId: string, language: string): boolean => {
+  const prefix = String(voiceId || '').split('-')[0]?.toLowerCase() || '';
+  return prefix === normalizeLanguageBase(language);
+};
+
+type VoiceResolutionSource =
+  | 'request_override'
+  | 'voice_preferences'
+  | 'ai_settings'
+  | 'locale_default';
+
+export interface EffectiveVoiceResolution {
+  voiceId: string;
+  source: VoiceResolutionSource;
+  fallbackGender: 'male' | 'female';
+}
+
+export function resolveEffectiveVoiceId(input: {
+  language: string;
+  requestOverride?: unknown;
+  preferenceVoiceId?: unknown;
+  aiSettingsVoice?: unknown;
+  fallbackGender?: 'male' | 'female';
+}): EffectiveVoiceResolution {
+  const fallbackGender = normalizeVoiceGender(input.fallbackGender);
+  const localeDefault = resolveLocaleDefaultVoice(input.language, fallbackGender);
+  const base = normalizeLanguageBase(input.language);
+
+  const candidates: Array<{ value: unknown; source: VoiceResolutionSource }> = [
+    { value: input.requestOverride, source: 'request_override' },
+    { value: input.preferenceVoiceId, source: 'voice_preferences' },
+    { value: input.aiSettingsVoice, source: 'ai_settings' },
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate.value || '').trim();
+    if (!value) continue;
+
+    if (isVoiceId(value)) {
+      if (candidate.source === 'request_override' || voiceIdMatchesLanguage(value, base)) {
+        return {
+          voiceId: value,
+          source: candidate.source,
+          fallbackGender,
+        };
+      }
+      continue;
+    }
+
+    const lower = String(value || '').toLowerCase();
+    if (lower === 'male' || lower === 'female') {
+      return {
+        voiceId: resolveLocaleDefaultVoice(base, normalizeVoiceGender(lower)),
+        source: candidate.source,
+        fallbackGender: normalizeVoiceGender(lower),
+      };
+    }
+  }
+
+  return {
+    voiceId: localeDefault,
+    source: 'locale_default',
+    fallbackGender,
+  };
+}
+
+const resolveAzureVoiceId = (language: string, preferredVoice?: unknown): string | undefined => {
+  const resolved = resolveEffectiveVoiceId({
+    language,
+    requestOverride: preferredVoice,
+  });
+  return resolved.voiceId;
 };
 
 export type TTSErrorCategory =
@@ -151,6 +258,41 @@ const parseTTSDiagnostics = (reason: unknown) => {
   };
 };
 
+const pickDeviceVoiceIdentifier = async (
+  locale: string,
+  preferredVoice?: unknown
+): Promise<string | undefined> => {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    const langBase = String(locale || 'en-ZA').split('-')[0].toLowerCase();
+    const matching = voices.filter((voice) => String(voice.language || '').toLowerCase().startsWith(langBase));
+    if (matching.length === 0) return undefined;
+
+    const preferredValue = String(preferredVoice || '').trim();
+    if (isVoiceId(preferredValue)) {
+      const exact = matching.find((voice) =>
+        String(voice.identifier || '').toLowerCase() === preferredValue.toLowerCase()
+      );
+      if (exact?.identifier) return exact.identifier;
+    }
+
+    const target = normalizeVoiceGender(preferredVoice);
+    if (target === 'male') {
+      const male = matching.find((voice) =>
+        String(voice.name || '').toLowerCase().includes('male') || (voice as any)?.gender === 'male'
+      );
+      return male?.identifier || matching[0]?.identifier;
+    }
+
+    const female = matching.find((voice) =>
+      String(voice.name || '').toLowerCase().includes('female') || (voice as any)?.gender === 'female'
+    );
+    return female?.identifier || matching[0]?.identifier;
+  } catch {
+    return undefined;
+  }
+};
+
 const prepareDevicePhonicsText = (text: string): string => {
   let next = String(text || '');
   // /s/ -> sss, /sh/ -> shhh, [m] -> mmm, etc.
@@ -162,11 +304,11 @@ const prepareDevicePhonicsText = (text: string): string => {
     const key = String(token || '').toLowerCase();
     return DEVICE_PHONICS_SOUND_MAP[key] || key;
   });
-  // c-a-t -> kuh ... ah ... tuh (so device TTS doesn't read punctuation oddly)
+  // c-a-t -> kuh . ah . tuh (short pause to keep pace natural for young learners)
   next = next.replace(/\b([a-z](?:-[a-z]){1,7})\b/gi, (token) => {
     const letters = token.split('-').map((v) => v.trim().toLowerCase()).filter(Boolean);
     if (letters.some((v) => v.length !== 1)) return token;
-    return letters.map((l) => DEVICE_PHONICS_SOUND_MAP[l] || l).join(' ... ');
+    return letters.map((l) => DEVICE_PHONICS_SOUND_MAP[l] || l).join(' . ');
   });
   // Ensure marker punctuation is never spoken literally.
   next = next.replace(/[\/[\]]/g, ' ');
@@ -274,6 +416,9 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
   const playbackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioModeConfiguredRef = useRef(false);
+  const cachedVoicePreferenceRef = useRef<VoicePreference | null | undefined>(undefined);
+  const cachedAISettingsVoiceRef = useRef<string | null | undefined>(undefined);
+  const lastAppliedVoiceSignatureRef = useRef<string | null>(null);
 
   const clearPlaybackTimers = useCallback(() => {
     if (playbackIntervalRef.current) {
@@ -474,6 +619,69 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     });
   }, [clearPlaybackTimers, cleanupPlayer]);
 
+  const getCachedVoicePreference = useCallback(async (): Promise<VoicePreference | null> => {
+    if (cachedVoicePreferenceRef.current !== undefined) {
+      return cachedVoicePreferenceRef.current;
+    }
+    try {
+      const prefs = await getVoicePrefs();
+      cachedVoicePreferenceRef.current = prefs;
+      return prefs;
+    } catch {
+      cachedVoicePreferenceRef.current = null;
+      return null;
+    }
+  }, []);
+
+  const getCachedAISettingsVoice = useCallback((): string | null => {
+    if (cachedAISettingsVoiceRef.current !== undefined) {
+      return cachedAISettingsVoiceRef.current;
+    }
+    try {
+      const personality = getPersonality?.();
+      const voiceValue = String(
+        personality?.voice_settings?.voice_id ||
+        personality?.voice_settings?.voice ||
+        personality?.voice ||
+        ''
+      ).trim();
+      cachedAISettingsVoiceRef.current = voiceValue || null;
+      return cachedAISettingsVoiceRef.current;
+    } catch {
+      cachedAISettingsVoiceRef.current = null;
+      return null;
+    }
+  }, []);
+
+  const resolveSessionVoice = useCallback(async (
+    language: string,
+    requestOverride?: unknown
+  ): Promise<EffectiveVoiceResolution> => {
+    const flags = getFeatureFlagsSync();
+    const fallbackGender = normalizeVoiceGender((profile as any)?.voice_gender || (profile as any)?.gender);
+
+    if (!flags.dash_tutor_voice_sticky_v1) {
+      return resolveEffectiveVoiceId({
+        language,
+        requestOverride,
+        fallbackGender,
+      });
+    }
+
+    const [voicePreference, aiSettingsVoice] = await Promise.all([
+      getCachedVoicePreference(),
+      Promise.resolve(getCachedAISettingsVoice()),
+    ]);
+
+    return resolveEffectiveVoiceId({
+      language,
+      requestOverride,
+      preferenceVoiceId: voicePreference?.voice_id,
+      aiSettingsVoice,
+      fallbackGender,
+    });
+  }, [getCachedAISettingsVoice, getCachedVoicePreference, profile]);
+
   const speakWithDeviceTTS = useCallback(async (
     text: string,
     language: string,
@@ -488,6 +696,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       ? Math.max(0.5, Math.min(safePitch, 2.0))
       : 1.0;
     const spokenText = phonicsMode ? prepareDevicePhonicsText(text) : text;
+    const selectedVoice = await pickDeviceVoiceIdentifier(locale, options.voice);
     await stopPlayback();
     // Delay after Speech.stop() to prevent Android race condition where
     // an immediate Speech.speak() call is silently ignored.
@@ -501,7 +710,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         resolve();
       }, 30000);
 
-      Speech.speak(spokenText, {
+      const deviceOptions: Speech.SpeechOptions = {
         language: locale,
         rate: effectiveRate,
         pitch: effectivePitch,
@@ -511,7 +720,11 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           clearTimeout(safetyTimer);
           reject(err instanceof Error ? err : new Error('DEVICE_TTS_FAILED'));
         },
-      });
+      };
+      if (selectedVoice) {
+        deviceOptions.voice = selectedVoice;
+      }
+      Speech.speak(spokenText, deviceOptions);
     });
   }, [stopPlayback]);
 
@@ -539,6 +752,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     const endpoint = `${supabaseUrl}/functions/v1/tts-proxy`;
 
     const phonicsMode = options.phonicsMode === true;
+    const voiceId = resolveAzureVoiceId(langCode, options.voice);
     const effectiveRate = Number.isFinite(options.rate as number)
       ? Number(options.rate)
       : (phonicsMode ? DEFAULT_PHONICS_AZURE_RATE : DEFAULT_AZURE_RATE);
@@ -555,6 +769,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         body: JSON.stringify({
           text: cleanText,
           lang: langCode,
+          voice_id: voiceId,
           rate: effectiveRate,
           pitch: effectivePitch,
           style: 'friendly',
@@ -724,13 +939,28 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
       const phonicsMode = typeof options.phonicsMode === 'boolean'
         ? options.phonicsMode
         : shouldUsePhonicsMode(text);
+      const resolvedVoice = await resolveSessionVoice(language, options.voice);
+      const effectiveOptions: TTSOptions = {
+        ...options,
+        voice: resolvedVoice.voiceId,
+        phonicsMode,
+      };
+      const voiceSignature = `${language}|${resolvedVoice.source}|${resolvedVoice.voiceId}`;
+      if (lastAppliedVoiceSignatureRef.current !== voiceSignature) {
+        lastAppliedVoiceSignatureRef.current = voiceSignature;
+        trackTutorVoicePreferenceApplied({
+          voiceId: resolvedVoice.voiceId,
+          source: resolvedVoice.source,
+          language,
+          role: String(profile?.role || 'unknown'),
+        });
+      }
       
       if (!SUPPORTED_TTS_LANGS.includes(baseLang)) {
         console.warn(`[VoiceTTS] Language ${language} not supported by Azure path. Falling back to device TTS.`);
         fallbackUsed = 'device';
         await speakWithDeviceTTS(text, language, {
-          ...options,
-          phonicsMode,
+          ...effectiveOptions,
         });
         return;
       }
@@ -756,8 +986,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         for (const chunk of chunks) {
           if (stopRequestedRef.current) break;
           await speakWithDeviceTTS(chunk, effectiveLanguage, {
-            ...options,
-            phonicsMode,
+            ...effectiveOptions,
           });
         }
         return;
@@ -773,8 +1002,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
         try {
           cloudAttempted = true;
           await speakWithAzure(chunk, effectiveLanguage, {
-            ...options,
-            phonicsMode,
+            ...effectiveOptions,
           });
           anyChunkSucceeded = true;
           cloudChunkSucceeded = true;
@@ -794,8 +1022,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
               await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
               cloudAttempted = true;
               await speakWithAzure(chunk, effectiveLanguage, {
-                ...options,
-                phonicsMode,
+                ...effectiveOptions,
               });
               anyChunkSucceeded = true;
               cloudChunkSucceeded = true;
@@ -827,8 +1054,7 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
           fallbackUsed = 'device';
           try {
             await speakWithDeviceTTS(chunk, effectiveLanguage, {
-              ...options,
-              phonicsMode,
+              ...effectiveOptions,
             });
             anyChunkSucceeded = true;
           } catch (deviceErr) {
@@ -880,7 +1106,16 @@ export function useVoiceTTS(): UseVoiceTTSReturn {
     } finally {
       setIsSpeaking(false);
     }
-  }, [stopPlayback, speakWithAzure, speakWithDeviceTTS, reportTTSError, profile?.role, tier, user?.id]);
+  }, [
+    stopPlayback,
+    speakWithAzure,
+    speakWithDeviceTTS,
+    reportTTSError,
+    resolveSessionVoice,
+    profile?.role,
+    tier,
+    user?.id,
+  ]);
 
   return { speak, stop, isSpeaking, error };
 }

@@ -52,7 +52,7 @@ export const TeacherMetricsCard: React.FC<TeacherMetricsCardProps> = ({
         styles.metricCard,
         size === 'large' && styles.metricCardLarge,
         size === 'small' && styles.metricCardSmall,
-        { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap, borderLeftColor: color, shadowColor: color }
+        { marginHorizontal: layout.cardGap / 2, marginBottom: layout.cardGap }
       ]}
       onPress={onPress}
       disabled={!onPress}
@@ -117,57 +117,65 @@ export const getTrendText = (trend: string, t: any): string => {
   }
 };
 
-const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => StyleSheet.create({
-  metricCard: {
-    width: layout.cardWidth,
-    backgroundColor: theme.surface,
-    borderRadius: 16,
-    padding: layout.cardPadding,
-    borderLeftWidth: 4,
-    shadowColor: theme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  metricCardLarge: {
-    width: layout.containerWidth,
-  },
-  metricCardSmall: {
-    width: (layout.containerWidth - layout.cardGap) / 3,
-  },
-  metricContent: {
-    flex: 1,
-  },
-  metricHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  iconContainer: {
-    width: layout.isSmallScreen ? 40 : 48,
-    height: layout.isSmallScreen ? 40 : 48,
-    borderRadius: layout.isSmallScreen ? 20 : 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trendContainer: {
-    flexShrink: 1,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  metricValue: {
-    fontSize: layout.isTablet ? 28 : layout.isSmallScreen ? 22 : 24,
-    fontWeight: 'bold',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  metricTitle: {
-    fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 14,
-    color: theme.textSecondary,
-    lineHeight: layout.isTablet ? 22 : layout.isSmallScreen ? 16 : 18,
-  },
-});
+const getStyles = (theme: any, layout: ReturnType<typeof getLayoutMetrics>) => {
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
+
+  return StyleSheet.create({
+    metricCard: {
+      width: layout.cardWidth,
+      backgroundColor: isNextGenTeacher ? 'rgba(255,255,255,0.05)' : theme.surface,
+      borderRadius: isNextGenTeacher ? 18 : 16,
+      padding: layout.cardPadding,
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : 'transparent',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: isNextGenTeacher ? 14 : 2 },
+      shadowOpacity: isNextGenTeacher ? 0.35 : 0.1,
+      shadowRadius: isNextGenTeacher ? 24 : 8,
+      elevation: isNextGenTeacher ? 10 : 4,
+    },
+    metricCardLarge: {
+      width: layout.containerWidth,
+    },
+    metricCardSmall: {
+      width: (layout.containerWidth - layout.cardGap) / 3,
+    },
+    metricContent: {
+      flex: 1,
+    },
+    metricHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    iconContainer: {
+      width: layout.isSmallScreen ? 40 : 48,
+      height: layout.isSmallScreen ? 40 : 48,
+      borderRadius: isNextGenTeacher ? (layout.isSmallScreen ? 12 : 14) : (layout.isSmallScreen ? 20 : 24),
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: isNextGenTeacher ? 1 : 0,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.08)' : 'transparent',
+    },
+    trendContainer: {
+      flexShrink: 1,
+    },
+    trendText: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    metricValue: {
+      fontSize: layout.isTablet ? 32 : layout.isSmallScreen ? 24 : 28,
+      fontWeight: '700',
+      color: isNextGenTeacher ? '#EAF0FF' : theme.text,
+      marginBottom: 4,
+    },
+    metricTitle: {
+      fontSize: layout.isTablet ? 16 : layout.isSmallScreen ? 12 : 13,
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.72)' : theme.textSecondary,
+      fontWeight: '600',
+      lineHeight: layout.isTablet ? 22 : layout.isSmallScreen ? 16 : 18,
+    },
+  });
+};

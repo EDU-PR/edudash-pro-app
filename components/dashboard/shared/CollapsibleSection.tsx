@@ -186,9 +186,11 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 };
 
 const createStyles = (theme: any) => {
+  const isNextGenTeacher = String(theme?.background || '').toLowerCase() === '#0f121e';
+
   return StyleSheet.create({
     container: {
-      marginBottom: 24,
+      marginBottom: isNextGenTeacher ? 26 : 24,
     },
     hiddenContent: {
       height: 0,
@@ -198,12 +200,17 @@ const createStyles = (theme: any) => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      borderRadius: 14,
+      paddingVertical: isNextGenTeacher ? 14 : 12,
+      paddingHorizontal: isNextGenTeacher ? 14 : 12,
+      borderRadius: isNextGenTeacher ? 18 : 14,
       borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.cardBackground || theme.surface,
+      borderColor: isNextGenTeacher ? 'rgba(255,255,255,0.10)' : theme.border,
+      backgroundColor: isNextGenTeacher ? 'rgba(255,255,255,0.05)' : theme.cardBackground || theme.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: isNextGenTeacher ? 14 : 2 },
+      shadowOpacity: isNextGenTeacher ? 0.35 : 0.06,
+      shadowRadius: isNextGenTeacher ? 24 : 6,
+      elevation: isNextGenTeacher ? 10 : 2,
     },
     headerLeft: {
       flexDirection: 'row',
@@ -224,14 +231,14 @@ const createStyles = (theme: any) => {
       flex: 1,
     },
     headerTitle: {
-      fontSize: isTablet ? 20 : isSmallScreen ? 17 : 19,
+      fontSize: isTablet ? 20 : isSmallScreen ? 18 : 19,
       fontWeight: '700',
       color: theme.text,
     },
     headerHint: {
       marginTop: 4,
       fontSize: isSmallScreen ? 11 : 12,
-      color: theme.textSecondary,
+      color: isNextGenTeacher ? 'rgba(234,240,255,0.72)' : theme.textSecondary,
     },
     actionButton: {
       paddingHorizontal: 8,

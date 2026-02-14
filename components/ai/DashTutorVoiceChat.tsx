@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,16 +30,19 @@ import { formatTranscript } from '@/lib/voice/formatTranscript';
 import { getOrganizationType } from '@/lib/tenant/compat';
 import { detectPhonicsIntent } from '@/lib/dash-ai/phonicsDetection';
 import { assessPhonicsAttempt } from '@/lib/dash-ai/phonicsAssessmentClient';
+import { getFeatureFlagsSync } from '@/lib/featureFlags';
+import { classifyFullChatIntent } from '@/lib/dash-ai/fullChatIntent';
+import {
+  trackTutorFullChatHandoff,
+  trackTutorPhonicsContractApplied,
+} from '@/lib/ai/trackingEvents';
 import { styles } from '@/components/super-admin/dash-ai-chat/DashAIChat.styles';
 import { ChatMessage, ChatMessageData } from '@/components/super-admin/dash-ai-chat/ChatMessage';
 import { ChatInput } from '@/components/super-admin/dash-ai-chat/ChatInput';
 import {
-  getQuickActions,
-  buildSystemPrompt,
   cleanForTTS,
   cleanRawJSON,
   splitForTTS,
-  detectTextLanguage,
 } from '@/lib/dash-voice-utils';
 import { shouldUsePhonicsMode } from '@/lib/dash-ai/phonicsDetection';
 import type { SupportedLanguage } from '@/components/super-admin/voice-orb/useVoiceSTT';
@@ -316,23 +320,22 @@ export default function DashTutorVoiceChat() {
       setIsSpeaking(true);
       isSpeakingRef.current = true;
       const phonicsMode = Boolean(phonicsTargetRef.current) || shouldUsePhonicsMode(cleanText);
+      const stableLanguage = preferredLanguage || 'en-ZA';
       for (let idx = 0; idx < chunks.length; idx += 1) {
         const chunk = chunks[idx];
         if (ttsSessionRef.current !== sessionId || !isSpeakingRef.current) {
           console.log('[DashTutorVoiceChat][TTS] session:interrupted', { sessionId, atChunk: idx + 1 });
           break; // Barge-in support
         }
-        const chunkLang = preferredLanguage
-          || `${detectTextLanguage(chunk)}-ZA` as SupportedLanguage;
         console.log('[DashTutorVoiceChat][TTS] chunk:start', {
           sessionId,
           index: idx + 1,
           total: chunks.length,
           length: chunk.length,
-          language: chunkLang,
+          language: stableLanguage,
           phonicsMode,
         });
-        await voiceOrbRef.current.speakText(chunk, chunkLang, { phonicsMode });
+        await voiceOrbRef.current.speakText(chunk, stableLanguage, { phonicsMode });
         console.log('[DashTutorVoiceChat][TTS] chunk:end', { sessionId, index: idx + 1, total: chunks.length });
       }
     } catch (error) {
@@ -728,11 +731,41 @@ export default function DashTutorVoiceChat() {
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isProcessing) return;
+    const trimmed = text.trim();
+
+    const flags = getFeatureFlagsSync();
+    const handoffIntent = flags.dash_tutor_auto_handoff_v1 ? classifyFullChatIntent(trimmed) : null;
+    if (handoffIntent) {
+      trackTutorFullChatHandoff({
+        intent: handoffIntent,
+        source: 'dash_tutor_voice_chat',
+        role: normalizedRole,
+      });
+      router.push({
+        pathname: '/screens/dash-assistant',
+        params: {
+          source: 'dash_tutor_voice_chat',
+          initialMessage: trimmed,
+          resumePrompt: trimmed,
+          mode: handoffIntent === 'quiz' ? 'tutor' : 'advisor',
+          tutorMode: handoffIntent === 'quiz' ? 'quiz' : undefined,
+          handoffIntent,
+        },
+      } as any);
+      return;
+    }
+
+    if (flags.dash_tutor_phonics_strict_v1 && detectPhonicsIntent(trimmed)) {
+      trackTutorPhonicsContractApplied({
+        source: 'dash_tutor_voice_chat',
+        role: normalizedRole,
+      });
+    }
 
     const userMessage: ChatMessageData = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: text.trim(),
+      content: trimmed,
       timestamp: new Date(),
     };
 
@@ -762,9 +795,9 @@ export default function DashTutorVoiceChat() {
       if (!session?.access_token) throw new Error('Please log in to continue');
 
       if (isVoiceModeRef.current) {
-        await sendMessageStreaming(text.trim(), history, assistantId, session.access_token);
+        await sendMessageStreaming(trimmed, history, assistantId, session.access_token);
       } else {
-        await sendMessageRegular(text.trim(), history, assistantId, session.access_token);
+        await sendMessageRegular(trimmed, history, assistantId, session.access_token);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong';
